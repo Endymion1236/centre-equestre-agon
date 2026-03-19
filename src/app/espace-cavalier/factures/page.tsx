@@ -9,6 +9,7 @@ import { Loader2, Receipt, CreditCard, Ticket, Download } from "lucide-react";
 
 interface Payment {
   id: string;
+  familyId: string;
   familyName: string;
   items: { activityTitle: string; priceHT: number; tva: number; priceTTC: number }[];
   totalTTC: number;
@@ -20,6 +21,7 @@ interface Payment {
 
 interface Reservation {
   id: string;
+  familyId: string;
   activityTitle: string;
   childName: string;
   date: string;
@@ -33,6 +35,7 @@ interface Reservation {
 
 interface Card10 {
   id: string;
+  familyId: string;
   childName: string;
   totalSessions: number;
   usedSessions: number;
@@ -58,29 +61,44 @@ export default function FacturesPage() {
 
   useEffect(() => {
     if (!user) return;
-    const fetch = async () => {
+    const fetchAll = async () => {
+      // Payments - try with familyId filter, fallback to loading all
       try {
-        // Payments
+        const pSnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", user.uid)));
+        setPayments(pSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Payment[]);
+      } catch {
         try {
-          const pSnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", user.uid)));
-          setPayments(pSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Payment[]);
+          // Fallback: load all and filter client-side
+          const pSnap = await getDocs(collection(db, "payments"));
+          setPayments(pSnap.docs.map(d => ({ id: d.id, ...d.data() } as Payment)).filter(p => p.familyId === user.uid));
         } catch { setPayments([]); }
+      }
 
-        // Reservations
+      // Reservations
+      try {
+        const rSnap = await getDocs(query(collection(db, "reservations"), where("familyId", "==", user.uid)));
+        setReservations(rSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Reservation[]);
+      } catch {
         try {
-          const rSnap = await getDocs(query(collection(db, "reservations"), where("familyId", "==", user.uid)));
-          setReservations(rSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Reservation[]);
+          const rSnap = await getDocs(collection(db, "reservations"));
+          setReservations(rSnap.docs.map(d => ({ id: d.id, ...d.data() } as Reservation)).filter(r => r.familyId === user.uid));
         } catch { setReservations([]); }
+      }
 
-        // Cards
+      // Cards
+      try {
+        const cSnap = await getDocs(query(collection(db, "cartes"), where("familyId", "==", user.uid)));
+        setCards(cSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Card10[]);
+      } catch {
         try {
-          const cSnap = await getDocs(query(collection(db, "cartes"), where("familyId", "==", user.uid)));
-          setCards(cSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Card10[]);
+          const cSnap = await getDocs(collection(db, "cartes"));
+          setCards(cSnap.docs.map(d => ({ id: d.id, ...d.data() } as Card10)).filter(c => c.familyId === user.uid));
         } catch { setCards([]); }
-      } catch (e) { console.error(e); }
+      }
+
       setLoading(false);
     };
-    fetch();
+    fetchAll();
   }, [user]);
 
   const totalPaid = payments.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);

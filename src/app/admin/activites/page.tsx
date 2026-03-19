@@ -17,8 +17,9 @@ import { Card, Badge, Button } from "@/components/ui";
 import { Plus, Pencil, Trash2, Copy, X, Check, Loader2 } from "lucide-react";
 import type { Activity, ActivityType } from "@/types";
 
-const activityTypes: { id: ActivityType; label: string; emoji: string }[] = [
-  { id: "stage", label: "Stage", emoji: "🏇" },
+const activityTypes: { id: ActivityType | string; label: string; emoji: string }[] = [
+  { id: "stage", label: "Stage semaine", emoji: "🏇" },
+  { id: "stage_journee", label: "Stage journée", emoji: "📅" },
   { id: "balade", label: "Balade", emoji: "🌅" },
   { id: "cours", label: "Cours régulier", emoji: "📅" },
   { id: "competition", label: "Compétition", emoji: "🏆" },

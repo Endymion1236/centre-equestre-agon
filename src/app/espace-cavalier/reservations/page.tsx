@@ -10,6 +10,7 @@ import { useSearchParams } from "next/navigation";
 
 interface Reservation {
   id: string;
+  familyId: string;
   activityTitle: string;
   activityType: string;
   childName: string;
@@ -39,20 +40,18 @@ export default function ReservationsPage() {
     const fetch = async () => {
       try {
         const snap = await getDocs(
-          query(
-            collection(db, "reservations"),
-            where("familyId", "==", user.uid),
-            orderBy("createdAt", "desc")
-          )
+          query(collection(db, "reservations"), where("familyId", "==", user.uid))
         );
         setReservations(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Reservation[]);
       } catch (e) {
-        // If index doesn't exist yet, try without orderBy
+        // Fallback: load all and filter client-side (in case index is missing)
         try {
-          const snap = await getDocs(
-            query(collection(db, "reservations"), where("familyId", "==", user.uid))
+          const snap = await getDocs(collection(db, "reservations"));
+          setReservations(
+            snap.docs
+              .map((d) => ({ id: d.id, ...d.data() } as Reservation))
+              .filter((r) => r.familyId === user.uid)
           );
-          setReservations(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Reservation[]);
         } catch (e2) { console.error(e2); }
       }
       setLoading(false);

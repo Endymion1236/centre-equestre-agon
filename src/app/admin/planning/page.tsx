@@ -14,7 +14,7 @@ function fmtDate(d: Date) { return d.toISOString().split("T")[0]; }
 function fmtDateFR(d: Date) { return d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" }); }
 function fmtMonthFR(d: Date) { return d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" }); }
 const dayNames = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
-const typeColors: Record<string, string> = { stage: "#27ae60", balade: "#e67e22", cours: "#2050A0", competition: "#7c3aed", anniversaire: "#D63031", ponyride: "#16a085" };
+const typeColors: Record<string, string> = { stage: "#27ae60", stage_journee: "#16a085", balade: "#e67e22", cours: "#2050A0", competition: "#7c3aed", anniversaire: "#D63031", ponyride: "#16a085" };
 const payModes = [{ id: "cb_terminal", label: "CB Terminal", icon: "💳" }, { id: "cheque", label: "Chèque", icon: "📝" }, { id: "especes", label: "Espèces", icon: "💶" }, { id: "cheque_vacances", label: "Chèques Vac.", icon: "🏖️" }, { id: "pass_sport", label: "Pass'Sport", icon: "🎽" }, { id: "ancv", label: "ANCV", icon: "🎫" }, { id: "carte", label: "Carte/Ticket", icon: "🎟️" }];
 
 // ─── Enroll Panel with search, payment, unenroll ───
