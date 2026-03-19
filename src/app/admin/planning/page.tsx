@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { Plus, ChevronLeft, ChevronRight, X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, CalendarPlus } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Calendar } from "lucide-react";
 import type { Activity, Family } from "@/types";
 
 interface Creneau { id?: string; activityId: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolledCount: number; enrolled: any[]; status: string; priceHT?: number; priceTTC?: number; tvaTaux?: number; }
@@ -116,7 +116,7 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
 
   return (
     <Card padding="md" className="mb-6 border-gold-400/20 bg-gold-50/30">
-      <div className="flex justify-between items-center mb-4"><h3 className="font-body text-base font-semibold text-blue-800 flex items-center gap-2"><CalendarPlus size={18}/>Générateur de séances (périodes)</h3><button onClick={onCancel} className="text-gray-400 bg-transparent border-none cursor-pointer"><X size={20}/></button></div>
+      <div className="flex justify-between items-center mb-4"><h3 className="font-body text-base font-semibold text-blue-800 flex items-center gap-2"><Calendar size={18}/>Générateur de séances (périodes)</h3><button onClick={onCancel} className="text-gray-400 bg-transparent border-none cursor-pointer"><X size={20}/></button></div>
       <p className="font-body text-xs text-gray-500 mb-4">Comme dans Celeris : définissez les périodes de cours et les plages horaires, tout sera généré automatiquement.</p>
       
       {/* Periods */}
@@ -265,7 +265,7 @@ export default function PlanningPage() {
         <div className="flex gap-2">
           <div className="flex bg-sand rounded-lg p-0.5">{(["week","day"] as const).map(v=><button key={v} onClick={()=>setViewMode(v)} className={`px-4 py-2 rounded-md font-body text-xs font-semibold cursor-pointer border-none ${viewMode===v?"bg-white text-blue-500 shadow-sm":"text-gray-400 bg-transparent"}`}>{v==="week"?"Semaine":"Jour"}</button>)}</div>
           <button onClick={()=>{setShowSimple(true);setShowGenerator(false);setSelectedDate(viewMode==="day"?fmtDate(currentDay):undefined);}} className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400"><Plus size={16}/>Créneau</button>
-          <button onClick={()=>{setShowGenerator(true);setShowSimple(false);}} className="flex items-center gap-2 font-body text-sm font-semibold text-blue-800 bg-gold-400 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-gold-300"><CalendarPlus size={16}/>Périodes</button>
+          <button onClick={()=>{setShowGenerator(true);setShowSimple(false);}} className="flex items-center gap-2 font-body text-sm font-semibold text-blue-800 bg-gold-400 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-gold-300"><Calendar size={16}/>Périodes</button>
           {viewMode==="week"&&creneaux.length>0&&<button onClick={()=>setShowDuplicate(!showDuplicate)} className="font-body text-sm font-semibold text-blue-500 bg-blue-50 px-3 py-2.5 rounded-lg border-none cursor-pointer">📋</button>}
         </div>
       </div>

@@ -24,6 +24,7 @@ const navItems = [
   { href: "/admin/planning", icon: CalendarDays, label: "Planning" },
   { href: "/admin/montoir", icon: ClipboardList, label: "Montoir" },
   { href: "/admin/cavaliers", icon: Users, label: "Cavaliers" },
+  { href: "/admin/forfaits", icon: CalendarDays, label: "Forfaits annuels" },
   { href: "/admin/cartes", icon: CreditCard, label: "Cartes & tickets" },
   { href: "/admin/paiements", icon: CreditCard, label: "Paiements" },
   { href: "/admin/comptabilite", icon: BookOpen, label: "Comptabilité" },
