@@ -9,6 +9,7 @@ import { SITE_CONFIG } from "@/lib/config";
 const navLinks = [
   { href: "/activites", label: "Activités" },
   { href: "/mini-ferme", label: "Mini-ferme" },
+  { href: "/equipe", label: "Équipe" },
   { href: "/galerie", label: "Galerie" },
   { href: "/tarifs", label: "Tarifs" },
   { href: "/contact", label: "Contact" },

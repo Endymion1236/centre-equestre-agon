@@ -1,9 +1,170 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/lib/auth-context";
+import { Card, Badge } from "@/components/ui";
+import { Loader2, Calendar, Check, Clock, XCircle } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+
+interface Reservation {
+  id: string;
+  activityTitle: string;
+  activityType: string;
+  childName: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  priceTTC: number;
+  status: "confirmed" | "pending" | "cancelled";
+  createdAt: any;
+}
+
+const statusConfig = {
+  confirmed: { label: "Confirmée", color: "green" as const, icon: Check },
+  pending: { label: "En attente de paiement", color: "orange" as const, icon: Clock },
+  cancelled: { label: "Annulée", color: "red" as const, icon: XCircle },
+};
+
 export default function ReservationsPage() {
+  const { user } = useAuth();
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const searchParams = useSearchParams();
+  const success = searchParams.get("success");
+
+  useEffect(() => {
+    if (!user) return;
+    const fetch = async () => {
+      try {
+        const snap = await getDocs(
+          query(
+            collection(db, "reservations"),
+            where("familyId", "==", user.uid),
+            orderBy("createdAt", "desc")
+          )
+        );
+        setReservations(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Reservation[]);
+      } catch (e) {
+        // If index doesn't exist yet, try without orderBy
+        try {
+          const snap = await getDocs(
+            query(collection(db, "reservations"), where("familyId", "==", user.uid))
+          );
+          setReservations(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Reservation[]);
+        } catch (e2) { console.error(e2); }
+      }
+      setLoading(false);
+    };
+    fetch();
+  }, [user]);
+
+  // Group by upcoming / past
+  const today = new Date().toISOString().split("T")[0];
+  const upcoming = reservations.filter((r) => r.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+  const past = reservations.filter((r) => r.date < today).sort((a, b) => b.date.localeCompare(a.date));
+
   return (
-    <div className="text-center py-16">
-      <span className="text-5xl block mb-4">📋</span>
-      <h1 className="font-display text-2xl font-bold text-blue-800 mb-3">Mes réservations</h1>
-      <p className="font-body text-sm text-gray-500 max-w-md mx-auto">Vos réservations apparaîtront ici une fois le module de réservation activé (Phase 3).</p>
+    <div>
+      <h1 className="font-display text-2xl font-bold text-blue-800 mb-2">Mes réservations</h1>
+      <p className="font-body text-sm text-gray-400 mb-6">Retrouvez ici toutes vos réservations passées et à venir.</p>
+
+      {/* Success message */}
+      {success === "true" && (
+        <Card className="!bg-green-50 !border-green-200 mb-5" padding="sm">
+          <div className="flex items-center gap-3">
+            <Check size={20} className="text-green-600" />
+            <div className="font-body text-sm text-green-800">
+              <strong>Paiement confirmé !</strong> Votre réservation est enregistrée. À bientôt au centre équestre !
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {loading ? (
+        <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div>
+      ) : reservations.length === 0 ? (
+        <Card padding="lg" className="text-center">
+          <span className="text-5xl block mb-4">📋</span>
+          <h2 className="font-display text-lg font-bold text-blue-800 mb-2">Aucune réservation</h2>
+          <p className="font-body text-sm text-gray-500 mb-4">Vous n&apos;avez pas encore de réservation.</p>
+          <a href="/espace-cavalier/reserver" className="font-body text-sm font-semibold text-blue-500 no-underline">
+            Réserver une activité →
+          </a>
+        </Card>
+      ) : (
+        <div className="flex flex-col gap-8">
+          {/* Upcoming */}
+          {upcoming.length > 0 && (
+            <div>
+              <h2 className="font-body text-sm font-bold text-blue-800 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <Calendar size={14} /> À venir ({upcoming.length})
+              </h2>
+              <div className="flex flex-col gap-3">
+                {upcoming.map((r) => {
+                  const status = statusConfig[r.status] || statusConfig.pending;
+                  const StatusIcon = status.icon;
+                  return (
+                    <Card key={r.id} padding="md">
+                      <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-4">
+                          <div className="w-14 h-14 rounded-xl bg-blue-50 flex flex-col items-center justify-center">
+                            <div className="font-body text-xs font-bold text-blue-500">
+                              {new Date(r.date).toLocaleDateString("fr-FR", { weekday: "short" })}
+                            </div>
+                            <div className="font-body text-lg font-bold text-blue-800">
+                              {new Date(r.date).getDate()}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="font-body text-base font-semibold text-blue-800">{r.activityTitle}</div>
+                            <div className="font-body text-xs text-gray-400">
+                              🧒 {r.childName} · {r.startTime}–{r.endTime}
+                            </div>
+                            <div className="font-body text-xs text-gray-400">
+                              {new Date(r.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="font-body text-lg font-bold text-blue-500">{r.priceTTC?.toFixed(2)}€</span>
+                          <Badge color={status.color}>{status.label}</Badge>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Past */}
+          {past.length > 0 && (
+            <div>
+              <h2 className="font-body text-sm font-bold text-gray-400 uppercase tracking-wider mb-3">
+                Passées ({past.length})
+              </h2>
+              <div className="flex flex-col gap-2">
+                {past.map((r) => (
+                  <Card key={r.id} padding="sm" className="opacity-60">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="font-body text-xs text-gray-400">
+                          {new Date(r.date).toLocaleDateString("fr-FR")}
+                        </span>
+                        <span className="font-body text-sm text-gray-500">{r.activityTitle}</span>
+                        <span className="font-body text-xs text-gray-400">🧒 {r.childName}</span>
+                      </div>
+                      <span className="font-body text-sm text-gray-400">{r.priceTTC?.toFixed(2)}€</span>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

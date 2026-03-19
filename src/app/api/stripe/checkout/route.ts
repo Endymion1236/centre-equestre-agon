@@ -12,13 +12,16 @@ export async function POST(req: NextRequest) {
     }
 
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
+      payment_method_types: ["card", "sepa_debit"],
       mode: "payment",
       customer_email: familyEmail,
       metadata: {
         familyId,
         familyName,
         source: "online",
+      },
+      payment_intent_data: {
+        setup_future_usage: "off_session", // Permet de réutiliser le mandat SEPA pour les prochains prélèvements
       },
       line_items: items.map((item: any) => ({
         price_data: {

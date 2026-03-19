@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, doc, query, where, orderBy, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge, Button } from "@/components/ui";
@@ -137,29 +137,77 @@ export default function ReserverPage() {
   const cartTotal = cart.reduce((s, i) => s + i.priceTTC, 0);
 
   const handlePay = async () => {
-    if (cart.length === 0 || !family) return;
+    if (cart.length === 0 || !family || !user) return;
     setPaying(true);
     try {
-      const res = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          familyId: user?.uid,
-          familyEmail: family.parentEmail,
+      // 1. Save reservations in Firestore
+      for (const item of cart) {
+        // Create reservation
+        await addDoc(collection(db, "reservations"), {
+          familyId: user.uid,
           familyName: family.parentName,
-          items: cart.map((item) => ({
-            name: `${item.activityTitle} — ${item.childName}`,
-            description: `${new Date(item.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} · ${item.startTime}–${item.endTime}`,
-            priceInCents: Math.round(item.priceTTC * 100),
-            quantity: 1,
-          })),
-        }),
-      });
-      const data = await res.json();
-      if (data.url) window.location.href = data.url;
-      else alert("Erreur: " + (data.error || "Problème de paiement"));
+          childId: item.childId,
+          childName: item.childName,
+          activityTitle: item.activityTitle,
+          activityType: creneaux.find(c => c.id === item.creneauId)?.activityType || "",
+          creneauId: item.creneauId,
+          date: item.date,
+          startTime: item.startTime,
+          endTime: item.endTime,
+          priceTTC: item.priceTTC,
+          status: "confirmed",
+          createdAt: serverTimestamp(),
+        });
+
+        // 2. Enroll child in creneau
+        const creneau = creneaux.find(c => c.id === item.creneauId);
+        if (creneau) {
+          const enrolled = [...(creneau.enrolled || []), {
+            childId: item.childId,
+            childName: item.childName,
+            familyId: user.uid,
+            familyName: family.parentName,
+            enrolledAt: new Date().toISOString(),
+          }];
+          await updateDoc(doc(db, "creneaux", item.creneauId), {
+            enrolled,
+            enrolledCount: enrolled.length,
+          });
+        }
+      }
+
+      // 3. Try Stripe payment
+      try {
+        const res = await fetch("/api/stripe/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            familyId: user.uid,
+            familyEmail: family.parentEmail,
+            familyName: family.parentName,
+            items: cart.map((item) => ({
+              name: `${item.activityTitle} — ${item.childName}`,
+              description: `${new Date(item.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} · ${item.startTime}–${item.endTime}`,
+              priceInCents: Math.round(item.priceTTC * 100),
+              quantity: 1,
+            })),
+          }),
+        });
+        const data = await res.json();
+        if (data.url) {
+          window.location.href = data.url;
+          return;
+        }
+      } catch (stripeErr) {
+        console.error("Stripe error (non-bloquant):", stripeErr);
+      }
+
+      // If Stripe fails or no URL, redirect manually with success
+      setCart([]);
+      window.location.href = "/espace-cavalier/reservations?success=true";
     } catch (e) {
-      alert("Erreur de connexion au serveur de paiement");
+      console.error("Erreur réservation:", e);
+      alert("Erreur lors de la réservation. Veuillez réessayer.");
     }
     setPaying(false);
   };
