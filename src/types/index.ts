@@ -302,3 +302,30 @@ export interface PedagogyRecord {
   lastSessionDate: Date;
   updatedBy: string; // "Emmeline", "Nicolas"
 }
+
+// ─── Cartes / Tickets ───
+export interface Card10 {
+  id: string;
+  familyId: string;
+  familyName: string;
+  childId: string;
+  childName: string;
+  activityType: string; // "cours", "balade", etc.
+  totalSessions: number; // 5, 10, 20
+  usedSessions: number;
+  remainingSessions: number;
+  priceHT: number;
+  tvaTaux: number;
+  priceTTC: number;
+  purchaseDate: Date;
+  expiryDate: Date | null;
+  status: "active" | "expired" | "used";
+  history: CardUsage[];
+}
+
+export interface CardUsage {
+  date: string;
+  creneauId: string;
+  activityTitle: string;
+  deductedAt: string;
+}

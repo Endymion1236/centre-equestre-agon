@@ -7,7 +7,6 @@ import {
   BarChart3,
   CalendarDays,
   ClipboardList,
-  ClipboardCheck,
   CreditCard,
   Users,
   Mail,
@@ -24,12 +23,12 @@ const navItems = [
   { href: "/admin/activites", icon: ClipboardList, label: "Activités" },
   { href: "/admin/planning", icon: CalendarDays, label: "Planning" },
   { href: "/admin/montoir", icon: ClipboardList, label: "Montoir" },
-  { href: "/admin/montoir", icon: ClipboardCheck, label: "Montoir" },
   { href: "/admin/cavaliers", icon: Users, label: "Cavaliers" },
+  { href: "/admin/cartes", icon: CreditCard, label: "Cartes & tickets" },
   { href: "/admin/paiements", icon: CreditCard, label: "Paiements" },
   { href: "/admin/comptabilite", icon: BookOpen, label: "Comptabilité" },
   { href: "/admin/communication", icon: Mail, label: "Communication" },
-  { href: "/admin/galerie", icon: Image, label: "Galerie" },
+  { href: "/admin/bons-cadeaux", icon: Settings, label: "Bons cadeaux" },
   { href: "/admin/parametres", icon: Settings, label: "Paramètres" },
 ];
 
