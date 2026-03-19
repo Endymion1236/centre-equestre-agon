@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useMemo } from "react";
 import {
-  collection, getDocs, addDoc, deleteDoc, doc, query, where, serverTimestamp,
+  collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { Plus, ChevronLeft, ChevronRight, X, Check, Loader2, Trash2, Users } from "lucide-react";
-import type { Activity } from "@/types";
+import { Plus, ChevronLeft, ChevronRight, X, Check, Loader2, Trash2, Users, UserPlus } from "lucide-react";
+import type { Activity, Family } from "@/types";
 
 interface Creneau {
   id?: string;
@@ -20,7 +20,18 @@ interface Creneau {
   monitor: string;
   maxPlaces: number;
   enrolledCount: number;
+  enrolled: EnrolledChild[];
   status: "planned" | "closed";
+  priceHT?: number;
+  tvaTaux?: number;
+}
+
+interface EnrolledChild {
+  childId: string;
+  childName: string;
+  familyId: string;
+  familyName: string;
+  enrolledAt: string;
 }
 
 interface RecurrenceConfig {
@@ -48,6 +59,142 @@ function fmtMonthFR(d: Date): string { return d.toLocaleDateString("fr-FR", { mo
 const dayNames = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 const typeColors: Record<string, string> = { stage: "#27ae60", balade: "#e67e22", cours: "#2050A0", competition: "#7c3aed", anniversaire: "#D63031", ponyride: "#16a085" };
 
+// ─── Enrollment Panel ───
+function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
+  creneau: Creneau & { id: string };
+  families: (Family & { firestoreId: string })[];
+  onClose: () => void;
+  onEnroll: (creneauId: string, child: EnrolledChild) => Promise<void>;
+  onUnenroll: (creneauId: string, childId: string) => Promise<void>;
+}) {
+  const [selectedFamily, setSelectedFamily] = useState("");
+  const [selectedChild, setSelectedChild] = useState("");
+  const [enrolling, setEnrolling] = useState(false);
+
+  const family = families.find((f) => f.firestoreId === selectedFamily);
+  const children = family?.children || [];
+  const enrolled = creneau.enrolled || [];
+  const enrolledIds = enrolled.map((e) => e.childId);
+  const availableChildren = children.filter((c: any) => !enrolledIds.includes(c.id));
+  const spotsLeft = creneau.maxPlaces - enrolled.length;
+  const color = typeColors[creneau.activityType] || "#666";
+  const priceTTC = (creneau.priceHT || 0) * (1 + (creneau.tvaTaux || 5.5) / 100);
+
+  const handleEnroll = async () => {
+    if (!selectedChild || !family) return;
+    setEnrolling(true);
+    const child = children.find((c: any) => c.id === selectedChild);
+    await onEnroll(creneau.id, {
+      childId: selectedChild,
+      childName: child?.firstName || "—",
+      familyId: family.firestoreId,
+      familyName: family.parentName || "—",
+      enrolledAt: new Date().toISOString(),
+    });
+    setSelectedChild("");
+    setEnrolling(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="p-5 border-b border-blue-500/8" style={{ borderLeftWidth: 4, borderLeftColor: color }}>
+          <div className="flex justify-between items-start">
+            <div>
+              <div className="font-body text-sm font-semibold" style={{ color }}>{creneau.startTime}–{creneau.endTime}</div>
+              <h2 className="font-display text-lg font-bold text-blue-800">{creneau.activityTitle}</h2>
+              <div className="font-body text-xs text-gray-400 mt-1">
+                {new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                {" · "}{creneau.monitor}
+                {priceTTC > 0 && ` · ${priceTTC.toFixed(2)}€ TTC`}
+              </div>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button>
+          </div>
+          <div className="flex items-center gap-3 mt-3">
+            <Badge color={spotsLeft > 2 ? "green" : spotsLeft > 0 ? "orange" : "red"}>
+              {spotsLeft > 0 ? `${spotsLeft} place${spotsLeft > 1 ? "s" : ""} restante${spotsLeft > 1 ? "s" : ""}` : "COMPLET"}
+            </Badge>
+            <span className="font-body text-xs text-gray-400">{enrolled.length}/{creneau.maxPlaces} inscrits</span>
+          </div>
+        </div>
+
+        {/* Enrolled list */}
+        <div className="p-5">
+          <h3 className="font-body text-sm font-semibold text-blue-800 mb-3 flex items-center gap-2">
+            <Users size={16} /> Cavaliers inscrits ({enrolled.length})
+          </h3>
+          {enrolled.length === 0 ? (
+            <p className="font-body text-sm text-gray-400 italic mb-4">Aucun cavalier inscrit</p>
+          ) : (
+            <div className="flex flex-col gap-2 mb-4">
+              {enrolled.map((e) => (
+                <div key={e.childId} className="flex items-center justify-between bg-sand rounded-lg px-4 py-2.5">
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg">🧒</span>
+                    <div>
+                      <div className="font-body text-sm font-semibold text-blue-800">{e.childName}</div>
+                      <div className="font-body text-xs text-gray-400">{e.familyName}</div>
+                    </div>
+                  </div>
+                  <button onClick={() => onUnenroll(creneau.id, e.childId)}
+                    className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer" title="Désinscrire">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Enroll new */}
+          {spotsLeft > 0 && (
+            <div className="border-t border-blue-500/8 pt-4">
+              <h3 className="font-body text-sm font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                <UserPlus size={16} /> Inscrire un cavalier
+              </h3>
+              <div className="flex flex-col gap-3">
+                <select value={selectedFamily} onChange={(e) => { setSelectedFamily(e.target.value); setSelectedChild(""); }}
+                  className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none">
+                  <option value="">Choisir une famille...</option>
+                  {families.map((f) => (
+                    <option key={f.firestoreId} value={f.firestoreId}>{f.parentName} ({(f.children || []).length} cavalier{(f.children || []).length > 1 ? "s" : ""})</option>
+                  ))}
+                </select>
+
+                {family && availableChildren.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {availableChildren.map((c: any) => (
+                      <button key={c.id} onClick={() => setSelectedChild(c.id)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-body text-sm cursor-pointer transition-all
+                          ${selectedChild === c.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
+                        🧒 {c.firstName}
+                        {c.galopLevel && c.galopLevel !== "—" && <Badge color="blue">{c.galopLevel}</Badge>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {family && availableChildren.length === 0 && (
+                  <p className="font-body text-xs text-orange-500">Tous les cavaliers de cette famille sont déjà inscrits.</p>
+                )}
+
+                <button onClick={handleEnroll} disabled={!selectedChild || enrolling}
+                  className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer transition-all
+                    ${!selectedChild || enrolling ? "bg-gray-200 text-gray-400" : "bg-green-600 text-white hover:bg-green-500"}`}>
+                  {enrolling ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                  {enrolling ? "Inscription..." : "Inscrire ce cavalier"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Créneau Form (unchanged but compact) ───
 function CreneauForm({ activities, onSave, onCancel, defaultDate }: {
   activities: Activity[]; onSave: (c: Partial<Creneau>[]) => Promise<void>; onCancel: () => void; defaultDate?: string;
 }) {
@@ -59,8 +206,8 @@ function CreneauForm({ activities, onSave, onCancel, defaultDate }: {
   const [rec, setRec] = useState<RecurrenceConfig>({ mode: "single", startDate: defaultDate || fmtDate(new Date()), endDate: "", daysOfWeek: [] });
   const [saving, setSaving] = useState(false);
 
-  const selActivity = activities.find((a) => a.id === activityId);
-  useEffect(() => { if (selActivity) setMaxPlaces(selActivity.maxPlaces || 8); }, [activityId]);
+  const selAct = activities.find((a) => a.id === activityId);
+  useEffect(() => { if (selAct) setMaxPlaces(selAct.maxPlaces || 8); }, [activityId]);
 
   const dates = useMemo(() => {
     if (rec.mode === "single") return [rec.startDate];
@@ -78,98 +225,101 @@ function CreneauForm({ activities, onSave, onCancel, defaultDate }: {
   }, [rec]);
 
   const handleSubmit = async () => {
-    if (!activityId || !selActivity) return;
+    if (!activityId || !selAct) return;
     setSaving(true);
     await onSave(dates.map((date) => ({
-      activityId, activityTitle: selActivity.title, activityType: selActivity.type,
-      date, startTime, endTime, monitor, maxPlaces, enrolledCount: 0, status: "planned" as const,
+      activityId, activityTitle: selAct.title, activityType: selAct.type,
+      date, startTime, endTime, monitor, maxPlaces, enrolledCount: 0, enrolled: [],
+      status: "planned" as const,
+      priceHT: selAct.priceHT || 0, tvaTaux: selAct.tvaTaux || 5.5,
     })));
     setSaving(false);
   };
 
-  const inputCls = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
+  const inp = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
 
   return (
     <Card padding="md" className="mb-6 border-blue-500/15">
-      <div className="flex justify-between items-center mb-5">
+      <div className="flex justify-between items-center mb-4">
         <h3 className="font-body text-base font-semibold text-blue-800">Nouveau créneau</h3>
         <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button>
       </div>
       <div className="flex flex-col gap-4">
         <div>
           <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Activité *</label>
-          <select value={activityId} onChange={(e) => setActivityId(e.target.value)} className={inputCls}>
-            <option value="">Choisir une activité...</option>
-            {activities.filter((a) => a.active !== false).map((a) => (
-              <option key={a.id} value={a.id}>{a.title} ({a.type})</option>
-            ))}
+          <select value={activityId} onChange={(e) => setActivityId(e.target.value)} className={inp}>
+            <option value="">Choisir...</option>
+            {activities.filter((a) => a.active !== false).map((a) => <option key={a.id} value={a.id}>{a.title} ({a.type})</option>)}
           </select>
         </div>
         <div className="flex gap-3 flex-wrap">
-          <div className="flex-1 min-w-[100px]"><label className="font-body text-xs font-semibold text-blue-800 block mb-1">Début</label><input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputCls} /></div>
-          <div className="flex-1 min-w-[100px]"><label className="font-body text-xs font-semibold text-blue-800 block mb-1">Fin</label><input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={inputCls} /></div>
+          <div className="flex-1 min-w-[100px]"><label className="font-body text-xs font-semibold text-blue-800 block mb-1">Début</label><input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inp} /></div>
+          <div className="flex-1 min-w-[100px]"><label className="font-body text-xs font-semibold text-blue-800 block mb-1">Fin</label><input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={inp} /></div>
           <div className="flex-1 min-w-[120px]"><label className="font-body text-xs font-semibold text-blue-800 block mb-1">Moniteur</label>
-            <select value={monitor} onChange={(e) => setMonitor(e.target.value)} className={inputCls}><option value="Emmeline">Emmeline</option><option value="Nicolas">Nicolas</option></select></div>
-          <div className="flex-1 min-w-[80px]"><label className="font-body text-xs font-semibold text-blue-800 block mb-1">Places</label><input type="number" value={maxPlaces} onChange={(e) => setMaxPlaces(parseInt(e.target.value))} className={inputCls} /></div>
+            <select value={monitor} onChange={(e) => setMonitor(e.target.value)} className={inp}><option>Emmeline</option><option>Nicolas</option></select></div>
+          <div className="flex-1 min-w-[80px]"><label className="font-body text-xs font-semibold text-blue-800 block mb-1">Places</label>
+            <input type="number" value={maxPlaces} onChange={(e) => setMaxPlaces(parseInt(e.target.value))} className={inp} /></div>
         </div>
         <div>
           <label className="font-body text-xs font-semibold text-blue-800 block mb-2">Récurrence</label>
           <div className="flex flex-wrap gap-2 mb-3">
             {([["single", "Date unique"], ["daily_week", "Lun–Ven (stage)"], ["weekly", "Jours spécifiques"]] as const).map(([id, label]) => (
               <button key={id} onClick={() => setRec((r) => ({ ...r, mode: id }))}
-                className={`px-4 py-2 rounded-lg border text-sm font-medium cursor-pointer transition-all font-body ${rec.mode === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>{label}</button>
+                className={`px-4 py-2 rounded-lg border text-sm font-medium cursor-pointer font-body ${rec.mode === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>{label}</button>
             ))}
           </div>
           <div className="flex gap-3 flex-wrap">
-            <div className="flex-1 min-w-[140px]"><label className="font-body text-xs font-semibold text-gray-500 block mb-1">{rec.mode === "single" ? "Date" : "Date de début"}</label>
-              <input type="date" value={rec.startDate} onChange={(e) => setRec((r) => ({ ...r, startDate: e.target.value }))} className={inputCls} /></div>
-            {rec.mode !== "single" && <div className="flex-1 min-w-[140px]"><label className="font-body text-xs font-semibold text-gray-500 block mb-1">Date de fin</label>
-              <input type="date" value={rec.endDate} onChange={(e) => setRec((r) => ({ ...r, endDate: e.target.value }))} className={inputCls} /></div>}
+            <div className="flex-1 min-w-[140px]"><label className="font-body text-xs font-semibold text-gray-500 block mb-1">{rec.mode === "single" ? "Date" : "Du"}</label>
+              <input type="date" value={rec.startDate} onChange={(e) => setRec((r) => ({ ...r, startDate: e.target.value }))} className={inp} /></div>
+            {rec.mode !== "single" && <div className="flex-1 min-w-[140px]"><label className="font-body text-xs font-semibold text-gray-500 block mb-1">Au</label>
+              <input type="date" value={rec.endDate} onChange={(e) => setRec((r) => ({ ...r, endDate: e.target.value }))} className={inp} /></div>}
           </div>
           {rec.mode === "weekly" && (
-            <div className="mt-3"><label className="font-body text-xs font-semibold text-gray-500 block mb-2">Jours</label>
-              <div className="flex gap-2">{dayNames.map((day, i) => (
-                <button key={day} onClick={() => setRec((r) => ({ ...r, daysOfWeek: r.daysOfWeek.includes(i) ? r.daysOfWeek.filter((d) => d !== i) : [...r.daysOfWeek, i] }))}
-                  className={`w-10 h-10 rounded-lg border text-xs font-semibold cursor-pointer font-body ${rec.daysOfWeek.includes(i) ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>{day}</button>
-              ))}</div></div>
+            <div className="mt-3 flex gap-2">{dayNames.map((day, i) => (
+              <button key={day} onClick={() => setRec((r) => ({ ...r, daysOfWeek: r.daysOfWeek.includes(i) ? r.daysOfWeek.filter((d) => d !== i) : [...r.daysOfWeek, i] }))}
+                className={`w-10 h-10 rounded-lg border text-xs font-semibold cursor-pointer font-body ${rec.daysOfWeek.includes(i) ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>{day}</button>
+            ))}</div>
           )}
         </div>
         {dates.length > 0 && (
           <div className="bg-blue-50 rounded-lg p-3">
-            <div className="font-body text-xs font-semibold text-blue-800 mb-2">{dates.length} créneau{dates.length > 1 ? "x" : ""} à créer</div>
-            <div className="flex flex-wrap gap-1.5">
-              {dates.slice(0, 14).map((d) => (<span key={d} className="font-body text-xs text-blue-500 bg-white px-2 py-1 rounded">{new Date(d).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</span>))}
-              {dates.length > 14 && <span className="font-body text-xs text-gray-400">+{dates.length - 14} autres</span>}
-            </div>
+            <div className="font-body text-xs font-semibold text-blue-800 mb-1">{dates.length} créneau{dates.length > 1 ? "x" : ""}</div>
+            <div className="flex flex-wrap gap-1">{dates.slice(0, 14).map((d) => (<span key={d} className="font-body text-xs text-blue-500 bg-white px-2 py-0.5 rounded">{new Date(d).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</span>))}
+              {dates.length > 14 && <span className="font-body text-xs text-gray-400">+{dates.length - 14}</span>}</div>
           </div>
         )}
-        <div className="flex gap-3 pt-2">
-          <button onClick={handleSubmit} disabled={!activityId || dates.length === 0 || saving}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-body text-sm font-semibold border-none cursor-pointer ${!activityId || dates.length === 0 || saving ? "bg-gray-200 text-gray-400" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
-            {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-            {saving ? "Création..." : `Créer ${dates.length} créneau${dates.length > 1 ? "x" : ""}`}
-          </button>
-          <button onClick={onCancel} className="px-6 py-2.5 rounded-lg font-body text-sm text-gray-500 bg-white border border-gray-200 cursor-pointer">Annuler</button>
-        </div>
+        <button onClick={handleSubmit} disabled={!activityId || dates.length === 0 || saving}
+          className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-body text-sm font-semibold border-none cursor-pointer ${!activityId || dates.length === 0 || saving ? "bg-gray-200 text-gray-400" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
+          {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+          {saving ? "Création..." : `Créer ${dates.length} créneau${dates.length > 1 ? "x" : ""}`}
+        </button>
       </div>
     </Card>
   );
 }
 
+// ─── Main ───
 export default function PlanningPage() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [creneaux, setCreneaux] = useState<(Creneau & { id: string })[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | undefined>();
+  const [selectedCreneau, setSelectedCreneau] = useState<(Creneau & { id: string }) | null>(null);
 
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
 
   const fetchData = async () => {
     try {
-      const actSnap = await getDocs(collection(db, "activities"));
+      const [actSnap, famSnap] = await Promise.all([
+        getDocs(collection(db, "activities")),
+        getDocs(collection(db, "families")),
+      ]);
       setActivities(actSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Activity[]);
+      setFamilies(famSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as any);
+
       const startStr = fmtDate(weekDates[0]);
       const endStr = fmtDate(weekDates[6]);
       const crSnap = await getDocs(query(collection(db, "creneaux"), where("date", ">=", startStr), where("date", "<=", endStr)));
@@ -180,8 +330,8 @@ export default function PlanningPage() {
 
   useEffect(() => { setLoading(true); fetchData(); }, [weekOffset]);
 
-  const handleCreate = async (newCreneaux: Partial<Creneau>[]) => {
-    for (const c of newCreneaux) await addDoc(collection(db, "creneaux"), { ...c, createdAt: serverTimestamp() });
+  const handleCreate = async (newC: Partial<Creneau>[]) => {
+    for (const c of newC) await addDoc(collection(db, "creneaux"), { ...c, createdAt: serverTimestamp() });
     setShowForm(false);
     fetchData();
   };
@@ -190,6 +340,35 @@ export default function PlanningPage() {
     if (!confirm("Supprimer ce créneau ?")) return;
     await deleteDoc(doc(db, "creneaux", id));
     fetchData();
+  };
+
+  const handleEnroll = async (creneauId: string, child: EnrolledChild) => {
+    const creneau = creneaux.find((c) => c.id === creneauId);
+    if (!creneau) return;
+    const enrolled = [...(creneau.enrolled || []), child];
+    await updateDoc(doc(db, "creneaux", creneauId), { enrolled, enrolledCount: enrolled.length });
+    await fetchData();
+    // Update selectedCreneau with fresh data
+    const updated = creneaux.find((c) => c.id === creneauId);
+    if (updated) setSelectedCreneau({ ...updated, enrolled, enrolledCount: enrolled.length });
+    else {
+      const snap = await getDocs(query(collection(db, "creneaux"), where("date", ">=", fmtDate(weekDates[0])), where("date", "<=", fmtDate(weekDates[6]))));
+      const freshCreneaux = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (Creneau & { id: string })[];
+      setCreneaux(freshCreneaux);
+      setSelectedCreneau(freshCreneaux.find((c) => c.id === creneauId) || null);
+    }
+  };
+
+  const handleUnenroll = async (creneauId: string, childId: string) => {
+    const creneau = creneaux.find((c) => c.id === creneauId);
+    if (!creneau) return;
+    const enrolled = (creneau.enrolled || []).filter((e) => e.childId !== childId);
+    await updateDoc(doc(db, "creneaux", creneauId), { enrolled, enrolledCount: enrolled.length });
+    await fetchData();
+    const snap = await getDocs(query(collection(db, "creneaux"), where("date", ">=", fmtDate(weekDates[0])), where("date", "<=", fmtDate(weekDates[6]))));
+    const freshCreneaux = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (Creneau & { id: string })[];
+    setCreneaux(freshCreneaux);
+    setSelectedCreneau(freshCreneaux.find((c) => c.id === creneauId) || null);
   };
 
   const isToday = (d: Date) => fmtDate(d) === fmtDate(new Date());
@@ -206,40 +385,36 @@ export default function PlanningPage() {
 
       {showForm && <CreneauForm activities={activities} onSave={handleCreate} onCancel={() => setShowForm(false)} defaultDate={selectedDate} />}
 
+      {/* Week nav */}
       <div className="flex items-center justify-between mb-5">
-        <button onClick={() => setWeekOffset((w) => w - 1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50">
-          <ChevronLeft size={16} /> Préc.
-        </button>
+        <button onClick={() => setWeekOffset((w) => w - 1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50"><ChevronLeft size={16} /> Préc.</button>
         <div className="text-center">
           <div className="font-display text-lg font-bold text-blue-800 capitalize">{fmtMonthFR(weekDates[0])}</div>
-          <div className="font-body text-xs text-gray-400">
-            Semaine du {weekDates[0].toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} au {weekDates[6].toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
-          </div>
+          <div className="font-body text-xs text-gray-400">Semaine du {weekDates[0].toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} au {weekDates[6].toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</div>
         </div>
         <div className="flex gap-2">
           <button onClick={() => setWeekOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Aujourd&apos;hui</button>
-          <button onClick={() => setWeekOffset((w) => w + 1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50">
-            Suiv. <ChevronRight size={16} />
-          </button>
+          <button onClick={() => setWeekOffset((w) => w + 1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50">Suiv. <ChevronRight size={16} /></button>
         </div>
       </div>
 
+      {/* Legend */}
       <div className="flex flex-wrap gap-4 mb-4">
         {[["Stages", "stage"], ["Cours", "cours"], ["Balades", "balade"], ["Compétitions", "competition"]].map(([label, type]) => (
           <span key={type} className="flex items-center gap-1.5 font-body text-xs text-gray-400">
             <span className="w-2.5 h-2.5 rounded-sm" style={{ background: typeColors[type] }} /> {label}
           </span>
         ))}
+        <span className="font-body text-xs text-gray-400 ml-auto">💡 Cliquez sur un créneau pour inscrire des cavaliers</span>
       </div>
 
+      {/* Grid */}
       {loading ? (
         <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div>
       ) : (
         <div className="grid grid-cols-7 gap-1.5">
           {weekDates.map((d, i) => (
-            <div key={i} className={`text-center py-2 rounded-lg font-body text-xs font-semibold ${isToday(d) ? "bg-blue-500 text-white" : "bg-sand text-gray-500"}`}>
-              {fmtDateFR(d)}
-            </div>
+            <div key={i} className={`text-center py-2 rounded-lg font-body text-xs font-semibold ${isToday(d) ? "bg-blue-500 text-white" : "bg-sand text-gray-500"}`}>{fmtDateFR(d)}</div>
           ))}
           {weekDates.map((d, i) => {
             const dateStr = fmtDate(d);
@@ -247,23 +422,27 @@ export default function PlanningPage() {
             return (
               <div key={`col-${i}`} className="min-h-[140px] flex flex-col gap-1">
                 {dayCreneaux.map((c) => {
-                  const fill = c.maxPlaces > 0 ? c.enrolledCount / c.maxPlaces : 0;
+                  const enrolled = c.enrolled || [];
+                  const fill = c.maxPlaces > 0 ? enrolled.length / c.maxPlaces : 0;
                   const color = typeColors[c.activityType] || "#666";
                   return (
-                    <div key={c.id} className="bg-white rounded-lg p-2 border border-blue-500/8 group relative hover:shadow-md transition-all" style={{ borderLeftWidth: 3, borderLeftColor: color }}>
+                    <div key={c.id} onClick={() => setSelectedCreneau(c)}
+                      className="bg-white rounded-lg p-2 border border-blue-500/8 group relative hover:shadow-md transition-all cursor-pointer"
+                      style={{ borderLeftWidth: 3, borderLeftColor: color }}>
                       <div className="font-body text-[11px] font-semibold" style={{ color }}>{c.startTime}–{c.endTime}</div>
                       <div className="font-body text-xs font-semibold text-blue-800 leading-tight mt-0.5">{c.activityTitle}</div>
                       <div className="font-body text-[10px] text-gray-400 mt-0.5">{c.monitor}</div>
                       <div className="flex items-center gap-1 mt-1">
                         <Users size={10} className="text-gray-400" />
                         <span className={`font-body text-[10px] font-semibold ${fill >= 1 ? "text-red-500" : fill >= 0.7 ? "text-orange-500" : "text-green-600"}`}>
-                          {c.enrolledCount}/{c.maxPlaces}
+                          {enrolled.length}/{c.maxPlaces}
                         </span>
                       </div>
                       <div className="mt-1 h-1 rounded-full bg-gray-100">
                         <div className="h-1 rounded-full" style={{ width: `${Math.min(fill * 100, 100)}%`, background: fill >= 1 ? "#D63031" : fill >= 0.7 ? "#e67e22" : "#27ae60" }} />
                       </div>
-                      <button onClick={() => handleDelete(c.id)} className="absolute top-1 right-1 w-5 h-5 rounded bg-red-50 text-red-400 hover:bg-red-100 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <button onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }}
+                        className="absolute top-1 right-1 w-5 h-5 rounded bg-red-50 text-red-400 hover:bg-red-100 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                         <Trash2 size={10} />
                       </button>
                     </div>
@@ -277,20 +456,32 @@ export default function PlanningPage() {
         </div>
       )}
 
+      {/* Stats */}
       <div className="mt-6 flex gap-4 flex-wrap">
         <Card padding="sm" className="flex items-center gap-3">
           <span className="font-body text-xl font-bold text-blue-500">{creneaux.length}</span>
-          <span className="font-body text-xs text-gray-400">créneaux cette semaine</span>
+          <span className="font-body text-xs text-gray-400">créneaux</span>
         </Card>
         <Card padding="sm" className="flex items-center gap-3">
-          <span className="font-body text-xl font-bold text-green-600">{creneaux.reduce((s, c) => s + c.enrolledCount, 0)}</span>
+          <span className="font-body text-xl font-bold text-green-600">{creneaux.reduce((s, c) => s + (c.enrolled?.length || 0), 0)}</span>
           <span className="font-body text-xs text-gray-400">inscrits</span>
         </Card>
         <Card padding="sm" className="flex items-center gap-3">
           <span className="font-body text-xl font-bold text-gold-400">{creneaux.reduce((s, c) => s + c.maxPlaces, 0)}</span>
-          <span className="font-body text-xs text-gray-400">places totales</span>
+          <span className="font-body text-xs text-gray-400">places</span>
         </Card>
       </div>
+
+      {/* Enrollment panel modal */}
+      {selectedCreneau && (
+        <EnrollPanel
+          creneau={selectedCreneau}
+          families={families}
+          onClose={() => setSelectedCreneau(null)}
+          onEnroll={handleEnroll}
+          onUnenroll={handleUnenroll}
+        />
+      )}
     </div>
   );
 }
