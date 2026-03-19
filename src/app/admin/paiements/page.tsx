@@ -108,13 +108,14 @@ export default function PaiementsPage() {
     const activity = activities.find((a) => a.firestoreId === selectedActivity);
     if (!activity) return;
     const child = children.find((c: any) => c.id === selectedChild);
-    const priceTTC = (activity.priceHT || 0) * (1 + (activity.tvaTaux || 5.5) / 100);
+    const priceTTC = (activity as any).priceTTC || (activity.priceHT || 0) * (1 + (activity.tvaTaux || 5.5) / 100);
+    const priceHT = priceTTC / (1 + (activity.tvaTaux || 5.5) / 100);
     setBasket([...basket, {
       id: Date.now().toString(),
       activityTitle: activity.title,
       childName: child?.firstName || "—",
       description: activity.schedule || "",
-      priceHT: activity.priceHT || 0,
+      priceHT: Math.round(priceHT * 100) / 100,
       tva: activity.tvaTaux || 5.5,
       priceTTC: Math.round(priceTTC * 100) / 100,
     }]);
@@ -216,9 +217,9 @@ export default function PaiementsPage() {
               <div className="flex gap-2 mb-3">
                 <select value={selectedActivity} onChange={(e) => setSelectedActivity(e.target.value)} className={`${inputCls} flex-1`}>
                   <option value="">Choisir une activité...</option>
-                  {activities.filter((a) => a.active !== false).map((a) => {
-                    const ttc = (a.priceHT || 0) * (1 + (a.tvaTaux || 5.5) / 100);
-                    return <option key={a.firestoreId} value={a.firestoreId}>{a.title} — {ttc.toFixed(2)}€ TTC</option>;
+                  {activities.filter((a) => a.active !== false).map((a, idx) => {
+                    const ttc = (a as any).priceTTC || (a.priceHT || 0) * (1 + (a.tvaTaux || 5.5) / 100);
+                    return <option key={`${a.firestoreId}-${idx}`} value={a.firestoreId}>{a.title} — {ttc.toFixed(2)}€ TTC</option>;
                   })}
                 </select>
                 <button onClick={addToBasket} disabled={!selectedActivity}
