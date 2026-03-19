@@ -41,7 +41,8 @@ export interface Activity {
   ageMax: number | null;
   galopRequired: string | null;
   priceHT: number;
-  tvaTaux: number; // 10 pour 10%
+  priceTTC: number; // Prix annoncé au client (TTC)
+  tvaTaux: number; // 5.5 pour 5.5%
   maxPlaces: number;
   schedule: string; // ex: "Lun-Ven · 10h-12h"
   seasonPeriod: string; // ex: "Toutes vacances", "Avr-Oct"

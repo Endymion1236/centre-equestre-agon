@@ -27,7 +27,7 @@ const activityTypes: { id: ActivityType | string; label: string; emoji: string }
   { id: "ponyride", label: "Pony ride", emoji: "🐴" },
 ];
 
-const defaultActivity: Partial<Activity> = {
+const defaultActivity: Partial<Activity> & { priceTTC?: number } = {
   type: "stage",
   title: "",
   description: "",
@@ -35,12 +35,13 @@ const defaultActivity: Partial<Activity> = {
   ageMax: null,
   galopRequired: null,
   priceHT: 0,
-  tvaTaux: 10,
+  tvaTaux: 5.5,
   maxPlaces: 8,
   schedule: "",
   seasonPeriod: "",
   active: true,
   articles: [],
+  priceTTC: 0,
 };
 
 function ActivityForm({
@@ -61,7 +62,11 @@ function ActivityForm({
   const handleSubmit = async () => {
     if (!form.title) return;
     setSaving(true);
-    await onSave(form);
+    // Calculate HT from TTC
+    const priceTTC = (form as any).priceTTC || 0;
+    const tvaTaux = form.tvaTaux || 5.5;
+    const priceHT = priceTTC / (1 + tvaTaux / 100);
+    await onSave({ ...form, priceHT: Math.round(priceHT * 100) / 100, priceTTC });
     setSaving(false);
   };
 
@@ -182,25 +187,26 @@ function ActivityForm({
         {/* Price + TVA + Season */}
         <div className="flex gap-3 flex-wrap">
           <div className="flex-1 min-w-[120px]">
-            <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Prix HT (€)</label>
+            <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Prix TTC (€) — prix annoncé</label>
             <input
               type="number"
               step="0.01"
-              value={form.priceHT || 0}
-              onChange={(e) => update("priceHT", parseFloat(e.target.value))}
+              value={form.priceTTC || 0}
+              onChange={(e) => update("priceTTC", parseFloat(e.target.value))}
               className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
             />
           </div>
           <div className="flex-1 min-w-[100px]">
             <label className="font-body text-xs font-semibold text-blue-800 block mb-1">TVA (%)</label>
             <select
-              value={form.tvaTaux || 10}
+              value={form.tvaTaux || 5.5}
               onChange={(e) => update("tvaTaux", parseFloat(e.target.value))}
               className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
             >
               <option value={5.5}>5.5%</option>
               <option value={10}>10%</option>
               <option value={20}>20%</option>
+              <option value={0}>0% (exonéré)</option>
             </select>
           </div>
           <div className="flex-1 min-w-[140px]">
@@ -214,12 +220,26 @@ function ActivityForm({
           </div>
         </div>
 
-        {/* Prix TTC calculé */}
-        <div className="bg-blue-50 rounded-lg p-3 flex justify-between items-center">
-          <span className="font-body text-sm text-blue-800">Prix TTC calculé :</span>
-          <span className="font-body text-lg font-bold text-blue-500">
-            {((form.priceHT || 0) * (1 + (form.tvaTaux || 10) / 100)).toFixed(2)}€
-          </span>
+        {/* Prix HT calculé */}
+        <div className="bg-blue-50 rounded-lg p-3">
+          <div className="flex justify-between items-center mb-1">
+            <span className="font-body text-sm text-blue-800">Prix TTC (annoncé) :</span>
+            <span className="font-body text-lg font-bold text-blue-500">
+              {(form.priceTTC || 0).toFixed(2)}€
+            </span>
+          </div>
+          <div className="flex justify-between items-center mb-1">
+            <span className="font-body text-xs text-gray-500">dont TVA {form.tvaTaux || 5.5}% :</span>
+            <span className="font-body text-xs text-orange-500">
+              {((form.priceTTC || 0) - (form.priceTTC || 0) / (1 + (form.tvaTaux || 5.5) / 100)).toFixed(2)}€
+            </span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="font-body text-xs text-gray-500">Prix HT :</span>
+            <span className="font-body text-xs text-gray-700">
+              {((form.priceTTC || 0) / (1 + (form.tvaTaux || 5.5) / 100)).toFixed(2)}€
+            </span>
+          </div>
         </div>
 
         {/* Actions */}
@@ -389,7 +409,7 @@ export default function AdminActivitesPage() {
 
           {/* Rows */}
           {filtered.map((activity) => {
-            const priceTTC = (activity.priceHT || 0) * (1 + (activity.tvaTaux || 10) / 100);
+            const priceTTC = (activity as any).priceTTC || (activity.priceHT || 0) * (1 + (activity.tvaTaux || 5.5) / 100);
             return (
               <div
                 key={activity.firestoreId}

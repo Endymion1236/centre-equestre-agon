@@ -6,7 +6,7 @@ import { Card, Badge } from "@/components/ui";
 import { Plus, ChevronLeft, ChevronRight, X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard } from "lucide-react";
 import type { Activity, Family } from "@/types";
 
-interface Creneau { id?: string; activityId: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolledCount: number; enrolled: any[]; status: string; priceHT?: number; tvaTaux?: number; }
+interface Creneau { id?: string; activityId: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolledCount: number; enrolled: any[]; status: string; priceHT?: number; priceTTC?: number; tvaTaux?: number; }
 interface EnrolledChild { childId: string; childName: string; familyId: string; familyName: string; enrolledAt: string; }
 
 function getWeekDates(offset: number): Date[] { const t = new Date(); const m = new Date(t); m.setDate(t.getDate() - ((t.getDay() + 6) % 7) + offset * 7); return Array.from({ length: 7 }, (_, i) => { const d = new Date(m); d.setDate(m.getDate() + i); return d; }); }
@@ -36,7 +36,7 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
   const enrolledIds = enrolled.map((e: any) => e.childId);
   const spots = creneau.maxPlaces - enrolled.length;
   const color = typeColors[creneau.activityType] || "#666";
-  const priceTTC = (creneau.priceHT || 0) * (1 + (creneau.tvaTaux || 5.5) / 100);
+  const priceTTC = (creneau as any).priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux || 5.5) / 100);
 
   // Search families by parent name, email, or child name
   const filteredFamilies = useMemo(() => {
@@ -192,7 +192,7 @@ function CreneauForm({ activities, onSave, onCancel, defaultDate }: { activities
   const act = activities.find(a => a.id === actId);
   useEffect(() => { if (act) setMp(act.maxPlaces || 8); }, [actId]);
   const dates = useMemo(() => { if (rec.mode === "single") return [rec.startDate]; if (!rec.endDate) return []; const r: string[] = []; const c = new Date(rec.startDate); const e = new Date(rec.endDate); while (c <= e) { const dow = (c.getDay() + 6) % 7; if (rec.mode === "daily_week" && dow < 5) r.push(fmtDate(c)); else if (rec.mode === "weekly" && rec.daysOfWeek.includes(dow)) r.push(fmtDate(c)); c.setDate(c.getDate() + 1); } return r; }, [rec]);
-  const sub = async () => { if (!actId || !act) return; setSaving(true); await onSave(dates.map(d => ({ activityId: actId, activityTitle: act.title, activityType: act.type, date: d, startTime: st, endTime: et, monitor: mon, maxPlaces: mp, enrolledCount: 0, enrolled: [], status: "planned", priceHT: act.priceHT || 0, tvaTaux: act.tvaTaux || 5.5 }))); setSaving(false); };
+  const sub = async () => { if (!actId || !act) return; setSaving(true); const actPriceTTC = (act as any).priceTTC || (act.priceHT || 0) * (1 + (act.tvaTaux || 5.5) / 100); await onSave(dates.map(d => ({ activityId: actId, activityTitle: act.title, activityType: act.type, date: d, startTime: st, endTime: et, monitor: mon, maxPlaces: mp, enrolledCount: 0, enrolled: [], status: "planned", priceHT: actPriceTTC / (1 + (act.tvaTaux || 5.5) / 100), priceTTC: actPriceTTC, tvaTaux: act.tvaTaux || 5.5 }))); setSaving(false); };
   const inp = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
   return (
     <Card padding="md" className="mb-6 border-blue-500/15">
@@ -249,7 +249,7 @@ export default function PlanningPage() {
   
   const handleDuplicateWeek = async () => {
     if (creneaux.length === 0) return; setDuplicating(true);
-    for (let w = 1; w <= dupWeeks; w++) { for (const c of creneaux) { const d = new Date(c.date); d.setDate(d.getDate() + 7 * w); await addDoc(collection(db, "creneaux"), { activityId: c.activityId, activityTitle: c.activityTitle, activityType: c.activityType, date: fmtDate(d), startTime: c.startTime, endTime: c.endTime, monitor: c.monitor, maxPlaces: c.maxPlaces, enrolledCount: 0, enrolled: [], status: "planned", priceHT: c.priceHT || 0, tvaTaux: c.tvaTaux || 5.5, createdAt: serverTimestamp() }); } }
+    for (let w = 1; w <= dupWeeks; w++) { for (const c of creneaux) { const d = new Date(c.date); d.setDate(d.getDate() + 7 * w); await addDoc(collection(db, "creneaux"), { activityId: c.activityId, activityTitle: c.activityTitle, activityType: c.activityType, date: fmtDate(d), startTime: c.startTime, endTime: c.endTime, monitor: c.monitor, maxPlaces: c.maxPlaces, enrolledCount: 0, enrolled: [], status: "planned", priceHT: c.priceHT || 0, priceTTC: (c as any).priceTTC || 0, tvaTaux: c.tvaTaux || 5.5, createdAt: serverTimestamp() }); } }
     setDuplicating(false); setShowDuplicate(false); alert(`${creneaux.length * dupWeeks} créneaux dupliqués !`); fetchData();
   };
 
@@ -268,7 +268,8 @@ export default function PlanningPage() {
     const en = [...(c.enrolled || []), child];
     await updateDoc(doc(db, "creneaux", cid), { enrolled: en, enrolledCount: en.length });
     
-    const priceTTC = (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
+    const priceTTC = (c as any).priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
+    const priceHT = priceTTC / (1 + (c.tvaTaux || 5.5) / 100);
     
     // Create reservation
     await addDoc(collection(db, "reservations"), {
@@ -284,7 +285,7 @@ export default function PlanningPage() {
     if (payMode && priceTTC > 0) {
       await addDoc(collection(db, "payments"), {
         familyId: child.familyId, familyName: child.familyName,
-        items: [{ activityTitle: c.activityTitle, priceHT: c.priceHT || 0, tva: c.tvaTaux || 5.5, priceTTC: Math.round(priceTTC * 100) / 100 }],
+        items: [{ activityTitle: c.activityTitle, priceHT: Math.round(priceHT * 100) / 100, tva: c.tvaTaux || 5.5, priceTTC: Math.round(priceTTC * 100) / 100 }],
         totalTTC: Math.round(priceTTC * 100) / 100,
         paymentMode: payMode, paymentRef: "", status: "paid",
         paidAmount: Math.round(priceTTC * 100) / 100,
@@ -372,7 +373,7 @@ export default function PlanningPage() {
         </div>
         {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
         dayCreneaux.length === 0 ? <Card padding="lg" className="text-center"><span className="text-4xl block mb-3">📅</span><p className="font-body text-sm text-gray-500 mb-3">Aucun créneau.</p><button onClick={() => { setSelectedDate(fmtDate(currentDay)); setShowForm(true); }} className="font-body text-sm font-semibold text-blue-500 bg-transparent border-none cursor-pointer">+ Créer</button></Card> :
-        <div className="flex flex-col gap-3">{dayCreneaux.map(c => { const en = c.enrolled||[]; const fill = c.maxPlaces > 0 ? en.length/c.maxPlaces : 0; const col = typeColors[c.activityType]||"#666"; const ttc = (c.priceHT||0)*(1+(c.tvaTaux||5.5)/100); return (
+        <div className="flex flex-col gap-3">{dayCreneaux.map(c => { const en = c.enrolled||[]; const fill = c.maxPlaces > 0 ? en.length/c.maxPlaces : 0; const col = typeColors[c.activityType]||"#666"; const ttc = (c as any).priceTTC || (c.priceHT||0)*(1+(c.tvaTaux||5.5)/100); return (
           <Card key={c.id} padding="md" className="cursor-pointer hover:shadow-lg" hover>
             <div onClick={() => setSelectedCreneau(c)}>
               <div className="flex items-start justify-between mb-3">
