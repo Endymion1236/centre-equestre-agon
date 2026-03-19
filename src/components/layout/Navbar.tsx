@@ -82,7 +82,7 @@ export function Navbar() {
               {link.label}
             </Link>
           ))}
-          <Link href="/espace-cavalier">
+          <Link href="/espace-cavalier/reserver">
             <Button variant="primary" size="sm">
               Réserver
             </Button>
@@ -113,7 +113,7 @@ export function Navbar() {
               {link.label}
             </Link>
           ))}
-          <Link href="/espace-cavalier" onClick={() => setMobileOpen(false)}>
+          <Link href="/espace-cavalier/reserver" onClick={() => setMobileOpen(false)}>
             <Button variant="primary" full className="mt-4">
               Réserver en ligne
             </Button>

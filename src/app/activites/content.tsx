@@ -392,9 +392,11 @@ function ActivityCard({ activity }: { activity: Activity }) {
           )}
 
           <div className="flex items-center gap-4">
-            <Button variant="primary" size="sm">
-              Réserver
-            </Button>
+            <a href="/espace-cavalier/reserver" className="no-underline">
+              <Button variant="primary" size="sm">
+                Réserver
+              </Button>
+            </a>
             <button
               onClick={() => setExpanded(!expanded)}
               className="font-body text-sm font-medium text-blue-500 flex items-center gap-1 hover:text-blue-400 transition-colors bg-transparent border-none cursor-pointer"

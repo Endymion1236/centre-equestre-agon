@@ -87,18 +87,20 @@ function PriceCard({
           </div>
         ))}
       </div>
-      <button
-        className={`
-          w-full font-body text-sm font-semibold py-3.5 rounded-xl transition-all cursor-pointer
-          ${
-            highlight
-              ? "bg-gold-400 text-blue-800 border-none hover:bg-gold-300"
-              : "bg-transparent text-blue-500 border-2 border-blue-500 hover:bg-blue-500 hover:text-white"
-          }
-        `}
-      >
-        Réserver
-      </button>
+      <a href="/espace-cavalier/reserver" className="no-underline w-full block">
+        <button
+          className={`
+            w-full font-body text-sm font-semibold py-3.5 rounded-xl transition-all cursor-pointer
+            ${
+              highlight
+                ? "bg-gold-400 text-blue-800 border-none hover:bg-gold-300"
+                : "bg-transparent text-blue-500 border-2 border-blue-500 hover:bg-blue-500 hover:text-white"
+            }
+          `}
+        >
+          Réserver
+        </button>
+      </a>
     </div>
   );
 }
