@@ -7,6 +7,7 @@ import {
   BarChart3,
   CalendarDays,
   ClipboardList,
+  ClipboardCheck,
   CreditCard,
   Users,
   Mail,
@@ -22,6 +23,8 @@ const navItems = [
   { href: "/admin/dashboard", icon: BarChart3, label: "Tableau de bord" },
   { href: "/admin/activites", icon: ClipboardList, label: "Activités" },
   { href: "/admin/planning", icon: CalendarDays, label: "Planning" },
+  { href: "/admin/montoir", icon: ClipboardList, label: "Montoir" },
+  { href: "/admin/montoir", icon: ClipboardCheck, label: "Montoir" },
   { href: "/admin/cavaliers", icon: Users, label: "Cavaliers" },
   { href: "/admin/paiements", icon: CreditCard, label: "Paiements" },
   { href: "/admin/comptabilite", icon: BookOpen, label: "Comptabilité" },
@@ -105,9 +108,26 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  // For now, allow any logged-in user (we'll restrict to admins later)
-  // TODO: uncomment this when admin emails are configured
-  // if (!isAdmin) { ... redirect ... }
+  // Restrict to admin emails
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-cream flex items-center justify-center px-6">
+        <div className="text-center max-w-sm">
+          <ShieldAlert className="w-12 h-12 text-orange-400 mx-auto mb-4" />
+          <h1 className="font-display text-xl font-bold text-blue-800 mb-2">Accès réservé</h1>
+          <p className="font-body text-sm text-gray-500 mb-2">
+            Le back-office est réservé aux administrateurs.
+          </p>
+          <p className="font-body text-xs text-gray-400 mb-6">
+            Connecté en tant que : {user?.email}
+          </p>
+          <Link href="/espace-cavalier" className="font-body text-sm font-semibold text-blue-500 no-underline">
+            → Espace cavalier
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-cream flex">

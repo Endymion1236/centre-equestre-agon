@@ -12,6 +12,7 @@ import {
   Receipt,
   Users,
   Star,
+  TrendingUp,
   LogOut,
   Loader2,
 } from "lucide-react";
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/espace-cavalier/reservations", icon: ClipboardList, label: "Mes réservations" },
   { href: "/espace-cavalier/factures", icon: Receipt, label: "Mes factures" },
   { href: "/espace-cavalier/profil", icon: Users, label: "Profil famille" },
+  { href: "/espace-cavalier/progression", icon: TrendingUp, label: "Progression" },
   { href: "/espace-cavalier/satisfaction", icon: Star, label: "Satisfaction" },
 ];
 
