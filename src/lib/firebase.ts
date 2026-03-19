@@ -1,32 +1,26 @@
 import { initializeApp, getApps } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, FacebookAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// ═══════════════════════════════════════════════════════════════
-// INSTRUCTIONS POUR NICOLAS :
-// 1. Va sur https://console.firebase.google.com/
-// 2. Crée un nouveau projet "centre-equestre-agon"
-// 3. Active Authentication > Méthodes : Google + Facebook
-// 4. Active Firestore Database (mode test pour commencer)
-// 5. Active Storage
-// 6. Va dans Paramètres > Général > "Vos applications" > Web
-// 7. Copie les valeurs ci-dessous
-// ═══════════════════════════════════════════════════════════════
-
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "REMPLACER_PAR_TA_CLE",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "centre-equestre-agon.firebaseapp.com",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "centre-equestre-agon",
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "centre-equestre-agon.appspot.com",
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "REMPLACER",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "REMPLACER",
+  apiKey: "AIzaSyDy1vrJpa12CrnyGoDkR9t4c3E31CS7Ovc",
+  authDomain: "gestion-2026.firebaseapp.com",
+  projectId: "gestion-2026",
+  storageBucket: "gestion-2026.firebasestorage.app",
+  messagingSenderId: "785848912923",
+  appId: "1:785848912923:web:47f03aa109fa13eb1c7cbe",
 };
 
-// Initialize Firebase (singleton pattern)
+// Initialize Firebase (singleton)
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+
+// Auth providers
+export const googleProvider = new GoogleAuthProvider();
+export const facebookProvider = new FacebookAuthProvider();
+
 export default app;

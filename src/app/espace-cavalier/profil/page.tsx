@@ -1,0 +1,297 @@
+"use client";
+
+import { useState } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { doc, updateDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { Card, Badge, Button } from "@/components/ui";
+import { Plus, ChevronDown, ChevronUp } from "lucide-react";
+import type { Child, SanitaryForm } from "@/types";
+
+function AddChildForm({ onAdd }: { onAdd: () => void }) {
+  const { user } = useAuth();
+  const [firstName, setFirstName] = useState("");
+  const [birthDate, setBirthDate] = useState("");
+  const [allergies, setAllergies] = useState("");
+  const [emergencyName, setEmergencyName] = useState("");
+  const [emergencyPhone, setEmergencyPhone] = useState("");
+  const [authorization, setAuthorization] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!firstName || !birthDate || !user) return;
+    setSaving(true);
+
+    const newChild: Child = {
+      id: Date.now().toString(),
+      firstName,
+      birthDate: new Date(birthDate),
+      galopLevel: "—",
+      sanitaryForm: authorization
+        ? {
+            allergies,
+            emergencyContactName: emergencyName,
+            emergencyContactPhone: emergencyPhone,
+            parentalAuthorization: true,
+            updatedAt: new Date(),
+          }
+        : null,
+    };
+
+    try {
+      const familyRef = doc(db, "families", user.uid);
+      await updateDoc(familyRef, {
+        children: arrayUnion(newChild),
+        updatedAt: serverTimestamp(),
+      });
+      onAdd();
+      // Reset form
+      setFirstName("");
+      setBirthDate("");
+      setAllergies("");
+      setEmergencyName("");
+      setEmergencyPhone("");
+      setAuthorization(false);
+    } catch (error) {
+      console.error("Erreur ajout enfant:", error);
+    }
+    setSaving(false);
+  };
+
+  return (
+    <Card className="mt-4" padding="md">
+      <h3 className="font-body text-sm font-semibold text-blue-800 mb-4">
+        Ajouter un cavalier
+      </h3>
+      <div className="flex flex-col gap-4">
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="font-body text-xs font-semibold text-blue-800 block mb-1">
+              Prénom *
+            </label>
+            <input
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
+              placeholder="Prénom de l'enfant"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="font-body text-xs font-semibold text-blue-800 block mb-1">
+              Date de naissance *
+            </label>
+            <input
+              type="date"
+              value={birthDate}
+              onChange={(e) => setBirthDate(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+        </div>
+
+        <div className="border-t border-blue-500/8 pt-4">
+          <div className="font-body text-xs font-semibold text-blue-800 mb-3">
+            📋 Fiche sanitaire
+          </div>
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="font-body text-xs font-semibold text-gray-500 block mb-1">
+                Allergies connues
+              </label>
+              <input
+                value={allergies}
+                onChange={(e) => setAllergies(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
+                placeholder="Ex: arachides, pollen..."
+              />
+            </div>
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className="font-body text-xs font-semibold text-gray-500 block mb-1">
+                  Contact urgence — Nom
+                </label>
+                <input
+                  value={emergencyName}
+                  onChange={(e) => setEmergencyName(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
+                  placeholder="Nom"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="font-body text-xs font-semibold text-gray-500 block mb-1">
+                  Téléphone urgence
+                </label>
+                <input
+                  value={emergencyPhone}
+                  onChange={(e) => setEmergencyPhone(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
+                  placeholder="06..."
+                />
+              </div>
+            </div>
+            <label className="flex items-center gap-2 font-body text-xs text-gray-500 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={authorization}
+                onChange={(e) => setAuthorization(e.target.checked)}
+                className="accent-blue-500 w-4 h-4"
+              />
+              J&apos;autorise mon enfant à participer aux activités équestres du centre
+            </label>
+          </div>
+        </div>
+
+        <Button
+          variant="secondary"
+          onClick={handleSubmit}
+          disabled={!firstName || !birthDate || saving}
+        >
+          {saving ? "Enregistrement..." : "Ajouter ce cavalier"}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+export default function ProfilPage() {
+  const { user, family } = useAuth();
+  const [showAddChild, setShowAddChild] = useState(false);
+  const [expandedChild, setExpandedChild] = useState<string | null>(null);
+
+  const handleChildAdded = () => {
+    setShowAddChild(false);
+    // Force reload to get updated family
+    window.location.reload();
+  };
+
+  return (
+    <div>
+      <h1 className="font-display text-2xl font-bold text-blue-800 mb-6">
+        Profil famille
+      </h1>
+
+      {/* Parent info */}
+      <Card padding="md" className="mb-5">
+        <div className="flex justify-between items-start mb-4">
+          <span className="font-body text-sm font-semibold text-blue-800">
+            👤 Parent titulaire
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          {[
+            { label: "Nom", value: family?.parentName || "—" },
+            { label: "Email", value: family?.parentEmail || "—" },
+            { label: "Téléphone", value: family?.parentPhone || "Non renseigné" },
+            { label: "Connexion", value: `${family?.authProvider === "google" ? "Google" : "Facebook"} SSO` },
+          ].map((field, i) => (
+            <div key={i}>
+              <div className="font-body text-xs font-semibold text-gray-400 mb-0.5">
+                {field.label}
+              </div>
+              <div className="font-body text-sm text-blue-800">{field.value}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Children */}
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="font-display text-lg font-bold text-blue-800">
+          Cavaliers
+        </h2>
+        <button
+          onClick={() => setShowAddChild(!showAddChild)}
+          className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-400 transition-colors"
+        >
+          <Plus size={16} />
+          Ajouter un enfant
+        </button>
+      </div>
+
+      {showAddChild && <AddChildForm onAdd={handleChildAdded} />}
+
+      {family?.children && family.children.length > 0 ? (
+        <div className="flex flex-col gap-3 mt-4">
+          {family.children.map((child) => (
+            <Card key={child.id} padding="md">
+              <div className="flex justify-between items-center flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-2xl">
+                    🧒
+                  </div>
+                  <div>
+                    <div className="font-body text-base font-semibold text-blue-800">
+                      {child.firstName}
+                    </div>
+                    <div className="font-body text-xs text-gray-400">
+                      Niveau : {child.galopLevel || "—"}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {child.sanitaryForm ? (
+                    <Badge color="green">✓ Fiche sanitaire OK</Badge>
+                  ) : (
+                    <Badge color="red">⚠ Fiche manquante</Badge>
+                  )}
+                </div>
+              </div>
+
+              {/* Expandable sanitary info */}
+              {child.sanitaryForm && (
+                <button
+                  onClick={() =>
+                    setExpandedChild(
+                      expandedChild === child.id ? null : child.id
+                    )
+                  }
+                  className="mt-3 font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1"
+                >
+                  {expandedChild === child.id ? (
+                    <>Masquer la fiche <ChevronUp size={14} /></>
+                  ) : (
+                    <>Voir la fiche sanitaire <ChevronDown size={14} /></>
+                  )}
+                </button>
+              )}
+
+              {expandedChild === child.id && child.sanitaryForm && (
+                <div className="mt-3 pt-3 border-t border-blue-500/8 grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="font-body text-xs font-semibold text-gray-400">Allergies</div>
+                    <div className="font-body text-sm text-blue-800">
+                      {child.sanitaryForm.allergies || "Aucune"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-body text-xs font-semibold text-gray-400">Contact urgence</div>
+                    <div className="font-body text-sm text-blue-800">
+                      {child.sanitaryForm.emergencyContactName} — {child.sanitaryForm.emergencyContactPhone}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-body text-xs font-semibold text-gray-400">Autorisation parentale</div>
+                    <div className="font-body text-sm text-green-600">✓ Accordée</div>
+                  </div>
+                </div>
+              )}
+            </Card>
+          ))}
+        </div>
+      ) : (
+        !showAddChild && (
+          <Card padding="lg" className="text-center mt-4">
+            <span className="text-4xl block mb-3">👶</span>
+            <p className="font-body text-sm text-gray-500 mb-4">
+              Aucun cavalier enregistré. Ajoutez vos enfants pour pouvoir
+              réserver des activités.
+            </p>
+            <Button variant="primary" onClick={() => setShowAddChild(true)}>
+              Ajouter mon premier cavalier
+            </Button>
+          </Card>
+        )
+      )}
+    </div>
+  );
+}
