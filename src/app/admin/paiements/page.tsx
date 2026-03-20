@@ -32,16 +32,16 @@ interface Payment {
   date: any;
 }
 
-const paymentModes: { id: PaymentMode; label: string; icon: string }[] = [
-  { id: "cb_terminal", label: "CB (terminal)", icon: "💳" },
-  { id: "cb_online", label: "CB en ligne (Stripe)", icon: "🌐" },
-  { id: "cheque", label: "Chèque", icon: "📝" },
-  { id: "especes", label: "Espèces", icon: "💶" },
-  { id: "cheque_vacances", label: "Chèques vacances", icon: "🏖️" },
-  { id: "pass_sport", label: "Pass'Sport", icon: "🎽" },
-  { id: "ancv", label: "ANCV", icon: "🎫" },
-  { id: "virement", label: "Virement", icon: "🏦" },
-  { id: "avoir", label: "Avoir", icon: "🔄" },
+const paymentModes: { id: PaymentMode; label: string }[] = [
+  { id: "cb_terminal", label: "CB (terminal)" },
+  { id: "cb_online", label: "CB en ligne (Stripe)" },
+  { id: "cheque", label: "Chèque" },
+  { id: "especes", label: "Espèces" },
+  { id: "cheque_vacances", label: "Chèques vacances" },
+  { id: "pass_sport", label: "Pass'Sport" },
+  { id: "ancv", label: "ANCV" },
+  { id: "virement", label: "Virement" },
+  { id: "avoir", label: "Avoir" },
 ];
 
 export default function PaiementsPage() {
@@ -254,7 +254,7 @@ export default function PaiementsPage() {
                     <button key={m.id} onClick={() => setPaymentMode(m.id)}
                       className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border font-body text-xs font-medium cursor-pointer transition-all
                         ${paymentMode === m.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
-                      <span>{m.icon}</span> {m.label}
+                      {m.label}
                     </button>
                   ))}
                 </div>
@@ -281,7 +281,7 @@ export default function PaiementsPage() {
                     type="number" step="0.01" className={`${inputCls} w-40`} />
                   {paidAmount && parseFloat(paidAmount) < basketTotal && (
                     <div className="font-body text-xs text-orange-500 mt-1">
-                      ⚠️ Paiement partiel — reste dû : {(basketTotal - parseFloat(paidAmount)).toFixed(2)}€
+                      Paiement partiel — reste dû : {(basketTotal - parseFloat(paidAmount)).toFixed(2)}€
                     </div>
                   )}
                 </div>
@@ -421,7 +421,7 @@ export default function PaiementsPage() {
                     </span>
                     <span className="w-20 text-right font-body text-sm font-bold text-blue-500">{p.totalTTC?.toFixed(2)}€</span>
                     <span className="w-20 text-center">
-                      <Badge color="blue">{mode?.icon} {mode?.label?.split(" ")[0] || p.paymentMode}</Badge>
+                      <Badge color="blue">{mode?.label?.split(" ")[0] || p.paymentMode}</Badge>
                     </span>
                     <span className="w-16 text-center">
                       <Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : "gray"}>
@@ -489,7 +489,7 @@ export default function PaiementsPage() {
             const unpaid = payments.filter(p => p.status === "partial" || p.status === "pending" || ((p.paidAmount || 0) < (p.totalTTC || 0) && p.status !== "paid"));
             const totalDue = unpaid.reduce((s, p) => s + ((p.totalTTC || 0) - (p.paidAmount || 0)), 0);
             return unpaid.length === 0 ? (
-              <Card padding="lg" className="text-center"><span className="text-4xl block mb-3">🎉</span><p className="font-body text-sm text-gray-500">Aucun impayé ! Toutes les factures sont réglées.</p></Card>
+              <Card padding="lg" className="text-center"><div className="w-14 h-14 rounded-2xl bg-green-50 flex items-center justify-center mx-auto mb-3"><Check size={28} className="text-green-400" /></div><p className="font-body text-sm text-gray-500">Aucun impayé ! Toutes les factures sont réglées.</p></Card>
             ) : (
               <div>
                 <Card padding="sm" className="mb-4 flex items-center gap-3">
@@ -507,7 +507,7 @@ export default function PaiementsPage() {
                           <div>
                             <div className="font-body text-sm font-semibold text-blue-800">{p.familyName}</div>
                             <div className="font-body text-xs text-gray-400">{(p.items||[]).map((i:any)=>i.activityTitle).join(", ")} · {date.toLocaleDateString("fr-FR")}</div>
-                            {daysLate > 30 && <div className="font-body text-xs text-red-500 mt-1">⚠️ {daysLate} jours de retard</div>}
+                            {daysLate > 30 && <div className="font-body text-xs text-red-500 mt-1">{daysLate} jours de retard</div>}
                           </div>
                           <div className="flex items-center gap-3">
                             <div className="text-right">
@@ -517,6 +517,18 @@ export default function PaiementsPage() {
                             <Badge color={daysLate > 60 ? "red" : daysLate > 30 ? "orange" : "gray"}>
                               {daysLate > 60 ? "Urgent" : daysLate > 30 ? "Relance" : "Récent"}
                             </Badge>
+                            <button onClick={() => {
+                              const fam = families.find(f => f.firestoreId === p.familyId);
+                              const email = fam?.parentEmail || "";
+                              const subject = encodeURIComponent(`Rappel de paiement — Centre Équestre d'Agon-Coutainville`);
+                              const body = encodeURIComponent(
+                                `Bonjour ${p.familyName},\n\nNous nous permettons de vous rappeler qu'un solde de ${due.toFixed(2)}€ reste dû pour les prestations suivantes :\n${(p.items||[]).map((i:any) => `- ${i.activityTitle} (${i.priceTTC?.toFixed(2) || "—"}€)`).join("\n")}\n\nMerci de régulariser votre situation à votre convenance.\n\nCordialement,\nCentre Équestre d'Agon-Coutainville\n02 44 84 99 96`
+                              );
+                              window.open(`mailto:${email}?subject=${subject}&body=${body}`, "_blank");
+                            }}
+                              className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 whitespace-nowrap">
+                              Relancer
+                            </button>
                           </div>
                         </div>
                       </Card>
