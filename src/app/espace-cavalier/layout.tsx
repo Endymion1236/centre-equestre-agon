@@ -15,6 +15,7 @@ import {
   TrendingUp,
   LogOut,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
 
 const navItems = [
@@ -132,6 +133,13 @@ function CavalierSidebar() {
 
       {/* Logout */}
       <div className="mt-auto pt-4 border-t border-blue-500/8">
+        <Link
+          href="/"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-500 transition-all no-underline mb-1"
+        >
+          <ExternalLink size={18} />
+          <span className="font-body text-[13px] font-medium">Retour au site</span>
+        </Link>
         <button
           onClick={signOut}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-all w-full bg-transparent border-none cursor-pointer"

@@ -24,6 +24,7 @@ import {
   Heart,
   TrendingUp,
   Wallet,
+  ExternalLink,
 } from "lucide-react";
 
 const navItems = [
@@ -81,6 +82,13 @@ function AdminSidebar() {
       })}
 
       <div className="mt-auto pt-3 border-t border-white/10">
+        <Link
+          href="/"
+          className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-white/40 hover:text-gold-400 hover:bg-gold-400/10 transition-all no-underline mb-0.5"
+        >
+          <ExternalLink size={16} />
+          <span className="font-body text-[13px]">Retour au site</span>
+        </Link>
         <div className="px-3 py-2 font-body text-[11px] text-white/30 truncate">
           {user?.email}
         </div>
