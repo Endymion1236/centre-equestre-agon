@@ -131,7 +131,7 @@ export default function ReserverPage() {
     }]);
     setSelectedCreneau(null);
     setSelectedChild("");
-    setShowCart(true);
+    // Ne pas ouvrir le panier automatiquement — l'utilisateur voit le badge compteur
   };
 
   const removeFromCart = (idx: number) => setCart(cart.filter((_, i) => i !== idx));
@@ -290,11 +290,17 @@ export default function ReserverPage() {
                   const type = typeLabels[c.activityType] || { label: c.activityType, color: "#666" };
                   const spots = spotsLeft(c);
                   const priceTTC = (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
-                  const inCart = cart.some((i) => i.creneauId === c.id);
+                  // Vérifier si TOUS les enfants sont déjà dans le panier ou inscrits pour ce créneau
+                  const allChildrenHandled = children.length > 0 && children.every((ch: any) => {
+                    const inCartForThis = cart.some((i) => i.creneauId === c.id && i.childId === ch.id);
+                    const enrolledForThis = (c.enrolled || []).some((e: any) => e.childId === ch.id);
+                    return inCartForThis || enrolledForThis;
+                  });
+                  const someInCart = cart.some((i) => i.creneauId === c.id);
 
                   return (
                     <div key={c.id}
-                      className={`card !p-0 overflow-hidden transition-all hover:shadow-lg hover:-translate-y-0.5 ${inCart ? "ring-2 ring-gold-400" : ""}`}
+                      className={`card !p-0 overflow-hidden transition-all hover:shadow-lg hover:-translate-y-0.5 ${someInCart ? "ring-2 ring-gold-400" : ""}`}
                       style={{ borderLeftWidth: 4, borderLeftColor: type.color }}>
                       <div className="p-4">
                         <div className="flex justify-between items-start mb-2">
@@ -315,12 +321,13 @@ export default function ReserverPage() {
                         </div>
 
                         <div className="flex items-center justify-between mt-3">
-                          <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>
-                            {spots > 0 ? `${spots} place${spots > 1 ? "s" : ""} restante${spots > 1 ? "s" : ""}` : "COMPLET"}
-                          </Badge>
-                          {inCart ? (
-                            <Badge color="gold">✓ Dans le panier</Badge>
-                          ) : spots > 0 && children.length > 0 ? (
+                          <div className="flex items-center gap-2">
+                            <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>
+                              {spots > 0 ? `${spots} place${spots > 1 ? "s" : ""} restante${spots > 1 ? "s" : ""}` : "COMPLET"}
+                            </Badge>
+                            {someInCart && <Badge color="gold">Dans le panier</Badge>}
+                          </div>
+                          {allChildrenHandled ? null : spots > 0 && children.length > 0 ? (
                             <button onClick={() => { setSelectedCreneau(c); setSelectedChild(""); }}
                               className="font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-400 transition-colors">
                               Réserver
@@ -409,7 +416,7 @@ export default function ReserverPage() {
                       <div>
                         <div className="font-body text-sm font-semibold text-blue-800">{item.activityTitle}</div>
                         <div className="font-body text-xs text-gray-400 mt-0.5">
-                          🧒 {item.childName}
+                          {item.childName}
                         </div>
                         <div className="font-body text-xs text-gray-400">
                           {new Date(item.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}
