@@ -577,7 +577,7 @@ export default function StatistiquesPage() {
         <>
           {statsMoniteurs.length === 0 ? (
             <Card padding="lg" className="text-center">
-              <span className="text-4xl block mb-3">👩‍🏫</span>
+              <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><Users size={28} className="text-blue-300" /></div>
               <p className="font-body text-sm text-gray-500">Aucune reprise enregistrée pour {year}.</p>
             </Card>
           ) : (

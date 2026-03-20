@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import Link from "next/link";
-import { Plus, Users, CalendarDays, CreditCard, TrendingUp } from "lucide-react";
+import {
+  Plus, Users, CalendarDays, CreditCard, TrendingUp,
+  ClipboardList, BookOpen, Mail, Settings, Camera, Heart, BarChart3,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 export default function AdminDashboard() {
   const [familyCount, setFamilyCount] = useState(0);
@@ -24,6 +28,19 @@ export default function AdminDashboard() {
     }
     fetchStats();
   }, []);
+
+  const quickActions: { href: string; icon: LucideIcon; label: string; color: string }[] = [
+    { href: "/admin/activites", icon: ClipboardList, label: "Gérer les activités", color: "text-blue-500" },
+    { href: "/admin/planning", icon: CalendarDays, label: "Planning", color: "text-blue-500" },
+    { href: "/admin/cavaliers", icon: Users, label: "Cavaliers", color: "text-blue-500" },
+    { href: "/admin/cavalerie", icon: Heart, label: "Cavalerie", color: "text-red-400" },
+    { href: "/admin/paiements", icon: CreditCard, label: "Paiements", color: "text-green-600" },
+    { href: "/admin/comptabilite", icon: BookOpen, label: "Comptabilité", color: "text-orange-500" },
+    { href: "/admin/statistiques", icon: BarChart3, label: "Statistiques", color: "text-purple-600" },
+    { href: "/admin/communication", icon: Mail, label: "Communication", color: "text-blue-500" },
+    { href: "/admin/parametres", icon: Settings, label: "Paramètres", color: "text-gray-500" },
+    { href: "/admin/galerie", icon: Camera, label: "Galerie", color: "text-blue-500" },
+  ];
 
   return (
     <div>
@@ -45,17 +62,17 @@ export default function AdminDashboard() {
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {[
-          { icon: Users, value: familyCount.toString(), label: "Familles inscrites", color: "text-blue-500", delta: "" },
-          { icon: CalendarDays, value: activityCount.toString(), label: "Activités créées", color: "text-blue-500", delta: "" },
-          { icon: CreditCard, value: "0€", label: "CA ce mois", color: "text-green-600", delta: "" },
-          { icon: TrendingUp, value: "—", label: "Taux de remplissage", color: "text-gold-400", delta: "" },
+          { icon: Users, value: familyCount.toString(), label: "Familles inscrites", color: "text-blue-500", iconColor: "text-blue-500", bg: "bg-blue-50" },
+          { icon: CalendarDays, value: activityCount.toString(), label: "Activités créées", color: "text-blue-500", iconColor: "text-blue-500", bg: "bg-blue-50" },
+          { icon: CreditCard, value: "0€", label: "CA ce mois", color: "text-green-600", iconColor: "text-green-600", bg: "bg-green-50" },
+          { icon: TrendingUp, value: "—", label: "Taux de remplissage", color: "text-gold-400", iconColor: "text-amber-500", bg: "bg-amber-50" },
         ].map((kpi, i) => {
           const Icon = kpi.icon;
           return (
             <Card key={i} padding="md">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-                  <Icon size={20} className="text-blue-500" />
+                <div className={`w-10 h-10 rounded-xl ${kpi.bg} flex items-center justify-center`}>
+                  <Icon size={20} className={kpi.iconColor} />
                 </div>
               </div>
               <div className={`font-body text-2xl font-bold ${kpi.color}`}>{kpi.value}</div>
@@ -67,30 +84,28 @@ export default function AdminDashboard() {
 
       {/* Quick actions grid */}
       <h2 className="font-display text-lg font-bold text-blue-800 mb-4">Accès rapide</h2>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-        {[
-          { href: "/admin/activites", icon: "🏇", label: "Gérer les activités" },
-          { href: "/admin/planning", icon: "📅", label: "Planning" },
-          { href: "/admin/cavaliers", icon: "👥", label: "Cavaliers" },
-          { href: "/admin/paiements", icon: "💳", label: "Paiements" },
-          { href: "/admin/comptabilite", icon: "📒", label: "Comptabilité" },
-          { href: "/admin/communication", icon: "📧", label: "Communication" },
-          { href: "/admin/parametres", icon: "⚙️", label: "Paramètres" },
-          { href: "/admin/galerie", icon: "📷", label: "Galerie" },
-        ].map((action, i) => (
-          <Link key={i} href={action.href} className="no-underline">
-            <Card hover padding="sm" className="text-center !py-5">
-              <span className="text-2xl block mb-2">{action.icon}</span>
-              <span className="font-body text-xs font-semibold text-blue-800">{action.label}</span>
-            </Card>
-          </Link>
-        ))}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {quickActions.map((action, i) => {
+          const Icon = action.icon;
+          return (
+            <Link key={i} href={action.href} className="no-underline">
+              <Card hover padding="sm" className="text-center !py-5">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center mx-auto mb-2">
+                  <Icon size={20} className={action.color} />
+                </div>
+                <span className="font-body text-xs font-semibold text-blue-800">{action.label}</span>
+              </Card>
+            </Link>
+          );
+        })}
       </div>
 
       {/* Placeholder for today's schedule */}
       <h2 className="font-display text-lg font-bold text-blue-800 mb-4 mt-10">Aujourd&apos;hui</h2>
       <Card padding="lg" className="text-center">
-        <span className="text-4xl block mb-3">📅</span>
+        <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-4">
+          <CalendarDays size={28} className="text-blue-300" />
+        </div>
         <p className="font-body text-sm text-gray-500">
           Aucune reprise planifiée aujourd&apos;hui. Créez vos premières activités pour commencer !
         </p>

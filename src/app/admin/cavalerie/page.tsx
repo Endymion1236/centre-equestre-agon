@@ -35,7 +35,28 @@ import {
   Clock,
   Filter,
   Download,
+  GraduationCap,
+  Check,
+  BookOpen,
+  Stethoscope,
+  ClipboardList,
+  Syringe,
+  Wrench,
+  Bone,
+  Scissors,
+  Timer,
 } from "lucide-react";
+
+// Icône tab helper
+const tabIconMap: Record<string, any> = {};
+function TabIcon({ name }: { name: string }) {
+  const map: Record<string, any> = {
+    heart: Heart, book: BookOpen, stethoscope: Stethoscope,
+    file: FileText, timer: Timer,
+  };
+  const Icon = map[name];
+  return Icon ? <Icon size={16} /> : null;
+}
 
 // ─── Types locaux (à migrer dans src/types/index.ts) ───
 type EquideType = "poney" | "shetland" | "cheval" | "ane";
@@ -417,11 +438,11 @@ export default function CavaleriePage() {
   // ═══════════════════════════════════════════
 
   const tabs = [
-    { id: "fiches" as const, label: "Fiches équidés", icon: "🐴", count: equides.length },
-    { id: "registre" as const, label: "Registre", icon: "📒", count: mouvements.length },
-    { id: "soins" as const, label: "Soins & alertes", icon: "💊", count: nbAlertes > 0 ? nbAlertes : undefined, alert: nbAlertes > 0 },
-    { id: "documents" as const, label: "Documents", icon: "📄", count: documents.length },
-    { id: "charge" as const, label: "Charge de travail", icon: "⏱️" },
+    { id: "fiches" as const, label: "Fiches équidés", icon: "heart", count: equides.length },
+    { id: "registre" as const, label: "Registre", icon: "book", count: mouvements.length },
+    { id: "soins" as const, label: "Soins & alertes", icon: "stethoscope", count: nbAlertes > 0 ? nbAlertes : undefined, alert: nbAlertes > 0 },
+    { id: "documents" as const, label: "Documents", icon: "file", count: documents.length },
+    { id: "charge" as const, label: "Charge de travail", icon: "timer" },
   ];
 
   // ─── Styles communs ───
@@ -468,29 +489,29 @@ export default function CavaleriePage() {
       {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         <Card padding="sm" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center text-lg">🐴</div>
+          <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center"><Heart size={18} className="text-green-600" /></div>
           <div>
             <div className="font-body text-xl font-bold text-green-600">{nbActifs}</div>
             <div className="font-body text-xs text-gray-400">actifs</div>
           </div>
         </Card>
         <Card padding="sm" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-lg">📚</div>
+          <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><GraduationCap size={18} className="text-blue-500" /></div>
           <div>
             <div className="font-body text-xl font-bold text-blue-500">{nbFormation}</div>
             <div className="font-body text-xs text-gray-400">en formation</div>
           </div>
         </Card>
         <Card padding="sm" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center text-lg">⚠️</div>
+          <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center"><AlertTriangle size={18} className="text-orange-500" /></div>
           <div>
             <div className="font-body text-xl font-bold text-orange-500">{nbIndispo}</div>
             <div className="font-body text-xs text-gray-400">indisponibles</div>
           </div>
         </Card>
         <Card padding="sm" className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-xl ${nbAlertes > 0 ? "bg-red-50" : "bg-gray-50"} flex items-center justify-center text-lg`}>
-            {nbAlertes > 0 ? "🔴" : "✅"}
+          <div className={`w-10 h-10 rounded-xl ${nbAlertes > 0 ? "bg-red-50" : "bg-gray-50"} flex items-center justify-center`}>
+            {nbAlertes > 0 ? <AlertTriangle size={18} className="text-red-500" /> : <Check size={18} className="text-gray-400" />}
           </div>
           <div>
             <div className={`font-body text-xl font-bold ${nbAlertes > 0 ? "text-red-500" : "text-gray-400"}`}>{nbAlertes}</div>
@@ -505,7 +526,7 @@ export default function CavaleriePage() {
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all whitespace-nowrap
               ${tab === t.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"}`}>
-            <span className="text-base">{t.icon}</span>
+            <TabIcon name={t.icon} />
             {t.label}
             {t.count !== undefined && (
               <span className={`text-xs px-2 py-0.5 rounded-full ${tab === t.id ? "bg-white/20 text-white" : t.alert ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-500"}`}>
@@ -539,7 +560,7 @@ export default function CavaleriePage() {
           {/* Liste */}
           {filteredEquides.length === 0 ? (
             <Card padding="lg" className="text-center">
-              <span className="text-4xl block mb-3">🐴</span>
+              <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><Heart size={28} className="text-blue-300" /></div>
               <p className="font-body text-sm text-gray-500">
                 {equides.length === 0
                   ? "Aucun équidé enregistré. Commencez par ajouter votre premier cheval ou poney !"
@@ -682,7 +703,7 @@ export default function CavaleriePage() {
         <>
           {mouvements.length === 0 ? (
             <Card padding="lg" className="text-center">
-              <span className="text-4xl block mb-3">📒</span>
+              <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><BookOpen size={28} className="text-blue-300" /></div>
               <p className="font-body text-sm text-gray-500">Aucun mouvement enregistré. Le registre d&apos;élevage trace toutes les entrées et sorties d&apos;équidés.</p>
             </Card>
           ) : (
@@ -753,7 +774,7 @@ export default function CavaleriePage() {
           </div>
           {soins.length === 0 ? (
             <Card padding="lg" className="text-center">
-              <span className="text-4xl block mb-3">💊</span>
+              <div className="w-14 h-14 rounded-2xl bg-green-50 flex items-center justify-center mx-auto mb-3"><Stethoscope size={28} className="text-green-400" /></div>
               <p className="font-body text-sm text-gray-500">Aucun soin enregistré.</p>
             </Card>
           ) : (
@@ -787,7 +808,7 @@ export default function CavaleriePage() {
       {/* ═══ ONGLET 4 : DOCUMENTS ═══ */}
       {tab === "documents" && (
         <Card padding="lg" className="text-center">
-          <span className="text-4xl block mb-3">📄</span>
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><FileText size={28} className="text-blue-300" /></div>
           <p className="font-body text-sm text-gray-500 mb-2">
             L&apos;upload de documents nécessite Firebase Storage. Cette fonctionnalité sera activée une fois Storage configuré.
           </p>
