@@ -13,7 +13,7 @@ import {
   signInWithPopup,
   signOut as firebaseSignOut,
 } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { auth, db, googleProvider, facebookProvider } from "@/lib/firebase";
 import type { Family } from "@/types";
 
@@ -55,30 +55,74 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(firebaseUser);
 
       if (firebaseUser) {
-        // Check if family profile exists in Firestore
+        // 1. Chercher une fiche famille par uid (cas normal : déjà lié)
         const familyRef = doc(db, "families", firebaseUser.uid);
         const familySnap = await getDoc(familyRef);
 
         if (familySnap.exists()) {
           setFamily({ id: familySnap.id, ...familySnap.data() } as Family);
         } else {
-          // Create initial family profile
-          const newFamily: Partial<Family> = {
-            parentName: firebaseUser.displayName || "",
-            parentEmail: firebaseUser.email || "",
-            parentPhone: "",
-            authProvider: firebaseUser.providerData[0]?.providerId === "google.com" ? "google" : "facebook",
-            authUid: firebaseUser.uid,
-            children: [],
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          };
-          await setDoc(familyRef, {
-            ...newFamily,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-          setFamily({ id: firebaseUser.uid, ...newFamily } as Family);
+          // 2. Chercher une fiche famille existante par email (créée par l'admin)
+          let linked = false;
+          if (firebaseUser.email) {
+            try {
+              const emailQuery = query(
+                collection(db, "families"),
+                where("parentEmail", "==", firebaseUser.email)
+              );
+              const emailSnap = await getDocs(emailQuery);
+
+              if (!emailSnap.empty) {
+                // Trouvé ! On lie le compte auth à cette fiche existante
+                const existingDoc = emailSnap.docs[0];
+                const existingData = existingDoc.data();
+
+                // Mettre à jour la fiche existante avec le uid et le provider
+                await updateDoc(doc(db, "families", existingDoc.id), {
+                  authUid: firebaseUser.uid,
+                  authProvider: firebaseUser.providerData[0]?.providerId === "google.com" ? "google" : "facebook",
+                  parentName: existingData.parentName || firebaseUser.displayName || "",
+                  updatedAt: serverTimestamp(),
+                });
+
+                // Copier la fiche vers l'ID = uid pour les accès futurs rapides
+                const familyData = {
+                  ...existingData,
+                  authUid: firebaseUser.uid,
+                  authProvider: firebaseUser.providerData[0]?.providerId === "google.com" ? "google" : "facebook",
+                  parentName: existingData.parentName || firebaseUser.displayName || "",
+                  updatedAt: serverTimestamp(),
+                };
+                await setDoc(familyRef, familyData);
+
+                setFamily({ id: firebaseUser.uid, ...familyData } as unknown as Family);
+                linked = true;
+                console.log(`Compte lié : ${firebaseUser.email} → fiche ${existingDoc.id}`);
+              }
+            } catch (e) {
+              console.error("Erreur recherche email:", e);
+            }
+          }
+
+          if (!linked) {
+            // 3. Aucune fiche trouvée → créer un nouveau profil
+            const newFamily: Partial<Family> = {
+              parentName: firebaseUser.displayName || "",
+              parentEmail: firebaseUser.email || "",
+              parentPhone: "",
+              authProvider: firebaseUser.providerData[0]?.providerId === "google.com" ? "google" : "facebook",
+              authUid: firebaseUser.uid,
+              children: [],
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+            await setDoc(familyRef, {
+              ...newFamily,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+            setFamily({ id: firebaseUser.uid, ...newFamily } as Family);
+          }
         }
       } else {
         setFamily(null);
