@@ -157,8 +157,16 @@ export default function EspaceCavalierLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, signOut, isAdmin } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
+
+  // Redirection admin → back-office
+  useEffect(() => {
+    if (user && isAdmin && !loading) {
+      router.replace("/admin/dashboard");
+    }
+  }, [user, isAdmin, loading, router]);
 
   // Loading state
   if (loading) {
@@ -167,6 +175,18 @@ export default function EspaceCavalierLayout({
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-3" />
           <p className="font-body text-sm text-gray-400">Chargement...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Admin → en cours de redirection
+  if (user && isAdmin) {
+    return (
+      <div className="min-h-screen bg-cream flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-3" />
+          <p className="font-body text-sm text-gray-400">Redirection vers l&apos;administration...</p>
         </div>
       </div>
     );
