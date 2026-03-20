@@ -1,0 +1,260 @@
+"use client";
+import { useState, useEffect } from "react";
+import { collection, getDocs, doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { Card, Badge } from "@/components/ui";
+import { Search, Loader2, ChevronDown, ChevronUp, Plus, X, Save, Target, MessageSquare, TrendingUp } from "lucide-react";
+import type { Family } from "@/types";
+
+interface PedaNote {
+  date: string;
+  text: string;
+  author: string;
+}
+interface PedaObjectif {
+  id: string;
+  label: string;
+  status: "en_cours" | "valide" | "a_revoir";
+  addedAt: string;
+}
+interface PedaData {
+  objectifs: PedaObjectif[];
+  notes: PedaNote[];
+  updatedAt?: any;
+}
+
+const galopLevels = ["—", "Bronze", "Argent", "Or", "G1", "G2", "G3", "G4", "G5", "G6", "G7"];
+const defaultObjectifs: Record<string, string[]> = {
+  "Bronze": ["Monter et descendre seul", "Diriger au pas", "Trot enlevé", "Pansage complet", "Connaître les parties du poney"],
+  "Argent": ["Galop à 3 allures", "Trotter sans étriers", "Transition pas-trot-galop", "Aborder un obstacle isolé", "Brider et seller seul"],
+  "Or": ["Enchaînement d'obstacles (60cm)", "Galop assis", "Départ au galop à juste", "Travail sur le plat", "Longe et travail en liberté"],
+  "G3": ["Incurvation", "Épaule en dedans", "Enchaînement CSO 70cm", "Dressage E2", "Travail aux 3 allures sans étriers"],
+  "G4": ["Appuyers", "Changement de pied", "Enchaînement CSO 80cm", "Dressage E3", "Cross obstacles naturels"],
+};
+
+export default function PedagogiePage() {
+  const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [addingNote, setAddingNote] = useState<string | null>(null);
+  const [noteText, setNoteText] = useState("");
+  const [addingObj, setAddingObj] = useState<string | null>(null);
+  const [newObjLabel, setNewObjLabel] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const fetchData = async () => {
+    try {
+      const snap = await getDocs(collection(db, "families"));
+      setFamilies(snap.docs.map(d => ({ firestoreId: d.id, ...d.data() })) as any);
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  };
+  useEffect(() => { fetchData(); }, []);
+
+  const allChildren = families.flatMap(f => (f.children || []).map((c: any) => ({
+    ...c, familyId: f.firestoreId, familyName: f.parentName,
+    peda: c.peda || { objectifs: [], notes: [] },
+  })));
+
+  const filtered = search
+    ? allChildren.filter(c => c.firstName?.toLowerCase().includes(search.toLowerCase()) || c.familyName?.toLowerCase().includes(search.toLowerCase()))
+    : allChildren;
+
+  const updatePeda = async (familyId: string, childId: string, peda: PedaData) => {
+    setSaving(true);
+    const family = families.find(f => f.firestoreId === familyId);
+    if (!family) return;
+    const updated = (family.children || []).map((c: any) =>
+      c.id === childId ? { ...c, peda: { ...peda, updatedAt: new Date().toISOString() } } : c
+    );
+    await updateDoc(doc(db, "families", familyId), { children: updated, updatedAt: serverTimestamp() });
+    await fetchData();
+    setSaving(false);
+  };
+
+  const addNote = async (child: any) => {
+    if (!noteText.trim()) return;
+    const peda = child.peda || { objectifs: [], notes: [] };
+    const newNote: PedaNote = { date: new Date().toISOString(), text: noteText.trim(), author: "Emmeline" };
+    await updatePeda(child.familyId, child.id, { ...peda, notes: [newNote, ...peda.notes] });
+    setNoteText("");
+    setAddingNote(null);
+  };
+
+  const addObjectif = async (child: any) => {
+    if (!newObjLabel.trim()) return;
+    const peda = child.peda || { objectifs: [], notes: [] };
+    const newObj: PedaObjectif = { id: Date.now().toString(), label: newObjLabel.trim(), status: "en_cours", addedAt: new Date().toISOString() };
+    await updatePeda(child.familyId, child.id, { ...peda, objectifs: [...peda.objectifs, newObj] });
+    setNewObjLabel("");
+    setAddingObj(null);
+  };
+
+  const toggleObjStatus = async (child: any, objId: string) => {
+    const peda = child.peda || { objectifs: [], notes: [] };
+    const updated = peda.objectifs.map((o: PedaObjectif) => {
+      if (o.id !== objId) return o;
+      const next = o.status === "en_cours" ? "valide" : o.status === "valide" ? "a_revoir" : "en_cours";
+      return { ...o, status: next };
+    });
+    await updatePeda(child.familyId, child.id, { ...peda, objectifs: updated });
+  };
+
+  const addDefaultObjectifs = async (child: any) => {
+    const level = child.galopLevel || "Bronze";
+    const defaults = defaultObjectifs[level] || defaultObjectifs["Bronze"];
+    const peda = child.peda || { objectifs: [], notes: [] };
+    const existing = peda.objectifs.map((o: PedaObjectif) => o.label);
+    const newObjs = defaults.filter(d => !existing.includes(d)).map(label => ({
+      id: Date.now().toString() + Math.random().toString(36).slice(2, 5),
+      label, status: "en_cours" as const, addedAt: new Date().toISOString(),
+    }));
+    if (newObjs.length === 0) return;
+    await updatePeda(child.familyId, child.id, { ...peda, objectifs: [...peda.objectifs, ...newObjs] });
+  };
+
+  const objStatusColors = { en_cours: "blue", valide: "green", a_revoir: "orange" };
+  const objStatusLabels = { en_cours: "En cours", valide: "Validé", a_revoir: "À revoir" };
+
+  return (
+    <div>
+      <h1 className="font-display text-2xl font-bold text-blue-800 mb-1">Suivi pédagogique</h1>
+      <p className="font-body text-xs text-gray-400 mb-6">Objectifs, progression et notes d&apos;instructrice par cavalier</p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <Card padding="sm" className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><Target size={20} className="text-blue-500" /></div>
+          <div><div className="font-body text-xl font-bold text-blue-500">{allChildren.reduce((s, c) => s + (c.peda?.objectifs?.length || 0), 0)}</div><div className="font-body text-xs text-gray-400">objectifs suivis</div></div>
+        </Card>
+        <Card padding="sm" className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center"><TrendingUp size={20} className="text-green-600" /></div>
+          <div><div className="font-body text-xl font-bold text-green-600">{allChildren.reduce((s, c) => s + (c.peda?.objectifs?.filter((o: PedaObjectif) => o.status === "valide").length || 0), 0)}</div><div className="font-body text-xs text-gray-400">validés</div></div>
+        </Card>
+        <Card padding="sm" className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gold-50 flex items-center justify-center"><MessageSquare size={20} className="text-gold-400" /></div>
+          <div><div className="font-body text-xl font-bold text-gold-400">{allChildren.reduce((s, c) => s + (c.peda?.notes?.length || 0), 0)}</div><div className="font-body text-xs text-gray-400">notes</div></div>
+        </Card>
+      </div>
+
+      <div className="relative mb-5">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un cavalier..."
+          className="w-full pl-10 pr-4 py-3 rounded-xl border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none" />
+      </div>
+
+      {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
+      filtered.length === 0 ? <Card padding="lg" className="text-center"><span className="text-4xl block mb-3">🎓</span><p className="font-body text-sm text-gray-500">Aucun cavalier trouvé.</p></Card> :
+      <div className="flex flex-col gap-3">
+        {filtered.map(child => {
+          const isExp = expanded === child.id;
+          const peda = child.peda || { objectifs: [], notes: [] };
+          const objDone = peda.objectifs.filter((o: PedaObjectif) => o.status === "valide").length;
+          const objTotal = peda.objectifs.length;
+
+          return (
+            <Card key={child.id} padding="md">
+              <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpanded(isExp ? null : child.id)}>
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center text-xl">🧒</div>
+                  <div>
+                    <div className="font-body text-base font-semibold text-blue-800">{child.firstName} <span className="text-xs text-gray-400 font-normal">({child.familyName})</span></div>
+                    <div className="font-body text-xs text-gray-400">Niveau : {child.galopLevel || "Débutant"} · {objDone}/{objTotal} objectifs validés</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge color={child.galopLevel && child.galopLevel !== "—" ? "blue" : "gray"}>
+                    {child.galopLevel && child.galopLevel !== "—" ? `Galop ${child.galopLevel}` : "Débutant"}
+                  </Badge>
+                  {objTotal > 0 && (
+                    <div className="w-16 h-2 rounded-full bg-gray-100">
+                      <div className="h-2 rounded-full bg-green-500 transition-all" style={{ width: `${objTotal > 0 ? (objDone / objTotal) * 100 : 0}%` }} />
+                    </div>
+                  )}
+                  {isExp ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+                </div>
+              </div>
+
+              {isExp && (
+                <div className="mt-4 pt-4 border-t border-blue-500/8">
+                  {/* Objectifs */}
+                  <div className="mb-5">
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="font-body text-sm font-semibold text-blue-800 flex items-center gap-2"><Target size={14} /> Objectifs</h3>
+                      <div className="flex gap-2">
+                        <button onClick={() => addDefaultObjectifs(child)} className="font-body text-[11px] text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer">+ Objectifs type {child.galopLevel || "Bronze"}</button>
+                        <button onClick={() => setAddingObj(addingObj === child.id ? null : child.id)} className="font-body text-[11px] text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer"><Plus size={12} className="inline" /> Perso</button>
+                      </div>
+                    </div>
+
+                    {addingObj === child.id && (
+                      <div className="flex gap-2 mb-3">
+                        <input value={newObjLabel} onChange={e => setNewObjLabel(e.target.value)} placeholder="Nouvel objectif..." autoFocus
+                          className="flex-1 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
+                        <button onClick={() => addObjectif(child)} disabled={!newObjLabel.trim() || saving}
+                          className="px-4 py-2 rounded-lg bg-blue-500 text-white font-body text-xs font-semibold border-none cursor-pointer"><Save size={12} className="inline mr-1" />OK</button>
+                      </div>
+                    )}
+
+                    {peda.objectifs.length === 0 ? (
+                      <p className="font-body text-xs text-gray-400 italic">Aucun objectif. Cliquez sur &quot;+ Objectifs type&quot; pour pré-remplir.</p>
+                    ) : (
+                      <div className="flex flex-col gap-1.5">
+                        {peda.objectifs.map((obj: PedaObjectif) => (
+                          <div key={obj.id} className="flex items-center justify-between bg-sand rounded-lg px-4 py-2.5">
+                            <span className={`font-body text-sm ${obj.status === "valide" ? "text-green-600 line-through" : "text-blue-800"}`}>
+                              {obj.status === "valide" ? "✅" : obj.status === "a_revoir" ? "⚠️" : "🔵"} {obj.label}
+                            </span>
+                            <button onClick={() => toggleObjStatus(child, obj.id)}
+                              className="bg-transparent border-none cursor-pointer">
+                              <Badge color={objStatusColors[obj.status] as any}>{objStatusLabels[obj.status]}</Badge>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Notes instructrice */}
+                  <div>
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="font-body text-sm font-semibold text-blue-800 flex items-center gap-2"><MessageSquare size={14} /> Notes d&apos;instructrice</h3>
+                      <button onClick={() => setAddingNote(addingNote === child.id ? null : child.id)}
+                        className="font-body text-[11px] text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer"><Plus size={12} className="inline" /> Ajouter</button>
+                    </div>
+
+                    {addingNote === child.id && (
+                      <div className="mb-3">
+                        <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={3} placeholder="Observations, progrès, points à travailler..." autoFocus
+                          className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none resize-vertical" />
+                        <button onClick={() => addNote(child)} disabled={!noteText.trim() || saving}
+                          className="mt-2 px-4 py-2 rounded-lg bg-blue-500 text-white font-body text-xs font-semibold border-none cursor-pointer"><Save size={12} className="inline mr-1" />Enregistrer</button>
+                      </div>
+                    )}
+
+                    {peda.notes.length === 0 ? (
+                      <p className="font-body text-xs text-gray-400 italic">Aucune note pour l&apos;instant.</p>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        {peda.notes.slice(0, 5).map((note: PedaNote, i: number) => (
+                          <div key={i} className="bg-sand rounded-lg px-4 py-3">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="font-body text-[11px] font-semibold text-blue-500">{note.author}</span>
+                              <span className="font-body text-[11px] text-gray-400">{new Date(note.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}</span>
+                            </div>
+                            <p className="font-body text-sm text-gray-600 leading-relaxed">💬 {note.text}</p>
+                          </div>
+                        ))}
+                        {peda.notes.length > 5 && <p className="font-body text-xs text-gray-400 text-center">+ {peda.notes.length - 5} notes antérieures</p>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </Card>
+          );
+        })}
+      </div>}
+    </div>
+  );
+}

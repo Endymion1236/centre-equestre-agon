@@ -16,6 +16,11 @@ import {
   LogOut,
   Loader2,
   ShieldAlert,
+  GraduationCap,
+  UserPlus,
+  LayoutTemplate,
+  Send,
+  Ticket,
 } from "lucide-react";
 
 const navItems = [
@@ -24,12 +29,17 @@ const navItems = [
   { href: "/admin/planning", icon: CalendarDays, label: "Planning" },
   { href: "/admin/montoir", icon: ClipboardList, label: "Montoir" },
   { href: "/admin/cavaliers", icon: Users, label: "Cavaliers" },
+  { href: "/admin/pedagogie", icon: GraduationCap, label: "Suivi pédagogique" },
+  { href: "/admin/passage", icon: UserPlus, label: "Cavaliers passage" },
   { href: "/admin/forfaits", icon: CalendarDays, label: "Forfaits annuels" },
   { href: "/admin/cartes", icon: CreditCard, label: "Cartes & tickets" },
   { href: "/admin/paiements", icon: CreditCard, label: "Paiements" },
   { href: "/admin/comptabilite", icon: BookOpen, label: "Comptabilité" },
   { href: "/admin/communication", icon: Mail, label: "Communication" },
+  { href: "/admin/email-reprise", icon: Send, label: "Email reprise" },
   { href: "/admin/bons-cadeaux", icon: Settings, label: "Bons cadeaux" },
+  { href: "/admin/bons-recup", icon: Ticket, label: "Bons de récup." },
+  { href: "/admin/modeles", icon: LayoutTemplate, label: "Modèles reprises" },
   { href: "/admin/parametres", icon: Settings, label: "Paramètres" },
 ];
 
@@ -108,7 +118,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  // Restrict to admin emails
   if (!isAdmin) {
     return (
       <div className="min-h-screen bg-cream flex items-center justify-center px-6">

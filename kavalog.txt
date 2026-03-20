@@ -1,0 +1,111 @@
+Kavalog CE
+Fiches cavaliers très détaillées
+
+Pensions et demi-pensions (renouvellement automatique)
+
+Licences et cotisations
+
+Gestion des familles
+
+Panier multifonctions accueillant l’ensemble des prestations du client et de ses subrogés (enfant, conjoint,…)
+
+Facturation collective des paniers
+
+Historique complet des cavaliers (factures, règlements…)
+
+Listings multi-critères et paramétrables
+
+Création de documents personnalisables (modèles de mails, fiche d’inscription…) et gestion des documents rattachés (certificat médical, règlement intérieur signé…)
+
+Envoi de SMS / email(s) par groupes personnalisables
+
+Listing historique et prévisionnel des reprises
+
+Forfaits personnalisables : Durée / Récupération (nombre et durée de validité) / Absence / Renouvellement
+
+Cartes paramétrables : Renouvellement automatique / Contrôle du crédit et relance / Gestion par discipline / Durée de validité personnalisable
+
+Création de modèles de reprises multi-critères afin de créer son planning pour l’année (semaine normale, vacances, stages)
+
+Création de reprise ponctuelle
+
+Gestion et facturation des cavaliers de passage
+
+Planification d’une personne aux reprises pour l’année
+
+Décompte automatique des heures sur la carte
+
+Gestion des présences ou absences des forfaits (génération de bon de récupération)
+
+Visualisation paramétrable du planning (général, chevaux, poneys, shetlands, groupes, stages)
+
+Planification assistée (filtre en fonction de différents critères : âges, niveau, galop…)
+
+Contrôles des cavaliers lors du montoir (factures dues, solde de carte, historique des montures…)
+
+Clôture simplifiée (une fois la reprise effectuée, les participants sont débités du nombre d’heures correspondant, mise à jour automatique du panier à facturer)
+
+Multiples formats d’impression du montoir
+
+Envoi de mails collectifs à une reprise, une journée, etc.
+
+Gestion du suivi pédagogique
+
+Création des prestations avec différents articles (droit d’accès aux installations, enseignement, hébergement, etc…)
+
+Création de factures « semi-automatiques » (pension)
+
+Possibilité de facturer l’ensemble des « paniers »
+
+Impression de factures avec logo personnalisable
+
+Enregistrement des règlements avec répartition simple du montant sur plusieurs factures
+
+Gestion des chèques différés
+
+Bordereau de remise en banque
+
+Gestion des avoirs et des avances
+
+Liste des factures impayées et relances (courrier etc…)
+
+Visualisation du chiffre d’affaires, de la situation des créances et des règlements
+
+Liste des factures à partir des fiches clients, visualisation du total dû, des factures déjà effectuées
+
+Journal de la TVA encaissée
+
+Journal comptable, des ventes et des règlements
+
+Personnalisation de votre plan comptable
+
+Export paramétrable vers tout programme de comptabilité du marché
+
+Gestion des coûts
+
+Gestion des produits constatés d’avance
+
+Gestion des devis
+
+Gestion des paiements échelonnés et du tableau des échéances
+
+Gestion des prélèvements SEPA (impression du mandat, création du fichier Xml…)
+Evolution annuelle du chiffre d’affaires
+
+Chiffre d’affaires par catégorie de prestations personnalisables
+
+Statistiques sur ventes
+
+Chiffre d’affaires par activité
+
+Nombre d’heures dispensées par période (semaine, mois, année…)
+
+Statistiques par moniteur
+
+Nombre de cavaliers par période
+
+Nombre d’heures par cheval
+
+Taux de remplissage par reprise et par catégorie
+
+Age moyen des cavaliers, de la cavalerie
