@@ -158,6 +158,7 @@ export default function EspaceCavalierLayout({
   children: React.ReactNode;
 }) {
   const { user, loading } = useAuth();
+  const pathname = usePathname();
 
   // Loading state
   if (loading) {
@@ -176,13 +177,22 @@ export default function EspaceCavalierLayout({
     return <LoginScreen />;
   }
 
+  // Mobile bottom nav items (les 5 plus importants)
+  const mobileNav = [
+    { href: "/espace-cavalier/dashboard", icon: Home, label: "Accueil" },
+    { href: "/espace-cavalier/reserver", icon: Calendar, label: "Réserver" },
+    { href: "/espace-cavalier/reservations", icon: ClipboardList, label: "Réservations" },
+    { href: "/espace-cavalier/factures", icon: Receipt, label: "Factures" },
+    { href: "/espace-cavalier/profil", icon: Users, label: "Profil" },
+  ];
+
   // Logged in → show dashboard layout
   return (
     <div className="min-h-screen bg-cream flex">
       <CavalierSidebar />
       <div className="flex-1 overflow-auto">
         {/* Top bar */}
-        <div className="sticky top-0 z-50 bg-cream/95 backdrop-blur-xl border-b border-blue-500/8 px-6 py-3 flex items-center justify-between">
+        <div className="sticky top-0 z-50 bg-cream/95 backdrop-blur-xl border-b border-blue-500/8 px-4 md:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link href="/" className="no-underline">
               <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-display text-xs font-bold">
@@ -190,19 +200,38 @@ export default function EspaceCavalierLayout({
               </div>
             </Link>
             <span className="font-display text-sm font-bold text-blue-800">Centre Equestre</span>
-            <span className="font-body text-xs text-gray-400 ml-1">Espace cavalier</span>
+            <span className="font-body text-xs text-gray-400 ml-1 hidden sm:inline">Espace cavalier</span>
           </div>
           <div className="flex items-center gap-3">
+            <Link href="/" className="md:hidden font-body text-xs text-gray-400 no-underline flex items-center gap-1">
+              <ExternalLink size={14} /> Site
+            </Link>
             <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center font-body text-xs font-bold text-blue-500">
               {user.displayName?.split(" ").map(n => n[0]).join("").slice(0, 2) || "?"}
             </div>
           </div>
         </div>
 
-        {/* Page content */}
-        <div className="p-6 md:p-8 max-w-[900px]">
+        {/* Page content — padding bottom pour ne pas cacher sous la nav mobile */}
+        <div className="p-4 md:p-8 max-w-[900px] pb-24 md:pb-8">
           {children}
         </div>
+      </div>
+
+      {/* ─── Bottom Navigation Mobile ─── */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 flex items-center justify-around px-2 py-2 safe-area-inset-bottom">
+        {mobileNav.map(item => {
+          const Icon = item.icon;
+          const active = pathname === item.href || pathname?.startsWith(item.href + "/");
+          return (
+            <Link key={item.href} href={item.href}
+              className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg no-underline transition-all min-w-[56px]
+                ${active ? "text-blue-500" : "text-gray-400"}`}>
+              <Icon size={20} strokeWidth={active ? 2 : 1.5} />
+              <span className={`font-body text-[10px] ${active ? "font-semibold" : "font-normal"}`}>{item.label}</span>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
