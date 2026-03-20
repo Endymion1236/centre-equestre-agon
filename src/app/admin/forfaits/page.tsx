@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { Loader2, Search, Users, Plus, X, Check, Calendar } from "lucide-react";
+import { Loader2, Search, Users, Plus, X, Check, Calendar   ClipboardList,
+} from "lucide-react";
 import type { Family } from "@/types";
 
 interface Forfait {
@@ -150,7 +151,7 @@ export default function ForfaitsPage() {
       {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
       filtered.length === 0 ? (
         <Card padding="lg" className="text-center">
-          <span className="text-4xl block mb-3">📋</span>
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><ClipboardList size={28} className="text-blue-300" /></div>
           <p className="font-body text-sm text-gray-500 mb-3">Aucun forfait annuel. Créez-en un !</p>
         </Card>
       ) : (

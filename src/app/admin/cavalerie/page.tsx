@@ -137,11 +137,11 @@ interface DocumentEquide {
 }
 
 // ─── Constantes ───
-const typeOptions: { value: EquideType; label: string; emoji: string }[] = [
-  { value: "poney", label: "Poney", emoji: "🐴" },
-  { value: "shetland", label: "Shetland", emoji: "🐎" },
-  { value: "cheval", label: "Cheval", emoji: "🏇" },
-  { value: "ane", label: "Âne", emoji: "🫏" },
+const typeOptions: { value: EquideType; label: string }[] = [
+  { value: "poney", label: "Poney" },
+  { value: "shetland", label: "Shetland" },
+  { value: "cheval", label: "Cheval" },
+  { value: "ane", label: "Âne" },
 ];
 
 const sexOptions: { value: EquideSex; label: string }[] = [
@@ -162,15 +162,15 @@ const niveauOptions = ["Débutant", "Intermédiaire", "Confirmé", "Tous niveaux
 const disciplinesList = ["Baby Poney", "Pony Games", "CSO", "Dressage", "Balade", "Cross", "Voltige", "Attelage", "Randonnée", "Compétition"];
 const robesList = ["Bai", "Alezan", "Gris", "Noir", "Pie", "Isabelle", "Palomino", "Crème", "Rouan", "Appaloosa", "Autre"];
 
-const soinTypeOptions: { value: SoinType; label: string; emoji: string; recurrence: number }[] = [
-  { value: "vermifuge", label: "Vermifuge", emoji: "💊", recurrence: 90 },
-  { value: "vaccin", label: "Vaccin", emoji: "💉", recurrence: 365 },
-  { value: "marechal", label: "Maréchal-ferrant", emoji: "🔨", recurrence: 42 },
-  { value: "dentiste", label: "Dentiste", emoji: "🦷", recurrence: 365 },
-  { value: "osteopathe", label: "Ostéopathe", emoji: "🤲", recurrence: 180 },
-  { value: "veterinaire", label: "Vétérinaire", emoji: "🩺", recurrence: 0 },
-  { value: "tonte", label: "Tonte", emoji: "✂️", recurrence: 0 },
-  { value: "autre", label: "Autre", emoji: "📋", recurrence: 0 },
+const soinTypeOptions: { value: SoinType; label: string; icon: typeof Heart; recurrence: number }[] = [
+  { value: "vermifuge", label: "Vermifuge", icon: Pill, recurrence: 90 },
+  { value: "vaccin", label: "Vaccin", icon: Syringe, recurrence: 365 },
+  { value: "marechal", label: "Maréchal-ferrant", icon: Wrench, recurrence: 42 },
+  { value: "dentiste", label: "Dentiste", icon: Bone, recurrence: 365 },
+  { value: "osteopathe", label: "Ostéopathe", icon: Heart, recurrence: 180 },
+  { value: "veterinaire", label: "Vétérinaire", icon: Stethoscope, recurrence: 0 },
+  { value: "tonte", label: "Tonte", icon: Scissors, recurrence: 0 },
+  { value: "autre", label: "Autre", icon: ClipboardList, recurrence: 0 },
 ];
 
 const docTypeOptions: { value: DocumentEquideType; label: string }[] = [
@@ -553,7 +553,7 @@ export default function CavaleriePage() {
             </select>
             <select value={filterType} onChange={e => setFilterType(e.target.value as any)} className={inputStyle + " !w-auto"}>
               <option value="all">Tous types</option>
-              {typeOptions.map(t => <option key={t.value} value={t.value}>{t.emoji} {t.label}</option>)}
+              {typeOptions.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </div>
 
@@ -574,7 +574,7 @@ export default function CavaleriePage() {
                 const equideDocs = documents.filter(d => d.equideId === e.id);
                 const expanded = expandedId === e.id;
                 const statusOpt = statusOptions.find(s => s.value === e.status);
-                const typeEmoji = typeOptions.find(t => t.value === e.type)?.emoji || "🐴";
+                const TypeIcon = typeOptions.find(t => t.value === e.type)?.icon || Heart;
                 const prochainSoin = equideSoins
                   .filter(s => s.prochainRdv)
                   .sort((a, b) => daysUntil(a.prochainRdv) - daysUntil(b.prochainRdv))[0];
@@ -584,8 +584,8 @@ export default function CavaleriePage() {
                   <Card key={e.id} padding="md" className={`transition-all ${expanded ? "ring-2 ring-blue-200" : ""}`}>
                     {/* Ligne résumé */}
                     <div className="flex items-center gap-3 cursor-pointer" onClick={() => setExpandedId(expanded ? null : e.id)}>
-                      <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-2xl flex-shrink-0">
-                        {typeEmoji}
+                      <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                        <TypeIcon size={22} className="text-blue-400" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -658,7 +658,7 @@ export default function CavaleriePage() {
                                   const stOpt = soinTypeOptions.find(o => o.value === s.type);
                                   return (
                                     <div key={s.id} className="flex items-center gap-2 text-xs font-body">
-                                      <span>{stOpt?.emoji || "📋"}</span>
+                                      {(() => { const SI = stOpt?.icon || ClipboardList; return <SI size={16} className="text-blue-400" />; })()}
                                       <span className="text-gray-600">{s.label || stOpt?.label}</span>
                                       <span className="text-gray-300 ml-auto">{formatDate(s.date)}</span>
                                     </div>
@@ -751,7 +751,7 @@ export default function CavaleriePage() {
                   const stOpt = soinTypeOptions.find(o => o.value === a.type);
                   return (
                     <Card key={a.id} padding="sm" className={`flex items-center gap-3 ${a.alertStatus === "en_retard" ? "!border-red-200 !bg-red-50/30" : "!border-orange-200 !bg-orange-50/30"}`}>
-                      <span className="text-lg">{stOpt?.emoji || "📋"}</span>
+                      {(() => { const SI = stOpt?.icon || ClipboardList; return <SI size={18} className="text-blue-400" />; })()}
                       <div className="flex-1">
                         <div className="font-body text-sm font-semibold text-blue-800">{a.equideName} — {a.label || stOpt?.label}</div>
                         <div className="font-body text-xs text-gray-400">
@@ -787,7 +787,7 @@ export default function CavaleriePage() {
                 const stOpt = soinTypeOptions.find(o => o.value === s.type);
                 return (
                   <Card key={s.id} padding="sm" className="flex items-center gap-3">
-                    <span className="text-lg">{stOpt?.emoji || "📋"}</span>
+                    {(() => { const SI = stOpt?.icon || ClipboardList; return <SI size={18} className="text-blue-400" />; })()}
                     <div className="flex-1">
                       <div className="font-body text-sm font-semibold text-blue-800">{s.equideName} — {s.label || stOpt?.label}</div>
                       <div className="font-body text-xs text-gray-400">
@@ -887,7 +887,7 @@ export default function CavaleriePage() {
                   <div>
                     <label className={labelStyle}>Type</label>
                     <select className={inputStyle} value={form.type} onChange={e => setForm({ ...form, type: e.target.value as EquideType })}>
-                      {typeOptions.map(t => <option key={t.value} value={t.value}>{t.emoji} {t.label}</option>)}
+                      {typeOptions.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                     </select>
                   </div>
                   <div>
@@ -1048,7 +1048,7 @@ export default function CavaleriePage() {
                       : "";
                     setSoinForm({ ...soinForm, type: t, label: opt?.label || "", prochainRdv: nextDate });
                   }}>
-                    {soinTypeOptions.map(s => <option key={s.value} value={s.value}>{s.emoji} {s.label}</option>)}
+                    {soinTypeOptions.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </select>
                 </div>
                 <div>

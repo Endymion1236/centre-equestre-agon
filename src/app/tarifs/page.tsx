@@ -1,3 +1,4 @@
+import { BadgeEuro } from "lucide-react";
 import { Metadata } from "next";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
@@ -117,7 +118,7 @@ export default function TarifsPage() {
           <path d="M0,30 C480,50 960,10 1440,35 L1440,50 L0,50Z" className="fill-cream" />
         </svg>
         <div className="relative z-10 max-w-2xl mx-auto">
-          <span className="text-5xl mb-4 block">💰</span>
+          <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center mx-auto mb-4"><BadgeEuro size={32} className="text-white/80" /></div>
           <h1 className="font-display text-4xl md:text-5xl font-bold text-white leading-tight mb-4">
             Nos tarifs
           </h1>

@@ -1,3 +1,4 @@
+import { TreePine } from "lucide-react";
 import { Metadata } from "next";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
@@ -29,7 +30,7 @@ const animals = [
     gradient: "from-gray-200 to-gray-100",
   },
   {
-    emoji: "🐐",
+    icon: "heart",
     name: "Les chèvres",
     type: "Chèvres naines",
     color: "",
@@ -38,7 +39,7 @@ const animals = [
     gradient: "from-amber-200 to-amber-100",
   },
   {
-    emoji: "🐔",
+    icon: "heart",
     name: "Les poules",
     type: "Poules pondeuses",
     color: "",
@@ -49,15 +50,15 @@ const animals = [
 ];
 
 const poneyStars = [
-  { name: "Sircee", type: "Poney", specialty: "Pony Games & CSO", emoji: "🏇" },
-  { name: "Batz", type: "Poney", specialty: "Baby Poney & débutants", emoji: "🐴" },
-  { name: "Ultim", type: "Poney", specialty: "Compétition CSO", emoji: "🏅" },
-  { name: "Rose", type: "Poney", specialty: "Stages tous niveaux", emoji: "🌹" },
-  { name: "Gucci", type: "Poney", specialty: "Pony Games", emoji: "⭐" },
-  { name: "Galaxy", type: "Poney", specialty: "Balades & compétition", emoji: "🌌" },
-  { name: "Caramel", type: "Shetland", specialty: "Baby Poney", emoji: "🍬" },
-  { name: "Java", type: "Poney", specialty: "Débutants", emoji: "☕" },
-  { name: "Joy", type: "Shetland", specialty: "Baby Poney", emoji: "😊" },
+  { name: "Sircee", type: "Poney", specialty: "Pony Games & CSO", icon: "heart" },
+  { name: "Batz", type: "Poney", specialty: "Baby Poney & débutants", icon: "heart" },
+  { name: "Ultim", type: "Poney", specialty: "Compétition CSO", icon: "heart" },
+  { name: "Rose", type: "Poney", specialty: "Stages tous niveaux", icon: "heart" },
+  { name: "Gucci", type: "Poney", specialty: "Pony Games", icon: "heart" },
+  { name: "Galaxy", type: "Poney", specialty: "Balades & compétition", icon: "heart" },
+  { name: "Caramel", type: "Shetland", specialty: "Baby Poney", icon: "heart" },
+  { name: "Java", type: "Poney", specialty: "Débutants", icon: "heart" },
+  { name: "Joy", type: "Shetland", specialty: "Baby Poney", icon: "heart" },
 ];
 
 export default function MiniFermePage() {
@@ -72,7 +73,7 @@ export default function MiniFermePage() {
           <path d="M0,30 C480,50 960,10 1440,35 L1440,50 L0,50Z" className="fill-cream" />
         </svg>
         <div className="relative z-10 max-w-2xl mx-auto">
-          <span className="text-5xl mb-4 block">🐷</span>
+          <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center mx-auto mb-4"><TreePine size={32} className="text-white/80" /></div>
           <h1 className="font-display text-4xl md:text-5xl font-bold text-white leading-tight mb-4">
             La mini-ferme pédagogique
           </h1>
@@ -97,7 +98,7 @@ export default function MiniFermePage() {
               <div
                 className={`h-40 bg-gradient-to-br ${animal.gradient} flex items-center justify-center`}
               >
-                <span className="text-7xl opacity-70">{animal.emoji}</span>
+                <span className="text-7xl opacity-70"><Heart size={24} className="text-pink-400" /></span>
               </div>
               <div className="p-6">
                 <div className="flex items-center gap-3 mb-2">

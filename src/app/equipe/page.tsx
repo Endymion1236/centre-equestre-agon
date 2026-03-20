@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { SectionHeader, Card, Badge } from "@/components/ui";
+import { Users, Heart, GraduationCap, Sparkles } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "L'équipe & la cavalerie",
@@ -12,14 +13,14 @@ const team = [
   {
     name: "Nicolas",
     role: "Gérant",
-    emoji: "👨‍💼",
+    initials: "N",
     description: "Passionné d'équitation et d'innovation, Nicolas gère le centre depuis plusieurs années. Il conçoit des activités ludiques et immersives pour les cavaliers de tous âges.",
     specialties: ["Gestion", "Pony Games", "Innovation", "LaserBay"],
   },
   {
     name: "Emmeline",
     role: "Instructrice BPJEPS",
-    emoji: "👩‍🏫",
+    initials: "E",
     description: "Emmeline est notre instructrice diplômée BPJEPS. Pédagogue et bienveillante, elle accompagne chaque cavalier dans sa progression avec passion et exigence.",
     specialties: ["Enseignement", "CSO", "Dressage", "Baby Poney"],
   },
@@ -61,7 +62,7 @@ export default function EquipePage() {
           <path d="M0,30 C480,50 960,10 1440,35 L1440,50 L0,50Z" className="fill-cream" />
         </svg>
         <div className="relative z-10 max-w-2xl mx-auto">
-          <span className="text-5xl mb-4 block">🤝</span>
+          <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center mx-auto mb-4"><Users size={32} className="text-white/80" /></div>
           <h1 className="font-display text-4xl md:text-5xl font-bold text-white leading-tight mb-4">L&apos;équipe & la cavalerie</h1>
           <p className="font-body text-lg text-white/65">Les humains et les poneys qui font vivre le centre au quotidien.</p>
         </div>
@@ -74,7 +75,7 @@ export default function EquipePage() {
           {team.map((member, i) => (
             <Card key={i} padding="lg" className="flex-1 min-w-[320px] max-w-[420px]">
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center text-3xl">{member.emoji}</div>
+                <div className="w-16 h-16 rounded-2xl bg-blue-500 flex items-center justify-center"><span className="font-display text-xl font-bold text-white">{member.initials}</span></div>
                 <div>
                   <h3 className="font-display text-xl font-bold text-blue-800">{member.name}</h3>
                   <div className="font-body text-sm text-gold-400 font-semibold">{member.role}</div>
@@ -99,7 +100,7 @@ export default function EquipePage() {
             {poneys.map((p, i) => (
               <Card key={i} padding="md">
                 <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-xl bg-blue-50 flex items-center justify-center text-3xl flex-shrink-0">🐴</div>
+                  <div className="w-14 h-14 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0"><Heart size={24} className="text-blue-400" /></div>
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-1">
                       <h3 className="font-display text-lg font-bold text-blue-800">{p.name}</h3>
@@ -115,11 +116,11 @@ export default function EquipePage() {
 
           {/* Young poneys */}
           <div className="mt-8">
-            <h3 className="font-display text-lg font-bold text-blue-800 mb-4">🌟 La relève</h3>
+            <h3 className="font-display text-lg font-bold text-blue-800 mb-4 flex items-center gap-2"><Sparkles size={20} className="text-amber-400" /> La relève</h3>
             <div className="flex gap-4 flex-wrap">
               {youngPoneys.map((p, i) => (
                 <Card key={i} padding="sm" className="flex items-center gap-3">
-                  <span className="text-xl">🐎</span>
+                  <Heart size={18} className="text-blue-400" />
                   <div>
                     <div className="font-body text-sm font-semibold text-blue-800">{p.name}</div>
                     <div className="font-body text-xs text-gold-400">{p.status}</div>

@@ -73,7 +73,7 @@ export default function CavaliersPage() {
         <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div>
       ) : filtered.length === 0 ? (
         <Card padding="lg" className="text-center">
-          <span className="text-4xl block mb-3">👥</span>
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><Users size={28} className="text-blue-300" /></div>
           <p className="font-body text-sm text-gray-500">{search ? "Aucun résultat." : "Aucune famille inscrite."}</p>
         </Card>
       ) : (

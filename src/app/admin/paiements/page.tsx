@@ -367,7 +367,7 @@ export default function PaiementsPage() {
             <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div>
           ) : payments.length === 0 ? (
             <Card padding="lg" className="text-center">
-              <span className="text-4xl block mb-3">💳</span>
+              <div className="w-14 h-14 rounded-2xl bg-green-50 flex items-center justify-center mx-auto mb-3"><CreditCard size={28} className="text-green-400" /></div>
               <p className="font-body text-sm text-gray-500">Aucun paiement enregistré.</p>
             </Card>
           ) : (

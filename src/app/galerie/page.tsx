@@ -1,3 +1,4 @@
+import { Camera } from "lucide-react";
 import { Metadata } from "next";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
@@ -10,11 +11,11 @@ export const metadata: Metadata = {
 };
 
 const categories = [
-  { id: "balades", label: "Balades plage", emoji: "🌅", count: 0 },
-  { id: "stages", label: "Stages", emoji: "🏇", count: 0 },
-  { id: "competitions", label: "Compétitions", emoji: "🏆", count: 0 },
-  { id: "miniferme", label: "Mini-ferme", emoji: "🐷", count: 0 },
-  { id: "club", label: "Vie du club", emoji: "🤝", count: 0 },
+  { id: "balades", label: "Balades plage", icon: "compass", count: 0 },
+  { id: "stages", label: "Stages", icon: "star", count: 0 },
+  { id: "competitions", label: "Compétitions", icon: "trophy", count: 0 },
+  { id: "miniferme", label: "Mini-ferme", icon: "leaf", count: 0 },
+  { id: "club", label: "Vie du club", icon: "users", count: 0 },
 ];
 
 export default function GaleriePage() {
@@ -29,7 +30,7 @@ export default function GaleriePage() {
           <path d="M0,30 C480,50 960,10 1440,35 L1440,50 L0,50Z" className="fill-cream" />
         </svg>
         <div className="relative z-10 max-w-2xl mx-auto">
-          <span className="text-5xl mb-4 block">📷</span>
+          <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center mx-auto mb-4"><Camera size={32} className="text-white/80" /></div>
           <h1 className="font-display text-4xl md:text-5xl font-bold text-white leading-tight mb-4">
             Galerie photos
           </h1>
@@ -54,7 +55,7 @@ export default function GaleriePage() {
               className="card !p-0 overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all cursor-pointer"
             >
               <div className="h-44 bg-gradient-to-br from-blue-500/20 to-blue-400/10 flex items-center justify-center">
-                <span className="text-6xl opacity-50">{cat.emoji}</span>
+                <Camera size={48} className="text-white/30" />
               </div>
               <div className="p-5 text-center">
                 <h3 className="font-display text-lg font-bold text-blue-800 mb-1">
@@ -70,7 +71,7 @@ export default function GaleriePage() {
 
         {/* Coming soon message */}
         <div className="mt-12 text-center bg-gold-50 rounded-2xl p-8 border border-gold-400/15">
-          <span className="text-4xl block mb-4">📸</span>
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-4"><Camera size={28} className="text-blue-300" /></div>
           <h3 className="font-display text-xl font-bold text-blue-800 mb-3">
             Galerie en cours de construction
           </h3>

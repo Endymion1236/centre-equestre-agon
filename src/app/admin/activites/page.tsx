@@ -14,7 +14,8 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge, Button } from "@/components/ui";
-import { Plus, Pencil, Trash2, Copy, X, Check, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Copy, X, Check, Loader2   ClipboardList,
+} from "lucide-react";
 import type { Activity, ActivityType } from "@/types";
 
 const activityTypes: { id: ActivityType | string; label: string; emoji: string }[] = [
@@ -383,7 +384,7 @@ export default function AdminActivitesPage() {
         </div>
       ) : filtered.length === 0 ? (
         <Card padding="lg" className="text-center">
-          <span className="text-4xl block mb-3">📋</span>
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><ClipboardList size={28} className="text-blue-300" /></div>
           <p className="font-body text-sm text-gray-500 mb-4">
             {filter === "all"
               ? "Aucune activité créée. Commencez par créer votre première activité !"

@@ -179,7 +179,7 @@ export default function CartesPage() {
           {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
           filteredCards.length === 0 ? (
             <Card padding="lg" className="text-center">
-              <span className="text-4xl block mb-3">🎟️</span>
+              <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><Ticket size={28} className="text-blue-300" /></div>
               <p className="font-body text-sm text-gray-500 mb-3">{search ? "Aucune carte trouvée." : "Aucune carte active."}</p>
               <button onClick={() => setTab("create")} className="font-body text-sm font-semibold text-blue-500 bg-transparent border-none cursor-pointer">+ Créer une carte</button>
             </Card>

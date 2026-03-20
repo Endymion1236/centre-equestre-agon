@@ -79,7 +79,7 @@ const activities: Activity[] = [
   {
     id: "or",
     category: "stages",
-    emoji: "🥇",
+    icon: "crown",
     title: "Galop d'Or",
     ages: "8+ ans (cavaliers de l'année ou Galop d'Argent validé)",
     schedule: "Lun–Ven · 10h–12h ou 14h–16h",
@@ -98,7 +98,7 @@ const activities: Activity[] = [
   {
     id: "galop34",
     category: "stages",
-    emoji: "🏇",
+    icon: "star",
     title: "Galop 3 – 4",
     ages: "10+ ans",
     schedule: "Lun–Ven · 10h–12h ou 14h–16h",
@@ -117,7 +117,7 @@ const activities: Activity[] = [
   {
     id: "balade-soleil",
     category: "balades",
-    emoji: "🌅",
+    icon: "compass",
     title: "Balade coucher de soleil",
     ages: "Dès 12 ans",
     schedule: "2h · Avr–Oct · Sur réservation",
@@ -137,7 +137,7 @@ const activities: Activity[] = [
   {
     id: "balade-jour",
     category: "balades",
-    emoji: "☀️",
+    icon: "sun",
     title: "Promenade en journée",
     ages: "Dès 12 ans",
     schedule: "2h · Toute l'année · Sur réservation",
@@ -156,7 +156,7 @@ const activities: Activity[] = [
   {
     id: "balade-privee",
     category: "balades",
-    emoji: "💑",
+    icon: "heart",
     title: "Promenade romantique privatisée",
     ages: "Adultes",
     schedule: "2h · Sur demande",
@@ -174,7 +174,7 @@ const activities: Activity[] = [
   {
     id: "randonnee-jeunes",
     category: "balades",
-    emoji: "🗺️",
+    icon: "map",
     title: "Randonnée jeunes 12–16 ans",
     ages: "12 – 16 ans",
     schedule: "Journée · Sur réservation",
@@ -192,7 +192,7 @@ const activities: Activity[] = [
   {
     id: "cours-loisir",
     category: "cours",
-    emoji: "📅",
+    icon: "calendar",
     title: "Forfait Loisir",
     ages: "Tous âges, tous niveaux",
     schedule: "1 cours/semaine · Toute l'année",
@@ -211,7 +211,7 @@ const activities: Activity[] = [
   {
     id: "cours-compet",
     category: "cours",
-    emoji: "🏆",
+    icon: "trophy",
     title: "Forfait Compétition",
     ages: "Cavaliers motivés",
     schedule: "2 cours/semaine · Toute l'année",
@@ -230,7 +230,7 @@ const activities: Activity[] = [
   {
     id: "cso",
     category: "competitions",
-    emoji: "🏅",
+    icon: "medal",
     title: "Concours CSO interne",
     ages: "Galop 3+",
     schedule: "Mensuel",
@@ -248,7 +248,7 @@ const activities: Activity[] = [
   {
     id: "ponygames",
     category: "competitions",
-    emoji: "🎯",
+    icon: "flag",
     title: "Pony Games",
     ages: "Tous niveaux",
     schedule: "Mensuel",
@@ -284,7 +284,7 @@ const activities: Activity[] = [
   {
     id: "anniversaire",
     category: "autres",
-    emoji: "🎂",
+    icon: "party",
     title: "Anniversaire au club",
     ages: "Dès 4 ans",
     schedule: "Demi-journée · Sur demande",
@@ -303,7 +303,7 @@ const activities: Activity[] = [
   {
     id: "ponyride",
     category: "autres",
-    emoji: "🐴",
+    icon: "heart",
     title: "Pony rides",
     ages: "Jusqu'à 7 ans",
     schedule: "Sur place · Aux heures d'ouverture",
