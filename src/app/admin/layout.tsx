@@ -21,6 +21,7 @@ import {
   LayoutTemplate,
   Send,
   Ticket,
+  Heart,
 } from "lucide-react";
 
 const navItems = [
@@ -29,6 +30,7 @@ const navItems = [
   { href: "/admin/planning", icon: CalendarDays, label: "Planning" },
   { href: "/admin/montoir", icon: ClipboardList, label: "Montoir" },
   { href: "/admin/cavaliers", icon: Users, label: "Cavaliers" },
+  { href: "/admin/cavalerie", icon: Heart, label: "Cavalerie" },
   { href: "/admin/pedagogie", icon: GraduationCap, label: "Suivi pédagogique" },
   { href: "/admin/passage", icon: UserPlus, label: "Cavaliers passage" },
   { href: "/admin/forfaits", icon: CalendarDays, label: "Forfaits annuels" },

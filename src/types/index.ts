@@ -283,13 +283,105 @@ export interface SatisfactionReview {
 }
 
 // ─── Cavalerie ───
-export interface Horse {
+export type EquideType = "poney" | "shetland" | "cheval" | "ane";
+export type EquideSex = "male" | "femelle" | "hongre";
+export type EquideStatus = "actif" | "retraite" | "sorti" | "en_formation" | "indisponible";
+
+export interface Equide {
   id: string;
   name: string;
-  type: "poney" | "shetland" | "cheval";
+  sire: string;
+  puce: string;
+  type: EquideType;
+  sex: EquideSex;
+  robe: string;
+  race: string;
+  birthDate: Date | null;
+  toise: number | null;
+  photo: string | null;
+  provenance: string;
+  proprietaire: string;
+  dateArrivee: Date;
+  dateSortie: Date | null;
+  motifSortie: string | null;
+  status: EquideStatus;
   available: boolean;
+  niveauCavalier: string;
+  disciplines: string[];
+  temperament: string;
+  cavaliersFavoris: string[];
   maxReprisesPerDay: number;
+  maxHeuresHebdo: number;
   notes: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Rétro-compatibilité
+export type Horse = Equide;
+
+// ─── Registre d'élevage ───
+export type MouvementType = "entree" | "sortie";
+
+export interface MouvementRegistre {
+  id: string;
+  equideId: string;
+  equideName: string;
+  type: MouvementType;
+  date: Date;
+  motif: string;
+  provenance: string | null;
+  destination: string | null;
+  prixAchat: number | null;
+  prixVente: number | null;
+  observations: string;
+  createdAt: Date;
+}
+
+// ─── Soins & Santé ───
+export type SoinType =
+  | "vermifuge" | "vaccin" | "marechal" | "dentiste"
+  | "osteopathe" | "veterinaire" | "tonte" | "autre";
+
+export interface SoinRecord {
+  id: string;
+  equideId: string;
+  equideName: string;
+  type: SoinType;
+  label: string;
+  date: Date;
+  prochainRdv: Date | null;
+  praticien: string;
+  cout: number | null;
+  observations: string;
+  createdAt: Date;
+}
+
+// ─── Documents rattachés aux équidés ───
+export type DocumentEquideType =
+  | "radio" | "ordonnance" | "carnet_sante" | "certificat"
+  | "assurance" | "livret" | "facture_veto" | "autre";
+
+export interface DocumentEquide {
+  id: string;
+  equideId: string;
+  equideName: string;
+  type: DocumentEquideType;
+  label: string;
+  fileUrl: string;
+  fileName: string;
+  uploadedAt: Date;
+  notes: string;
+}
+
+// ─── Charge de travail ───
+export interface ChargeJournaliere {
+  equideId: string;
+  date: string;
+  nbReprises: number;
+  nbHeures: number;
+  maxReprises: number;
+  depassement: boolean;
 }
 
 // ─── Suivi pédagogique ───
