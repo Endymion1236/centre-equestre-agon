@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -25,6 +26,8 @@ import {
   TrendingUp,
   Wallet,
   ExternalLink,
+  Menu,
+  X,
   ShoppingCart,
   FileText,
 } from "lucide-react";
@@ -109,7 +112,14 @@ function AdminSidebar() {
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, isAdmin } = useAuth();
+  const { user, loading, isAdmin, signOut: authSignOut } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
+
+  // Fermer le menu mobile quand on change de page
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
 
   if (loading) {
     return (
@@ -160,7 +170,53 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-cream flex">
       <AdminSidebar />
       <div className="flex-1 overflow-auto">
-        <div className="p-6 md:p-8 max-w-[960px]">
+        {/* Top bar mobile */}
+        <div className="md:hidden sticky top-0 z-50 bg-blue-800 px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center text-white border-none cursor-pointer">
+              {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+            <span className="font-display text-sm font-bold text-white">Admin</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link href="/" className="font-body text-xs text-white/50 no-underline flex items-center gap-1">
+              <ExternalLink size={12} /> Site
+            </Link>
+            <button onClick={authSignOut}
+              className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center text-red-300 border-none cursor-pointer">
+              <LogOut size={14} />
+            </button>
+          </div>
+        </div>
+
+        {/* Menu mobile déroulant */}
+        {mobileMenuOpen && (
+          <div className="md:hidden fixed inset-0 top-[56px] z-40 bg-black/30" onClick={() => setMobileMenuOpen(false)}>
+            <div className="bg-blue-800 w-[260px] h-full overflow-y-auto p-3 flex flex-col gap-0.5 shadow-2xl" onClick={e => e.stopPropagation()}>
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const active = pathname?.startsWith(item.href);
+                return (
+                  <Link key={item.href} href={item.href}
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg no-underline transition-all
+                      ${active ? "bg-blue-500/30 text-white" : "text-white/50 hover:text-white/80 hover:bg-white/5"}`}>
+                    <Icon size={16} />
+                    <span className={`font-body text-[13px] ${active ? "font-semibold" : "font-normal"}`}>{item.label}</span>
+                  </Link>
+                );
+              })}
+              <div className="mt-4 pt-3 border-t border-white/10">
+                <Link href="/" className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-white/40 hover:text-gold-400 no-underline">
+                  <ExternalLink size={16} />
+                  <span className="font-body text-[13px]">Retour au site</span>
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="p-4 md:p-8 max-w-[960px]">
           {children}
         </div>
       </div>
