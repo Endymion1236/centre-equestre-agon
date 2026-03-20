@@ -23,6 +23,7 @@ import {
   Ticket,
   Heart,
   TrendingUp,
+  Wallet,
 } from "lucide-react";
 
 const navItems = [
@@ -37,6 +38,7 @@ const navItems = [
   { href: "/admin/forfaits", icon: CalendarDays, label: "Forfaits annuels" },
   { href: "/admin/cartes", icon: CreditCard, label: "Cartes & tickets" },
   { href: "/admin/paiements", icon: CreditCard, label: "Paiements" },
+  { href: "/admin/avoirs", icon: Wallet, label: "Avoirs & avances" },
   { href: "/admin/comptabilite", icon: BookOpen, label: "Comptabilité" },
   { href: "/admin/statistiques", icon: TrendingUp, label: "Statistiques" },
   { href: "/admin/communication", icon: Mail, label: "Communication" },

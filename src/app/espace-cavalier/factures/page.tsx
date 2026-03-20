@@ -46,9 +46,9 @@ interface Card10 {
 }
 
 const modeLabels: Record<string, string> = {
-  cb_terminal: "💳 CB", cb_online: "🌐 Stripe", cheque: "📝 Chèque", especes: "💶 Espèces",
-  cheque_vacances: "🏖️ Chq. Vac.", pass_sport: "🎽 Pass'Sport", ancv: "🎫 ANCV",
-  virement: "🏦 Virement", avoir: "🔄 Avoir", carte: "🎟️ Carte",
+  cb_terminal: "CB", cb_online: "Stripe", cheque: "Chèque", especes: "Espèces",
+  cheque_vacances: "Chq. Vac.", pass_sport: "Pass'Sport", ancv: "ANCV",
+  virement: "Virement", avoir: "Avoir", carte: "Carte",
 };
 
 export default function FacturesPage() {
