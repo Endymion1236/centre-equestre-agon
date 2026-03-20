@@ -19,6 +19,10 @@ export default function CavaliersPage() {
   const [expandedFamily, setExpandedFamily] = useState<string | null>(null);
   const [editingGalop, setEditingGalop] = useState<{ familyId: string; childId: string } | null>(null);
 
+  // ─── Édition infos famille ───
+  const [editingFamily, setEditingFamily] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ parentName: "", parentEmail: "", parentPhone: "" });
+
   // ─── Création famille ───
   const [showCreateFamily, setShowCreateFamily] = useState(false);
   const [newFamily, setNewFamily] = useState({ parentName: "", parentEmail: "", parentPhone: "" });
@@ -116,6 +120,32 @@ export default function CavaliersPage() {
     await updateDoc(doc(db, "families", familyId), { children: updated });
     setEditingGalop(null);
     fetchFamilies();
+  };
+
+  // ─── Modifier les infos famille ───
+  const startEditFamily = (family: any) => {
+    setEditingFamily(family.firestoreId);
+    setEditForm({
+      parentName: family.parentName || "",
+      parentEmail: family.parentEmail || "",
+      parentPhone: family.parentPhone || "",
+    });
+  };
+
+  const handleSaveFamily = async () => {
+    if (!editingFamily) return;
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, "families", editingFamily), {
+        parentName: editForm.parentName.trim(),
+        parentEmail: editForm.parentEmail.trim(),
+        parentPhone: editForm.parentPhone.trim(),
+        updatedAt: serverTimestamp(),
+      });
+      setEditingFamily(null);
+      fetchFamilies();
+    } catch (e) { console.error(e); alert("Erreur de sauvegarde."); }
+    setSaving(false);
   };
 
   // ─── Charger les créneaux pour l'inscription ───
@@ -264,11 +294,45 @@ export default function CavaliersPage() {
                 {isExp && (
                   <div className="mt-4 pt-4 border-t border-blue-500/8">
                     {/* Infos parent */}
-                    <div className="grid grid-cols-3 gap-4 mb-5">
-                      <div><div className="font-body text-[11px] font-semibold text-gray-400">Email</div><div className="font-body text-sm text-blue-800">{family.parentEmail || "—"}</div></div>
-                      <div><div className="font-body text-[11px] font-semibold text-gray-400">Téléphone</div><div className="font-body text-sm text-blue-800">{family.parentPhone || "Non renseigné"}</div></div>
-                      <div><div className="font-body text-[11px] font-semibold text-gray-400">Inscription</div><div className="font-body text-sm text-blue-800">{(family as any).authProvider === "admin" ? "Créé par l'admin" : `Via ${(family as any).authProvider}`}</div></div>
-                    </div>
+                    {editingFamily === family.firestoreId ? (
+                      <div className="bg-blue-50 rounded-lg p-4 mb-5">
+                        <div className="font-body text-xs font-semibold text-blue-500 uppercase tracking-wider mb-3">Modifier les informations</div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+                          <div>
+                            <label className="font-body text-[10px] font-semibold text-gray-400 uppercase block mb-1">Nom</label>
+                            <input value={editForm.parentName} onChange={e => setEditForm({ ...editForm, parentName: e.target.value })} className={inputStyle} />
+                          </div>
+                          <div>
+                            <label className="font-body text-[10px] font-semibold text-gray-400 uppercase block mb-1">Email</label>
+                            <input type="email" value={editForm.parentEmail} onChange={e => setEditForm({ ...editForm, parentEmail: e.target.value })} className={inputStyle} />
+                          </div>
+                          <div>
+                            <label className="font-body text-[10px] font-semibold text-gray-400 uppercase block mb-1">Téléphone</label>
+                            <input type="tel" value={editForm.parentPhone} onChange={e => setEditForm({ ...editForm, parentPhone: e.target.value })} className={inputStyle} />
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={handleSaveFamily} disabled={saving}
+                            className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-600 disabled:opacity-50">
+                            {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer
+                          </button>
+                          <button onClick={() => setEditingFamily(null)}
+                            className="font-body text-xs text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-start justify-between mb-5">
+                        <div className="grid grid-cols-3 gap-4 flex-1">
+                          <div><div className="font-body text-[11px] font-semibold text-gray-400">Email</div><div className="font-body text-sm text-blue-800">{family.parentEmail || "—"}</div></div>
+                          <div><div className="font-body text-[11px] font-semibold text-gray-400">Téléphone</div><div className="font-body text-sm text-blue-800">{family.parentPhone || "Non renseigné"}</div></div>
+                          <div><div className="font-body text-[11px] font-semibold text-gray-400">Inscription</div><div className="font-body text-sm text-blue-800">{(family as any).authProvider === "admin" ? "Créé par l'admin" : `Via ${(family as any).authProvider}`}</div></div>
+                        </div>
+                        <button onClick={() => startEditFamily(family)}
+                          className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1 flex-shrink-0">
+                          <Edit3 size={12} /> Modifier
+                        </button>
+                      </div>
+                    )}
 
                     {/* Cavaliers */}
                     <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Cavaliers ({children.length})</div>

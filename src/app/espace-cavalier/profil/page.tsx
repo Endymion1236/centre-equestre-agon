@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { doc, updateDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge, Button } from "@/components/ui";
-import { Plus, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, ChevronDown, ChevronUp, Edit3, Save, Loader2, Users } from "lucide-react";
 import type { Child, SanitaryForm } from "@/types";
 
 function AddChildForm({ onAdd }: { onAdd: () => void }) {
@@ -157,6 +157,32 @@ export default function ProfilPage() {
   const { user, family } = useAuth();
   const [showAddChild, setShowAddChild] = useState(false);
   const [expandedChild, setExpandedChild] = useState<string | null>(null);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [editForm, setEditForm] = useState({ parentName: "", parentPhone: "" });
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  const startEdit = () => {
+    setEditForm({
+      parentName: family?.parentName || "",
+      parentPhone: family?.parentPhone || "",
+    });
+    setEditingProfile(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    setSavingProfile(true);
+    try {
+      await updateDoc(doc(db, "families", user.uid), {
+        parentName: editForm.parentName.trim(),
+        parentPhone: editForm.parentPhone.trim(),
+        updatedAt: serverTimestamp(),
+      });
+      setEditingProfile(false);
+      window.location.reload();
+    } catch (e) { console.error(e); alert("Erreur de sauvegarde."); }
+    setSavingProfile(false);
+  };
 
   const handleChildAdded = () => {
     setShowAddChild(false);
@@ -173,25 +199,67 @@ export default function ProfilPage() {
       {/* Parent info */}
       <Card padding="md" className="mb-5">
         <div className="flex justify-between items-start mb-4">
-          <span className="font-body text-sm font-semibold text-blue-800">
-            👤 Parent titulaire
+          <span className="font-body text-sm font-semibold text-blue-800 flex items-center gap-2">
+            <Users size={16} className="text-blue-500" /> Parent titulaire
           </span>
+          {!editingProfile && (
+            <button onClick={startEdit}
+              className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
+              <Edit3 size={12} /> Modifier
+            </button>
+          )}
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          {[
-            { label: "Nom", value: family?.parentName || "—" },
-            { label: "Email", value: family?.parentEmail || "—" },
-            { label: "Téléphone", value: family?.parentPhone || "Non renseigné" },
-            { label: "Connexion", value: `${family?.authProvider === "google" ? "Google" : "Facebook"} SSO` },
-          ].map((field, i) => (
-            <div key={i}>
-              <div className="font-body text-xs font-semibold text-gray-400 mb-0.5">
-                {field.label}
+
+        {editingProfile ? (
+          <div className="flex flex-col gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="font-body text-xs font-semibold text-gray-400 mb-1 block">Nom</label>
+                <input value={editForm.parentName} onChange={e => setEditForm({ ...editForm, parentName: e.target.value })}
+                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400" />
               </div>
-              <div className="font-body text-sm text-blue-800">{field.value}</div>
+              <div>
+                <label className="font-body text-xs font-semibold text-gray-400 mb-1 block">Téléphone</label>
+                <input type="tel" value={editForm.parentPhone} onChange={e => setEditForm({ ...editForm, parentPhone: e.target.value })}
+                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400" placeholder="06 00 00 00 00" />
+              </div>
             </div>
-          ))}
-        </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="font-body text-xs font-semibold text-gray-400 mb-1 block">Email</label>
+                <div className="font-body text-sm text-gray-400 py-2.5">{family?.parentEmail || "—"} (non modifiable)</div>
+              </div>
+              <div>
+                <label className="font-body text-xs font-semibold text-gray-400 mb-1 block">Connexion</label>
+                <div className="font-body text-sm text-gray-400 py-2.5">{family?.authProvider === "google" ? "Google" : "Facebook"}</div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={handleSaveProfile} disabled={savingProfile}
+                className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-600 disabled:opacity-50">
+                {savingProfile ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer
+              </button>
+              <button onClick={() => setEditingProfile(false)}
+                className="font-body text-xs text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            {[
+              { label: "Nom", value: family?.parentName || "—" },
+              { label: "Email", value: family?.parentEmail || "—" },
+              { label: "Téléphone", value: family?.parentPhone || "Non renseigné" },
+              { label: "Connexion", value: `${family?.authProvider === "google" ? "Google" : "Facebook"}` },
+            ].map((field, i) => (
+              <div key={i}>
+                <div className="font-body text-xs font-semibold text-gray-400 mb-0.5">
+                  {field.label}
+                </div>
+                <div className="font-body text-sm text-blue-800">{field.value}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
 
       {/* Children */}
