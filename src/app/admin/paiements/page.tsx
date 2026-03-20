@@ -45,7 +45,7 @@ const paymentModes: { id: PaymentMode; label: string; icon: string }[] = [
 ];
 
 export default function PaiementsPage() {
-  const [tab, setTab] = useState<"encaisser" | "historique">("encaisser");
+  const [tab, setTab] = useState<"encaisser" | "historique" | "echeances" | "impayes">("encaisser");
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const [activities, setActivities] = useState<(Activity & { firestoreId: string })[]>([]);
   const [payments, setPayments] = useState<(Payment & { id: string })[]>([]);
@@ -160,11 +160,14 @@ export default function PaiementsPage() {
       <h1 className="font-display text-2xl font-bold text-blue-800 mb-6">Paiements & facturation</h1>
 
       <div className="flex gap-2 mb-6">
-        {([["encaisser", "Encaisser", ShoppingCart], ["historique", "Historique", Receipt]] as const).map(([id, label, Icon]) => (
-          <button key={id} onClick={() => setTab(id)}
+        {([["encaisser", "Encaisser", ShoppingCart], ["historique", "Historique", Receipt], ["echeances", "Échéances", Receipt], ["impayes", "Impayés", Receipt]] as const).map(([id, label, Icon]) => (
+          <button key={id} onClick={() => setTab(id as any)}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all
               ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
             <Icon size={16} /> {label}
+            {id === "impayes" && payments.filter(p => p.status === "partial" || (p.paidAmount || 0) < (p.totalTTC || 0)).length > 0 && (
+              <span className="bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{payments.filter(p => p.status === "partial" || ((p.paidAmount || 0) < (p.totalTTC || 0) && p.status !== "paid")).length}</span>
+            )}
           </button>
         ))}
       </div>
@@ -371,38 +374,158 @@ export default function PaiementsPage() {
             <Card className="!p-0 overflow-hidden">
               <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                 <span className="w-20">Date</span>
+                <span className="w-20">N° Facture</span>
                 <span className="flex-1">Client</span>
                 <span className="w-32">Prestations</span>
                 <span className="w-20 text-right">Montant</span>
-                <span className="w-24 text-center">Mode</span>
-                <span className="w-20 text-center">Statut</span>
+                <span className="w-20 text-center">Mode</span>
+                <span className="w-16 text-center">Statut</span>
+                <span className="w-16 text-center">PDF</span>
               </div>
-              {payments.map((p) => {
+              {payments.map((p, idx) => {
                 const date = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
                 const mode = paymentModes.find((m) => m.id === p.paymentMode);
+                const invoiceNum = `F${date.getFullYear()}-${String(payments.length - idx).padStart(3, "0")}`;
+                const ht = (p.items || []).reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
+                const printInvoice = async () => {
+                  const res = await fetch("/api/facture", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      invoiceNumber: invoiceNum,
+                      date: date.toLocaleDateString("fr-FR"),
+                      familyName: p.familyName,
+                      familyAddress: "",
+                      items: p.items || [],
+                      totalHT: ht,
+                      totalTVA: (p.totalTTC || 0) - ht,
+                      totalTTC: p.totalTTC || 0,
+                      paymentMode: mode?.label || p.paymentMode,
+                      paymentRef: p.paymentRef || "",
+                      paidAmount: p.paidAmount || p.totalTTC || 0,
+                      status: p.status,
+                    }),
+                  });
+                  const html = await res.text();
+                  const w = window.open("", "_blank");
+                  if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 500); }
+                };
                 return (
                   <div key={p.id} className="px-5 py-3 border-b border-blue-500/8 last:border-b-0 flex items-center hover:bg-blue-50/30 transition-colors">
                     <span className="w-20 font-body text-xs text-gray-400">{date.toLocaleDateString("fr-FR")}</span>
+                    <span className="w-20 font-body text-xs font-semibold text-blue-800">{invoiceNum}</span>
                     <span className="flex-1">
                       <div className="font-body text-sm font-semibold text-blue-800">{p.familyName}</div>
                     </span>
-                    <span className="w-32 font-body text-xs text-gray-500">
+                    <span className="w-32 font-body text-xs text-gray-500 truncate">
                       {(p.items || []).map((i: any) => i.activityTitle).join(", ")}
                     </span>
                     <span className="w-20 text-right font-body text-sm font-bold text-blue-500">{p.totalTTC?.toFixed(2)}€</span>
-                    <span className="w-24 text-center">
+                    <span className="w-20 text-center">
                       <Badge color="blue">{mode?.icon} {mode?.label?.split(" ")[0] || p.paymentMode}</Badge>
                     </span>
-                    <span className="w-20 text-center">
+                    <span className="w-16 text-center">
                       <Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : "gray"}>
-                        {p.status === "paid" ? "Payé" : p.status === "partial" ? "Partiel" : "En attente"}
+                        {p.status === "paid" ? "Payé" : p.status === "partial" ? "Partiel" : "—"}
                       </Badge>
+                    </span>
+                    <span className="w-16 text-center">
+                      <button onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100">📄</button>
                     </span>
                   </div>
                 );
               })}
             </Card>
           )}
+        </div>
+      )}
+      {/* ─── Échéances Tab ─── */}
+      {tab === "echeances" && (
+        <div>
+          <Card padding="md" className="mb-4 bg-blue-50 border-blue-500/8">
+            <div className="font-body text-sm text-blue-800">💡 <strong>Tableau des échéances :</strong> Suivi des paiements en 3x ou 10x. Les échéances Stripe sont prélevées automatiquement. Les échéances manuelles doivent être relancées.</div>
+          </Card>
+          {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
+          (() => {
+            const installments = payments.filter(p => p.paymentRef?.includes("x") || (p.totalTTC || 0) > (p.paidAmount || 0));
+            return installments.length === 0 ? (
+              <Card padding="lg" className="text-center"><p className="font-body text-sm text-gray-500">Aucun paiement échelonné.</p></Card>
+            ) : (
+              <Card className="!p-0 overflow-hidden">
+                <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                  <span className="flex-1">Client</span>
+                  <span className="w-32">Prestation</span>
+                  <span className="w-20 text-right">Total</span>
+                  <span className="w-20 text-right">Payé</span>
+                  <span className="w-20 text-right">Reste</span>
+                  <span className="w-24 text-center">Progression</span>
+                </div>
+                {installments.map(p => {
+                  const paid = p.paidAmount || 0;
+                  const total = p.totalTTC || 0;
+                  const rest = total - paid;
+                  const pct = total > 0 ? (paid / total) * 100 : 0;
+                  return (
+                    <div key={p.id} className="px-5 py-3 border-b border-blue-500/8 flex items-center">
+                      <span className="flex-1 font-body text-sm font-semibold text-blue-800">{p.familyName}</span>
+                      <span className="w-32 font-body text-xs text-gray-500 truncate">{(p.items||[]).map((i:any)=>i.activityTitle).join(", ")}</span>
+                      <span className="w-20 text-right font-body text-sm text-gray-500">{total.toFixed(2)}€</span>
+                      <span className="w-20 text-right font-body text-sm font-semibold text-green-600">{paid.toFixed(2)}€</span>
+                      <span className="w-20 text-right font-body text-sm font-semibold text-orange-500">{rest.toFixed(2)}€</span>
+                      <span className="w-24 flex items-center gap-2"><div className="flex-1 h-2 rounded-full bg-gray-100"><div className="h-2 rounded-full bg-blue-500" style={{width:`${pct}%`}}/></div><span className="font-body text-[10px] text-gray-400">{Math.round(pct)}%</span></span>
+                    </div>
+                  );
+                })}
+              </Card>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* ─── Impayés Tab ─── */}
+      {tab === "impayes" && (
+        <div>
+          {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
+          (() => {
+            const unpaid = payments.filter(p => p.status === "partial" || p.status === "pending" || ((p.paidAmount || 0) < (p.totalTTC || 0) && p.status !== "paid"));
+            const totalDue = unpaid.reduce((s, p) => s + ((p.totalTTC || 0) - (p.paidAmount || 0)), 0);
+            return unpaid.length === 0 ? (
+              <Card padding="lg" className="text-center"><span className="text-4xl block mb-3">🎉</span><p className="font-body text-sm text-gray-500">Aucun impayé ! Toutes les factures sont réglées.</p></Card>
+            ) : (
+              <div>
+                <Card padding="sm" className="mb-4 flex items-center gap-3">
+                  <span className="font-body text-2xl font-bold text-red-500">{totalDue.toFixed(2)}€</span>
+                  <span className="font-body text-xs text-gray-400">total impayé sur {unpaid.length} facture{unpaid.length > 1 ? "s" : ""}</span>
+                </Card>
+                <div className="flex flex-col gap-3">
+                  {unpaid.map(p => {
+                    const date = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
+                    const due = (p.totalTTC || 0) - (p.paidAmount || 0);
+                    const daysLate = Math.floor((Date.now() - date.getTime()) / 86400000);
+                    return (
+                      <Card key={p.id} padding="md">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-body text-sm font-semibold text-blue-800">{p.familyName}</div>
+                            <div className="font-body text-xs text-gray-400">{(p.items||[]).map((i:any)=>i.activityTitle).join(", ")} · {date.toLocaleDateString("fr-FR")}</div>
+                            {daysLate > 30 && <div className="font-body text-xs text-red-500 mt-1">⚠️ {daysLate} jours de retard</div>}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <div className="font-body text-lg font-bold text-red-500">{due.toFixed(2)}€</div>
+                              <div className="font-body text-[10px] text-gray-400">dû sur {(p.totalTTC || 0).toFixed(2)}€</div>
+                            </div>
+                            <Badge color={daysLate > 60 ? "red" : daysLate > 30 ? "orange" : "gray"}>
+                              {daysLate > 60 ? "Urgent" : daysLate > 30 ? "Relance" : "Récent"}
+                            </Badge>
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
