@@ -157,7 +157,7 @@ export default function EspaceCavalierLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading } = useAuth();
+  const { user, loading, signOut } = useAuth();
   const pathname = usePathname();
 
   // Loading state
@@ -202,13 +202,18 @@ export default function EspaceCavalierLayout({
             <span className="font-display text-sm font-bold text-blue-800">Centre Equestre</span>
             <span className="font-body text-xs text-gray-400 ml-1 hidden sm:inline">Espace cavalier</span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <Link href="/" className="md:hidden font-body text-xs text-gray-400 no-underline flex items-center gap-1">
               <ExternalLink size={14} /> Site
             </Link>
             <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center font-body text-xs font-bold text-blue-500">
               {user.displayName?.split(" ").map(n => n[0]).join("").slice(0, 2) || "?"}
             </div>
+            <button onClick={signOut}
+              className="md:hidden w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-red-400 border-none cursor-pointer hover:bg-red-100"
+              title="Déconnexion">
+              <LogOut size={14} />
+            </button>
           </div>
         </div>
 
