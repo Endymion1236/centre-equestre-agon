@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, addDoc, deleteDoc, doc, serverTimestamp, query, orderBy, limit } from "firebase/firestore";
+import { collection, getDocs, addDoc, deleteDoc, doc, getDoc, serverTimestamp, query, orderBy, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge, Button } from "@/components/ui";
 import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt } from "lucide-react";
@@ -67,22 +67,46 @@ export default function PaiementsPage() {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  // Réductions
+  const [promos, setPromos] = useState<any[]>([]);
+  const [promoCode, setPromoCode] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState<{ label: string; discountMode: string; discountValue: number } | null>(null);
+  const [manualDiscount, setManualDiscount] = useState("");
+
   useEffect(() => {
     Promise.all([
       getDocs(collection(db, "families")),
       getDocs(collection(db, "activities")),
       getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(50))),
-    ]).then(([famSnap, actSnap, paySnap]) => {
+      getDoc(doc(db, "settings", "promos")),
+    ]).then(([famSnap, actSnap, paySnap, promoSnap]) => {
       setFamilies(famSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as any);
       setActivities(actSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as any);
       setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+      if (promoSnap.exists() && promoSnap.data().items) setPromos(promoSnap.data().items);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
 
   const family = families.find((f) => f.firestoreId === selectedFamily);
   const children = family?.children || [];
-  const basketTotal = basket.reduce((s, i) => s + i.priceTTC, 0);
+  const basketSubtotal = basket.reduce((s, i) => s + i.priceTTC, 0);
+  const promoDiscount = appliedPromo
+    ? (appliedPromo.discountMode === "percent" ? basketSubtotal * appliedPromo.discountValue / 100 : appliedPromo.discountValue)
+    : (parseFloat(manualDiscount) || 0);
+  const basketTotal = Math.max(0, basketSubtotal - promoDiscount);
+
+  const applyPromoCode = () => {
+    const found = promos.find((p: any) => p.type === "code" && p.code === promoCode.toUpperCase() && p.active && (p.appliesTo === "paiement" || p.appliesTo === "tout"));
+    if (found) {
+      if (found.maxUses > 0 && found.usedCount >= found.maxUses) { alert("Ce code a atteint son nombre max d'utilisations."); return; }
+      if (found.validUntil && new Date(found.validUntil) < new Date()) { alert("Ce code a expiré."); return; }
+      setAppliedPromo({ label: found.label, discountMode: found.discountMode, discountValue: found.discountValue });
+      setManualDiscount("");
+    } else {
+      alert("Code promo invalide ou non applicable aux paiements.");
+    }
+  };
 
   const filteredFamilies = familySearch
     ? families.filter((f) => f.parentName?.toLowerCase().includes(familySearch.toLowerCase()) || f.parentEmail?.toLowerCase().includes(familySearch.toLowerCase()))
@@ -331,24 +355,60 @@ export default function PaiementsPage() {
                     ))}
                   </div>
 
+                  {/* Réductions */}
+                  {basket.length > 0 && (
+                    <div className="border-t border-blue-500/8 pt-3 mb-3">
+                      <div className="font-body text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Réduction</div>
+                      {appliedPromo && (
+                        <div className="bg-green-50 rounded-lg px-3 py-2 mb-2 flex items-center justify-between">
+                          <span className="font-body text-xs text-green-800">{appliedPromo.label} ({appliedPromo.discountMode === "percent" ? `-${appliedPromo.discountValue}%` : `-${appliedPromo.discountValue}€`})</span>
+                          <button onClick={() => setAppliedPromo(null)} className="font-body text-[10px] text-red-500 bg-transparent border-none cursor-pointer">Retirer</button>
+                        </div>
+                      )}
+                      <div className="flex gap-1.5 mb-1.5">
+                        <input value={promoCode} onChange={e => setPromoCode(e.target.value.toUpperCase())} placeholder="Code promo"
+                          className="flex-1 px-2 py-1.5 rounded border border-blue-500/8 font-body text-xs bg-cream font-mono uppercase focus:border-blue-500 focus:outline-none" />
+                        <button onClick={applyPromoCode} disabled={!promoCode}
+                          className={`px-3 py-1.5 rounded font-body text-xs font-semibold border-none cursor-pointer ${!promoCode ? "bg-gray-200 text-gray-400" : "bg-blue-500 text-white"}`}>
+                          OK
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-body text-[10px] text-gray-400">ou remise :</span>
+                        <input type="number" value={manualDiscount} onChange={e => { setManualDiscount(e.target.value); setAppliedPromo(null); }}
+                          placeholder="0" className="w-16 px-2 py-1.5 rounded border border-blue-500/8 font-body text-xs bg-cream text-center focus:border-blue-500 focus:outline-none" />
+                        <span className="font-body text-[10px] text-gray-400">€</span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Totals */}
                   <div className="border-t border-blue-500/8 pt-3">
                     <div className="flex justify-between mb-1">
-                      <span className="font-body text-xs text-gray-400">Total HT</span>
+                      <span className="font-body text-xs text-gray-400">Sous-total HT</span>
                       <span className="font-body text-xs text-gray-500">{basket.reduce((s, i) => s + i.priceHT, 0).toFixed(2)}€</span>
                     </div>
                     <div className="flex justify-between mb-1">
                       <span className="font-body text-xs text-gray-400">TVA</span>
-                      <span className="font-body text-xs text-gray-500">{(basketTotal - basket.reduce((s, i) => s + i.priceHT, 0)).toFixed(2)}€</span>
+                      <span className="font-body text-xs text-gray-500">{(basketSubtotal - basket.reduce((s, i) => s + i.priceHT, 0)).toFixed(2)}€</span>
                     </div>
+                    {promoDiscount > 0 && (
+                      <div className="flex justify-between mb-1">
+                        <span className="font-body text-xs text-green-600">Réduction</span>
+                        <span className="font-body text-xs font-semibold text-green-600">-{promoDiscount.toFixed(2)}€</span>
+                      </div>
+                    )}
                     <div className="flex justify-between pt-2 border-t border-blue-500/8">
                       <span className="font-body text-base font-bold text-blue-800">Total TTC</span>
-                      <span className="font-body text-xl font-bold text-blue-500">{basketTotal.toFixed(2)}€</span>
+                      <div className="flex items-center gap-2">
+                        {promoDiscount > 0 && <span className="font-body text-xs text-gray-400 line-through">{basketSubtotal.toFixed(2)}€</span>}
+                        <span className="font-body text-xl font-bold text-blue-500">{basketTotal.toFixed(2)}€</span>
+                      </div>
                     </div>
                   </div>
 
                   <div className="mt-3 flex gap-2">
-                    <button onClick={() => setBasket([])}
+                    <button onClick={() => { setBasket([]); setAppliedPromo(null); setManualDiscount(""); setPromoCode(""); }}
                       className="flex-1 py-2 rounded-lg font-body text-xs font-medium text-red-500 bg-red-50 border-none cursor-pointer hover:bg-red-100">
                       Vider le panier
                     </button>
