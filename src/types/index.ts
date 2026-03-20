@@ -384,6 +384,21 @@ export interface ChargeJournaliere {
   depassement: boolean;
 }
 
+// ─── Indisponibilités équidés ───
+export type IndispoMotif = "blessure" | "maladie" | "repos" | "marechal" | "veterinaire" | "formation" | "competition_ext" | "autre";
+
+export interface Indisponibilite {
+  id: string;
+  equideId: string;
+  equideName: string;
+  dateDebut: Date;
+  dateFin: Date | null; // null = indéfini
+  motif: IndispoMotif;
+  details: string;
+  active: boolean;
+  createdAt: Date;
+}
+
 // ─── Suivi pédagogique ───
 export interface PedagogyRecord {
   id: string;

@@ -53,7 +53,7 @@ const tabIconMap: Record<string, any> = {};
 function TabIcon({ name }: { name: string }) {
   const map: Record<string, any> = {
     heart: Heart, book: BookOpen, stethoscope: Stethoscope,
-    file: FileText, timer: Timer,
+    file: FileText, timer: Timer, alert: AlertTriangle,
   };
   const Icon = map[name];
   return Icon ? <Icon size={16} /> : null;
@@ -219,11 +219,12 @@ const daysUntil = (d: any): number => {
 // ═══════════════════════════════════════════
 export default function CavaleriePage() {
   // ─── State ───
-  const [tab, setTab] = useState<"fiches" | "registre" | "soins" | "documents" | "charge">("fiches");
+  const [tab, setTab] = useState<"fiches" | "registre" | "soins" | "documents" | "charge" | "indispos">("fiches");
   const [equides, setEquides] = useState<Equide[]>([]);
   const [soins, setSoins] = useState<SoinRecord[]>([]);
   const [mouvements, setMouvements] = useState<MouvementRegistre[]>([]);
   const [documents, setDocuments] = useState<DocumentEquide[]>([]);
+  const [indispos, setIndispos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<EquideStatus | "all">("all");
@@ -235,6 +236,7 @@ export default function CavaleriePage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showSoinForm, setShowSoinForm] = useState(false);
   const [showMouvForm, setShowMouvForm] = useState(false);
+  const [showIndispoForm, setShowIndispoForm] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // ─── Form State : Equidé ───
@@ -266,16 +268,18 @@ export default function CavaleriePage() {
   // ─── Fetch Data ───
   const fetchData = async () => {
     try {
-      const [eSnap, sSnap, mSnap, dSnap] = await Promise.all([
+      const [eSnap, sSnap, mSnap, dSnap, iSnap] = await Promise.all([
         getDocs(collection(db, "equides")),
         getDocs(collection(db, "soins")),
         getDocs(collection(db, "mouvements_registre")),
         getDocs(collection(db, "documents_equide")),
+        getDocs(collection(db, "indisponibilites")),
       ]);
       setEquides(eSnap.docs.map(d => ({ id: d.id, ...d.data() } as Equide)));
       setSoins(sSnap.docs.map(d => ({ id: d.id, ...d.data() } as SoinRecord)));
       setMouvements(mSnap.docs.map(d => ({ id: d.id, ...d.data() } as MouvementRegistre)));
       setDocuments(dSnap.docs.map(d => ({ id: d.id, ...d.data() } as DocumentEquide)));
+      setIndispos(iSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (e) {
       console.error("Erreur chargement cavalerie:", e);
     }
@@ -444,6 +448,7 @@ export default function CavaleriePage() {
     { id: "soins" as const, label: "Soins & alertes", icon: "stethoscope", count: nbAlertes > 0 ? nbAlertes : undefined, alert: nbAlertes > 0 },
     { id: "documents" as const, label: "Documents", icon: "file", count: documents.length },
     { id: "charge" as const, label: "Charge de travail", icon: "timer" },
+    { id: "indispos" as const, label: "Indisponibilités", icon: "alert", count: indispos.filter((i: any) => i.active).length || undefined },
   ];
 
   // ─── Styles communs ───
@@ -483,6 +488,11 @@ export default function CavaleriePage() {
         {tab === "registre" && (
           <button onClick={() => { setMouvForm({ ...emptyMouv, equideId: equides[0]?.id || "" }); setShowMouvForm(true); }} className={btnPrimary}>
             <Plus size={16} /> Nouveau mouvement
+          </button>
+        )}
+        {tab === "indispos" && (
+          <button onClick={() => setShowIndispoForm(true)} className={btnPrimary}>
+            <Plus size={16} /> Déclarer une indisponibilité
           </button>
         )}
       </div>
@@ -859,6 +869,171 @@ export default function CavaleriePage() {
             })}
           </div>
         </>
+      )}
+
+      {/* ═══ ONGLET 6 : INDISPONIBILITÉS ═══ */}
+      {tab === "indispos" && (
+        <>
+          {(() => {
+            const activeIndispos = indispos.filter((i: any) => i.active);
+            const pastIndispos = indispos.filter((i: any) => !i.active);
+            const motifLabels: Record<string, string> = {
+              blessure: "Blessure", maladie: "Maladie", repos: "Repos", marechal: "Maréchal",
+              veterinaire: "Vétérinaire", formation: "Formation", competition_ext: "Compétition ext.", autre: "Autre",
+            };
+            const motifColors: Record<string, string> = {
+              blessure: "red", maladie: "red", repos: "blue", marechal: "orange",
+              veterinaire: "orange", formation: "blue", competition_ext: "purple", autre: "gray",
+            };
+            return (
+              <>
+                {activeIndispos.length > 0 && (
+                  <div className="mb-6">
+                    <div className="font-body text-xs font-semibold text-red-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                      <AlertTriangle size={14} /> Indisponibilités en cours ({activeIndispos.length})
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {activeIndispos.map((ind: any) => (
+                        <Card key={ind.id} padding="sm" className="flex items-center gap-3 !border-red-200 !bg-red-50/30">
+                          <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center">
+                            <AlertTriangle size={18} className="text-red-500" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-body text-sm font-semibold text-blue-800">{ind.equideName}</div>
+                            <div className="font-body text-xs text-gray-400">
+                              Depuis {formatDate(ind.dateDebut)}
+                              {ind.dateFin ? ` — jusqu'au ${formatDate(ind.dateFin)}` : " — durée indéterminée"}
+                            </div>
+                            {ind.details && <div className="font-body text-xs text-gray-400 mt-0.5">{ind.details}</div>}
+                          </div>
+                          <Badge color={motifColors[ind.motif] as any || "gray"}>{motifLabels[ind.motif] || ind.motif}</Badge>
+                          <button onClick={async () => {
+                            if (!confirm("Terminer cette indisponibilité ?")) return;
+                            await updateDoc(doc(db, "indisponibilites", ind.id), { active: false, dateFin: Timestamp.now() });
+                            fetchData();
+                          }} className="font-body text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-green-100">
+                            Terminer
+                          </button>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {activeIndispos.length === 0 && pastIndispos.length === 0 && (
+                  <Card padding="lg" className="text-center">
+                    <div className="w-14 h-14 rounded-2xl bg-green-50 flex items-center justify-center mx-auto mb-3">
+                      <Check size={28} className="text-green-400" />
+                    </div>
+                    <p className="font-body text-sm text-gray-500">Aucune indisponibilité. Tous les équidés sont disponibles.</p>
+                  </Card>
+                )}
+
+                {pastIndispos.length > 0 && (
+                  <div>
+                    <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                      Historique ({pastIndispos.length})
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {pastIndispos.sort((a: any, b: any) => {
+                        const da = a.dateDebut?.toDate ? a.dateDebut.toDate() : new Date(a.dateDebut);
+                        const db2 = b.dateDebut?.toDate ? b.dateDebut.toDate() : new Date(b.dateDebut);
+                        return db2.getTime() - da.getTime();
+                      }).slice(0, 20).map((ind: any) => (
+                        <Card key={ind.id} padding="sm" className="flex items-center gap-3 opacity-60">
+                          <div className="flex-1">
+                            <div className="font-body text-sm font-semibold text-blue-800">{ind.equideName}</div>
+                            <div className="font-body text-xs text-gray-400">
+                              {formatDate(ind.dateDebut)} → {formatDate(ind.dateFin)}
+                            </div>
+                          </div>
+                          <Badge color="gray">{motifLabels[ind.motif] || ind.motif}</Badge>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </>
+      )}
+
+      {/* ═══ MODAL : INDISPONIBILITÉ ═══ */}
+      {showIndispoForm && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center pt-16" onClick={() => setShowIndispoForm(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-lg mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-5 border-b border-gray-100">
+              <h2 className="font-display text-lg font-bold text-blue-800">Déclarer une indisponibilité</h2>
+              <button onClick={() => setShowIndispoForm(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const fd = new FormData(e.currentTarget);
+              const equideId = fd.get("equideId") as string;
+              const eq = equides.find(eq => eq.id === equideId);
+              setSaving(true);
+              try {
+                await addDoc(collection(db, "indisponibilites"), {
+                  equideId,
+                  equideName: eq?.name || "",
+                  dateDebut: Timestamp.fromDate(new Date(fd.get("dateDebut") as string)),
+                  dateFin: fd.get("dateFin") ? Timestamp.fromDate(new Date(fd.get("dateFin") as string)) : null,
+                  motif: fd.get("motif") as string,
+                  details: fd.get("details") as string || "",
+                  active: true,
+                  createdAt: serverTimestamp(),
+                });
+                setShowIndispoForm(false);
+                fetchData();
+              } catch (err) { console.error(err); alert("Erreur"); }
+              setSaving(false);
+            }}>
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className={labelStyle}>Équidé *</label>
+                  <select name="equideId" required className={inputStyle}>
+                    {equides.filter(e => e.status !== "sorti").map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelStyle}>Date de début *</label>
+                    <input type="date" name="dateDebut" required defaultValue={new Date().toISOString().split("T")[0]} className={inputStyle} />
+                  </div>
+                  <div>
+                    <label className={labelStyle}>Date de fin</label>
+                    <input type="date" name="dateFin" className={inputStyle} />
+                    <p className="font-body text-xs text-gray-300 mt-1">Laisser vide si indéterminé</p>
+                  </div>
+                </div>
+                <div>
+                  <label className={labelStyle}>Motif *</label>
+                  <select name="motif" required className={inputStyle}>
+                    <option value="blessure">Blessure</option>
+                    <option value="maladie">Maladie</option>
+                    <option value="repos">Repos</option>
+                    <option value="marechal">Maréchal-ferrant</option>
+                    <option value="veterinaire">Vétérinaire</option>
+                    <option value="formation">Formation</option>
+                    <option value="competition_ext">Compétition extérieure</option>
+                    <option value="autre">Autre</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelStyle}>Détails</label>
+                  <textarea name="details" className={inputStyle + " !h-16 resize-none"} placeholder="Précisions..." />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
+                <button type="button" onClick={() => setShowIndispoForm(false)} className={btnSecondary}>Annuler</button>
+                <button type="submit" disabled={saving} className={`${btnPrimary} ${saving ? "opacity-50" : ""}`}>
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Enregistrer
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* ═══════════════════════════════════════════ */}
