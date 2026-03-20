@@ -65,18 +65,26 @@ export default function ForfaitsPage() {
   const [selForfait, setSelForfait] = useState("");
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [payPlan, setPayPlan] = useState("10x");
+  const [promoCode, setPromoCode] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState<{ label: string; discountMode: string; discountValue: number; type: string } | null>(null);
+  const [manualDiscount, setManualDiscount] = useState("");
+  const [promos, setPromos] = useState<any[]>([]);
 
   const fetchData = async () => {
     try {
-      const [fSnap, famSnap, tSnap] = await Promise.all([
+      const [fSnap, famSnap, tSnap, pSnap] = await Promise.all([
         getDocs(collection(db, "forfaits")),
         getDocs(collection(db, "families")),
         getDoc(doc(db, "settings", "tarifs")),
+        getDoc(doc(db, "settings", "promos")),
       ]);
       setForfaits(fSnap.docs.map(d => ({ id: d.id, ...d.data() } as Forfait)));
       setFamilies(famSnap.docs.map(d => ({ firestoreId: d.id, ...d.data() })) as any);
       if (tSnap.exists() && tSnap.data().items) {
         setTarifs(tSnap.data().items);
+      }
+      if (pSnap.exists() && pSnap.data().items) {
+        setPromos(pSnap.data().items);
       }
     } catch (e) { console.error(e); }
     setLoading(false);
@@ -106,7 +114,40 @@ export default function ForfaitsPage() {
     return lines;
   }, [tarifs, selForfait, selectedOptions]);
 
-  const totalTTC = forfaitLines.reduce((s, l) => s + l.priceTTC, 0);
+  const subtotalTTC = forfaitLines.reduce((s, l) => s + l.priceTTC, 0);
+
+  // Détection auto : 1ère année (pas de forfait existant pour cet enfant)
+  const isPremiereAnnee = selChild && !forfaits.some(f => f.childId === selChild && f.status === "active");
+  const premiereAnneePromo = promos.find((p: any) => p.type === "premiere_annee" && p.active && (p.appliesTo === "forfait" || p.appliesTo === "tout"));
+
+  // Détection auto : anniversaire
+  const selectedChildData = children.find((c: any) => c.id === selChild) as any;
+  const isAnniversaireMois = selectedChildData?.birthDate && (() => {
+    const raw = selectedChildData.birthDate;
+    const bd = typeof raw === "string" ? new Date(raw) : raw?.seconds ? new Date(raw.seconds * 1000) : raw instanceof Date ? raw : null;
+    return bd && bd.getMonth() === new Date().getMonth();
+  })();
+  const anniversairePromo = promos.find((p: any) => p.type === "anniversaire" && p.active && (p.appliesTo === "forfait" || p.appliesTo === "tout"));
+
+  // Calcul réduction
+  const activePromo = appliedPromo || (isPremiereAnnee && premiereAnneePromo ? { label: premiereAnneePromo.label, discountMode: premiereAnneePromo.discountMode, discountValue: premiereAnneePromo.discountValue, type: "premiere_annee" } : null) || (isAnniversaireMois && anniversairePromo ? { label: anniversairePromo.label, discountMode: anniversairePromo.discountMode, discountValue: anniversairePromo.discountValue, type: "anniversaire" } : null);
+
+  const discountAmount = activePromo
+    ? (activePromo.discountMode === "percent" ? subtotalTTC * activePromo.discountValue / 100 : activePromo.discountValue)
+    : (parseFloat(manualDiscount) || 0);
+  const totalTTC = Math.max(0, subtotalTTC - discountAmount);
+
+  // Appliquer un code promo
+  const applyPromoCode = () => {
+    const found = promos.find((p: any) => p.type === "code" && p.code === promoCode.toUpperCase() && p.active && (p.appliesTo === "forfait" || p.appliesTo === "tout"));
+    if (found) {
+      if (found.maxUses > 0 && found.usedCount >= found.maxUses) { alert("Ce code a atteint son nombre maximum d'utilisations."); return; }
+      if (found.validUntil && new Date(found.validUntil) < new Date()) { alert("Ce code a expiré."); return; }
+      setAppliedPromo({ label: found.label, discountMode: found.discountMode, discountValue: found.discountValue, type: "code" });
+    } else {
+      alert("Code promo invalide.");
+    }
+  };
   const forfaitTarifs = tarifs.filter(t => t.category === "forfait");
   const optionTarifs = tarifs.filter(t => t.category === "option");
   const obligatoireTarifs = tarifs.filter(t => t.obligatoire);
@@ -260,6 +301,52 @@ export default function ForfaitsPage() {
               </div>
             )}
 
+            {/* Réductions */}
+            {selForfait && (
+              <div>
+                <label className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Réduction</label>
+
+                {/* Détection auto */}
+                {isPremiereAnnee && premiereAnneePromo && !appliedPromo && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 mb-2 font-body text-sm text-green-800 flex items-center justify-between">
+                    <span>Nouveau cavalier — <strong>{premiereAnneePromo.label}</strong> ({premiereAnneePromo.discountMode === "percent" ? `-${premiereAnneePromo.discountValue}%` : `-${premiereAnneePromo.discountValue}€`}) appliquée automatiquement</span>
+                  </div>
+                )}
+                {isAnniversaireMois && anniversairePromo && !appliedPromo && !isPremiereAnnee && (
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg px-4 py-2 mb-2 font-body text-sm text-orange-800 flex items-center justify-between">
+                    <span>Mois d&apos;anniversaire — <strong>{anniversairePromo.label}</strong> ({anniversairePromo.discountMode === "percent" ? `-${anniversairePromo.discountValue}%` : `-${anniversairePromo.discountValue}€`}) appliquée automatiquement</span>
+                  </div>
+                )}
+
+                {/* Code promo appliqué */}
+                {appliedPromo && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 mb-2 font-body text-sm text-blue-800 flex items-center justify-between">
+                    <span>Code appliqué : <strong>{appliedPromo.label}</strong> ({appliedPromo.discountMode === "percent" ? `-${appliedPromo.discountValue}%` : `-${appliedPromo.discountValue}€`})</span>
+                    <button onClick={() => setAppliedPromo(null)} className="font-body text-xs text-red-500 bg-transparent border-none cursor-pointer">Retirer</button>
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  {/* Code promo */}
+                  <div className="flex-1 flex gap-2">
+                    <input value={promoCode} onChange={e => setPromoCode(e.target.value.toUpperCase())} placeholder="Code promo (ex: BIENVENUE10)"
+                      className={`${inputStyle} flex-1 font-mono uppercase`} />
+                    <button onClick={applyPromoCode} disabled={!promoCode}
+                      className={`font-body text-sm font-semibold px-4 py-2.5 rounded-lg border-none cursor-pointer ${!promoCode ? "bg-gray-200 text-gray-400" : "bg-blue-500 text-white hover:bg-blue-600"}`}>
+                      Appliquer
+                    </button>
+                  </div>
+                  {/* Ou réduction manuelle */}
+                  <div className="flex items-center gap-1">
+                    <span className="font-body text-xs text-gray-400">ou</span>
+                    <input type="number" value={manualDiscount} onChange={e => { setManualDiscount(e.target.value); setAppliedPromo(null); }}
+                      placeholder="€" className={`${inputStyle} !w-20`} />
+                    <span className="font-body text-xs text-gray-400">€ de remise</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Récapitulatif avec lignes obligatoires */}
             {selForfait && (
               <Card padding="sm" className="bg-blue-50/50 border-blue-200">
@@ -277,9 +364,18 @@ export default function ForfaitsPage() {
                       </div>
                     );
                   })}
+                  {discountAmount > 0 && (
+                    <div className="flex justify-between items-center font-body text-sm text-green-600 pt-1">
+                      <span>{activePromo ? activePromo.label : "Remise manuelle"} ({activePromo?.discountMode === "percent" ? `-${activePromo.discountValue}%` : `-${discountAmount.toFixed(2)}€`})</span>
+                      <span className="font-semibold">-{discountAmount.toFixed(2)}€</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center font-body text-base font-bold text-blue-500 pt-2 mt-2 border-t border-blue-200">
                     <span>Total TTC</span>
-                    <span>{totalTTC.toFixed(2)}€</span>
+                    <div className="flex items-center gap-2">
+                      {discountAmount > 0 && <span className="font-body text-sm font-normal text-gray-400 line-through">{subtotalTTC.toFixed(2)}€</span>}
+                      <span>{totalTTC.toFixed(2)}€</span>
+                    </div>
                   </div>
                 </div>
               </Card>
