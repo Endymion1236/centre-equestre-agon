@@ -18,14 +18,14 @@ import { Plus, Pencil, Trash2, Copy, X, Check, Loader2   ClipboardList,
 } from "lucide-react";
 import type { Activity, ActivityType } from "@/types";
 
-const activityTypes: { id: ActivityType | string; label: string; emoji: string }[] = [
-  { id: "stage", label: "Stage semaine", emoji: "🏇" },
-  { id: "stage_journee", label: "Stage journée", emoji: "📅" },
-  { id: "balade", label: "Balade", emoji: "🌅" },
-  { id: "cours", label: "Cours régulier", emoji: "📅" },
-  { id: "competition", label: "Compétition", emoji: "🏆" },
-  { id: "anniversaire", label: "Anniversaire", emoji: "🎂" },
-  { id: "ponyride", label: "Pony ride", emoji: "🐴" },
+const activityTypes: { id: ActivityType | string; label: string }[] = [
+  { id: "stage", label: "Stage semaine" },
+  { id: "stage_journee", label: "Stage journée" },
+  { id: "balade", label: "Balade" },
+  { id: "cours", label: "Cours régulier" },
+  { id: "competition", label: "Compétition" },
+  { id: "anniversaire", label: "Anniversaire" },
+  { id: "ponyride", label: "Pony ride" },
 ];
 
 const defaultActivity: Partial<Activity> & { priceTTC?: number } = {
@@ -96,7 +96,7 @@ function ActivityForm({
                   ${form.type === t.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200 hover:border-blue-200"}
                 `}
               >
-                <span>{t.emoji}</span> {t.label}
+                {t.label}
               </button>
             ))}
           </div>
@@ -334,7 +334,7 @@ export default function AdminActivitesPage() {
 
   const filtered = filter === "all" ? activities : activities.filter((a) => a.type === filter);
 
-  const typeEmoji = (type: string) => activityTypes.find((t) => t.id === type)?.emoji || "📌";
+  const typeEmoji = (type: string) => "";
 
   return (
     <div>
@@ -369,7 +369,7 @@ export default function AdminActivitesPage() {
               ${filter === cat.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200 hover:border-blue-200"}
             `}
           >
-            {"emoji" in cat ? `${cat.emoji} ` : ""}{cat.label}
+            {cat.label}
             <span className="ml-1 opacity-50">
               {cat.id === "all" ? activities.length : activities.filter((a) => a.type === cat.id).length}
             </span>

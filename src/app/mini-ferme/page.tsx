@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 const animals = [
   {
-    emoji: "🐷",
+    icon: "heart",
     name: "Pépita",
     type: "Cochon Kune Kune",
     color: "Roux",
@@ -21,7 +21,7 @@ const animals = [
     gradient: "from-pink-300 to-pink-200",
   },
   {
-    emoji: "🐷",
+    icon: "heart",
     name: "Ronron",
     type: "Cochon Kune Kune",
     color: "Blanc",
@@ -139,7 +139,7 @@ export default function MiniFermePage() {
                 className="bg-white rounded-xl p-5 border border-blue-500/8 flex items-center gap-4 hover:shadow-md hover:-translate-y-0.5 transition-all"
               >
                 <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-2xl flex-shrink-0">
-                  {poney.emoji}
+                  <Heart size={18} className="text-blue-400" />
                 </div>
                 <div>
                   <div className="font-body text-base font-semibold text-blue-800">

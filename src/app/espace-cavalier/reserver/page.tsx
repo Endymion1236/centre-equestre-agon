@@ -34,13 +34,13 @@ interface CartItem {
   priceTTC: number;
 }
 
-const typeLabels: Record<string, { label: string; emoji: string; color: string }> = {
-  stage: { label: "Stage", emoji: "🏇", color: "#27ae60" },
-  balade: { label: "Balade", emoji: "🌅", color: "#e67e22" },
-  cours: { label: "Cours", emoji: "📅", color: "#2050A0" },
-  competition: { label: "Compétition", emoji: "🏆", color: "#7c3aed" },
-  anniversaire: { label: "Anniversaire", emoji: "🎂", color: "#D63031" },
-  ponyride: { label: "Pony ride", emoji: "🐴", color: "#16a085" },
+const typeLabels: Record<string, { label: string; color: string }> = {
+  stage: { label: "Stage", color: "#27ae60" },
+  balade: { label: "Balade", color: "#e67e22" },
+  cours: { label: "Cours", color: "#2050A0" },
+  competition: { label: "Compétition", color: "#7c3aed" },
+  anniversaire: { label: "Anniversaire", color: "#D63031" },
+  ponyride: { label: "Pony ride", color: "#16a085" },
 };
 
 export default function ReserverPage() {
@@ -245,11 +245,11 @@ export default function ReserverPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-4">
-        {[{ id: "all", label: "Toutes", emoji: "" }, ...Object.entries(typeLabels).map(([id, t]) => ({ id, label: t.label, emoji: t.emoji }))].map((f) => (
+        {[{ id: "all", label: "Toutes" }, ...Object.entries(typeLabels).map(([id, t]) => ({ id, label: t.label }))].map((f) => (
           <button key={f.id} onClick={() => setFilter(f.id)}
             className={`px-4 py-2 rounded-full border font-body text-sm font-medium cursor-pointer transition-all
               ${filter === f.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200 hover:border-blue-200"}`}>
-            {f.emoji && <span className="mr-1">{f.emoji}</span>}{f.label}
+            {f.label}
           </button>
         ))}
       </div>
@@ -286,7 +286,7 @@ export default function ReserverPage() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {creneauxForDay.map((c) => {
-                  const type = typeLabels[c.activityType] || { label: c.activityType, emoji: "📌", color: "#666" };
+                  const type = typeLabels[c.activityType] || { label: c.activityType, color: "#666" };
                   const spots = spotsLeft(c);
                   const priceTTC = (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
                   const inCart = cart.some((i) => i.creneauId === c.id);
@@ -299,7 +299,7 @@ export default function ReserverPage() {
                         <div className="flex justify-between items-start mb-2">
                           <div>
                             <div className="font-body text-base font-semibold text-blue-800">
-                              {type.emoji} {c.activityTitle}
+                              {type} {c.activityTitle}
                             </div>
                             <div className="flex items-center gap-3 mt-1 font-body text-xs text-gray-400">
                               <span className="flex items-center gap-1"><Clock size={12} />{c.startTime} – {c.endTime}</span>

@@ -7,7 +7,7 @@ import { ChevronDown, ChevronUp, Clock, Users, Calendar, Award } from "lucide-re
 interface Activity {
   id: string;
   category: string;
-  emoji: string;
+  icon: string;
   title: string;
   ages: string;
   schedule: string;
@@ -22,7 +22,7 @@ const activities: Activity[] = [
   {
     id: "baby",
     category: "stages",
-    emoji: "🦄",
+    icon: "baby",
     title: "Baby Poney",
     ages: "3 – 5 ans",
     schedule: "Lun–Ven · 10h–12h",
@@ -41,7 +41,7 @@ const activities: Activity[] = [
   {
     id: "bronze",
     category: "stages",
-    emoji: "🥉",
+    icon: "award",
     title: "Galop de Bronze",
     ages: "6 – 8 ans",
     schedule: "Lun–Ven · 10h–12h ou 14h–16h",
@@ -60,7 +60,7 @@ const activities: Activity[] = [
   {
     id: "argent",
     category: "stages",
-    emoji: "🥈",
+    icon: "medal",
     title: "Galop d'Argent",
     ages: "8 – 10 ans",
     schedule: "Lun–Ven · 10h–12h ou 14h–16h",
@@ -266,7 +266,7 @@ const activities: Activity[] = [
   {
     id: "equifun",
     category: "competitions",
-    emoji: "🎪",
+    icon: "party",
     title: "Challenge Équifun",
     ages: "Tous niveaux",
     schedule: "Trimestriel",
@@ -339,7 +339,7 @@ function ActivityCard({ activity }: { activity: Activity }) {
         <div
           className={`w-full md:w-48 h-40 md:h-auto bg-gradient-to-br ${activity.gradient} flex items-center justify-center flex-shrink-0`}
         >
-          <span className="text-6xl opacity-60">{activity.emoji}</span>
+          <Star size={64} className="text-white/25" strokeWidth={1} />
         </div>
 
         {/* Content */}
