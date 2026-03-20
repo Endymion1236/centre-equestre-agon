@@ -253,7 +253,7 @@ export default function CavaleriePage() {
 
   // ─── Form State : Soin ───
   const emptySoin = {
-    equideId: "", type: "vermifuge" as SoinType, label: "", date: new Date().toISOString().split("T")[0],
+    equideIds: [] as string[], type: "vermifuge" as SoinType, label: "", date: new Date().toISOString().split("T")[0],
     prochainRdv: "", praticien: "", cout: "", observations: "",
   };
   const [soinForm, setSoinForm] = useState(emptySoin);
@@ -394,20 +394,30 @@ export default function CavaleriePage() {
   };
 
   const saveSoin = async () => {
+    if (soinForm.equideIds.length === 0) return;
     setSaving(true);
     try {
-      const eq = equides.find(e => e.id === soinForm.equideId);
-      await addDoc(collection(db, "soins"), {
-        ...soinForm,
-        equideName: eq?.name || "",
-        date: Timestamp.fromDate(new Date(soinForm.date)),
-        prochainRdv: soinForm.prochainRdv ? Timestamp.fromDate(new Date(soinForm.prochainRdv)) : null,
-        cout: soinForm.cout ? Number(soinForm.cout) : null,
-        createdAt: serverTimestamp(),
-      });
+      for (const eqId of soinForm.equideIds) {
+        const eq = equides.find(e => e.id === eqId);
+        await addDoc(collection(db, "soins"), {
+          equideId: eqId,
+          equideName: eq?.name || "",
+          type: soinForm.type,
+          label: soinForm.label,
+          date: Timestamp.fromDate(new Date(soinForm.date)),
+          prochainRdv: soinForm.prochainRdv ? Timestamp.fromDate(new Date(soinForm.prochainRdv)) : null,
+          praticien: soinForm.praticien,
+          cout: soinForm.cout ? Number(soinForm.cout) : null,
+          observations: soinForm.observations,
+          createdAt: serverTimestamp(),
+        });
+      }
       setShowSoinForm(false);
       setSoinForm(emptySoin);
       fetchData();
+      if (soinForm.equideIds.length > 1) {
+        alert(`Soin enregistré pour ${soinForm.equideIds.length} équidés.`);
+      }
     } catch (e) {
       console.error(e);
       alert("Erreur lors de l'enregistrement du soin.");
@@ -481,7 +491,7 @@ export default function CavaleriePage() {
           </button>
         )}
         {tab === "soins" && (
-          <button onClick={() => { setSoinForm({ ...emptySoin, equideId: equides[0]?.id || "" }); setShowSoinForm(true); }} className={btnPrimary}>
+          <button onClick={() => { setSoinForm({ ...emptySoin, equideIds: equides.filter(e => e.status !== "sorti").map(e => e.id) }); setShowSoinForm(true); }} className={btnPrimary}>
             <Plus size={16} /> Enregistrer un soin
           </button>
         )}
@@ -690,7 +700,7 @@ export default function CavaleriePage() {
                           </div>
                         )}
                         <div className="mt-3 pt-3 border-t border-gray-100 flex gap-2">
-                          <button onClick={() => { setSoinForm({ ...emptySoin, equideId: e.id }); setShowSoinForm(true); }}
+                          <button onClick={() => { setSoinForm({ ...emptySoin, equideIds: [e.id] }); setShowSoinForm(true); }}
                             className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 transition-colors">
                             💊 Ajouter un soin
                           </button>
@@ -1208,10 +1218,42 @@ export default function CavaleriePage() {
             </div>
             <div className="p-5 space-y-4">
               <div>
-                <label className={labelStyle}>Équidé *</label>
-                <select className={inputStyle} value={soinForm.equideId} onChange={e => setSoinForm({ ...soinForm, equideId: e.target.value })}>
-                  {equides.filter(e => e.status !== "sorti").map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-                </select>
+                <label className={labelStyle}>Équidés * <span className="font-normal text-gray-400">({soinForm.equideIds.length} sélectionné{soinForm.equideIds.length > 1 ? "s" : ""})</span></label>
+                <div className="flex gap-2 mb-2">
+                  <button type="button" onClick={() => setSoinForm({ ...soinForm, equideIds: equides.filter(e => e.status !== "sorti").map(e => e.id) })}
+                    className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100">
+                    Tous
+                  </button>
+                  <button type="button" onClick={() => setSoinForm({ ...soinForm, equideIds: [] })}
+                    className="font-body text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-lg border-none cursor-pointer hover:bg-gray-200">
+                    Aucun
+                  </button>
+                  <button type="button" onClick={() => setSoinForm({ ...soinForm, equideIds: equides.filter(e => e.type === "poney" && e.status !== "sorti").map(e => e.id) })}
+                    className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100">
+                    Poneys
+                  </button>
+                  <button type="button" onClick={() => setSoinForm({ ...soinForm, equideIds: equides.filter(e => e.type === "shetland" && e.status !== "sorti").map(e => e.id) })}
+                    className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100">
+                    Shetlands
+                  </button>
+                </div>
+                <div className="max-h-36 overflow-y-auto border border-gray-200 rounded-lg p-2 flex flex-wrap gap-1.5">
+                  {equides.filter(e => e.status !== "sorti").map(e => {
+                    const selected = soinForm.equideIds.includes(e.id);
+                    return (
+                      <button key={e.id} type="button"
+                        onClick={() => setSoinForm({
+                          ...soinForm,
+                          equideIds: selected ? soinForm.equideIds.filter(id => id !== e.id) : [...soinForm.equideIds, e.id]
+                        })}
+                        className={`font-body text-xs px-2.5 py-1 rounded-full border cursor-pointer transition-all ${
+                          selected ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200 hover:border-blue-300"
+                        }`}>
+                        {e.name}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1261,8 +1303,8 @@ export default function CavaleriePage() {
             </div>
             <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
               <button onClick={() => setShowSoinForm(false)} className={btnSecondary}>Annuler</button>
-              <button onClick={saveSoin} disabled={saving || !soinForm.equideId} className={`${btnPrimary} ${saving ? "opacity-50" : ""}`}>
-                {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Enregistrer
+              <button onClick={saveSoin} disabled={saving || soinForm.equideIds.length === 0} className={`${btnPrimary} ${saving ? "opacity-50" : ""}`}>
+                {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Enregistrer{soinForm.equideIds.length > 1 ? ` (${soinForm.equideIds.length} équidés)` : ""}
               </button>
             </div>
           </div>
