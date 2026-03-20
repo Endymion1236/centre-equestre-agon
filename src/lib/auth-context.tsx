@@ -40,7 +40,8 @@ const AuthContext = createContext<AuthContextType>({
 // Nicolas & Emmeline admin emails
 const ADMIN_EMAILS = [
   "ceagon@orange.fr",
-  // Ajoute ici les emails Google de Nicolas et Emmeline
+  "ceagon50@gmail.com",
+  "emmelinelagy@gmail.com",
 ];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
