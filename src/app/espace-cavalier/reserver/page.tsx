@@ -5,7 +5,8 @@ import { collection, getDocs, addDoc, updateDoc, doc, query, where, orderBy, ser
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge, Button } from "@/components/ui";
-import { Calendar, Clock, Users, MapPin, Filter, Loader2, ShoppingCart, ChevronLeft, ChevronRight, X, Check } from "lucide-react";
+import { Calendar, Clock, Users, MapPin, Filter, Loader2, ShoppingCart, ChevronLeft, ChevronRight, X, Check   Users,
+} from "lucide-react";
 
 interface Creneau {
   id: string;
@@ -364,7 +365,7 @@ export default function ReserverPage() {
                     className={`flex items-center justify-between px-4 py-3 rounded-xl border text-left cursor-pointer transition-all
                       ${disabled ? "bg-gray-50 border-gray-200 opacity-50 cursor-not-allowed" : selectedChild === c.id ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white hover:border-blue-200"}`}>
                     <div className="flex items-center gap-3">
-                      <span className="text-xl">🧒</span>
+                      <Users size={18} className="text-blue-400" />
                       <div>
                         <div className="font-body text-sm font-semibold text-blue-800">{c.firstName}</div>
                         <div className="font-body text-xs text-gray-400">{c.galopLevel && c.galopLevel !== "—" ? `Galop ${c.galopLevel}` : "Débutant"}</div>
