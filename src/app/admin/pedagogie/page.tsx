@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { collection, getDocs, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { Search, Loader2, ChevronDown, ChevronUp, Plus, X, Save, Target, MessageSquare, TrendingUp   GraduationCap,
+import { Search, Loader2, ChevronDown, ChevronUp, Plus, X, Save, Target, MessageSquare, TrendingUp, GraduationCap,
 } from "lucide-react";
 import type { Family } from "@/types";
 

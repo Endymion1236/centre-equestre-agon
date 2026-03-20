@@ -1,4 +1,4 @@
-import { TreePine } from "lucide-react";
+import { TreePine, Heart } from "lucide-react";
 import { Metadata } from "next";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";

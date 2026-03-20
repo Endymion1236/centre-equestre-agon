@@ -5,7 +5,7 @@ import { collection, getDocs, addDoc, updateDoc, doc, query, where, orderBy, ser
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge, Button } from "@/components/ui";
-import { Calendar, Clock, Users, MapPin, Filter, Loader2, ShoppingCart, ChevronLeft, ChevronRight, X, Check   Users,
+import { Calendar, Clock, Users, MapPin, Filter, Loader2, ShoppingCart, ChevronLeft, ChevronRight, X, Check,
 } from "lucide-react";
 
 interface Creneau {
@@ -300,7 +300,7 @@ export default function ReserverPage() {
                         <div className="flex justify-between items-start mb-2">
                           <div>
                             <div className="font-body text-base font-semibold text-blue-800">
-                              {type} {c.activityTitle}
+                              {type.label} — {c.activityTitle}
                             </div>
                             <div className="flex items-center gap-3 mt-1 font-body text-xs text-gray-400">
                               <span className="flex items-center gap-1"><Clock size={12} />{c.startTime} – {c.endTime}</span>

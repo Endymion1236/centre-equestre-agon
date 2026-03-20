@@ -44,6 +44,7 @@ import {
   Wrench,
   Bone,
   Scissors,
+  Pill,
   Timer,
 } from "lucide-react";
 
@@ -574,7 +575,7 @@ export default function CavaleriePage() {
                 const equideDocs = documents.filter(d => d.equideId === e.id);
                 const expanded = expandedId === e.id;
                 const statusOpt = statusOptions.find(s => s.value === e.status);
-                const TypeIcon = typeOptions.find(t => t.value === e.type)?.icon || Heart;
+                const TypeIcon = Heart;
                 const prochainSoin = equideSoins
                   .filter(s => s.prochainRdv)
                   .sort((a, b) => daysUntil(a.prochainRdv) - daysUntil(b.prochainRdv))[0];

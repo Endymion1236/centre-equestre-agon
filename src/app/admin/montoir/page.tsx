@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, updateDoc, doc, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Printer   ClipboardList,
+import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Printer, ClipboardList,
 } from "lucide-react";
 
 interface Creneau { id: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolled: any[]; status: string; }

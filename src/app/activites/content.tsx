@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Badge, Button, Card } from "@/components/ui";
-import { ChevronDown, ChevronUp, Clock, Users, Calendar, Award } from "lucide-react";
+import { ChevronDown, ChevronUp, Clock, Users, Calendar, Award, Star } from "lucide-react";
 
 interface Activity {
   id: string;

@@ -90,6 +90,7 @@ interface CardProps {
   hover?: boolean;
   className?: string;
   padding?: "sm" | "md" | "lg";
+  onClick?: () => void;
 }
 
 const paddingStyles = {
@@ -103,9 +104,11 @@ export function Card({
   hover = false,
   className = "",
   padding = "md",
+  onClick,
 }: CardProps) {
   return (
     <div
+      onClick={onClick}
       className={`
         card ${paddingStyles[padding]}
         ${hover ? "card-hover cursor-pointer" : ""}

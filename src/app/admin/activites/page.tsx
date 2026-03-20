@@ -14,7 +14,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge, Button } from "@/components/ui";
-import { Plus, Pencil, Trash2, Copy, X, Check, Loader2   ClipboardList,
+import { Plus, Pencil, Trash2, Copy, X, Check, Loader2, ClipboardList,
 } from "lucide-react";
 import type { Activity, ActivityType } from "@/types";
 

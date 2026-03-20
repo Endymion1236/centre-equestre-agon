@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { Loader2, Search, Users, Plus, X, Check, Calendar   ClipboardList,
+import { Loader2, Search, Users, Plus, X, Check, Calendar, ClipboardList,
 } from "lucide-react";
 import type { Family } from "@/types";
 
