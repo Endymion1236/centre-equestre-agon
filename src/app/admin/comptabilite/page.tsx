@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, query, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { Loader2, Download, Upload, Check, FileText, Building2, Receipt, Calculator } from "lucide-react";
+import { Loader2, Download, Upload, Check, FileText, Building2, Receipt, Calculator, Search, Printer } from "lucide-react";
 
 interface Payment {
   id: string;
@@ -45,14 +45,17 @@ const modeLabels: Record<string, string> = {
 };
 
 export default function ComptabilitePage() {
-  const [tab, setTab] = useState<"journal" | "tva" | "rapprochement" | "fec" | "export">("journal");
+  const [tab, setTab] = useState<"journal" | "tva" | "rapprochement" | "remise" | "fec" | "export">("journal");
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
-  const [bankLines, setBankLines] = useState<{ date: string; label: string; amount: number; matched: boolean; matchType: string; matchDetail: string }[]>([]);
+  const [bankLines, setBankLines] = useState<{ date: string; label: string; amount: number; matched: boolean; matchType: string; matchDetail: string; manualPaymentId?: string }[]>([]);
+  // Pointage manuel
+  const [showManualMatch, setShowManualMatch] = useState<number | null>(null); // index de la bankLine
+  const [manualSearch, setManualSearch] = useState("");
 
   useEffect(() => {
     getDocs(query(collection(db, "payments"), orderBy("date", "desc")))
@@ -258,6 +261,7 @@ export default function ComptabilitePage() {
   const tabs = [
     { id: "journal" as const, label: "Journal des ventes", icon: Receipt },
     { id: "tva" as const, label: "TVA", icon: Calculator },
+    { id: "remise" as const, label: "Bordereaux remise", icon: Printer },
     { id: "rapprochement" as const, label: "Rapprochement", icon: Building2 },
     { id: "fec" as const, label: "Export FEC", icon: FileText },
     { id: "export" as const, label: "Export CSV", icon: Download },
@@ -386,14 +390,78 @@ export default function ComptabilitePage() {
         </div>
       )}
 
+      {/* ─── Bordereaux de remise ─── */}
+      {!loading && tab === "remise" && (
+        <div className="flex flex-col gap-5">
+          <Card padding="md" className="bg-blue-50 border-blue-500/8">
+            <div className="font-body text-sm text-blue-800">
+              Regroupement des encaissements par jour et par mode de paiement. Imprimez le bordereau pour votre remise en banque.
+            </div>
+          </Card>
+
+          {Object.entries(dailyTotals).length === 0 ? (
+            <Card padding="lg" className="text-center">
+              <p className="font-body text-sm text-gray-500">Aucun paiement sur cette période.</p>
+            </Card>
+          ) : (
+            Object.entries(dailyTotals).sort(([a],[b]) => b.localeCompare(a)).map(([day, modes]) => {
+              const dayTotal = Object.values(modes).reduce((s, v) => s + v, 0);
+              const dayPayments = filteredPayments.filter(p => {
+                const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
+                return d && d.toLocaleDateString("fr-FR") === day;
+              });
+              return (
+                <Card key={day} padding="md">
+                  <div className="flex justify-between items-center mb-3">
+                    <div>
+                      <div className="font-body text-base font-semibold text-blue-800">{day}</div>
+                      <div className="font-body text-xs text-gray-400">{dayPayments.length} encaissement{dayPayments.length > 1 ? "s" : ""}</div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-body text-xl font-bold text-blue-500">{dayTotal.toFixed(2)}€</span>
+                      <button onClick={() => {
+                        const html = `<html><head><meta charset="utf-8"><title>Bordereau ${day}</title><style>body{font-family:Arial;max-width:600px;margin:30px auto}h1{font-size:18px;color:#2050A0;border-bottom:2px solid #2050A0;padding-bottom:8px}table{width:100%;border-collapse:collapse;margin:16px 0}th,td{padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;text-align:left}th{font-size:11px;color:#999;text-transform:uppercase}.total{font-size:16px;font-weight:bold;color:#2050A0;text-align:right;margin-top:12px}.footer{font-size:11px;color:#999;margin-top:30px}</style></head><body><h1>Bordereau de remise — ${day}</h1><p style="font-size:12px;color:#666">Centre Équestre d'Agon-Coutainville</p><table><thead><tr><th>Client</th><th>Prestation</th><th>Mode</th><th style="text-align:right">Montant</th></tr></thead><tbody>${dayPayments.map(p => `<tr><td>${p.familyName||"—"}</td><td>${(p.items||[]).map(i=>i.activityTitle).join(", ")||"—"}</td><td>${modeLabels[p.paymentMode]||p.paymentMode}</td><td style="text-align:right">${(p.totalTTC||0).toFixed(2)}€</td></tr>`).join("")}</tbody></table><div class="total">Total : ${dayTotal.toFixed(2)}€</div><table style="margin-top:16px"><thead><tr><th>Mode</th><th style="text-align:right">Sous-total</th></tr></thead><tbody>${Object.entries(modes).map(([m,v])=>`<tr><td>${modeLabels[m]||m}</td><td style="text-align:right">${v.toFixed(2)}€</td></tr>`).join("")}</tbody></table><div class="footer">Imprimé le ${new Date().toLocaleDateString("fr-FR")} — Signature : _______________</div></body></html>`;
+                        const w = window.open("", "_blank"); if (w) { w.document.write(html); w.document.close(); w.print(); }
+                      }} className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
+                        <Printer size={12} /> Imprimer
+                      </button>
+                    </div>
+                  </div>
+                  {/* Détail par mode */}
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {Object.entries(modes).map(([mode, total]) => (
+                      <div key={mode} className="font-body text-xs bg-sand rounded-lg px-3 py-1.5">
+                        <span className="text-gray-500">{modeLabels[mode] || mode} :</span>{" "}
+                        <span className="font-semibold text-blue-800">{total.toFixed(2)}€</span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Détail par client */}
+                  <div className="border-t border-gray-100 pt-2">
+                    {dayPayments.map(p => (
+                      <div key={p.id} className="flex justify-between py-1.5 font-body text-xs">
+                        <div className="flex items-center gap-2">
+                          <Badge color="gray">{modeLabels[p.paymentMode] || p.paymentMode}</Badge>
+                          <span className="text-blue-800 font-semibold">{p.familyName || "—"}</span>
+                          <span className="text-gray-400">{(p.items || []).map(i => i.activityTitle).join(", ")}</span>
+                        </div>
+                        <span className="font-semibold text-blue-500">{(p.totalTTC || 0).toFixed(2)}€</span>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              );
+            })
+          )}
+        </div>
+      )}
+
       {/* ─── Rapprochement bancaire ─── */}
       {!loading && tab === "rapprochement" && (
         <div className="flex flex-col gap-5">
           <Card padding="md" className="bg-blue-50 border-blue-500/8">
             <div className="font-body text-sm text-blue-800">
-              💡 <strong>Rapprochement bancaire :</strong> Importez votre relevé bancaire au format CSV pour rapprocher automatiquement les paiements.
-              Les virements Stripe et les remises CB sont matchés automatiquement par montant.
-              Phase suivante : synchronisation automatique via Bridge/Bankin.
+              Importez votre relevé bancaire au format CSV pour rapprocher les mouvements avec vos encaissements. Les CB, Stripe, chèques et virements sont matchés automatiquement par montant. Cliquez sur "Pointer" pour les lignes non rapprochées.
             </div>
           </Card>
 
@@ -414,6 +482,7 @@ export default function ComptabilitePage() {
                 <span className="w-24 text-right">Montant</span>
                 <span className="w-28 text-center">Rapprochement</span>
                 <span className="w-20 text-center">Statut</span>
+                <span className="w-20 text-center">Action</span>
               </div>
               {bankLines.map((bl, i) => (
                 <div key={i} className={`px-5 py-3 border-b border-blue-500/8 flex items-center ${bl.matched ? "" : "bg-orange-50"}`}>
@@ -429,6 +498,14 @@ export default function ComptabilitePage() {
                   <span className="w-20 text-center">
                     <Badge color={bl.matched ? "green" : "orange"}>{bl.matched ? "OK" : "À traiter"}</Badge>
                   </span>
+                  <span className="w-20 text-center">
+                    {!bl.matched && (
+                      <button onClick={() => { setShowManualMatch(i); setManualSearch(""); }}
+                        className="font-body text-[10px] text-blue-500 bg-blue-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-blue-100">
+                        Pointer
+                      </button>
+                    )}
+                  </span>
                 </div>
               ))}
               <div className="px-5 py-3 bg-sand flex justify-between font-body text-sm">
@@ -437,6 +514,74 @@ export default function ComptabilitePage() {
               </div>
             </Card>
           )}
+        </div>
+      )}
+
+      {/* ─── Modal : Pointage manuel ─── */}
+      {showManualMatch !== null && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={() => setShowManualMatch(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-lg mx-4 shadow-xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-5 border-b border-gray-100">
+              <div>
+                <h2 className="font-display text-lg font-bold text-blue-800">Pointer manuellement</h2>
+                <p className="font-body text-xs text-gray-400">
+                  Mouvement : {bankLines[showManualMatch]?.label} — {bankLines[showManualMatch]?.amount.toFixed(2)}€
+                </p>
+              </div>
+              <button onClick={() => setShowManualMatch(null)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none">✕</button>
+            </div>
+            <div className="p-4">
+              <div className="relative mb-3">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+                <input placeholder="Filtrer par client, montant…" value={manualSearch} onChange={e => setManualSearch(e.target.value)}
+                  className="w-full font-body text-sm border border-gray-200 rounded-lg pl-9 pr-3 py-2 bg-white focus:outline-none focus:border-blue-400" />
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 pb-4">
+              <div className="flex flex-col gap-1.5">
+                {filteredPayments
+                  .filter(p => {
+                    if (!manualSearch) return true;
+                    const q = manualSearch.toLowerCase();
+                    return p.familyName?.toLowerCase().includes(q) ||
+                      (p.totalTTC || 0).toFixed(2).includes(q) ||
+                      (modeLabels[p.paymentMode] || "").toLowerCase().includes(q);
+                  })
+                  .slice(0, 50)
+                  .map(p => {
+                    const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
+                    const amountMatch = bankLines[showManualMatch] && Math.abs((p.totalTTC || 0) - bankLines[showManualMatch].amount) < 0.02;
+                    return (
+                      <div key={p.id}
+                        className={`flex items-center justify-between px-3 py-2.5 rounded-lg border cursor-pointer hover:border-blue-300 ${amountMatch ? "border-green-300 bg-green-50/30" : "border-gray-100"}`}
+                        onClick={() => {
+                          const updated = [...bankLines];
+                          updated[showManualMatch!] = {
+                            ...updated[showManualMatch!],
+                            matched: true,
+                            matchType: "Manuel",
+                            matchDetail: `${p.familyName} — ${(p.totalTTC || 0).toFixed(2)}€ (${modeLabels[p.paymentMode] || p.paymentMode})`,
+                            manualPaymentId: p.id,
+                          };
+                          setBankLines(updated);
+                          setShowManualMatch(null);
+                        }}>
+                        <div>
+                          <div className="font-body text-sm font-semibold text-blue-800">{p.familyName || "—"}</div>
+                          <div className="font-body text-xs text-gray-400">
+                            {d?.toLocaleDateString("fr-FR")} · {(p.items || []).map(i => i.activityTitle).join(", ") || "—"} · {modeLabels[p.paymentMode] || p.paymentMode}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className={`font-body text-sm font-bold ${amountMatch ? "text-green-600" : "text-blue-500"}`}>{(p.totalTTC || 0).toFixed(2)}€</div>
+                          {amountMatch && <div className="font-body text-[10px] text-green-500">Montant exact</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
