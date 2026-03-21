@@ -75,7 +75,7 @@ export default function PaniersPage() {
         getDocs(collection(db, "payments")),
         getDocs(collection(db, "reservations")),
         getDocs(collection(db, "cartes")),
-        getDocs(collection(db, "forfaits_annuels")),
+        getDocs(collection(db, "forfaits")),
       ]);
       setFamilies(fSnap.docs.map(d => ({ firestoreId: d.id, ...d.data() } as any)));
       setPayments(pSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -105,7 +105,12 @@ export default function PaniersPage() {
       });
 
       forfaits.filter((f: any) => f.familyId === fam.firestoreId).forEach((f: any) => {
-        items.push({ id: "forfait-" + f.id, source: "forfait", sourceId: f.id, childName: f.childName || "", label: f.activityTitle || "Forfait annuel", priceHT: (f.priceTTC || 0) / 1.055, tvaTaux: 5.5, priceTTC: f.priceTTC || 0, date: f.createdAt?.seconds ? new Date(f.createdAt.seconds * 1000).toISOString().split("T")[0] : "", invoiced: f.status === "paid" });
+        const ttc = f.totalTTC || f.forfaitPriceTTC || 0;
+        const paid = (f.totalPaidTTC || 0) >= ttc;
+        const label = f.lines && f.lines.length > 0
+          ? f.lines.map((l: any) => l.label).join(" + ")
+          : (f.slotKey || "Forfait annuel");
+        items.push({ id: "forfait-" + f.id, source: "forfait", sourceId: f.id, childName: f.childName || "", label, priceHT: ttc / 1.055, tvaTaux: 5.5, priceTTC: ttc, date: f.createdAt?.seconds ? new Date(f.createdAt.seconds * 1000).toISOString().split("T")[0] : "", invoiced: paid });
       });
 
       const totalTTC = items.reduce((s, i) => s + i.priceTTC, 0);
@@ -154,7 +159,7 @@ export default function PaniersPage() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="font-display text-2xl font-bold text-blue-800">Paniers clients</h1>
-          <p className="font-body text-xs text-gray-400">Vue centralisee des prestations par famille — facturation collective</p>
+          <p className="font-body text-xs text-gray-400">Vue centralisée des prestations par famille — facturation collective</p>
         </div>
       </div>
 
@@ -165,15 +170,15 @@ export default function PaniersPage() {
         </Card>
         <Card padding="sm" className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center"><AlertTriangle size={18} className="text-orange-500" /></div>
-          <div><div className="font-body text-xl font-bold text-orange-500">{familiesWithPending}</div><div className="font-body text-xs text-gray-400">a facturer</div></div>
+          <div><div className="font-body text-xl font-bold text-orange-500">{familiesWithPending}</div><div className="font-body text-xs text-gray-400">à facturer</div></div>
         </Card>
         <Card padding="sm" className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center"><ShoppingCart size={18} className="text-red-500" /></div>
-          <div><div className="font-body text-xl font-bold text-red-500">{totalPendingGlobal.toFixed(0)}EUR</div><div className="font-body text-xs text-gray-400">en attente</div></div>
+          <div><div className="font-body text-xl font-bold text-red-500">{totalPendingGlobal.toFixed(0)}€</div><div className="font-body text-xs text-gray-400">en attente</div></div>
         </Card>
         <Card padding="sm" className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center"><Check size={18} className="text-green-600" /></div>
-          <div><div className="font-body text-xl font-bold text-green-600">{totalInvoicedGlobal.toFixed(0)}EUR</div><div className="font-body text-xs text-gray-400">facture</div></div>
+          <div><div className="font-body text-xl font-bold text-green-600">{totalInvoicedGlobal.toFixed(0)}€</div><div className="font-body text-xs text-gray-400">facture</div></div>
         </Card>
       </div>
 
@@ -183,7 +188,7 @@ export default function PaniersPage() {
           <input type="text" placeholder="Rechercher une famille..." value={search} onChange={e => setSearch(e.target.value)} className={`${inputStyle} !pl-9`} />
         </div>
         <div className="flex gap-1.5">
-          {([["pending", "A facturer"], ["all", "Tous"], ["invoiced", "Factures"]] as const).map(([id, label]) => (
+          {([["pending", "À facturer"], ["all", "Tous"], ["invoiced", "Factures"]] as const).map(([id, label]) => (
             <button key={id} onClick={() => setFilter(id)} className={`font-body text-sm px-4 py-2.5 rounded-lg border cursor-pointer transition-all ${filter === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>{label}</button>
           ))}
         </div>
@@ -192,7 +197,7 @@ export default function PaniersPage() {
       {filteredPaniers.length === 0 ? (
         <Card padding="lg" className="text-center">
           <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><ShoppingCart size={28} className="text-blue-300" /></div>
-          <p className="font-body text-sm text-gray-500">Aucun panier a afficher.</p>
+          <p className="font-body text-sm text-gray-500">Aucun panier à afficher.</p>
         </Card>
       ) : (
         <div className="flex flex-col gap-3">
@@ -209,7 +214,7 @@ export default function PaniersPage() {
                     <div className="flex items-center gap-2">
                       <span className="font-display text-sm font-bold text-blue-800">{fp.familyName}</span>
                       <Badge color="gray">{fp.items.length} prestation{fp.items.length > 1 ? "s" : ""}</Badge>
-                      {pendingItems.length > 0 && <Badge color="orange">{pendingItems.length} a facturer</Badge>}
+                      {pendingItems.length > 0 && <Badge color="orange">{pendingItems.length} à facturer</Badge>}
                     </div>
                     <div className="font-body text-xs text-gray-400 mt-0.5">
                       {fp.items.map(i => i.childName).filter((v, i, a) => a.indexOf(v) === i && v).join(", ")}
@@ -219,8 +224,8 @@ export default function PaniersPage() {
                     {fp.totalPending > 0 && (
                       <>
                         <div className="text-right">
-                          <div className="font-body text-lg font-bold text-orange-500">{fp.totalPending.toFixed(2)}EUR</div>
-                          <div className="font-body text-[10px] text-gray-400">a facturer</div>
+                          <div className="font-body text-lg font-bold text-orange-500">{fp.totalPending.toFixed(2)}€</div>
+                          <div className="font-body text-[10px] text-gray-400">à facturer</div>
                         </div>
                         <button onClick={(e) => { e.stopPropagation(); openInvoice(fp); }}
                           className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-600">
@@ -245,14 +250,14 @@ export default function PaniersPage() {
                             </div>
                             {item.date && <div className="font-body text-xs text-gray-300 mt-0.5">{item.date}</div>}
                           </div>
-                          <span className="font-body text-sm font-semibold text-blue-800">{item.priceTTC.toFixed(2)}EUR</span>
-                          <Badge color={item.invoiced ? "green" : "orange"}>{item.invoiced ? "Facture" : "En attente"}</Badge>
+                          <span className="font-body text-sm font-semibold text-blue-800">{item.priceTTC.toFixed(2)}€</span>
+                          <Badge color={item.invoiced ? "green" : "orange"}>{item.invoiced ? "Facturé" : "En attente"}</Badge>
                         </div>
                       ))}
                     </div>
                     <div className="flex justify-between mt-3 pt-3 border-t border-gray-100 font-body text-sm">
-                      <span className="text-gray-500">Total : {fp.totalTTC.toFixed(2)}EUR | Facture : {fp.totalInvoiced.toFixed(2)}EUR</span>
-                      <span className="font-semibold text-orange-500">Reste : {fp.totalPending.toFixed(2)}EUR</span>
+                      <span className="text-gray-500">Total : {fp.totalTTC.toFixed(2)}€ | Facture : {fp.totalInvoiced.toFixed(2)}€</span>
+                      <span className="font-semibold text-orange-500">Reste : {fp.totalPending.toFixed(2)}€</span>
                     </div>
                   </div>
                 )}
@@ -294,7 +299,7 @@ export default function PaniersPage() {
                           <div className="font-body text-sm text-blue-800">{item.label}</div>
                           {item.childName && <div className="font-body text-xs text-gray-400">{item.childName}</div>}
                         </div>
-                        <span className="font-body text-sm font-semibold text-blue-500">{item.priceTTC.toFixed(2)}EUR</span>
+                        <span className="font-body text-sm font-semibold text-blue-500">{item.priceTTC.toFixed(2)}€</span>
                       </button>
                     );
                   })}
@@ -310,7 +315,7 @@ export default function PaniersPage() {
               </div>
               <div className="flex justify-between items-center p-4 bg-blue-50 rounded-xl mb-4">
                 <span className="font-body text-sm font-semibold text-blue-800">Total</span>
-                <span className="font-body text-2xl font-bold text-blue-500">{invoicingFamily.items.filter(i => selectedItems.includes(i.id)).reduce((s, i) => s + i.priceTTC, 0).toFixed(2)}EUR</span>
+                <span className="font-body text-2xl font-bold text-blue-500">{invoicingFamily.items.filter(i => selectedItems.includes(i.id)).reduce((s, i) => s + i.priceTTC, 0).toFixed(2)}€</span>
               </div>
               <button onClick={handleInvoice} disabled={saving || selectedItems.length === 0}
                 className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${saving || selectedItems.length === 0 ? "bg-gray-200 text-gray-400" : "bg-blue-500 text-white hover:bg-blue-600"}`}>
