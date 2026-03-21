@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, addDoc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { Loader2, Send, Mail, ChevronDown } from "lucide-react";
+import { Loader2, Send, Mail, ChevronDown, Check } from "lucide-react";
 
 export default function EmailReprisePage() {
   const [creneaux, setCreneaux] = useState<any[]>([]);
@@ -56,17 +56,55 @@ export default function EmailReprisePage() {
     if (!selectedCreneau || !subject || !message) return;
     setSending(true);
     const recipients = getEmails(selectedCreneau);
+    const emails = recipients.map((r: any) => r.email).filter((e: string) => e && e.includes("@"));
 
-    // Log in Firestore (quand Resend sera branché, on enverra pour de vrai)
+    let emailStatus = "logged";
+
+    // Envoyer via l'API Resend
+    if (emails.length > 0) {
+      try {
+        const htmlBody = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+          <div style="background:#2050A0;color:white;padding:20px;border-radius:12px 12px 0 0;text-align:center;">
+            <h2 style="margin:0;font-size:18px;">Centre Équestre d'Agon-Coutainville</h2>
+          </div>
+          <div style="padding:24px;background:#fff;border:1px solid #eee;">
+            <p style="white-space:pre-line;color:#333;line-height:1.6;">${message.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+          </div>
+          <div style="padding:16px;text-align:center;font-size:12px;color:#999;">
+            Centre Équestre Poney Club d'Agon-Coutainville<br>
+            56 Charrière du Commerce — 50230 Agon-Coutainville<br>
+            02 44 84 99 96 — ceagon@orange.fr
+          </div>
+        </div>`;
+
+        const res = await fetch("/api/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ to: emails, subject, html: htmlBody }),
+        });
+        const result = await res.json();
+        if (result.success) {
+          emailStatus = "sent";
+        } else {
+          console.error("Erreur envoi:", result.error);
+          emailStatus = "error";
+        }
+      } catch (e) {
+        console.error("Erreur réseau:", e);
+        emailStatus = "error";
+      }
+    }
+
+    // Log dans Firestore
     await addDoc(collection(db, "emailsReprise"), {
       creneauId: selectedCreneau.id,
       creneauTitle: selectedCreneau.activityTitle,
       date: dateStr,
       subject,
       message,
-      recipients: recipients.map((r: any) => r.email),
-      recipientCount: recipients.length,
-      status: "logged", // deviendra "sent" quand Resend sera branché
+      recipients: emails,
+      recipientCount: emails.length,
+      status: emailStatus,
       createdAt: serverTimestamp(),
     });
 
@@ -151,10 +189,10 @@ export default function EmailReprisePage() {
               <Card padding="md">
                 {sent ? (
                   <div className="text-center py-8">
-                    <span className="text-5xl block mb-4">✅</span>
-                    <div className="font-body text-lg font-semibold text-blue-800 mb-2">Email enregistré !</div>
+                    <div className="w-16 h-16 rounded-2xl bg-green-50 flex items-center justify-center mx-auto mb-4"><Check size={32} className="text-green-500" /></div>
+                    <div className="font-body text-lg font-semibold text-blue-800 mb-2">Email envoyé !</div>
                     <p className="font-body text-sm text-gray-500 mb-4">
-                      {getEmails(selectedCreneau).length} destinataires. L&apos;envoi réel sera activé quand Resend sera branché.
+                      {getEmails(selectedCreneau).length} destinataire{getEmails(selectedCreneau).length > 1 ? "s" : ""}.
                     </p>
                     <button onClick={() => { setSent(false); setSelectedCreneau(null); }}
                       className="font-body text-sm text-blue-500 bg-transparent border-none cursor-pointer">← Choisir une autre reprise</button>
