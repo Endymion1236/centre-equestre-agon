@@ -51,6 +51,12 @@ export default function PaiementsPage() {
   const [payments, setPayments] = useState<(Payment & { id: string })[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Historique filters
+  const [histModeFilter, setHistModeFilter] = useState<string>("all");
+  const [histStatusFilter, setHistStatusFilter] = useState<string>("all");
+  const [histSearch, setHistSearch] = useState("");
+  const [histPeriod, setHistPeriod] = useState("");
+
   // Basket state
   const [selectedFamily, setSelectedFamily] = useState<string>("");
   const [familySearch, setFamilySearch] = useState("");
@@ -425,77 +431,139 @@ export default function PaiementsPage() {
         <div>
           {loading ? (
             <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div>
-          ) : payments.length === 0 ? (
-            <Card padding="lg" className="text-center">
-              <div className="w-14 h-14 rounded-2xl bg-green-50 flex items-center justify-center mx-auto mb-3"><CreditCard size={28} className="text-green-400" /></div>
-              <p className="font-body text-sm text-gray-500">Aucun paiement enregistré.</p>
-            </Card>
-          ) : (
-            <Card className="!p-0 overflow-hidden">
-              <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                <span className="w-20">Date</span>
-                <span className="w-20">N° Facture</span>
-                <span className="flex-1">Client</span>
-                <span className="w-32">Prestations</span>
-                <span className="w-20 text-right">Montant</span>
-                <span className="w-20 text-center">Mode</span>
-                <span className="w-16 text-center">Statut</span>
-                <span className="w-16 text-center">PDF</span>
-              </div>
-              {payments.map((p, idx) => {
-                const date = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
-                const mode = paymentModes.find((m) => m.id === p.paymentMode);
-                const invoiceNum = `F${date.getFullYear()}-${String(payments.length - idx).padStart(3, "0")}`;
-                const ht = (p.items || []).reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
-                const printInvoice = async () => {
-                  const res = await fetch("/api/facture", {
-                    method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      invoiceNumber: invoiceNum,
-                      date: date.toLocaleDateString("fr-FR"),
-                      familyName: p.familyName,
-                      familyAddress: "",
-                      items: p.items || [],
-                      totalHT: ht,
-                      totalTVA: (p.totalTTC || 0) - ht,
-                      totalTTC: p.totalTTC || 0,
-                      paymentMode: mode?.label || p.paymentMode,
-                      paymentRef: p.paymentRef || "",
-                      paidAmount: p.paidAmount || p.totalTTC || 0,
-                      status: p.status,
-                    }),
-                  });
-                  const html = await res.text();
-                  const w = window.open("", "_blank");
-                  if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 500); }
-                };
-                return (
-                  <div key={p.id} className="px-5 py-3 border-b border-blue-500/8 last:border-b-0 flex items-center hover:bg-blue-50/30 transition-colors">
-                    <span className="w-20 font-body text-xs text-gray-400">{date.toLocaleDateString("fr-FR")}</span>
-                    <span className="w-20 font-body text-xs font-semibold text-blue-800">{invoiceNum}</span>
-                    <span className="flex-1">
-                      <div className="font-body text-sm font-semibold text-blue-800">{p.familyName}</div>
-                    </span>
-                    <span className="w-32 font-body text-xs text-gray-500 truncate">
-                      {(p.items || []).map((i: any) => i.activityTitle).join(", ")}
-                    </span>
-                    <span className="w-20 text-right font-body text-sm font-bold text-blue-500">{p.totalTTC?.toFixed(2)}€</span>
-                    <span className="w-20 text-center">
-                      <Badge color="blue">{mode?.label?.split(" ")[0] || p.paymentMode}</Badge>
-                    </span>
-                    <span className="w-16 text-center">
-                      <Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : "gray"}>
-                        {p.status === "paid" ? "Payé" : p.status === "partial" ? "Partiel" : "—"}
-                      </Badge>
-                    </span>
-                    <span className="w-16 text-center">
-                      <button onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100">📄</button>
-                    </span>
+          ) : (() => {
+            // Filtres
+            const [modeFilter, setModeFilter] = [histModeFilter, setHistModeFilter];
+            const [statusFilter, setStatusFilter] = [histStatusFilter, setHistStatusFilter];
+            const [searchFilter, setSearchFilter] = [histSearch, setHistSearch];
+            const [periodFilter, setPeriodFilter] = [histPeriod, setHistPeriod];
+
+            // Filtrage
+            let filtered = [...payments];
+            if (modeFilter !== "all") filtered = filtered.filter(p => p.paymentMode === modeFilter);
+            if (statusFilter !== "all") filtered = filtered.filter(p => p.status === statusFilter);
+            if (searchFilter) {
+              const q = searchFilter.toLowerCase();
+              filtered = filtered.filter(p => p.familyName?.toLowerCase().includes(q) || (p.items || []).some((i: any) => i.activityTitle?.toLowerCase().includes(q)));
+            }
+            if (periodFilter) {
+              filtered = filtered.filter(p => {
+                const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
+                if (!d) return false;
+                const m = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+                return m === periodFilter;
+              });
+            }
+
+            // Totaux par mode
+            const totalsByMode: Record<string, number> = {};
+            filtered.forEach(p => { totalsByMode[p.paymentMode] = (totalsByMode[p.paymentMode] || 0) + (p.totalTTC || 0); });
+            const grandTotal = filtered.reduce((s, p) => s + (p.totalTTC || 0), 0);
+
+            return (
+              <>
+                {/* KPIs par mode */}
+                <div className="flex flex-wrap gap-3 mb-4">
+                  {Object.entries(totalsByMode).sort(([,a],[,b]) => b - a).map(([mode, total]) => {
+                    const modeObj = paymentModes.find(m => m.id === mode);
+                    return (
+                      <div key={mode} onClick={() => setHistModeFilter(modeFilter === mode ? "all" : mode as any)}
+                        className={`flex flex-col items-center px-4 py-2.5 rounded-xl cursor-pointer transition-all ${modeFilter === mode ? "bg-blue-500 text-white ring-2 ring-blue-300" : "bg-sand hover:bg-blue-50"}`}>
+                        <div className={`font-body text-[10px] uppercase font-semibold ${modeFilter === mode ? "text-white/70" : "text-gray-400"}`}>
+                          {modeObj?.label?.split("(")[0]?.trim() || mode}
+                        </div>
+                        <div className={`font-body text-base font-bold ${modeFilter === mode ? "text-white" : "text-blue-800"}`}>{total.toFixed(2)}€</div>
+                      </div>
+                    );
+                  })}
+                  <div className="flex flex-col items-center px-4 py-2.5 rounded-xl bg-blue-50">
+                    <div className="font-body text-[10px] uppercase font-semibold text-blue-400">Total</div>
+                    <div className="font-body text-base font-bold text-blue-500">{grandTotal.toFixed(2)}€</div>
                   </div>
-                );
-              })}
-            </Card>
-          )}
+                </div>
+
+                {/* Filtres : statut + recherche + période */}
+                <div className="flex flex-wrap gap-3 mb-4 items-center">
+                  <div className="flex gap-1.5">
+                    {([["all", "Tous"], ["paid", "Encaissé"], ["pending", "En attente"], ["partial", "Partiel"]] as const).map(([val, label]) => (
+                      <button key={val} onClick={() => setHistStatusFilter(val as any)}
+                        className={`font-body text-xs px-3 py-1.5 rounded-lg border-none cursor-pointer transition-all ${histStatusFilter === val ? "bg-blue-500 text-white" : "bg-white text-gray-500 border border-gray-200"}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="relative flex-1 min-w-[200px]">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+                    <input placeholder="Rechercher par nom ou prestation…" value={histSearch} onChange={e => setHistSearch(e.target.value)}
+                      className="w-full font-body text-xs border border-gray-200 rounded-lg pl-9 pr-3 py-2 bg-white focus:outline-none focus:border-blue-400" />
+                  </div>
+                  <input type="month" value={histPeriod} onChange={e => setHistPeriod(e.target.value)}
+                    className="font-body text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-blue-400" />
+                  {(modeFilter !== "all" || statusFilter !== "all" || searchFilter || periodFilter) && (
+                    <button onClick={() => { setHistModeFilter("all"); setHistStatusFilter("all"); setHistSearch(""); setHistPeriod(""); }}
+                      className="font-body text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-red-100">
+                      Réinitialiser
+                    </button>
+                  )}
+                  <span className="font-body text-xs text-gray-400">{filtered.length} paiement{filtered.length > 1 ? "s" : ""}</span>
+                </div>
+
+                {/* Tableau */}
+                {filtered.length === 0 ? (
+                  <Card padding="lg" className="text-center">
+                    <p className="font-body text-sm text-gray-500">Aucun paiement correspondant aux filtres.</p>
+                  </Card>
+                ) : (
+                  <Card className="!p-0 overflow-hidden">
+                    <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                      <span className="w-20">Date</span>
+                      <span className="w-20">N° Facture</span>
+                      <span className="flex-1">Client</span>
+                      <span className="w-32">Prestations</span>
+                      <span className="w-20 text-right">Montant</span>
+                      <span className="w-20 text-center">Mode</span>
+                      <span className="w-16 text-center">Statut</span>
+                      <span className="w-16 text-center">PDF</span>
+                    </div>
+                    {filtered.map((p, idx) => {
+                      const date = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
+                      const mode = paymentModes.find((m) => m.id === p.paymentMode);
+                      const invoiceNum = `F${date.getFullYear()}-${String(payments.length - payments.indexOf(p)).padStart(3, "0")}`;
+                      const ht = (p.items || []).reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
+                      const printInvoice = async () => {
+                        const res = await fetch("/api/facture", {
+                          method: "POST", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            invoiceNumber: invoiceNum, date: date.toLocaleDateString("fr-FR"),
+                            familyName: p.familyName, familyAddress: "",
+                            items: p.items || [], totalHT: ht,
+                            totalTVA: (p.totalTTC || 0) - ht, totalTTC: p.totalTTC || 0,
+                            paymentMode: mode?.label || p.paymentMode, paymentRef: p.paymentRef || "",
+                            paidAmount: p.paidAmount || p.totalTTC || 0, status: p.status,
+                          }),
+                        });
+                        const html = await res.text();
+                        const w = window.open("", "_blank");
+                        if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 500); }
+                      };
+                      return (
+                        <div key={p.id || idx} className="px-5 py-3 border-b border-blue-500/8 last:border-b-0 flex items-center hover:bg-blue-50/30 transition-colors">
+                          <span className="w-20 font-body text-xs text-gray-400">{date.toLocaleDateString("fr-FR")}</span>
+                          <span className="w-20 font-body text-xs font-semibold text-blue-800">{invoiceNum}</span>
+                          <span className="flex-1"><div className="font-body text-sm font-semibold text-blue-800">{p.familyName}</div></span>
+                          <span className="w-32 font-body text-xs text-gray-500 truncate">{(p.items || []).map((i: any) => i.activityTitle).join(", ")}</span>
+                          <span className="w-20 text-right font-body text-sm font-bold text-blue-500">{p.totalTTC?.toFixed(2)}€</span>
+                          <span className="w-20 text-center"><Badge color="blue">{mode?.label?.split(" ")[0] || p.paymentMode}</Badge></span>
+                          <span className="w-16 text-center"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : "gray"}>{p.status === "paid" ? "Payé" : p.status === "partial" ? "Partiel" : "Att."}</Badge></span>
+                          <span className="w-16 text-center"><button onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button></span>
+                        </div>
+                      );
+                    })}
+                  </Card>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
       {/* ─── Échéances Tab ─── */}
