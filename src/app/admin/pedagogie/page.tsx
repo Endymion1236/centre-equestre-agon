@@ -148,30 +148,28 @@ export default function PedagogiePage() {
       filtered.length === 0 ? <Card padding="lg" className="text-center"><div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><GraduationCap size={28} className="text-blue-300" /></div><p className="font-body text-sm text-gray-500">Aucun cavalier trouvé.</p></Card> :
       <div className="flex flex-col gap-3">
         {filtered.map(child => {
-          const isExp = expanded === child.id;
+          const uniqueKey = `${child.familyId}_${child.id}`;
+          const isExp = expanded === uniqueKey;
           const peda = child.peda || { objectifs: [], notes: [] };
           const objDone = peda.objectifs.filter((o: PedaObjectif) => o.status === "valide").length;
           const objTotal = peda.objectifs.length;
 
           return (
-            <Card key={child.id} padding="md">
-              <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpanded(isExp ? null : child.id)}>
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center text-xl">🧒</div>
-                  <div>
-                    <div className="font-body text-base font-semibold text-blue-800">{child.firstName} <span className="text-xs text-gray-400 font-normal">({child.familyName})</span></div>
+            <Card key={uniqueKey} padding="md">
+              <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpanded(isExp ? null : uniqueKey)}>
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                    <GraduationCap size={18} className="text-blue-500" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-body text-sm font-semibold text-blue-800">{child.firstName} <span className="text-xs text-gray-400 font-normal">({child.familyName})</span></div>
                     <div className="font-body text-xs text-gray-400">Niveau : {child.galopLevel || "Débutant"} · {objDone}/{objTotal} objectifs validés</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                   <Badge color={child.galopLevel && child.galopLevel !== "—" ? "blue" : "gray"}>
-                    {child.galopLevel && child.galopLevel !== "—" ? `Galop ${child.galopLevel}` : "Débutant"}
+                    {child.galopLevel && child.galopLevel !== "—" ? `${child.galopLevel}` : "Débutant"}
                   </Badge>
-                  {objTotal > 0 && (
-                    <div className="w-16 h-2 rounded-full bg-gray-100">
-                      <div className="h-2 rounded-full bg-green-500 transition-all" style={{ width: `${objTotal > 0 ? (objDone / objTotal) * 100 : 0}%` }} />
-                    </div>
-                  )}
                   {isExp ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
                 </div>
               </div>
@@ -184,11 +182,11 @@ export default function PedagogiePage() {
                       <h3 className="font-body text-sm font-semibold text-blue-800 flex items-center gap-2"><Target size={14} /> Objectifs</h3>
                       <div className="flex gap-2">
                         <button onClick={() => addDefaultObjectifs(child)} className="font-body text-[11px] text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer">+ Objectifs type {child.galopLevel || "Bronze"}</button>
-                        <button onClick={() => setAddingObj(addingObj === child.id ? null : child.id)} className="font-body text-[11px] text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer"><Plus size={12} className="inline" /> Perso</button>
+                        <button onClick={() => setAddingObj(addingObj === uniqueKey ? null : child.id)} className="font-body text-[11px] text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer"><Plus size={12} className="inline" /> Perso</button>
                       </div>
                     </div>
 
-                    {addingObj === child.id && (
+                    {addingObj === uniqueKey && (
                       <div className="flex gap-2 mb-3">
                         <input value={newObjLabel} onChange={e => setNewObjLabel(e.target.value)} placeholder="Nouvel objectif..." autoFocus
                           className="flex-1 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
@@ -204,7 +202,7 @@ export default function PedagogiePage() {
                         {peda.objectifs.map((obj: PedaObjectif) => (
                           <div key={obj.id} className="flex items-center justify-between bg-sand rounded-lg px-4 py-2.5">
                             <span className={`font-body text-sm ${obj.status === "valide" ? "text-green-600 line-through" : "text-blue-800"}`}>
-                              {obj.status === "valide" ? "✅" : obj.status === "a_revoir" ? "⚠️" : "🔵"} {obj.label}
+                              {obj.status === "valide" ? "● " : obj.status === "a_revoir" ? "▲ " : "○ "} {obj.label}
                             </span>
                             <button onClick={() => toggleObjStatus(child, obj.id)}
                               className="bg-transparent border-none cursor-pointer">
@@ -220,11 +218,11 @@ export default function PedagogiePage() {
                   <div>
                     <div className="flex justify-between items-center mb-3">
                       <h3 className="font-body text-sm font-semibold text-blue-800 flex items-center gap-2"><MessageSquare size={14} /> Notes d&apos;instructrice</h3>
-                      <button onClick={() => setAddingNote(addingNote === child.id ? null : child.id)}
+                      <button onClick={() => setAddingNote(addingNote === uniqueKey ? null : child.id)}
                         className="font-body text-[11px] text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer"><Plus size={12} className="inline" /> Ajouter</button>
                     </div>
 
-                    {addingNote === child.id && (
+                    {addingNote === uniqueKey && (
                       <div className="mb-3">
                         <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={3} placeholder="Observations, progrès, points à travailler..." autoFocus
                           className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none resize-vertical" />
@@ -243,7 +241,7 @@ export default function PedagogiePage() {
                               <span className="font-body text-[11px] font-semibold text-blue-500">{note.author}</span>
                               <span className="font-body text-[11px] text-gray-400">{new Date(note.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}</span>
                             </div>
-                            <p className="font-body text-sm text-gray-600 leading-relaxed">💬 {note.text}</p>
+                            <p className="font-body text-sm text-gray-600 leading-relaxed">{note.text}</p>
                           </div>
                         ))}
                         {peda.notes.length > 5 && <p className="font-body text-xs text-gray-400 text-center">+ {peda.notes.length - 5} notes antérieures</p>}
