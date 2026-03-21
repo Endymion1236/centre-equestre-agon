@@ -43,10 +43,34 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
   const fam = families.find(f => f.firestoreId === selFam); const children = fam?.children || [];
   const available = children.filter((c: any) => !enrolledIds.includes(c.id));
 
-  // Calcul forfait annuel
+  // Calcul forfait annuel avec prorata
   const prixAdhesion = 60;
   const prixLicence = licenceType === "moins18" ? 25 : 36;
-  const prixForfait = 650; // TODO: charger depuis Firestore settings/tarifs
+  const prixForfaitAnnuel = 650; // Prix plein tarif (35 séances)
+  const totalSessionsSaison = 35;
+  const dateFinSaison = "2026-06-30"; // TODO: configurable dans paramètres
+
+  // Calculer les séances restantes entre aujourd'hui et le 30 juin
+  // pour le jour de la semaine du créneau
+  const sessionsRestantes = useMemo(() => {
+    const today = new Date();
+    const fin = new Date(dateFinSaison);
+    const creneauDate = new Date(creneau.date);
+    const jourSemaine = creneauDate.getDay(); // 0=dim, 1=lun, ... 6=sam
+    let count = 0;
+    const cursor = new Date(today);
+    // Aller au prochain jour correspondant
+    while (cursor.getDay() !== jourSemaine) cursor.setDate(cursor.getDate() + 1);
+    // Compter les occurrences jusqu'à fin de saison
+    while (cursor <= fin) {
+      count++;
+      cursor.setDate(cursor.getDate() + 7);
+    }
+    return count;
+  }, [creneau.date]);
+
+  const prorata = sessionsRestantes / totalSessionsSaison;
+  const prixForfait = Math.round(prixForfaitAnnuel * prorata);
   const totalAnnuel = (adhesion ? prixAdhesion : 0) + (licence ? prixLicence : 0) + prixForfait;
 
   const handleEnroll = async () => {
@@ -69,11 +93,14 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
           dayLabel: new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long" }),
           startTime: creneau.startTime,
           endTime: creneau.endTime,
-          totalSessions: 35,
+          totalSessions: sessionsRestantes,
+          totalSessionsSaison,
           attendedSessions: 0,
           licenceFFE: licence,
           licenceType,
           adhesion,
+          prixForfaitAnnuel,
+          prorata: Math.round(prorata * 100),
           forfaitPriceTTC: totalAnnuel,
           totalPaidTTC: 0,
           paymentPlan: payPlan,
@@ -141,8 +168,9 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
                   <button onClick={() => setInscriptionMode("annuel")}
                     className={`p-3 rounded-lg border-2 text-left cursor-pointer transition-all ${inscriptionMode === "annuel" ? "border-green-500 bg-green-50" : "border-gray-200 bg-white"}`}>
                     <div className="font-body text-sm font-semibold text-green-700">Forfait à l'année</div>
-                    <div className="font-body text-xs text-gray-400 mt-0.5">Adhésion + Licence + Abonnement</div>
+                    <div className="font-body text-xs text-gray-400 mt-0.5">{sessionsRestantes} séances restantes sur {totalSessionsSaison}</div>
                     <div className="font-body text-lg font-bold text-green-600 mt-1">{totalAnnuel.toFixed(2)}€</div>
+                    {prorata < 1 && <div className="font-body text-[10px] text-orange-500 mt-0.5">Prorata : {Math.round(prorata * 100)}% du tarif annuel</div>}
                   </button>
                 </div>
 
@@ -186,9 +214,16 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
                       )}
                     </div>
                     {/* Forfait */}
-                    <div className="flex items-center justify-between">
-                      <span className="font-body text-sm text-blue-800">Forfait {creneau.activityTitle}</span>
-                      <span className="font-body text-sm font-semibold text-blue-500">{prixForfait}€</span>
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-body text-sm text-blue-800">Forfait {creneau.activityTitle}</span>
+                        <span className="font-body text-sm font-semibold text-blue-500">{prixForfait}€</span>
+                      </div>
+                      <div className="font-body text-[10px] text-gray-400 mt-0.5">
+                        {sessionsRestantes} séances restantes jusqu'au 30 juin
+                        {prorata < 1 && <> · {prixForfaitAnnuel}€ × {sessionsRestantes}/{totalSessionsSaison} = {prixForfait}€</>}
+                        {prorata >= 1 && <> · Tarif plein (début de saison)</>}
+                      </div>
                     </div>
                     {/* Total */}
                     <div className="flex items-center justify-between pt-2 border-t border-gray-200">
