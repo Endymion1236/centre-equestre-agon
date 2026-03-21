@@ -7,18 +7,62 @@ import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Printer, Cli
 } from "lucide-react";
 
 interface Creneau { id: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolled: any[]; status: string; }
-const horses = ["Sircee","Batz","Ultim","Rose","Gucci","Galaxy","Caramel","Java","Joy","Joey","Joystar","LPP"];
 const typeColors: Record<string,string> = {stage:"#27ae60",balade:"#e67e22",cours:"#2050A0",competition:"#7c3aed"};
 
 export default function MontoirPage() {
   const [dayOffset, setDayOffset] = useState(0);
   const [creneaux, setCreneaux] = useState<Creneau[]>([]);
+  const [equides, setEquides] = useState<any[]>([]);
+  const [indisponibilites, setIndisponibilites] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const currentDay = useMemo(() => { const d = new Date(); d.setDate(d.getDate()+dayOffset); return d; }, [dayOffset]);
   const dateStr = currentDay.toISOString().split("T")[0];
 
-  const fetchData = async () => { try { const s = await getDocs(query(collection(db,"creneaux"),where("date","==",dateStr))); setCreneaux(s.docs.map(d=>({id:d.id,...d.data()})).sort((a:any,b:any)=>a.startTime.localeCompare(b.startTime)) as Creneau[]); } catch(e){console.error(e);} setLoading(false); };
+  const fetchData = async () => {
+    try {
+      const [cSnap, eSnap, iSnap] = await Promise.all([
+        getDocs(query(collection(db,"creneaux"),where("date","==",dateStr))),
+        getDocs(collection(db,"equides")),
+        getDocs(collection(db,"indisponibilites")),
+      ]);
+      setCreneaux(cSnap.docs.map(d=>({id:d.id,...d.data()})).sort((a:any,b:any)=>a.startTime.localeCompare(b.startTime)) as Creneau[]);
+      setEquides(eSnap.docs.map(d=>({id:d.id,...d.data()})));
+      setIndisponibilites(iSnap.docs.map(d=>({id:d.id,...d.data()})));
+    } catch(e){console.error(e);}
+    setLoading(false);
+  };
   useEffect(() => { setLoading(true); fetchData(); }, [dayOffset]);
+
+  // Liste des équidés disponibles (pas sortis, pas indisponibles)
+  const availableHorses = useMemo(() => {
+    const activeIndispos = indisponibilites.filter((i: any) => {
+      if (i.status === "terminee") return false;
+      const start = i.startDate?.seconds ? new Date(i.startDate.seconds * 1000).toISOString().split("T")[0] : i.startDate || "";
+      const end = i.endDate?.seconds ? new Date(i.endDate.seconds * 1000).toISOString().split("T")[0] : i.endDate || "";
+      if (dateStr < start) return false;
+      if (end && dateStr > end) return false;
+      return true;
+    }).map((i: any) => i.equideId);
+
+    return equides
+      .filter(e => e.status !== "sorti" && !activeIndispos.includes(e.id))
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  }, [equides, indisponibilites, dateStr]);
+
+  const unavailableHorses = useMemo(() => {
+    const activeIndispos = indisponibilites.filter((i: any) => {
+      if (i.status === "terminee") return false;
+      const start = i.startDate?.seconds ? new Date(i.startDate.seconds * 1000).toISOString().split("T")[0] : i.startDate || "";
+      const end = i.endDate?.seconds ? new Date(i.endDate.seconds * 1000).toISOString().split("T")[0] : i.endDate || "";
+      if (dateStr < start) return false;
+      if (end && dateStr > end) return false;
+      return true;
+    });
+    return activeIndispos.map((i: any) => {
+      const eq = equides.find(e => e.id === i.equideId);
+      return { name: eq?.name || "?", reason: i.motif || "Indisponible" };
+    });
+  }, [equides, indisponibilites, dateStr]);
 
   const updateEnrolled = async (cid: string, enrolled: any[]) => { await updateDoc(doc(db,"creneaux",cid),{enrolled}); fetchData(); };
   const togglePresence = (c: Creneau, childId: string, val: string) => { updateEnrolled(c.id, (c.enrolled||[]).map(e => e.childId===childId ? {...e, presence: val} : e)); };
@@ -40,7 +84,21 @@ export default function MontoirPage() {
         <div className="flex gap-2"><button onClick={()=>setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setDayOffset(d=>d+1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain <ChevronRight size={16} /></button></div>
       </div>
       {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
-      creneaux.length === 0 ? <Card padding="lg" className="text-center"><div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><ClipboardList size={28} className="text-blue-300" /></div><p className="font-body text-sm text-gray-500">Aucune reprise ce jour.</p></Card> :
+      <>
+      {/* Équidés disponibles / indisponibles */}
+      {equides.length > 0 && (
+        <div className="flex flex-wrap gap-3 mb-4">
+          <div className="font-body text-xs bg-green-50 text-green-700 px-3 py-1.5 rounded-lg">
+            {availableHorses.length} équidé{availableHorses.length > 1 ? "s" : ""} disponible{availableHorses.length > 1 ? "s" : ""}
+          </div>
+          {unavailableHorses.map((h, i) => (
+            <div key={i} className="font-body text-xs bg-red-50 text-red-500 px-3 py-1.5 rounded-lg">
+              {h.name} — {h.reason}
+            </div>
+          ))}
+        </div>
+      )}
+      {creneaux.length === 0 ? <Card padding="lg" className="text-center"><div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><ClipboardList size={28} className="text-blue-300" /></div><p className="font-body text-sm text-gray-500">Aucune reprise ce jour.</p></Card> :
       <div className="flex flex-col gap-6">{creneaux.map(c => { const en = c.enrolled||[]; const col = typeColors[c.activityType]||"#666"; const closed = c.status==="closed"; const pres = en.filter((e:any)=>e.presence==="present").length; return (
         <Card key={c.id} padding="md" className={closed?"opacity-60":""}>
           <div className="flex items-center justify-between mb-4 pb-3 border-b border-blue-500/8">
@@ -63,7 +121,7 @@ export default function MontoirPage() {
                 <span className="w-8 font-body text-xs text-gray-400">{i+1}</span>
                 <span className="flex-1 font-body text-sm font-semibold text-blue-800">{e.childName}</span>
                 <span className="w-32 font-body text-xs text-gray-500">{e.familyName}</span>
-                <span className="w-36">{!closed ? <select value={e.horseName||""} onChange={ev=>assignHorse(c,e.childId,ev.target.value)} className="px-2 py-1.5 rounded-lg border border-blue-500/8 font-body text-xs bg-white w-full"><option value="">Affecter...</option>{horses.map(h=><option key={h} value={h}>{h}</option>)}</select> : <span className="font-body text-xs font-semibold text-blue-800">{e.horseName||"—"}</span>}</span>
+                <span className="w-36">{!closed ? <select value={e.horseName||""} onChange={ev=>assignHorse(c,e.childId,ev.target.value)} className="px-2 py-1.5 rounded-lg border border-blue-500/8 font-body text-xs bg-white w-full"><option value="">Affecter...</option>{availableHorses.map(h=><option key={h.id} value={h.name}>{h.name}</option>)}</select> : <span className="font-body text-xs font-semibold text-blue-800">{e.horseName||"—"}</span>}</span>
                 <span className="w-24 flex justify-center gap-2">{!closed ? <>
                   <button onClick={()=>togglePresence(c,e.childId,"present")} className={`w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="present"?"bg-green-500 text-white":"bg-gray-100 text-gray-400 hover:bg-green-100"}`}><CheckCircle2 size={16}/></button>
                   <button onClick={()=>togglePresence(c,e.childId,"absent")} className={`w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent"?"bg-red-500 text-white":"bg-gray-100 text-gray-400 hover:bg-red-100"}`}><XCircle size={16}/></button>
@@ -72,6 +130,7 @@ export default function MontoirPage() {
             ))}
           </div>}
         </Card>); })}</div>}
+      </>}
     </div>
   );
 }
