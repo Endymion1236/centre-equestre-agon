@@ -235,10 +235,17 @@ export default function CavaliersPage() {
   // ─── Charger les créneaux pour l'inscription ───
   const loadCreneaux = async () => {
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const now = new Date();
+      const today = now.toISOString().split("T")[0];
+      const nowHHMM = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
       const snap = await getDocs(collection(db, "creneaux"));
       const all = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-      setCreneaux(all.filter(c => c.date >= today && c.status !== "closed").sort((a, b) => a.date.localeCompare(b.date)));
+      setCreneaux(all.filter(c => {
+        if (c.status === "closed") return false;
+        if (c.date < today) return false;
+        if (c.date === today && c.startTime <= nowHHMM) return false;
+        return true;
+      }).sort((a, b) => a.date.localeCompare(b.date)));
     } catch (e) { console.error(e); }
   };
 

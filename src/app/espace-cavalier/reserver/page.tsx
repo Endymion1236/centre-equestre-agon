@@ -92,9 +92,17 @@ export default function ReserverPage() {
   }, [weekOffset]);
 
   const filteredCreneaux = useMemo(() => {
+    const now = new Date();
+    const todayStr = fmtDate(now);
+    const nowHHMM = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+
     let result = creneaux.filter((c) => {
+      // Exclure les créneaux passés (date passée OU même jour mais heure passée)
+      if (c.date < todayStr) return false;
+      if (c.date === todayStr && c.startTime <= nowHHMM) return false;
+      // Exclure les créneaux complets
       const enrolled = c.enrolled || [];
-      return enrolled.length < c.maxPlaces; // Only show available
+      return enrolled.length < c.maxPlaces;
     });
     if (filter !== "all") result = result.filter((c) => c.activityType === filter);
     return result.sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
@@ -257,7 +265,8 @@ export default function ReserverPage() {
 
       {/* Date navigation */}
       <div className="flex items-center justify-between mb-5">
-        <button onClick={() => setWeekOffset((w) => w - 1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">
+        <button onClick={() => setWeekOffset((w) => Math.max(0, w - 1))} disabled={weekOffset <= 0}
+          className={`flex items-center gap-1 font-body text-sm px-4 py-2 rounded-lg border cursor-pointer ${weekOffset <= 0 ? "text-gray-300 border-gray-100 bg-gray-50 cursor-not-allowed" : "text-gray-500 bg-white border-gray-200"}`}>
           <ChevronLeft size={16} /> 2 semaines préc.
         </button>
         <div className="font-body text-sm font-semibold text-blue-800">
