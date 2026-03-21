@@ -504,9 +504,28 @@ export default function CavaleriePage() {
           </p>
         </div>
         {tab === "fiches" && (
-          <button onClick={() => { setForm(emptyEquide); setEditingId(null); setShowForm(true); }} className={btnPrimary}>
-            <Plus size={16} /> Ajouter un équidé
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => { setForm(emptyEquide); setEditingId(null); setShowForm(true); }} className={btnPrimary}>
+              <Plus size={16} /> Ajouter un équidé
+            </button>
+            <button onClick={async () => {
+              if (!confirm(`Importer les équidés depuis le fichier CSV Céléris ?\n\nCela va ajouter les équidés qui n'existent pas encore (comparaison par nom).`)) return;
+              try {
+                const res = await fetch("/equides-import.json");
+                const data = await res.json();
+                const existingNames = equides.map(e => e.name?.toLowerCase());
+                const toImport = data.filter((e: any) => !existingNames.includes(e.name?.toLowerCase()));
+                if (toImport.length === 0) { alert("Tous les équidés sont déjà importés."); return; }
+                for (const eq of toImport) {
+                  await addDoc(collection(db, "equides"), { ...eq, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+                }
+                alert(`${toImport.length} équidés importés avec succès !`);
+                fetchData();
+              } catch (e) { console.error(e); alert("Erreur lors de l'import."); }
+            }} className={btnSecondary}>
+              <Upload size={16} /> Importer Céléris
+            </button>
+          </div>
         )}
         {tab === "soins" && (
           <button onClick={() => { setSoinForm({ ...emptySoin, equideIds: equides.filter(e => e.status !== "sorti" && e.status !== "deces").map(e => e.id) }); setShowSoinForm(true); }} className={btnPrimary}>

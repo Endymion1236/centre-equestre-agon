@@ -325,9 +325,31 @@ export default function CavaliersPage() {
         createdAt: serverTimestamp(),
       });
 
-      alert(`${showEnroll.childName} inscrit(e) dans ${creneau.activityTitle} le ${new Date(creneau.date).toLocaleDateString("fr-FR")}`);
+      // Créer un paiement en attente (à facturer) si le prix > 0
+      if (priceTTC > 0) {
+        const priceHT = priceTTC / (1 + (creneau.tvaTaux || 5.5) / 100);
+        await addDoc(collection(db, "payments"), {
+          familyId: showEnroll.familyId,
+          familyName: family?.parentName || "",
+          items: [{
+            activityTitle: creneau.activityTitle,
+            priceHT: Math.round(priceHT * 100) / 100,
+            tva: creneau.tvaTaux || 5.5,
+            priceTTC: Math.round(priceTTC * 100) / 100,
+          }],
+          totalTTC: Math.round(priceTTC * 100) / 100,
+          paymentMode: "",
+          paymentRef: "",
+          status: "pending",
+          paidAmount: 0,
+          date: serverTimestamp(),
+        });
+      }
+
+      alert(`${showEnroll.childName} inscrit(e) dans ${creneau.activityTitle} le ${new Date(creneau.date).toLocaleDateString("fr-FR")}${priceTTC > 0 ? `\n${priceTTC.toFixed(2)}€ ajouté aux impayés.` : ""}`);
       setShowEnroll(null);
       loadCreneaux();
+      fetchFamilies(); // Rafraîchir les données (balance, paiements)
     } catch (e) { console.error(e); alert("Erreur."); }
     setSaving(false);
   };
