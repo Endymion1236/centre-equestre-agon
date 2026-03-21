@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, getDocs, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { Save, Plus, Trash2, Loader2 } from "lucide-react";
+import { Save, Plus, Trash2, Loader2, AlertTriangle } from "lucide-react";
 
 const defaultAccounts = [
   { code: "70641000", label: "Animations collectivité", tva: "5.50%", affectation: "Animations CE, collectivités" },
@@ -27,7 +27,7 @@ const defaultAccounts = [
 ];
 
 export default function ParametresPage() {
-  const [section, setSection] = useState<"tarifs" | "reductions" | "degressivite" | "annulation" | "comptable" | "horaires" | "moniteurs">("tarifs");
+  const [section, setSection] = useState<"tarifs" | "reductions" | "degressivite" | "annulation" | "comptable" | "horaires" | "moniteurs" | "maintenance">("tarifs");
 
   const [multiStage, setMultiStage] = useState([
     { nth: 2, discount: 10 },
@@ -137,6 +137,7 @@ export default function ParametresPage() {
           ["comptable", "Plan comptable"],
           ["horaires", "Horaires"],
           ["moniteurs", "Moniteurs"],
+          ["maintenance", "Maintenance"],
         ] as const).map(([id, label]) => (
           <button key={id} onClick={() => setSection(id)}
             className={`px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all
@@ -637,6 +638,111 @@ export default function ParametresPage() {
             <Plus size={14} /> Ajouter un moniteur
           </button>
         </Card>
+      )}
+
+      {/* ─── Maintenance ─── */}
+      {section === "maintenance" && (
+        <div className="flex flex-col gap-5">
+          <Card padding="md" className="bg-orange-50 border-orange-200">
+            <div className="flex items-center gap-3 mb-2">
+              <AlertTriangle size={20} className="text-orange-500" />
+              <div className="font-body text-sm font-semibold text-orange-700">Zone de maintenance</div>
+            </div>
+            <p className="font-body text-xs text-orange-600">
+              Ces actions suppriment des données de façon irréversible. Utilisez-les uniquement pour nettoyer les données de test.
+              Les familles, cavaliers et la cavalerie ne sont PAS affectés.
+            </p>
+          </Card>
+
+          <Card padding="md">
+            <h3 className="font-body text-base font-semibold text-blue-800 mb-4">Nettoyer les données de test</h3>
+            <p className="font-body text-xs text-gray-400 mb-4">
+              Supprime toutes les données transactionnelles (paiements, réservations, forfaits, avoirs, créneaux, etc.)
+              tout en conservant les familles/cavaliers et la cavalerie intactes.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+              {[
+                { col: "payments", label: "Paiements & factures", color: "text-red-500" },
+                { col: "reservations", label: "Réservations", color: "text-red-500" },
+                { col: "forfaits", label: "Forfaits annuels", color: "text-red-500" },
+                { col: "avoirs", label: "Avoirs & avances", color: "text-red-500" },
+                { col: "creneaux", label: "Créneaux planning", color: "text-red-500" },
+                { col: "emailsReprise", label: "Emails envoyés", color: "text-orange-500" },
+                { col: "rdv_pro", label: "RDV professionnels", color: "text-orange-500" },
+                { col: "cartes", label: "Cartes & tickets", color: "text-red-500" },
+              ].map(item => (
+                <div key={item.col} className="flex items-center justify-between px-3 py-2 bg-sand rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <Trash2 size={12} className={item.color} />
+                    <span className="font-body text-sm text-blue-800">{item.label}</span>
+                  </div>
+                  <button onClick={async () => {
+                    if (!confirm(`Supprimer TOUS les ${item.label.toLowerCase()} ?\n\nCette action est irréversible.`)) return;
+                    try {
+                      const snap = await getDocs(collection(db, item.col));
+                      let count = 0;
+                      for (const d of snap.docs) {
+                        await deleteDoc(doc(db, item.col, d.id));
+                        count++;
+                      }
+                      alert(`${count} ${item.label.toLowerCase()} supprimé(s).`);
+                    } catch (e) { console.error(e); alert("Erreur."); }
+                  }} className="font-body text-[10px] text-red-500 bg-red-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-red-100">
+                    Vider
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t border-gray-200 pt-4">
+              <button onClick={async () => {
+                const msg = "TOUT SUPPRIMER ?\n\n" +
+                  "Cela va supprimer :\n" +
+                  "- Tous les paiements et factures\n" +
+                  "- Toutes les réservations\n" +
+                  "- Tous les forfaits\n" +
+                  "- Tous les avoirs\n" +
+                  "- Tous les créneaux du planning\n" +
+                  "- Tous les emails envoyés\n" +
+                  "- Tous les RDV pro\n" +
+                  "- Toutes les cartes/tickets\n\n" +
+                  "CONSERVÉ : familles, cavaliers, cavalerie, soins, registre, activités, paramètres.\n\n" +
+                  "Tapez NETTOYER pour confirmer.";
+                const input = prompt(msg);
+                if (input !== "NETTOYER") { if (input !== null) alert("Confirmation incorrecte."); return; }
+
+                const collections = ["payments", "reservations", "forfaits", "avoirs", "creneaux", "emailsReprise", "rdv_pro", "cartes"];
+                let total = 0;
+                for (const col of collections) {
+                  try {
+                    const snap = await getDocs(collection(db, col));
+                    for (const d of snap.docs) {
+                      await deleteDoc(doc(db, col, d.id));
+                      total++;
+                    }
+                  } catch (e) { console.error(`Erreur sur ${col}:`, e); }
+                }
+                alert(`Nettoyage terminé : ${total} documents supprimés.\n\nLes familles et la cavalerie sont intactes.`);
+              }} className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-red-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-red-600">
+                <Trash2 size={16} /> Tout nettoyer (confirmation requise)
+              </button>
+            </div>
+          </Card>
+
+          <Card padding="md">
+            <h3 className="font-body text-base font-semibold text-blue-800 mb-2">Données préservées</h3>
+            <p className="font-body text-xs text-gray-400 mb-3">Ces collections ne sont jamais supprimées par le nettoyage :</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                "Familles & cavaliers", "Équidés (cavalerie)", "Soins vétérinaires",
+                "Registre d'élevage", "Indisponibilités", "Documents équidés",
+                "Activités", "Paramètres & tarifs",
+              ].map(item => (
+                <div key={item} className="font-body text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-lg">{item}</div>
+              ))}
+            </div>
+          </Card>
+        </div>
       )}
     </div>
   );
