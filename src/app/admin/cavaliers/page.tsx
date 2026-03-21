@@ -321,16 +321,18 @@ export default function CavaliersPage() {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex items-start justify-between mb-5">
-                        <div className="grid grid-cols-3 gap-4 flex-1">
-                          <div><div className="font-body text-[11px] font-semibold text-gray-400">Email</div><div className="font-body text-sm text-blue-800">{family.parentEmail || "—"}</div></div>
+                      <div className="mb-5">
+                        <div className="flex justify-end mb-2">
+                          <button onClick={() => startEditFamily(family)}
+                            className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
+                            <Edit3 size={12} /> Modifier
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div><div className="font-body text-[11px] font-semibold text-gray-400">Email</div><div className="font-body text-sm text-blue-800 break-all">{family.parentEmail || "—"}</div></div>
                           <div><div className="font-body text-[11px] font-semibold text-gray-400">Téléphone</div><div className="font-body text-sm text-blue-800">{family.parentPhone || "Non renseigné"}</div></div>
                           <div><div className="font-body text-[11px] font-semibold text-gray-400">Inscription</div><div className="font-body text-sm text-blue-800">{(family as any).authProvider === "admin" ? "Créé par l'admin" : `Via ${(family as any).authProvider}`}</div></div>
                         </div>
-                        <button onClick={() => startEditFamily(family)}
-                          className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1 flex-shrink-0">
-                          <Edit3 size={12} /> Modifier
-                        </button>
                       </div>
                     )}
 
@@ -341,19 +343,19 @@ export default function CavaliersPage() {
                     ) : (
                       <div className="flex flex-col gap-2 mb-3">
                         {children.map((child: any) => (
-                          <div key={child.id} className="flex items-center justify-between bg-sand rounded-lg px-4 py-3">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                          <div key={child.id} className="bg-sand rounded-lg px-4 py-3">
+                            <div className="flex items-center gap-3 mb-2">
+                              <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
                                 <Users size={14} className="text-blue-500" />
                               </div>
-                              <div>
+                              <div className="flex-1 min-w-0">
                                 <div className="font-body text-sm font-semibold text-blue-800">{child.firstName}</div>
                                 <div className="font-body text-xs text-gray-400">
                                   {child.birthDate ? `Né(e) le ${new Date(typeof child.birthDate === "string" ? child.birthDate : child.birthDate?.seconds ? child.birthDate.seconds * 1000 : child.birthDate).toLocaleDateString("fr-FR")}` : ""}
                                 </div>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap pl-11">
                               {/* Galop */}
                               {editingGalop?.familyId === family.firestoreId && editingGalop?.childId === child.id ? (
                                 <select defaultValue={child.galopLevel || "—"} onChange={(e) => handleUpdateGalop(family.firestoreId, child.id, e.target.value)} onBlur={() => setEditingGalop(null)} autoFocus
