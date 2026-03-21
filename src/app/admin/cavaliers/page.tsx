@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, Timestamp, query, where } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, Timestamp, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import {
   Search, ChevronDown, ChevronUp, Loader2, Users, UserCheck, AlertTriangle,
-  Plus, X, Save, UserPlus, Phone, Mail, Calendar, Edit3, Trash2, CalendarDays,
+  Plus, X, Save, UserPlus, Phone, Mail, Calendar, Edit3, Trash2, CalendarDays, GitMerge,
 } from "lucide-react";
 import type { Family } from "@/types";
 
@@ -47,6 +47,14 @@ export default function CavaliersPage() {
   const [showEnroll, setShowEnroll] = useState<{ familyId: string; childId: string; childName: string } | null>(null);
   const [creneaux, setCreneaux] = useState<any[]>([]);
   const [enrollSearch, setEnrollSearch] = useState("");
+
+  // ─── Modifier infos parent ───
+  const [editingParent, setEditingParent] = useState<string | null>(null);
+  const [editParentForm, setEditParentForm] = useState({ parentName: "", parentEmail: "", parentPhone: "" });
+
+  // ─── Fusionner familles ───
+  const [showMerge, setShowMerge] = useState<string | null>(null); // ID de la famille source
+  const [mergeTarget, setMergeTarget] = useState(""); // ID de la famille cible
 
   const fetchFamilies = async () => {
     try {
@@ -285,6 +293,78 @@ export default function CavaliersPage() {
     setSaving(false);
   };
 
+  // ─── Supprimer une famille ───
+  const handleDeleteFamily = async (familyId: string, familyName: string) => {
+    const children = families.find(f => f.firestoreId === familyId)?.children || [];
+    const msg = children.length > 0
+      ? `Supprimer la famille "${familyName}" et ses ${children.length} cavalier(s) ?\n\nCette action est irréversible. Les réservations et paiements associés ne seront PAS supprimés.`
+      : `Supprimer la famille "${familyName}" ?\n\nCette action est irréversible.`;
+    if (!confirm(msg)) return;
+    setSaving(true);
+    try {
+      await deleteDoc(doc(db, "families", familyId));
+      fetchFamilies();
+    } catch (e) { console.error(e); alert("Erreur lors de la suppression."); }
+    setSaving(false);
+  };
+
+  // ─── Modifier infos parent ───
+  const handleUpdateParent = async (familyId: string) => {
+    if (!editParentForm.parentName.trim()) return;
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, "families", familyId), {
+        parentName: editParentForm.parentName.trim(),
+        parentEmail: editParentForm.parentEmail.trim(),
+        parentPhone: editParentForm.parentPhone.trim(),
+        updatedAt: serverTimestamp(),
+      });
+      setEditingParent(null);
+      fetchFamilies();
+    } catch (e) { console.error(e); alert("Erreur."); }
+    setSaving(false);
+  };
+
+  // ─── Fusionner deux familles ───
+  const handleMerge = async () => {
+    if (!showMerge || !mergeTarget || showMerge === mergeTarget) return;
+    const source = families.find(f => f.firestoreId === showMerge);
+    const target = families.find(f => f.firestoreId === mergeTarget);
+    if (!source || !target) return;
+
+    const msg = `Fusionner "${source.parentName}" → "${target.parentName}" ?\n\n` +
+      `Les ${(source.children || []).length} cavalier(s) de "${source.parentName}" seront ajoutés à "${target.parentName}".\n` +
+      `La fiche "${source.parentName}" sera ensuite supprimée.\n\n` +
+      `Les réservations et paiements liés à l'ancienne fiche ne seront PAS transférés automatiquement.`;
+    if (!confirm(msg)) return;
+
+    setSaving(true);
+    try {
+      // Fusionner les enfants (éviter les doublons par prénom)
+      const existingNames = (target.children || []).map((c: any) => c.firstName?.toLowerCase());
+      const newChildren = (source.children || []).filter((c: any) =>
+        !existingNames.includes(c.firstName?.toLowerCase())
+      );
+      const mergedChildren = [...(target.children || []), ...newChildren];
+
+      // Mettre à jour la cible avec les enfants fusionnés
+      await updateDoc(doc(db, "families", mergeTarget), {
+        children: mergedChildren,
+        parentPhone: target.parentPhone || source.parentPhone || "",
+        updatedAt: serverTimestamp(),
+      });
+
+      // Supprimer la source
+      await deleteDoc(doc(db, "families", showMerge));
+
+      setShowMerge(null);
+      setMergeTarget("");
+      fetchFamilies();
+      alert(`Fusion terminée. ${newChildren.length} cavalier(s) ajouté(s) à "${target.parentName}".`);
+    } catch (e) { console.error(e); alert("Erreur lors de la fusion."); }
+    setSaving(false);
+  };
+
   const allChildren = families.flatMap((f) => (f.children || []).map((c: any) => ({ ...c, familyName: f.parentName })));
   const missingForms = allChildren.filter((c) => !c.sanitaryForm).length;
 
@@ -398,10 +478,18 @@ export default function CavaliersPage() {
                       </div>
                     ) : (
                       <div className="mb-5">
-                        <div className="flex justify-end mb-2">
+                        <div className="flex justify-end mb-2 gap-2">
+                          <button onClick={() => { setShowMerge(family.firestoreId); setMergeTarget(""); }}
+                            className="font-body text-xs text-purple-500 bg-purple-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-purple-100 flex items-center gap-1">
+                            <GitMerge size={12} /> Fusionner
+                          </button>
                           <button onClick={() => startEditFamily(family)}
                             className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
                             <Edit3 size={12} /> Modifier
+                          </button>
+                          <button onClick={() => handleDeleteFamily(family.firestoreId, family.parentName)}
+                            className="font-body text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-100 flex items-center gap-1">
+                            <Trash2 size={12} /> Supprimer
                           </button>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -722,6 +810,64 @@ export default function CavaliersPage() {
                     })}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ MODAL : Fusionner des familles ═══ */}
+      {showMerge && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={() => setShowMerge(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-5 border-b border-gray-100">
+              <div>
+                <h2 className="font-display text-lg font-bold text-blue-800">Fusionner des familles</h2>
+                <p className="font-body text-xs text-gray-400">Les cavaliers seront regroupés dans la famille cible</p>
+              </div>
+              <button onClick={() => setShowMerge(null)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none hover:bg-gray-200"><X size={16} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className={labelStyle}>Famille à supprimer (source)</label>
+                <div className="px-3 py-2.5 rounded-lg bg-red-50 border border-red-200 font-body text-sm text-red-700">
+                  {families.find(f => f.firestoreId === showMerge)?.parentName || "?"} — {(families.find(f => f.firestoreId === showMerge)?.children || []).length} cavalier(s)
+                </div>
+              </div>
+              <div className="text-center font-body text-xs text-gray-400">↓ ses cavaliers seront ajoutés à ↓</div>
+              <div>
+                <label className={labelStyle}>Famille à conserver (cible)</label>
+                <select className={inputStyle} value={mergeTarget} onChange={e => setMergeTarget(e.target.value)}>
+                  <option value="">— Sélectionner la famille cible —</option>
+                  {families.filter(f => f.firestoreId !== showMerge).map(f => (
+                    <option key={f.firestoreId} value={f.firestoreId}>
+                      {f.parentName} ({(f.children || []).length} cavalier{(f.children || []).length > 1 ? "s" : ""}) — {f.parentEmail || "pas d'email"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {mergeTarget && (
+                <div className="bg-blue-50 rounded-lg p-3">
+                  <div className="font-body text-xs font-semibold text-blue-800 mb-1">Résultat après fusion :</div>
+                  <div className="font-body text-xs text-gray-600">
+                    {(() => {
+                      const source = families.find(f => f.firestoreId === showMerge);
+                      const target = families.find(f => f.firestoreId === mergeTarget);
+                      if (!source || !target) return "";
+                      const existingNames = (target.children || []).map((c: any) => c.firstName?.toLowerCase());
+                      const newOnes = (source.children || []).filter((c: any) => !existingNames.includes(c.firstName?.toLowerCase()));
+                      const dupes = (source.children || []).length - newOnes.length;
+                      return `${target.parentName} aura ${(target.children || []).length + newOnes.length} cavalier(s) (${newOnes.length} ajouté(s)${dupes > 0 ? `, ${dupes} doublon(s) ignoré(s)` : ""})`;
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
+              <button onClick={() => setShowMerge(null)} className="font-body text-sm text-gray-500 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+              <button onClick={handleMerge} disabled={saving || !mergeTarget}
+                className={`flex items-center gap-2 font-body text-sm font-semibold text-white bg-purple-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-purple-600 ${saving || !mergeTarget ? "opacity-50 cursor-not-allowed" : ""}`}>
+                {saving ? <Loader2 size={16} className="animate-spin" /> : <GitMerge size={16} />} Fusionner
+              </button>
             </div>
           </div>
         </div>
