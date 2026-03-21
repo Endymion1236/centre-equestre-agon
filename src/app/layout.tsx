@@ -19,6 +19,10 @@ export const metadata: Metadata = {
     "pony games",
     "mini-ferme",
   ],
+  icons: {
+    icon: "/images/favicon.ico",
+    apple: "/images/logo-ce-agon.png",
+  },
   openGraph: {
     title: "Centre Équestre d'Agon-Coutainville",
     description:

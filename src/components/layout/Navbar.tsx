@@ -38,18 +38,11 @@ export function Navbar() {
       <div className="max-w-[1180px] mx-auto px-6 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3 no-underline">
-          <div
-            className={`
-              w-11 h-11 rounded-xl flex items-center justify-center
-              font-display text-sm font-bold text-white transition-all duration-400
-              ${scrolled
-                ? "bg-gradient-to-br from-blue-500 to-blue-600"
-                : "bg-white/10 border border-white/12"
-              }
-            `}
-          >
-            CE
-          </div>
+          <img
+            src="/images/logo-ce-agon.png"
+            alt="Centre Équestre Agon"
+            className="w-11 h-11 rounded-xl object-contain"
+          />
           <div>
             <div
               className={`font-display font-bold text-[15px] leading-tight transition-colors duration-400 ${

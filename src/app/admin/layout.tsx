@@ -63,9 +63,12 @@ function AdminSidebar() {
 
   return (
     <div className="w-[210px] bg-blue-800 p-2 flex flex-col gap-0.5 flex-shrink-0 min-h-screen hidden md:flex">
-      <div className="px-3 py-3 pb-5">
-        <div className="font-display text-sm font-bold text-white">Centre Equestre</div>
-        <div className="font-body text-[10px] text-white/40 uppercase tracking-widest mt-0.5">Administration</div>
+      <div className="px-3 py-3 pb-5 flex items-center gap-2.5">
+        <img src="/images/logo-ce-agon.png" alt="Logo" className="w-9 h-9 rounded-lg object-contain" />
+        <div>
+          <div className="font-display text-sm font-bold text-white">Centre Equestre</div>
+          <div className="font-body text-[10px] text-white/40 uppercase tracking-widest mt-0.5">Administration</div>
+        </div>
       </div>
 
       {navItems.map((item) => {

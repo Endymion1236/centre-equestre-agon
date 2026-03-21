@@ -7,8 +7,11 @@ export function Footer() {
       <div className="max-w-[1180px] mx-auto flex flex-wrap gap-12">
         {/* Brand */}
         <div className="flex-1 min-w-[240px]">
-          <div className="font-display text-lg font-bold text-white mb-2">
-            Centre Equestre
+          <div className="flex items-center gap-3 mb-2">
+            <img src="/images/logo-ce-agon.png" alt="Logo CE Agon" className="w-10 h-10 rounded-lg object-contain" />
+            <div className="font-display text-lg font-bold text-white">
+              Centre Equestre
+            </div>
           </div>
           <p className="font-body text-sm text-white/40 leading-relaxed mb-5">
             Poney Club d&apos;Agon-Coutainville
