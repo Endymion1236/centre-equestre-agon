@@ -468,7 +468,7 @@ export default function CavaleriePage() {
 
           await updateDoc(doc(db, "equides", mouvForm.equideId), {
             status: newStatus,
-            dateSortieDef: mouvForm.date,
+            dateSortie: mouvForm.date,
             updatedAt: serverTimestamp(),
           });
         }
@@ -1258,6 +1258,56 @@ export default function CavaleriePage() {
                     placeholder="Informations complémentaires…" />
                 </div>
               </div>
+
+              {/* Mouvements & date de sortie (seulement en édition) */}
+              {editingId && (
+                <div>
+                  <div className="font-body text-xs font-semibold text-blue-500 uppercase tracking-wider mb-3">Historique des mouvements</div>
+                  {(() => {
+                    const eqMouvs = mouvements.filter(m => m.equideId === editingId).sort((a: any, b: any) => {
+                      const da = a.date?.seconds ? a.date.seconds : 0;
+                      const db2 = b.date?.seconds ? b.date.seconds : 0;
+                      return db2 - da;
+                    });
+                    const eq = equides.find(e => e.id === editingId);
+                    return (
+                      <>
+                        {/* Date de sortie définitive */}
+                        {(eq?.status === "sorti" || eq?.status === "deces" || eq?.status === "retraite") && (
+                          <div className="bg-red-50 rounded-lg p-3 mb-3">
+                            <div className="font-body text-xs font-semibold text-red-500 uppercase mb-1">Sortie définitive</div>
+                            <div className="font-body text-sm text-red-700">
+                              Statut : {eq?.status === "deces" ? "Décédé" : eq?.status === "retraite" ? "Retraite" : "Sorti"}
+                              {eq?.dateSortie && <> · Date : {new Date(eq.dateSortie).toLocaleDateString("fr-FR")}</>}
+                            </div>
+                          </div>
+                        )}
+                        {eqMouvs.length === 0 ? (
+                          <p className="font-body text-xs text-gray-400 italic">Aucun mouvement enregistré pour cet équidé.</p>
+                        ) : (
+                          <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto">
+                            {eqMouvs.map((m: any) => (
+                              <div key={m.id} className={`flex items-center gap-2 font-body text-xs py-2 px-3 rounded-lg ${m.type === "entree" ? "bg-green-50" : m.temporaire ? "bg-orange-50" : "bg-red-50"}`}>
+                                <span className={`font-semibold min-w-[50px] ${m.type === "entree" ? "text-green-600" : m.temporaire ? "text-orange-500" : "text-red-500"}`}>
+                                  {m.type === "entree" ? "Entrée" : m.temporaire ? "Temp." : "Sortie"}
+                                </span>
+                                <span className="text-gray-400">{formatDate(m.date)}</span>
+                                <span className="text-blue-800 font-semibold">{m.motif}</span>
+                                {m.provenance && <span className="text-gray-400">de {m.provenance}</span>}
+                                {m.destination && <span className="text-gray-400">vers {m.destination}</span>}
+                                {m.temporaire && m.dateRetour && <span className="text-orange-500">Retour : {formatDate(m.dateRetour)}</span>}
+                                {m.prixAchat && <span className="text-gray-400">Achat : {m.prixAchat}€</span>}
+                                {m.prixVente && <span className="text-gray-400">Vente : {m.prixVente}€</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <p className="font-body text-[10px] text-gray-400 mt-2">Pour ajouter un mouvement, utilisez l'onglet "Registre".</p>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
