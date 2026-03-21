@@ -35,6 +35,14 @@ export default function CavaliersPage() {
   const [addChildTo, setAddChildTo] = useState<string | null>(null);
   const [newChildForm, setNewChildForm] = useState({ firstName: "", birthDate: "", galopLevel: "—" });
 
+  // ─── Édition d'un enfant existant ───
+  const [editingChild, setEditingChild] = useState<{ familyId: string; childId: string } | null>(null);
+  const [editChildForm, setEditChildForm] = useState({ firstName: "", birthDate: "", galopLevel: "—" });
+
+  // ─── Fiche sanitaire ───
+  const [editingSanitary, setEditingSanitary] = useState<{ familyId: string; childId: string } | null>(null);
+  const [sanitaryForm, setSanitaryForm] = useState({ allergies: "", medicalNotes: "", emergencyContactName: "", emergencyContactPhone: "", authorization: true });
+
   // ─── Inscription dans un créneau ───
   const [showEnroll, setShowEnroll] = useState<{ familyId: string; childId: string; childName: string } | null>(null);
   const [creneaux, setCreneaux] = useState<any[]>([]);
@@ -145,6 +153,74 @@ export default function CavaliersPage() {
       setEditingFamily(null);
       fetchFamilies();
     } catch (e) { console.error(e); alert("Erreur de sauvegarde."); }
+    setSaving(false);
+  };
+
+  // ─── Modifier un enfant ───
+  const startEditChild = (familyId: string, child: any) => {
+    setEditingChild({ familyId, childId: child.id });
+    const bd = child.birthDate;
+    const dateStr = bd ? (typeof bd === "string" ? bd.split("T")[0] : bd?.seconds ? new Date(bd.seconds * 1000).toISOString().split("T")[0] : bd instanceof Date ? bd.toISOString().split("T")[0] : "") : "";
+    setEditChildForm({ firstName: child.firstName || "", birthDate: dateStr, galopLevel: child.galopLevel || "—" });
+  };
+
+  const handleSaveChild = async () => {
+    if (!editingChild) return;
+    setSaving(true);
+    const family = families.find(f => f.firestoreId === editingChild.familyId);
+    if (!family) return;
+    const updated = (family.children || []).map((c: any) =>
+      c.id === editingChild.childId ? {
+        ...c,
+        firstName: editChildForm.firstName.trim(),
+        birthDate: editChildForm.birthDate ? new Date(editChildForm.birthDate) : c.birthDate,
+        galopLevel: editChildForm.galopLevel,
+      } : c
+    );
+    try {
+      await updateDoc(doc(db, "families", editingChild.familyId), { children: updated, updatedAt: serverTimestamp() });
+      setEditingChild(null);
+      fetchFamilies();
+    } catch (e) { console.error(e); }
+    setSaving(false);
+  };
+
+  // ─── Supprimer un enfant ───
+  const handleDeleteChild = async (familyId: string, childId: string, childName: string) => {
+    if (!confirm(`Supprimer ${childName} de cette famille ?`)) return;
+    const family = families.find(f => f.firestoreId === familyId);
+    if (!family) return;
+    const updated = (family.children || []).filter((c: any) => c.id !== childId);
+    await updateDoc(doc(db, "families", familyId), { children: updated, updatedAt: serverTimestamp() });
+    fetchFamilies();
+  };
+
+  // ─── Fiche sanitaire ───
+  const startEditSanitary = (familyId: string, child: any) => {
+    setEditingSanitary({ familyId, childId: child.id });
+    const sf = child.sanitaryForm || {};
+    setSanitaryForm({
+      allergies: sf.allergies || "",
+      medicalNotes: sf.medicalNotes || "",
+      emergencyContactName: sf.emergencyContactName || "",
+      emergencyContactPhone: sf.emergencyContactPhone || "",
+      authorization: sf.authorization !== false,
+    });
+  };
+
+  const handleSaveSanitary = async () => {
+    if (!editingSanitary) return;
+    setSaving(true);
+    const family = families.find(f => f.firestoreId === editingSanitary.familyId);
+    if (!family) return;
+    const updated = (family.children || []).map((c: any) =>
+      c.id === editingSanitary.childId ? { ...c, sanitaryForm: { ...sanitaryForm } } : c
+    );
+    try {
+      await updateDoc(doc(db, "families", editingSanitary.familyId), { children: updated, updatedAt: serverTimestamp() });
+      setEditingSanitary(null);
+      fetchFamilies();
+    } catch (e) { console.error(e); }
     setSaving(false);
   };
 
@@ -344,39 +420,122 @@ export default function CavaliersPage() {
                       <div className="flex flex-col gap-2 mb-3">
                         {children.map((child: any) => (
                           <div key={child.id} className="bg-sand rounded-lg px-4 py-3">
-                            <div className="flex items-center gap-3 mb-2">
-                              <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-                                <Users size={14} className="text-blue-500" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="font-body text-sm font-semibold text-blue-800">{child.firstName}</div>
-                                <div className="font-body text-xs text-gray-400">
-                                  {child.birthDate ? `Né(e) le ${new Date(typeof child.birthDate === "string" ? child.birthDate : child.birthDate?.seconds ? child.birthDate.seconds * 1000 : child.birthDate).toLocaleDateString("fr-FR")}` : ""}
+                            {/* Mode édition enfant */}
+                            {editingChild?.familyId === family.firestoreId && editingChild?.childId === child.id ? (
+                              <div className="flex flex-col gap-2">
+                                <div className="font-body text-xs font-semibold text-blue-500 uppercase">Modifier le cavalier</div>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                  <input value={editChildForm.firstName} onChange={e => setEditChildForm({ ...editChildForm, firstName: e.target.value })}
+                                    className={inputStyle} placeholder="Prénom" />
+                                  <input type="date" value={editChildForm.birthDate} onChange={e => setEditChildForm({ ...editChildForm, birthDate: e.target.value })}
+                                    className={inputStyle} />
+                                  <select value={editChildForm.galopLevel} onChange={e => setEditChildForm({ ...editChildForm, galopLevel: e.target.value })}
+                                    className={inputStyle}>
+                                    {galopLevels.map(g => <option key={g} value={g}>{g === "—" ? "Débutant" : `Galop ${g}`}</option>)}
+                                  </select>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button onClick={handleSaveChild} disabled={saving}
+                                    className="flex items-center gap-1 font-body text-xs font-semibold text-white bg-blue-500 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                                    {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer
+                                  </button>
+                                  <button onClick={() => setEditingChild(null)}
+                                    className="font-body text-xs text-gray-500 bg-white px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
                                 </div>
                               </div>
-                            </div>
-                            <div className="flex items-center gap-2 flex-wrap pl-11">
-                              {/* Galop */}
-                              {editingGalop?.familyId === family.firestoreId && editingGalop?.childId === child.id ? (
-                                <select defaultValue={child.galopLevel || "—"} onChange={(e) => handleUpdateGalop(family.firestoreId, child.id, e.target.value)} onBlur={() => setEditingGalop(null)} autoFocus
-                                  className="px-2 py-1 rounded border border-blue-500 font-body text-xs bg-white focus:outline-none">
-                                  {galopLevels.map((g) => <option key={g} value={g}>{g}</option>)}
-                                </select>
-                              ) : (
-                                <button onClick={(e) => { e.stopPropagation(); setEditingGalop({ familyId: family.firestoreId, childId: child.id }); }}
-                                  className="bg-transparent border-none cursor-pointer" title="Modifier le niveau">
-                                  <Badge color={child.galopLevel && child.galopLevel !== "—" ? "blue" : "gray"}>
-                                    {child.galopLevel && child.galopLevel !== "—" ? `Galop ${child.galopLevel}` : "Débutant"}
-                                  </Badge>
-                                </button>
-                              )}
-                              {child.sanitaryForm ? <Badge color="green">Fiche OK</Badge> : <Badge color="red">Fiche manquante</Badge>}
-                              {/* Bouton inscrire */}
-                              <button onClick={(e) => { e.stopPropagation(); setShowEnroll({ familyId: family.firestoreId, childId: child.id, childName: child.firstName }); loadCreneaux(); }}
-                                className="font-body text-xs text-blue-500 bg-blue-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
-                                <CalendarDays size={12} /> Inscrire
-                              </button>
-                            </div>
+                            ) : editingSanitary?.familyId === family.firestoreId && editingSanitary?.childId === child.id ? (
+                              /* Mode édition fiche sanitaire */
+                              <div className="flex flex-col gap-2">
+                                <div className="font-body text-xs font-semibold text-green-600 uppercase">Fiche sanitaire — {child.firstName}</div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="font-body text-[10px] text-gray-400 block mb-0.5">Allergies / Régime</label>
+                                    <input value={sanitaryForm.allergies} onChange={e => setSanitaryForm({ ...sanitaryForm, allergies: e.target.value })}
+                                      className={inputStyle} placeholder="Aucune" />
+                                  </div>
+                                  <div>
+                                    <label className="font-body text-[10px] text-gray-400 block mb-0.5">Notes médicales</label>
+                                    <input value={sanitaryForm.medicalNotes} onChange={e => setSanitaryForm({ ...sanitaryForm, medicalNotes: e.target.value })}
+                                      className={inputStyle} placeholder="Asthme, lunettes..." />
+                                  </div>
+                                  <div>
+                                    <label className="font-body text-[10px] text-gray-400 block mb-0.5">Contact urgence (nom)</label>
+                                    <input value={sanitaryForm.emergencyContactName} onChange={e => setSanitaryForm({ ...sanitaryForm, emergencyContactName: e.target.value })}
+                                      className={inputStyle} placeholder="Maman, Papa, Grand-mère..." />
+                                  </div>
+                                  <div>
+                                    <label className="font-body text-[10px] text-gray-400 block mb-0.5">Téléphone urgence</label>
+                                    <input type="tel" value={sanitaryForm.emergencyContactPhone} onChange={e => setSanitaryForm({ ...sanitaryForm, emergencyContactPhone: e.target.value })}
+                                      className={inputStyle} placeholder="06 00 00 00 00" />
+                                  </div>
+                                </div>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input type="checkbox" checked={sanitaryForm.authorization} onChange={e => setSanitaryForm({ ...sanitaryForm, authorization: e.target.checked })}
+                                    className="w-4 h-4 accent-blue-500" />
+                                  <span className="font-body text-xs text-gray-600">Autorisation parentale de transport en cas d&apos;urgence</span>
+                                </label>
+                                <div className="flex gap-2">
+                                  <button onClick={handleSaveSanitary} disabled={saving}
+                                    className="flex items-center gap-1 font-body text-xs font-semibold text-white bg-green-600 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                                    {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer la fiche
+                                  </button>
+                                  <button onClick={() => setEditingSanitary(null)}
+                                    className="font-body text-xs text-gray-500 bg-white px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                                </div>
+                              </div>
+                            ) : (
+                              /* Mode lecture */
+                              <>
+                                <div className="flex items-center gap-3 mb-2">
+                                  <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                                    <Users size={14} className="text-blue-500" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-body text-sm font-semibold text-blue-800">{child.firstName}</div>
+                                    <div className="font-body text-xs text-gray-400">
+                                      {child.birthDate ? `Né(e) le ${new Date(typeof child.birthDate === "string" ? child.birthDate : child.birthDate?.seconds ? child.birthDate.seconds * 1000 : child.birthDate).toLocaleDateString("fr-FR")}` : ""}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 flex-wrap pl-11">
+                                  {/* Galop */}
+                                  {editingGalop?.familyId === family.firestoreId && editingGalop?.childId === child.id ? (
+                                    <select defaultValue={child.galopLevel || "—"} onChange={(e) => handleUpdateGalop(family.firestoreId, child.id, e.target.value)} onBlur={() => setEditingGalop(null)} autoFocus
+                                      className="px-2 py-1 rounded border border-blue-500 font-body text-xs bg-white focus:outline-none">
+                                      {galopLevels.map((g) => <option key={g} value={g}>{g}</option>)}
+                                    </select>
+                                  ) : (
+                                    <button onClick={(e) => { e.stopPropagation(); setEditingGalop({ familyId: family.firestoreId, childId: child.id }); }}
+                                      className="bg-transparent border-none cursor-pointer" title="Modifier le niveau">
+                                      <Badge color={child.galopLevel && child.galopLevel !== "—" ? "blue" : "gray"}>
+                                        {child.galopLevel && child.galopLevel !== "—" ? `Galop ${child.galopLevel}` : "Débutant"}
+                                      </Badge>
+                                    </button>
+                                  )}
+                                  {child.sanitaryForm ? (
+                                    <button onClick={() => startEditSanitary(family.firestoreId, child)} className="bg-transparent border-none cursor-pointer">
+                                      <Badge color="green">Fiche OK</Badge>
+                                    </button>
+                                  ) : (
+                                    <button onClick={() => startEditSanitary(family.firestoreId, child)} className="bg-transparent border-none cursor-pointer">
+                                      <Badge color="red">Fiche manquante</Badge>
+                                    </button>
+                                  )}
+                                  <button onClick={(e) => { e.stopPropagation(); setShowEnroll({ familyId: family.firestoreId, childId: child.id, childName: child.firstName }); loadCreneaux(); }}
+                                    className="font-body text-xs text-blue-500 bg-blue-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
+                                    <CalendarDays size={12} /> Inscrire
+                                  </button>
+                                  <button onClick={() => startEditChild(family.firestoreId, child)}
+                                    className="font-body text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-lg border-none cursor-pointer hover:bg-gray-200 flex items-center gap-1">
+                                    <Edit3 size={10} /> Modifier
+                                  </button>
+                                  <button onClick={() => handleDeleteChild(family.firestoreId, child.id, child.firstName)}
+                                    className="font-body text-xs text-red-400 bg-red-50 px-2 py-1 rounded-lg border-none cursor-pointer hover:bg-red-100 flex items-center gap-1">
+                                    <Trash2 size={10} /> Suppr.
+                                  </button>
+                                </div>
+                              </>
+                            )}
                           </div>
                         ))}
                       </div>
