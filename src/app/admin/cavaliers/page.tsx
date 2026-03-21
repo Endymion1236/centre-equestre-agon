@@ -6,7 +6,7 @@ import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import {
   Search, ChevronDown, ChevronUp, Loader2, Users, UserCheck, AlertTriangle,
-  Plus, X, Save, UserPlus, Phone, Mail, Calendar, Edit3, Trash2, CalendarDays, GitMerge,
+  Plus, X, Save, UserPlus, Phone, Mail, Calendar, Edit3, Trash2, CalendarDays, GitMerge, Receipt, Clock,
 } from "lucide-react";
 import type { Family } from "@/types";
 
@@ -18,6 +18,10 @@ export default function CavaliersPage() {
   const [search, setSearch] = useState("");
   const [expandedFamily, setExpandedFamily] = useState<string | null>(null);
   const [editingGalop, setEditingGalop] = useState<{ familyId: string; childId: string } | null>(null);
+
+  // ─── Réservations & paiements par famille ───
+  const [allReservations, setAllReservations] = useState<any[]>([]);
+  const [allPayments, setAllPayments] = useState<any[]>([]);
 
   // ─── Édition infos famille ───
   const [editingFamily, setEditingFamily] = useState<string | null>(null);
@@ -58,13 +62,32 @@ export default function CavaliersPage() {
 
   const fetchFamilies = async () => {
     try {
-      const snap = await getDocs(collection(db, "families"));
-      setFamilies(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as (Family & { firestoreId: string })[]);
+      const [famSnap, resSnap, paySnap] = await Promise.all([
+        getDocs(collection(db, "families")),
+        getDocs(collection(db, "reservations")),
+        getDocs(collection(db, "payments")),
+      ]);
+      setFamilies(famSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as (Family & { firestoreId: string })[]);
+      setAllReservations(resSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setAllPayments(paySnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (e) { console.error(e); }
     setLoading(false);
   };
 
   useEffect(() => { fetchFamilies(); }, []);
+
+  // ─── Helpers : données par famille ───
+  const getReservationsForFamily = (familyId: string) => {
+    return allReservations
+      .filter(r => r.familyId === familyId)
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  };
+
+  const getPaymentsForFamily = (familyId: string) => {
+    return allPayments
+      .filter(p => p.familyId === familyId)
+      .sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
+  };
 
   // ─── Créer une nouvelle famille ───
   const handleCreateFamily = async () => {
@@ -678,6 +701,107 @@ export default function CavaliersPage() {
                         ))}
                       </div>
                     )}
+
+                    {/* ─── Réservations ─── */}
+                    {(() => {
+                      const reservations = getReservationsForFamily(family.firestoreId);
+                      const today = new Date().toISOString().split("T")[0];
+                      const upcoming = reservations.filter(r => r.date >= today);
+                      const past = reservations.filter(r => r.date < today).slice(0, 5);
+                      return (reservations.length > 0 || true) ? (
+                        <div className="mt-4 pt-3 border-t border-blue-500/8">
+                          <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                            <CalendarDays size={12} /> Réservations ({reservations.length})
+                          </div>
+                          {reservations.length === 0 ? (
+                            <p className="font-body text-xs text-gray-400 italic">Aucune réservation.</p>
+                          ) : (
+                            <div className="flex flex-col gap-1">
+                              {upcoming.length > 0 && (
+                                <>
+                                  <div className="font-body text-[10px] text-green-600 font-semibold mt-1 mb-0.5">A venir ({upcoming.length})</div>
+                                  {upcoming.slice(0, 8).map((r: any) => (
+                                    <div key={r.id} className="flex items-center justify-between font-body text-xs py-1.5 px-3 bg-green-50 rounded-lg">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-green-700 font-semibold">{new Date(r.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</span>
+                                        <span className="text-gray-500">{r.startTime}–{r.endTime}</span>
+                                        <span className="text-blue-800 font-semibold">{r.activityTitle}</span>
+                                        <span className="text-gray-400">({r.childName})</span>
+                                      </div>
+                                      <Badge color={r.status === "confirmed" ? "green" : r.status === "cancelled" ? "red" : "gray"}>
+                                        {r.status === "confirmed" ? "Confirmée" : r.status === "cancelled" ? "Annulée" : r.status}
+                                      </Badge>
+                                    </div>
+                                  ))}
+                                </>
+                              )}
+                              {past.length > 0 && (
+                                <>
+                                  <div className="font-body text-[10px] text-gray-400 font-semibold mt-2 mb-0.5">Passées (dernières {past.length})</div>
+                                  {past.map((r: any) => (
+                                    <div key={r.id} className="flex items-center justify-between font-body text-xs py-1 px-3 text-gray-400">
+                                      <div className="flex items-center gap-2">
+                                        <span>{new Date(r.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span>
+                                        <span>{r.activityTitle}</span>
+                                        <span>({r.childName})</span>
+                                      </div>
+                                      <span>{r.priceTTC ? `${r.priceTTC.toFixed(2)}€` : ""}</span>
+                                    </div>
+                                  ))}
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : null;
+                    })()}
+
+                    {/* ─── Paiements ─── */}
+                    {(() => {
+                      const payments = getPaymentsForFamily(family.firestoreId);
+                      const totalPaid = payments.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
+                      const totalDue = payments.filter(p => p.status === "partial" || p.status === "pending").reduce((s, p) => s + ((p.totalTTC || 0) - (p.paidAmount || 0)), 0);
+                      const modeLabels: Record<string,string> = { cb_terminal: "CB", cb_online: "Stripe", cheque: "Chèque", especes: "Espèces", cheque_vacances: "Chq. Vac.", pass_sport: "Pass'Sport", ancv: "ANCV", virement: "Virement", avoir: "Avoir", carte: "Carte" };
+                      return (
+                        <div className="mt-4 pt-3 border-t border-blue-500/8">
+                          <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                            <Receipt size={12} /> Paiements ({payments.length})
+                            {totalDue > 0 && <Badge color="red">{totalDue.toFixed(2)}€ dû</Badge>}
+                          </div>
+                          {payments.length === 0 ? (
+                            <p className="font-body text-xs text-gray-400 italic">Aucun paiement enregistré.</p>
+                          ) : (
+                            <>
+                              <div className="flex gap-4 mb-2">
+                                <div className="font-body text-xs"><span className="text-gray-400">Total payé :</span> <span className="font-semibold text-green-600">{totalPaid.toFixed(2)}€</span></div>
+                                {totalDue > 0 && <div className="font-body text-xs"><span className="text-gray-400">Reste dû :</span> <span className="font-semibold text-red-500">{totalDue.toFixed(2)}€</span></div>}
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                {payments.slice(0, 8).map((p: any) => {
+                                  const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
+                                  return (
+                                    <div key={p.id} className="flex items-center justify-between font-body text-xs py-1.5 px-3 bg-sand rounded-lg">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-gray-400 min-w-[65px]">{d ? d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "—"}</span>
+                                        <span className="text-blue-800 font-semibold">{(p.items || []).map((i: any) => i.activityTitle).join(", ") || "Paiement"}</span>
+                                        <Badge color="gray">{modeLabels[p.paymentMode] || p.paymentMode}</Badge>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-semibold text-blue-500">{(p.totalTTC || 0).toFixed(2)}€</span>
+                                        <Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : "red"}>
+                                          {p.status === "paid" ? "Payé" : p.status === "partial" ? "Partiel" : "Impayé"}
+                                        </Badge>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                {payments.length > 8 && <p className="font-body text-[10px] text-gray-400 text-center mt-1">+ {payments.length - 8} paiement(s) antérieur(s)</p>}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </Card>
