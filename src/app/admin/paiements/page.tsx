@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, addDoc, deleteDoc, doc, getDoc, serverTimestamp, query, orderBy, limit } from "firebase/firestore";
+import { collection, getDocs, addDoc, deleteDoc, updateDoc, doc, getDoc, serverTimestamp, query, orderBy, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge, Button } from "@/components/ui";
-import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle } from "lucide-react";
 import type { Family, Activity } from "@/types";
 
 type PaymentMode = "cb_terminal" | "cb_online" | "cheque" | "especes" | "cheque_vacances" | "pass_sport" | "ancv" | "virement" | "avoir";
@@ -241,6 +241,60 @@ export default function PaiementsPage() {
                 </div>
               )}
             </Card>
+
+            {/* Impayés de cette famille */}
+            {family && (() => {
+              const familyPending = payments.filter(p =>
+                p.familyId === selectedFamily &&
+                (p.status === "pending" || (p.status === "partial" && (p.paidAmount || 0) < (p.totalTTC || 0)))
+              );
+              if (familyPending.length === 0) return null;
+              const totalPending = familyPending.reduce((s, p) => s + (p.totalTTC || 0) - (p.paidAmount || 0), 0);
+              return (
+                <Card padding="md" className="mb-4 border-orange-200 bg-orange-50/30">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-body text-sm font-semibold text-orange-700">
+                      <AlertTriangle size={14} className="inline mr-1" />
+                      Impayés — {family.parentName} ({familyPending.length})
+                    </h3>
+                    <span className="font-body text-lg font-bold text-red-500">{totalPending.toFixed(2)}€</span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {familyPending.map(p => {
+                      const reste = (p.totalTTC || 0) - (p.paidAmount || 0);
+                      return (
+                        <div key={p.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2.5">
+                          <div>
+                            <div className="font-body text-sm text-blue-800">{(p.items || []).map((i: any) => i.activityTitle).join(", ") || "Prestation"}</div>
+                            <div className="font-body text-xs text-gray-400">{p.totalTTC?.toFixed(2)}€{p.paidAmount > 0 ? ` (déjà payé : ${p.paidAmount.toFixed(2)}€)` : ""}</div>
+                          </div>
+                          <button onClick={async () => {
+                            const mode = prompt(`Encaisser ${reste.toFixed(2)}€ pour ${family.parentName}\n\nMode de paiement :\n1 = CB terminal\n2 = Chèque\n3 = Espèces\n4 = Virement\n5 = Chèques vacances\n6 = Pass'Sport\n\nTapez le numéro :`);
+                            if (!mode) return;
+                            const modeMap: Record<string,string> = {"1":"cb_terminal","2":"cheque","3":"especes","4":"virement","5":"cheque_vacances","6":"pass_sport"};
+                            const payMode = modeMap[mode] || "cb_terminal";
+                            try {
+                              await updateDoc(doc(db, "payments", p.id!), {
+                                status: "paid",
+                                paidAmount: p.totalTTC || 0,
+                                paymentMode: payMode,
+                                date: serverTimestamp(),
+                              });
+                              alert(`${reste.toFixed(2)}€ encaissé !`);
+                              const paySnap = await getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200)));
+                              setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+                            } catch (e) { console.error(e); alert("Erreur."); }
+                          }}
+                            className="font-body text-xs font-semibold text-white bg-green-600 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-green-500">
+                            Encaisser {reste.toFixed(2)}€
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+              );
+            })()}
 
             {/* Add items */}
             <Card padding="md" className="mb-4">
