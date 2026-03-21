@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { Plus, ChevronLeft, ChevronRight, X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Calendar, CalendarDays,
+import { Plus, ChevronLeft, ChevronRight, X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Calendar, CalendarDays, Briefcase, Bell, Mail,
 } from "lucide-react";
 import type { Activity, Family } from "@/types";
 
@@ -299,7 +299,8 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: { acti
 // ─── Main Planning ───
 export default function PlanningPage() {
   const [weekOffset, setWeekOffset] = useState(0); const [dayOffset, setDayOffset] = useState(0);
-  const [viewMode, setViewMode] = useState<"week"|"day">("week");
+  const [monthOffset, setMonthOffset] = useState(0);
+  const [viewMode, setViewMode] = useState<"week"|"day"|"month">("week");
   const [creneaux, setCreneaux] = useState<(Creneau & { id: string })[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
@@ -309,22 +310,91 @@ export default function PlanningPage() {
   const [selectedCreneau, setSelectedCreneau] = useState<(Creneau & { id: string })|null>(null);
   const [showDuplicate, setShowDuplicate] = useState(false); const [dupWeeks, setDupWeeks] = useState(1); const [duplicating, setDuplicating] = useState(false);
 
+  // ─── RDV Pro ───
+  const [rdvPros, setRdvPros] = useState<any[]>([]);
+  const [showRdvForm, setShowRdvForm] = useState(false);
+  const [rdvForm, setRdvForm] = useState({ title: "", date: "", startTime: "09:00", endTime: "10:00", category: "veterinaire", notes: "", reminderEmail: "", reminderDays: 1 });
+
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
   const currentDay = useMemo(() => { const d = new Date(); d.setDate(d.getDate() + dayOffset); return d; }, [dayOffset]);
+
+  // ─── Mois courant ───
+  const currentMonth = useMemo(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + monthOffset);
+    return d;
+  }, [monthOffset]);
+
+  const monthDays = useMemo(() => {
+    const y = currentMonth.getFullYear(), m = currentMonth.getMonth();
+    const first = new Date(y, m, 1);
+    const last = new Date(y, m + 1, 0);
+    const startDay = (first.getDay() + 6) % 7; // lundi = 0
+    const days: (Date | null)[] = [];
+    for (let i = 0; i < startDay; i++) days.push(null);
+    for (let d = 1; d <= last.getDate(); d++) days.push(new Date(y, m, d));
+    while (days.length % 7 !== 0) days.push(null);
+    return days;
+  }, [currentMonth]);
 
   const fetchData = async () => {
     try {
       const [aS, fS] = await Promise.all([getDocs(collection(db, "activities")), getDocs(collection(db, "families"))]);
       setActivities(aS.docs.map(d => ({ id: d.id, ...d.data() })) as Activity[]);
       setFamilies(fS.docs.map(d => ({ firestoreId: d.id, ...d.data() })) as any);
-      const s = viewMode === "day" ? fmtDate(currentDay) : fmtDate(weekDates[0]);
-      const e = viewMode === "day" ? fmtDate(currentDay) : fmtDate(weekDates[6]);
+
+      let s: string, e: string;
+      if (viewMode === "day") { s = fmtDate(currentDay); e = s; }
+      else if (viewMode === "month") {
+        const y = currentMonth.getFullYear(), m = currentMonth.getMonth();
+        s = fmtDate(new Date(y, m, 1));
+        e = fmtDate(new Date(y, m + 1, 0));
+      } else { s = fmtDate(weekDates[0]); e = fmtDate(weekDates[6]); }
+
       const cS = await getDocs(query(collection(db, "creneaux"), where("date", ">=", s), where("date", "<=", e)));
       setCreneaux(cS.docs.map(d => ({ id: d.id, ...d.data() })) as any);
+
+      // RDV Pro
+      try {
+        const rS = await getDocs(collection(db, "rdv_pro"));
+        setRdvPros(rS.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch { setRdvPros([]); }
     } catch(e) { console.error(e); }
     setLoading(false);
   };
-  useEffect(() => { setLoading(true); fetchData(); }, [weekOffset, dayOffset, viewMode]);
+  useEffect(() => { setLoading(true); fetchData(); }, [weekOffset, dayOffset, monthOffset, viewMode]);
+
+  // ─── Créer RDV Pro ───
+  const handleCreateRdv = async () => {
+    if (!rdvForm.title || !rdvForm.date) return;
+    try {
+      await addDoc(collection(db, "rdv_pro"), {
+        ...rdvForm,
+        reminderDays: parseInt(String(rdvForm.reminderDays)) || 1,
+        reminderSent: false,
+        createdAt: serverTimestamp(),
+      });
+      setShowRdvForm(false);
+      setRdvForm({ title: "", date: "", startTime: "09:00", endTime: "10:00", category: "veterinaire", notes: "", reminderEmail: "", reminderDays: 1 });
+      fetchData();
+    } catch (e) { console.error(e); }
+  };
+
+  const handleDeleteRdv = async (id: string) => {
+    if (!confirm("Supprimer ce RDV ?")) return;
+    await deleteDoc(doc(db, "rdv_pro", id));
+    fetchData();
+  };
+
+  const rdvCategories: Record<string, { label: string; color: string }> = {
+    veterinaire: { label: "Vétérinaire", color: "#e74c3c" },
+    marechal: { label: "Maréchal-ferrant", color: "#e67e22" },
+    dentiste: { label: "Dentiste équin", color: "#9b59b6" },
+    osteopathe: { label: "Ostéopathe", color: "#1abc9c" },
+    reunion: { label: "Réunion / FFE", color: "#3498db" },
+    formation: { label: "Formation", color: "#2ecc71" },
+    autre: { label: "Autre", color: "#95a5a6" },
+  };
 
   const handleCreate = async (nc: Partial<Creneau>[]) => { for (const c of nc) await addDoc(collection(db, "creneaux"), { ...c, createdAt: serverTimestamp() }); setShowSimple(false); setShowGenerator(false); alert(`${nc.length} créneau${nc.length>1?"x":""} créé${nc.length>1?"s":""}!`); fetchData(); };
   const handleDelete = async (id: string) => { if (!confirm("Supprimer ?")) return; await deleteDoc(doc(db, "creneaux", id)); fetchData(); };
@@ -349,10 +419,11 @@ export default function PlanningPage() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="font-display text-2xl font-bold text-blue-800">Planning</h1>
         <div className="flex gap-2">
-          <div className="flex bg-sand rounded-lg p-0.5">{(["week","day"] as const).map(v=><button key={v} onClick={()=>setViewMode(v)} className={`px-4 py-2 rounded-md font-body text-xs font-semibold cursor-pointer border-none ${viewMode===v?"bg-white text-blue-500 shadow-sm":"text-gray-400 bg-transparent"}`}>{v==="week"?"Semaine":"Jour"}</button>)}</div>
+          <div className="flex bg-sand rounded-lg p-0.5">{(["month","week","day"] as const).map(v=><button key={v} onClick={()=>setViewMode(v)} className={`px-4 py-2 rounded-md font-body text-xs font-semibold cursor-pointer border-none ${viewMode===v?"bg-white text-blue-500 shadow-sm":"text-gray-400 bg-transparent"}`}>{v==="week"?"Semaine":v==="day"?"Jour":"Mois"}</button>)}</div>
           <button onClick={()=>{setShowSimple(true);setShowGenerator(false);setSelectedDate(viewMode==="day"?fmtDate(currentDay):undefined);}} className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400"><Plus size={16}/>Créneau</button>
+          <button onClick={()=>setShowRdvForm(true)} className="flex items-center gap-2 font-body text-sm font-semibold text-orange-700 bg-orange-50 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-orange-100"><Briefcase size={16}/>RDV Pro</button>
           <button onClick={()=>{setShowGenerator(true);setShowSimple(false);}} className="flex items-center gap-2 font-body text-sm font-semibold text-blue-800 bg-gold-400 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-gold-300"><Calendar size={16}/>Périodes</button>
-          {viewMode==="week"&&creneaux.length>0&&<button onClick={()=>setShowDuplicate(!showDuplicate)} className="font-body text-sm font-semibold text-blue-500 bg-blue-50 px-3 py-2.5 rounded-lg border-none cursor-pointer">📋</button>}
+          {viewMode==="week"&&creneaux.length>0&&<button onClick={()=>setShowDuplicate(!showDuplicate)} className="font-body text-sm font-semibold text-blue-500 bg-blue-50 px-3 py-2.5 rounded-lg border-none cursor-pointer">Dupliquer</button>}
         </div>
       </div>
 
@@ -401,11 +472,156 @@ export default function PlanningPage() {
           </Card>);})}</div>}
       </>}
 
+      {/* ═══ VUE MENSUELLE ═══ */}
+      {viewMode==="month"&&<>
+        <div className="flex items-center justify-between mb-5">
+          <button onClick={()=>setMonthOffset(m=>m-1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16}/>Préc.</button>
+          <div className="text-center"><div className="font-display text-lg font-bold text-blue-800 capitalize">{currentMonth.toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}</div><div className="font-body text-xs text-gray-400">{creneaux.length} créneaux · {rdvPros.filter(r => r.date?.startsWith(currentMonth.toISOString().slice(0,7))).length} RDV pro</div></div>
+          <div className="flex gap-2"><button onClick={()=>setMonthOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setMonthOffset(m=>m+1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Suiv.<ChevronRight size={16}/></button></div>
+        </div>
+        {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:
+        <div>
+          <div className="grid grid-cols-7 gap-1 mb-1">
+            {["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"].map(d=><div key={d} className="text-center font-body text-[10px] font-semibold text-gray-400 uppercase py-1">{d}</div>)}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {monthDays.map((d,i) => {
+              if (!d) return <div key={`e${i}`} className="min-h-[90px] bg-gray-50/50 rounded-lg" />;
+              const ds = fmtDate(d);
+              const today = fmtDate(new Date()) === ds;
+              const dc = creneaux.filter(c => c.date === ds);
+              const dr = rdvPros.filter(r => r.date === ds);
+              const totalInscrits = dc.reduce((s,c) => s + (c.enrolled?.length || 0), 0);
+              return (
+                <div key={ds} className={`min-h-[90px] rounded-lg p-1.5 cursor-pointer border transition-all hover:shadow-md ${today ? "bg-blue-50 border-blue-300" : "bg-white border-gray-100"}`}
+                  onClick={() => { setViewMode("day"); setDayOffset(Math.round((d.getTime()-new Date().setHours(0,0,0,0))/86400000)); }}>
+                  <div className={`font-body text-xs font-semibold mb-1 ${today ? "text-blue-500" : d.getDay()===0||d.getDay()===6 ? "text-gray-300" : "text-gray-600"}`}>
+                    {d.getDate()}
+                  </div>
+                  {dc.length > 0 && (
+                    <div className="font-body text-[9px] text-blue-500 bg-blue-50 rounded px-1 py-0.5 mb-0.5">
+                      {dc.length} cours · {totalInscrits} inscr.
+                    </div>
+                  )}
+                  {dr.map(r => (
+                    <div key={r.id} className="font-body text-[9px] rounded px-1 py-0.5 mb-0.5 truncate" style={{ backgroundColor: `${rdvCategories[r.category]?.color || "#95a5a6"}20`, color: rdvCategories[r.category]?.color || "#95a5a6" }}>
+                      {r.startTime} {r.title}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </div>}
+      </>}
+
+      {/* RDV Pros du mois (visible en vue mois) */}
+      {viewMode === "month" && rdvPros.filter(r => r.date?.startsWith(currentMonth.toISOString().slice(0,7))).length > 0 && (
+        <div className="mt-6">
+          <h3 className="font-body text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">RDV professionnels du mois</h3>
+          <div className="flex flex-col gap-2">
+            {rdvPros.filter(r => r.date?.startsWith(currentMonth.toISOString().slice(0,7))).sort((a:any,b:any) => a.date.localeCompare(b.date)).map((r: any) => (
+              <Card key={r.id} padding="sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: rdvCategories[r.category]?.color || "#95a5a6" }} />
+                    <div>
+                      <div className="font-body text-sm font-semibold text-blue-800">{r.title}</div>
+                      <div className="font-body text-xs text-gray-400">
+                        {new Date(r.date).toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"})} · {r.startTime}–{r.endTime}
+                        {r.notes && ` · ${r.notes}`}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge color="gray">{rdvCategories[r.category]?.label || r.category}</Badge>
+                    {r.reminderEmail && <span title={`Rappel ${r.reminderDays}j avant → ${r.reminderEmail}`}><Bell size={12} className="text-orange-400" /></span>}
+                    <button onClick={() => handleDeleteRdv(r.id)} className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={14}/></button>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="mt-6 flex gap-4 flex-wrap">
         {[["text-blue-500",(viewMode==="day"?dayCreneaux:creneaux).length,"créneaux"],["text-green-600",(viewMode==="day"?dayCreneaux:creneaux).reduce((s:number,c:any)=>s+(c.enrolled?.length||0),0),"inscrits"],["text-gold-400",(viewMode==="day"?dayCreneaux:creneaux).reduce((s:number,c:any)=>s+c.maxPlaces,0),"places"]].map(([col,val,lab],i)=>(
           <Card key={i} padding="sm" className="flex items-center gap-3"><span className={`font-body text-xl font-bold ${col}`}>{val}</span><span className="font-body text-xs text-gray-400">{lab as string}</span></Card>
         ))}
       </div>
+
+      {/* ═══ MODAL : RDV Pro ═══ */}
+      {showRdvForm && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={() => setShowRdvForm(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-5 border-b border-gray-100">
+              <h2 className="font-display text-lg font-bold text-blue-800">Nouveau RDV professionnel</h2>
+              <button onClick={() => setShowRdvForm(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div>
+                <label className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Catégorie</label>
+                <select className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400" value={rdvForm.category} onChange={e => setRdvForm({...rdvForm, category: e.target.value})}>
+                  {Object.entries(rdvCategories).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Titre *</label>
+                <input className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400" value={rdvForm.title} onChange={e => setRdvForm({...rdvForm, title: e.target.value})}
+                  placeholder="Ex: Vaccins annuels, Parage cavalerie…" />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Date *</label>
+                  <input type="date" className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400" value={rdvForm.date} onChange={e => setRdvForm({...rdvForm, date: e.target.value})} />
+                </div>
+                <div>
+                  <label className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Début</label>
+                  <input type="time" className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400" value={rdvForm.startTime} onChange={e => setRdvForm({...rdvForm, startTime: e.target.value})} />
+                </div>
+                <div>
+                  <label className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Fin</label>
+                  <input type="time" className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400" value={rdvForm.endTime} onChange={e => setRdvForm({...rdvForm, endTime: e.target.value})} />
+                </div>
+              </div>
+              <div>
+                <label className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Notes</label>
+                <input className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400" value={rdvForm.notes} onChange={e => setRdvForm({...rdvForm, notes: e.target.value})}
+                  placeholder="Ex: Dr Martin, lot de 12 poneys…" />
+              </div>
+              <div className="border-t border-gray-100 pt-3">
+                <div className="font-body text-xs font-semibold text-orange-500 uppercase tracking-wider mb-2 flex items-center gap-1"><Bell size={12} /> Rappel email</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="font-body text-[10px] text-gray-400 block mb-1">Email de rappel</label>
+                    <input type="email" className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400" value={rdvForm.reminderEmail} onChange={e => setRdvForm({...rdvForm, reminderEmail: e.target.value})}
+                      placeholder="ceagon@orange.fr" />
+                  </div>
+                  <div>
+                    <label className="font-body text-[10px] text-gray-400 block mb-1">Combien de jours avant</label>
+                    <select className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400" value={rdvForm.reminderDays} onChange={e => setRdvForm({...rdvForm, reminderDays: parseInt(e.target.value)})}>
+                      <option value={1}>1 jour avant</option>
+                      <option value={2}>2 jours avant</option>
+                      <option value={3}>3 jours avant</option>
+                      <option value={7}>1 semaine avant</option>
+                      <option value={14}>2 semaines avant</option>
+                    </select>
+                  </div>
+                </div>
+                <p className="font-body text-[10px] text-gray-400 mt-1">Laissez l'email vide pour ne pas envoyer de rappel.</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
+              <button onClick={() => setShowRdvForm(false)} className="font-body text-sm text-gray-500 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+              <button onClick={handleCreateRdv} disabled={!rdvForm.title || !rdvForm.date}
+                className={`flex items-center gap-2 font-body text-sm font-semibold text-white bg-orange-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-orange-600 ${!rdvForm.title || !rdvForm.date ? "opacity-50" : ""}`}>
+                <Briefcase size={16} /> Créer le RDV
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectedCreneau&&<EnrollPanel creneau={selectedCreneau as any} families={families} onClose={()=>{setSelectedCreneau(null);fetchData();}} onEnroll={handleEnroll} onUnenroll={handleUnenroll}/>}
     </div>
