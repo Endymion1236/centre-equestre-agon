@@ -6,7 +6,7 @@ import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import {
   Search, ChevronDown, ChevronUp, Loader2, Users, UserCheck, AlertTriangle,
-  Plus, X, Save, UserPlus, Phone, Mail, Calendar, Edit3, Trash2, CalendarDays, GitMerge, Receipt, Clock,
+  Plus, X, Save, UserPlus, Phone, Mail, Calendar, Edit3, Trash2, CalendarDays, GitMerge, Receipt, Clock, Wallet,
 } from "lucide-react";
 import type { Family } from "@/types";
 
@@ -22,6 +22,7 @@ export default function CavaliersPage() {
   // ─── Réservations & paiements par famille ───
   const [allReservations, setAllReservations] = useState<any[]>([]);
   const [allPayments, setAllPayments] = useState<any[]>([]);
+  const [allAvoirs, setAllAvoirs] = useState<any[]>([]);
 
   // ─── Édition infos famille ───
   const [editingFamily, setEditingFamily] = useState<string | null>(null);
@@ -62,14 +63,16 @@ export default function CavaliersPage() {
 
   const fetchFamilies = async () => {
     try {
-      const [famSnap, resSnap, paySnap] = await Promise.all([
+      const [famSnap, resSnap, paySnap, avoirsSnap] = await Promise.all([
         getDocs(collection(db, "families")),
         getDocs(collection(db, "reservations")),
         getDocs(collection(db, "payments")),
+        getDocs(collection(db, "avoirs")),
       ]);
       setFamilies(famSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as (Family & { firestoreId: string })[]);
       setAllReservations(resSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setAllPayments(paySnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setAllAvoirs(avoirsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (e) { console.error(e); }
     setLoading(false);
   };
@@ -87,6 +90,12 @@ export default function CavaliersPage() {
     return allPayments
       .filter(p => p.familyId === familyId)
       .sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
+  };
+
+  const getAvoirsForFamily = (familyId: string) => {
+    return allAvoirs
+      .filter(a => a.familyId === familyId)
+      .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
   };
 
   // ─── Créer une nouvelle famille ───
@@ -827,6 +836,49 @@ export default function CavaliersPage() {
                     })()}
 
                     {/* ═══ NOTES INTERNES ═══ */}
+
+                    {/* ─── Avoirs & avances ─── */}
+                    {(() => {
+                      const avoirs = getAvoirsForFamily(family.firestoreId);
+                      const activeAvoirs = avoirs.filter(a => a.status === "actif");
+                      const totalRemaining = activeAvoirs.reduce((s, a) => s + (a.remainingAmount || 0), 0);
+                      return (
+                        <div className="mt-4 pt-3 border-t border-blue-500/8">
+                          <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                            <Wallet size={12} /> Avoirs & avances ({avoirs.length})
+                            {totalRemaining > 0 && <Badge color="blue">{totalRemaining.toFixed(2)}€ dispo</Badge>}
+                          </div>
+                          {avoirs.length === 0 ? (
+                            <p className="font-body text-xs text-gray-400 italic">Aucun avoir ni avance.</p>
+                          ) : (
+                            <div className="flex flex-col gap-1.5">
+                              {avoirs.map((a: any) => {
+                                const pctUsed = a.amount > 0 ? Math.round((a.usedAmount / a.amount) * 100) : 0;
+                                return (
+                                  <div key={a.id} className="flex items-center justify-between font-body text-xs py-2 px-3 bg-sand rounded-lg">
+                                    <div className="flex items-center gap-2 flex-1">
+                                      <Badge color={a.type === "avoir" ? "orange" : "green"}>{a.type === "avoir" ? "Avoir" : "Avance"}</Badge>
+                                      <span className="text-blue-800 font-semibold">{a.reference}</span>
+                                      <span className="text-gray-400">{a.reason || "—"}</span>
+                                      <div className="flex-1 max-w-[100px] h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                        <div className={`h-full rounded-full ${pctUsed > 80 ? "bg-gray-300" : "bg-blue-300"}`} style={{ width: `${pctUsed}%` }} />
+                                      </div>
+                                      <span className="text-gray-400">{a.usedAmount?.toFixed(2) || "0"}€/{a.amount?.toFixed(2)}€</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className={`font-semibold ${a.remainingAmount > 0 ? "text-blue-500" : "text-gray-300"}`}>{a.remainingAmount?.toFixed(2)}€</span>
+                                      <Badge color={a.status === "actif" ? "green" : a.status === "utilise" ? "gray" : "orange"}>{a.status}</Badge>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* ═══ NOTES INTERNES (suite) ═══ */}
                     <div className="mt-4 pt-3 border-t border-blue-500/8">
                       <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Notes internes</div>
                       <textarea

@@ -130,6 +130,11 @@ export default function AvoirsPage() {
     const avoir = avoirs.find(a => a.id === useAvoirId);
     if (!avoir) return;
     const amt = parseFloat(useAmount);
+    if (amt <= 0 || amt > (avoir.remainingAmount || 0)) {
+      alert(`Montant invalide. Maximum : ${(avoir.remainingAmount || 0).toFixed(2)}€`);
+      setSaving(false);
+      return;
+    }
     const newUsed = (avoir.usedAmount || 0) + amt;
     const newRemaining = avoir.amount - newUsed;
     const newHistory = [...(avoir.usageHistory || []), {
