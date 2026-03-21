@@ -120,7 +120,7 @@ export default function ForfaitsPage() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="font-display text-2xl font-bold text-blue-800">Forfaits annuels</h1>
-          <p className="font-body text-xs text-gray-400">Suivi des abonnements — les forfaits se cr\u00e9ent depuis le planning</p>
+          <p className="font-body text-xs text-gray-400">Suivi des abonnements — les forfaits se créent depuis le planning</p>
         </div>
       </div>
 
@@ -132,17 +132,17 @@ export default function ForfaitsPage() {
         </Card>
         <Card padding="sm" className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><TrendingUp size={18} className="text-blue-500" /></div>
-          <div><div className="font-body text-xl font-bold text-blue-500">{totalCA.toFixed(0)}\u20ac</div><div className="font-body text-xs text-gray-400">CA forfaits</div></div>
+          <div><div className="font-body text-xl font-bold text-blue-500">{totalCA.toFixed(0)}€</div><div className="font-body text-xs text-gray-400">CA forfaits</div></div>
         </Card>
         <Card padding="sm" className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center"><CreditCard size={18} className="text-green-600" /></div>
-          <div><div className="font-body text-xl font-bold text-green-600">{totalPaid.toFixed(0)}\u20ac</div><div className="font-body text-xs text-gray-400">encaiss\u00e9</div></div>
+          <div><div className="font-body text-xl font-bold text-green-600">{totalPaid.toFixed(0)}€</div><div className="font-body text-xs text-gray-400">encaissé</div></div>
         </Card>
         <Card padding="sm" className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-xl ${totalDue > 0 ? "bg-red-50" : "bg-gray-50"} flex items-center justify-center`}>
             <CreditCard size={18} className={totalDue > 0 ? "text-red-500" : "text-gray-400"} />
           </div>
-          <div><div className={`font-body text-xl font-bold ${totalDue > 0 ? "text-red-500" : "text-gray-400"}`}>{totalDue.toFixed(0)}\u20ac</div><div className="font-body text-xs text-gray-400">reste \u00e0 encaisser</div></div>
+          <div><div className={`font-body text-xl font-bold ${totalDue > 0 ? "text-red-500" : "text-gray-400"}`}>{totalDue.toFixed(0)}€</div><div className="font-body text-xs text-gray-400">reste à encaisser</div></div>
         </Card>
       </div>
 
@@ -153,8 +153,8 @@ export default function ForfaitsPage() {
             { id: "all", label: `Tous (${forfaits.length})` },
             { id: "active", label: `Actifs (${activeCount})` },
             { id: "suspended", label: `Suspendus (${suspendedCount})` },
-            { id: "completed", label: "Termin\u00e9s" },
-            { id: "cancelled", label: "R\u00e9sili\u00e9s" },
+            { id: "completed", label: "Terminés" },
+            { id: "cancelled", label: "Résiliés" },
           ].map(f => (
             <button key={f.id} onClick={() => setFilterStatus(f.id)}
               className={`font-body text-xs px-3 py-1.5 rounded-lg border-none cursor-pointer transition-all ${
@@ -166,7 +166,7 @@ export default function ForfaitsPage() {
         </div>
         <div className="relative flex-1 min-w-[200px]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
-          <input placeholder="Rechercher par famille, cavalier, activit\u00e9\u2026" value={search} onChange={e => setSearch(e.target.value)}
+          <input placeholder="Rechercher par famille, cavalier, activité…" value={search} onChange={e => setSearch(e.target.value)}
             className="w-full font-body text-xs border border-gray-200 rounded-lg pl-9 pr-3 py-2 bg-white focus:outline-none focus:border-blue-400" />
         </div>
       </div>
@@ -177,7 +177,7 @@ export default function ForfaitsPage() {
           <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><Calendar size={28} className="text-blue-300" /></div>
           <p className="font-body text-sm text-gray-500">
             {forfaits.length === 0
-              ? "Aucun forfait. Pour inscrire un cavalier \u00e0 l'ann\u00e9e, allez dans le Planning, cliquez sur un cr\u00e9neau et choisissez \u00ab Forfait \u00e0 l'ann\u00e9e \u00bb."
+              ? "Aucun forfait. Pour inscrire un cavalier à l'année, allez dans le Planning, cliquez sur un créneau et choisissez « Forfait à l'année »."
               : "Aucun forfait correspondant aux filtres."
             }
           </p>
@@ -201,16 +201,16 @@ export default function ForfaitsPage() {
                     </div>
                     <div>
                       <div className="font-body text-sm font-semibold text-blue-800">
-                        {f.childName} <span className="text-gray-400 font-normal">\u2014 {f.familyName}</span>
+                        {f.childName} <span className="text-gray-400 font-normal">— {f.familyName}</span>
                       </div>
                       <div className="font-body text-xs text-gray-400">
-                        {f.slotKey || f.activityTitle || "\u2014"} \u00b7 Cr\u00e9\u00e9 le {formatDate(f.createdAt)}
+                        {f.slotKey || f.activityTitle || "—"} · Créé le {formatDate(f.createdAt)}
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="text-right">
-                      <div className="font-body text-base font-bold text-blue-500">{(f.forfaitPriceTTC || 0).toFixed(0)}\u20ac</div>
+                      <div className="font-body text-base font-bold text-blue-500">{(f.forfaitPriceTTC || 0).toFixed(0)}€</div>
                       <div className="font-body text-[10px] text-gray-400">{f.paymentPlan || "1x"}</div>
                     </div>
                     <Badge color={sc.color}>{sc.label}</Badge>
@@ -221,9 +221,9 @@ export default function ForfaitsPage() {
                 {isExp && (
                   <div className="mt-4 pt-4 border-t border-blue-500/8 space-y-4">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div><div className="font-body text-[10px] text-gray-400 uppercase">Activit\u00e9</div><div className="font-body text-sm text-blue-800">{f.activityTitle || "\u2014"}</div></div>
-                      <div><div className="font-body text-[10px] text-gray-400 uppercase">Cr\u00e9neau</div><div className="font-body text-sm text-blue-800">{f.dayLabel || "\u2014"} {f.startTime}\u2013{f.endTime}</div></div>
-                      <div><div className="font-body text-[10px] text-gray-400 uppercase">Adh\u00e9sion</div><div className="font-body text-sm text-blue-800">{f.adhesion ? "Oui" : "Non"}</div></div>
+                      <div><div className="font-body text-[10px] text-gray-400 uppercase">Activité</div><div className="font-body text-sm text-blue-800">{f.activityTitle || "—"}</div></div>
+                      <div><div className="font-body text-[10px] text-gray-400 uppercase">Créneau</div><div className="font-body text-sm text-blue-800">{f.dayLabel || "—"} {f.startTime}–{f.endTime}</div></div>
+                      <div><div className="font-body text-[10px] text-gray-400 uppercase">Adhésion</div><div className="font-body text-sm text-blue-800">{f.adhesion ? "Oui" : "Non"}</div></div>
                       <div><div className="font-body text-[10px] text-gray-400 uppercase">Licence FFE</div><div className="font-body text-sm text-blue-800">{f.licenceFFE ? `Oui (${f.licenceType === "moins18" ? "-18" : "+18"})` : "Non"}</div></div>
                     </div>
 
@@ -231,18 +231,18 @@ export default function ForfaitsPage() {
                       <div>
                         <div className="flex justify-between mb-1">
                           <span className="font-body text-[10px] text-gray-400 uppercase">Paiement</span>
-                          <span className="font-body text-xs font-semibold text-blue-500">{paid.toFixed(0)}\u20ac / {(f.forfaitPriceTTC || 0).toFixed(0)}\u20ac</span>
+                          <span className="font-body text-xs font-semibold text-blue-500">{paid.toFixed(0)}€ / {(f.forfaitPriceTTC || 0).toFixed(0)}€</span>
                         </div>
                         <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
                           <div className={`h-full rounded-full ${pctPaid >= 100 ? "bg-green-500" : pctPaid > 50 ? "bg-blue-400" : "bg-orange-400"}`} style={{ width: `${pctPaid}%` }} />
                         </div>
                         <div className="font-body text-[10px] text-gray-400 mt-0.5">
-                          {f.paymentPlan === "1x" ? "Paiement unique" : `${f.paymentPlan} \u00b7 ${installment.toFixed(0)}\u20ac/\u00e9ch\u00e9ance`}
+                          {f.paymentPlan === "1x" ? "Paiement unique" : `${f.paymentPlan} · ${installment.toFixed(0)}€/échéance`}
                         </div>
                       </div>
                       <div>
                         <div className="flex justify-between mb-1">
-                          <span className="font-body text-[10px] text-gray-400 uppercase">S\u00e9ances</span>
+                          <span className="font-body text-[10px] text-gray-400 uppercase">Séances</span>
                           <span className="font-body text-xs font-semibold text-blue-500">{f.attendedSessions || 0} / {f.totalSessions || 35}</span>
                         </div>
                         <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
@@ -261,13 +261,13 @@ export default function ForfaitsPage() {
                       {f.status === "suspended" && (
                         <button onClick={() => handleStatusChange(f.id, "active")} disabled={saving}
                           className="flex items-center gap-1.5 font-body text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-green-100">
-                          <Play size={12} /> R\u00e9activer
+                          <Play size={12} /> Réactiver
                         </button>
                       )}
                       {(f.status === "active" || f.status === "suspended") && (
-                        <button onClick={() => { if (confirm(`R\u00e9silier le forfait de ${f.childName} ?`)) handleStatusChange(f.id, "cancelled"); }} disabled={saving}
+                        <button onClick={() => { if (confirm(`Résilier le forfait de ${f.childName} ?`)) handleStatusChange(f.id, "cancelled"); }} disabled={saving}
                           className="flex items-center gap-1.5 font-body text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-100">
-                          <XCircle size={12} /> R\u00e9silier
+                          <XCircle size={12} /> Résilier
                         </button>
                       )}
                     </div>
