@@ -30,32 +30,190 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
   const [search, setSearch] = useState(""); const [selFam, setSelFam] = useState(""); const [selChild, setSelChild] = useState("");
   const [enrolling, setEnrolling] = useState(false); const [justEnrolled, setJustEnrolled] = useState("");
   const [showPay, setShowPay] = useState(false); const [payMode, setPayMode] = useState("cb_terminal"); const [unenrolling, setUnenrolling] = useState("");
+  const [inscriptionMode, setInscriptionMode] = useState<"ponctuel" | "annuel">("ponctuel");
+  const [licenceType, setLicenceType] = useState<"moins18" | "plus18">("moins18");
+  const [adhesion, setAdhesion] = useState(true);
+  const [licence, setLicence] = useState(true);
+  const [payPlan, setPayPlan] = useState<"1x" | "3x" | "10x">("1x");
+
   const enrolled = creneau.enrolled || []; const enrolledIds = enrolled.map((e: any) => e.childId);
   const spots = creneau.maxPlaces - enrolled.length; const color = typeColors[creneau.activityType] || "#666";
   const priceTTC = (creneau as any).priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux || 5.5) / 100);
   const filteredFamilies = useMemo(() => { if (!search) return families; const q = search.toLowerCase(); return families.filter(f => f.parentName?.toLowerCase().includes(q) || f.parentEmail?.toLowerCase().includes(q) || (f.children || []).some((c: any) => c.firstName?.toLowerCase().includes(q))); }, [families, search]);
   const fam = families.find(f => f.firestoreId === selFam); const children = fam?.children || [];
   const available = children.filter((c: any) => !enrolledIds.includes(c.id));
-  const handleEnroll = async () => { if (!selChild || !fam) return; setEnrolling(true); const child = children.find((c: any) => c.id === selChild); const childName = (child as any)?.firstName || "—"; await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, showPay ? payMode : undefined); setJustEnrolled(childName); setSelChild(""); setSelFam(""); setSearch(""); setEnrolling(false); setShowPay(false); setTimeout(() => setJustEnrolled(""), 3000); };
+
+  // Calcul forfait annuel
+  const prixAdhesion = 60;
+  const prixLicence = licenceType === "moins18" ? 25 : 36;
+  const prixForfait = 650; // TODO: charger depuis Firestore settings/tarifs
+  const totalAnnuel = (adhesion ? prixAdhesion : 0) + (licence ? prixLicence : 0) + prixForfait;
+
+  const handleEnroll = async () => {
+    if (!selChild || !fam) return;
+    setEnrolling(true);
+    const child = children.find((c: any) => c.id === selChild);
+    const childName = (child as any)?.firstName || "—";
+
+    if (inscriptionMode === "annuel") {
+      // Inscription annuelle : créer le forfait + inscrire dans le créneau
+      try {
+        const slotKey = `${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long" })} ${creneau.startTime}`;
+        await addDoc(collection(db, "forfaits"), {
+          familyId: fam.firestoreId,
+          familyName: fam.parentName || "",
+          childId: selChild,
+          childName,
+          slotKey,
+          activityTitle: creneau.activityTitle,
+          dayLabel: new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long" }),
+          startTime: creneau.startTime,
+          endTime: creneau.endTime,
+          totalSessions: 35,
+          attendedSessions: 0,
+          licenceFFE: licence,
+          licenceType,
+          adhesion,
+          forfaitPriceTTC: totalAnnuel,
+          totalPaidTTC: 0,
+          paymentPlan: payPlan,
+          status: "active",
+          createdAt: serverTimestamp(),
+        });
+        // Créer le paiement en attente pour le forfait
+        const items = [];
+        if (adhesion) items.push({ activityTitle: "Adhésion annuelle", priceHT: prixAdhesion / 1.055, tva: 5.5, priceTTC: prixAdhesion });
+        if (licence) items.push({ activityTitle: `Licence FFE ${licenceType === "moins18" ? "-18ans" : "+18ans"}`, priceHT: prixLicence, tva: 0, priceTTC: prixLicence });
+        items.push({ activityTitle: `Forfait ${creneau.activityTitle} (${slotKey})`, priceHT: prixForfait / 1.055, tva: 5.5, priceTTC: prixForfait });
+        await addDoc(collection(db, "payments"), {
+          familyId: fam.firestoreId,
+          familyName: fam.parentName || "",
+          items,
+          totalTTC: totalAnnuel,
+          paymentMode: "",
+          paymentRef: "",
+          status: "pending",
+          paidAmount: 0,
+          date: serverTimestamp(),
+        });
+      } catch (e) { console.error(e); }
+    }
+
+    // Dans les 2 cas : inscrire dans le créneau
+    await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, inscriptionMode === "ponctuel" && showPay ? payMode : undefined);
+    setJustEnrolled(childName + (inscriptionMode === "annuel" ? " (forfait annuel)" : ""));
+    setSelChild(""); setSelFam(""); setSearch(""); setEnrolling(false); setShowPay(false);
+    setTimeout(() => setJustEnrolled(""), 4000);
+  };
+
   const handleUnenroll = async (childId: string) => { setUnenrolling(childId); await onUnenroll(creneau.id!, childId); setUnenrolling(""); };
+
   return (
     <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
         <div className="p-5 border-b border-blue-500/8" style={{ borderLeftWidth: 4, borderLeftColor: color }}>
-          <div className="flex justify-between items-start"><div><div className="font-body text-sm font-semibold" style={{ color }}>{creneau.startTime}–{creneau.endTime}</div><h2 className="font-display text-lg font-bold text-blue-800">{creneau.activityTitle}</h2><div className="font-body text-xs text-gray-400 mt-1">{new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · {creneau.monitor}{priceTTC > 0 ? ` · ${priceTTC.toFixed(2)}€` : ""}</div></div><button onClick={onClose} className="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button></div>
+          <div className="flex justify-between items-start"><div><div className="font-body text-sm font-semibold" style={{ color }}>{creneau.startTime}–{creneau.endTime}</div><h2 className="font-display text-lg font-bold text-blue-800">{creneau.activityTitle}</h2><div className="font-body text-xs text-gray-400 mt-1">{new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · {creneau.monitor}{priceTTC > 0 ? ` · ${priceTTC.toFixed(2)}€/séance` : ""}</div></div><button onClick={onClose} className="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button></div>
           <div className="flex items-center gap-3 mt-3"><Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>{spots > 0 ? `${spots} place${spots > 1 ? "s" : ""}` : "COMPLET"}</Badge><span className="font-body text-xs text-gray-400">{enrolled.length}/{creneau.maxPlaces}</span></div>
         </div>
         <div className="p-5">
-          {justEnrolled && <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg font-body text-sm text-green-700">✅ {justEnrolled} inscrit(e) !</div>}
+          {justEnrolled && <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg font-body text-sm text-green-700"><Check size={16} className="inline mr-1" /> {justEnrolled} inscrit(e) !</div>}
           <h3 className="font-body text-sm font-semibold text-blue-800 mb-3"><Users size={16} className="inline mr-1" />Inscrits ({enrolled.length})</h3>
           {enrolled.length === 0 ? <p className="font-body text-sm text-gray-400 italic mb-4">Aucun</p> :
-          <div className="flex flex-col gap-2 mb-4">{enrolled.map((e: any) => (<div key={e.childId} className="flex items-center justify-between bg-sand rounded-lg px-4 py-2.5"><div className="flex items-center gap-3"><span>🧒</span><div><div className="font-body text-sm font-semibold text-blue-800">{e.childName}</div><div className="font-body text-xs text-gray-400">{e.familyName}</div></div></div><button onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId} className="flex items-center gap-1 font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-red-50">{unenrolling===e.childId ? <Loader2 size={12} className="animate-spin"/> : <Trash2 size={12}/>} Désinscrire</button></div>))}</div>}
+          <div className="flex flex-col gap-2 mb-4">{enrolled.map((e: any) => (<div key={e.childId} className="flex items-center justify-between bg-sand rounded-lg px-4 py-2.5"><div className="flex items-center gap-3"><div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center"><Users size={12} className="text-blue-500" /></div><div><div className="font-body text-sm font-semibold text-blue-800">{e.childName}</div><div className="font-body text-xs text-gray-400">{e.familyName}</div></div></div><button onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId} className="flex items-center gap-1 font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-red-50">{unenrolling===e.childId ? <Loader2 size={12} className="animate-spin"/> : <Trash2 size={12}/>} Désinscrire</button></div>))}</div>}
+
           {spots > 0 && (<div className="border-t border-blue-500/8 pt-4"><h3 className="font-body text-sm font-semibold text-blue-800 mb-3"><UserPlus size={16} className="inline mr-1"/>Inscrire</h3><div className="flex flex-col gap-3">
+            {/* Recherche famille */}
             <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300"/><input value={search} onChange={e=>{setSearch(e.target.value);setSelFam("");setSelChild("");}} placeholder="Nom parent, prénom enfant, email..." className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/></div>
             <select value={selFam} onChange={e=>{setSelFam(e.target.value);setSelChild("");}} className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream"><option value="">Famille ({filteredFamilies.length})</option>{filteredFamilies.map(f=>{const n=(f.children||[]).map((c:any)=>c.firstName).join(", ");return<option key={f.firestoreId} value={f.firestoreId}>{f.parentName} {n?`(${n})`:""}</option>})}</select>
-            {fam&&available.length>0&&<div className="flex flex-wrap gap-2">{available.map((c:any)=><button key={c.id} onClick={()=>setSelChild(c.id)} className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${selChild===c.id?"bg-blue-500 text-white border-blue-500":"bg-white text-gray-500 border-gray-200"}`}>🧒 {c.firstName}</button>)}</div>}
-            {selChild&&priceTTC>0&&<div className="bg-blue-50 rounded-lg p-3"><label className="flex items-center gap-2 cursor-pointer mb-2"><input type="checkbox" checked={showPay} onChange={e=>setShowPay(e.target.checked)} className="accent-blue-500 w-4 h-4"/><span className="font-body text-sm text-blue-800 font-semibold">💳 Encaisser ({priceTTC.toFixed(2)}€)</span></label>{showPay&&<div className="flex flex-wrap gap-1.5 mt-2">{payModes.map(m=><button key={m.id} onClick={()=>setPayMode(m.id)} className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${payMode===m.id?"bg-blue-500 text-white border-blue-500":"bg-white text-gray-500 border-gray-200"}`}>{m.icon} {m.label}</button>)}</div>}</div>}
-            <button onClick={handleEnroll} disabled={!selChild||enrolling} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${!selChild||enrolling?"bg-gray-200 text-gray-400":"bg-green-600 text-white hover:bg-green-500"}`}>{enrolling?"...":showPay?`Inscrire + Encaisser`:"Inscrire"}</button>
+            {fam&&available.length>0&&<div className="flex flex-wrap gap-2">{available.map((c:any)=><button key={c.id} onClick={()=>setSelChild(c.id)} className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${selChild===c.id?"bg-blue-500 text-white border-blue-500":"bg-white text-gray-500 border-gray-200"}`}><Users size={12}/> {c.firstName}</button>)}</div>}
+
+            {/* Choix du mode d'inscription */}
+            {selChild && (
+              <div className="bg-sand rounded-xl p-4 space-y-3">
+                <div className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">Type d'inscription</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => setInscriptionMode("ponctuel")}
+                    className={`p-3 rounded-lg border-2 text-left cursor-pointer transition-all ${inscriptionMode === "ponctuel" ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white"}`}>
+                    <div className="font-body text-sm font-semibold text-blue-800">Séance ponctuelle</div>
+                    <div className="font-body text-xs text-gray-400 mt-0.5">Paiement à l'unité ou débit carte</div>
+                    {priceTTC > 0 && <div className="font-body text-lg font-bold text-blue-500 mt-1">{priceTTC.toFixed(2)}€</div>}
+                  </button>
+                  <button onClick={() => setInscriptionMode("annuel")}
+                    className={`p-3 rounded-lg border-2 text-left cursor-pointer transition-all ${inscriptionMode === "annuel" ? "border-green-500 bg-green-50" : "border-gray-200 bg-white"}`}>
+                    <div className="font-body text-sm font-semibold text-green-700">Forfait à l'année</div>
+                    <div className="font-body text-xs text-gray-400 mt-0.5">Adhésion + Licence + Abonnement</div>
+                    <div className="font-body text-lg font-bold text-green-600 mt-1">{totalAnnuel.toFixed(2)}€</div>
+                  </button>
+                </div>
+
+                {/* Mode ponctuel */}
+                {inscriptionMode === "ponctuel" && priceTTC > 0 && (
+                  <div className="bg-white rounded-lg p-3">
+                    <label className="flex items-center gap-2 cursor-pointer mb-2">
+                      <input type="checkbox" checked={showPay} onChange={e => setShowPay(e.target.checked)} className="accent-blue-500 w-4 h-4"/>
+                      <span className="font-body text-sm text-blue-800 font-semibold">Encaisser maintenant ({priceTTC.toFixed(2)}€)</span>
+                    </label>
+                    {showPay && <div className="flex flex-wrap gap-1.5 mt-2">{payModes.map(m=><button key={m.id} onClick={()=>setPayMode(m.id)} className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${payMode===m.id?"bg-blue-500 text-white border-blue-500":"bg-white text-gray-500 border-gray-200"}`}>{m.icon} {m.label}</button>)}</div>}
+                  </div>
+                )}
+
+                {/* Mode annuel */}
+                {inscriptionMode === "annuel" && (
+                  <div className="bg-white rounded-lg p-3 space-y-3">
+                    <div className="font-body text-xs font-semibold text-green-600 uppercase tracking-wider">Détail du forfait</div>
+                    {/* Adhésion */}
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" checked={adhesion} onChange={e => setAdhesion(e.target.checked)} className="accent-green-500 w-4 h-4"/>
+                        <span className="font-body text-sm text-blue-800">Adhésion annuelle</span>
+                      </div>
+                      <span className="font-body text-sm font-semibold text-blue-500">{prixAdhesion}€</span>
+                    </label>
+                    {/* Licence FFE */}
+                    <div>
+                      <label className="flex items-center justify-between cursor-pointer">
+                        <div className="flex items-center gap-2">
+                          <input type="checkbox" checked={licence} onChange={e => setLicence(e.target.checked)} className="accent-green-500 w-4 h-4"/>
+                          <span className="font-body text-sm text-blue-800">Licence FFE</span>
+                        </div>
+                        <span className="font-body text-sm font-semibold text-blue-500">{prixLicence}€</span>
+                      </label>
+                      {licence && (
+                        <div className="flex gap-2 mt-1.5 ml-6">
+                          <button onClick={() => setLicenceType("moins18")} className={`px-3 py-1 rounded-lg font-body text-xs cursor-pointer border ${licenceType === "moins18" ? "bg-green-500 text-white border-green-500" : "bg-white text-gray-500 border-gray-200"}`}>-18 ans (25€)</button>
+                          <button onClick={() => setLicenceType("plus18")} className={`px-3 py-1 rounded-lg font-body text-xs cursor-pointer border ${licenceType === "plus18" ? "bg-green-500 text-white border-green-500" : "bg-white text-gray-500 border-gray-200"}`}>+18 ans (36€)</button>
+                        </div>
+                      )}
+                    </div>
+                    {/* Forfait */}
+                    <div className="flex items-center justify-between">
+                      <span className="font-body text-sm text-blue-800">Forfait {creneau.activityTitle}</span>
+                      <span className="font-body text-sm font-semibold text-blue-500">{prixForfait}€</span>
+                    </div>
+                    {/* Total */}
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                      <span className="font-body text-sm font-bold text-blue-800">Total</span>
+                      <span className="font-body text-lg font-bold text-green-600">{totalAnnuel.toFixed(2)}€</span>
+                    </div>
+                    {/* Plan de paiement */}
+                    <div>
+                      <div className="font-body text-[10px] text-gray-400 mb-1">Plan de paiement</div>
+                      <div className="flex gap-2">
+                        {(["1x", "3x", "10x"] as const).map(p => (
+                          <button key={p} onClick={() => setPayPlan(p)} className={`flex-1 py-2 rounded-lg font-body text-xs font-semibold cursor-pointer border ${payPlan === p ? "bg-green-500 text-white border-green-500" : "bg-white text-gray-500 border-gray-200"}`}>
+                            {p === "1x" ? `1× ${totalAnnuel.toFixed(0)}€` : p === "3x" ? `3× ${(totalAnnuel / 3).toFixed(0)}€` : `10× ${(totalAnnuel / 10).toFixed(0)}€`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <button onClick={handleEnroll} disabled={!selChild||enrolling} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${!selChild||enrolling?"bg-gray-200 text-gray-400":inscriptionMode==="annuel"?"bg-green-600 text-white hover:bg-green-500":"bg-blue-500 text-white hover:bg-blue-400"}`}>
+              {enrolling ? "..." : inscriptionMode === "annuel" ? `Inscrire à l'année (${totalAnnuel.toFixed(2)}€)` : showPay ? `Inscrire + Encaisser` : "Inscrire (ponctuel)"}
+            </button>
           </div></div>)}
         </div>
       </div>
