@@ -128,9 +128,14 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
 
     // Dans les 2 cas : inscrire dans le créneau
     await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, inscriptionMode === "ponctuel" && showPay ? payMode : undefined);
-    setJustEnrolled(childName + (inscriptionMode === "annuel" ? " (forfait annuel)" : ""));
-    setSelChild(""); setSelFam(""); setSearch(""); setEnrolling(false); setShowPay(false);
-    setTimeout(() => setJustEnrolled(""), 4000);
+
+    if (inscriptionMode === "annuel") {
+      setJustEnrolled(`${childName} inscrit(e) en forfait annuel — ${sessionsRestantes} séances — ${totalAnnuel.toFixed(2)}€ en ${payPlan}`);
+    } else {
+      setJustEnrolled(childName);
+    }
+    setSelChild(""); setSelFam(""); setSearch(""); setEnrolling(false); setShowPay(false); setInscriptionMode("ponctuel");
+    setTimeout(() => setJustEnrolled(""), 5000);
   };
 
   const handleUnenroll = async (childId: string) => { setUnenrolling(childId); await onUnenroll(creneau.id!, childId); setUnenrolling(""); };
