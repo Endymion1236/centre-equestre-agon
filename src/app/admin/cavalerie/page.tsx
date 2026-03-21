@@ -46,6 +46,8 @@ import {
   Scissors,
   Pill,
   Timer,
+  ChevronRight,
+  ChevronLeft,
 } from "lucide-react";
 
 // Icône tab helper
@@ -117,6 +119,8 @@ interface MouvementRegistre {
   type: "entree" | "sortie";
   date: any;
   motif: string;
+  temporaire: boolean;
+  dateRetour: string | null;
   provenance: string | null;
   destination: string | null;
   prixAchat: number | null;
@@ -262,7 +266,7 @@ export default function CavaleriePage() {
   // ─── Form State : Mouvement ───
   const emptyMouv = {
     equideId: "", type: "entree" as "entree" | "sortie", date: new Date().toISOString().split("T")[0],
-    motif: "Achat", provenance: "", destination: "", prixAchat: "", prixVente: "", observations: "",
+    motif: "Achat", temporaire: false, dateRetour: "", provenance: "", destination: "", prixAchat: "", prixVente: "", observations: "",
   };
   const [mouvForm, setMouvForm] = useState(emptyMouv);
 
@@ -431,30 +435,49 @@ export default function CavaleriePage() {
     try {
       const eq = equides.find(e => e.id === mouvForm.equideId);
       await addDoc(collection(db, "mouvements_registre"), {
-        ...mouvForm,
+        equideId: mouvForm.equideId,
         equideName: eq?.name || mouvForm.equideId,
+        type: mouvForm.type,
         date: Timestamp.fromDate(new Date(mouvForm.date)),
+        motif: mouvForm.motif,
+        temporaire: mouvForm.temporaire,
+        dateRetour: mouvForm.dateRetour ? Timestamp.fromDate(new Date(mouvForm.dateRetour)) : null,
         provenance: mouvForm.provenance || null,
         destination: mouvForm.destination || null,
         prixAchat: mouvForm.prixAchat ? Number(mouvForm.prixAchat) : null,
         prixVente: mouvForm.prixVente ? Number(mouvForm.prixVente) : null,
+        observations: mouvForm.observations || "",
         createdAt: serverTimestamp(),
       });
 
-      // Mise à jour automatique du statut de l'équidé selon le motif de sortie
+      // Mise à jour automatique du statut selon le type de mouvement
       if (mouvForm.type === "sortie" && mouvForm.equideId) {
-        let newStatus: EquideStatus | null = null;
-        if (mouvForm.motif === "Décès") newStatus = "deces";
-        else if (mouvForm.motif === "Vente") newStatus = "sorti";
-        else if (mouvForm.motif === "Retraite") newStatus = "retraite";
-        else if (mouvForm.motif === "Prêt extérieur" || mouvForm.motif === "Fin demi-pension") newStatus = "sorti";
+        if (mouvForm.temporaire) {
+          // Sortie temporaire → indisponible mais pas sorti
+          await updateDoc(doc(db, "equides", mouvForm.equideId), {
+            status: "indisponible" as EquideStatus,
+            updatedAt: serverTimestamp(),
+          });
+        } else {
+          // Sortie définitive → statut selon motif
+          let newStatus: EquideStatus | null = null;
+          if (mouvForm.motif === "Décès") newStatus = "deces";
+          else if (mouvForm.motif === "Vente") newStatus = "sorti";
+          else if (mouvForm.motif === "Retraite") newStatus = "retraite";
+          else newStatus = "sorti";
 
-        if (newStatus) {
           await updateDoc(doc(db, "equides", mouvForm.equideId), {
             status: newStatus,
+            dateSortieDef: mouvForm.date,
             updatedAt: serverTimestamp(),
           });
         }
+      } else if (mouvForm.type === "entree" && mouvForm.equideId) {
+        // Entrée (retour ou achat) → remettre actif
+        await updateDoc(doc(db, "equides", mouvForm.equideId), {
+          status: "actif" as EquideStatus,
+          updatedAt: serverTimestamp(),
+        });
       }
 
       setShowMouvForm(false);
@@ -772,12 +795,16 @@ export default function CavaleriePage() {
                 return db2.getTime() - da.getTime();
               }).map(m => (
                 <Card key={m.id} padding="sm" className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${m.type === "entree" ? "bg-green-50" : "bg-red-50"}`}>
-                    {m.type === "entree" ? "➡️" : "⬅️"}
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${m.type === "entree" ? "bg-green-50" : m.temporaire ? "bg-orange-50" : "bg-red-50"}`}>
+                    {m.type === "entree" ? <ChevronRight size={20} className="text-green-500" /> : <ChevronLeft size={20} className={m.temporaire ? "text-orange-500" : "text-red-500"} />}
                   </div>
                   <div className="flex-1">
-                    <div className="font-body text-sm font-semibold text-blue-800">
-                      {m.equideName} — <span className={m.type === "entree" ? "text-green-600" : "text-red-500"}>{m.type === "entree" ? "Entrée" : "Sortie"}</span>
+                    <div className="font-body text-sm font-semibold text-blue-800 flex items-center gap-2">
+                      {m.equideName} — <span className={m.type === "entree" ? "text-green-600" : m.temporaire ? "text-orange-500" : "text-red-500"}>
+                        {m.type === "entree" ? "Entrée" : m.temporaire ? "Sortie temporaire" : "Sortie définitive"}
+                      </span>
+                      {m.temporaire && <Badge color="orange">Temporaire</Badge>}
+                      {!m.temporaire && m.type === "sortie" && m.motif === "Décès" && <Badge color="red">Décès</Badge>}
                     </div>
                     <div className="font-body text-xs text-gray-400">
                       {formatDate(m.date)} · {m.motif}
@@ -785,6 +812,7 @@ export default function CavaleriePage() {
                       {m.destination && <> · vers {m.destination}</>}
                       {m.prixAchat && <> · Achat : {m.prixAchat}€</>}
                       {m.prixVente && <> · Vente : {m.prixVente}€</>}
+                      {m.temporaire && m.dateRetour && <> · Retour prévu : {formatDate(m.dateRetour)}</>}
                     </div>
                     {m.observations && <div className="font-body text-xs text-gray-400 mt-0.5">{m.observations}</div>}
                   </div>
@@ -1384,12 +1412,33 @@ export default function CavaleriePage() {
                   <label className={labelStyle}>Motif</label>
                   <select className={inputStyle} value={mouvForm.motif} onChange={e => setMouvForm({ ...mouvForm, motif: e.target.value })}>
                     {mouvForm.type === "entree"
-                      ? ["Achat", "Naissance", "Prêt", "Demi-pension", "Don", "Retour"].map(m => <option key={m} value={m}>{m}</option>)
-                      : ["Vente", "Retraite", "Décès", "Prêt extérieur", "Fin demi-pension", "Autre"].map(m => <option key={m} value={m}>{m}</option>)
+                      ? ["Achat", "Naissance", "Retour de prêt", "Retour concours", "Retour pension", "Demi-pension", "Don", "Autre"].map(m => <option key={m} value={m}>{m}</option>)
+                      : ["Vente", "Départ définitif", "Retraite", "Décès", "Prêt extérieur", "Concours", "Pension extérieure", "Fin demi-pension", "Autre"].map(m => <option key={m} value={m}>{m}</option>)
                     }
                   </select>
                 </div>
               </div>
+              {/* Sortie temporaire vs définitive */}
+              {mouvForm.type === "sortie" && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name="duree" checked={!mouvForm.temporaire} onChange={() => setMouvForm({ ...mouvForm, temporaire: false, dateRetour: "" })} className="accent-blue-500" />
+                      <span className="font-body text-sm text-red-500 font-semibold">Sortie définitive</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name="duree" checked={mouvForm.temporaire} onChange={() => setMouvForm({ ...mouvForm, temporaire: true })} className="accent-blue-500" />
+                      <span className="font-body text-sm text-orange-500 font-semibold">Sortie temporaire</span>
+                    </label>
+                  </div>
+                  {mouvForm.temporaire && (
+                    <div>
+                      <label className={labelStyle}>Date de retour prévue</label>
+                      <input type="date" className={inputStyle} value={mouvForm.dateRetour} onChange={e => setMouvForm({ ...mouvForm, dateRetour: e.target.value })} />
+                    </div>
+                  )}
+                </div>
+              )}
               {mouvForm.type === "entree" && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
