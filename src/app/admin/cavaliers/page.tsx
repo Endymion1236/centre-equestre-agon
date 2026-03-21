@@ -527,6 +527,29 @@ export default function CavaliersPage() {
                           <div><div className="font-body text-[11px] font-semibold text-gray-400">Téléphone</div><div className="font-body text-sm text-blue-800">{family.parentPhone || "Non renseigné"}</div></div>
                           <div><div className="font-body text-[11px] font-semibold text-gray-400">Inscription</div><div className="font-body text-sm text-blue-800">{(family as any).authProvider === "admin" ? "Créé par l'admin" : `Via ${(family as any).authProvider}`}</div></div>
                         </div>
+                        {/* Balance financière */}
+                        {(() => {
+                          const fp = getPaymentsForFamily(family.firestoreId);
+                          const paid = fp.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
+                          const due = fp.reduce((s, p) => s + (p.totalTTC || 0), 0);
+                          const bal = paid - due;
+                          return (
+                            <div className="grid grid-cols-3 gap-3 mt-3">
+                              <div className={`rounded-xl p-3 text-center ${bal < 0 ? "bg-red-50" : "bg-green-50"}`}>
+                                <div className="font-body text-[10px] text-gray-500 uppercase font-semibold">Balance</div>
+                                <div className={`font-body text-xl font-bold ${bal < 0 ? "text-red-500" : bal > 0 ? "text-green-600" : "text-gray-400"}`}>{bal >= 0 ? "+" : ""}{bal.toFixed(2)}€</div>
+                              </div>
+                              <div className="bg-sand rounded-xl p-3 text-center">
+                                <div className="font-body text-[10px] text-gray-400">Payé</div>
+                                <div className="font-body text-xl font-bold text-green-600">{paid.toFixed(2)}€</div>
+                              </div>
+                              <div className="bg-sand rounded-xl p-3 text-center">
+                                <div className="font-body text-[10px] text-gray-400">Facturé</div>
+                                <div className="font-body text-xl font-bold text-blue-500">{due.toFixed(2)}€</div>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
 
@@ -802,6 +825,23 @@ export default function CavaliersPage() {
                         </div>
                       );
                     })()}
+
+                    {/* ═══ NOTES INTERNES ═══ */}
+                    <div className="mt-4 pt-3 border-t border-blue-500/8">
+                      <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Notes internes</div>
+                      <textarea
+                        defaultValue={(family as any).notes || ""}
+                        onBlur={async (e) => {
+                          if (e.target.value !== ((family as any).notes || "")) {
+                            await updateDoc(doc(db, "families", family.firestoreId), { notes: e.target.value, updatedAt: serverTimestamp() });
+                            fetchFamilies();
+                          }
+                        }}
+                        placeholder="Notes visibles uniquement par l'admin (allergies, remarques, historique...)"
+                        className="w-full font-body text-xs border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 min-h-[60px] resize-y"
+                      />
+                      <p className="font-body text-[10px] text-gray-400 mt-1">Sauvegarde automatique quand vous cliquez en dehors.</p>
+                    </div>
                   </div>
                 )}
               </Card>
