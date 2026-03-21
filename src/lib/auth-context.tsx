@@ -13,7 +13,7 @@ import {
   signInWithPopup,
   signOut as firebaseSignOut,
 } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { auth, db, googleProvider, facebookProvider } from "@/lib/firebase";
 import type { Family } from "@/types";
 
@@ -76,28 +76,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 // Trouvé ! On lie le compte auth à cette fiche existante
                 const existingDoc = emailSnap.docs[0];
                 const existingData = existingDoc.data();
+                const provider = firebaseUser.providerData[0]?.providerId === "google.com" ? "google" : "facebook";
 
-                // Mettre à jour la fiche existante avec le uid et le provider
-                await updateDoc(doc(db, "families", existingDoc.id), {
-                  authUid: firebaseUser.uid,
-                  authProvider: firebaseUser.providerData[0]?.providerId === "google.com" ? "google" : "facebook",
-                  parentName: existingData.parentName || firebaseUser.displayName || "",
-                  updatedAt: serverTimestamp(),
-                });
-
-                // Copier la fiche vers l'ID = uid pour les accès futurs rapides
+                // Copier la fiche vers l'ID = uid (document principal pour les accès futurs)
                 const familyData = {
                   ...existingData,
                   authUid: firebaseUser.uid,
-                  authProvider: firebaseUser.providerData[0]?.providerId === "google.com" ? "google" : "facebook",
+                  authProvider: provider,
                   parentName: existingData.parentName || firebaseUser.displayName || "",
                   updatedAt: serverTimestamp(),
                 };
                 await setDoc(familyRef, familyData);
 
+                // Supprimer l'ancienne fiche (ID auto-généré) pour éviter les doublons
+                // Seulement si l'ancien ID est différent du nouveau (uid)
+                if (existingDoc.id !== firebaseUser.uid) {
+                  await deleteDoc(doc(db, "families", existingDoc.id));
+                }
+
                 setFamily({ id: firebaseUser.uid, ...familyData } as unknown as Family);
                 linked = true;
-                console.log(`Compte lié : ${firebaseUser.email} → fiche ${existingDoc.id}`);
+                console.log(`Compte lié : ${firebaseUser.email} → ancien ${existingDoc.id} supprimé → nouveau ${firebaseUser.uid}`);
               }
             } catch (e) {
               console.error("Erreur recherche email:", e);
