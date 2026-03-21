@@ -250,6 +250,23 @@ export default function PaiementsPage() {
               );
               if (familyPending.length === 0) return null;
               const totalPending = familyPending.reduce((s, p) => s + (p.totalTTC || 0) - (p.paidAmount || 0), 0);
+
+              const encaisserTout = async (payModeId: string) => {
+                try {
+                  for (const p of familyPending) {
+                    await updateDoc(doc(db, "payments", p.id!), {
+                      status: "paid",
+                      paidAmount: p.totalTTC || 0,
+                      paymentMode: payModeId,
+                      date: serverTimestamp(),
+                    });
+                  }
+                  alert(`${totalPending.toFixed(2)}€ encaissé pour ${family.parentName} (${familyPending.length} prestation${familyPending.length > 1 ? "s" : ""}) !`);
+                  const paySnap = await getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200)));
+                  setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+                } catch (e) { console.error(e); alert("Erreur."); }
+              };
+
               return (
                 <Card padding="md" className="mb-4 border-orange-200 bg-orange-50/30">
                   <div className="flex items-center justify-between mb-3">
@@ -259,38 +276,43 @@ export default function PaiementsPage() {
                     </h3>
                     <span className="font-body text-lg font-bold text-red-500">{totalPending.toFixed(2)}€</span>
                   </div>
-                  <div className="flex flex-col gap-2">
+                  {/* Détail des lignes */}
+                  <div className="flex flex-col gap-1.5 mb-4">
                     {familyPending.map(p => {
                       const reste = (p.totalTTC || 0) - (p.paidAmount || 0);
                       return (
-                        <div key={p.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2.5">
+                        <div key={p.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
                           <div>
                             <div className="font-body text-sm text-blue-800">{(p.items || []).map((i: any) => i.activityTitle).join(", ") || "Prestation"}</div>
-                            <div className="font-body text-xs text-gray-400">{p.totalTTC?.toFixed(2)}€{p.paidAmount > 0 ? ` (déjà payé : ${p.paidAmount.toFixed(2)}€)` : ""}</div>
+                            <div className="font-body text-xs text-gray-400">{reste.toFixed(2)}€{p.paidAmount > 0 ? ` (déjà payé : ${p.paidAmount.toFixed(2)}€)` : ""}</div>
                           </div>
-                          <button onClick={async () => {
-                            const mode = prompt(`Encaisser ${reste.toFixed(2)}€ pour ${family.parentName}\n\nMode de paiement :\n1 = CB terminal\n2 = Chèque\n3 = Espèces\n4 = Virement\n5 = Chèques vacances\n6 = Pass'Sport\n\nTapez le numéro :`);
-                            if (!mode) return;
-                            const modeMap: Record<string,string> = {"1":"cb_terminal","2":"cheque","3":"especes","4":"virement","5":"cheque_vacances","6":"pass_sport"};
-                            const payMode = modeMap[mode] || "cb_terminal";
-                            try {
-                              await updateDoc(doc(db, "payments", p.id!), {
-                                status: "paid",
-                                paidAmount: p.totalTTC || 0,
-                                paymentMode: payMode,
-                                date: serverTimestamp(),
-                              });
-                              alert(`${reste.toFixed(2)}€ encaissé !`);
-                              const paySnap = await getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200)));
-                              setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
-                            } catch (e) { console.error(e); alert("Erreur."); }
-                          }}
-                            className="font-body text-xs font-semibold text-white bg-green-600 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-green-500">
-                            Encaisser {reste.toFixed(2)}€
-                          </button>
+                          <span className="font-body text-sm font-bold text-red-500">{reste.toFixed(2)}€</span>
                         </div>
                       );
                     })}
+                  </div>
+                  {/* Total + choix mode + bouton encaisser tout */}
+                  <div className="bg-white rounded-lg p-3 border border-green-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-body text-sm font-semibold text-blue-800">Total à encaisser</span>
+                      <span className="font-body text-xl font-bold text-green-600">{totalPending.toFixed(2)}€</span>
+                    </div>
+                    <div className="font-body text-xs font-semibold text-gray-400 mb-2">Mode de paiement</div>
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      {paymentModes.map(m => (
+                        <button key={m.id} onClick={() => setPaymentMode(m.id)}
+                          className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer transition-all ${
+                            paymentMode === m.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"
+                          }`}>
+                          {m.label}
+                        </button>
+                      ))}
+                    </div>
+                    <button onClick={() => encaisserTout(paymentMode)}
+                      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-body text-base font-semibold text-white bg-green-600 border-none cursor-pointer hover:bg-green-500 transition-colors">
+                      <Check size={18} />
+                      Encaisser {totalPending.toFixed(2)}€ ({familyPending.length} prestation{familyPending.length > 1 ? "s" : ""})
+                    </button>
                   </div>
                 </Card>
               );
