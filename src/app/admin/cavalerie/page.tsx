@@ -62,7 +62,7 @@ function TabIcon({ name }: { name: string }) {
 // ─── Types locaux (à migrer dans src/types/index.ts) ───
 type EquideType = "poney" | "shetland" | "cheval" | "ane";
 type EquideSex = "male" | "femelle" | "hongre";
-type EquideStatus = "actif" | "retraite" | "sorti" | "en_formation" | "indisponible";
+type EquideStatus = "actif" | "retraite" | "sorti" | "deces" | "en_formation" | "indisponible";
 type SoinType = "vermifuge" | "vaccin" | "marechal" | "dentiste" | "osteopathe" | "veterinaire" | "tonte" | "autre";
 type DocumentEquideType = "radio" | "ordonnance" | "carnet_sante" | "certificat" | "assurance" | "livret" | "facture_veto" | "autre";
 
@@ -156,7 +156,8 @@ const statusOptions: { value: EquideStatus; label: string; color: "green" | "blu
   { value: "en_formation", label: "En formation", color: "blue" },
   { value: "indisponible", label: "Indisponible", color: "orange" },
   { value: "retraite", label: "Retraite", color: "gray" },
-  { value: "sorti", label: "Sorti", color: "red" },
+  { value: "sorti", label: "Sorti (vendu/prêté)", color: "red" },
+  { value: "deces", label: "Décédé", color: "red" },
 ];
 
 const niveauOptions = ["Débutant", "Intermédiaire", "Confirmé", "Tous niveaux"];
@@ -439,6 +440,23 @@ export default function CavaleriePage() {
         prixVente: mouvForm.prixVente ? Number(mouvForm.prixVente) : null,
         createdAt: serverTimestamp(),
       });
+
+      // Mise à jour automatique du statut de l'équidé selon le motif de sortie
+      if (mouvForm.type === "sortie" && mouvForm.equideId) {
+        let newStatus: EquideStatus | null = null;
+        if (mouvForm.motif === "Décès") newStatus = "deces";
+        else if (mouvForm.motif === "Vente") newStatus = "sorti";
+        else if (mouvForm.motif === "Retraite") newStatus = "retraite";
+        else if (mouvForm.motif === "Prêt extérieur" || mouvForm.motif === "Fin demi-pension") newStatus = "sorti";
+
+        if (newStatus) {
+          await updateDoc(doc(db, "equides", mouvForm.equideId), {
+            status: newStatus,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+
       setShowMouvForm(false);
       setMouvForm(emptyMouv);
       fetchData();
@@ -491,7 +509,7 @@ export default function CavaleriePage() {
           </button>
         )}
         {tab === "soins" && (
-          <button onClick={() => { setSoinForm({ ...emptySoin, equideIds: equides.filter(e => e.status !== "sorti").map(e => e.id) }); setShowSoinForm(true); }} className={btnPrimary}>
+          <button onClick={() => { setSoinForm({ ...emptySoin, equideIds: equides.filter(e => e.status !== "sorti" && e.status !== "deces").map(e => e.id) }); setShowSoinForm(true); }} className={btnPrimary}>
             <Plus size={16} /> Enregistrer un soin
           </button>
         )}
@@ -1003,7 +1021,7 @@ export default function CavaleriePage() {
                 <div>
                   <label className={labelStyle}>Équidé *</label>
                   <select name="equideId" required className={inputStyle}>
-                    {equides.filter(e => e.status !== "sorti").map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                    {equides.filter(e => e.status !== "sorti" && e.status !== "deces").map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
                   </select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -1220,7 +1238,7 @@ export default function CavaleriePage() {
               <div>
                 <label className={labelStyle}>Équidés * <span className="font-normal text-gray-400">({soinForm.equideIds.length} sélectionné{soinForm.equideIds.length > 1 ? "s" : ""})</span></label>
                 <div className="flex gap-2 mb-2">
-                  <button type="button" onClick={() => setSoinForm({ ...soinForm, equideIds: equides.filter(e => e.status !== "sorti").map(e => e.id) })}
+                  <button type="button" onClick={() => setSoinForm({ ...soinForm, equideIds: equides.filter(e => e.status !== "sorti" && e.status !== "deces").map(e => e.id) })}
                     className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100">
                     Tous
                   </button>
@@ -1228,17 +1246,17 @@ export default function CavaleriePage() {
                     className="font-body text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-lg border-none cursor-pointer hover:bg-gray-200">
                     Aucun
                   </button>
-                  <button type="button" onClick={() => setSoinForm({ ...soinForm, equideIds: equides.filter(e => e.type === "poney" && e.status !== "sorti").map(e => e.id) })}
+                  <button type="button" onClick={() => setSoinForm({ ...soinForm, equideIds: equides.filter(e => e.type === "poney" && e.status !== "sorti" && e.status !== "deces").map(e => e.id) })}
                     className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100">
                     Poneys
                   </button>
-                  <button type="button" onClick={() => setSoinForm({ ...soinForm, equideIds: equides.filter(e => e.type === "shetland" && e.status !== "sorti").map(e => e.id) })}
+                  <button type="button" onClick={() => setSoinForm({ ...soinForm, equideIds: equides.filter(e => e.type === "shetland" && e.status !== "sorti" && e.status !== "deces").map(e => e.id) })}
                     className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100">
                     Shetlands
                   </button>
                 </div>
                 <div className="max-h-36 overflow-y-auto border border-gray-200 rounded-lg p-2 flex flex-wrap gap-1.5">
-                  {equides.filter(e => e.status !== "sorti").map(e => {
+                  {equides.filter(e => e.status !== "sorti" && e.status !== "deces").map(e => {
                     const selected = soinForm.equideIds.includes(e.id);
                     return (
                       <button key={e.id} type="button"

@@ -45,7 +45,7 @@ export default function MontoirPage() {
     }).map((i: any) => i.equideId);
 
     return equides
-      .filter(e => e.status !== "sorti" && !activeIndispos.includes(e.id))
+      .filter(e => e.status !== "sorti" && e.status !== "deces" && !activeIndispos.includes(e.id))
       .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   }, [equides, indisponibilites, dateStr]);
 
