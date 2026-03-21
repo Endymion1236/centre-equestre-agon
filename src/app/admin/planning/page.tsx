@@ -107,22 +107,38 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
           status: "active",
           createdAt: serverTimestamp(),
         });
-        // Créer le paiement en attente pour le forfait
+        // Créer les paiements en attente selon le plan
         const items = [];
         if (adhesion) items.push({ activityTitle: "Adhésion annuelle", priceHT: prixAdhesion / 1.055, tva: 5.5, priceTTC: prixAdhesion });
         if (licence) items.push({ activityTitle: `Licence FFE ${licenceType === "moins18" ? "-18ans" : "+18ans"}`, priceHT: prixLicence, tva: 0, priceTTC: prixLicence });
         items.push({ activityTitle: `Forfait ${creneau.activityTitle} (${slotKey})`, priceHT: prixForfait / 1.055, tva: 5.5, priceTTC: prixForfait });
-        await addDoc(collection(db, "payments"), {
-          familyId: fam.firestoreId,
-          familyName: fam.parentName || "",
-          items,
-          totalTTC: totalAnnuel,
-          paymentMode: "",
-          paymentRef: "",
-          status: "pending",
-          paidAmount: 0,
-          date: serverTimestamp(),
-        });
+
+        const nbEcheances = payPlan === "10x" ? 10 : payPlan === "3x" ? 3 : 1;
+        const montantEcheance = Math.round((totalAnnuel / nbEcheances) * 100) / 100;
+        // Ajuster la dernière échéance pour couvrir l'arrondi
+        const montantDerniereEcheance = Math.round((totalAnnuel - montantEcheance * (nbEcheances - 1)) * 100) / 100;
+
+        for (let i = 0; i < nbEcheances; i++) {
+          const echeanceDate = new Date();
+          echeanceDate.setMonth(echeanceDate.getMonth() + i);
+          const montant = i === nbEcheances - 1 ? montantDerniereEcheance : montantEcheance;
+
+          await addDoc(collection(db, "payments"), {
+            familyId: fam.firestoreId,
+            familyName: fam.parentName || "",
+            items: i === 0 ? items : [{ activityTitle: `Échéance ${i + 1}/${nbEcheances} — ${childName}`, priceHT: montant / 1.055, tva: 5.5, priceTTC: montant }],
+            totalTTC: montant,
+            paymentMode: "",
+            paymentRef: "",
+            status: "pending",
+            paidAmount: 0,
+            echeance: i + 1,
+            echeancesTotal: nbEcheances,
+            echeanceDate: echeanceDate.toISOString().split("T")[0],
+            forfaitRef: slotKey,
+            date: serverTimestamp(),
+          });
+        }
       } catch (e) { console.error(e); }
     }
 

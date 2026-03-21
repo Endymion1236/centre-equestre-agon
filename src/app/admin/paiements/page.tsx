@@ -291,12 +291,31 @@ export default function PaiementsPage() {
                       );
                     })}
                   </div>
-                  {/* Total + choix mode + bouton encaisser tout */}
+                  {/* Total + montant + mode + bouton */}
                   <div className="bg-white rounded-lg p-3 border border-green-200">
                     <div className="flex items-center justify-between mb-3">
-                      <span className="font-body text-sm font-semibold text-blue-800">Total à encaisser</span>
-                      <span className="font-body text-xl font-bold text-green-600">{totalPending.toFixed(2)}€</span>
+                      <span className="font-body text-sm font-semibold text-blue-800">Total dû</span>
+                      <span className="font-body text-xl font-bold text-red-500">{totalPending.toFixed(2)}€</span>
                     </div>
+
+                    {/* Montant à encaisser */}
+                    <div className="mb-3">
+                      <div className="font-body text-xs font-semibold text-gray-400 mb-1">Montant encaissé</div>
+                      <div className="flex gap-2 items-center">
+                        <input type="number" step="0.01" value={paidAmount} onChange={e => setPaidAmount(e.target.value)}
+                          placeholder={totalPending.toFixed(2)}
+                          className={`${inputCls} w-32`} />
+                        <span className="font-body text-xs text-gray-400">€</span>
+                        {!paidAmount && <span className="font-body text-[10px] text-gray-400">(vide = tout encaisser)</span>}
+                      </div>
+                      {paidAmount && parseFloat(paidAmount) < totalPending && parseFloat(paidAmount) > 0 && (
+                        <div className="font-body text-xs text-orange-500 mt-1">
+                          Paiement partiel — reste dû après : {(totalPending - parseFloat(paidAmount)).toFixed(2)}€
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Mode de paiement */}
                     <div className="font-body text-xs font-semibold text-gray-400 mb-2">Mode de paiement</div>
                     <div className="flex flex-wrap gap-1.5 mb-3">
                       {paymentModes.map(m => (
@@ -308,10 +327,48 @@ export default function PaiementsPage() {
                         </button>
                       ))}
                     </div>
-                    <button onClick={() => encaisserTout(paymentMode)}
+
+                    {/* Référence */}
+                    {["cheque", "cheque_vacances", "pass_sport", "ancv", "virement"].includes(paymentMode) && (
+                      <div className="mb-3">
+                        <input value={paymentRef} onChange={e => setPaymentRef(e.target.value)}
+                          placeholder="N° de chèque, référence..."
+                          className={inputCls} />
+                      </div>
+                    )}
+
+                    <button onClick={async () => {
+                      const montant = paidAmount ? parseFloat(paidAmount) : totalPending;
+                      if (montant <= 0) return;
+                      try {
+                        let resteARegler = montant;
+                        for (const p of familyPending) {
+                          if (resteARegler <= 0) break;
+                          const du = (p.totalTTC || 0) - (p.paidAmount || 0);
+                          const paye = Math.min(du, resteARegler);
+                          const newPaid = (p.paidAmount || 0) + paye;
+                          const newStatus = newPaid >= (p.totalTTC || 0) ? "paid" : "partial";
+                          await updateDoc(doc(db, "payments", p.id!), {
+                            status: newStatus,
+                            paidAmount: Math.round(newPaid * 100) / 100,
+                            paymentMode,
+                            paymentRef: paymentRef || "",
+                            date: serverTimestamp(),
+                          });
+                          resteARegler -= paye;
+                        }
+                        const resteFinal = totalPending - montant;
+                        alert(`${montant.toFixed(2)}€ encaissé pour ${family.parentName} !${resteFinal > 0 ? `\nReste dû : ${resteFinal.toFixed(2)}€` : "\nTout est réglé !"}`);
+                        setPaidAmount("");
+                        setPaymentRef("");
+                        const paySnap = await getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200)));
+                        setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+                      } catch (e) { console.error(e); alert("Erreur."); }
+                    }}
                       className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-body text-base font-semibold text-white bg-green-600 border-none cursor-pointer hover:bg-green-500 transition-colors">
                       <Check size={18} />
-                      Encaisser {totalPending.toFixed(2)}€ ({familyPending.length} prestation{familyPending.length > 1 ? "s" : ""})
+                      Encaisser {(paidAmount ? parseFloat(paidAmount) : totalPending).toFixed(2)}€
+                      {paidAmount && parseFloat(paidAmount) < totalPending ? " (partiel)" : ` (${familyPending.length} prestation${familyPending.length > 1 ? "s" : ""})`}
                     </button>
                   </div>
                 </Card>
@@ -645,41 +702,104 @@ export default function PaiementsPage() {
       {/* ─── Échéances Tab ─── */}
       {tab === "echeances" && (
         <div>
-          <Card padding="md" className="mb-4 bg-blue-50 border-blue-500/8">
-            <div className="font-body text-sm text-blue-800">💡 <strong>Tableau des échéances :</strong> Suivi des paiements en 3x ou 10x. Les échéances Stripe sont prélevées automatiquement. Les échéances manuelles doivent être relancées.</div>
-          </Card>
           {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
           (() => {
-            const installments = payments.filter(p => p.paymentRef?.includes("x") || (p.totalTTC || 0) > (p.paidAmount || 0));
-            return installments.length === 0 ? (
-              <Card padding="lg" className="text-center"><p className="font-body text-sm text-gray-500">Aucun paiement échelonné.</p></Card>
+            // Filtrer les paiements qui font partie d'un échéancier
+            const echeances = payments.filter(p => (p as any).echeancesTotal > 1);
+            
+            // Grouper par famille + forfaitRef
+            const groupes: Record<string, typeof echeances> = {};
+            echeances.forEach(p => {
+              const key = `${p.familyId}_${(p as any).forfaitRef || ""}`;
+              if (!groupes[key]) groupes[key] = [];
+              groupes[key].push(p);
+            });
+
+            // Trier chaque groupe par numéro d'échéance
+            Object.values(groupes).forEach(g => g.sort((a: any, b: any) => (a.echeance || 0) - (b.echeance || 0)));
+
+            const groupesList = Object.entries(groupes);
+
+            return groupesList.length === 0 ? (
+              <Card padding="lg" className="text-center">
+                <CreditCard size={28} className="text-gray-300 mx-auto mb-3" />
+                <p className="font-body text-sm text-gray-500">Aucun paiement échelonné. Les échéanciers sont créés automatiquement quand un forfait est souscrit en 3x ou 10x depuis le planning.</p>
+              </Card>
             ) : (
-              <Card className="!p-0 overflow-hidden">
-                <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                  <span className="flex-1">Client</span>
-                  <span className="w-32">Prestation</span>
-                  <span className="w-20 text-right">Total</span>
-                  <span className="w-20 text-right">Payé</span>
-                  <span className="w-20 text-right">Reste</span>
-                  <span className="w-24 text-center">Progression</span>
-                </div>
-                {installments.map(p => {
-                  const paid = p.paidAmount || 0;
-                  const total = p.totalTTC || 0;
-                  const rest = total - paid;
-                  const pct = total > 0 ? (paid / total) * 100 : 0;
+              <div className="flex flex-col gap-4">
+                {groupesList.map(([key, echs]) => {
+                  const first = echs[0];
+                  const totalForfait = echs.reduce((s, e) => s + (e.totalTTC || 0), 0);
+                  const totalPaye = echs.reduce((s, e) => s + (e.paidAmount || 0), 0);
+                  const nbPayes = echs.filter(e => e.status === "paid").length;
+                  const nbTotal = echs.length;
+                  const today = new Date().toISOString().split("T")[0];
+
                   return (
-                    <div key={p.id} className="px-5 py-3 border-b border-blue-500/8 flex items-center">
-                      <span className="flex-1 font-body text-sm font-semibold text-blue-800">{p.familyName}</span>
-                      <span className="w-32 font-body text-xs text-gray-500 truncate">{(p.items||[]).map((i:any)=>i.activityTitle).join(", ")}</span>
-                      <span className="w-20 text-right font-body text-sm text-gray-500">{total.toFixed(2)}€</span>
-                      <span className="w-20 text-right font-body text-sm font-semibold text-green-600">{paid.toFixed(2)}€</span>
-                      <span className="w-20 text-right font-body text-sm font-semibold text-orange-500">{rest.toFixed(2)}€</span>
-                      <span className="w-24 flex items-center gap-2"><div className="flex-1 h-2 rounded-full bg-gray-100"><div className="h-2 rounded-full bg-blue-500" style={{width:`${pct}%`}}/></div><span className="font-body text-[10px] text-gray-400">{Math.round(pct)}%</span></span>
-                    </div>
+                    <Card key={key} padding="md">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <div className="font-body text-sm font-semibold text-blue-800">{first.familyName}</div>
+                          <div className="font-body text-xs text-gray-400">{(first as any).forfaitRef || (first.items || []).map((i: any) => i.activityTitle).join(", ")}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-body text-base font-bold text-blue-500">{totalForfait.toFixed(2)}€</div>
+                          <div className="font-body text-[10px] text-gray-400">{nbPayes}/{nbTotal} échéances payées</div>
+                        </div>
+                      </div>
+
+                      {/* Barre de progression */}
+                      <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden mb-3">
+                        <div className={`h-full rounded-full ${nbPayes === nbTotal ? "bg-green-500" : "bg-blue-400"}`} style={{ width: `${(nbPayes / nbTotal) * 100}%` }} />
+                      </div>
+
+                      {/* Grille des échéances */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {echs.map((e: any) => {
+                          const isPaid = e.status === "paid";
+                          const isOverdue = !isPaid && e.echeanceDate && e.echeanceDate < today;
+                          const isCurrent = !isPaid && !isOverdue;
+                          return (
+                            <div key={e.id} className={`flex items-center justify-between px-3 py-2 rounded-lg ${isPaid ? "bg-green-50" : isOverdue ? "bg-red-50" : "bg-sand"}`}>
+                              <div className="flex items-center gap-2">
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${isPaid ? "bg-green-500 text-white" : isOverdue ? "bg-red-500 text-white" : "bg-gray-200 text-gray-500"}`}>
+                                  {isPaid ? <Check size={12} /> : e.echeance}
+                                </div>
+                                <div>
+                                  <div className={`font-body text-xs font-semibold ${isPaid ? "text-green-700" : isOverdue ? "text-red-600" : "text-blue-800"}`}>
+                                    Échéance {e.echeance}/{e.echeancesTotal}
+                                  </div>
+                                  <div className="font-body text-[10px] text-gray-400">
+                                    {e.echeanceDate ? new Date(e.echeanceDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : "—"}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className={`font-body text-sm font-bold ${isPaid ? "text-green-600" : isOverdue ? "text-red-500" : "text-blue-500"}`}>{(e.totalTTC || 0).toFixed(2)}€</span>
+                                {isPaid && <Badge color="green">Payé</Badge>}
+                                {isOverdue && <Badge color="red">En retard</Badge>}
+                                {isCurrent && !isPaid && (
+                                  <button onClick={async () => {
+                                    const mode = prompt(`Encaisser ${(e.totalTTC || 0).toFixed(2)}€\n\n1=CB  2=Chèque  3=Espèces  4=Virement`);
+                                    if (!mode) return;
+                                    const modeMap: Record<string,string> = {"1":"cb_terminal","2":"cheque","3":"especes","4":"virement"};
+                                    await updateDoc(doc(db, "payments", e.id), { status: "paid", paidAmount: e.totalTTC || 0, paymentMode: modeMap[mode] || "cb_terminal", date: serverTimestamp() });
+                                    const paySnap = await getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200)));
+                                    setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+                                  }}
+                                    className="font-body text-[10px] font-semibold text-white bg-green-600 px-2 py-1 rounded border-none cursor-pointer hover:bg-green-500">
+                                    Encaisser
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </Card>
                   );
                 })}
-              </Card>
+              </div>
             );
           })()}
         </div>
