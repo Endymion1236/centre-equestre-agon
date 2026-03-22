@@ -45,7 +45,7 @@ const paymentModes: { id: PaymentMode; label: string }[] = [
 ];
 
 export default function PaiementsPage() {
-  const [tab, setTab] = useState<"encaisser" | "historique" | "echeances" | "impayes">("encaisser");
+  const [tab, setTab] = useState<"encaisser" | "journal" | "historique" | "echeances" | "impayes">("encaisser");
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const [activities, setActivities] = useState<(Activity & { firestoreId: string })[]>([]);
   const [payments, setPayments] = useState<(Payment & { id: string })[]>([]);
@@ -56,6 +56,15 @@ export default function PaiementsPage() {
   const [histStatusFilter, setHistStatusFilter] = useState<string>("all");
   const [histSearch, setHistSearch] = useState("");
   const [histPeriod, setHistPeriod] = useState("");
+
+  // Journal filters
+  const [journalDateFrom, setJournalDateFrom] = useState("");
+  const [journalDateTo, setJournalDateTo] = useState("");
+  const [journalMontantMin, setJournalMontantMin] = useState("");
+  const [journalMontantMax, setJournalMontantMax] = useState("");
+  const [journalMode, setJournalMode] = useState("all");
+  const [journalStatus, setJournalStatus] = useState("all");
+  const [journalSearch, setJournalSearch] = useState("");
 
   // Basket state
   const [selectedFamily, setSelectedFamily] = useState<string>("");
@@ -190,7 +199,7 @@ export default function PaiementsPage() {
       <h1 className="font-display text-2xl font-bold text-blue-800 mb-6">Paiements & facturation</h1>
 
       <div className="flex gap-2 mb-6">
-        {([["encaisser", "Encaisser", ShoppingCart], ["historique", "Historique", Receipt], ["echeances", "Échéances", Receipt], ["impayes", "Impayés", Receipt]] as const).map(([id, label, Icon]) => (
+        {([["encaisser", "Encaisser", ShoppingCart], ["journal", "Journal", Receipt], ["historique", "Historique", Receipt], ["echeances", "Échéances", Receipt], ["impayes", "Impayés", Receipt]] as const).map(([id, label, Icon]) => (
           <button key={id} onClick={() => setTab(id as any)}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all
               ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
@@ -556,6 +565,128 @@ export default function PaiementsPage() {
               )}
             </Card>
           </div>
+        </div>
+      )}
+
+      {/* ─── Journal Tab ─── */}
+      {tab === "journal" && (
+        <div>
+          {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
+          (() => {
+            // Filtrage
+            let filtered = [...payments];
+            if (journalDateFrom) filtered = filtered.filter(p => { const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null; return d && d >= new Date(journalDateFrom); });
+            if (journalDateTo) filtered = filtered.filter(p => { const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null; return d && d <= new Date(journalDateTo + "T23:59:59"); });
+            if (journalMontantMin) filtered = filtered.filter(p => (p.paidAmount || p.totalTTC || 0) >= parseFloat(journalMontantMin));
+            if (journalMontantMax) filtered = filtered.filter(p => (p.paidAmount || p.totalTTC || 0) <= parseFloat(journalMontantMax));
+            if (journalMode !== "all") filtered = filtered.filter(p => p.paymentMode === journalMode);
+            if (journalStatus !== "all") filtered = filtered.filter(p => p.status === journalStatus);
+            if (journalSearch) { const q = journalSearch.toLowerCase(); filtered = filtered.filter(p => p.familyName?.toLowerCase().includes(q) || (p.items || []).some((i: any) => i.activityTitle?.toLowerCase().includes(q))); }
+            filtered.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
+
+            const totalEncaisse = filtered.filter(p => p.status === "paid").reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
+            const totalPending = filtered.filter(p => p.status === "pending" || p.status === "partial").reduce((s, p) => s + ((p.totalTTC || 0) - (p.paidAmount || 0)), 0);
+
+            return (
+              <>
+                {/* Filtres */}
+                <Card padding="md" className="mb-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                    <div>
+                      <label className="font-body text-[10px] text-gray-400 uppercase block mb-1">Date de</label>
+                      <input type="date" value={journalDateFrom} onChange={e => setJournalDateFrom(e.target.value)} className={inputCls} />
+                    </div>
+                    <div>
+                      <label className="font-body text-[10px] text-gray-400 uppercase block mb-1">Date à</label>
+                      <input type="date" value={journalDateTo} onChange={e => setJournalDateTo(e.target.value)} className={inputCls} />
+                    </div>
+                    <div>
+                      <label className="font-body text-[10px] text-gray-400 uppercase block mb-1">Montant min</label>
+                      <input type="number" step="0.01" placeholder="0" value={journalMontantMin} onChange={e => setJournalMontantMin(e.target.value)} className={inputCls} />
+                    </div>
+                    <div>
+                      <label className="font-body text-[10px] text-gray-400 uppercase block mb-1">Montant max</label>
+                      <input type="number" step="0.01" placeholder="9999" value={journalMontantMax} onChange={e => setJournalMontantMax(e.target.value)} className={inputCls} />
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <select value={journalMode} onChange={e => setJournalMode(e.target.value)} className={`${inputCls} w-40`}>
+                      <option value="all">Tous les modes</option>
+                      {paymentModes.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                    </select>
+                    <select value={journalStatus} onChange={e => setJournalStatus(e.target.value)} className={`${inputCls} w-36`}>
+                      <option value="all">Tous statuts</option>
+                      <option value="paid">Encaissé</option>
+                      <option value="pending">En attente</option>
+                      <option value="partial">Partiel</option>
+                    </select>
+                    <div className="relative flex-1 min-w-[180px]">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+                      <input placeholder="Nom, prestation…" value={journalSearch} onChange={e => setJournalSearch(e.target.value)} className={`${inputCls} !pl-9`} />
+                    </div>
+                    {(journalDateFrom || journalDateTo || journalMontantMin || journalMontantMax || journalMode !== "all" || journalStatus !== "all" || journalSearch) && (
+                      <button onClick={() => { setJournalDateFrom(""); setJournalDateTo(""); setJournalMontantMin(""); setJournalMontantMax(""); setJournalMode("all"); setJournalStatus("all"); setJournalSearch(""); }}
+                        className="font-body text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-red-100">Effacer filtres</button>
+                    )}
+                  </div>
+                </Card>
+
+                {/* KPIs */}
+                <div className="flex gap-4 mb-4">
+                  <Card padding="sm" className="flex-1 flex items-center gap-3">
+                    <div className="font-body text-lg font-bold text-green-600">{totalEncaisse.toFixed(2)}€</div>
+                    <div className="font-body text-xs text-gray-400">encaissé ({filtered.filter(p => p.status === "paid").length})</div>
+                  </Card>
+                  <Card padding="sm" className="flex-1 flex items-center gap-3">
+                    <div className="font-body text-lg font-bold text-orange-500">{totalPending.toFixed(2)}€</div>
+                    <div className="font-body text-xs text-gray-400">en attente ({filtered.filter(p => p.status !== "paid").length})</div>
+                  </Card>
+                  <Card padding="sm" className="flex-1 flex items-center gap-3">
+                    <div className="font-body text-lg font-bold text-blue-500">{filtered.length}</div>
+                    <div className="font-body text-xs text-gray-400">lignes</div>
+                  </Card>
+                </div>
+
+                {/* Tableau */}
+                {filtered.length === 0 ? (
+                  <Card padding="lg" className="text-center"><p className="font-body text-sm text-gray-500">Aucun paiement correspondant.</p></Card>
+                ) : (
+                  <Card className="!p-0 overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="bg-sand border-b border-blue-500/8">
+                            {["Date", "Réf.", "Client", "Prestation", "Montant", "Payé", "Mode", "Statut"].map(h => (
+                              <th key={h} className="px-3 py-2.5 font-body text-[10px] font-semibold text-gray-400 uppercase tracking-wider text-left">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filtered.map((p, idx) => {
+                            const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
+                            const mode = paymentModes.find(m => m.id === p.paymentMode);
+                            const reste = (p.totalTTC || 0) - (p.paidAmount || 0);
+                            return (
+                              <tr key={p.id} className={`border-b border-blue-500/5 hover:bg-blue-50/30 ${p.status === "pending" ? "bg-orange-50/20" : ""}`}>
+                                <td className="px-3 py-2 font-body text-xs text-gray-400">{d ? d.toLocaleDateString("fr-FR") : "—"}</td>
+                                <td className="px-3 py-2 font-body text-xs font-semibold text-blue-800">F{d ? d.getFullYear() : ""}-{String(payments.length - payments.indexOf(p)).padStart(3, "0")}</td>
+                                <td className="px-3 py-2 font-body text-sm font-semibold text-blue-800">{p.familyName}</td>
+                                <td className="px-3 py-2 font-body text-xs text-gray-500 max-w-[200px] truncate">{(p.items || []).map((i: any) => i.activityTitle).join(", ")}</td>
+                                <td className="px-3 py-2 font-body text-sm font-bold text-blue-500">{(p.totalTTC || 0).toFixed(2)}€</td>
+                                <td className="px-3 py-2 font-body text-sm font-semibold text-green-600">{(p.paidAmount || 0).toFixed(2)}€</td>
+                                <td className="px-3 py-2"><Badge color="blue">{mode?.label?.split(" ")[0] || p.paymentMode || "—"}</Badge></td>
+                                <td className="px-3 py-2"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : "gray"}>{p.status === "paid" ? "Encaissé" : p.status === "partial" ? "Partiel" : "Att."}</Badge></td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 
