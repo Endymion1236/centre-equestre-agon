@@ -151,7 +151,7 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
           }
         }
 
-        // UN SEUL paiement groupé pour tous les enfants
+        // Ajouter les lignes au panier de la famille (1 seul paiement pending)
         const newItems = stageLines.map(l => ({
           activityTitle: `${creneau.activityTitle} (${creneauxAInscrire.length}j) — ${l.childName} (-${l.remiseEuros}€ réd. ${l.rang}${l.rang === 1 ? "ère" : "ème"})`,
           priceHT: l.prixReduit / 1.055,
@@ -160,85 +160,54 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
           childName: l.childName,
         }));
 
-        // Chercher un acompte stage pending existant pour cette famille
-        const existingAcompteSnap = await getDocs(query(
+        // Chercher un paiement pending existant pour cette famille
+        const existingSnap = await getDocs(query(
           collection(db, "payments"),
           where("familyId", "==", fam.firestoreId),
-          where("isAcompte", "==", true),
           where("status", "==", "pending"),
-        ));
-        const existingSoldeSnap = await getDocs(query(
-          collection(db, "payments"),
-          where("familyId", "==", fam.firestoreId),
-          where("isSolde", "==", true),
-          where("status", "==", "pending"),
+          where("isStageCart", "==", true),
         ));
 
-        if (existingAcompteSnap.docs.length > 0) {
-          // Fusionner avec l'acompte existant
-          const existingAcompte = existingAcompteSnap.docs[0];
-          const existingData = existingAcompte.data();
+        if (existingSnap.docs.length > 0) {
+          // Fusionner avec le panier existant
+          const existing = existingSnap.docs[0];
+          const existingData = existing.data();
           const mergedItems = [...(existingData.items || []), ...newItems];
           const mergedTotal = mergedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
-          const mergedAcompte = Math.round(mergedTotal * 0.3 * 100) / 100;
-          const mergedSolde = Math.round((mergedTotal - mergedAcompte) * 100) / 100;
 
-          await updateDoc(doc(db, "payments", existingAcompte.id), {
+          await updateDoc(doc(db, "payments", existing.id), {
             items: mergedItems,
-            totalTTC: mergedAcompte,
+            totalTTC: Math.round(mergedTotal * 100) / 100,
             updatedAt: serverTimestamp(),
           });
-
-          // Mettre à jour le solde existant
-          if (existingSoldeSnap.docs.length > 0) {
-            await updateDoc(doc(db, "payments", existingSoldeSnap.docs[0].id), {
-              items: [{ activityTitle: `Solde stages famille ${fam.parentName} (${mergedItems.length} inscription${mergedItems.length > 1 ? "s" : ""})`, priceHT: mergedSolde / 1.055, tva: 5.5, priceTTC: mergedSolde }],
-              totalTTC: mergedSolde,
-              updatedAt: serverTimestamp(),
-            });
-          }
         } else {
-          // Créer nouveaux paiements acompte + solde
+          // Créer le panier
           await addDoc(collection(db, "payments"), {
             familyId: fam.firestoreId,
             familyName: fam.parentName || "",
             items: newItems,
-            totalTTC: stageAcompte,
+            totalTTC: stageTotalTTC,
             paymentMode: "",
             paymentRef: "",
             status: "pending",
             paidAmount: 0,
-            isAcompte: true,
-            stageRef: creneau.activityTitle,
-            date: serverTimestamp(),
-          });
-
-          await addDoc(collection(db, "payments"), {
-            familyId: fam.firestoreId,
-            familyName: fam.parentName || "",
-            items: [{ activityTitle: `Solde stages famille ${fam.parentName} (${stageLines.length} enfant${stageLines.length > 1 ? "s" : ""})`, priceHT: stageSolde / 1.055, tva: 5.5, priceTTC: stageSolde }],
-            totalTTC: stageSolde,
-            paymentMode: "",
-            paymentRef: "",
-            status: "pending",
-            paidAmount: 0,
-            isSolde: true,
-            stageRef: creneau.activityTitle,
+            isStageCart: true,
             date: serverTimestamp(),
           });
         }
 
         const noms = stageLines.map(l => l.childName).join(", ");
-        setJustEnrolled(`${noms} inscrit(s) dans ${creneauxAInscrire.length} jour(s) — Total : ${stageTotalTTC.toFixed(2)}€ — Acompte : ${stageAcompte.toFixed(2)}€`);
+        setJustEnrolled(`${noms} inscrit(s) dans ${creneauxAInscrire.length} jour(s) — ${stageTotalTTC.toFixed(2)}€ ajouté au panier`);
 
-        // Proposer envoi lien Stripe pour l'acompte
+        // Proposer envoi lien Stripe
         if (fam.parentEmail) {
+          const acompte30 = Math.round(stageTotalTTC * 0.3 * 100) / 100;
           const choix = prompt(
-            `Stage inscrit ! ${stageLines.length} enfant(s) — ${stageTotalTTC.toFixed(2)}€\n` +
-            `Acompte 30% : ${stageAcompte.toFixed(2)}€\n` +
-            `Solde sur place : ${stageSolde.toFixed(2)}€\n\n` +
-            `1 = Envoyer le lien de paiement acompte par email\n` +
-            `2 = Plus tard (encaissement manuel)\n\nTapez 1 ou 2 :`
+            `Inscription ajoutée au panier !\n` +
+            `${stageLines.length} enfant(s) dans ${creneauxAInscrire.length} jour(s) — ${stageTotalTTC.toFixed(2)}€\n\n` +
+            `Encaisser maintenant ?\n` +
+            `1 = Envoyer un lien de paiement par email (acompte 30% = ${acompte30.toFixed(2)}€)\n` +
+            `2 = Plus tard (tout est dans Paiements > Encaisser)\n\nTapez 1 ou 2 :`
           );
           if (choix === "1") {
             try {
@@ -250,8 +219,8 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
                   familyName: fam.parentName || "",
                   childName: noms,
                   email: fam.parentEmail,
-                  forfaitLabel: `Acompte ${creneau.activityTitle}`,
-                  totalTTC: stageAcompte,
+                  forfaitLabel: `Stages — ${fam.parentName}`,
+                  totalTTC: acompte30,
                   nbEcheances: 1,
                   paymentIds: [],
                 }),
@@ -263,24 +232,23 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
                     to: fam.parentEmail,
-                    subject: `Acompte stage — ${creneau.activityTitle}`,
+                    subject: `Inscription stage — ${creneau.activityTitle}`,
                     html: `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px;">
-                      <h2 style="color:#1e3a5f;">Centre Équestre d'Agon-Coutainville</h2>
+                      <h2 style="color:#1e3a5f;">Centre Equestre d'Agon-Coutainville</h2>
                       <p>Bonjour ${fam.parentName},</p>
-                      <p>Inscription confirmée pour <strong>${noms}</strong> au stage <strong>${creneau.activityTitle}</strong>.</p>
+                      <p>Inscription confirmée au stage <strong>${creneau.activityTitle}</strong> :</p>
                       <table style="width:100%;border-collapse:collapse;margin:15px 0;">
                         ${stageLines.map(l => `<tr><td style="padding:5px 0;">${l.childName}</td><td style="text-align:right;padding:5px 0;">${l.prixReduit.toFixed(2)}€ <span style="color:#27ae60;">(-${l.remiseEuros}€)</span></td></tr>`).join("")}
                         <tr style="border-top:2px solid #1e3a5f;font-weight:bold;"><td style="padding:8px 0;">Total</td><td style="text-align:right;padding:8px 0;">${stageTotalTTC.toFixed(2)}€</td></tr>
                       </table>
-                      <p><strong>Acompte à régler : ${stageAcompte.toFixed(2)}€</strong> (30%)<br/>Solde : ${stageSolde.toFixed(2)}€ le jour du stage</p>
+                      <p><strong>Acompte demande : ${acompte30.toFixed(2)}€</strong> (30%)<br/>Solde : ${(stageTotalTTC - acompte30).toFixed(2)}€ le jour du stage</p>
                       <p style="text-align:center;margin:25px 0;">
                         <a href="${data.url}" style="background:#27ae60;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;">Payer l'acompte</a>
                       </p>
-                      <p style="color:#888;font-size:12px;">Paiement sécurisé par Stripe.</p>
                     </div>`,
                   }),
                 });
-                alert(`Lien d'acompte envoyé à ${fam.parentEmail} !`);
+                alert(`Lien envoyé à ${fam.parentEmail} !`);
               }
             } catch (e) { console.error(e); }
           }
