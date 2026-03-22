@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, doc, query, orderBy, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { Loader2, Download, Upload, Check, FileText, Building2, Receipt, Calculator, Search, Printer } from "lucide-react";
+import { Loader2, Download, Upload, Check, FileText, Building2, Receipt, Calculator, Search, Printer, Plus } from "lucide-react";
 
 interface Payment {
   id: string;
@@ -47,6 +47,7 @@ const modeLabels: Record<string, string> = {
 export default function ComptabilitePage() {
   const [tab, setTab] = useState<"journal" | "tva" | "rapprochement" | "remise" | "fec" | "export">("journal");
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [remises, setRemises] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState(() => {
     const now = new Date();
@@ -57,14 +58,18 @@ export default function ComptabilitePage() {
   const [showManualMatch, setShowManualMatch] = useState<number | null>(null); // index de la bankLine
   const [manualSearch, setManualSearch] = useState("");
 
-  useEffect(() => {
+  const fetchData = () => {
     getDocs(query(collection(db, "payments"), orderBy("date", "desc")))
       .then((snap) => setPayments(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Payment[]))
       .catch(() => {
         getDocs(collection(db, "payments")).then((snap) => setPayments(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Payment[]));
       })
       .finally(() => setLoading(false));
-  }, []);
+    getDocs(collection(db, "remises"))
+      .then((snap) => setRemises(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+  };
+
+  useEffect(() => { fetchData(); }, []);
 
   // Filter by period
   const filteredPayments = useMemo(() => {
@@ -391,70 +396,154 @@ export default function ComptabilitePage() {
       )}
 
       {/* ─── Bordereaux de remise ─── */}
-      {!loading && tab === "remise" && (
+      {!loading && tab === "remise" && (() => {
+        // Paiements encaissés non encore remis
+        const paidPayments = payments.filter(p => p.status === "paid" && p.paidAmount > 0);
+        const remisPaymentIds = (remises || []).flatMap((r: any) => r.paymentIds || []);
+        const nonRemis = paidPayments.filter(p => !remisPaymentIds.includes(p.id) && !(p as any).remiseId);
+        const nonRemisByMode: Record<string, typeof nonRemis> = {};
+        nonRemis.forEach(p => {
+          const m = p.paymentMode || "autre";
+          if (!nonRemisByMode[m]) nonRemisByMode[m] = [];
+          nonRemisByMode[m].push(p);
+        });
+        const totalNonRemis = nonRemis.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
+
+        return (
         <div className="flex flex-col gap-5">
-          <Card padding="md" className="bg-blue-50 border-blue-500/8">
-            <div className="font-body text-sm text-blue-800">
-              Regroupement des encaissements par jour et par mode de paiement. Imprimez le bordereau pour votre remise en banque.
+          {/* Non encore remis */}
+          <Card padding="md" className={totalNonRemis > 0 ? "border-orange-200 bg-orange-50/30" : ""}>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="font-body text-base font-semibold text-blue-800">Encaissements à remettre</h3>
+                <p className="font-body text-xs text-gray-400">{nonRemis.length} paiement{nonRemis.length > 1 ? "s" : ""} non encore inclus dans une remise</p>
+              </div>
+              {nonRemis.length > 0 && <span className="font-body text-xl font-bold text-orange-500">{totalNonRemis.toFixed(2)}€</span>}
             </div>
+            {nonRemis.length === 0 ? (
+              <p className="font-body text-sm text-green-600">Tous les encaissements ont été remis en banque.</p>
+            ) : (
+              <>
+                {/* Par mode */}
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {Object.entries(nonRemisByMode).map(([mode, ps]) => {
+                    const mTotal = ps.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
+                    return (
+                      <div key={mode} className="font-body text-xs bg-white rounded-lg px-3 py-1.5 border border-gray-100">
+                        <span className="text-gray-500">{modeLabels[mode] || mode} :</span>{" "}
+                        <span className="font-semibold text-blue-800">{mTotal.toFixed(2)}€ ({ps.length})</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Détail */}
+                <div className="flex flex-col gap-1 mb-4 max-h-[300px] overflow-y-auto">
+                  {nonRemis.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)).map(p => {
+                    const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
+                    return (
+                      <div key={p.id} className="flex items-center justify-between font-body text-xs py-1.5 px-3 bg-white rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-400 min-w-[65px]">{d ? d.toLocaleDateString("fr-FR") : "—"}</span>
+                          <Badge color="gray">{modeLabels[p.paymentMode] || p.paymentMode}</Badge>
+                          <span className="text-blue-800 font-semibold">{p.familyName}</span>
+                          <span className="text-gray-400">{(p.items || []).map((i: any) => i.activityTitle).join(", ").slice(0, 40)}</span>
+                        </div>
+                        <span className="font-semibold text-blue-500">{(p.paidAmount || p.totalTTC || 0).toFixed(2)}€</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Bouton créer remise */}
+                <div className="flex gap-2">
+                  <button onClick={async () => {
+                    const modeChoix = prompt(
+                      `Créer un bordereau de remise pour :\n\n` +
+                      Object.entries(nonRemisByMode).map(([m, ps]) => `${modeLabels[m] || m} : ${ps.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0).toFixed(2)}€ (${ps.length})`).join("\n") +
+                      `\n\nTotal : ${totalNonRemis.toFixed(2)}€\n\n` +
+                      `Filtrer par mode ? (laisser vide = tout inclure)\n1=CB  2=Chèque  3=Espèces  4=Virement  5=Tout`
+                    );
+                    if (modeChoix === null) return;
+                    const modeMap: Record<string,string> = {"1":"cb_terminal","2":"cheque","3":"especes","4":"virement"};
+                    const filterMode = modeMap[modeChoix] || "";
+                    const toRemise = filterMode ? nonRemis.filter(p => p.paymentMode === filterMode) : nonRemis;
+                    if (toRemise.length === 0) { alert("Aucun paiement correspondant."); return; }
+                    const remiseTotal = toRemise.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
+
+                    try {
+                      const remiseRef = await addDoc(collection(db, "remises"), {
+                        date: serverTimestamp(),
+                        paymentIds: toRemise.map(p => p.id),
+                        paymentMode: filterMode || "mixte",
+                        total: remiseTotal,
+                        nbPaiements: toRemise.length,
+                        status: "created",
+                        createdAt: serverTimestamp(),
+                      });
+                      // Marquer les paiements comme remis
+                      for (const p of toRemise) {
+                        await updateDoc(doc(db, "payments", p.id!), { remiseId: remiseRef.id });
+                      }
+                      alert(`Bordereau créé : ${toRemise.length} paiement(s) — ${remiseTotal.toFixed(2)}€`);
+                      fetchData();
+                    } catch (e) { console.error(e); alert("Erreur."); }
+                  }} className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600">
+                    <Plus size={16} /> Créer un bordereau de remise
+                  </button>
+                </div>
+              </>
+            )}
           </Card>
 
-          {Object.entries(dailyTotals).length === 0 ? (
-            <Card padding="lg" className="text-center">
-              <p className="font-body text-sm text-gray-500">Aucun paiement sur cette période.</p>
-            </Card>
-          ) : (
-            Object.entries(dailyTotals).sort(([a],[b]) => b.localeCompare(a)).map(([day, modes]) => {
-              const dayTotal = Object.values(modes).reduce((s, v) => s + v, 0);
-              const dayPayments = filteredPayments.filter(p => {
-                const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
-                return d && d.toLocaleDateString("fr-FR") === day;
-              });
-              return (
-                <Card key={day} padding="md">
-                  <div className="flex justify-between items-center mb-3">
-                    <div>
-                      <div className="font-body text-base font-semibold text-blue-800">{day}</div>
-                      <div className="font-body text-xs text-gray-400">{dayPayments.length} encaissement{dayPayments.length > 1 ? "s" : ""}</div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-body text-xl font-bold text-blue-500">{dayTotal.toFixed(2)}€</span>
-                      <button onClick={() => {
-                        const html = `<html><head><meta charset="utf-8"><title>Bordereau ${day}</title><style>body{font-family:Arial;max-width:600px;margin:30px auto}h1{font-size:18px;color:#2050A0;border-bottom:2px solid #2050A0;padding-bottom:8px}table{width:100%;border-collapse:collapse;margin:16px 0}th,td{padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;text-align:left}th{font-size:11px;color:#999;text-transform:uppercase}.total{font-size:16px;font-weight:bold;color:#2050A0;text-align:right;margin-top:12px}.footer{font-size:11px;color:#999;margin-top:30px}</style></head><body><h1>Bordereau de remise — ${day}</h1><p style="font-size:12px;color:#666">Centre Équestre d'Agon-Coutainville</p><table><thead><tr><th>Client</th><th>Prestation</th><th>Mode</th><th style="text-align:right">Montant</th></tr></thead><tbody>${dayPayments.map(p => `<tr><td>${p.familyName||"—"}</td><td>${(p.items||[]).map(i=>i.activityTitle).join(", ")||"—"}</td><td>${modeLabels[p.paymentMode]||p.paymentMode}</td><td style="text-align:right">${(p.totalTTC||0).toFixed(2)}€</td></tr>`).join("")}</tbody></table><div class="total">Total : ${dayTotal.toFixed(2)}€</div><table style="margin-top:16px"><thead><tr><th>Mode</th><th style="text-align:right">Sous-total</th></tr></thead><tbody>${Object.entries(modes).map(([m,v])=>`<tr><td>${modeLabels[m]||m}</td><td style="text-align:right">${v.toFixed(2)}€</td></tr>`).join("")}</tbody></table><div class="footer">Imprimé le ${new Date().toLocaleDateString("fr-FR")} — Signature : _______________</div></body></html>`;
-                        const w = window.open("", "_blank"); if (w) { w.document.write(html); w.document.close(); w.print(); }
-                      }} className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
-                        <Printer size={12} /> Imprimer
-                      </button>
-                    </div>
-                  </div>
-                  {/* Détail par mode */}
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {Object.entries(modes).map(([mode, total]) => (
-                      <div key={mode} className="font-body text-xs bg-sand rounded-lg px-3 py-1.5">
-                        <span className="text-gray-500">{modeLabels[mode] || mode} :</span>{" "}
-                        <span className="font-semibold text-blue-800">{total.toFixed(2)}€</span>
-                      </div>
-                    ))}
-                  </div>
-                  {/* Détail par client */}
-                  <div className="border-t border-gray-100 pt-2">
-                    {dayPayments.map(p => (
-                      <div key={p.id} className="flex justify-between py-1.5 font-body text-xs">
-                        <div className="flex items-center gap-2">
-                          <Badge color="gray">{modeLabels[p.paymentMode] || p.paymentMode}</Badge>
-                          <span className="text-blue-800 font-semibold">{p.familyName || "—"}</span>
-                          <span className="text-gray-400">{(p.items || []).map(i => i.activityTitle).join(", ")}</span>
+          {/* Historique des remises */}
+          {(remises || []).length > 0 && (
+            <div>
+              <h3 className="font-body text-base font-semibold text-blue-800 mb-3">Historique des remises</h3>
+              <div className="flex flex-col gap-3">
+                {(remises || []).sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).map((r: any) => {
+                  const rDate = r.createdAt?.seconds ? new Date(r.createdAt.seconds * 1000) : new Date();
+                  const rPayments = payments.filter(p => (r.paymentIds || []).includes(p.id));
+                  return (
+                    <Card key={r.id} padding="md">
+                      <div className="flex justify-between items-center mb-2">
+                        <div>
+                          <div className="font-body text-sm font-semibold text-blue-800">Remise du {rDate.toLocaleDateString("fr-FR")}</div>
+                          <div className="font-body text-xs text-gray-400">{r.nbPaiements} paiement{r.nbPaiements > 1 ? "s" : ""} · {modeLabels[r.paymentMode] || r.paymentMode || "Mixte"}</div>
                         </div>
-                        <span className="font-semibold text-blue-500">{(p.totalTTC || 0).toFixed(2)}€</span>
+                        <div className="flex items-center gap-3">
+                          <span className="font-body text-lg font-bold text-blue-500">{(r.total || 0).toFixed(2)}€</span>
+                          <button onClick={() => {
+                            const html = `<html><head><meta charset="utf-8"><title>Bordereau de remise</title><style>body{font-family:Arial;max-width:600px;margin:30px auto}h1{font-size:18px;color:#2050A0;border-bottom:2px solid #2050A0;padding-bottom:8px}table{width:100%;border-collapse:collapse;margin:16px 0}th,td{padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;text-align:left}th{font-size:11px;color:#999;text-transform:uppercase}.total{font-size:16px;font-weight:bold;color:#2050A0;text-align:right;margin-top:12px}.footer{font-size:11px;color:#999;margin-top:30px}</style></head><body><h1>Bordereau de remise — ${rDate.toLocaleDateString("fr-FR")}</h1><p style="font-size:12px;color:#666">Centre Equestre d'Agon-Coutainville</p><table><thead><tr><th>Date</th><th>Client</th><th>Prestation</th><th>Mode</th><th style="text-align:right">Montant</th></tr></thead><tbody>${rPayments.map(p => { const pd = p.date?.seconds ? new Date(p.date.seconds * 1000).toLocaleDateString("fr-FR") : "—"; return `<tr><td>${pd}</td><td>${p.familyName||"—"}</td><td>${(p.items||[]).map((i: any)=>i.activityTitle).join(", ")||"—"}</td><td>${modeLabels[p.paymentMode]||p.paymentMode}</td><td style="text-align:right">${(p.paidAmount||p.totalTTC||0).toFixed(2)}€</td></tr>`; }).join("")}</tbody></table><div class="total">Total : ${(r.total || 0).toFixed(2)}€</div><div class="footer">Imprime le ${new Date().toLocaleDateString("fr-FR")} — Signature : _______________</div></body></html>`;
+                            const w = window.open("", "_blank"); if (w) { w.document.write(html); w.document.close(); w.print(); }
+                          }} className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
+                            <Printer size={12} /> Imprimer
+                          </button>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                </Card>
-              );
-            })
+                      {/* Détail */}
+                      <div className="border-t border-gray-100 pt-2">
+                        {rPayments.map(p => {
+                          const pd = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
+                          return (
+                            <div key={p.id} className="flex justify-between py-1 font-body text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className="text-gray-400">{pd ? pd.toLocaleDateString("fr-FR") : "—"}</span>
+                                <Badge color="gray">{modeLabels[p.paymentMode] || p.paymentMode}</Badge>
+                                <span className="text-blue-800">{p.familyName}</span>
+                              </div>
+                              <span className="text-blue-500 font-semibold">{(p.paidAmount || p.totalTTC || 0).toFixed(2)}€</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* ─── Rapprochement bancaire ─── */}
       {!loading && tab === "rapprochement" && (
