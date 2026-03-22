@@ -490,15 +490,22 @@ export default function PaiementsPage() {
                           <div>
                             <div className="font-body text-sm text-blue-800">{(p.items || []).map((i: any) => i.activityTitle).join(", ") || "Prestation"}</div>
                             <div className="font-body text-xs text-gray-400">{reste.toFixed(2)}€ dû sur {(p.totalTTC || 0).toFixed(2)}€</div>
-                            {((p as any).encaissements || []).length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {((p as any).encaissements || []).map((enc: any, i: number) => (
-                                  <span key={i} className="font-body text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded">
-                                    {enc.montant?.toFixed(2)}€ {enc.modeLabel || enc.mode} {enc.date ? new Date(enc.date).toLocaleDateString("fr-FR") : ""}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
+                            {(() => {
+                              const payEnc = encaissements.filter((e: any) => e.paymentId === p.id);
+                              if (payEnc.length === 0) return null;
+                              return (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {payEnc.map((enc: any, i: number) => {
+                                    const d = enc.date?.seconds ? new Date(enc.date.seconds * 1000) : null;
+                                    return (
+                                      <span key={i} className="font-body text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded">
+                                        {(enc.montant || 0).toFixed(2)}€ {enc.modeLabel || enc.mode} {d ? d.toLocaleDateString("fr-FR") : ""}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()}
                           </div>
                           <span className="font-body text-sm font-bold text-red-500">{reste.toFixed(2)}€</span>
                         </div>
