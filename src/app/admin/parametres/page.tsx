@@ -670,6 +670,7 @@ export default function ParametresPage() {
                 { col: "emailsReprise", label: "Emails envoyés", color: "text-orange-500" },
                 { col: "rdv_pro", label: "RDV professionnels", color: "text-orange-500" },
                 { col: "cartes", label: "Cartes & tickets", color: "text-red-500" },
+                { col: "encaissements", label: "Encaissements (journal)", color: "text-red-500" },
               ].map(item => (
                 <div key={item.col} className="flex items-center justify-between px-3 py-2 bg-sand rounded-lg">
                   <div className="flex items-center gap-2">
@@ -711,7 +712,7 @@ export default function ParametresPage() {
                 const input = prompt(msg);
                 if (input !== "NETTOYER") { if (input !== null) alert("Confirmation incorrecte."); return; }
 
-                const collections = ["payments", "reservations", "forfaits", "avoirs", "creneaux", "emailsReprise", "rdv_pro", "cartes"];
+                const collections = ["payments", "reservations", "forfaits", "avoirs", "creneaux", "emailsReprise", "rdv_pro", "cartes", "encaissements", "remises"];
                 let total = 0;
                 for (const col of collections) {
                   try {

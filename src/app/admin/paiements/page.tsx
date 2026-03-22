@@ -49,6 +49,7 @@ export default function PaiementsPage() {
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const [activities, setActivities] = useState<(Activity & { firestoreId: string })[]>([]);
   const [payments, setPayments] = useState<(Payment & { id: string })[]>([]);
+  const [encaissements, setEncaissements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Historique filters
@@ -92,12 +93,14 @@ export default function PaiementsPage() {
     Promise.all([
       getDocs(collection(db, "families")),
       getDocs(collection(db, "activities")),
-      getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(50))),
+      getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200))),
+      getDocs(query(collection(db, "encaissements"), orderBy("date", "desc"), limit(500))),
       getDoc(doc(db, "settings", "promos")),
-    ]).then(([famSnap, actSnap, paySnap, promoSnap]) => {
+    ]).then(([famSnap, actSnap, paySnap, encSnap, promoSnap]) => {
       setFamilies(famSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as any);
       setActivities(actSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as any);
       setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+      setEncaissements(encSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
       if (promoSnap.exists() && promoSnap.data().items) setPromos(promoSnap.data().items);
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -367,23 +370,24 @@ export default function PaiementsPage() {
                           const newPaid = (p.paidAmount || 0) + paye;
                           const newStatus = newPaid >= (p.totalTTC || 0) ? "paid" : "partial";
                           
-                          // Ajouter l'encaissement au journal du paiement
-                          const existingEncaissements = (p as any).encaissements || [];
-                          const newEncaissement = {
+                          // 1. Créer un doc dans la collection encaissements
+                          await addDoc(collection(db, "encaissements"), {
+                            paymentId: p.id,
+                            familyId: p.familyId,
+                            familyName: p.familyName,
                             montant: Math.round(paye * 100) / 100,
                             mode: paymentMode,
                             modeLabel: paymentModes.find(m => m.id === paymentMode)?.label || paymentMode,
                             ref: paymentRef || "",
-                            date: new Date().toISOString(),
-                          };
+                            activityTitle: (p.items || []).map((i: any) => i.activityTitle).join(", "),
+                            date: serverTimestamp(),
+                          });
                           
+                          // 2. Mettre à jour le paiement (facture)
                           await updateDoc(doc(db, "payments", p.id!), {
                             status: newStatus,
                             paidAmount: Math.round(newPaid * 100) / 100,
-                            paymentMode: newStatus === "paid" ? paymentMode : "mixte",
-                            paymentRef: paymentRef || "",
-                            encaissements: [...existingEncaissements, newEncaissement],
-                            date: serverTimestamp(),
+                            updatedAt: serverTimestamp(),
                           });
                           resteARegler -= paye;
                         }
@@ -391,8 +395,11 @@ export default function PaiementsPage() {
                         alert(`${montant.toFixed(2)}€ encaissé (${paymentModes.find(m => m.id === paymentMode)?.label || paymentMode}) pour ${family.parentName} !${resteFinal > 0 ? `\nReste dû : ${resteFinal.toFixed(2)}€` : "\nTout est réglé !"}`);
                         setPaidAmount("");
                         setPaymentRef("");
+                        // Rafraîchir
                         const paySnap = await getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200)));
                         setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+                        const encSnap = await getDocs(query(collection(db, "encaissements"), orderBy("date", "desc"), limit(500)));
+                        setEncaissements(encSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
                       } catch (e) { console.error(e); alert("Erreur."); }
                     }}
                       className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-body text-base font-semibold text-white bg-green-600 border-none cursor-pointer hover:bg-green-500 transition-colors">
@@ -589,135 +596,96 @@ export default function PaiementsPage() {
         </div>
       )}
 
-      {/* ─── Journal Tab ─── */}
+      {/* ─── Journal des encaissements ─── */}
       {tab === "journal" && (
         <div>
           {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
           (() => {
-            // Filtrage
-            let filtered = [...payments];
-            if (journalDateFrom) filtered = filtered.filter(p => { const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null; return d && d >= new Date(journalDateFrom); });
-            if (journalDateTo) filtered = filtered.filter(p => { const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null; return d && d <= new Date(journalDateTo + "T23:59:59"); });
-            if (journalMontantMin) filtered = filtered.filter(p => (p.paidAmount || p.totalTTC || 0) >= parseFloat(journalMontantMin));
-            if (journalMontantMax) filtered = filtered.filter(p => (p.paidAmount || p.totalTTC || 0) <= parseFloat(journalMontantMax));
-            if (journalMode !== "all") filtered = filtered.filter(p => p.paymentMode === journalMode);
-            if (journalStatus !== "all") filtered = filtered.filter(p => p.status === journalStatus);
-            if (journalSearch) { const q = journalSearch.toLowerCase(); filtered = filtered.filter(p => p.familyName?.toLowerCase().includes(q) || (p.items || []).some((i: any) => i.activityTitle?.toLowerCase().includes(q))); }
+            // Filtrage des encaissements
+            let filtered = [...encaissements];
+            if (journalDateFrom) filtered = filtered.filter(e => { const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null; return d && d >= new Date(journalDateFrom); });
+            if (journalDateTo) filtered = filtered.filter(e => { const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null; return d && d <= new Date(journalDateTo + "T23:59:59"); });
+            if (journalMontantMin) filtered = filtered.filter(e => (e.montant || 0) >= parseFloat(journalMontantMin));
+            if (journalMontantMax) filtered = filtered.filter(e => (e.montant || 0) <= parseFloat(journalMontantMax));
+            if (journalMode !== "all") filtered = filtered.filter(e => e.mode === journalMode);
+            if (journalSearch) { const q = journalSearch.toLowerCase(); filtered = filtered.filter(e => e.familyName?.toLowerCase().includes(q) || e.activityTitle?.toLowerCase().includes(q) || e.ref?.toLowerCase().includes(q)); }
             filtered.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
 
-            const totalEncaisse = filtered.filter(p => p.status === "paid").reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
-            const totalPending = filtered.filter(p => p.status === "pending" || p.status === "partial").reduce((s, p) => s + ((p.totalTTC || 0) - (p.paidAmount || 0)), 0);
+            // Totaux par mode
+            const totalsByMode: Record<string, number> = {};
+            filtered.forEach(e => { totalsByMode[e.mode || "autre"] = (totalsByMode[e.mode || "autre"] || 0) + (e.montant || 0); });
+            const grandTotal = filtered.reduce((s, e) => s + (e.montant || 0), 0);
 
             return (
               <>
+                {/* Totaux par mode — style Céléris */}
+                <div className="flex flex-wrap gap-3 mb-4">
+                  {Object.entries(totalsByMode).sort(([,a],[,b]) => b - a).map(([mode, total]) => {
+                    const modeObj = paymentModes.find(m => m.id === mode);
+                    return (
+                      <div key={mode} onClick={() => setJournalMode(journalMode === mode ? "all" : mode)}
+                        className={`flex flex-col items-center px-4 py-2.5 rounded-xl cursor-pointer transition-all ${journalMode === mode ? "bg-blue-500 text-white ring-2 ring-blue-300" : "bg-sand hover:bg-blue-50"}`}>
+                        <div className={`font-body text-[10px] uppercase font-semibold ${journalMode === mode ? "text-white/70" : "text-gray-400"}`}>{modeObj?.label || mode}</div>
+                        <div className={`font-body text-lg font-bold ${journalMode === mode ? "text-white" : "text-blue-800"}`}>{total.toFixed(2)}€</div>
+                      </div>
+                    );
+                  })}
+                  <div className="flex flex-col items-center px-4 py-2.5 rounded-xl bg-green-50">
+                    <div className="font-body text-[10px] uppercase font-semibold text-green-600">Total encaissé</div>
+                    <div className="font-body text-lg font-bold text-green-600">{grandTotal.toFixed(2)}€</div>
+                  </div>
+                </div>
+
                 {/* Filtres */}
-                <Card padding="md" className="mb-4">
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-                    <div>
-                      <label className="font-body text-[10px] text-gray-400 uppercase block mb-1">Date de</label>
-                      <input type="date" value={journalDateFrom} onChange={e => setJournalDateFrom(e.target.value)} className={inputCls} />
-                    </div>
-                    <div>
-                      <label className="font-body text-[10px] text-gray-400 uppercase block mb-1">Date à</label>
-                      <input type="date" value={journalDateTo} onChange={e => setJournalDateTo(e.target.value)} className={inputCls} />
-                    </div>
-                    <div>
-                      <label className="font-body text-[10px] text-gray-400 uppercase block mb-1">Montant min</label>
-                      <input type="number" step="0.01" placeholder="0" value={journalMontantMin} onChange={e => setJournalMontantMin(e.target.value)} className={inputCls} />
-                    </div>
-                    <div>
-                      <label className="font-body text-[10px] text-gray-400 uppercase block mb-1">Montant max</label>
-                      <input type="number" step="0.01" placeholder="9999" value={journalMontantMax} onChange={e => setJournalMontantMax(e.target.value)} className={inputCls} />
-                    </div>
+                <Card padding="sm" className="mb-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+                    <div><label className="font-body text-[10px] text-gray-400 uppercase block mb-0.5">Date de</label><input type="date" value={journalDateFrom} onChange={e => setJournalDateFrom(e.target.value)} className={inputCls} /></div>
+                    <div><label className="font-body text-[10px] text-gray-400 uppercase block mb-0.5">Date à</label><input type="date" value={journalDateTo} onChange={e => setJournalDateTo(e.target.value)} className={inputCls} /></div>
+                    <div><label className="font-body text-[10px] text-gray-400 uppercase block mb-0.5">Montant min</label><input type="number" step="0.01" placeholder="0" value={journalMontantMin} onChange={e => setJournalMontantMin(e.target.value)} className={inputCls} /></div>
+                    <div><label className="font-body text-[10px] text-gray-400 uppercase block mb-0.5">Montant max</label><input type="number" step="0.01" placeholder="9999" value={journalMontantMax} onChange={e => setJournalMontantMax(e.target.value)} className={inputCls} /></div>
                   </div>
                   <div className="flex flex-wrap gap-2 items-center">
                     <select value={journalMode} onChange={e => setJournalMode(e.target.value)} className={`${inputCls} w-40`}>
                       <option value="all">Tous les modes</option>
                       {paymentModes.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                     </select>
-                    <select value={journalStatus} onChange={e => setJournalStatus(e.target.value)} className={`${inputCls} w-36`}>
-                      <option value="all">Tous statuts</option>
-                      <option value="paid">Encaissé</option>
-                      <option value="pending">En attente</option>
-                      <option value="partial">Partiel</option>
-                    </select>
-                    <div className="relative flex-1 min-w-[180px]">
+                    <div className="relative flex-1 min-w-[150px]">
                       <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
-                      <input placeholder="Nom, prestation…" value={journalSearch} onChange={e => setJournalSearch(e.target.value)} className={`${inputCls} !pl-9`} />
+                      <input placeholder="Nom, prestation, référence…" value={journalSearch} onChange={e => setJournalSearch(e.target.value)} className={`${inputCls} !pl-9`} />
                     </div>
-                    {(journalDateFrom || journalDateTo || journalMontantMin || journalMontantMax || journalMode !== "all" || journalStatus !== "all" || journalSearch) && (
-                      <button onClick={() => { setJournalDateFrom(""); setJournalDateTo(""); setJournalMontantMin(""); setJournalMontantMax(""); setJournalMode("all"); setJournalStatus("all"); setJournalSearch(""); }}
-                        className="font-body text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-red-100">Effacer filtres</button>
+                    {(journalDateFrom || journalDateTo || journalMontantMin || journalMontantMax || journalMode !== "all" || journalSearch) && (
+                      <button onClick={() => { setJournalDateFrom(""); setJournalDateTo(""); setJournalMontantMin(""); setJournalMontantMax(""); setJournalMode("all"); setJournalSearch(""); }}
+                        className="font-body text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-100">Effacer</button>
                     )}
+                    <span className="font-body text-xs text-gray-400">{filtered.length} mouvement{filtered.length > 1 ? "s" : ""}</span>
                   </div>
                 </Card>
 
-                {/* KPIs */}
-                <div className="flex gap-4 mb-4">
-                  <Card padding="sm" className="flex-1 flex items-center gap-3">
-                    <div className="font-body text-lg font-bold text-green-600">{totalEncaisse.toFixed(2)}€</div>
-                    <div className="font-body text-xs text-gray-400">encaissé ({filtered.filter(p => p.status === "paid").length})</div>
-                  </Card>
-                  <Card padding="sm" className="flex-1 flex items-center gap-3">
-                    <div className="font-body text-lg font-bold text-orange-500">{totalPending.toFixed(2)}€</div>
-                    <div className="font-body text-xs text-gray-400">en attente ({filtered.filter(p => p.status !== "paid").length})</div>
-                  </Card>
-                  <Card padding="sm" className="flex-1 flex items-center gap-3">
-                    <div className="font-body text-lg font-bold text-blue-500">{filtered.length}</div>
-                    <div className="font-body text-xs text-gray-400">lignes</div>
-                  </Card>
-                </div>
-
-                {/* Tableau */}
+                {/* Tableau des encaissements — 1 ligne = 1 mouvement réel */}
                 {filtered.length === 0 ? (
-                  <Card padding="lg" className="text-center"><p className="font-body text-sm text-gray-500">Aucun paiement correspondant.</p></Card>
+                  <Card padding="lg" className="text-center"><p className="font-body text-sm text-gray-500">{encaissements.length === 0 ? "Aucun encaissement enregistré." : "Aucun encaissement correspondant aux filtres."}</p></Card>
                 ) : (
                   <Card className="!p-0 overflow-hidden">
                     <div className="overflow-x-auto">
                       <table className="w-full">
                         <thead>
                           <tr className="bg-sand border-b border-blue-500/8">
-                            {["Date", "Réf.", "Client", "Prestation", "Montant", "Payé", "Mode", "Statut"].map(h => (
+                            {["Date", "Client", "Prestation", "Montant", "Mode", "Référence"].map(h => (
                               <th key={h} className="px-3 py-2.5 font-body text-[10px] font-semibold text-gray-400 uppercase tracking-wider text-left">{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
-                          {filtered.map((p, idx) => {
-                            const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
-                            const mode = paymentModes.find(m => m.id === p.paymentMode);
-                            const encaissements = (p as any).encaissements || [];
+                          {filtered.map(enc => {
+                            const d = enc.date?.seconds ? new Date(enc.date.seconds * 1000) : null;
                             return (
-                              <tr key={p.id} className={`border-b border-blue-500/5 hover:bg-blue-50/30 ${p.status === "pending" ? "bg-orange-50/20" : ""}`}>
-                                <td className="px-3 py-2 font-body text-xs text-gray-400">{d ? d.toLocaleDateString("fr-FR") : "—"}</td>
-                                <td className="px-3 py-2 font-body text-xs font-semibold text-blue-800">F{d ? d.getFullYear() : ""}-{String(payments.length - payments.indexOf(p)).padStart(3, "0")}</td>
-                                <td className="px-3 py-2 font-body text-sm font-semibold text-blue-800">{p.familyName}</td>
-                                <td className="px-3 py-2 font-body text-xs text-gray-500 max-w-[200px] truncate">{(p.items || []).map((i: any) => i.activityTitle).join(", ")}</td>
-                                <td className="px-3 py-2 font-body text-sm font-bold text-blue-500">{(p.totalTTC || 0).toFixed(2)}€</td>
-                                <td className="px-3 py-2">
-                                  <div className="font-body text-sm font-semibold text-green-600">{(p.paidAmount || 0).toFixed(2)}€</div>
-                                  {encaissements.length > 0 && (
-                                    <div className="flex flex-col gap-0.5 mt-0.5">
-                                      {encaissements.map((enc: any, i: number) => (
-                                        <span key={i} className="font-body text-[9px] text-gray-400">
-                                          {enc.montant?.toFixed(2)}€ {enc.modeLabel || enc.mode} {enc.ref ? `(${enc.ref})` : ""} — {enc.date ? new Date(enc.date).toLocaleDateString("fr-FR") : ""}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2">
-                                  {encaissements.length > 1 ? (
-                                    <div className="flex flex-col gap-0.5">
-                                      {encaissements.map((enc: any, i: number) => (
-                                        <Badge key={i} color="blue">{enc.modeLabel?.split(" ")[0] || enc.mode}</Badge>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <Badge color="blue">{mode?.label?.split(" ")[0] || p.paymentMode || "—"}</Badge>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : "gray"}>{p.status === "paid" ? "Encaissé" : p.status === "partial" ? "Partiel" : "Att."}</Badge></td>
+                              <tr key={enc.id} className="border-b border-blue-500/5 hover:bg-blue-50/30">
+                                <td className="px-3 py-2.5 font-body text-xs text-gray-500">{d ? d.toLocaleDateString("fr-FR") : "—"}</td>
+                                <td className="px-3 py-2.5 font-body text-sm font-semibold text-blue-800">{enc.familyName || "—"}</td>
+                                <td className="px-3 py-2.5 font-body text-xs text-gray-500 max-w-[250px] truncate">{enc.activityTitle || "—"}</td>
+                                <td className="px-3 py-2.5 font-body text-sm font-bold text-green-600">{(enc.montant || 0).toFixed(2)}€</td>
+                                <td className="px-3 py-2.5"><Badge color="blue">{enc.modeLabel || enc.mode || "—"}</Badge></td>
+                                <td className="px-3 py-2.5 font-body text-xs text-gray-400">{enc.ref || "—"}</td>
                               </tr>
                             );
                           })}
