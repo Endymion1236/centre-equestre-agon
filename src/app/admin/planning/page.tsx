@@ -157,10 +157,13 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
         // Ajouter les lignes au panier de la famille (1 seul paiement pending)
         const newItems = stageLines.map(l => ({
           activityTitle: `${creneau.activityTitle} (${creneauxAInscrire.length}j) — ${l.childName} (-${l.remiseEuros}€ réd. ${l.rang}${l.rang === 1 ? "ère" : "ème"})`,
+          childId: l.childId,
+          childName: l.childName,
+          stageKey: `${creneau.activityTitle}_${creneau.date}`,
+          activityType: creneau.activityType,
           priceHT: l.prixReduit / 1.055,
           tva: 5.5,
           priceTTC: l.prixReduit,
-          childName: l.childName,
         }));
 
         // Chercher un paiement pending existant pour cette famille
@@ -1045,7 +1048,8 @@ export default function PlanningPage() {
         const p = pDoc.data();
         const items = p.items || [];
         const matchItem = items.find((i: any) =>
-          i.activityTitle?.includes(c.activityTitle) && i.activityTitle?.includes(child.childName)
+          (i.childId && i.childId === childId && (i.stageKey?.includes(c.activityTitle) || i.activityTitle?.includes(c.activityTitle))) ||
+          (!i.childId && i.activityTitle?.includes(c.activityTitle) && i.activityTitle?.includes(child.childName))
         );
         if (matchItem) {
           montantAvoir = matchItem.priceTTC || 0;
