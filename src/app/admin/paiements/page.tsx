@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, addDoc, deleteDoc, updateDoc, doc, getDoc, serverTimestamp, query, orderBy, limit } from "firebase/firestore";
+import { collection, getDocs, addDoc, deleteDoc, updateDoc, doc, getDoc, serverTimestamp, query, where, orderBy, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge, Button } from "@/components/ui";
 import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle } from "lucide-react";
@@ -108,6 +108,58 @@ export default function PaiementsPage() {
 
   const family = families.find((f) => f.firestoreId === selectedFamily);
   const children = family?.children || [];
+
+  // ═══ FONCTION CENTRALE D'ENCAISSEMENT ═══
+  // Source unique de vérité : crée l'encaissement + recalcule paidAmount
+  const enregistrerEncaissement = async (
+    paymentId: string,
+    paymentData: any,
+    montant: number,
+    mode: string,
+    ref: string = "",
+    activityTitle: string = "",
+  ) => {
+    // 1. Créer le doc encaissement (journal)
+    await addDoc(collection(db, "encaissements"), {
+      paymentId,
+      familyId: paymentData.familyId,
+      familyName: paymentData.familyName,
+      montant: Math.round(montant * 100) / 100,
+      mode,
+      modeLabel: paymentModes.find(m => m.id === mode)?.label || mode,
+      ref,
+      activityTitle: activityTitle || (paymentData.items || []).map((i: any) => i.activityTitle).join(", "),
+      date: serverTimestamp(),
+    });
+
+    // 2. Recalculer paidAmount depuis TOUS les encaissements de ce payment
+    const encSnap = await getDocs(query(collection(db, "encaissements"), where("paymentId", "==", paymentId)));
+    const totalEncaisse = encSnap.docs.reduce((s, d) => s + (d.data().montant || 0), 0) + montant;
+    // Note : le doc qu'on vient de créer n'est peut-être pas encore dans le snapshot, donc on ajoute montant
+    const realTotal = Math.round(totalEncaisse * 100) / 100;
+    const totalTTC = paymentData.totalTTC || 0;
+    const newStatus = realTotal >= totalTTC ? "paid" : realTotal > 0 ? "partial" : "pending";
+
+    // 3. Mettre à jour le payment avec paidAmount calculé
+    await updateDoc(doc(db, "payments", paymentId), {
+      paidAmount: realTotal,
+      status: newStatus,
+      updatedAt: serverTimestamp(),
+    });
+
+    return { paidAmount: realTotal, status: newStatus };
+  };
+
+  // Rafraîchir les données
+  const refreshAll = async () => {
+    const [paySnap, encSnap] = await Promise.all([
+      getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200))),
+      getDocs(query(collection(db, "encaissements"), orderBy("date", "desc"), limit(500))),
+    ]);
+    setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+    setEncaissements(encSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+  };
+
   const basketSubtotal = basket.reduce((s, i) => s + i.priceTTC, 0);
   const promoDiscount = appliedPromo
     ? (appliedPromo.discountMode === "percent" ? basketSubtotal * appliedPromo.discountValue / 100 : appliedPromo.discountValue)
@@ -176,26 +228,21 @@ export default function PaiementsPage() {
       familyName: family?.parentName || "—",
       items: basket,
       totalTTC: basketTotal,
-      paymentMode,
-      paymentRef,
-      status: paid >= basketTotal ? "paid" : "partial",
-      paidAmount: paid,
+      paymentMode: "",
+      paymentRef: "",
+      status: "pending",
+      paidAmount: 0,
       date: serverTimestamp(),
     });
 
-    // Créer l'encaissement dans le journal
+    // Encaisser via la fonction centrale
     if (paid > 0) {
-      await addDoc(collection(db, "encaissements"), {
-        paymentId: payRef.id,
+      await enregistrerEncaissement(payRef.id, {
         familyId: selectedFamily,
         familyName: family?.parentName || "—",
-        montant: Math.round(paid * 100) / 100,
-        mode: paymentMode,
-        modeLabel: paymentModes.find(m => m.id === paymentMode)?.label || paymentMode,
-        ref: paymentRef || "",
-        activityTitle: basket.map(i => i.activityTitle).join(", "),
-        date: serverTimestamp(),
-      });
+        items: basket,
+        totalTTC: basketTotal,
+      }, paid, paymentMode, paymentRef, basket.map(i => i.activityTitle).join(", "));
     }
 
     setBasket([]);
@@ -204,14 +251,7 @@ export default function PaiementsPage() {
     setSaving(false);
     setSuccess(true);
     setTimeout(() => setSuccess(false), 3000);
-
-    // Refresh
-    const [paySnap, encSnap] = await Promise.all([
-      getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200))),
-      getDocs(query(collection(db, "encaissements"), orderBy("date", "desc"), limit(500))),
-    ]);
-    setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
-    setEncaissements(encSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+    await refreshAll();
   };
 
   const inputCls = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
@@ -386,39 +426,14 @@ export default function PaiementsPage() {
                           if (resteARegler <= 0) break;
                           const du = (p.totalTTC || 0) - (p.paidAmount || 0);
                           const paye = Math.min(du, resteARegler);
-                          const newPaid = (p.paidAmount || 0) + paye;
-                          const newStatus = newPaid >= (p.totalTTC || 0) ? "paid" : "partial";
-                          
-                          // 1. Créer un doc dans la collection encaissements
-                          await addDoc(collection(db, "encaissements"), {
-                            paymentId: p.id,
-                            familyId: p.familyId,
-                            familyName: p.familyName,
-                            montant: Math.round(paye * 100) / 100,
-                            mode: paymentMode,
-                            modeLabel: paymentModes.find(m => m.id === paymentMode)?.label || paymentMode,
-                            ref: paymentRef || "",
-                            activityTitle: (p.items || []).map((i: any) => i.activityTitle).join(", "),
-                            date: serverTimestamp(),
-                          });
-                          
-                          // 2. Mettre à jour le paiement (facture)
-                          await updateDoc(doc(db, "payments", p.id!), {
-                            status: newStatus,
-                            paidAmount: Math.round(newPaid * 100) / 100,
-                            updatedAt: serverTimestamp(),
-                          });
+                          await enregistrerEncaissement(p.id!, p, paye, paymentMode, paymentRef);
                           resteARegler -= paye;
                         }
                         const resteFinal = totalPending - montant;
                         alert(`${montant.toFixed(2)}€ encaissé (${paymentModes.find(m => m.id === paymentMode)?.label || paymentMode}) pour ${family.parentName} !${resteFinal > 0 ? `\nReste dû : ${resteFinal.toFixed(2)}€` : "\nTout est réglé !"}`);
                         setPaidAmount("");
                         setPaymentRef("");
-                        // Rafraîchir
-                        const paySnap = await getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200)));
-                        setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
-                        const encSnap = await getDocs(query(collection(db, "encaissements"), orderBy("date", "desc"), limit(500)));
-                        setEncaissements(encSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+                        await refreshAll();
                       } catch (e) { console.error(e); alert("Erreur."); }
                     }}
                       className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-body text-base font-semibold text-white bg-green-600 border-none cursor-pointer hover:bg-green-500 transition-colors">
@@ -960,29 +975,9 @@ export default function PaiementsPage() {
                                     const mode = prompt(`Encaisser ${(e.totalTTC || 0).toFixed(2)}€\n\n1=CB  2=Chèque  3=Espèces  4=Virement`);
                                     if (!mode) return;
                                     const modeMap: Record<string,string> = {"1":"cb_terminal","2":"cheque","3":"especes","4":"virement"};
-                                    const modeLabelsMap: Record<string,string> = {"1":"CB (terminal)","2":"Chèque","3":"Espèces","4":"Virement"};
-                                    const payMode = modeMap[mode] || "cb_terminal";
-                                    // 1. Mettre à jour le payment
-                                    await updateDoc(doc(db, "payments", e.id), { status: "paid", paidAmount: e.totalTTC || 0, paymentMode: payMode, date: serverTimestamp() });
-                                    // 2. Créer l'encaissement
-                                    await addDoc(collection(db, "encaissements"), {
-                                      paymentId: e.id,
-                                      familyId: first.familyId,
-                                      familyName: first.familyName,
-                                      montant: e.totalTTC || 0,
-                                      mode: payMode,
-                                      modeLabel: modeLabelsMap[mode] || payMode,
-                                      ref: "",
-                                      activityTitle: (e as any).forfaitRef || (first as any).forfaitRef || (e.items || []).map((i: any) => i.activityTitle).join(", "),
-                                      date: serverTimestamp(),
-                                    });
-                                    // Refresh
-                                    const [paySnap, encSnap] = await Promise.all([
-                                      getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200))),
-                                      getDocs(query(collection(db, "encaissements"), orderBy("date", "desc"), limit(500))),
-                                    ]);
-                                    setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
-                                    setEncaissements(encSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+                                    await enregistrerEncaissement(e.id, e, e.totalTTC || 0, modeMap[mode] || "cb_terminal", "",
+                                      (e as any).forfaitRef || (first as any).forfaitRef || (e.items || []).map((i: any) => i.activityTitle).join(", "));
+                                    await refreshAll();
                                   }}
                                     className="font-body text-[10px] font-semibold text-white bg-green-600 px-2 py-1 rounded border-none cursor-pointer hover:bg-green-500">
                                     Encaisser
