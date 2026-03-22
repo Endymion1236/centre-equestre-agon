@@ -989,9 +989,137 @@ export default function PlanningPage() {
     const fresh = await refreshCreneaux(); const upd = fresh.find(x => x.id === cid); if (upd) setSelectedCreneau(upd);
   };
 
-  const handleUnenroll = async (cid: string, childId: string) => { const c=creneaux.find(x=>x.id===cid); if(!c) return; const en=(c.enrolled||[]).filter((e:any)=>e.childId!==childId); await updateDoc(doc(db,"creneaux",cid),{enrolled:en,enrolledCount:en.length});
-    try{const rs=await getDocs(query(collection(db,"reservations"),where("creneauId","==",cid),where("childId","==",childId)));for(const d of rs.docs)await deleteDoc(doc(db,"reservations",d.id));}catch(e){console.error(e);}
-    const fresh=await refreshCreneaux(); const upd=fresh.find(x=>x.id===cid); if(upd)setSelectedCreneau(upd); };
+  const handleUnenroll = async (cid: string, childId: string) => {
+    // Lire le créneau frais
+    const cSnap = await getDoc(doc(db, "creneaux", cid));
+    if (!cSnap.exists()) return;
+    const c = { id: cSnap.id, ...cSnap.data() } as any;
+    const isStageType = c.activityType === "stage" || c.activityType === "stage_journee";
+    const enrolled = c.enrolled || [];
+    const child = enrolled.find((e: any) => e.childId === childId);
+    if (!child) return;
+
+    // Pour un stage : trouver TOUS les créneaux de la même semaine
+    let creneauxToRemove = [{ id: cid, data: c }];
+    if (isStageType) {
+      const creneauDate = new Date(c.date);
+      const dow = creneauDate.getDay();
+      const monday = new Date(creneauDate); monday.setDate(monday.getDate() - ((dow + 6) % 7));
+      const sunday = new Date(monday); sunday.setDate(sunday.getDate() + 6);
+      // Chercher tous les créneaux du même stage cette semaine
+      const allStageSnap = await getDocs(query(collection(db, "creneaux"),
+        where("activityTitle", "==", c.activityTitle),
+        where("date", ">=", fmtDate(monday)),
+        where("date", "<=", fmtDate(sunday)),
+      ));
+      creneauxToRemove = allStageSnap.docs.map(d => ({ id: d.id, data: d.data() }));
+    }
+
+    const nbJours = creneauxToRemove.length;
+    const confirmMsg = isStageType
+      ? `Désinscrire ${child.childName} du stage "${c.activityTitle}" (${nbJours} jour${nbJours > 1 ? "s" : ""}) ?\n\nSi un paiement a été encaissé, un avoir sera créé automatiquement.`
+      : `Désinscrire ${child.childName} de "${c.activityTitle}" le ${new Date(c.date).toLocaleDateString("fr-FR")} ?\n\nSi un paiement a été encaissé, un avoir sera créé automatiquement.`;
+    if (!confirm(confirmMsg)) return;
+
+    // 1. Retirer l'enfant de tous les créneaux
+    for (const cr of creneauxToRemove) {
+      const crEnrolled = (cr.data as any).enrolled || [];
+      const newEnrolled = crEnrolled.filter((e: any) => e.childId !== childId);
+      await updateDoc(doc(db, "creneaux", cr.id), { enrolled: newEnrolled, enrolledCount: newEnrolled.length });
+    }
+
+    // 2. Supprimer les réservations
+    try {
+      for (const cr of creneauxToRemove) {
+        const rs = await getDocs(query(collection(db, "reservations"), where("creneauId", "==", cr.id), where("childId", "==", childId)));
+        for (const d of rs.docs) await deleteDoc(doc(db, "reservations", d.id));
+      }
+    } catch (e) { console.error(e); }
+
+    // 3. Chercher le paiement lié et gérer l'avoir
+    try {
+      const paySnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", child.familyId)));
+      // Trouver le paiement qui contient cette prestation
+      let montantAvoir = 0;
+      for (const pDoc of paySnap.docs) {
+        const p = pDoc.data();
+        const items = p.items || [];
+        const matchItem = items.find((i: any) =>
+          i.activityTitle?.includes(c.activityTitle) && i.activityTitle?.includes(child.childName)
+        );
+        if (matchItem) {
+          montantAvoir = matchItem.priceTTC || 0;
+          // Réduire le paiement
+          const newItems = items.filter((i: any) => i !== matchItem);
+          const newTotal = newItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
+          const newPaid = Math.min(p.paidAmount || 0, newTotal);
+          if (newItems.length === 0) {
+            // Plus rien dans le paiement → l'annuler
+            await updateDoc(doc(db, "payments", pDoc.id), { status: "cancelled", updatedAt: serverTimestamp() });
+          } else {
+            await updateDoc(doc(db, "payments", pDoc.id), {
+              items: newItems,
+              totalTTC: Math.round(newTotal * 100) / 100,
+              paidAmount: Math.round(newPaid * 100) / 100,
+              status: newPaid >= newTotal ? "paid" : newPaid > 0 ? "partial" : "pending",
+              updatedAt: serverTimestamp(),
+            });
+          }
+          break;
+        }
+      }
+
+      // 4. Si de l'argent a été encaissé pour cette prestation → créer un avoir
+      if (montantAvoir > 0) {
+        // Vérifier si un encaissement couvrait cette prestation
+        const encSnap = await getDocs(query(collection(db, "encaissements"), where("familyId", "==", child.familyId)));
+        const totalEncaisse = encSnap.docs.reduce((s, d) => s + (d.data().montant || 0), 0);
+        const allPayments = paySnap.docs.map(d => d.data());
+        const totalFacture = allPayments.filter(p => p.status !== "cancelled").reduce((s, p) => s + (p.totalTTC || 0), 0);
+
+        // Si le total encaissé dépasse le total facturé (après retrait de la ligne),
+        // il y a un trop-perçu → créer un avoir
+        const newTotalFacture = totalFacture - montantAvoir;
+        const tropPercu = totalEncaisse - newTotalFacture;
+
+        if (tropPercu > 0) {
+          const avoirMontant = Math.min(tropPercu, montantAvoir);
+          const ref = `AV-${Date.now().toString(36).toUpperCase()}`;
+          const expiry = new Date();
+          expiry.setFullYear(expiry.getFullYear() + 1);
+
+          await addDoc(collection(db, "avoirs"), {
+            familyId: child.familyId,
+            familyName: child.familyName || "",
+            type: "avoir",
+            amount: Math.round(avoirMontant * 100) / 100,
+            usedAmount: 0,
+            remainingAmount: Math.round(avoirMontant * 100) / 100,
+            reason: `Désinscription ${child.childName} — ${c.activityTitle}`,
+            reference: ref,
+            expiryDate: expiry,
+            status: "actif",
+            usageHistory: [],
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+
+          alert(`${child.childName} désinscrit(e) de ${c.activityTitle}${isStageType ? ` (${nbJours} jours)` : ""}.\n\nAvoir créé : ${avoirMontant.toFixed(2)}€ (réf. ${ref})\nDisponible sur la fiche famille.`);
+        } else {
+          alert(`${child.childName} désinscrit(e) de ${c.activityTitle}${isStageType ? ` (${nbJours} jours)` : ""}.\nLe paiement a été ajusté.`);
+        }
+      } else {
+        alert(`${child.childName} désinscrit(e) de ${c.activityTitle}${isStageType ? ` (${nbJours} jours)` : ""}.`);
+      }
+    } catch (e) {
+      console.error("Erreur gestion paiement/avoir:", e);
+      alert(`${child.childName} désinscrit(e) mais erreur lors de l'ajustement du paiement.`);
+    }
+
+    const fresh = await refreshCreneaux();
+    const upd = fresh.find(x => x.id === cid);
+    if (upd) setSelectedCreneau(upd);
+  };
 
   const isToday = (d: Date) => fmtDate(d) === fmtDate(new Date());
   const dayCreneaux = creneaux.filter(c => c.date === fmtDate(currentDay)).sort((a,b) => a.startTime.localeCompare(b.startTime));
