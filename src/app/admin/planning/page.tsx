@@ -79,6 +79,8 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
     const child = children.find((c: any) => c.id === selChild);
     const childName = (child as any)?.firstName || "—";
 
+    const createdPaymentIds: string[] = [];
+
     if (inscriptionMode === "annuel") {
       // Inscription annuelle : créer le forfait + inscrire dans le créneau
       try {
@@ -123,7 +125,7 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
           echeanceDate.setMonth(echeanceDate.getMonth() + i);
           const montant = i === nbEcheances - 1 ? montantDerniereEcheance : montantEcheance;
 
-          await addDoc(collection(db, "payments"), {
+          const docRef = await addDoc(collection(db, "payments"), {
             familyId: fam.firestoreId,
             familyName: fam.parentName || "",
             items: i === 0 ? items : [{ activityTitle: `Échéance ${i + 1}/${nbEcheances} — ${childName}`, priceHT: montant / 1.055, tva: 5.5, priceTTC: montant }],
@@ -138,6 +140,7 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
             forfaitRef: slotKey,
             date: serverTimestamp(),
           });
+          createdPaymentIds.push(docRef.id);
         }
       } catch (e) { console.error(e); }
     }
@@ -147,6 +150,42 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
 
     if (inscriptionMode === "annuel") {
       setJustEnrolled(`${childName} inscrit(e) en forfait annuel — ${sessionsRestantes} séances — ${totalAnnuel.toFixed(2)}€ en ${payPlan}`);
+
+      // Proposer le paiement Stripe si 3x ou 10x
+      if ((payPlan === "3x" || payPlan === "10x") && fam.parentEmail && createdPaymentIds.length > 0) {
+        const doStripe = confirm(
+          `Forfait créé en ${payPlan} (${createdPaymentIds.length} échéances).\n\n` +
+          `Voulez-vous envoyer un lien de paiement Stripe à ${fam.parentEmail} ?\n\n` +
+          `Le parent pourra payer par carte bancaire et les ${createdPaymentIds.length} mensualités seront prélevées automatiquement.`
+        );
+        if (doStripe) {
+          try {
+            const res = await fetch("/api/stripe-checkout", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                familyId: fam.firestoreId,
+                familyName: fam.parentName || "",
+                childName,
+                email: fam.parentEmail,
+                forfaitLabel: `${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long" })} ${creneau.startTime}`,
+                totalTTC: totalAnnuel,
+                nbEcheances: payPlan === "10x" ? 10 : 3,
+                paymentIds: createdPaymentIds,
+              }),
+            });
+            const data = await res.json();
+            if (data.url) {
+              window.open(data.url, "_blank");
+            } else if (data.error) {
+              alert(`Erreur Stripe : ${data.error}\n\nLe forfait est quand même créé. Vous pouvez encaisser manuellement dans Paiements.`);
+            }
+          } catch (e) {
+            console.error(e);
+            alert("Impossible de contacter Stripe. Le forfait est créé, encaissement manuel possible.");
+          }
+        }
+      }
     } else {
       setJustEnrolled(childName);
     }
