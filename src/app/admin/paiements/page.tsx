@@ -50,6 +50,7 @@ export default function PaiementsPage() {
   const [activities, setActivities] = useState<(Activity & { firestoreId: string })[]>([]);
   const [payments, setPayments] = useState<(Payment & { id: string })[]>([]);
   const [encaissements, setEncaissements] = useState<any[]>([]);
+  const [avoirs, setAvoirs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Historique filters
@@ -95,12 +96,14 @@ export default function PaiementsPage() {
       getDocs(collection(db, "activities")),
       getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200))),
       getDocs(query(collection(db, "encaissements"), orderBy("date", "desc"), limit(500))),
+      getDocs(collection(db, "avoirs")),
       getDoc(doc(db, "settings", "promos")),
-    ]).then(([famSnap, actSnap, paySnap, encSnap, promoSnap]) => {
+    ]).then(([famSnap, actSnap, paySnap, encSnap, avoirsSnap, promoSnap]) => {
       setFamilies(famSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as any);
       setActivities(actSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as any);
       setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
       setEncaissements(encSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+      setAvoirs(avoirsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
       if (promoSnap.exists() && promoSnap.data().items) setPromos(promoSnap.data().items);
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -152,12 +155,14 @@ export default function PaiementsPage() {
 
   // Rafraîchir les données
   const refreshAll = async () => {
-    const [paySnap, encSnap] = await Promise.all([
+    const [paySnap, encSnap, avoirsSnap] = await Promise.all([
       getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200))),
       getDocs(query(collection(db, "encaissements"), orderBy("date", "desc"), limit(500))),
+      getDocs(collection(db, "avoirs")),
     ]);
     setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
     setEncaissements(encSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+    setAvoirs(avoirsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
   };
 
   const basketSubtotal = basket.reduce((s, i) => s + i.priceTTC, 0);
@@ -377,6 +382,53 @@ export default function PaiementsPage() {
                       <span className="font-body text-sm font-semibold text-blue-800">Total dû</span>
                       <span className="font-body text-xl font-bold text-red-500">{totalPending.toFixed(2)}€</span>
                     </div>
+
+                    {/* Avoirs disponibles */}
+                    {(() => {
+                      const familyAvoirs = avoirs.filter(a => a.familyId === selectedFamily && a.status === "actif" && (a.remainingAmount || 0) > 0);
+                      const totalAvoir = familyAvoirs.reduce((s, a) => s + (a.remainingAmount || 0), 0);
+                      if (totalAvoir <= 0) return null;
+                      return (
+                        <div className="mb-3 p-2 bg-purple-50 rounded-lg">
+                          <div className="flex items-center justify-between font-body text-sm">
+                            <span className="text-purple-700 font-semibold">Avoir disponible</span>
+                            <span className="text-purple-700 font-bold">{totalAvoir.toFixed(2)}€</span>
+                          </div>
+                          <button onClick={async () => {
+                            const toUse = Math.min(totalAvoir, totalPending);
+                            if (!confirm(`Utiliser ${toUse.toFixed(2)}€ d'avoir pour cette famille ?`)) return;
+                            try {
+                              let resteAUtiliser = toUse;
+                              // 1. Déduire des avoirs
+                              for (const a of familyAvoirs) {
+                                if (resteAUtiliser <= 0) break;
+                                const used = Math.min(a.remainingAmount || 0, resteAUtiliser);
+                                await updateDoc(doc(db, "avoirs", a.id), {
+                                  usedAmount: (a.usedAmount || 0) + used,
+                                  remainingAmount: (a.remainingAmount || 0) - used,
+                                  status: (a.remainingAmount || 0) - used <= 0 ? "utilise" : "actif",
+                                  updatedAt: serverTimestamp(),
+                                });
+                                resteAUtiliser -= used;
+                              }
+                              // 2. Encaisser en mode "avoir" sur les paiements
+                              let resteAPayer = toUse;
+                              for (const p of familyPending) {
+                                if (resteAPayer <= 0) break;
+                                const du = (p.totalTTC || 0) - (p.paidAmount || 0);
+                                const paye = Math.min(du, resteAPayer);
+                                await enregistrerEncaissement(p.id!, p, paye, "avoir", "", "Utilisation avoir");
+                                resteAPayer -= paye;
+                              }
+                              alert(`${toUse.toFixed(2)}€ d'avoir utilisé !`);
+                              await refreshAll();
+                            } catch (e) { console.error(e); alert("Erreur."); }
+                          }} className="w-full mt-2 py-1.5 rounded-lg font-body text-xs font-semibold text-purple-700 bg-purple-100 border-none cursor-pointer hover:bg-purple-200">
+                            Utiliser {Math.min(totalAvoir, totalPending).toFixed(2)}€ d'avoir
+                          </button>
+                        </div>
+                      );
+                    })()}
 
                     {/* Montant à encaisser */}
                     <div className="mb-3">
