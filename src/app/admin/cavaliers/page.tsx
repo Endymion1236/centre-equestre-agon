@@ -558,26 +558,40 @@ export default function CavaliersPage() {
                           <div><div className="font-body text-[11px] font-semibold text-gray-400">Téléphone</div><div className="font-body text-sm text-blue-800">{family.parentPhone || "Non renseigné"}</div></div>
                           <div><div className="font-body text-[11px] font-semibold text-gray-400">Inscription</div><div className="font-body text-sm text-blue-800">{(family as any).authProvider === "admin" ? "Créé par l'admin" : `Via ${(family as any).authProvider}`}</div></div>
                         </div>
-                        {/* Balance financière */}
+                        {/* Compte client */}
                         {(() => {
-                          const fp = getPaymentsForFamily(family.firestoreId);
-                          const paid = fp.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
-                          const due = fp.reduce((s, p) => s + (p.totalTTC || 0), 0);
-                          const bal = paid - due;
+                          const fp = getPaymentsForFamily(family.firestoreId).filter(p => (p as any).status !== "cancelled");
+                          const totalFacture = fp.reduce((s, p) => s + (p.totalTTC || 0), 0);
+                          const totalPaye = fp.reduce((s, p) => s + (p.paidAmount || 0), 0);
+                          const resteDu = totalFacture - totalPaye;
+                          const famAvoirs = allAvoirs.filter((a: any) => a.familyId === family.firestoreId && a.status === "actif");
+                          const totalAvoir = famAvoirs.reduce((s: number, a: any) => s + (a.remainingAmount || 0), 0);
+                          const soldeReel = resteDu - totalAvoir;
                           return (
-                            <div className="grid grid-cols-3 gap-3 mt-3">
-                              <div className={`rounded-xl p-3 text-center ${bal < 0 ? "bg-red-50" : "bg-green-50"}`}>
-                                <div className="font-body text-[10px] text-gray-500 uppercase font-semibold">Balance</div>
-                                <div className={`font-body text-xl font-bold ${bal < 0 ? "text-red-500" : bal > 0 ? "text-green-600" : "text-gray-400"}`}>{bal >= 0 ? "+" : ""}{bal.toFixed(2)}€</div>
+                            <div className="mt-3 space-y-2">
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                <div className="bg-sand rounded-xl p-3 text-center">
+                                  <div className="font-body text-[10px] text-gray-400 uppercase">Facturé</div>
+                                  <div className="font-body text-lg font-bold text-blue-500">{totalFacture.toFixed(2)}€</div>
+                                </div>
+                                <div className="bg-green-50 rounded-xl p-3 text-center">
+                                  <div className="font-body text-[10px] text-gray-400 uppercase">Payé</div>
+                                  <div className="font-body text-lg font-bold text-green-600">{totalPaye.toFixed(2)}€</div>
+                                </div>
+                                <div className={`rounded-xl p-3 text-center ${resteDu > 0 ? "bg-red-50" : "bg-green-50"}`}>
+                                  <div className="font-body text-[10px] text-gray-400 uppercase">Reste dû</div>
+                                  <div className={`font-body text-lg font-bold ${resteDu > 0 ? "text-red-500" : "text-green-600"}`}>{resteDu.toFixed(2)}€</div>
+                                </div>
+                                {totalAvoir > 0 && (
+                                  <div className="bg-purple-50 rounded-xl p-3 text-center">
+                                    <div className="font-body text-[10px] text-purple-600 uppercase">Avoir</div>
+                                    <div className="font-body text-lg font-bold text-purple-600">{totalAvoir.toFixed(2)}€</div>
+                                  </div>
+                                )}
                               </div>
-                              <div className="bg-sand rounded-xl p-3 text-center">
-                                <div className="font-body text-[10px] text-gray-400">Payé</div>
-                                <div className="font-body text-xl font-bold text-green-600">{paid.toFixed(2)}€</div>
-                              </div>
-                              <div className="bg-sand rounded-xl p-3 text-center">
-                                <div className="font-body text-[10px] text-gray-400">Facturé</div>
-                                <div className="font-body text-xl font-bold text-blue-500">{due.toFixed(2)}€</div>
-                              </div>
+                              {soldeReel > 0 && totalAvoir > 0 && (
+                                <div className="font-body text-xs text-center text-gray-400">Solde réel après avoir : <span className="font-semibold text-red-500">{soldeReel.toFixed(2)}€</span></div>
+                              )}
                             </div>
                           );
                         })()}

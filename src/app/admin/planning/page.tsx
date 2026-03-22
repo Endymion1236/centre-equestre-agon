@@ -303,10 +303,10 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
           createdAt: serverTimestamp(),
         });
         // Créer les paiements en attente selon le plan
-        const items = [];
-        if (adhesion) items.push({ activityTitle: "Adhésion annuelle", priceHT: prixAdhesion / 1.055, tva: 5.5, priceTTC: prixAdhesion });
-        if (licence) items.push({ activityTitle: `Licence FFE ${licenceType === "moins18" ? "-18ans" : "+18ans"}`, priceHT: prixLicence, tva: 0, priceTTC: prixLicence });
-        items.push({ activityTitle: `Forfait ${creneau.activityTitle} (${slotKey})`, priceHT: prixForfait / 1.055, tva: 5.5, priceTTC: prixForfait });
+        const items: any[] = [];
+        if (adhesion) items.push({ activityTitle: "Adhésion annuelle", childId: selChild, childName, priceHT: prixAdhesion / 1.055, tva: 5.5, priceTTC: prixAdhesion });
+        if (licence) items.push({ activityTitle: `Licence FFE ${licenceType === "moins18" ? "-18ans" : "+18ans"}`, childId: selChild, childName, priceHT: prixLicence, tva: 0, priceTTC: prixLicence });
+        items.push({ activityTitle: `Forfait ${creneau.activityTitle} (${slotKey})`, childId: selChild, childName, creneauId: creneau.id, activityType: creneau.activityType, priceHT: prixForfait / 1.055, tva: 5.5, priceTTC: prixForfait });
 
         const nbEcheances = payPlan === "10x" ? 10 : payPlan === "3x" ? 3 : 1;
         const montantEcheance = Math.round((totalAnnuel / nbEcheances) * 100) / 100;
@@ -321,7 +321,7 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
           const docRef = await addDoc(collection(db, "payments"), {
             familyId: fam.firestoreId,
             familyName: fam.parentName || "",
-            items: i === 0 ? items : [{ activityTitle: `Échéance ${i + 1}/${nbEcheances} — ${childName}`, priceHT: montant / 1.055, tva: 5.5, priceTTC: montant }],
+            items: i === 0 ? items : [{ activityTitle: `Échéance ${i + 1}/${nbEcheances} — ${childName}`, childId: selChild, childName, priceHT: montant / 1.055, tva: 5.5, priceTTC: montant }],
             totalTTC: montant,
             paymentMode: "",
             paymentRef: "",
@@ -988,7 +988,7 @@ export default function PlanningPage() {
     const priceTTC = c.priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
     const priceHT = priceTTC / (1 + (c.tvaTaux || 5.5) / 100);
     await addDoc(collection(db, "reservations"), { familyId: child.familyId, familyName: child.familyName, childId: child.childId, childName: child.childName, activityTitle: c.activityTitle, activityType: c.activityType, creneauId: cid, date: c.date, startTime: c.startTime, endTime: c.endTime, priceTTC: Math.round(priceTTC * 100) / 100, status: "confirmed", source: "admin", createdAt: serverTimestamp() });
-    if (payMode && priceTTC > 0) { await addDoc(collection(db, "payments"), { familyId: child.familyId, familyName: child.familyName, items: [{ activityTitle: c.activityTitle, priceHT: Math.round(priceHT * 100) / 100, tva: c.tvaTaux || 5.5, priceTTC: Math.round(priceTTC * 100) / 100 }], totalTTC: Math.round(priceTTC * 100) / 100, paymentMode: payMode, paymentRef: "", status: "paid", paidAmount: Math.round(priceTTC * 100) / 100, date: serverTimestamp() }); }
+    if (payMode && priceTTC > 0) { await addDoc(collection(db, "payments"), { familyId: child.familyId, familyName: child.familyName, items: [{ activityTitle: c.activityTitle, childId: child.childId, childName: child.childName, creneauId: cid, activityType: c.activityType, priceHT: Math.round(priceHT * 100) / 100, tva: c.tvaTaux || 5.5, priceTTC: Math.round(priceTTC * 100) / 100 }], totalTTC: Math.round(priceTTC * 100) / 100, paymentMode: payMode, paymentRef: "", status: "paid", paidAmount: Math.round(priceTTC * 100) / 100, date: serverTimestamp() }); }
     const fresh = await refreshCreneaux(); const upd = fresh.find(x => x.id === cid); if (upd) setSelectedCreneau(upd);
   };
 
