@@ -1042,8 +1042,9 @@ export default function PlanningPage() {
     // 3. Chercher le paiement lié et gérer l'avoir
     try {
       const paySnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", child.familyId)));
-      // Trouver le paiement qui contient cette prestation
       let montantAvoir = 0;
+      let matchedPaymentId = "";
+      let matchedNewTotal = 0;
       for (const pDoc of paySnap.docs) {
         const p = pDoc.data();
         const items = p.items || [];
@@ -1053,19 +1054,18 @@ export default function PlanningPage() {
         );
         if (matchItem) {
           montantAvoir = matchItem.priceTTC || 0;
-          // Réduire le paiement
+          matchedPaymentId = pDoc.id;
           const newItems = items.filter((i: any) => i !== matchItem);
-          const newTotal = newItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
-          const newPaid = Math.min(p.paidAmount || 0, newTotal);
+          matchedNewTotal = newItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
+          const newPaid = Math.min(p.paidAmount || 0, matchedNewTotal);
           if (newItems.length === 0) {
-            // Plus rien dans le paiement → l'annuler
-            await updateDoc(doc(db, "payments", pDoc.id), { status: "cancelled", updatedAt: serverTimestamp() });
+            await updateDoc(doc(db, "payments", pDoc.id), { status: "cancelled", cancelledAt: serverTimestamp(), cancelReason: `Désinscription ${child.childName}`, updatedAt: serverTimestamp() });
           } else {
             await updateDoc(doc(db, "payments", pDoc.id), {
               items: newItems,
-              totalTTC: Math.round(newTotal * 100) / 100,
+              totalTTC: Math.round(matchedNewTotal * 100) / 100,
               paidAmount: Math.round(newPaid * 100) / 100,
-              status: newPaid >= newTotal ? "paid" : newPaid > 0 ? "partial" : "pending",
+              status: newPaid >= matchedNewTotal ? "paid" : newPaid > 0 ? "partial" : "pending",
               updatedAt: serverTimestamp(),
             });
           }
@@ -1073,18 +1073,11 @@ export default function PlanningPage() {
         }
       }
 
-      // 4. Si de l'argent a été encaissé pour cette prestation → créer un avoir
-      if (montantAvoir > 0) {
-        // Vérifier si un encaissement couvrait cette prestation
-        const encSnap = await getDocs(query(collection(db, "encaissements"), where("familyId", "==", child.familyId)));
-        const totalEncaisse = encSnap.docs.reduce((s, d) => s + (d.data().montant || 0), 0);
-        const allPayments = paySnap.docs.map(d => d.data());
-        const totalFacture = allPayments.filter(p => p.status !== "cancelled").reduce((s, p) => s + (p.totalTTC || 0), 0);
-
-        // Si le total encaissé dépasse le total facturé (après retrait de la ligne),
-        // il y a un trop-perçu → créer un avoir
-        const newTotalFacture = totalFacture - montantAvoir;
-        const tropPercu = totalEncaisse - newTotalFacture;
+      // 4. Si de l'argent a été encaissé pour CE paiement → créer un avoir
+      if (montantAvoir > 0 && matchedPaymentId) {
+        const encSnap = await getDocs(query(collection(db, "encaissements"), where("paymentId", "==", matchedPaymentId)));
+        const encaisseForThisPayment = encSnap.docs.reduce((s, d) => s + (d.data().montant || 0), 0);
+        const tropPercu = encaisseForThisPayment - matchedNewTotal;
 
         if (tropPercu > 0) {
           const avoirMontant = Math.min(tropPercu, montantAvoir);
@@ -1101,6 +1094,8 @@ export default function PlanningPage() {
             remainingAmount: Math.round(avoirMontant * 100) / 100,
             reason: `Désinscription ${child.childName} — ${c.activityTitle}`,
             reference: ref,
+            sourcePaymentId: matchedPaymentId,
+            sourceType: "desinscription",
             expiryDate: expiry,
             status: "actif",
             usageHistory: [],

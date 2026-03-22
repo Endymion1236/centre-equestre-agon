@@ -814,7 +814,7 @@ export default function CavaliersPage() {
                     {(() => {
                       const payments = getPaymentsForFamily(family.firestoreId);
                       const totalPaid = payments.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
-                      const totalDue = payments.filter(p => p.status === "partial" || p.status === "pending").reduce((s, p) => s + ((p.totalTTC || 0) - (p.paidAmount || 0)), 0);
+                      const totalDue = payments.filter(p => (p.status === "partial" || p.status === "pending") && p.status !== "cancelled").reduce((s, p) => s + ((p.totalTTC || 0) - (p.paidAmount || 0)), 0);
                       const modeLabels: Record<string,string> = { cb_terminal: "CB", cb_online: "Stripe", cheque: "Chèque", especes: "Espèces", cheque_vacances: "Chq. Vac.", pass_sport: "Pass'Sport", ancv: "ANCV", virement: "Virement", avoir: "Avoir", carte: "Carte" };
                       return (
                         <div className="mt-4 pt-3 border-t border-blue-500/8">

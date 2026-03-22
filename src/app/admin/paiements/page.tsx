@@ -27,7 +27,7 @@ interface Payment {
   totalTTC: number;
   paymentMode: PaymentMode;
   paymentRef: string;
-  status: "paid" | "pending" | "partial";
+  status: "paid" | "pending" | "partial" | "cancelled";
   paidAmount: number;
   date: any;
 }
@@ -271,8 +271,8 @@ export default function PaiementsPage() {
             className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all
               ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
             <Icon size={16} /> {label}
-            {id === "impayes" && payments.filter(p => p.status === "partial" || (p.paidAmount || 0) < (p.totalTTC || 0)).length > 0 && (
-              <span className="bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{payments.filter(p => p.status === "partial" || ((p.paidAmount || 0) < (p.totalTTC || 0) && p.status !== "paid")).length}</span>
+            {id === "impayes" && payments.filter(p => p.status !== "cancelled" && (p.status === "partial" || (p.paidAmount || 0) < (p.totalTTC || 0))).length > 0 && (
+              <span className="bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{payments.filter(p => p.status !== "cancelled" && (p.status === "partial" || ((p.paidAmount || 0) < (p.totalTTC || 0) && p.status !== "paid"))).length}</span>
             )}
           </button>
         ))}
@@ -691,7 +691,7 @@ export default function PaiementsPage() {
             // Construire le journal : encaissements réels + fallback anciens payments payés
             const encPaymentIds = new Set(encaissements.map((e: any) => e.paymentId));
             const fallbackLines = payments
-              .filter(p => (p.status === "paid" || p.paidAmount > 0) && !encPaymentIds.has(p.id))
+              .filter(p => (p.status === "paid" || p.paidAmount > 0) && p.status !== "cancelled" && !encPaymentIds.has(p.id))
               .map(p => ({
                 id: `fallback_${p.id}`,
                 paymentId: p.id,
@@ -1054,7 +1054,7 @@ export default function PaiementsPage() {
         <div>
           {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
           (() => {
-            const unpaid = payments.filter(p => p.status === "partial" || p.status === "pending" || ((p.paidAmount || 0) < (p.totalTTC || 0) && p.status !== "paid"));
+            const unpaid = payments.filter(p => p.status !== "cancelled" && (p.status === "partial" || p.status === "pending" || ((p.paidAmount || 0) < (p.totalTTC || 0) && p.status !== "paid")));
             const totalDue = unpaid.reduce((s, p) => s + ((p.totalTTC || 0) - (p.paidAmount || 0)), 0);
             return unpaid.length === 0 ? (
               <Card padding="lg" className="text-center"><div className="w-14 h-14 rounded-2xl bg-green-50 flex items-center justify-center mx-auto mb-3"><Check size={28} className="text-green-400" /></div><p className="font-body text-sm text-gray-500">Aucun impayé ! Toutes les factures sont réglées.</p></Card>
