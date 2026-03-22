@@ -152,7 +152,7 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
         }
 
         // UN SEUL paiement groupé pour tous les enfants
-        const items = stageLines.map(l => ({
+        const newItems = stageLines.map(l => ({
           activityTitle: `${creneau.activityTitle} (${creneauxAInscrire.length}j) — ${l.childName} (-${l.remiseEuros}€ réd. ${l.rang}${l.rang === 1 ? "ère" : "ème"})`,
           priceHT: l.prixReduit / 1.055,
           tva: 5.5,
@@ -160,35 +160,73 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
           childName: l.childName,
         }));
 
-        // Paiement acompte
-        await addDoc(collection(db, "payments"), {
-          familyId: fam.firestoreId,
-          familyName: fam.parentName || "",
-          items,
-          totalTTC: stageAcompte,
-          paymentMode: "",
-          paymentRef: "",
-          status: "pending",
-          paidAmount: 0,
-          isAcompte: true,
-          stageRef: creneau.activityTitle,
-          date: serverTimestamp(),
-        });
+        // Chercher un acompte stage pending existant pour cette famille
+        const existingAcompteSnap = await getDocs(query(
+          collection(db, "payments"),
+          where("familyId", "==", fam.firestoreId),
+          where("isAcompte", "==", true),
+          where("status", "==", "pending"),
+        ));
+        const existingSoldeSnap = await getDocs(query(
+          collection(db, "payments"),
+          where("familyId", "==", fam.firestoreId),
+          where("isSolde", "==", true),
+          where("status", "==", "pending"),
+        ));
 
-        // Paiement solde
-        await addDoc(collection(db, "payments"), {
-          familyId: fam.firestoreId,
-          familyName: fam.parentName || "",
-          items: [{ activityTitle: `Solde ${creneau.activityTitle} (${stageLines.length} enfant${stageLines.length > 1 ? "s" : ""})`, priceHT: stageSolde / 1.055, tva: 5.5, priceTTC: stageSolde }],
-          totalTTC: stageSolde,
-          paymentMode: "",
-          paymentRef: "",
-          status: "pending",
-          paidAmount: 0,
-          isSolde: true,
-          stageRef: creneau.activityTitle,
-          date: serverTimestamp(),
-        });
+        if (existingAcompteSnap.docs.length > 0) {
+          // Fusionner avec l'acompte existant
+          const existingAcompte = existingAcompteSnap.docs[0];
+          const existingData = existingAcompte.data();
+          const mergedItems = [...(existingData.items || []), ...newItems];
+          const mergedTotal = mergedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
+          const mergedAcompte = Math.round(mergedTotal * 0.3 * 100) / 100;
+          const mergedSolde = Math.round((mergedTotal - mergedAcompte) * 100) / 100;
+
+          await updateDoc(doc(db, "payments", existingAcompte.id), {
+            items: mergedItems,
+            totalTTC: mergedAcompte,
+            updatedAt: serverTimestamp(),
+          });
+
+          // Mettre à jour le solde existant
+          if (existingSoldeSnap.docs.length > 0) {
+            await updateDoc(doc(db, "payments", existingSoldeSnap.docs[0].id), {
+              items: [{ activityTitle: `Solde stages famille ${fam.parentName} (${mergedItems.length} inscription${mergedItems.length > 1 ? "s" : ""})`, priceHT: mergedSolde / 1.055, tva: 5.5, priceTTC: mergedSolde }],
+              totalTTC: mergedSolde,
+              updatedAt: serverTimestamp(),
+            });
+          }
+        } else {
+          // Créer nouveaux paiements acompte + solde
+          await addDoc(collection(db, "payments"), {
+            familyId: fam.firestoreId,
+            familyName: fam.parentName || "",
+            items: newItems,
+            totalTTC: stageAcompte,
+            paymentMode: "",
+            paymentRef: "",
+            status: "pending",
+            paidAmount: 0,
+            isAcompte: true,
+            stageRef: creneau.activityTitle,
+            date: serverTimestamp(),
+          });
+
+          await addDoc(collection(db, "payments"), {
+            familyId: fam.firestoreId,
+            familyName: fam.parentName || "",
+            items: [{ activityTitle: `Solde stages famille ${fam.parentName} (${stageLines.length} enfant${stageLines.length > 1 ? "s" : ""})`, priceHT: stageSolde / 1.055, tva: 5.5, priceTTC: stageSolde }],
+            totalTTC: stageSolde,
+            paymentMode: "",
+            paymentRef: "",
+            status: "pending",
+            paidAmount: 0,
+            isSolde: true,
+            stageRef: creneau.activityTitle,
+            date: serverTimestamp(),
+          });
+        }
 
         const noms = stageLines.map(l => l.childName).join(", ");
         setJustEnrolled(`${noms} inscrit(s) dans ${creneauxAInscrire.length} jour(s) — Total : ${stageTotalTTC.toFixed(2)}€ — Acompte : ${stageAcompte.toFixed(2)}€`);
