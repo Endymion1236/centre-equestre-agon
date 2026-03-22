@@ -36,6 +36,10 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
   const [licence, setLicence] = useState(true);
   const [payPlan, setPayPlan] = useState<"1x" | "3x" | "10x">("1x");
 
+  // Stage multi-enfants
+  const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
+  const isStage = creneau.activityType === "stage" || creneau.activityType === "stage_journee";
+
   const enrolled = creneau.enrolled || []; const enrolledIds = enrolled.map((e: any) => e.childId);
   const spots = creneau.maxPlaces - enrolled.length; const color = typeColors[creneau.activityType] || "#666";
   const priceTTC = (creneau as any).priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux || 5.5) / 100);
@@ -73,7 +77,146 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
   const prixForfait = Math.round(prixForfaitAnnuel * prorata);
   const totalAnnuel = (adhesion ? prixAdhesion : 0) + (licence ? prixLicence : 0) + prixForfait;
 
+  // Calcul stage : réductions fratrie
+  const stageLines = useMemo(() => {
+    if (!isStage) return [];
+    return selectedChildren.map((childId, idx) => {
+      const child = children.find((c: any) => c.id === childId);
+      const remise = idx === 0 ? 0 : idx === 1 ? 10 : idx === 2 ? 20 : 25;
+      const prixBase = priceTTC;
+      const prixReduit = Math.round(prixBase * (1 - remise / 100) * 100) / 100;
+      return {
+        childId,
+        childName: (child as any)?.firstName || "—",
+        prixBase,
+        remise,
+        prixReduit,
+      };
+    });
+  }, [isStage, selectedChildren, children, priceTTC]);
+
+  const stageTotalTTC = stageLines.reduce((s, l) => s + l.prixReduit, 0);
+  const stageAcompte = Math.round(stageTotalTTC * 0.3 * 100) / 100;
+  const stageSolde = Math.round((stageTotalTTC - stageAcompte) * 100) / 100;
+
   const handleEnroll = async () => {
+    // Mode stage : inscription multi-enfants
+    if (isStage && selectedChildren.length > 0 && fam) {
+      setEnrolling(true);
+      try {
+        // Inscrire chaque enfant dans le créneau
+        for (const line of stageLines) {
+          await onEnroll(creneau.id!, {
+            childId: line.childId, childName: line.childName,
+            familyId: fam.firestoreId, familyName: fam.parentName || "—",
+            enrolledAt: new Date().toISOString(),
+          });
+        }
+
+        // Créer le paiement acompte (30%)
+        const items = stageLines.map(l => ({
+          activityTitle: `${creneau.activityTitle} — ${l.childName}${l.remise > 0 ? ` (-${l.remise}% fratrie)` : ""}`,
+          priceHT: l.prixReduit / 1.055,
+          tva: 5.5,
+          priceTTC: l.prixReduit,
+          childName: l.childName,
+        }));
+
+        // Paiement acompte
+        await addDoc(collection(db, "payments"), {
+          familyId: fam.firestoreId,
+          familyName: fam.parentName || "",
+          items,
+          totalTTC: stageAcompte,
+          paymentMode: "",
+          paymentRef: "",
+          status: "pending",
+          paidAmount: 0,
+          isAcompte: true,
+          stageRef: creneau.activityTitle,
+          date: serverTimestamp(),
+        });
+
+        // Paiement solde
+        await addDoc(collection(db, "payments"), {
+          familyId: fam.firestoreId,
+          familyName: fam.parentName || "",
+          items: [{ activityTitle: `Solde ${creneau.activityTitle} (${stageLines.length} enfant${stageLines.length > 1 ? "s" : ""})`, priceHT: stageSolde / 1.055, tva: 5.5, priceTTC: stageSolde }],
+          totalTTC: stageSolde,
+          paymentMode: "",
+          paymentRef: "",
+          status: "pending",
+          paidAmount: 0,
+          isSolde: true,
+          stageRef: creneau.activityTitle,
+          date: serverTimestamp(),
+        });
+
+        const noms = stageLines.map(l => l.childName).join(", ");
+        setJustEnrolled(`${noms} inscrit(s) — Total : ${stageTotalTTC.toFixed(2)}€ — Acompte : ${stageAcompte.toFixed(2)}€`);
+
+        // Proposer envoi lien Stripe pour l'acompte
+        if (fam.parentEmail) {
+          const choix = prompt(
+            `Stage inscrit ! ${stageLines.length} enfant(s) — ${stageTotalTTC.toFixed(2)}€\n` +
+            `Acompte 30% : ${stageAcompte.toFixed(2)}€\n` +
+            `Solde sur place : ${stageSolde.toFixed(2)}€\n\n` +
+            `1 = Envoyer le lien de paiement acompte par email\n` +
+            `2 = Plus tard (encaissement manuel)\n\nTapez 1 ou 2 :`
+          );
+          if (choix === "1") {
+            try {
+              const res = await fetch("/api/stripe-checkout", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  familyId: fam.firestoreId,
+                  familyName: fam.parentName || "",
+                  childName: noms,
+                  email: fam.parentEmail,
+                  forfaitLabel: `Acompte ${creneau.activityTitle}`,
+                  totalTTC: stageAcompte,
+                  nbEcheances: 1,
+                  paymentIds: [],
+                }),
+              });
+              const data = await res.json();
+              if (data.url) {
+                await fetch("/api/send-email", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    to: fam.parentEmail,
+                    subject: `Acompte stage — ${creneau.activityTitle}`,
+                    html: `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px;">
+                      <h2 style="color:#1e3a5f;">Centre Équestre d'Agon-Coutainville</h2>
+                      <p>Bonjour ${fam.parentName},</p>
+                      <p>Inscription confirmée pour <strong>${noms}</strong> au stage <strong>${creneau.activityTitle}</strong>.</p>
+                      <table style="width:100%;border-collapse:collapse;margin:15px 0;">
+                        ${stageLines.map(l => `<tr><td style="padding:5px 0;">${l.childName}</td><td style="text-align:right;padding:5px 0;">${l.prixReduit.toFixed(2)}€${l.remise > 0 ? ` <span style="color:#27ae60;">(-${l.remise}%)</span>` : ""}</td></tr>`).join("")}
+                        <tr style="border-top:2px solid #1e3a5f;font-weight:bold;"><td style="padding:8px 0;">Total</td><td style="text-align:right;padding:8px 0;">${stageTotalTTC.toFixed(2)}€</td></tr>
+                      </table>
+                      <p><strong>Acompte à régler : ${stageAcompte.toFixed(2)}€</strong> (30%)<br/>Solde : ${stageSolde.toFixed(2)}€ le jour du stage</p>
+                      <p style="text-align:center;margin:25px 0;">
+                        <a href="${data.url}" style="background:#27ae60;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;">Payer l'acompte</a>
+                      </p>
+                      <p style="color:#888;font-size:12px;">Paiement sécurisé par Stripe.</p>
+                    </div>`,
+                  }),
+                });
+                alert(`Lien d'acompte envoyé à ${fam.parentEmail} !`);
+              }
+            } catch (e) { console.error(e); }
+          }
+        }
+      } catch (e) { console.error(e); alert("Erreur."); }
+      setSelectedChildren([]);
+      setSelFam(""); setSearch(""); setEnrolling(false);
+      setTimeout(() => setJustEnrolled(""), 6000);
+      return;
+    }
+
+    // Mode cours/forfait : inscription simple
     if (!selChild || !fam) return;
     setEnrolling(true);
     const child = children.find((c: any) => c.id === selChild);
@@ -255,10 +398,61 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
             {/* Recherche famille */}
             <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300"/><input value={search} onChange={e=>{setSearch(e.target.value);setSelFam("");setSelChild("");}} placeholder="Nom parent, prénom enfant, email..." className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/></div>
             <select value={selFam} onChange={e=>{setSelFam(e.target.value);setSelChild("");}} className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream"><option value="">Famille ({filteredFamilies.length})</option>{filteredFamilies.map(f=>{const n=(f.children||[]).map((c:any)=>c.firstName).join(", ");return<option key={f.firestoreId} value={f.firestoreId}>{f.parentName} {n?`(${n})`:""}</option>})}</select>
-            {fam&&available.length>0&&<div className="flex flex-wrap gap-2">{available.map((c:any)=><button key={c.id} onClick={()=>setSelChild(c.id)} className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${selChild===c.id?"bg-blue-500 text-white border-blue-500":"bg-white text-gray-500 border-gray-200"}`}><Users size={12}/> {c.firstName}</button>)}</div>}
+            {fam && available.length > 0 && !isStage && <div className="flex flex-wrap gap-2">{available.map((c:any)=><button key={c.id} onClick={()=>setSelChild(c.id)} className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${selChild===c.id?"bg-blue-500 text-white border-blue-500":"bg-white text-gray-500 border-gray-200"}`}><Users size={12}/> {c.firstName}</button>)}</div>}
 
-            {/* Choix du mode d'inscription */}
-            {selChild && (
+            {/* Stage : sélection multiple d'enfants */}
+            {fam && available.length > 0 && isStage && (
+              <div>
+                <div className="font-body text-xs font-semibold text-gray-400 mb-2">Sélectionner les enfants (multi-sélection)</div>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {available.map((c: any) => {
+                    const sel = selectedChildren.includes(c.id);
+                    return (
+                      <button key={c.id} onClick={() => setSelectedChildren(sel ? selectedChildren.filter(x => x !== c.id) : [...selectedChildren, c.id])}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${sel ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-500 border-gray-200"}`}>
+                        {sel ? <Check size={12}/> : <Users size={12}/>} {c.firstName}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Récap stage */}
+                {selectedChildren.length > 0 && (
+                  <div className="bg-green-50 rounded-xl p-4 space-y-3">
+                    <div className="font-body text-xs font-semibold text-green-700 uppercase tracking-wider">Récapitulatif stage</div>
+                    {stageLines.map((l, idx) => (
+                      <div key={l.childId} className="flex items-center justify-between font-body text-sm">
+                        <div>
+                          <span className="text-blue-800 font-semibold">{l.childName}</span>
+                          {l.remise > 0 && <Badge color="green">-{l.remise}% fratrie</Badge>}
+                        </div>
+                        <div className="text-right">
+                          {l.remise > 0 && <span className="text-gray-400 line-through text-xs mr-1">{l.prixBase.toFixed(2)}€</span>}
+                          <span className="font-bold text-blue-500">{l.prixReduit.toFixed(2)}€</span>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between pt-2 border-t border-green-200 font-body">
+                      <span className="text-sm font-bold text-blue-800">Total</span>
+                      <span className="text-lg font-bold text-green-600">{stageTotalTTC.toFixed(2)}€</span>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 space-y-1">
+                      <div className="flex justify-between font-body text-sm">
+                        <span className="text-orange-600 font-semibold">Acompte 30%</span>
+                        <span className="font-bold text-orange-600">{stageAcompte.toFixed(2)}€</span>
+                      </div>
+                      <div className="flex justify-between font-body text-xs text-gray-400">
+                        <span>Solde le jour du stage</span>
+                        <span>{stageSolde.toFixed(2)}€</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Choix du mode d'inscription — COURS uniquement (pas stage) */}
+            {selChild && !isStage && (
               <div className="bg-sand rounded-xl p-4 space-y-3">
                 <div className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">Type d'inscription</div>
                 <div className="grid grid-cols-2 gap-2">
@@ -349,9 +543,19 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
               </div>
             )}
 
-            <button onClick={handleEnroll} disabled={!selChild||enrolling} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${!selChild||enrolling?"bg-gray-200 text-gray-400":inscriptionMode==="annuel"?"bg-green-600 text-white hover:bg-green-500":"bg-blue-500 text-white hover:bg-blue-400"}`}>
-              {enrolling ? "..." : inscriptionMode === "annuel" ? `Inscrire à l'année (${totalAnnuel.toFixed(2)}€)` : showPay ? `Inscrire + Encaisser` : "Inscrire (ponctuel)"}
-            </button>
+            {/* Bouton Stage */}
+            {isStage && selectedChildren.length > 0 && (
+              <button onClick={handleEnroll} disabled={enrolling} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${enrolling ? "bg-gray-200 text-gray-400" : "bg-green-600 text-white hover:bg-green-500"}`}>
+                {enrolling ? "..." : `Inscrire ${selectedChildren.length} enfant${selectedChildren.length > 1 ? "s" : ""} — Acompte ${stageAcompte.toFixed(2)}€`}
+              </button>
+            )}
+
+            {/* Bouton Cours */}
+            {!isStage && selChild && (
+              <button onClick={handleEnroll} disabled={!selChild||enrolling} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${!selChild||enrolling?"bg-gray-200 text-gray-400":inscriptionMode==="annuel"?"bg-green-600 text-white hover:bg-green-500":"bg-blue-500 text-white hover:bg-blue-400"}`}>
+                {enrolling ? "..." : inscriptionMode === "annuel" ? `Inscrire à l'année (${totalAnnuel.toFixed(2)}€)` : showPay ? `Inscrire + Encaisser` : "Inscrire (ponctuel)"}
+              </button>
+            )}
           </div></div>)}
         </div>
       </div>
