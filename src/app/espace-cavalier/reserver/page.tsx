@@ -187,6 +187,11 @@ export default function ReserverPage() {
         familyId: user.uid, familyName: family.parentName,
         items: cart.map(i => ({
           activityTitle: `${i.activityTitle} — ${i.childName}${i.remiseEuros > 0 ? ` (-${i.remiseEuros}€)` : ""}`,
+          childId: i.childId,
+          childName: i.childName,
+          creneauId: i.creneauIds[0],
+          stageKey: i.isStage ? `${i.activityTitle}_${i.dates}` : undefined,
+          activityType: i.isStage ? "stage" : "cours",
           priceHT: i.prixFinal / 1.055, tva: 5.5, priceTTC: i.prixFinal,
         })),
         totalTTC: cartTotal,

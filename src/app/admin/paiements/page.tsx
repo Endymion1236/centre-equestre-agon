@@ -12,7 +12,11 @@ type PaymentMode = "cb_terminal" | "cb_online" | "cheque" | "especes" | "cheque_
 interface BasketItem {
   id: string;
   activityTitle: string;
+  childId?: string;
   childName: string;
+  activityId?: string;
+  creneauId?: string;
+  activityType?: string;
   description: string;
   priceHT: number;
   tva: number;
@@ -322,6 +326,7 @@ export default function PaiementsPage() {
       setBasket([...basket, {
         id: Date.now().toString(),
         activityTitle: customLabel,
+        childId: selectedChild || "",
         childName: selectedChild || "—",
         description: "Saisie manuelle",
         priceHT: price / 1.055,
@@ -341,7 +346,9 @@ export default function PaiementsPage() {
     setBasket([...basket, {
       id: Date.now().toString(),
       activityTitle: activity.title,
+      childId: selectedChild || "",
       childName: child?.firstName || "—",
+      activityId: activity.firestoreId,
       description: activity.schedule || "",
       priceHT: Math.round(priceHT * 100) / 100,
       tva: activity.tvaTaux || 5.5,
