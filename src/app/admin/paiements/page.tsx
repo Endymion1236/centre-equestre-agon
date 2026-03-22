@@ -293,7 +293,16 @@ export default function PaiementsPage() {
                         <div key={p.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
                           <div>
                             <div className="font-body text-sm text-blue-800">{(p.items || []).map((i: any) => i.activityTitle).join(", ") || "Prestation"}</div>
-                            <div className="font-body text-xs text-gray-400">{reste.toFixed(2)}€{p.paidAmount > 0 ? ` (déjà payé : ${p.paidAmount.toFixed(2)}€)` : ""}</div>
+                            <div className="font-body text-xs text-gray-400">{reste.toFixed(2)}€ dû sur {(p.totalTTC || 0).toFixed(2)}€</div>
+                            {((p as any).encaissements || []).length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {((p as any).encaissements || []).map((enc: any, i: number) => (
+                                  <span key={i} className="font-body text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded">
+                                    {enc.montant?.toFixed(2)}€ {enc.modeLabel || enc.mode} {enc.date ? new Date(enc.date).toLocaleDateString("fr-FR") : ""}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                           <span className="font-body text-sm font-bold text-red-500">{reste.toFixed(2)}€</span>
                         </div>
@@ -357,17 +366,29 @@ export default function PaiementsPage() {
                           const paye = Math.min(du, resteARegler);
                           const newPaid = (p.paidAmount || 0) + paye;
                           const newStatus = newPaid >= (p.totalTTC || 0) ? "paid" : "partial";
+                          
+                          // Ajouter l'encaissement au journal du paiement
+                          const existingEncaissements = (p as any).encaissements || [];
+                          const newEncaissement = {
+                            montant: Math.round(paye * 100) / 100,
+                            mode: paymentMode,
+                            modeLabel: paymentModes.find(m => m.id === paymentMode)?.label || paymentMode,
+                            ref: paymentRef || "",
+                            date: new Date().toISOString(),
+                          };
+                          
                           await updateDoc(doc(db, "payments", p.id!), {
                             status: newStatus,
                             paidAmount: Math.round(newPaid * 100) / 100,
-                            paymentMode,
+                            paymentMode: newStatus === "paid" ? paymentMode : "mixte",
                             paymentRef: paymentRef || "",
+                            encaissements: [...existingEncaissements, newEncaissement],
                             date: serverTimestamp(),
                           });
                           resteARegler -= paye;
                         }
                         const resteFinal = totalPending - montant;
-                        alert(`${montant.toFixed(2)}€ encaissé pour ${family.parentName} !${resteFinal > 0 ? `\nReste dû : ${resteFinal.toFixed(2)}€` : "\nTout est réglé !"}`);
+                        alert(`${montant.toFixed(2)}€ encaissé (${paymentModes.find(m => m.id === paymentMode)?.label || paymentMode}) pour ${family.parentName} !${resteFinal > 0 ? `\nReste dû : ${resteFinal.toFixed(2)}€` : "\nTout est réglé !"}`);
                         setPaidAmount("");
                         setPaymentRef("");
                         const paySnap = await getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200)));
@@ -665,7 +686,7 @@ export default function PaiementsPage() {
                           {filtered.map((p, idx) => {
                             const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
                             const mode = paymentModes.find(m => m.id === p.paymentMode);
-                            const reste = (p.totalTTC || 0) - (p.paidAmount || 0);
+                            const encaissements = (p as any).encaissements || [];
                             return (
                               <tr key={p.id} className={`border-b border-blue-500/5 hover:bg-blue-50/30 ${p.status === "pending" ? "bg-orange-50/20" : ""}`}>
                                 <td className="px-3 py-2 font-body text-xs text-gray-400">{d ? d.toLocaleDateString("fr-FR") : "—"}</td>
@@ -673,8 +694,29 @@ export default function PaiementsPage() {
                                 <td className="px-3 py-2 font-body text-sm font-semibold text-blue-800">{p.familyName}</td>
                                 <td className="px-3 py-2 font-body text-xs text-gray-500 max-w-[200px] truncate">{(p.items || []).map((i: any) => i.activityTitle).join(", ")}</td>
                                 <td className="px-3 py-2 font-body text-sm font-bold text-blue-500">{(p.totalTTC || 0).toFixed(2)}€</td>
-                                <td className="px-3 py-2 font-body text-sm font-semibold text-green-600">{(p.paidAmount || 0).toFixed(2)}€</td>
-                                <td className="px-3 py-2"><Badge color="blue">{mode?.label?.split(" ")[0] || p.paymentMode || "—"}</Badge></td>
+                                <td className="px-3 py-2">
+                                  <div className="font-body text-sm font-semibold text-green-600">{(p.paidAmount || 0).toFixed(2)}€</div>
+                                  {encaissements.length > 0 && (
+                                    <div className="flex flex-col gap-0.5 mt-0.5">
+                                      {encaissements.map((enc: any, i: number) => (
+                                        <span key={i} className="font-body text-[9px] text-gray-400">
+                                          {enc.montant?.toFixed(2)}€ {enc.modeLabel || enc.mode} {enc.ref ? `(${enc.ref})` : ""} — {enc.date ? new Date(enc.date).toLocaleDateString("fr-FR") : ""}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {encaissements.length > 1 ? (
+                                    <div className="flex flex-col gap-0.5">
+                                      {encaissements.map((enc: any, i: number) => (
+                                        <Badge key={i} color="blue">{enc.modeLabel?.split(" ")[0] || enc.mode}</Badge>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <Badge color="blue">{mode?.label?.split(" ")[0] || p.paymentMode || "—"}</Badge>
+                                  )}
+                                </td>
                                 <td className="px-3 py-2"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : "gray"}>{p.status === "paid" ? "Encaissé" : p.status === "partial" ? "Partiel" : "Att."}</Badge></td>
                               </tr>
                             );
