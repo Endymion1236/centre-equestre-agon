@@ -58,6 +58,7 @@ export default function FacturesPage() {
   const [cards, setCards] = useState<Card10[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"factures" | "reservations" | "cartes">("factures");
+  const [clientAvoirs, setClientAvoirs] = useState<any[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -96,6 +97,17 @@ export default function FacturesPage() {
         } catch { setCards([]); }
       }
 
+      // Avoirs
+      try {
+        const aSnap = await getDocs(query(collection(db, "avoirs"), where("familyId", "==", user.uid)));
+        setClientAvoirs(aSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch {
+        try {
+          const aSnap = await getDocs(collection(db, "avoirs"));
+          setClientAvoirs(aSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((a: any) => a.familyId === user.uid));
+        } catch { setClientAvoirs([]); }
+      }
+
       setLoading(false);
     };
     fetchAll();
@@ -129,21 +141,36 @@ export default function FacturesPage() {
           {/* ─── Paiements ─── */}
           {tab === "factures" && (
             <div>
-              {/* Summary */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                <Card padding="sm">
-                  <div className="font-body text-2xl font-bold text-blue-500">{totalPaid.toFixed(2)}€</div>
-                  <div className="font-body text-xs text-gray-400">Total payé</div>
-                </Card>
-                <Card padding="sm">
-                  <div className="font-body text-2xl font-bold text-green-600">{payments.filter(p => p.status === "paid").length}</div>
-                  <div className="font-body text-xs text-gray-400">Paiements confirmés</div>
-                </Card>
-                <Card padding="sm">
-                  <div className="font-body text-2xl font-bold text-orange-500">{payments.filter(p => p.status === "partial").length}</div>
-                  <div className="font-body text-xs text-gray-400">Paiements partiels</div>
-                </Card>
-              </div>
+              {/* Mon compte — résumé financier */}
+              {(() => {
+                const activePayments = payments.filter(p => p.status !== "cancelled");
+                const totalFacture = activePayments.reduce((s, p) => s + (p.totalTTC || 0), 0);
+                const totalPaye = activePayments.reduce((s, p) => s + (p.paidAmount || 0), 0);
+                const resteDu = totalFacture - totalPaye;
+                const totalAvoir = clientAvoirs.filter((a: any) => a.status === "actif").reduce((s: number, a: any) => s + (a.remainingAmount || 0), 0);
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                    <Card padding="sm" className="text-center">
+                      <div className="font-body text-xl font-bold text-blue-500">{totalFacture.toFixed(2)}€</div>
+                      <div className="font-body text-[10px] text-gray-400 uppercase">Total facturé</div>
+                    </Card>
+                    <Card padding="sm" className="text-center bg-green-50">
+                      <div className="font-body text-xl font-bold text-green-600">{totalPaye.toFixed(2)}€</div>
+                      <div className="font-body text-[10px] text-gray-400 uppercase">Payé</div>
+                    </Card>
+                    <Card padding="sm" className={`text-center ${resteDu > 0 ? "bg-red-50" : "bg-green-50"}`}>
+                      <div className={`font-body text-xl font-bold ${resteDu > 0 ? "text-red-500" : "text-green-600"}`}>{resteDu.toFixed(2)}€</div>
+                      <div className="font-body text-[10px] text-gray-400 uppercase">Reste dû</div>
+                    </Card>
+                    {totalAvoir > 0 && (
+                      <Card padding="sm" className="text-center bg-purple-50">
+                        <div className="font-body text-xl font-bold text-purple-600">{totalAvoir.toFixed(2)}€</div>
+                        <div className="font-body text-[10px] text-purple-500 uppercase">Avoir</div>
+                      </Card>
+                    )}
+                  </div>
+                );
+              })()}
 
               {sortedPayments.length === 0 ? (
                 <Card padding="lg" className="text-center">
