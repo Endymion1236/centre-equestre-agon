@@ -171,7 +171,7 @@ export default function PaiementsPage() {
     setSaving(true);
     const paid = paidAmount ? parseFloat(paidAmount) : basketTotal;
 
-    await addDoc(collection(db, "payments"), {
+    const payRef = await addDoc(collection(db, "payments"), {
       familyId: selectedFamily,
       familyName: family?.parentName || "—",
       items: basket,
@@ -183,6 +183,21 @@ export default function PaiementsPage() {
       date: serverTimestamp(),
     });
 
+    // Créer l'encaissement dans le journal
+    if (paid > 0) {
+      await addDoc(collection(db, "encaissements"), {
+        paymentId: payRef.id,
+        familyId: selectedFamily,
+        familyName: family?.parentName || "—",
+        montant: Math.round(paid * 100) / 100,
+        mode: paymentMode,
+        modeLabel: paymentModes.find(m => m.id === paymentMode)?.label || paymentMode,
+        ref: paymentRef || "",
+        activityTitle: basket.map(i => i.activityTitle).join(", "),
+        date: serverTimestamp(),
+      });
+    }
+
     setBasket([]);
     setPaymentRef("");
     setPaidAmount("");
@@ -190,9 +205,13 @@ export default function PaiementsPage() {
     setSuccess(true);
     setTimeout(() => setSuccess(false), 3000);
 
-    // Refresh payments
-    const paySnap = await getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(50)));
+    // Refresh
+    const [paySnap, encSnap] = await Promise.all([
+      getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200))),
+      getDocs(query(collection(db, "encaissements"), orderBy("date", "desc"), limit(500))),
+    ]);
     setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+    setEncaissements(encSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
   };
 
   const inputCls = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
@@ -602,7 +621,24 @@ export default function PaiementsPage() {
           {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
           (() => {
             // Filtrage des encaissements
-            let filtered = [...encaissements];
+            // Construire le journal : encaissements réels + fallback anciens payments payés
+            const encPaymentIds = new Set(encaissements.map((e: any) => e.paymentId));
+            const fallbackLines = payments
+              .filter(p => (p.status === "paid" || p.paidAmount > 0) && !encPaymentIds.has(p.id))
+              .map(p => ({
+                id: `fallback_${p.id}`,
+                paymentId: p.id,
+                familyId: p.familyId,
+                familyName: p.familyName,
+                montant: p.paidAmount || p.totalTTC || 0,
+                mode: p.paymentMode || "",
+                modeLabel: paymentModes.find(m => m.id === p.paymentMode)?.label || p.paymentMode || "—",
+                ref: p.paymentRef || "",
+                activityTitle: (p.items || []).map((i: any) => i.activityTitle).join(", "),
+                date: p.date,
+              }));
+            
+            let filtered = [...encaissements, ...fallbackLines];
             if (journalDateFrom) filtered = filtered.filter(e => { const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null; return d && d >= new Date(journalDateFrom); });
             if (journalDateTo) filtered = filtered.filter(e => { const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null; return d && d <= new Date(journalDateTo + "T23:59:59"); });
             if (journalMontantMin) filtered = filtered.filter(e => (e.montant || 0) >= parseFloat(journalMontantMin));
@@ -924,9 +960,29 @@ export default function PaiementsPage() {
                                     const mode = prompt(`Encaisser ${(e.totalTTC || 0).toFixed(2)}€\n\n1=CB  2=Chèque  3=Espèces  4=Virement`);
                                     if (!mode) return;
                                     const modeMap: Record<string,string> = {"1":"cb_terminal","2":"cheque","3":"especes","4":"virement"};
-                                    await updateDoc(doc(db, "payments", e.id), { status: "paid", paidAmount: e.totalTTC || 0, paymentMode: modeMap[mode] || "cb_terminal", date: serverTimestamp() });
-                                    const paySnap = await getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200)));
+                                    const modeLabelsMap: Record<string,string> = {"1":"CB (terminal)","2":"Chèque","3":"Espèces","4":"Virement"};
+                                    const payMode = modeMap[mode] || "cb_terminal";
+                                    // 1. Mettre à jour le payment
+                                    await updateDoc(doc(db, "payments", e.id), { status: "paid", paidAmount: e.totalTTC || 0, paymentMode: payMode, date: serverTimestamp() });
+                                    // 2. Créer l'encaissement
+                                    await addDoc(collection(db, "encaissements"), {
+                                      paymentId: e.id,
+                                      familyId: first.familyId,
+                                      familyName: first.familyName,
+                                      montant: e.totalTTC || 0,
+                                      mode: payMode,
+                                      modeLabel: modeLabelsMap[mode] || payMode,
+                                      ref: "",
+                                      activityTitle: (e as any).forfaitRef || (first as any).forfaitRef || (e.items || []).map((i: any) => i.activityTitle).join(", "),
+                                      date: serverTimestamp(),
+                                    });
+                                    // Refresh
+                                    const [paySnap, encSnap] = await Promise.all([
+                                      getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200))),
+                                      getDocs(query(collection(db, "encaissements"), orderBy("date", "desc"), limit(500))),
+                                    ]);
                                     setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+                                    setEncaissements(encSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
                                   }}
                                     className="font-body text-[10px] font-semibold text-white bg-green-600 px-2 py-1 rounded border-none cursor-pointer hover:bg-green-500">
                                     Encaisser
