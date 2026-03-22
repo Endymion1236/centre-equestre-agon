@@ -27,7 +27,7 @@ interface Payment {
   totalTTC: number;
   paymentMode: PaymentMode;
   paymentRef: string;
-  status: "paid" | "pending" | "partial" | "cancelled";
+  status: "draft" | "paid" | "pending" | "partial" | "cancelled";
   paidAmount: number;
   date: any;
 }
@@ -163,6 +163,135 @@ export default function PaiementsPage() {
     setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
     setEncaissements(encSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
     setAvoirs(avoirsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+  };
+
+  // ═══ SUPPRESSION / MODIFICATION DE COMMANDE ═══
+  // Règle : non encaissé = supprimable, encaissé = avoir automatique
+
+  const getTotalEncaisse = (payment: any) => {
+    // Chercher dans la collection encaissements
+    return encaissements
+      .filter((e: any) => e.paymentId === payment.id)
+      .reduce((s: number, e: any) => s + (e.montant || 0), 0);
+  };
+
+  const deletePaymentCommand = async (payment: any) => {
+    const totalEnc = getTotalEncaisse(payment);
+
+    if (totalEnc === 0) {
+      // Non encaissé → suppression libre
+      if (!confirm(`Supprimer cette commande de ${(payment.totalTTC || 0).toFixed(2)}€ pour ${payment.familyName} ?\n\nAucun encaissement — suppression simple.`)) return;
+      await deleteDoc(doc(db, "payments", payment.id));
+      alert("Commande supprimée.");
+    } else {
+      // Encaissé → avoir automatique
+      if (!confirm(`${totalEnc.toFixed(2)}€ ont déjà été encaissés.\n\nUn avoir de ${totalEnc.toFixed(2)}€ sera créé automatiquement pour ${payment.familyName}.\n\nConfirmer l'annulation ?`)) return;
+
+      const ref = `AV-${Date.now().toString(36).toUpperCase()}`;
+      const expiry = new Date();
+      expiry.setFullYear(expiry.getFullYear() + 1);
+
+      await addDoc(collection(db, "avoirs"), {
+        familyId: payment.familyId,
+        familyName: payment.familyName,
+        type: "avoir",
+        amount: Math.round(totalEnc * 100) / 100,
+        usedAmount: 0,
+        remainingAmount: Math.round(totalEnc * 100) / 100,
+        reason: `Annulation commande — ${(payment.items || []).map((i: any) => i.activityTitle).join(", ").slice(0, 60)}`,
+        reference: ref,
+        sourcePaymentId: payment.id,
+        sourceType: "annulation",
+        expiryDate: expiry,
+        status: "actif",
+        usageHistory: [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      await updateDoc(doc(db, "payments", payment.id), {
+        status: "cancelled",
+        cancelledAt: serverTimestamp(),
+        cancelReason: "Annulation manuelle",
+        updatedAt: serverTimestamp(),
+      });
+
+      alert(`Commande annulée.\nAvoir créé : ${totalEnc.toFixed(2)}€ (réf. ${ref})`);
+    }
+    await refreshAll();
+  };
+
+  const removePaymentItem = async (payment: any, itemIndex: number) => {
+    const totalEnc = getTotalEncaisse(payment);
+    const items = payment.items || [];
+    const itemToRemove = items[itemIndex];
+    if (!itemToRemove) return;
+
+    const newItems = items.filter((_: any, i: number) => i !== itemIndex);
+    const newTotal = newItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
+
+    if (totalEnc === 0) {
+      // Non encaissé → modification libre
+      if (!confirm(`Retirer "${itemToRemove.activityTitle}" (${(itemToRemove.priceTTC || 0).toFixed(2)}€) ?`)) return;
+
+      if (newItems.length === 0) {
+        await deleteDoc(doc(db, "payments", payment.id));
+      } else {
+        await updateDoc(doc(db, "payments", payment.id), {
+          items: newItems,
+          totalTTC: Math.round(newTotal * 100) / 100,
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } else {
+      // Encaissé → avoir du trop-perçu si nécessaire
+      const tropPercu = totalEnc - newTotal;
+      const msg = tropPercu > 0
+        ? `Retirer "${itemToRemove.activityTitle}" ?\n\n${tropPercu.toFixed(2)}€ de trop-perçu → un avoir sera créé.`
+        : `Retirer "${itemToRemove.activityTitle}" ?`;
+      if (!confirm(msg)) return;
+
+      if (tropPercu > 0) {
+        const ref = `AV-${Date.now().toString(36).toUpperCase()}`;
+        const expiry = new Date();
+        expiry.setFullYear(expiry.getFullYear() + 1);
+
+        await addDoc(collection(db, "avoirs"), {
+          familyId: payment.familyId,
+          familyName: payment.familyName,
+          type: "avoir",
+          amount: Math.round(tropPercu * 100) / 100,
+          usedAmount: 0,
+          remainingAmount: Math.round(tropPercu * 100) / 100,
+          reason: `Retrait prestation — ${itemToRemove.activityTitle}`,
+          reference: ref,
+          sourcePaymentId: payment.id,
+          sourceType: "retrait_prestation",
+          expiryDate: expiry,
+          status: "actif",
+          usageHistory: [],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      if (newItems.length === 0) {
+        await updateDoc(doc(db, "payments", payment.id), {
+          status: "cancelled", cancelledAt: serverTimestamp(),
+          cancelReason: "Dernière prestation retirée", updatedAt: serverTimestamp(),
+        });
+      } else {
+        const newPaid = Math.min(totalEnc, newTotal);
+        await updateDoc(doc(db, "payments", payment.id), {
+          items: newItems,
+          totalTTC: Math.round(newTotal * 100) / 100,
+          paidAmount: Math.round(newPaid * 100) / 100,
+          status: newPaid >= newTotal ? "paid" : newPaid > 0 ? "partial" : "pending",
+          updatedAt: serverTimestamp(),
+        });
+      }
+    }
+    await refreshAll();
   };
 
   const basketSubtotal = basket.reduce((s, i) => s + i.priceTTC, 0);
@@ -1098,6 +1227,28 @@ export default function PaiementsPage() {
                               Relancer
                             </button>
                           </div>
+                        </div>
+                        {/* Détail des lignes avec bouton retirer */}
+                        {(p.items || []).length > 1 && (
+                          <div className="mt-2 pt-2 border-t border-gray-100">
+                            {(p.items || []).map((item: any, idx: number) => (
+                              <div key={idx} className="flex items-center justify-between py-1 font-body text-xs">
+                                <span className="text-gray-500">{item.activityTitle}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-blue-500 font-semibold">{(item.priceTTC || 0).toFixed(2)}€</span>
+                                  <button onClick={() => removePaymentItem(p, idx)}
+                                    className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-0.5"><X size={12} /></button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {/* Bouton supprimer la commande */}
+                        <div className="mt-2 pt-2 border-t border-gray-100 flex justify-end">
+                          <button onClick={() => deletePaymentCommand(p)}
+                            className="font-body text-[10px] text-red-500 bg-red-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-red-100 flex items-center gap-1">
+                            <Trash2 size={10} /> Annuler la commande
+                          </button>
                         </div>
                       </Card>
                     );
