@@ -120,18 +120,40 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
     if (isStage && selectedChildren.length > 0 && fam) {
       setEnrolling(true);
       try {
-        // Inscrire chaque enfant dans le créneau
+        // Trouver TOUS les créneaux du même stage la même semaine
+        const creneauDate = new Date(creneau.date);
+        const dayOfWeek = creneauDate.getDay(); // 0=dim
+        const monday = new Date(creneauDate);
+        monday.setDate(monday.getDate() - ((dayOfWeek + 6) % 7)); // lundi de la semaine
+        const sunday = new Date(monday);
+        sunday.setDate(sunday.getDate() + 6);
+
+        const stageCreneaux = allCreneaux.filter(c =>
+          c.activityTitle === creneau.activityTitle &&
+          (c.activityType === "stage" || c.activityType === "stage_journee") &&
+          new Date(c.date) >= monday && new Date(c.date) <= sunday
+        ).sort((a, b) => a.date.localeCompare(b.date));
+
+        // Si pas d'autres jours trouvés, juste le créneau cliqué
+        const creneauxAInscrire = stageCreneaux.length > 0 ? stageCreneaux : [creneau];
+
+        // Inscrire chaque enfant dans TOUS les jours du stage
         for (const line of stageLines) {
-          await onEnroll(creneau.id!, {
-            childId: line.childId, childName: line.childName,
-            familyId: fam.firestoreId, familyName: fam.parentName || "—",
-            enrolledAt: new Date().toISOString(),
-          });
+          for (const sc of creneauxAInscrire) {
+            // Vérifier si pas déjà inscrit
+            const enrolled = sc.enrolled || [];
+            if (enrolled.some((e: any) => e.childId === line.childId)) continue;
+            await onEnroll(sc.id!, {
+              childId: line.childId, childName: line.childName,
+              familyId: fam.firestoreId, familyName: fam.parentName || "—",
+              enrolledAt: new Date().toISOString(),
+            });
+          }
         }
 
-        // Créer le paiement acompte (30%)
+        // UN SEUL paiement groupé pour tous les enfants
         const items = stageLines.map(l => ({
-          activityTitle: `${creneau.activityTitle} — ${l.childName} (-${l.remiseEuros}€ réd. ${l.rang}${l.rang === 1 ? "ère" : "ème"})`,
+          activityTitle: `${creneau.activityTitle} (${creneauxAInscrire.length}j) — ${l.childName} (-${l.remiseEuros}€ réd. ${l.rang}${l.rang === 1 ? "ère" : "ème"})`,
           priceHT: l.prixReduit / 1.055,
           tva: 5.5,
           priceTTC: l.prixReduit,
@@ -169,7 +191,7 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
         });
 
         const noms = stageLines.map(l => l.childName).join(", ");
-        setJustEnrolled(`${noms} inscrit(s) — Total : ${stageTotalTTC.toFixed(2)}€ — Acompte : ${stageAcompte.toFixed(2)}€`);
+        setJustEnrolled(`${noms} inscrit(s) dans ${creneauxAInscrire.length} jour(s) — Total : ${stageTotalTTC.toFixed(2)}€ — Acompte : ${stageAcompte.toFixed(2)}€`);
 
         // Proposer envoi lien Stripe pour l'acompte
         if (fam.parentEmail) {
@@ -433,9 +455,27 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
                 </div>
 
                 {/* Récap stage */}
-                {selectedChildren.length > 0 && (
+                {selectedChildren.length > 0 && (() => {
+                  // Compter les jours du stage cette semaine
+                  const creneauDate = new Date(creneau.date);
+                  const dow = creneauDate.getDay();
+                  const mon = new Date(creneauDate); mon.setDate(mon.getDate() - ((dow + 6) % 7));
+                  const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+                  const nbJours = allCreneaux.filter(c =>
+                    c.activityTitle === creneau.activityTitle &&
+                    (c.activityType === "stage" || c.activityType === "stage_journee") &&
+                    new Date(c.date) >= mon && new Date(c.date) <= sun
+                  ).length || 1;
+
+                  return (
                   <div className="bg-green-50 rounded-xl p-4 space-y-3">
-                    <div className="font-body text-xs font-semibold text-green-700 uppercase tracking-wider">Récapitulatif stage</div>
+                    <div className="flex items-center justify-between">
+                      <div className="font-body text-xs font-semibold text-green-700 uppercase tracking-wider">Récapitulatif stage</div>
+                      <Badge color="blue">{nbJours} jour{nbJours > 1 ? "s" : ""}</Badge>
+                    </div>
+                    <div className="font-body text-[10px] text-blue-500 bg-blue-50 rounded px-2 py-1">
+                      L'inscription couvre les {nbJours} jour(s) de la semaine pour ce stage.
+                    </div>
                     {existingStageCount > 0 && (
                       <div className="font-body text-[10px] text-orange-500 bg-orange-50 rounded px-2 py-1">
                         {existingStageCount} inscription(s) stage déjà enregistrée(s) pour cette famille — réductions cumulées
@@ -468,7 +508,8 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
                       </div>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
               </div>
             )}
 
