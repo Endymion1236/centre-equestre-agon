@@ -22,8 +22,8 @@ const typeColors: Record<string, string> = { stage: "#27ae60", stage_journee: "#
 const payModes = [{ id: "cb_terminal", label: "CB", icon: "💳" }, { id: "cheque", label: "Chèque", icon: "📝" }, { id: "especes", label: "Espèces", icon: "💶" }, { id: "cheque_vacances", label: "Chq.Vac.", icon: "🏖️" }, { id: "pass_sport", label: "Pass'Sport", icon: "🎽" }, { id: "ancv", label: "ANCV", icon: "🎫" }, { id: "carte", label: "Carte", icon: "🎟️" }];
 
 // ─── Enroll Panel ───
-function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
-  creneau: Creneau & { id: string }; families: (Family & { firestoreId: string })[]; onClose: () => void;
+function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnenroll }: {
+  creneau: Creneau & { id: string }; families: (Family & { firestoreId: string })[]; allCreneaux: (Creneau & { id: string })[]; onClose: () => void;
   onEnroll: (id: string, c: EnrolledChild, payMode?: string) => Promise<void>;
   onUnenroll: (id: string, childId: string) => Promise<void>;
 }) {
@@ -77,23 +77,39 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
   const prixForfait = Math.round(prixForfaitAnnuel * prorata);
   const totalAnnuel = (adhesion ? prixAdhesion : 0) + (licence ? prixLicence : 0) + prixForfait;
 
-  // Calcul stage : réductions fratrie
+  // Calcul stage : réductions cumulées famille (-10€, -20€, -30€...)
+  // Compter les inscriptions stage EXISTANTES pour cette famille
+  const existingStageCount = useMemo(() => {
+    if (!isStage || !fam) return 0;
+    let count = 0;
+    const stageCreneaux = allCreneaux.filter(c => c.activityType === "stage" || c.activityType === "stage_journee");
+    for (const sc of stageCreneaux) {
+      if (sc.id === creneau.id) continue; // pas le créneau actuel
+      const enrolled = sc.enrolled || [];
+      count += enrolled.filter((e: any) => e.familyId === fam.firestoreId).length;
+    }
+    return count;
+  }, [isStage, fam, allCreneaux, creneau.id]);
+
   const stageLines = useMemo(() => {
     if (!isStage) return [];
     return selectedChildren.map((childId, idx) => {
       const child = children.find((c: any) => c.id === childId);
-      const remise = idx === 0 ? 0 : idx === 1 ? 10 : idx === 2 ? 20 : 25;
+      // Le rang dans le compteur famille = inscriptions existantes + position dans la sélection
+      const rang = existingStageCount + idx; // 0-indexed
+      const remiseEuros = rang === 0 ? 10 : rang === 1 ? 20 : rang === 2 ? 30 : 30 + (rang - 2) * 10;
       const prixBase = priceTTC;
-      const prixReduit = Math.round(prixBase * (1 - remise / 100) * 100) / 100;
+      const prixReduit = Math.max(0, Math.round((prixBase - remiseEuros) * 100) / 100);
       return {
         childId,
         childName: (child as any)?.firstName || "—",
         prixBase,
-        remise,
+        remiseEuros,
+        rang: rang + 1,
         prixReduit,
       };
     });
-  }, [isStage, selectedChildren, children, priceTTC]);
+  }, [isStage, selectedChildren, children, priceTTC, existingStageCount]);
 
   const stageTotalTTC = stageLines.reduce((s, l) => s + l.prixReduit, 0);
   const stageAcompte = Math.round(stageTotalTTC * 0.3 * 100) / 100;
@@ -115,7 +131,7 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
 
         // Créer le paiement acompte (30%)
         const items = stageLines.map(l => ({
-          activityTitle: `${creneau.activityTitle} — ${l.childName}${l.remise > 0 ? ` (-${l.remise}% fratrie)` : ""}`,
+          activityTitle: `${creneau.activityTitle} — ${l.childName} (-${l.remiseEuros}€ réd. ${l.rang}${l.rang === 1 ? "ère" : "ème"})`,
           priceHT: l.prixReduit / 1.055,
           tva: 5.5,
           priceTTC: l.prixReduit,
@@ -193,7 +209,7 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
                       <p>Bonjour ${fam.parentName},</p>
                       <p>Inscription confirmée pour <strong>${noms}</strong> au stage <strong>${creneau.activityTitle}</strong>.</p>
                       <table style="width:100%;border-collapse:collapse;margin:15px 0;">
-                        ${stageLines.map(l => `<tr><td style="padding:5px 0;">${l.childName}</td><td style="text-align:right;padding:5px 0;">${l.prixReduit.toFixed(2)}€${l.remise > 0 ? ` <span style="color:#27ae60;">(-${l.remise}%)</span>` : ""}</td></tr>`).join("")}
+                        ${stageLines.map(l => `<tr><td style="padding:5px 0;">${l.childName}</td><td style="text-align:right;padding:5px 0;">${l.prixReduit.toFixed(2)}€ <span style="color:#27ae60;">(-${l.remiseEuros}€)</span></td></tr>`).join("")}
                         <tr style="border-top:2px solid #1e3a5f;font-weight:bold;"><td style="padding:8px 0;">Total</td><td style="text-align:right;padding:8px 0;">${stageTotalTTC.toFixed(2)}€</td></tr>
                       </table>
                       <p><strong>Acompte à régler : ${stageAcompte.toFixed(2)}€</strong> (30%)<br/>Solde : ${stageSolde.toFixed(2)}€ le jour du stage</p>
@@ -420,14 +436,19 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
                 {selectedChildren.length > 0 && (
                   <div className="bg-green-50 rounded-xl p-4 space-y-3">
                     <div className="font-body text-xs font-semibold text-green-700 uppercase tracking-wider">Récapitulatif stage</div>
-                    {stageLines.map((l, idx) => (
+                    {existingStageCount > 0 && (
+                      <div className="font-body text-[10px] text-orange-500 bg-orange-50 rounded px-2 py-1">
+                        {existingStageCount} inscription(s) stage déjà enregistrée(s) pour cette famille — réductions cumulées
+                      </div>
+                    )}
+                    {stageLines.map(l => (
                       <div key={l.childId} className="flex items-center justify-between font-body text-sm">
-                        <div>
+                        <div className="flex items-center gap-2">
                           <span className="text-blue-800 font-semibold">{l.childName}</span>
-                          {l.remise > 0 && <Badge color="green">-{l.remise}% fratrie</Badge>}
+                          <Badge color="green">-{l.remiseEuros}€ ({l.rang}{l.rang === 1 ? "ère" : "ème"} inscr.)</Badge>
                         </div>
                         <div className="text-right">
-                          {l.remise > 0 && <span className="text-gray-400 line-through text-xs mr-1">{l.prixBase.toFixed(2)}€</span>}
+                          <span className="text-gray-400 line-through text-xs mr-1">{l.prixBase.toFixed(2)}€</span>
                           <span className="font-bold text-blue-500">{l.prixReduit.toFixed(2)}€</span>
                         </div>
                       </div>
@@ -1123,7 +1144,7 @@ export default function PlanningPage() {
         </div>
       )}
 
-      {selectedCreneau&&<EnrollPanel creneau={selectedCreneau as any} families={families} onClose={()=>{setSelectedCreneau(null);fetchData();}} onEnroll={handleEnroll} onUnenroll={handleUnenroll}/>}
+      {selectedCreneau&&<EnrollPanel creneau={selectedCreneau as any} families={families} allCreneaux={creneaux} onClose={()=>{setSelectedCreneau(null);fetchData();}} onEnroll={handleEnroll} onUnenroll={handleUnenroll}/>}
     </div>
   );
 }
