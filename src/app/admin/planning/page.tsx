@@ -152,13 +152,17 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
       setJustEnrolled(`${childName} inscrit(e) en forfait annuel — ${sessionsRestantes} séances — ${totalAnnuel.toFixed(2)}€ en ${payPlan}`);
 
       // Proposer le paiement Stripe si 3x ou 10x
-      if ((payPlan === "3x" || payPlan === "10x") && fam.parentEmail && createdPaymentIds.length > 0) {
-        const doStripe = confirm(
-          `Forfait créé en ${payPlan} (${createdPaymentIds.length} échéances).\n\n` +
-          `Voulez-vous envoyer un lien de paiement Stripe à ${fam.parentEmail} ?\n\n` +
-          `Le parent pourra payer par carte bancaire et les ${createdPaymentIds.length} mensualités seront prélevées automatiquement.`
+      if ((payPlan === "3x" || payPlan === "10x") && createdPaymentIds.length > 0) {
+        const choix = prompt(
+          `Forfait créé en ${payPlan} (${createdPaymentIds.length} échéances de ${(totalAnnuel / createdPaymentIds.length).toFixed(2)}€).\n\n` +
+          `Comment encaisser ?\n\n` +
+          `1 = Ouvrir la page de paiement Stripe (vous ou le parent présent)\n` +
+          `2 = Envoyer le lien de paiement par email à ${fam.parentEmail || "pas d'email"}\n` +
+          `3 = Plus tard (encaissement manuel dans Paiements)\n\n` +
+          `Tapez 1, 2 ou 3 :`
         );
-        if (doStripe) {
+
+        if (choix === "1" || choix === "2") {
           try {
             const res = await fetch("/api/stripe-checkout", {
               method: "POST",
@@ -167,7 +171,7 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
                 familyId: fam.firestoreId,
                 familyName: fam.parentName || "",
                 childName,
-                email: fam.parentEmail,
+                email: fam.parentEmail || "",
                 forfaitLabel: `${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long" })} ${creneau.startTime}`,
                 totalTTC: totalAnnuel,
                 nbEcheances: payPlan === "10x" ? 10 : 3,
@@ -176,13 +180,52 @@ function EnrollPanel({ creneau, families, onClose, onEnroll, onUnenroll }: {
             });
             const data = await res.json();
             if (data.url) {
-              window.open(data.url, "_blank");
+              if (choix === "1") {
+                window.open(data.url, "_blank");
+              } else {
+                // Envoyer par email
+                if (fam.parentEmail) {
+                  try {
+                    await fetch("/api/send-email", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        to: fam.parentEmail,
+                        subject: `Lien de paiement — ${creneau.activityTitle} — ${childName}`,
+                        html: `
+                          <div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px;">
+                            <h2 style="color:#1e3a5f;">Centre Équestre d'Agon-Coutainville</h2>
+                            <p>Bonjour ${fam.parentName},</p>
+                            <p>Voici le lien de paiement pour le forfait de <strong>${childName}</strong> :</p>
+                            <p><strong>${creneau.activityTitle}</strong><br/>
+                            ${createdPaymentIds.length} mensualités de ${(totalAnnuel / createdPaymentIds.length).toFixed(2)}€</p>
+                            <p style="text-align:center;margin:25px 0;">
+                              <a href="${data.url}" style="background:#2050A0;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;">
+                                Payer en ligne
+                              </a>
+                            </p>
+                            <p style="color:#888;font-size:12px;">Le paiement est sécurisé par Stripe. Votre carte sera prélevée automatiquement chaque mois.</p>
+                          </div>
+                        `,
+                      }),
+                    });
+                    alert(`Lien de paiement envoyé à ${fam.parentEmail} !`);
+                  } catch (emailErr) {
+                    // Fallback : copier le lien
+                    await navigator.clipboard.writeText(data.url);
+                    alert(`Email non envoyé. Le lien a été copié dans le presse-papier :\n${data.url}`);
+                  }
+                } else {
+                  await navigator.clipboard.writeText(data.url);
+                  alert(`Pas d'email pour cette famille. Lien copié dans le presse-papier :\n${data.url}`);
+                }
+              }
             } else if (data.error) {
-              alert(`Erreur Stripe : ${data.error}\n\nLe forfait est quand même créé. Vous pouvez encaisser manuellement dans Paiements.`);
+              alert(`Erreur Stripe : ${data.error}\n\nEncaissement manuel possible dans Paiements.`);
             }
           } catch (e) {
             console.error(e);
-            alert("Impossible de contacter Stripe. Le forfait est créé, encaissement manuel possible.");
+            alert("Impossible de contacter Stripe. Encaissement manuel possible dans Paiements.");
           }
         }
       }

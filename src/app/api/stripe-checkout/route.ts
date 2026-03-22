@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
         },
       },
       metadata: { familyId, type: "forfait_echelonne" },
-      success_url: `${baseUrl}/admin/paiements?stripe=success&family=${familyId}`,
+      success_url: `${baseUrl}/api/stripe-success?pid=${paymentIds?.[0] || ""}&fid=${familyId}`,
       cancel_url: `${baseUrl}/admin/paiements?stripe=cancel`,
     });
 
