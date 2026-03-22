@@ -84,13 +84,18 @@ export default function ReserverPage() {
 
   // Compteur d'inscriptions stage famille (pour réductions)
   const existingStageCount = useMemo(() => {
-    let count = 0;
+    // Compter les inscriptions UNIQUES (enfant + titre stage) pour cette famille
+    const uniqueInscriptions = new Set<string>();
     creneaux.filter(c => c.activityType === "stage" || c.activityType === "stage_journee").forEach(c => {
-      count += (c.enrolled || []).filter((e: any) => e.familyId === familyId).length;
+      (c.enrolled || []).filter((e: any) => e.familyId === familyId).forEach((e: any) => {
+        uniqueInscriptions.add(`${e.childId}_${c.activityTitle}`);
+      });
     });
-    // Ajouter les items stage dans le panier
-    count += cart.filter(i => i.isStage).length;
-    return count;
+    // Ajouter les items stage dans le panier (déjà uniques par enfant+stage)
+    cart.filter(i => i.isStage).forEach(i => {
+      uniqueInscriptions.add(`${i.childId}_${i.activityTitle}`);
+    });
+    return uniqueInscriptions.size;
   }, [creneaux, familyId, cart]);
 
   const isStage = (c: Creneau) => c.activityType === "stage" || c.activityType === "stage_journee";

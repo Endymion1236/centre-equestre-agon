@@ -81,15 +81,18 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
   // Compter les inscriptions stage EXISTANTES pour cette famille
   const existingStageCount = useMemo(() => {
     if (!isStage || !fam) return 0;
-    let count = 0;
+    // Compter les inscriptions UNIQUES (enfant + titre stage) pour cette famille
+    const uniqueInscriptions = new Set<string>();
     const stageCreneaux = allCreneaux.filter(c => c.activityType === "stage" || c.activityType === "stage_journee");
     for (const sc of stageCreneaux) {
-      if (sc.id === creneau.id) continue; // pas le créneau actuel
+      if (sc.activityTitle === creneau.activityTitle) continue; // pas le stage actuel
       const enrolled = sc.enrolled || [];
-      count += enrolled.filter((e: any) => e.familyId === fam.firestoreId).length;
+      enrolled.filter((e: any) => e.familyId === fam.firestoreId).forEach((e: any) => {
+        uniqueInscriptions.add(`${e.childId}_${sc.activityTitle}`);
+      });
     }
-    return count;
-  }, [isStage, fam, allCreneaux, creneau.id]);
+    return uniqueInscriptions.size;
+  }, [isStage, fam, allCreneaux, creneau.activityTitle]);
 
   const stageLines = useMemo(() => {
     if (!isStage) return [];
