@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { Plus, ChevronLeft, ChevronRight, X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Calendar, CalendarDays, Briefcase, Bell, Mail,
@@ -97,7 +97,7 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
       const child = children.find((c: any) => c.id === childId);
       // Le rang dans le compteur famille = inscriptions existantes + position dans la sélection
       const rang = existingStageCount + idx; // 0-indexed
-      const remiseEuros = rang === 0 ? 10 : rang === 1 ? 20 : rang === 2 ? 30 : 30 + (rang - 2) * 10;
+      const remiseEuros = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
       const prixBase = priceTTC;
       const prixReduit = Math.max(0, Math.round((prixBase - remiseEuros) * 100) / 100);
       return {
@@ -970,10 +970,21 @@ export default function PlanningPage() {
 
   const refreshCreneaux = async () => { const s=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[0]); const e=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[6]); const snap=await getDocs(query(collection(db,"creneaux"),where("date",">=",s),where("date","<=",e))); const fresh=snap.docs.map(d=>({id:d.id,...d.data()})) as (Creneau&{id:string})[]; setCreneaux(fresh); return fresh; };
 
-  const handleEnroll = async (cid: string, child: EnrolledChild, payMode?: string) => { const c=creneaux.find(x=>x.id===cid); if(!c) return; const en=[...(c.enrolled||[]),child]; await updateDoc(doc(db,"creneaux",cid),{enrolled:en,enrolledCount:en.length}); const priceTTC=(c as any).priceTTC||(c.priceHT||0)*(1+(c.tvaTaux||5.5)/100); const priceHT=priceTTC/(1+(c.tvaTaux||5.5)/100);
-    await addDoc(collection(db,"reservations"),{familyId:child.familyId,familyName:child.familyName,childId:child.childId,childName:child.childName,activityTitle:c.activityTitle,activityType:c.activityType,creneauId:cid,date:c.date,startTime:c.startTime,endTime:c.endTime,priceTTC:Math.round(priceTTC*100)/100,status:"confirmed",source:"admin",createdAt:serverTimestamp()});
-    if(payMode&&priceTTC>0){await addDoc(collection(db,"payments"),{familyId:child.familyId,familyName:child.familyName,items:[{activityTitle:c.activityTitle,priceHT:Math.round(priceHT*100)/100,tva:c.tvaTaux||5.5,priceTTC:Math.round(priceTTC*100)/100}],totalTTC:Math.round(priceTTC*100)/100,paymentMode:payMode,paymentRef:"",status:"paid",paidAmount:Math.round(priceTTC*100)/100,date:serverTimestamp()});}
-    const fresh=await refreshCreneaux(); const upd=fresh.find(x=>x.id===cid); if(upd)setSelectedCreneau(upd); };
+  const handleEnroll = async (cid: string, child: EnrolledChild, payMode?: string) => {
+    // Toujours lire le créneau frais depuis Firestore
+    const snap = await getDoc(doc(db, "creneaux", cid));
+    if (!snap.exists()) return;
+    const c = { id: snap.id, ...snap.data() } as any;
+    const en = [...(c.enrolled || []), child];
+    // Vérifier pas de doublon
+    if ((c.enrolled || []).some((e: any) => e.childId === child.childId)) return;
+    await updateDoc(doc(db, "creneaux", cid), { enrolled: en, enrolledCount: en.length });
+    const priceTTC = c.priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
+    const priceHT = priceTTC / (1 + (c.tvaTaux || 5.5) / 100);
+    await addDoc(collection(db, "reservations"), { familyId: child.familyId, familyName: child.familyName, childId: child.childId, childName: child.childName, activityTitle: c.activityTitle, activityType: c.activityType, creneauId: cid, date: c.date, startTime: c.startTime, endTime: c.endTime, priceTTC: Math.round(priceTTC * 100) / 100, status: "confirmed", source: "admin", createdAt: serverTimestamp() });
+    if (payMode && priceTTC > 0) { await addDoc(collection(db, "payments"), { familyId: child.familyId, familyName: child.familyName, items: [{ activityTitle: c.activityTitle, priceHT: Math.round(priceHT * 100) / 100, tva: c.tvaTaux || 5.5, priceTTC: Math.round(priceTTC * 100) / 100 }], totalTTC: Math.round(priceTTC * 100) / 100, paymentMode: payMode, paymentRef: "", status: "paid", paidAmount: Math.round(priceTTC * 100) / 100, date: serverTimestamp() }); }
+    const fresh = await refreshCreneaux(); const upd = fresh.find(x => x.id === cid); if (upd) setSelectedCreneau(upd);
+  };
 
   const handleUnenroll = async (cid: string, childId: string) => { const c=creneaux.find(x=>x.id===cid); if(!c) return; const en=(c.enrolled||[]).filter((e:any)=>e.childId!==childId); await updateDoc(doc(db,"creneaux",cid),{enrolled:en,enrolledCount:en.length});
     try{const rs=await getDocs(query(collection(db,"reservations"),where("creneauId","==",cid),where("childId","==",childId)));for(const d of rs.docs)await deleteDoc(doc(db,"reservations",d.id));}catch(e){console.error(e);}

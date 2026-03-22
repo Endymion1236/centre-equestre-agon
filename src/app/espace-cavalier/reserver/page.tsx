@@ -105,7 +105,7 @@ export default function ReserverPage() {
     const newItems: CartItem[] = selectedChildren.map((childId, idx) => {
       const child = children.find((c: any) => c.id === childId);
       const rang = existingStageCount + idx;
-      const remise = rang === 0 ? 10 : rang === 1 ? 20 : rang === 2 ? 30 : 30 + (rang - 2) * 10;
+      const remise = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
       return {
         creneauIds: stageCreneaux.map(c => c.id),
         activityTitle: first.activityTitle,
@@ -311,7 +311,7 @@ export default function ReserverPage() {
                               {selectedChildren.map((childId, idx) => {
                                 const child = children.find((c: any) => c.id === childId);
                                 const rang = existingStageCount + idx;
-                                const remise = rang === 0 ? 10 : rang === 1 ? 20 : rang === 2 ? 30 : 30 + (rang - 2) * 10;
+                                const remise = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
                                 const prixFinal = Math.max(0, prix - remise);
                                 return (
                                   <div key={childId} className="flex justify-between font-body text-sm py-1">
