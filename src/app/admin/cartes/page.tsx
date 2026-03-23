@@ -94,7 +94,7 @@ export default function CartesPage() {
     setCreating(true);
     const child = children.find((c: any) => c.id === selChild);
 
-    await addDoc(collection(db, "cartes"), {
+    const cardRef = await addDoc(collection(db, "cartes"), {
       familyId: selFamily,
       familyName: family.parentName || "—",
       childId: selChild,
@@ -111,16 +111,38 @@ export default function CartesPage() {
       createdAt: serverTimestamp(),
     });
 
-    // Also create payment
-    await addDoc(collection(db, "payments"), {
+    // Créer paiement avec lien carte
+    const payRef = await addDoc(collection(db, "payments"), {
       familyId: selFamily,
       familyName: family.parentName || "—",
-      items: [{ activityTitle: `${template.label} — ${(child as any)?.firstName}`, priceHT: Math.round(totalHT * 100) / 100, tva: 5.5, priceTTC: Math.round(totalTTC * 100) / 100 }],
+      items: [{
+        activityTitle: `${template.label} — ${(child as any)?.firstName}`,
+        childId: selChild,
+        childName: (child as any)?.firstName || "—",
+        cardId: cardRef.id,
+        priceHT: Math.round(totalHT * 100) / 100,
+        tva: 5.5,
+        priceTTC: Math.round(totalTTC * 100) / 100,
+      }],
       totalTTC: Math.round(totalTTC * 100) / 100,
       paymentMode: payMode,
       paymentRef: "",
       status: "paid",
       paidAmount: Math.round(totalTTC * 100) / 100,
+      cardId: cardRef.id,
+      date: serverTimestamp(),
+    });
+
+    // Créer l'encaissement dans le journal
+    await addDoc(collection(db, "encaissements"), {
+      paymentId: payRef.id,
+      familyId: selFamily,
+      familyName: family.parentName || "—",
+      montant: Math.round(totalTTC * 100) / 100,
+      mode: payMode,
+      modeLabel: payMode === "cb_terminal" ? "CB (terminal)" : payMode === "especes" ? "Espèces" : payMode === "cheque" ? "Chèque" : payMode,
+      ref: "",
+      activityTitle: `${template.label} — ${(child as any)?.firstName}`,
       date: serverTimestamp(),
     });
 

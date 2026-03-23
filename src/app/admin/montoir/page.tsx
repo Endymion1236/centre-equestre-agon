@@ -15,19 +15,22 @@ export default function MontoirPage() {
   const [equides, setEquides] = useState<any[]>([]);
   const [indisponibilites, setIndisponibilites] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cartes, setCartes] = useState<any[]>([]);
   const currentDay = useMemo(() => { const d = new Date(); d.setDate(d.getDate()+dayOffset); return d; }, [dayOffset]);
   const dateStr = currentDay.toISOString().split("T")[0];
 
   const fetchData = async () => {
     try {
-      const [cSnap, eSnap, iSnap] = await Promise.all([
+      const [cSnap, eSnap, iSnap, cartSnap] = await Promise.all([
         getDocs(query(collection(db,"creneaux"),where("date","==",dateStr))),
         getDocs(collection(db,"equides")),
         getDocs(collection(db,"indisponibilites")),
+        getDocs(collection(db,"cartes")),
       ]);
       setCreneaux(cSnap.docs.map(d=>({id:d.id,...d.data()})).sort((a:any,b:any)=>a.startTime.localeCompare(b.startTime)) as Creneau[]);
       setEquides(eSnap.docs.map(d=>({id:d.id,...d.data()})));
       setIndisponibilites(iSnap.docs.map(d=>({id:d.id,...d.data()})));
+      setCartes(cartSnap.docs.map(d=>({id:d.id,...d.data()})));
     } catch(e){console.error(e);}
     setLoading(false);
   };
@@ -125,12 +128,42 @@ export default function MontoirPage() {
       } catch (e) { console.error("Erreur trace péda:", e); }
     }
 
-    // 4. Proposer l'ajout de notes rapides
+    // 4. Débiter automatiquement les cartes des cavaliers présents
+    let cartesDebitees = 0;
+    for (const child of presents) {
+      // Chercher une carte active pour cet enfant
+      const carte = cartes.find((ct: any) =>
+        ct.childId === child.childId && ct.status === "active" && (ct.remainingSessions || 0) > 0
+      );
+      if (carte) {
+        const newHistory = [...(carte.history || []), {
+          date: new Date().toISOString(),
+          activityTitle: c.activityTitle,
+          deductedAt: new Date().toISOString(),
+          creneauId: cid,
+          auto: true,
+        }];
+        const newRemaining = (carte.remainingSessions || 0) - 1;
+        await updateDoc(doc(db, "cartes", carte.id), {
+          remainingSessions: newRemaining,
+          usedSessions: (carte.usedSessions || 0) + 1,
+          history: newHistory,
+          status: newRemaining <= 0 ? "used" : "active",
+          updatedAt: serverTimestamp(),
+        });
+        cartesDebitees++;
+      }
+    }
+
+    // 5. Proposer l'ajout de notes rapides
     if (presents.length > 0) {
       setQuickNoteChild({ cid, children: presents.map(p => ({ childId: p.childId, childName: p.childName, horseName: p.horseName || "" })) });
     }
 
-    alert(`Reprise clôturée.\n${notesCreated} trace${notesCreated > 1 ? "s" : ""} pédagogique${notesCreated > 1 ? "s" : ""} créée${notesCreated > 1 ? "s" : ""}.`);
+    const parts = [`Reprise clôturée.`];
+    if (notesCreated > 0) parts.push(`${notesCreated} trace${notesCreated > 1 ? "s" : ""} péda.`);
+    if (cartesDebitees > 0) parts.push(`${cartesDebitees} carte${cartesDebitees > 1 ? "s" : ""} débitée${cartesDebitees > 1 ? "s" : ""}.`);
+    alert(parts.join("\n"));
     fetchData();
   };
 
