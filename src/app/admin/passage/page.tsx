@@ -102,7 +102,8 @@ export default function PassagePage() {
           totalTTC: prixTTC,
           totalHT: Math.round(ht * 100) / 100,
           totalTVA: Math.round((prixTTC - ht) * 100) / 100,
-          paymentMethod: modePaiement,
+          paymentMode: modePaiement,
+          paymentMethod: modePaiement, // rétro-compatibilité
           status: "paid",
           source: "passage",
           createdAt: serverTimestamp(),

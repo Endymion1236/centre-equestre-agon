@@ -370,7 +370,7 @@ export default function PaiementsPage() {
   const basketSubtotal = basket.reduce((s, i) => s + i.priceTTC, 0);
   const promoDiscount = appliedPromo
     ? (appliedPromo.discountMode === "percent" ? basketSubtotal * appliedPromo.discountValue / 100 : appliedPromo.discountValue)
-    : (parseFloat(manualDiscount) || 0);
+    : (safeNumber(manualDiscount));
   const basketTotal = Math.max(0, basketSubtotal - promoDiscount);
 
   const applyPromoCode = () => {
@@ -391,7 +391,7 @@ export default function PaiementsPage() {
 
   const addToBasket = () => {
     if (customLabel && customPrice) {
-      const price = parseFloat(customPrice);
+      const price = safeNumber(customPrice);
       setBasket([...basket, {
         id: Date.now().toString(),
         activityTitle: customLabel,
@@ -431,7 +431,7 @@ export default function PaiementsPage() {
   const handlePayment = async () => {
     if (!selectedFamily || basket.length === 0) return;
     setSaving(true);
-    const paid = paidAmount ? parseFloat(paidAmount) : basketTotal;
+    const paid = paidAmount ? safeNumber(paidAmount) : basketTotal;
 
     const payRef = await addDoc(collection(db, "payments"), {
       familyId: selectedFamily,
@@ -652,9 +652,9 @@ export default function PaiementsPage() {
                         <span className="font-body text-xs text-gray-400">€</span>
                         {!paidAmount && <span className="font-body text-[10px] text-gray-400">(vide = tout encaisser)</span>}
                       </div>
-                      {paidAmount && parseFloat(paidAmount) < totalPending && parseFloat(paidAmount) > 0 && (
+                      {paidAmount && safeNumber(paidAmount) < totalPending && safeNumber(paidAmount) > 0 && (
                         <div className="font-body text-xs text-orange-500 mt-1">
-                          Paiement partiel — reste dû après : {(totalPending - parseFloat(paidAmount)).toFixed(2)}€
+                          Paiement partiel — reste dû après : {(totalPending - safeNumber(paidAmount)).toFixed(2)}€
                         </div>
                       )}
                     </div>
@@ -682,7 +682,7 @@ export default function PaiementsPage() {
                     )}
 
                     <button onClick={async () => {
-                      const montant = paidAmount ? parseFloat(paidAmount) : totalPending;
+                      const montant = paidAmount ? safeNumber(paidAmount) : totalPending;
                       if (montant <= 0) return;
                       try {
                         let resteARegler = montant;
@@ -714,8 +714,8 @@ export default function PaiementsPage() {
                     }}
                       className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-body text-base font-semibold text-white bg-green-600 border-none cursor-pointer hover:bg-green-500 transition-colors">
                       <Check size={18} />
-                      Encaisser {(paidAmount ? parseFloat(paidAmount) : totalPending).toFixed(2)}€
-                      {paidAmount && parseFloat(paidAmount) < totalPending ? " (partiel)" : ` (${familyPending.length} prestation${familyPending.length > 1 ? "s" : ""})`}
+                      Encaisser {(paidAmount ? safeNumber(paidAmount) : totalPending).toFixed(2)}€
+                      {paidAmount && safeNumber(paidAmount) < totalPending ? " (partiel)" : ` (${familyPending.length} prestation${familyPending.length > 1 ? "s" : ""})`}
                     </button>
                   </div>
                 </Card>
@@ -789,9 +789,9 @@ export default function PaiementsPage() {
                   <input value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)}
                     placeholder={`${basketTotal.toFixed(2)}€`}
                     type="number" step="0.01" className={`${inputCls} w-40`} />
-                  {paidAmount && parseFloat(paidAmount) < basketTotal && (
+                  {paidAmount && safeNumber(paidAmount) < basketTotal && (
                     <div className="font-body text-xs text-orange-500 mt-1">
-                      Paiement partiel — reste dû : {(basketTotal - parseFloat(paidAmount)).toFixed(2)}€
+                      Paiement partiel — reste dû : {(basketTotal - safeNumber(paidAmount)).toFixed(2)}€
                     </div>
                   )}
                 </div>
@@ -932,8 +932,8 @@ export default function PaiementsPage() {
             let filtered = [...encaissements, ...fallbackLines];
             if (journalDateFrom) filtered = filtered.filter(e => { const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null; return d && d >= new Date(journalDateFrom); });
             if (journalDateTo) filtered = filtered.filter(e => { const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null; return d && d <= new Date(journalDateTo + "T23:59:59"); });
-            if (journalMontantMin) filtered = filtered.filter(e => (e.montant || 0) >= parseFloat(journalMontantMin));
-            if (journalMontantMax) filtered = filtered.filter(e => (e.montant || 0) <= parseFloat(journalMontantMax));
+            if (journalMontantMin) filtered = filtered.filter(e => (e.montant || 0) >= safeNumber(journalMontantMin));
+            if (journalMontantMax) filtered = filtered.filter(e => (e.montant || 0) <= safeNumber(journalMontantMax));
             if (journalMode !== "all") filtered = filtered.filter(e => e.mode === journalMode);
             if (journalSearch) { const q = journalSearch.toLowerCase(); filtered = filtered.filter(e => e.familyName?.toLowerCase().includes(q) || e.activityTitle?.toLowerCase().includes(q) || e.ref?.toLowerCase().includes(q)); }
             filtered.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
@@ -1072,7 +1072,7 @@ export default function PaiementsPage() {
                           className="flex-1 py-2.5 rounded-lg font-body text-sm text-gray-500 bg-gray-100 border-none cursor-pointer">Annuler</button>
                         <button onClick={async () => {
                           if (!correctionRaison) { alert("Indiquez la raison de la correction."); return; }
-                          const newMontant = parseFloat(correctionMontant) || 0;
+                          const newMontant = safeNumber(correctionMontant);
 
                           // 1. Contre-passation (écriture négative)
                           await addDoc(collection(db, "encaissements"), {
