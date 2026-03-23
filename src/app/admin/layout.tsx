@@ -209,15 +209,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {mobileMenuOpen && (
           <div className="md:hidden fixed inset-0 top-[56px] z-40 bg-black/30" onClick={() => setMobileMenuOpen(false)}>
             <div className="bg-blue-800 w-[260px] h-full overflow-y-auto p-3 flex flex-col gap-0.5 shadow-2xl" onClick={e => e.stopPropagation()}>
-              {navItems.map((item) => {
+              {navItems.map((item: any, idx: number) => {
+                if (item.separator) {
+                  return (
+                    <div key={`msep-${idx}`} className="px-3 pt-4 pb-1">
+                      <div className="font-body text-[9px] text-white/30 uppercase tracking-widest font-semibold">{item.label}</div>
+                    </div>
+                  );
+                }
                 const Icon = item.icon;
                 const active = pathname?.startsWith(item.href);
                 return (
-                  <Link key={item.href} href={item.href}
-                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg no-underline transition-all
+                  <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg no-underline transition-all
                       ${active ? "bg-blue-500/30 text-white" : "text-white/50 hover:text-white/80 hover:bg-white/5"}`}>
-                    <Icon size={16} />
-                    <span className={`font-body text-[13px] ${active ? "font-semibold" : "font-normal"}`}>{item.label}</span>
+                    <Icon size={15} />
+                    <span className={`font-body text-[12px] ${active ? "font-semibold" : "font-normal"}`}>{item.label}</span>
                   </Link>
                 );
               })}
