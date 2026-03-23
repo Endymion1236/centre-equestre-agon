@@ -44,6 +44,7 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
   // Stage multi-enfants
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [stageMode, setStageMode] = useState<"semaine" | "jour">("semaine");
+  const [showAddDays, setShowAddDays] = useState<{ enfants: string[]; joursRestants: { id: string; date: string; label: string }[] } | null>(null);
   const isStage = creneau.activityType === "stage" || creneau.activityType === "stage_journee";
 
   const enrolled = creneau.enrolled || []; const enrolledIds = enrolled.map((e: any) => e.childId);
@@ -289,6 +290,27 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
       setSelectedChildren([]);
       setSelFam(""); setSearch(""); setEnrolling(false);
       setTimeout(() => setJustEnrolled(""), 6000);
+
+      // Si mode jour : proposer d'inscrire dans d'autres jours du stage
+      if (stageMode === "jour" && fam) {
+        const creneauDate = new Date(creneau.date);
+        const dow = creneauDate.getDay();
+        const mon = new Date(creneauDate); mon.setDate(mon.getDate() - ((dow + 6) % 7));
+        const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+        const autresJours = allCreneaux.filter(c =>
+          c.activityTitle === creneau.activityTitle &&
+          (c.activityType === "stage" || c.activityType === "stage_journee") &&
+          new Date(c.date) >= mon && new Date(c.date) <= sun &&
+          c.id !== creneau.id
+        ).map(c => ({
+          id: c.id!,
+          date: c.date,
+          label: new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
+        }));
+        if (autresJours.length > 0) {
+          setShowAddDays({ enfants: stageLines.map(l => l.childName), joursRestants: autresJours });
+        }
+      }
       return;
     }
 
@@ -690,6 +712,59 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
               </button>
             )}
           </div></div>)}
+
+          {/* Panel proposant d'autres jours après inscription jour */}
+          {showAddDays && (
+            <div className="border-t border-green-200 p-4 bg-green-50/50">
+              <div className="font-body text-sm font-semibold text-green-700 mb-2">
+                Inscrire aussi dans d'autres jours ?
+              </div>
+              <p className="font-body text-xs text-gray-500 mb-3">
+                {showAddDays.enfants.join(", ")} inscrit(s) pour 1 jour. Voulez-vous ajouter d'autres jours du même stage ?
+              </p>
+              <div className="flex flex-col gap-1.5 mb-3">
+                {showAddDays.joursRestants.map(j => (
+                  <button key={j.id} onClick={async () => {
+                    // Inscrire dans ce jour supplémentaire
+                    setEnrolling(true);
+                    try {
+                      const fam2 = families.find(f => f.firestoreId === (creneau.enrolled || []).find((e: any) => showAddDays.enfants.includes(e.childName))?.familyId);
+                      if (fam2) {
+                        for (const enfantName of showAddDays.enfants) {
+                          const child = (fam2.children || []).find((c: any) => c.firstName === enfantName);
+                          if (child) {
+                            await onEnroll(j.id, {
+                              childId: child.id, childName: child.firstName,
+                              familyId: fam2.firestoreId, familyName: fam2.parentName || "—",
+                              enrolledAt: new Date().toISOString(),
+                            });
+                          }
+                        }
+                      }
+                      setJustEnrolled(`${showAddDays.enfants.join(", ")} ajouté(s) le ${j.label}`);
+                      // Retirer ce jour de la liste
+                      const remaining = showAddDays.joursRestants.filter(jr => jr.id !== j.id);
+                      if (remaining.length > 0) {
+                        setShowAddDays({ ...showAddDays, joursRestants: remaining });
+                      } else {
+                        setShowAddDays(null);
+                      }
+                    } catch (e) { console.error(e); }
+                    setEnrolling(false);
+                    setTimeout(() => setJustEnrolled(""), 4000);
+                  }}
+                    className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-green-200 bg-white font-body text-sm cursor-pointer hover:bg-green-50 text-left">
+                    <span className="text-blue-800 font-medium">{j.label}</span>
+                    <span className="text-green-600 text-xs font-semibold">+ Ajouter</span>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setShowAddDays(null)}
+                className="w-full py-2 rounded-lg font-body text-xs text-gray-500 bg-gray-100 border-none cursor-pointer">
+                Terminé
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
