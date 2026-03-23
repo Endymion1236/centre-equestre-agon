@@ -2,6 +2,11 @@
 import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import {
+  findStageCreneaux, countExistingStageInscriptions, computeStageReductions,
+  enrollChildInCreneau, createReservation, removeChildFromCreneau, deleteReservations,
+  findLinkedPayment, computeTropPercu, createAvoir, duplicateWeekCreneaux, fmtDate as fmtDateSvc,
+} from "@/lib/planning-services";
 import { Card, Badge } from "@/components/ui";
 import { Plus, ChevronLeft, ChevronRight, X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Calendar, CalendarDays, Briefcase, Bell, Mail,
 } from "lucide-react";
@@ -972,143 +977,93 @@ export default function PlanningPage() {
 
   const handleCreate = async (nc: Partial<Creneau>[]) => { for (const c of nc) await addDoc(collection(db, "creneaux"), { ...c, createdAt: serverTimestamp() }); setShowSimple(false); setShowGenerator(false); alert(`${nc.length} créneau${nc.length>1?"x":""} créé${nc.length>1?"s":""}!`); fetchData(); };
   const handleDelete = async (id: string) => { if (!confirm("Supprimer ?")) return; await deleteDoc(doc(db, "creneaux", id)); fetchData(); };
-  const handleDuplicateWeek = async () => { if (creneaux.length===0) return; setDuplicating(true); for (let w=1;w<=dupWeeks;w++){for(const c of creneaux){const d=new Date(c.date);d.setDate(d.getDate()+7*w);await addDoc(collection(db,"creneaux"),{activityId:c.activityId,activityTitle:c.activityTitle,activityType:c.activityType,date:fmtDate(d),startTime:c.startTime,endTime:c.endTime,monitor:c.monitor,maxPlaces:c.maxPlaces,enrolledCount:0,enrolled:[],status:"planned",priceHT:c.priceHT||0,priceTTC:(c as any).priceTTC||0,tvaTaux:c.tvaTaux||5.5,createdAt:serverTimestamp()});}} setDuplicating(false);setShowDuplicate(false);alert(`Dupliqué!`);fetchData(); };
+  const handleDuplicateWeek = async () => { if (creneaux.length===0) return; setDuplicating(true); const count = await duplicateWeekCreneaux(creneaux, dupWeeks); setDuplicating(false);setShowDuplicate(false);alert(`${count} créneau${count>1?"x":""} dupliqué${count>1?"s":""}!`);fetchData(); };
 
   const refreshCreneaux = async () => { const s=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[0]); const e=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[6]); const snap=await getDocs(query(collection(db,"creneaux"),where("date",">=",s),where("date","<=",e))); const fresh=snap.docs.map(d=>({id:d.id,...d.data()})) as (Creneau&{id:string})[]; setCreneaux(fresh); return fresh; };
 
   const handleEnroll = async (cid: string, child: EnrolledChild, payMode?: string) => {
-    // Toujours lire le créneau frais depuis Firestore
+    const enrolled = await enrollChildInCreneau(cid, child);
+    if (!enrolled) return;
+    // Lire le créneau pour la réservation + paiement
     const snap = await getDoc(doc(db, "creneaux", cid));
     if (!snap.exists()) return;
     const c = { id: snap.id, ...snap.data() } as any;
-    const en = [...(c.enrolled || []), child];
-    // Vérifier pas de doublon
-    if ((c.enrolled || []).some((e: any) => e.childId === child.childId)) return;
-    await updateDoc(doc(db, "creneaux", cid), { enrolled: en, enrolledCount: en.length });
+    await createReservation(child, c);
     const priceTTC = c.priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
-    const priceHT = priceTTC / (1 + (c.tvaTaux || 5.5) / 100);
-    await addDoc(collection(db, "reservations"), { familyId: child.familyId, familyName: child.familyName, childId: child.childId, childName: child.childName, activityTitle: c.activityTitle, activityType: c.activityType, creneauId: cid, date: c.date, startTime: c.startTime, endTime: c.endTime, priceTTC: Math.round(priceTTC * 100) / 100, status: "confirmed", source: "admin", createdAt: serverTimestamp() });
-    if (payMode && priceTTC > 0) { await addDoc(collection(db, "payments"), { familyId: child.familyId, familyName: child.familyName, items: [{ activityTitle: c.activityTitle, childId: child.childId, childName: child.childName, creneauId: cid, activityType: c.activityType, priceHT: Math.round(priceHT * 100) / 100, tva: c.tvaTaux || 5.5, priceTTC: Math.round(priceTTC * 100) / 100 }], totalTTC: Math.round(priceTTC * 100) / 100, paymentMode: payMode, paymentRef: "", status: "paid", paidAmount: Math.round(priceTTC * 100) / 100, date: serverTimestamp() }); }
+    if (payMode && priceTTC > 0) {
+      const priceHT = priceTTC / (1 + (c.tvaTaux || 5.5) / 100);
+      await addDoc(collection(db, "payments"), { familyId: child.familyId, familyName: child.familyName, items: [{ activityTitle: c.activityTitle, childId: child.childId, childName: child.childName, creneauId: cid, activityType: c.activityType, priceHT: Math.round(priceHT * 100) / 100, tva: c.tvaTaux || 5.5, priceTTC: Math.round(priceTTC * 100) / 100 }], totalTTC: Math.round(priceTTC * 100) / 100, paymentMode: payMode, paymentRef: "", status: "paid", paidAmount: Math.round(priceTTC * 100) / 100, date: serverTimestamp() });
+    }
     const fresh = await refreshCreneaux(); const upd = fresh.find(x => x.id === cid); if (upd) setSelectedCreneau(upd);
   };
 
   const handleUnenroll = async (cid: string, childId: string) => {
-    // Lire le créneau frais
     const cSnap = await getDoc(doc(db, "creneaux", cid));
     if (!cSnap.exists()) return;
     const c = { id: cSnap.id, ...cSnap.data() } as any;
     const isStageType = c.activityType === "stage" || c.activityType === "stage_journee";
-    const enrolled = c.enrolled || [];
-    const child = enrolled.find((e: any) => e.childId === childId);
+    const child = (c.enrolled || []).find((e: any) => e.childId === childId);
     if (!child) return;
 
-    // Pour un stage : trouver TOUS les créneaux de la même semaine
-    let creneauxToRemove = [{ id: cid, data: c }];
+    // Trouver les créneaux à déinscrire (stage = tous les jours)
+    let creneauxIds = [cid];
     if (isStageType) {
-      const creneauDate = new Date(c.date);
-      const dow = creneauDate.getDay();
-      const monday = new Date(creneauDate); monday.setDate(monday.getDate() - ((dow + 6) % 7));
-      const sunday = new Date(monday); sunday.setDate(sunday.getDate() + 6);
-      // Chercher tous les créneaux du même stage cette semaine
-      const allStageSnap = await getDocs(query(collection(db, "creneaux"),
-        where("activityTitle", "==", c.activityTitle),
-        where("date", ">=", fmtDate(monday)),
-        where("date", "<=", fmtDate(sunday)),
-      ));
-      creneauxToRemove = allStageSnap.docs.map(d => ({ id: d.id, data: d.data() }));
+      const stageCreneaux = await findStageCreneaux(c.activityTitle, c.date);
+      creneauxIds = stageCreneaux.map((sc: any) => sc.id);
     }
 
-    const nbJours = creneauxToRemove.length;
-    const confirmMsg = isStageType
+    const nbJours = creneauxIds.length;
+    const msg = isStageType
       ? `Désinscrire ${child.childName} du stage "${c.activityTitle}" (${nbJours} jour${nbJours > 1 ? "s" : ""}) ?\n\nSi un paiement a été encaissé, un avoir sera créé automatiquement.`
       : `Désinscrire ${child.childName} de "${c.activityTitle}" le ${new Date(c.date).toLocaleDateString("fr-FR")} ?\n\nSi un paiement a été encaissé, un avoir sera créé automatiquement.`;
-    if (!confirm(confirmMsg)) return;
+    if (!confirm(msg)) return;
 
-    // 1. Retirer l'enfant de tous les créneaux
-    for (const cr of creneauxToRemove) {
-      const crEnrolled = (cr.data as any).enrolled || [];
-      const newEnrolled = crEnrolled.filter((e: any) => e.childId !== childId);
-      await updateDoc(doc(db, "creneaux", cr.id), { enrolled: newEnrolled, enrolledCount: newEnrolled.length });
+    // 1. Retirer l'enfant de tous les créneaux + réservations
+    for (const crId of creneauxIds) {
+      await removeChildFromCreneau(crId, childId);
+      await deleteReservations(crId, childId);
     }
 
-    // 2. Supprimer les réservations
+    // 2. Gestion financière
     try {
-      for (const cr of creneauxToRemove) {
-        const rs = await getDocs(query(collection(db, "reservations"), where("creneauId", "==", cr.id), where("childId", "==", childId)));
-        for (const d of rs.docs) await deleteDoc(doc(db, "reservations", d.id));
-      }
-    } catch (e) { console.error(e); }
+      const linked = await findLinkedPayment(child.familyId, childId, c.activityTitle);
+      if (linked) {
+        const { paymentDoc, paymentData, matchItem } = linked;
+        const montantAvoir = matchItem.priceTTC || 0;
+        const newItems = (paymentData.items || []).filter((i: any) => i !== matchItem);
+        const newTotal = newItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
 
-    // 3. Chercher le paiement lié et gérer l'avoir
-    try {
-      const paySnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", child.familyId)));
-      let montantAvoir = 0;
-      let matchedPaymentId = "";
-      let matchedNewTotal = 0;
-      for (const pDoc of paySnap.docs) {
-        const p = pDoc.data();
-        const items = p.items || [];
-        const matchItem = items.find((i: any) =>
-          (i.childId && i.childId === childId && (i.stageKey?.includes(c.activityTitle) || i.activityTitle?.includes(c.activityTitle))) ||
-          (!i.childId && i.activityTitle?.includes(c.activityTitle) && i.activityTitle?.includes(child.childName))
-        );
-        if (matchItem) {
-          montantAvoir = matchItem.priceTTC || 0;
-          matchedPaymentId = pDoc.id;
-          const newItems = items.filter((i: any) => i !== matchItem);
-          matchedNewTotal = newItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
-          const newPaid = Math.min(p.paidAmount || 0, matchedNewTotal);
-          if (newItems.length === 0) {
-            await updateDoc(doc(db, "payments", pDoc.id), { status: "cancelled", cancelledAt: serverTimestamp(), cancelReason: `Désinscription ${child.childName}`, updatedAt: serverTimestamp() });
-          } else {
-            await updateDoc(doc(db, "payments", pDoc.id), {
-              items: newItems,
-              totalTTC: Math.round(matchedNewTotal * 100) / 100,
-              paidAmount: Math.round(newPaid * 100) / 100,
-              status: newPaid >= matchedNewTotal ? "paid" : newPaid > 0 ? "partial" : "pending",
-              updatedAt: serverTimestamp(),
-            });
-          }
-          break;
-        }
-      }
-
-      // 4. Si de l'argent a été encaissé pour CE paiement → créer un avoir
-      if (montantAvoir > 0 && matchedPaymentId) {
-        const encSnap = await getDocs(query(collection(db, "encaissements"), where("paymentId", "==", matchedPaymentId)));
-        const encaisseForThisPayment = encSnap.docs.reduce((s, d) => s + (d.data().montant || 0), 0);
-        const tropPercu = encaisseForThisPayment - matchedNewTotal;
-
-        if (tropPercu > 0) {
-          const avoirMontant = Math.min(tropPercu, montantAvoir);
-          const ref = `AV-${Date.now().toString(36).toUpperCase()}`;
-          const expiry = new Date();
-          expiry.setFullYear(expiry.getFullYear() + 1);
-
-          await addDoc(collection(db, "avoirs"), {
-            familyId: child.familyId,
-            familyName: child.familyName || "",
-            type: "avoir",
-            amount: Math.round(avoirMontant * 100) / 100,
-            usedAmount: 0,
-            remainingAmount: Math.round(avoirMontant * 100) / 100,
-            reason: `Désinscription ${child.childName} — ${c.activityTitle}`,
-            reference: ref,
-            sourcePaymentId: matchedPaymentId,
-            sourceType: "desinscription",
-            expiryDate: expiry,
-            status: "actif",
-            usageHistory: [],
-            createdAt: serverTimestamp(),
+        if (newItems.length === 0) {
+          await updateDoc(doc(db, "payments", paymentDoc.id), {
+            status: "cancelled", cancelledAt: serverTimestamp(),
+            cancelReason: `Désinscription ${child.childName}`, updatedAt: serverTimestamp(),
+          });
+        } else {
+          const newPaid = Math.min(paymentData.paidAmount || 0, newTotal);
+          await updateDoc(doc(db, "payments", paymentDoc.id), {
+            items: newItems, totalTTC: Math.round(newTotal * 100) / 100,
+            paidAmount: Math.round(newPaid * 100) / 100,
+            status: newPaid >= newTotal ? "paid" : newPaid > 0 ? "partial" : "pending",
             updatedAt: serverTimestamp(),
           });
+        }
 
-          alert(`${child.childName} désinscrit(e) de ${c.activityTitle}${isStageType ? ` (${nbJours} jours)` : ""}.\n\nAvoir créé : ${avoirMontant.toFixed(2)}€ (réf. ${ref})\nDisponible sur la fiche famille.`);
+        // Avoir si trop-perçu
+        if (montantAvoir > 0) {
+          const tropPercu = await computeTropPercu(paymentDoc.id, newTotal);
+          if (tropPercu > 0) {
+            const avoirMontant = Math.min(tropPercu, montantAvoir);
+            const ref = await createAvoir(child.familyId, child.familyName, avoirMontant,
+              `Désinscription ${child.childName} — ${c.activityTitle}`, paymentDoc.id, "desinscription");
+            alert(`${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""}.\n\nAvoir créé : ${avoirMontant.toFixed(2)}€ (réf. ${ref})`);
+          } else {
+            alert(`${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""}.\nPaiement ajusté.`);
+          }
         } else {
-          alert(`${child.childName} désinscrit(e) de ${c.activityTitle}${isStageType ? ` (${nbJours} jours)` : ""}.\nLe paiement a été ajusté.`);
+          alert(`${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""}.`);
         }
       } else {
-        alert(`${child.childName} désinscrit(e) de ${c.activityTitle}${isStageType ? ` (${nbJours} jours)` : ""}.`);
+        alert(`${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""}.`);
       }
     } catch (e) {
       console.error("Erreur gestion paiement/avoir:", e);
