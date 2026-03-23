@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, updateDoc, doc, query, where } from "firebase/firestore";
+import { collection, getDocs, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Printer, ClipboardList,
@@ -67,7 +67,52 @@ export default function MontoirPage() {
   const updateEnrolled = async (cid: string, enrolled: any[]) => { await updateDoc(doc(db,"creneaux",cid),{enrolled}); fetchData(); };
   const togglePresence = (c: Creneau, childId: string, val: string) => { updateEnrolled(c.id, (c.enrolled||[]).map(e => e.childId===childId ? {...e, presence: val} : e)); };
   const assignHorse = (c: Creneau, childId: string, h: string) => { updateEnrolled(c.id, (c.enrolled||[]).map(e => e.childId===childId ? {...e, horseName: h} : e)); };
-  const closeCreneau = async (cid: string) => { if(!confirm("Clôturer cette reprise ?")) return; await updateDoc(doc(db,"creneaux",cid),{status:"closed"}); fetchData(); };
+  const closeCreneau = async (cid: string) => {
+    const c = creneaux.find(x => x.id === cid);
+    if (!c) return;
+    const presents = (c.enrolled || []).filter((e: any) => e.presence === "present");
+    const absents = (c.enrolled || []).filter((e: any) => e.presence === "absent");
+    
+    const msg = `Clôturer "${c.activityTitle}" (${c.startTime}) ?\n\n` +
+      `${presents.length} présent${presents.length > 1 ? "s" : ""}, ${absents.length} absent${absents.length > 1 ? "s" : ""}\n\n` +
+      `Une trace de séance sera ajoutée au suivi pédagogique de chaque cavalier présent.`;
+    if (!confirm(msg)) return;
+
+    // 1. Clôturer le créneau
+    await updateDoc(doc(db, "creneaux", cid), { status: "closed", closedAt: serverTimestamp() });
+
+    // 2. Créer une trace pédagogique pour chaque enfant présent
+    for (const child of presents) {
+      try {
+        // Trouver la famille de l'enfant
+        const famSnap = await getDocs(query(collection(db, "families"), where("children", "!=", null)));
+        for (const famDoc of famSnap.docs) {
+          const fam = famDoc.data();
+          const matchChild = (fam.children || []).find((c: any) => c.id === child.childId);
+          if (matchChild) {
+            const peda = matchChild.peda || { objectifs: [], notes: [] };
+            const seanceNote = {
+              date: new Date().toISOString(),
+              text: `Séance : ${c.activityTitle} (${c.startTime}-${c.endTime})${child.horseName ? ` — Poney : ${child.horseName}` : ""}`,
+              author: "Montoir (auto)",
+              type: "seance",
+              creneauId: cid,
+              activityTitle: c.activityTitle,
+              horseName: child.horseName || "",
+            };
+            const updatedChildren = (fam.children || []).map((ch: any) =>
+              ch.id === child.childId ? { ...ch, peda: { ...peda, notes: [seanceNote, ...peda.notes], updatedAt: new Date().toISOString() } } : ch
+            );
+            await updateDoc(doc(db, "families", famDoc.id), { children: updatedChildren, updatedAt: serverTimestamp() });
+            break;
+          }
+        }
+      } catch (e) { console.error("Erreur trace péda:", e); }
+    }
+
+    alert(`Reprise clôturée.\n${presents.length} trace${presents.length > 1 ? "s" : ""} pédagogique${presents.length > 1 ? "s" : ""} créée${presents.length > 1 ? "s" : ""}.`);
+    fetchData();
+  };
 
   const totalE = creneaux.reduce((s,c)=>s+(c.enrolled?.length||0),0);
   const totalP = creneaux.reduce((s,c)=>s+(c.enrolled||[]).filter((e:any)=>e.presence==="present").length,0);

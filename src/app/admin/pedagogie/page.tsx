@@ -270,9 +270,12 @@ export default function PedagogiePage() {
                     ) : (
                       <div className="flex flex-col gap-2">
                         {(showAllNotes === uniqueKey ? peda.notes : peda.notes.slice(0, 5)).map((note: PedaNote, i: number) => (
-                          <div key={i} className="bg-sand rounded-lg px-4 py-3 group">
+                          <div key={i} className={`rounded-lg px-4 py-3 group ${(note as any).type === "seance" ? "bg-green-50 border border-green-100" : "bg-sand"}`}>
                             <div className="flex justify-between items-center mb-1">
-                              <span className="font-body text-[11px] font-semibold text-blue-500">{note.author}</span>
+                              <div className="flex items-center gap-2">
+                                {(note as any).type === "seance" && <span className="font-body text-[9px] bg-green-200 text-green-800 px-1.5 py-0.5 rounded">Séance</span>}
+                                <span className="font-body text-[11px] font-semibold text-blue-500">{note.author}</span>
+                              </div>
                               <div className="flex items-center gap-2">
                                 <span className="font-body text-[11px] text-gray-400">{new Date(note.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}</span>
                                 <button onClick={() => setEditingNote({ childId: child.id, noteIndex: i, text: note.text })} className="text-gray-300 hover:text-blue-500 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100"><MessageSquare size={11} /></button>
