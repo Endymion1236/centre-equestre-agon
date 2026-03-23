@@ -320,6 +320,37 @@ export default function PaiementsPage() {
     await refreshAll();
   };
 
+  const duplicatePayment = async (payment: any) => {
+    const cleanedItems = (payment.items || []).map((item: any) => ({
+      childId: item.childId || "",
+      childName: item.childName || "",
+      activityType: item.activityType || "",
+      activityTitle: item.activityTitle || item.label || "",
+      stageKey: item.stageKey || "",
+      priceHT: safeNumber(item.priceHT),
+      priceTTC: safeNumber(item.priceTTC),
+      tva: safeNumber(item.tva || item.tvaTaux || 5.5),
+      creneauId: "",
+      reservationId: "",
+    }));
+    const totalTTC = round2(cleanedItems.reduce((sum: number, item: any) => sum + safeNumber(item.priceTTC), 0));
+    await addDoc(collection(db, "payments"), {
+      familyId: payment.familyId,
+      familyName: payment.familyName,
+      items: cleanedItems,
+      totalTTC,
+      status: "draft",
+      paidAmount: 0,
+      paymentMode: "",
+      paymentRef: "",
+      source: "duplicate",
+      sourcePaymentId: payment.id,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    await refreshAll();
+  };
+
   const basketSubtotal = basket.reduce((s, i) => s + i.priceTTC, 0);
   const promoDiscount = appliedPromo
     ? (appliedPromo.discountMode === "percent" ? basketSubtotal * appliedPromo.discountValue / 100 : appliedPromo.discountValue)
@@ -1217,7 +1248,7 @@ export default function PaiementsPage() {
                           <span className="w-32 font-body text-xs text-gray-500 truncate">{(p.items || []).map((i: any) => i.activityTitle).join(", ")}</span>
                           <span className="w-20 text-right font-body text-sm font-bold text-blue-500">{p.totalTTC?.toFixed(2)}€</span>
                           <span className="w-20 text-center"><Badge color="blue">{mode?.label?.split(" ")[0] || p.paymentMode}</Badge></span>
-                          <span className="w-16 text-center"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : "gray"}>{p.status === "paid" ? "Payé" : p.status === "partial" ? "Partiel" : "Att."}</Badge></span>
+                          <span className="w-16 text-center"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "draft" ? "blue" : "gray"}>{p.status === "paid" ? "Payé" : p.status === "partial" ? "Partiel" : p.status === "draft" ? "Brouillon" : "Att."}</Badge></span>
                           <span className="w-16 text-center"><button onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button></span>
                         </div>
                       );
@@ -1405,8 +1436,12 @@ export default function PaiementsPage() {
                             ))}
                           </div>
                         )}
-                        {/* Bouton supprimer la commande */}
-                        <div className="mt-2 pt-2 border-t border-gray-100 flex justify-end">
+                        {/* Boutons actions commande */}
+                        <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between">
+                          <button onClick={async () => { await duplicatePayment(p); alert("Commande dupliquée en brouillon."); }}
+                            className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
+                            <Plus size={10} /> Dupliquer
+                          </button>
                           <button onClick={() => deletePaymentCommand(p)}
                             className="font-body text-[10px] text-red-500 bg-red-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-red-100 flex items-center gap-1">
                             <Trash2 size={10} /> Annuler la commande
