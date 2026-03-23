@@ -320,23 +320,38 @@ export default function PaiementsPage() {
     await refreshAll();
   };
 
-  const duplicatePayment = async (payment: any) => {
-    const cleanedItems = (payment.items || []).map((item: any) => ({
-      childId: item.childId || "",
-      childName: item.childName || "",
-      activityType: item.activityType || "",
-      activityTitle: item.activityTitle || item.label || "",
-      stageKey: item.stageKey || "",
-      priceHT: safeNumber(item.priceHT),
-      priceTTC: safeNumber(item.priceTTC),
-      tva: safeNumber(item.tva || item.tvaTaux || 5.5),
-      creneauId: "",
-      reservationId: "",
-    }));
+  const [duplicateTarget, setDuplicateTarget] = useState<{ payment: any; targetFamilyId: string; targetSearch: string } | null>(null);
+
+  const duplicatePayment = async (payment: any, targetFamilyId?: string) => {
+    const targetFamily = targetFamilyId
+      ? families.find(f => f.firestoreId === targetFamilyId)
+      : families.find(f => f.firestoreId === payment.familyId);
+    if (!targetFamily) return;
+
+    const targetChildren = targetFamily.children || [];
+    const sourceChildren = (payment.items || []).map((i: any) => i.childName).filter(Boolean);
+
+    const cleanedItems = (payment.items || []).map((item: any, idx: number) => {
+      // Si autre famille : remplacer l'enfant par celui de la cible (par position)
+      const targetChild = targetFamilyId && targetChildren[idx]
+        ? { childId: targetChildren[idx].id, childName: targetChildren[idx].firstName }
+        : { childId: item.childId || "", childName: item.childName || "" };
+      return {
+        ...targetChild,
+        activityType: item.activityType || "",
+        activityTitle: item.activityTitle || item.label || "",
+        stageKey: item.stageKey || "",
+        priceHT: safeNumber(item.priceHT),
+        priceTTC: safeNumber(item.priceTTC),
+        tva: safeNumber(item.tva || item.tvaTaux || 5.5),
+        creneauId: "",
+        reservationId: "",
+      };
+    });
     const totalTTC = round2(cleanedItems.reduce((sum: number, item: any) => sum + safeNumber(item.priceTTC), 0));
     await addDoc(collection(db, "payments"), {
-      familyId: payment.familyId,
-      familyName: payment.familyName,
+      familyId: targetFamily.firestoreId,
+      familyName: targetFamily.parentName || "",
       items: cleanedItems,
       totalTTC,
       status: "draft",
@@ -348,6 +363,7 @@ export default function PaiementsPage() {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+    setDuplicateTarget(null);
     await refreshAll();
   };
 
@@ -1438,7 +1454,7 @@ export default function PaiementsPage() {
                         )}
                         {/* Boutons actions commande */}
                         <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between">
-                          <button onClick={async () => { await duplicatePayment(p); alert("Commande dupliquée en brouillon."); }}
+                          <button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "" })}
                             className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
                             <Plus size={10} /> Dupliquer
                           </button>
@@ -1456,6 +1472,79 @@ export default function PaiementsPage() {
           })()}
         </div>
       )}
+      {/* Modale duplication commande */}
+      {duplicateTarget && (() => {
+        const p = duplicateTarget.payment;
+        const searchLower = duplicateTarget.targetSearch.toLowerCase();
+        const filteredFams = families.filter(f =>
+          f.parentName?.toLowerCase().includes(searchLower) ||
+          (f.children || []).some((c: any) => c.firstName?.toLowerCase().includes(searchLower))
+        ).slice(0, 8);
+        return (
+          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDuplicateTarget(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+              <div className="p-5 border-b border-gray-100">
+                <h2 className="font-display text-lg font-bold text-blue-800">Dupliquer la commande</h2>
+                <p className="font-body text-xs text-gray-400 mt-1">
+                  {(p.items || []).map((i: any) => i.activityTitle).join(", ")} — {safeNumber(p.totalTTC).toFixed(2)}€
+                </p>
+              </div>
+              <div className="p-5 flex flex-col gap-3">
+                {/* Option 1 : même famille */}
+                <button onClick={async () => { await duplicatePayment(p); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg border border-blue-200 bg-blue-50 cursor-pointer hover:bg-blue-100 text-left">
+                  <div className="w-10 h-10 rounded-lg bg-blue-200 flex items-center justify-center font-body text-sm font-bold text-blue-700">
+                    {(p.familyName || "?")[0]}
+                  </div>
+                  <div>
+                    <div className="font-body text-sm font-semibold text-blue-800">{p.familyName}</div>
+                    <div className="font-body text-xs text-gray-400">Même famille (mêmes enfants)</div>
+                  </div>
+                </button>
+
+                {/* Séparateur */}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-gray-200" />
+                  <span className="font-body text-[10px] text-gray-400 uppercase">ou pour une autre famille</span>
+                  <div className="flex-1 h-px bg-gray-200" />
+                </div>
+
+                {/* Recherche famille */}
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+                  <input value={duplicateTarget.targetSearch}
+                    onChange={e => setDuplicateTarget({ ...duplicateTarget, targetSearch: e.target.value })}
+                    placeholder="Chercher une famille..."
+                    className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
+                </div>
+
+                {duplicateTarget.targetSearch && (
+                  <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto">
+                    {filteredFams.length === 0 ? (
+                      <p className="font-body text-xs text-gray-400 text-center py-2">Aucune famille trouvée</p>
+                    ) : filteredFams.map(f => (
+                      <button key={f.firestoreId} onClick={async () => { await duplicatePayment(p, f.firestoreId); }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-200 bg-white cursor-pointer hover:bg-blue-50 text-left">
+                        <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center font-body text-xs font-bold text-gray-500">
+                          {(f.parentName || "?")[0]}
+                        </div>
+                        <div>
+                          <div className="font-body text-sm font-semibold text-blue-800">{f.parentName}</div>
+                          <div className="font-body text-xs text-gray-400">{(f.children || []).map((c: any) => c.firstName).join(", ") || "Pas d'enfant"}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="p-5 border-t border-gray-100">
+                <button onClick={() => setDuplicateTarget(null)}
+                  className="w-full py-2.5 rounded-lg font-body text-sm text-gray-500 bg-gray-100 border-none cursor-pointer">Annuler</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
