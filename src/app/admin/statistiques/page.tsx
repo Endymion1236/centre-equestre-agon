@@ -137,6 +137,7 @@ export default function StatistiquesPage() {
   // ─── Filtrage par année ───
   const yearPayments = useMemo(() => {
     return payments.filter(p => {
+      if ((p as any).status === "cancelled") return false;
       const d = toDate(p.date);
       return d && d.getFullYear() === year;
     });

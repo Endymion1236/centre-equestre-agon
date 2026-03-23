@@ -74,6 +74,7 @@ export default function ComptabilitePage() {
   // Filter by period
   const filteredPayments = useMemo(() => {
     return payments.filter((p) => {
+      if ((p as any).status === "cancelled") return false;
       const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
       if (!d) return false;
       const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;

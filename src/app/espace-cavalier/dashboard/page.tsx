@@ -1,13 +1,54 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge, Button } from "@/components/ui";
 import Link from "next/link";
-import { Calendar, Receipt, Users, Star } from "lucide-react";
+import { Calendar, Receipt, Users, Star, CreditCard, Wallet } from "lucide-react";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export default function DashboardPage() {
   const { user, family } = useAuth();
   const firstName = user?.displayName?.split(" ")[0] || "Bonjour";
+  const [stats, setStats] = useState({ reservations: 0, resteDu: 0, avoir: 0, totalPaye: 0 });
+
+  useEffect(() => {
+    if (!user) return;
+    const load = async () => {
+      try {
+        // Réservations à venir
+        const today = new Date().toISOString().split("T")[0];
+        let resCount = 0;
+        try {
+          const resSnap = await getDocs(query(collection(db, "reservations"), where("familyId", "==", user.uid)));
+          resCount = resSnap.docs.filter(d => (d.data().date || "") >= today && d.data().status !== "cancelled").length;
+        } catch { /* index manquant */ }
+
+        // Paiements
+        let resteDu = 0, totalPaye = 0;
+        try {
+          const paySnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", user.uid)));
+          paySnap.docs.forEach(d => {
+            const p = d.data();
+            if (p.status === "cancelled") return;
+            totalPaye += p.paidAmount || 0;
+            resteDu += (p.totalTTC || 0) - (p.paidAmount || 0);
+          });
+        } catch { /* index manquant */ }
+
+        // Avoirs
+        let avoir = 0;
+        try {
+          const avSnap = await getDocs(query(collection(db, "avoirs"), where("familyId", "==", user.uid)));
+          avSnap.docs.forEach(d => { const a = d.data(); if (a.status === "actif") avoir += a.remainingAmount || 0; });
+        } catch { /* index manquant */ }
+
+        setStats({ reservations: resCount, resteDu: Math.max(0, Math.round(resteDu * 100) / 100), avoir: Math.round(avoir * 100) / 100, totalPaye: Math.round(totalPaye * 100) / 100 });
+      } catch (e) { console.error(e); }
+    };
+    load();
+  }, [user]);
 
   const hasIncompleteChildren = family?.children?.some(
     (c) => !c.sanitaryForm
@@ -42,31 +83,45 @@ export default function DashboardPage() {
       )}
 
       {/* Quick stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        {[
-          { icon: Calendar, value: "0", label: "Réservations à venir", color: "text-blue-500" },
-          { icon: Receipt, value: "0€", label: "Prochain prélèvement", color: "text-gold-400" },
-          { icon: Star, value: "—", label: "Avis à donner", color: "text-gold-400" },
-        ].map((stat, i) => {
-          const Icon = stat.icon;
-          return (
-            <Card key={i} padding="sm">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-                  <Icon size={20} className="text-blue-500" />
-                </div>
-                <div>
-                  <div className={`font-body text-xl font-bold ${stat.color}`}>
-                    {stat.value}
-                  </div>
-                  <div className="font-body text-xs text-gray-400">
-                    {stat.label}
-                  </div>
-                </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+        <Card padding="sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><Calendar size={20} className="text-blue-500" /></div>
+            <div>
+              <div className="font-body text-xl font-bold text-blue-500">{stats.reservations}</div>
+              <div className="font-body text-xs text-gray-400">Réservations</div>
+            </div>
+          </div>
+        </Card>
+        <Card padding="sm" className={stats.resteDu > 0 ? "bg-red-50" : "bg-green-50"}>
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${stats.resteDu > 0 ? "bg-red-100" : "bg-green-100"}`}><CreditCard size={20} className={stats.resteDu > 0 ? "text-red-500" : "text-green-600"} /></div>
+            <div>
+              <div className={`font-body text-xl font-bold ${stats.resteDu > 0 ? "text-red-500" : "text-green-600"}`}>{stats.resteDu.toFixed(0)}€</div>
+              <div className="font-body text-xs text-gray-400">{stats.resteDu > 0 ? "Reste dû" : "À jour"}</div>
+            </div>
+          </div>
+        </Card>
+        <Card padding="sm" className="bg-green-50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center"><Receipt size={20} className="text-green-600" /></div>
+            <div>
+              <div className="font-body text-xl font-bold text-green-600">{stats.totalPaye.toFixed(0)}€</div>
+              <div className="font-body text-xs text-gray-400">Payé</div>
+            </div>
+          </div>
+        </Card>
+        {stats.avoir > 0 && (
+          <Card padding="sm" className="bg-purple-50">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center"><Wallet size={20} className="text-purple-600" /></div>
+              <div>
+                <div className="font-body text-xl font-bold text-purple-600">{stats.avoir.toFixed(0)}€</div>
+                <div className="font-body text-xs text-gray-400">Avoir</div>
               </div>
-            </Card>
-          );
-        })}
+            </div>
+          </Card>
+        )}
       </div>
 
       {/* Quick actions */}
