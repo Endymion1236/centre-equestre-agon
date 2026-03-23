@@ -102,23 +102,40 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
 
   const stageLines = useMemo(() => {
     if (!isStage) return [];
+
+    // Compter les jours du stage cette semaine pour le prorata
+    const creneauDate = new Date(creneau.date);
+    const dow = creneauDate.getDay();
+    const mon = new Date(creneauDate); mon.setDate(mon.getDate() - ((dow + 6) % 7));
+    const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+    const nbJoursStage = allCreneaux.filter(c =>
+      c.activityTitle === creneau.activityTitle &&
+      (c.activityType === "stage" || c.activityType === "stage_journee") &&
+      new Date(c.date) >= mon && new Date(c.date) <= sun
+    ).length || 1;
+
+    // Prix proratisé si mode jour
+    const prixStageComplet = priceTTC;
+    const prixJour = Math.round((prixStageComplet / nbJoursStage) * 100) / 100;
+    const prixEffectif = stageMode === "jour" ? prixJour : prixStageComplet;
+
     return selectedChildren.map((childId, idx) => {
       const child = children.find((c: any) => c.id === childId);
-      // Le rang dans le compteur famille = inscriptions existantes + position dans la sélection
-      const rang = existingStageCount + idx; // 0-indexed
+      const rang = existingStageCount + idx;
       const remiseEuros = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
-      const prixBase = priceTTC;
-      const prixReduit = Math.max(0, Math.round((prixBase - remiseEuros) * 100) / 100);
+      // La réduction s'applique au prorata aussi (mais plafonnée au prix)
+      const remiseEffective = stageMode === "jour" ? Math.round((remiseEuros / nbJoursStage) * 100) / 100 : remiseEuros;
+      const prixReduit = Math.max(0, Math.round((prixEffectif - remiseEffective) * 100) / 100);
       return {
         childId,
         childName: (child as any)?.firstName || "—",
-        prixBase,
-        remiseEuros,
+        prixBase: prixEffectif,
+        remiseEuros: remiseEffective,
         rang: rang + 1,
         prixReduit,
       };
     });
-  }, [isStage, selectedChildren, children, priceTTC, existingStageCount]);
+  }, [isStage, selectedChildren, children, priceTTC, existingStageCount, stageMode, allCreneaux, creneau]);
 
   const stageTotalTTC = stageLines.reduce((s, l) => s + l.prixReduit, 0);
   const stageAcompte = Math.round(stageTotalTTC * 0.3 * 100) / 100;
@@ -527,8 +544,8 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
                     )}
                     <div className="font-body text-[10px] text-blue-500 bg-blue-50 rounded px-2 py-1">
                       {stageMode === "semaine"
-                        ? `L'inscription couvre les ${nbJours} jour(s) de la semaine pour ce stage.`
-                        : `Inscription uniquement le ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}.`}
+                        ? `L'inscription couvre les ${nbJours} jour(s) — ${priceTTC.toFixed(2)}€`
+                        : `1 jour sur ${nbJours} — ${(priceTTC / nbJours).toFixed(2)}€/jour (prorata)`}
                     </div>
                     {existingStageCount > 0 && (
                       <div className="font-body text-[10px] text-orange-500 bg-orange-50 rounded px-2 py-1">
