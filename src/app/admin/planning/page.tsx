@@ -34,6 +34,7 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
   onEnroll: (id: string, c: EnrolledChild, payMode?: string) => Promise<void>;
   onUnenroll: (id: string, childId: string) => Promise<void>;
 }) {
+  const { toast: panelToast } = useToast();
   const [search, setSearch] = useState(""); const [selFam, setSelFam] = useState(""); const [selChild, setSelChild] = useState("");
   const [enrolling, setEnrolling] = useState(false); const [justEnrolled, setJustEnrolled] = useState("");
   const [showPay, setShowPay] = useState(false); const [payMode, setPayMode] = useState("cb_terminal"); const [unenrolling, setUnenrolling] = useState("");
@@ -292,12 +293,12 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ to: fam.parentEmail, ...emailData }),
                 });
-                alert(`Lien envoyé à ${fam.parentEmail} !`);
+                panelToast(`Lien envoyé à ${fam.parentEmail}`, "success");
               }
             } catch (e) { console.error(e); }
           }
         }
-      } catch (e) { console.error(e); alert("Erreur."); }
+      } catch (e) { console.error(e); panelToast("Erreur lors de l'inscription", "error"); }
       setSelectedChildren([]);
       setSelFam(""); setSearch(""); setEnrolling(false);
       setTimeout(() => setJustEnrolled(""), 6000);
@@ -449,23 +450,23 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({ to: fam.parentEmail, ...emailData }),
                     });
-                    alert(`Lien de paiement envoyé à ${fam.parentEmail} !`);
+                    panelToast(`Lien envoyé à ${fam.parentEmail}`, "success");
                   } catch (emailErr) {
                     // Fallback : copier le lien
                     await navigator.clipboard.writeText(data.url);
-                    alert(`Email non envoyé. Le lien a été copié dans le presse-papier :\n${data.url}`);
+                    panelToast("Lien copié dans le presse-papier", "warning");
                   }
                 } else {
                   await navigator.clipboard.writeText(data.url);
-                  alert(`Pas d'email pour cette famille. Lien copié dans le presse-papier :\n${data.url}`);
+                  panelToast("Pas d'email — lien copié dans le presse-papier", "warning");
                 }
               }
             } else if (data.error) {
-              alert(`Erreur Stripe : ${data.error}\n\nEncaissement manuel possible dans Paiements.`);
+              panelToast(`Erreur Stripe : ${data.error}`, "error");
             }
           } catch (e) {
             console.error(e);
-            alert("Impossible de contacter Stripe. Encaissement manuel possible dans Paiements.");
+            panelToast("Stripe indisponible — encaissement manuel dans Paiements", "error");
           }
         }
       }
@@ -1122,11 +1123,11 @@ export default function PlanningPage() {
       created++;
     }
     setShowSimple(false); setShowGenerator(false);
-    alert(`${created} créneau${created > 1 ? "x" : ""} créé${created > 1 ? "s" : ""}${skipped > 0 ? `\n${skipped} doublon${skipped > 1 ? "s" : ""} ignoré${skipped > 1 ? "s" : ""}` : ""}`);
+    toast(`${created} créneau${created > 1 ? "x" : ""} créé${created > 1 ? "s" : ""}${skipped > 0 ? ` (${skipped} doublon${skipped > 1 ? "s" : ""})` : ""}`, "success");
     fetchData();
   };
   const handleDelete = async (id: string) => { if (!confirm("Supprimer ?")) return; await deleteDoc(doc(db, "creneaux", id)); fetchData(); };
-  const handleDuplicateWeek = async () => { if (creneaux.length===0) return; setDuplicating(true); const { count, skipped } = await duplicateWeekCreneaux(creneaux, dupWeeks); setDuplicating(false);setShowDuplicate(false);alert(`${count} créneau${count>1?"x":""} créé${count>1?"s":""}${skipped > 0 ? `\n${skipped} doublon${skipped>1?"s":""} ignoré${skipped>1?"s":""}` : ""}`);fetchData(); };
+  const handleDuplicateWeek = async () => { if (creneaux.length===0) return; setDuplicating(true); const { count, skipped } = await duplicateWeekCreneaux(creneaux, dupWeeks); setDuplicating(false);setShowDuplicate(false);toast(`${count} créneau${count>1?"x":""} créé${count>1?"s":""}${skipped > 0 ? ` (${skipped} doublon${skipped>1?"s":""})` : ""}`, "success");fetchData(); };
 
   const refreshCreneaux = async () => { const s=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[0]); const e=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[6]); const snap=await getDocs(query(collection(db,"creneaux"),where("date",">=",s),where("date","<=",e))); const fresh=snap.docs.map(d=>({id:d.id,...d.data()})) as (Creneau&{id:string})[]; setCreneaux(fresh); return fresh; };
 
@@ -1217,7 +1218,7 @@ export default function PlanningPage() {
             const avoirMontant = Math.min(tropPercu, montantAvoir);
             const ref = await createAvoir(child.familyId, child.familyName, avoirMontant,
               `Désinscription ${child.childName} — ${c.activityTitle}`, paymentDoc.id, "desinscription");
-            alert(`${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""}.\n\nAvoir créé : ${avoirMontant.toFixed(2)}€ (réf. ${ref})`);
+            toast(`${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""} — Avoir : ${avoirMontant.toFixed(2)}€`, "success");
             // Email notification avoir
             const fam2 = families.find(f => f.firestoreId === child.familyId);
             if (fam2?.parentEmail) {
@@ -1230,17 +1231,17 @@ export default function PlanningPage() {
               } catch (e) { console.error("Email avoir:", e); }
             }
           } else {
-            alert(`${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""}.\nPaiement ajusté.`);
+            toast(`${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""} — Paiement ajusté`, "success");
           }
         } else {
-          alert(`${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""}.`);
+          toast(`${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""}`, "success");
         }
       } else {
-        alert(`${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""}.`);
+        toast(`${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""}`, "success");
       }
     } catch (e) {
       console.error("Erreur gestion paiement/avoir:", e);
-      alert(`${child.childName} désinscrit(e) mais erreur lors de l'ajustement du paiement.`);
+      toast(`${child.childName} désinscrit(e) — erreur ajustement paiement`, "warning");
     }
 
     const fresh = await refreshCreneaux();

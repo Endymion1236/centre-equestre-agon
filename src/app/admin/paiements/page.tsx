@@ -6,6 +6,7 @@ import { db } from "@/lib/firebase";
 import { emailTemplates } from "@/lib/email-templates";
 import { safeNumber, round2 } from "@/lib/utils";
 import { Card, Badge, Button } from "@/components/ui";
+import { useToast } from "@/components/ui/Toast";
 import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle } from "lucide-react";
 import type { Family, Activity } from "@/types";
 
@@ -66,6 +67,7 @@ const paymentModes: { id: PaymentMode; label: string }[] = [
 ];
 
 export default function PaiementsPage() {
+  const { toast } = useToast();
   const [tab, setTab] = useState<"encaisser" | "journal" | "historique" | "echeances" | "impayes">("encaisser");
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const [activities, setActivities] = useState<(Activity & { firestoreId: string })[]>([]);
@@ -208,7 +210,7 @@ export default function PaiementsPage() {
       // Non encaissé → suppression libre
       if (!confirm(`Supprimer cette commande de ${(payment.totalTTC || 0).toFixed(2)}€ pour ${payment.familyName} ?\n\nAucun encaissement — suppression simple.`)) return;
       await deleteDoc(doc(db, "payments", payment.id));
-      alert("Commande supprimée.");
+      toast("Commande supprimée.", "success");
     } else {
       // Encaissé → avoir automatique
       if (!confirm(`${totalEnc.toFixed(2)}€ ont déjà été encaissés.\n\nUn avoir de ${totalEnc.toFixed(2)}€ sera créé automatiquement pour ${payment.familyName}.\n\nConfirmer l'annulation ?`)) return;
@@ -242,7 +244,7 @@ export default function PaiementsPage() {
         updatedAt: serverTimestamp(),
       });
 
-      alert(`Commande annulée.\nAvoir créé : ${totalEnc.toFixed(2)}€ (réf. ${ref})`);
+      toast(`Commande annulée.\nAvoir créé : ${totalEnc.toFixed(2)}€ (réf. ${ref})`);
     }
     await refreshAll();
   };
@@ -376,12 +378,12 @@ export default function PaiementsPage() {
   const applyPromoCode = () => {
     const found = promos.find((p: any) => p.type === "code" && p.code === promoCode.toUpperCase() && p.active && (p.appliesTo === "paiement" || p.appliesTo === "tout"));
     if (found) {
-      if (found.maxUses > 0 && found.usedCount >= found.maxUses) { alert("Ce code a atteint son nombre max d'utilisations."); return; }
-      if (found.validUntil && new Date(found.validUntil) < new Date()) { alert("Ce code a expiré."); return; }
+      if (found.maxUses > 0 && found.usedCount >= found.maxUses) { toast("Ce code a atteint son nombre max d'utilisations."); return; }
+      if (found.validUntil && new Date(found.validUntil) < new Date()) { toast("Ce code a expiré.", "warning"); return; }
       setAppliedPromo({ label: found.label, discountMode: found.discountMode, discountValue: found.discountValue });
       setManualDiscount("");
     } else {
-      alert("Code promo invalide ou non applicable aux paiements.");
+      toast("Code promo invalide ou non applicable aux paiements.");
     }
   };
 
@@ -542,10 +544,10 @@ export default function PaiementsPage() {
                       date: serverTimestamp(),
                     });
                   }
-                  alert(`${totalPending.toFixed(2)}€ encaissé pour ${family.parentName} (${familyPending.length} prestation${familyPending.length > 1 ? "s" : ""}) !`);
+                  toast(`${totalPending.toFixed(2)}€ encaissé pour ${family.parentName} (${familyPending.length} prestation${familyPending.length > 1 ? "s" : ""}) !`);
                   const paySnap = await getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200)));
                   setPayments(loadPayments(paySnap.docs) as any);
-                } catch (e) { console.error(e); alert("Erreur."); }
+                } catch (e) { console.error(e); toast("Erreur.", "error"); }
               };
 
               return (
@@ -632,9 +634,9 @@ export default function PaiementsPage() {
                                 await enregistrerEncaissement(p.id!, p, paye, "avoir", "", "Utilisation avoir");
                                 resteAPayer -= paye;
                               }
-                              alert(`${toUse.toFixed(2)}€ d'avoir utilisé !`);
+                              toast(`${toUse.toFixed(2)}€ d'avoir utilisé !`);
                               await refreshAll();
-                            } catch (e) { console.error(e); alert("Erreur."); }
+                            } catch (e) { console.error(e); toast("Erreur.", "error"); }
                           }} className="w-full mt-2 py-1.5 rounded-lg font-body text-xs font-semibold text-purple-700 bg-purple-100 border-none cursor-pointer hover:bg-purple-200">
                             Utiliser {Math.min(totalAvoir, totalPending).toFixed(2)}€ d'avoir
                           </button>
@@ -694,7 +696,7 @@ export default function PaiementsPage() {
                           resteARegler -= paye;
                         }
                         const resteFinal = totalPending - montant;
-                        alert(`${montant.toFixed(2)}€ encaissé (${paymentModes.find(m => m.id === paymentMode)?.label || paymentMode}) pour ${family.parentName} !${resteFinal > 0 ? `\nReste dû : ${resteFinal.toFixed(2)}€` : "\nTout est réglé !"}`);
+                        toast(`${montant.toFixed(2)}€ encaissé (${paymentModes.find(m => m.id === paymentMode)?.label || paymentMode}) pour ${family.parentName} !${resteFinal > 0 ? `\nReste dû : ${resteFinal.toFixed(2)}€` : "\nTout est réglé !"}`);
                         // Email confirmation paiement
                         if (family.parentEmail && montant > 0) {
                           try {
@@ -710,7 +712,7 @@ export default function PaiementsPage() {
                         setPaidAmount("");
                         setPaymentRef("");
                         await refreshAll();
-                      } catch (e) { console.error(e); alert("Erreur."); }
+                      } catch (e) { console.error(e); toast("Erreur.", "error"); }
                     }}
                       className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-body text-base font-semibold text-white bg-green-600 border-none cursor-pointer hover:bg-green-500 transition-colors">
                       <Check size={18} />
@@ -1071,7 +1073,7 @@ export default function PaiementsPage() {
                         <button onClick={() => setCorrectionEnc(null)}
                           className="flex-1 py-2.5 rounded-lg font-body text-sm text-gray-500 bg-gray-100 border-none cursor-pointer">Annuler</button>
                         <button onClick={async () => {
-                          if (!correctionRaison) { alert("Indiquez la raison de la correction."); return; }
+                          if (!correctionRaison) { toast("Indiquez la raison de la correction.", "warning"); return; }
                           const newMontant = safeNumber(correctionMontant);
 
                           // 1. Contre-passation (écriture négative)
@@ -1421,7 +1423,7 @@ export default function PaiementsPage() {
                             <button onClick={async () => {
                               const fam = families.find(f => f.firestoreId === p.familyId);
                               const email = fam?.parentEmail || "";
-                              if (!email) { alert("Pas d'email pour cette famille."); return; }
+                              if (!email) { toast("Pas d'email pour cette famille.", "warning"); return; }
                               const emailData = emailTemplates.rappelImpaye({
                                 parentName: p.familyName || "",
                                 montant: due,
@@ -1429,8 +1431,8 @@ export default function PaiementsPage() {
                               });
                               try {
                                 await fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: email, ...emailData }) });
-                                alert(`Relance envoyée à ${email}`);
-                              } catch (e) { console.error(e); alert("Erreur envoi."); }
+                                toast(`Relance envoyée à ${email}`);
+                              } catch (e) { console.error(e); toast("Erreur envoi.", "error"); }
                             }}
                               className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 whitespace-nowrap">
                               Relancer

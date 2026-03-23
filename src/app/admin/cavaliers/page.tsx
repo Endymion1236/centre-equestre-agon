@@ -5,6 +5,7 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp
 import { db } from "@/lib/firebase";
 import { emailTemplates } from "@/lib/email-templates";
 import { Card, Badge } from "@/components/ui";
+import { useToast } from "@/components/ui/Toast";
 import {
   Search, ChevronDown, ChevronUp, Loader2, Users, UserCheck, AlertTriangle,
   Plus, X, Save, UserPlus, Phone, Mail, Calendar, Edit3, Trash2, CalendarDays, GitMerge, Receipt, Clock, Wallet,
@@ -14,6 +15,7 @@ import type { Family } from "@/types";
 const galopLevels = ["—", "Bronze", "Argent", "Or", "G1", "G2", "G3", "G4", "G5", "G6", "G7"];
 
 export default function CavaliersPage() {
+  const { toast } = useToast();
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
