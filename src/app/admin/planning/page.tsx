@@ -43,6 +43,7 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
 
   // Stage multi-enfants
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
+  const [stageMode, setStageMode] = useState<"semaine" | "jour">("semaine");
   const isStage = creneau.activityType === "stage" || creneau.activityType === "stage_journee";
 
   const enrolled = creneau.enrolled || []; const enrolledIds = enrolled.map((e: any) => e.childId);
@@ -128,22 +129,25 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
     if (isStage && selectedChildren.length > 0 && fam) {
       setEnrolling(true);
       try {
-        // Trouver TOUS les créneaux du même stage la même semaine
-        const creneauDate = new Date(creneau.date);
-        const dayOfWeek = creneauDate.getDay(); // 0=dim
-        const monday = new Date(creneauDate);
-        monday.setDate(monday.getDate() - ((dayOfWeek + 6) % 7)); // lundi de la semaine
-        const sunday = new Date(monday);
-        sunday.setDate(sunday.getDate() + 6);
+        // Trouver les créneaux à inscrire selon le mode choisi
+        let creneauxAInscrire = [creneau];
+        if (stageMode === "semaine") {
+          const creneauDate = new Date(creneau.date);
+          const dayOfWeek = creneauDate.getDay();
+          const monday = new Date(creneauDate);
+          monday.setDate(monday.getDate() - ((dayOfWeek + 6) % 7));
+          const sunday = new Date(monday);
+          sunday.setDate(sunday.getDate() + 6);
 
-        const stageCreneaux = allCreneaux.filter(c =>
-          c.activityTitle === creneau.activityTitle &&
-          (c.activityType === "stage" || c.activityType === "stage_journee") &&
-          new Date(c.date) >= monday && new Date(c.date) <= sunday
-        ).sort((a, b) => a.date.localeCompare(b.date));
+          const stageCreneaux = allCreneaux.filter(c =>
+            c.activityTitle === creneau.activityTitle &&
+            (c.activityType === "stage" || c.activityType === "stage_journee") &&
+            new Date(c.date) >= monday && new Date(c.date) <= sunday
+          ).sort((a, b) => a.date.localeCompare(b.date));
 
-        // Si pas d'autres jours trouvés, juste le créneau cliqué
-        const creneauxAInscrire = stageCreneaux.length > 0 ? stageCreneaux : [creneau];
+          creneauxAInscrire = stageCreneaux.length > 0 ? stageCreneaux : [creneau];
+        }
+        // Mode "jour" → juste le créneau cliqué (déjà par défaut)
 
         // Inscrire chaque enfant dans TOUS les jours du stage
         for (const line of stageLines) {
@@ -506,10 +510,25 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
                   <div className="bg-green-50 rounded-xl p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="font-body text-xs font-semibold text-green-700 uppercase tracking-wider">Récapitulatif stage</div>
-                      <Badge color="blue">{nbJours} jour{nbJours > 1 ? "s" : ""}</Badge>
+                      <Badge color="blue">{stageMode === "semaine" ? `${nbJours} jour${nbJours > 1 ? "s" : ""}` : "1 jour"}</Badge>
                     </div>
+                    {/* Choix semaine ou jour */}
+                    {nbJours > 1 && (
+                      <div className="flex gap-2">
+                        <button onClick={() => setStageMode("semaine")}
+                          className={`flex-1 py-2 rounded-lg font-body text-xs font-semibold border cursor-pointer ${stageMode === "semaine" ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
+                          Semaine complète ({nbJours}j)
+                        </button>
+                        <button onClick={() => setStageMode("jour")}
+                          className={`flex-1 py-2 rounded-lg font-body text-xs font-semibold border cursor-pointer ${stageMode === "jour" ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
+                          Ce jour uniquement
+                        </button>
+                      </div>
+                    )}
                     <div className="font-body text-[10px] text-blue-500 bg-blue-50 rounded px-2 py-1">
-                      L'inscription couvre les {nbJours} jour(s) de la semaine pour ce stage.
+                      {stageMode === "semaine"
+                        ? `L'inscription couvre les ${nbJours} jour(s) de la semaine pour ce stage.`
+                        : `Inscription uniquement le ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}.`}
                     </div>
                     {existingStageCount > 0 && (
                       <div className="font-body text-[10px] text-orange-500 bg-orange-50 rounded px-2 py-1">
