@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
+import { useToast } from "@/components/ui/Toast";
 import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Printer, ClipboardList,
 } from "lucide-react";
 
@@ -10,6 +11,7 @@ interface Creneau { id: string; activityTitle: string; activityType: string; dat
 const typeColors: Record<string,string> = {stage:"#27ae60",balade:"#e67e22",cours:"#2050A0",competition:"#7c3aed"};
 
 export default function MontoirPage() {
+  const { toast } = useToast();
   const [dayOffset, setDayOffset] = useState(0);
   const [creneaux, setCreneaux] = useState<Creneau[]>([]);
   const [equides, setEquides] = useState<any[]>([]);
@@ -77,7 +79,7 @@ export default function MontoirPage() {
     const c = creneaux.find(x => x.id === cid);
     if (!c) return;
     // Anti-duplication : si déjà clôturé, ne rien faire
-    if (c.status === "closed") { alert("Cette reprise est déjà clôturée."); return; }
+    if (c.status === "closed") { toast("Cette reprise est déjà clôturée.", "warning"); return; }
 
     const presents = (c.enrolled || []).filter((e: any) => e.presence === "present");
     const absents = (c.enrolled || []).filter((e: any) => e.presence === "absent");
@@ -166,7 +168,7 @@ export default function MontoirPage() {
     const parts = [`Reprise clôturée.`];
     if (notesCreated > 0) parts.push(`${notesCreated} trace${notesCreated > 1 ? "s" : ""} péda.`);
     if (cartesDebitees > 0) parts.push(`${cartesDebitees} carte${cartesDebitees > 1 ? "s" : ""} débitée${cartesDebitees > 1 ? "s" : ""}.`);
-    alert(parts.join("\n"));
+    toast(parts.join(" "), "success");
     fetchData();
   };
 

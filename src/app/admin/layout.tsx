@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { ToastProvider } from "@/components/ui/Toast";
 import {
   BarChart3,
   CalendarDays,
@@ -182,6 +183,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
+    <ToastProvider>
     <div className="min-h-screen bg-cream flex">
       <AdminSidebar />
       <div className="flex-1 overflow-auto">
@@ -243,5 +245,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </div>
     </div>
+    </ToastProvider>
   );
 }
