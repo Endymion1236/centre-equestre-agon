@@ -33,6 +33,7 @@ export interface StageLine {
 
 // ═══ UTILITAIRES ═══
 export const fmtDate = (d: Date) => d.toISOString().split("T")[0];
+export const safeNumber = (v: any) => Number.isFinite(Number(v)) ? Number(v) : 0;
 
 export function getWeekBounds(dateStr: string) {
   const d = new Date(dateStr);
@@ -49,15 +50,30 @@ export function getWeekBounds(dateStr: string) {
 /** Trouve tous les créneaux d'un stage sur la même semaine */
 export async function findStageCreneaux(activityTitle: string, dateStr: string) {
   const { monday, sunday } = getWeekBounds(dateStr);
-  const snap = await getDocs(query(
-    collection(db, "creneaux"),
-    where("activityTitle", "==", activityTitle),
-    where("date", ">=", fmtDate(monday)),
-    where("date", "<=", fmtDate(sunday)),
-  ));
-  return snap.docs
-    .map(d => ({ id: d.id, ...d.data() }))
-    .sort((a: any, b: any) => a.date.localeCompare(b.date));
+  try {
+    // Requête optimale (nécessite index composite: activityTitle + date)
+    const snap = await getDocs(query(
+      collection(db, "creneaux"),
+      where("activityTitle", "==", activityTitle),
+      where("date", ">=", fmtDate(monday)),
+      where("date", "<=", fmtDate(sunday)),
+    ));
+    return snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a: any, b: any) => a.date.localeCompare(b.date));
+  } catch (e) {
+    // Fallback si index manquant : charger par date et filtrer côté client
+    console.warn("Index Firestore manquant pour creneaux (activityTitle+date). Fallback client-side.", e);
+    const snap = await getDocs(query(
+      collection(db, "creneaux"),
+      where("date", ">=", fmtDate(monday)),
+      where("date", "<=", fmtDate(sunday)),
+    ));
+    return snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter((c: any) => c.activityTitle === activityTitle)
+      .sort((a: any, b: any) => a.date.localeCompare(b.date));
+  }
 }
 
 /** Compte les inscriptions stage uniques (enfant + titre stage) pour une famille */
@@ -168,14 +184,21 @@ export async function findLinkedPayment(familyId: string, childId: string, activ
   const paySnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", familyId)));
   for (const pDoc of paySnap.docs) {
     const p = pDoc.data();
+    if (p.status === "cancelled") continue;
     const items = p.items || [];
-    const matchItem = items.find((i: any) =>
-      (i.childId && i.childId === childId && (i.stageKey?.includes(activityTitle) || i.activityTitle?.includes(activityTitle))) ||
-      (!i.childId && i.activityTitle?.includes(activityTitle) && i.activityTitle?.includes(""))
+    // Priorité 1 : match par childId (fiable)
+    const matchById = items.find((i: any) =>
+      i.childId === childId && (
+        i.stageKey?.includes(activityTitle) ||
+        i.activityTitle?.includes(activityTitle)
+      )
     );
-    if (matchItem) {
-      return { paymentDoc: pDoc, paymentData: p, matchItem };
-    }
+    if (matchById) return { paymentDoc: pDoc, paymentData: p, matchItem: matchById };
+    // Priorité 2 : fallback ancien format (sans childId) par nom d'activité
+    const legacyMatch = items.find((i: any) =>
+      !i.childId && typeof i.activityTitle === "string" && i.activityTitle.includes(activityTitle)
+    );
+    if (legacyMatch) return { paymentDoc: pDoc, paymentData: p, matchItem: legacyMatch };
   }
   return null;
 }
@@ -183,8 +206,8 @@ export async function findLinkedPayment(familyId: string, childId: string, activ
 /** Calcule le trop-perçu pour un paiement après retrait d'une ligne */
 export async function computeTropPercu(paymentId: string, newTotal: number): Promise<number> {
   const encSnap = await getDocs(query(collection(db, "encaissements"), where("paymentId", "==", paymentId)));
-  const totalEncaisse = encSnap.docs.reduce((s, d) => s + (d.data().montant || 0), 0);
-  return Math.max(0, totalEncaisse - newTotal);
+  const totalEncaisse = encSnap.docs.reduce((s, d) => s + safeNumber(d.data().montant), 0);
+  return Math.max(0, totalEncaisse - safeNumber(newTotal));
 }
 
 /** Crée un avoir famille */
