@@ -441,15 +441,33 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
         <div className="p-5 border-b border-blue-500/8" style={{ borderLeftWidth: 4, borderLeftColor: color }}>
           <div className="flex justify-between items-start"><div><div className="font-body text-sm font-semibold" style={{ color }}>{creneau.startTime}–{creneau.endTime}</div><h2 className="font-display text-lg font-bold text-blue-800">{creneau.activityTitle}</h2><div className="font-body text-xs text-gray-400 mt-1">{new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · {creneau.monitor}{priceTTC > 0 ? ` · ${priceTTC.toFixed(2)}€/séance` : ""}</div></div><button onClick={onClose} className="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button></div>
-          <div className="flex items-center gap-3 mt-3"><Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>{spots > 0 ? `${spots} place${spots > 1 ? "s" : ""}` : "COMPLET"}</Badge><span className="font-body text-xs text-gray-400">{enrolled.length}/{creneau.maxPlaces}</span></div>
+          <div className="flex items-center gap-3 mt-3">
+            <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>{spots > 0 ? `${spots} place${spots > 1 ? "s" : ""}` : "COMPLET"}</Badge>
+            <span className="font-body text-xs text-gray-400">{enrolled.length}/{creneau.maxPlaces}</span>
+            {(creneau as any).status === "closed" && <Badge color="gray">Clôturée</Badge>}
+          </div>
         </div>
+
+        {/* Verrou si clôturée */}
+        {(creneau as any).status === "closed" && (
+          <div className="p-5 bg-gray-50 border-b border-gray-200">
+            <p className="font-body text-sm text-gray-500 mb-2">Cette séance est clôturée. Les inscriptions et modifications sont verrouillées.</p>
+            <button onClick={async () => {
+              if (!confirm("Réouvrir cette séance ?\n\nLes modifications seront à nouveau possibles.\nLes traces pédagogiques et débits de cartes déjà créés ne seront pas affectés.")) return;
+              await updateDoc(doc(db, "creneaux", creneau.id!), { status: "planned" });
+              onClose();
+            }} className="font-body text-xs text-orange-600 bg-orange-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-orange-100">
+              Réouvrir la séance
+            </button>
+          </div>
+        )}
         <div className="p-5">
           {justEnrolled && <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg font-body text-sm text-green-700"><Check size={16} className="inline mr-1" /> {justEnrolled} inscrit(e) !</div>}
           <h3 className="font-body text-sm font-semibold text-blue-800 mb-3"><Users size={16} className="inline mr-1" />Inscrits ({enrolled.length})</h3>
           {enrolled.length === 0 ? <p className="font-body text-sm text-gray-400 italic mb-4">Aucun</p> :
           <div className="flex flex-col gap-2 mb-4">{enrolled.map((e: any) => (<div key={e.childId} className="flex items-center justify-between bg-sand rounded-lg px-4 py-2.5"><div className="flex items-center gap-3"><div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center"><Users size={12} className="text-blue-500" /></div><div><div className="font-body text-sm font-semibold text-blue-800">{e.childName}</div><div className="font-body text-xs text-gray-400">{e.familyName}</div></div></div><button onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId} className="flex items-center gap-1 font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-red-50">{unenrolling===e.childId ? <Loader2 size={12} className="animate-spin"/> : <Trash2 size={12}/>} Désinscrire</button></div>))}</div>}
 
-          {spots > 0 && (<div className="border-t border-blue-500/8 pt-4"><h3 className="font-body text-sm font-semibold text-blue-800 mb-3"><UserPlus size={16} className="inline mr-1"/>Inscrire</h3><div className="flex flex-col gap-3">
+          {spots > 0 && (creneau as any).status !== "closed" && (<div className="border-t border-blue-500/8 pt-4"><h3 className="font-body text-sm font-semibold text-blue-800 mb-3"><UserPlus size={16} className="inline mr-1"/>Inscrire</h3><div className="flex flex-col gap-3">
             {/* Recherche famille */}
             <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300"/><input value={search} onChange={e=>{setSearch(e.target.value);setSelFam("");setSelChild("");}} placeholder="Nom parent, prénom enfant, email..." className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/></div>
             <select value={selFam} onChange={e=>{setSelFam(e.target.value);setSelChild("");}} className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream"><option value="">Famille ({filteredFamilies.length})</option>{filteredFamilies.map(f=>{const n=(f.children||[]).map((c:any)=>c.firstName).join(", ");return<option key={f.firestoreId} value={f.firestoreId}>{f.parentName} {n?`(${n})`:""}</option>})}</select>
