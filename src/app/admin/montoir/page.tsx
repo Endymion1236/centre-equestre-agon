@@ -67,51 +67,95 @@ export default function MontoirPage() {
   const updateEnrolled = async (cid: string, enrolled: any[]) => { await updateDoc(doc(db,"creneaux",cid),{enrolled}); fetchData(); };
   const togglePresence = (c: Creneau, childId: string, val: string) => { updateEnrolled(c.id, (c.enrolled||[]).map(e => e.childId===childId ? {...e, presence: val} : e)); };
   const assignHorse = (c: Creneau, childId: string, h: string) => { updateEnrolled(c.id, (c.enrolled||[]).map(e => e.childId===childId ? {...e, horseName: h} : e)); };
+  const [quickNoteChild, setQuickNoteChild] = useState<{ cid: string; children: any[] } | null>(null);
+  const [quickNotes, setQuickNotes] = useState<Record<string, string>>({});
+
   const closeCreneau = async (cid: string) => {
     const c = creneaux.find(x => x.id === cid);
     if (!c) return;
+    // Anti-duplication : si déjà clôturé, ne rien faire
+    if (c.status === "closed") { alert("Cette reprise est déjà clôturée."); return; }
+
     const presents = (c.enrolled || []).filter((e: any) => e.presence === "present");
     const absents = (c.enrolled || []).filter((e: any) => e.presence === "absent");
-    
+    const nonPointes = (c.enrolled || []).filter((e: any) => !e.presence);
+
+    if (nonPointes.length > 0) {
+      if (!confirm(`${nonPointes.length} cavalier${nonPointes.length > 1 ? "s" : ""} non pointé${nonPointes.length > 1 ? "s" : ""}.\n\nClôturer quand même ?`)) return;
+    }
+
     const msg = `Clôturer "${c.activityTitle}" (${c.startTime}) ?\n\n` +
-      `${presents.length} présent${presents.length > 1 ? "s" : ""}, ${absents.length} absent${absents.length > 1 ? "s" : ""}\n\n` +
-      `Une trace de séance sera ajoutée au suivi pédagogique de chaque cavalier présent.`;
+      `${presents.length} présent${presents.length > 1 ? "s" : ""}, ${absents.length} absent${absents.length > 1 ? "s" : ""}`;
     if (!confirm(msg)) return;
 
     // 1. Clôturer le créneau
     await updateDoc(doc(db, "creneaux", cid), { status: "closed", closedAt: serverTimestamp() });
 
-    // 2. Créer une trace pédagogique pour chaque enfant présent
+    // 2. Charger toutes les familles une seule fois
+    const famSnap = await getDocs(collection(db, "families"));
+    const allFams = famSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // 3. Créer une trace pédagogique pour chaque enfant présent
+    let notesCreated = 0;
     for (const child of presents) {
       try {
-        // Trouver la famille de l'enfant
-        const famSnap = await getDocs(query(collection(db, "families"), where("children", "!=", null)));
-        for (const famDoc of famSnap.docs) {
-          const fam = famDoc.data();
-          const matchChild = (fam.children || []).find((c: any) => c.id === child.childId);
-          if (matchChild) {
-            const peda = matchChild.peda || { objectifs: [], notes: [] };
-            const seanceNote = {
-              date: new Date().toISOString(),
-              text: `Séance : ${c.activityTitle} (${c.startTime}-${c.endTime})${child.horseName ? ` — Poney : ${child.horseName}` : ""}`,
-              author: "Montoir (auto)",
-              type: "seance",
-              creneauId: cid,
-              activityTitle: c.activityTitle,
-              horseName: child.horseName || "",
-            };
-            const updatedChildren = (fam.children || []).map((ch: any) =>
-              ch.id === child.childId ? { ...ch, peda: { ...peda, notes: [seanceNote, ...peda.notes], updatedAt: new Date().toISOString() } } : ch
-            );
-            await updateDoc(doc(db, "families", famDoc.id), { children: updatedChildren, updatedAt: serverTimestamp() });
-            break;
-          }
-        }
+        const famDoc = allFams.find((f: any) => (f.children || []).some((ch: any) => ch.id === child.childId)) as any;
+        if (!famDoc) continue;
+        const matchChild = famDoc.children.find((ch: any) => ch.id === child.childId);
+        if (!matchChild) continue;
+        const peda = matchChild.peda || { objectifs: [], notes: [] };
+
+        // Anti-doublon : vérifier si une note pour ce créneau existe déjà
+        if (peda.notes.some((n: any) => n.creneauId === cid)) continue;
+
+        const seanceNote = {
+          date: new Date().toISOString(),
+          text: `Séance : ${c.activityTitle} (${c.startTime}-${c.endTime})${child.horseName ? ` — Poney : ${child.horseName}` : ""}`,
+          author: "Montoir (auto)",
+          type: "seance",
+          creneauId: cid,
+          activityTitle: c.activityTitle,
+          horseName: child.horseName || "",
+        };
+        const updatedChildren = famDoc.children.map((ch: any) =>
+          ch.id === child.childId ? { ...ch, peda: { ...peda, notes: [seanceNote, ...peda.notes], updatedAt: new Date().toISOString() } } : ch
+        );
+        await updateDoc(doc(db, "families", famDoc.id), { children: updatedChildren, updatedAt: serverTimestamp() });
+        notesCreated++;
       } catch (e) { console.error("Erreur trace péda:", e); }
     }
 
-    alert(`Reprise clôturée.\n${presents.length} trace${presents.length > 1 ? "s" : ""} pédagogique${presents.length > 1 ? "s" : ""} créée${presents.length > 1 ? "s" : ""}.`);
+    // 4. Proposer l'ajout de notes rapides
+    if (presents.length > 0) {
+      setQuickNoteChild({ cid, children: presents.map(p => ({ childId: p.childId, childName: p.childName, horseName: p.horseName || "" })) });
+    }
+
+    alert(`Reprise clôturée.\n${notesCreated} trace${notesCreated > 1 ? "s" : ""} pédagogique${notesCreated > 1 ? "s" : ""} créée${notesCreated > 1 ? "s" : ""}.`);
     fetchData();
+  };
+
+  const saveQuickNotes = async () => {
+    if (!quickNoteChild) return;
+    const famSnap = await getDocs(collection(db, "families"));
+    const allFams = famSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const authorName = "Moniteur"; // On pourrait passer le user ici
+
+    for (const child of quickNoteChild.children) {
+      const noteText = quickNotes[child.childId];
+      if (!noteText?.trim()) continue;
+      const famDoc = allFams.find((f: any) => (f.children || []).some((ch: any) => ch.id === child.childId)) as any;
+      if (!famDoc) continue;
+      const matchChild = famDoc.children.find((ch: any) => ch.id === child.childId);
+      if (!matchChild) continue;
+      const peda = matchChild.peda || { objectifs: [], notes: [] };
+      const note = { date: new Date().toISOString(), text: noteText.trim(), author: authorName, type: "manual" };
+      const updatedChildren = famDoc.children.map((ch: any) =>
+        ch.id === child.childId ? { ...ch, peda: { ...peda, notes: [note, ...peda.notes], updatedAt: new Date().toISOString() } } : ch
+      );
+      await updateDoc(doc(db, "families", famDoc.id), { children: updatedChildren, updatedAt: serverTimestamp() });
+    }
+    setQuickNoteChild(null);
+    setQuickNotes({});
   };
 
   const totalE = creneaux.reduce((s,c)=>s+(c.enrolled?.length||0),0);
@@ -198,6 +242,40 @@ export default function MontoirPage() {
           </div>}
         </Card>); })}</div>}
       </>}
+
+      {/* Panel notes rapides post-clôture */}
+      {quickNoteChild && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onClick={() => setQuickNoteChild(null)}>
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] overflow-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-100">
+              <h2 className="font-display text-lg font-bold text-blue-800">Notes rapides (facultatif)</h2>
+              <p className="font-body text-xs text-gray-400 mt-1">Ajoutez une observation pour chaque cavalier. Laissez vide pour passer.</p>
+            </div>
+            <div className="p-5 flex flex-col gap-3">
+              {quickNoteChild.children.map(child => (
+                <div key={child.childId} className="bg-sand rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-body text-sm font-semibold text-blue-800">{child.childName}</span>
+                    {child.horseName && <Badge color="blue">{child.horseName}</Badge>}
+                  </div>
+                  <input
+                    value={quickNotes[child.childId] || ""}
+                    onChange={e => setQuickNotes({ ...quickNotes, [child.childId]: e.target.value })}
+                    placeholder="Progrès, point à travailler, remarque..."
+                    className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="p-5 border-t border-gray-100 flex gap-3">
+              <button onClick={() => { setQuickNoteChild(null); setQuickNotes({}); }}
+                className="flex-1 py-2.5 rounded-lg font-body text-sm text-gray-500 bg-gray-100 border-none cursor-pointer">Passer</button>
+              <button onClick={saveQuickNotes}
+                className="flex-1 py-2.5 rounded-lg font-body text-sm font-semibold text-white bg-blue-500 border-none cursor-pointer hover:bg-blue-600">Enregistrer</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
