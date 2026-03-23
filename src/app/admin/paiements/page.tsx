@@ -203,17 +203,73 @@ export default function PaiementsPage() {
       .reduce((s: number, e: any) => s + (e.montant || 0), 0);
   };
 
+  /** Désinscrit un enfant des créneaux/réservations liés à un item de commande */
+  const unenrollPaymentItem = async (payment: any, item: any) => {
+    if (!item.childId) return;
+
+    // Cas 1 : créneau lié directement
+    if (item.creneauId) {
+      try {
+        const creneauRef = doc(db, "creneaux", item.creneauId);
+        const cSnap = await getDoc(creneauRef);
+        if (cSnap.exists()) {
+          const enrolled = cSnap.data().enrolled || [];
+          const newEnrolled = enrolled.filter((e: any) => e.childId !== item.childId);
+          await updateDoc(creneauRef, { enrolled: newEnrolled });
+        }
+      } catch (e) { console.error("Erreur retrait créneau:", e); }
+
+      // Supprimer les réservations liées
+      try {
+        const resSnap = await getDocs(query(collection(db, "reservations"), where("creneauId", "==", item.creneauId), where("childId", "==", item.childId)));
+        for (const d of resSnap.docs) await deleteDoc(doc(db, "reservations", d.id));
+      } catch (e) { console.error("Erreur suppression réservation:", e); }
+      return;
+    }
+
+    // Cas 2 : stage ou activité sans creneauId → chercher toutes les réservations correspondantes
+    try {
+      const resSnap = await getDocs(query(collection(db, "reservations"), where("familyId", "==", payment.familyId), where("childId", "==", item.childId)));
+      for (const d of resSnap.docs) {
+        const r = d.data();
+        const match = (item.activityTitle && r.activityTitle?.includes(item.activityTitle.split(" (")[0])) ||
+                      (item.stageKey && r.activityTitle?.includes(item.stageKey));
+        if (!match) continue;
+
+        // Retirer du créneau
+        if (r.creneauId) {
+          try {
+            const creneauRef = doc(db, "creneaux", r.creneauId);
+            const cSnap = await getDoc(creneauRef);
+            if (cSnap.exists()) {
+              const enrolled = cSnap.data().enrolled || [];
+              const newEnrolled = enrolled.filter((e: any) => e.childId !== item.childId);
+              await updateDoc(creneauRef, { enrolled: newEnrolled });
+            }
+          } catch (e) { console.error("Erreur retrait créneau stage:", e); }
+        }
+        await deleteDoc(doc(db, "reservations", d.id));
+      }
+    } catch (e) { console.error("Erreur désinscription fallback:", e); }
+  };
+
   const deletePaymentCommand = async (payment: any) => {
     const totalEnc = getTotalEncaisse(payment);
+    const hasInscriptions = (payment.items || []).some((i: any) => i.childId && (i.creneauId || i.activityType));
+    const inscriptionMsg = hasInscriptions ? "\n\n⚠️ Les cavaliers seront aussi désinscrits des créneaux associés." : "";
 
     if (totalEnc === 0) {
-      // Non encaissé → suppression libre
-      if (!confirm(`Supprimer cette commande de ${(payment.totalTTC || 0).toFixed(2)}€ pour ${payment.familyName} ?\n\nAucun encaissement — suppression simple.`)) return;
+      if (!confirm(`Supprimer cette commande de ${(payment.totalTTC || 0).toFixed(2)}€ pour ${payment.familyName} ?\n\nAucun encaissement — suppression simple.${inscriptionMsg}`)) return;
+      // Désinscrire avant suppression
+      for (const item of payment.items || []) await unenrollPaymentItem(payment, item);
       await deleteDoc(doc(db, "payments", payment.id));
-      toast("Commande supprimée.", "success");
+      toast("Commande supprimée + cavaliers désinscrits", "success");
     } else {
       // Encaissé → avoir automatique
-      if (!confirm(`${totalEnc.toFixed(2)}€ ont déjà été encaissés.\n\nUn avoir de ${totalEnc.toFixed(2)}€ sera créé automatiquement pour ${payment.familyName}.\n\nConfirmer l'annulation ?`)) return;
+      if (!confirm(`${totalEnc.toFixed(2)}€ ont déjà été encaissés.\n\nUn avoir de ${totalEnc.toFixed(2)}€ sera créé automatiquement pour ${payment.familyName}.${inscriptionMsg}\n\nConfirmer l'annulation ?`)) return;
+
+      // Désinscrire avant annulation
+      for (const item of payment.items || []) await unenrollPaymentItem(payment, item);
 
       const ref = `AV-${Date.now().toString(36).toUpperCase()}`;
       const expiry = new Date();
@@ -259,8 +315,11 @@ export default function PaiementsPage() {
     const newTotal = newItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
 
     if (totalEnc === 0) {
-      // Non encaissé → modification libre
-      if (!confirm(`Retirer "${itemToRemove.activityTitle}" (${(itemToRemove.priceTTC || 0).toFixed(2)}€) ?`)) return;
+      const hasInscription = itemToRemove.childId && (itemToRemove.creneauId || itemToRemove.activityType);
+      if (!confirm(`Retirer "${itemToRemove.activityTitle}" (${(itemToRemove.priceTTC || 0).toFixed(2)}€) ?${hasInscription ? "\n\n⚠️ Le cavalier sera aussi désinscrit." : ""}`)) return;
+
+      // Désinscrire l'enfant du créneau
+      await unenrollPaymentItem(payment, itemToRemove);
 
       if (newItems.length === 0) {
         await deleteDoc(doc(db, "payments", payment.id));
@@ -274,10 +333,14 @@ export default function PaiementsPage() {
     } else {
       // Encaissé → avoir du trop-perçu si nécessaire
       const tropPercu = totalEnc - newTotal;
+      const hasInscription = itemToRemove.childId && (itemToRemove.creneauId || itemToRemove.activityType);
       const msg = tropPercu > 0
-        ? `Retirer "${itemToRemove.activityTitle}" ?\n\n${tropPercu.toFixed(2)}€ de trop-perçu → un avoir sera créé.`
-        : `Retirer "${itemToRemove.activityTitle}" ?`;
+        ? `Retirer "${itemToRemove.activityTitle}" ?\n\n${tropPercu.toFixed(2)}€ de trop-perçu → un avoir sera créé.${hasInscription ? "\n\n⚠️ Le cavalier sera aussi désinscrit." : ""}`
+        : `Retirer "${itemToRemove.activityTitle}" ?${hasInscription ? "\n\n⚠️ Le cavalier sera aussi désinscrit." : ""}`;
       if (!confirm(msg)) return;
+
+      // Désinscrire l'enfant du créneau
+      await unenrollPaymentItem(payment, itemToRemove);
 
       if (tropPercu > 0) {
         const ref = `AV-${Date.now().toString(36).toUpperCase()}`;
