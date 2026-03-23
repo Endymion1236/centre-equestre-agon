@@ -229,6 +229,11 @@ export default function CavaleriePage() {
   const [soins, setSoins] = useState<SoinRecord[]>([]);
   const [mouvements, setMouvements] = useState<MouvementRegistre[]>([]);
   const [documents, setDocuments] = useState<DocumentEquide[]>([]);
+  const [docEquideId, setDocEquideId] = useState("");
+  const [docType, setDocType] = useState("");
+  const [docLabel, setDocLabel] = useState("");
+  const [docUrl, setDocUrl] = useState("");
+  const [docDate, setDocDate] = useState("");
   const [indispos, setIndispos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -927,15 +932,83 @@ export default function CavaleriePage() {
 
       {/* ═══ ONGLET 4 : DOCUMENTS ═══ */}
       {tab === "documents" && (
-        <Card padding="lg" className="text-center">
-          <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><FileText size={28} className="text-blue-300" /></div>
-          <p className="font-body text-sm text-gray-500 mb-2">
-            L&apos;upload de documents nécessite Firebase Storage. Cette fonctionnalité sera activée une fois Storage configuré.
-          </p>
-          <p className="font-body text-xs text-gray-400">
-            Types supportés : radios, ordonnances, carnet de santé, certificats, assurance, livret, factures véto.
-          </p>
-        </Card>
+        <div className="flex flex-col gap-4">
+          <Card padding="md" className="bg-blue-50 border-blue-500/8">
+            <div className="font-body text-sm text-blue-800">
+              Gérez les documents de chaque équidé : radios, ordonnances, carnet de santé, certificats, livret, factures véto.
+            </div>
+          </Card>
+
+          {/* Ajouter un document */}
+          <Card padding="md">
+            <h3 className="font-body text-sm font-semibold text-blue-800 mb-3">Ajouter un document</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+              <select value={docEquideId} onChange={e => setDocEquideId(e.target.value)} className="px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream">
+                <option value="">Équidé...</option>
+                {equides.filter(e => e.status === "actif").map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+              </select>
+              <select value={docType} onChange={e => setDocType(e.target.value)} className="px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream">
+                <option value="">Type...</option>
+                {["Radio", "Ordonnance", "Carnet de santé", "Certificat", "Livret", "Facture véto", "Assurance", "Autre"].map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <input value={docLabel} onChange={e => setDocLabel(e.target.value)} placeholder="Libellé..." className="px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream" />
+              <input type="date" value={docDate} onChange={e => setDocDate(e.target.value)} className="px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream" />
+            </div>
+            <div className="flex gap-2">
+              <input value={docUrl} onChange={e => setDocUrl(e.target.value)} placeholder="URL du document (Google Drive, lien externe...)" className="flex-1 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream" />
+              <button onClick={async () => {
+                if (!docEquideId || !docType || !docLabel) return;
+                await addDoc(collection(db, "documents_equide"), {
+                  equideId: docEquideId,
+                  equideName: equides.find(e => e.id === docEquideId)?.name || "",
+                  type: docType, label: docLabel, url: docUrl || "",
+                  date: docDate || new Date().toISOString().split("T")[0],
+                  uploadedAt: serverTimestamp(),
+                });
+                setDocEquideId(""); setDocType(""); setDocLabel(""); setDocUrl(""); setDocDate("");
+                fetchData();
+              }} disabled={!docEquideId || !docType || !docLabel}
+                className="px-4 py-2 rounded-lg bg-blue-500 text-white font-body text-sm font-semibold border-none cursor-pointer hover:bg-blue-600 disabled:bg-gray-200 disabled:text-gray-400">
+                Ajouter
+              </button>
+            </div>
+          </Card>
+
+          {/* Liste des documents par équidé */}
+          {documents.length === 0 ? (
+            <Card padding="lg" className="text-center">
+              <p className="font-body text-sm text-gray-500">Aucun document enregistré.</p>
+            </Card>
+          ) : (
+            <Card className="!p-0 overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-sand border-b border-blue-500/8">
+                    {["Équidé", "Type", "Document", "Date", "Actions"].map(h => (
+                      <th key={h} className="px-3 py-2.5 font-body text-[10px] font-semibold text-gray-400 uppercase tracking-wider text-left">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {documents.sort((a: any, b: any) => (b.date || "").localeCompare(a.date || "")).map((d: any) => (
+                    <tr key={d.id} className="border-b border-blue-500/5 hover:bg-blue-50/30">
+                      <td className="px-3 py-2.5 font-body text-sm font-semibold text-blue-800">{d.equideName || "—"}</td>
+                      <td className="px-3 py-2.5"><Badge color="blue">{d.type}</Badge></td>
+                      <td className="px-3 py-2.5 font-body text-sm text-gray-600">
+                        {d.url ? <a href={d.url} target="_blank" rel="noreferrer" className="text-blue-500 underline">{d.label}</a> : d.label}
+                      </td>
+                      <td className="px-3 py-2.5 font-body text-xs text-gray-400">{d.date || "—"}</td>
+                      <td className="px-3 py-2.5">
+                        <button onClick={async () => { if (confirm("Supprimer ce document ?")) { await deleteDoc(doc(db, "documents_equide", d.id)); fetchData(); } }}
+                          className="font-body text-xs text-red-400 bg-transparent border-none cursor-pointer hover:text-red-600">Supprimer</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* ═══ ONGLET 5 : CHARGE DE TRAVAIL ═══ */}

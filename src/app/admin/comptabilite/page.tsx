@@ -117,17 +117,24 @@ export default function ComptabilitePage() {
   }, [filteredPayments]);
 
   // Daily totals by payment mode
+  // Totaux journaliers depuis les VRAIS encaissements (pas les factures)
   const dailyTotals = useMemo(() => {
     const map: Record<string, Record<string, number>> = {};
-    filteredPayments.forEach((p) => {
-      const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
+    const periodEnc = encaissementsCompta.filter(e => {
+      const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+      if (!d) return false;
+      const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      return pm === period;
+    });
+    periodEnc.forEach((e) => {
+      const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
       if (!d) return;
       const dateStr = d.toLocaleDateString("fr-FR");
       if (!map[dateStr]) map[dateStr] = {};
-      map[dateStr][p.paymentMode] = (map[dateStr][p.paymentMode] || 0) + (p.totalTTC || 0);
+      map[dateStr][e.mode || "autre"] = (map[dateStr][e.mode || "autre"] || 0) + (e.montant || 0);
     });
     return map;
-  }, [filteredPayments]);
+  }, [encaissementsCompta, period]);
 
   // CSV import handler — smart matching
   const handleCSVImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -184,25 +191,36 @@ export default function ComptabilitePage() {
           }
         }
 
-        // 3. Virement / SEPA → match any single payment
+        // 3. Virement / SEPA → match any single encaissement
         if (label.includes("VIR") || label.includes("SEPA")) {
-          const match = filteredPayments.find((p) =>
-            (p.paymentMode === "virement" || p.paymentMode === "sepa") &&
-            Math.abs((p.totalTTC || 0) - bl.amount) < 0.02
+          const periodEnc = encaissementsCompta.filter(e => {
+            const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+            if (!d) return false;
+            const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+            return pm === period;
+          });
+          const match = periodEnc.find((e) =>
+            (e.mode === "virement" || e.mode === "sepa") &&
+            Math.abs((e.montant || 0) - bl.amount) < 0.02
           );
           if (match) {
             return { ...bl, matched: true, matchType: "Virement", matchDetail: `Paiement ${match.familyName}` };
           }
         }
 
-        // 4. Chèque → match any cheque payment
+        // 4. Chèque → match any cheque encaissement
         if (label.includes("CHQ") || label.includes("CHEQUE") || label.includes("REMISE CHQ")) {
-          // Try exact amount match
-          const match = filteredPayments.find((p) =>
-            p.paymentMode === "cheque" && Math.abs((p.totalTTC || 0) - bl.amount) < 0.02
+          const periodEnc = encaissementsCompta.filter(e => {
+            const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+            if (!d) return false;
+            const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+            return pm === period;
+          });
+          const match = periodEnc.find((e) =>
+            e.mode === "cheque" && Math.abs((e.montant || 0) - bl.amount) < 0.02
           );
           if (match) {
-            return { ...bl, matched: true, matchType: "Chèque", matchDetail: `Chèque ${match.familyName} (${match.paymentRef || ""})` };
+            return { ...bl, matched: true, matchType: "Chèque", matchDetail: `Chèque ${match.familyName} (${match.ref || ""})` };
           }
           // Try daily total cheques
           for (const [day, modes] of Object.entries(dailyTotals)) {
