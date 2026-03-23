@@ -248,16 +248,32 @@ export async function createAvoir(
 
 /** Duplique les créneaux d'une semaine sur N semaines suivantes */
 export async function duplicateWeekCreneaux(creneaux: any[], nbWeeks: number) {
-  let count = 0;
+  let count = 0, skipped = 0;
   for (let w = 1; w <= nbWeeks; w++) {
+    // Charger les créneaux existants de la semaine cible
+    const firstDate = new Date(creneaux[0].date);
+    firstDate.setDate(firstDate.getDate() + 7 * w);
+    const lastDate = new Date(firstDate);
+    lastDate.setDate(lastDate.getDate() + 6);
+    let existing: any[] = [];
+    try {
+      const snap = await getDocs(query(collection(db, "creneaux"), where("date", ">=", fmtDate(firstDate)), where("date", "<=", fmtDate(lastDate))));
+      existing = snap.docs.map(d => d.data());
+    } catch { /* index manquant */ }
+
     for (const c of creneaux) {
       const d = new Date(c.date);
       d.setDate(d.getDate() + 7 * w);
+      const targetDate = fmtDate(d);
+      // Anti-doublon
+      if (existing.some(ex => ex.date === targetDate && ex.startTime === c.startTime && ex.activityTitle === c.activityTitle)) {
+        skipped++; continue;
+      }
       await addDoc(collection(db, "creneaux"), {
         activityId: c.activityId,
         activityTitle: c.activityTitle,
         activityType: c.activityType,
-        date: fmtDate(d),
+        date: targetDate,
         startTime: c.startTime,
         endTime: c.endTime,
         monitor: c.monitor,
@@ -273,5 +289,5 @@ export async function duplicateWeekCreneaux(creneaux: any[], nbWeeks: number) {
       count++;
     }
   }
-  return count;
+  return { count, skipped };
 }

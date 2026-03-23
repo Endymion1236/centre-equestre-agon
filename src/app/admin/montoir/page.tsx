@@ -268,14 +268,14 @@ export default function MontoirPage() {
           {en.length===0 ? <p className="font-body text-sm text-gray-400 italic">Aucun inscrit</p> :
           <div>
             <div className="flex items-center px-3 py-2 font-body text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-              <span className="w-8">#</span><span className="flex-1">Cavalier</span><span className="w-32">Famille</span><span className="w-36">Poney</span><span className="w-24 text-center">Présence</span>
+              <span className="w-8 hidden sm:block">#</span><span className="flex-1">Cavalier</span><span className="w-32 hidden sm:block">Famille</span><span className="w-28 sm:w-36">Poney</span><span className="w-20 sm:w-24 text-center">Présence</span>
             </div>
             {en.map((e:any, i:number) => (
               <div key={e.childId} className={`flex items-center px-3 py-2.5 rounded-lg ${i%2===0?"bg-sand":""} ${e.presence==="absent"?"opacity-40":""}`}>
-                <span className="w-8 font-body text-xs text-gray-400">{i+1}</span>
+                <span className="w-8 font-body text-xs text-gray-400 hidden sm:block">{i+1}</span>
                 <span className="flex-1 font-body text-sm font-semibold text-blue-800">{e.childName}</span>
-                <span className="w-32 font-body text-xs text-gray-500">{e.familyName}</span>
-                <span className="w-36">{!closed ? (() => {
+                <span className="w-32 font-body text-xs text-gray-500 hidden sm:block">{e.familyName}</span>
+                <span className="w-28 sm:w-36">{!closed ? (() => {
                   // Filtrer les poneys déjà affectés dans des créneaux qui se chevauchent
                   const usedInOtherCreneaux = new Set<string>();
                   creneaux.forEach(other => {
@@ -298,7 +298,7 @@ export default function MontoirPage() {
                     })}
                   </select>;
                 })() : <span className="font-body text-xs font-semibold text-blue-800">{e.horseName||"—"}</span>}</span>
-                <span className="w-24 flex justify-center gap-2">{!closed ? <>
+                <span className="w-20 sm:w-24 flex justify-center gap-2">{!closed ? <>
                   <button onClick={()=>togglePresence(c,e.childId,"present")} className={`w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="present"?"bg-green-500 text-white":"bg-gray-100 text-gray-400 hover:bg-green-100"}`}><CheckCircle2 size={16}/></button>
                   <button onClick={()=>togglePresence(c,e.childId,"absent")} className={`w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent"?"bg-red-500 text-white":"bg-gray-100 text-gray-400 hover:bg-red-100"}`}><XCircle size={16}/></button>
                 </> : <Badge color={e.presence==="present"?"green":e.presence==="absent"?"red":"gray"}>{e.presence==="present"?"Présent":e.presence==="absent"?"Absent":"—"}</Badge>}</span>

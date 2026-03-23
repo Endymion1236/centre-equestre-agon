@@ -128,3 +128,31 @@ h1, h2, h3, h4 {
 .animate-slide-up {
   animation: slide-up 0.25s ease-out;
 }
+
+/* Mobile-friendly tables */
+@media (max-width: 640px) {
+  .mobile-compact th,
+  .mobile-compact td {
+    padding: 6px 8px !important;
+    font-size: 11px !important;
+  }
+  .mobile-compact .hide-mobile {
+    display: none !important;
+  }
+  /* Montoir : rendre les colonnes plus compactes */
+  .montoir-row {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .montoir-row > span {
+    min-width: auto !important;
+    width: auto !important;
+  }
+  /* Planning : cards plus compactes */
+  .planning-card {
+    padding: 8px !important;
+  }
+  .planning-card .text-sm {
+    font-size: 12px !important;
+  }
+}

@@ -8,6 +8,7 @@ import {
   findLinkedPayment, computeTropPercu, createAvoir, duplicateWeekCreneaux, fmtDate as fmtDateSvc,
 } from "@/lib/planning-services";
 import { Card, Badge } from "@/components/ui";
+import { useToast } from "@/components/ui/Toast";
 import { emailTemplates } from "@/lib/email-templates";
 import { Plus, ChevronLeft, ChevronRight, X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Calendar, CalendarDays, Briefcase, Bell, Mail,
 } from "lucide-react";
@@ -1004,6 +1005,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: { acti
 
 // ─── Main Planning ───
 export default function PlanningPage() {
+  const { toast } = useToast();
   const [weekOffset, setWeekOffset] = useState(0); const [dayOffset, setDayOffset] = useState(0);
   const [monthOffset, setMonthOffset] = useState(0);
   const [viewMode, setViewMode] = useState<"week"|"day"|"month">("week");
@@ -1102,9 +1104,29 @@ export default function PlanningPage() {
     autre: { label: "Autre", color: "#95a5a6" },
   };
 
-  const handleCreate = async (nc: Partial<Creneau>[]) => { for (const c of nc) await addDoc(collection(db, "creneaux"), { ...c, createdAt: serverTimestamp() }); setShowSimple(false); setShowGenerator(false); alert(`${nc.length} créneau${nc.length>1?"x":""} créé${nc.length>1?"s":""}!`); fetchData(); };
+  const handleCreate = async (nc: Partial<Creneau>[]) => {
+    // Anti-doublon : vérifier si des créneaux identiques existent déjà
+    const dates = [...new Set(nc.map(c => c.date))];
+    let existingCreneaux: any[] = [];
+    if (dates.length > 0) {
+      const snap = await getDocs(query(collection(db, "creneaux"), where("date", ">=", dates[0]), where("date", "<=", dates[dates.length - 1])));
+      existingCreneaux = snap.docs.map(d => d.data());
+    }
+    let created = 0, skipped = 0;
+    for (const c of nc) {
+      const isDuplicate = existingCreneaux.some(ex =>
+        ex.date === c.date && ex.startTime === c.startTime && ex.activityTitle === c.activityTitle
+      );
+      if (isDuplicate) { skipped++; continue; }
+      await addDoc(collection(db, "creneaux"), { ...c, createdAt: serverTimestamp() });
+      created++;
+    }
+    setShowSimple(false); setShowGenerator(false);
+    alert(`${created} créneau${created > 1 ? "x" : ""} créé${created > 1 ? "s" : ""}${skipped > 0 ? `\n${skipped} doublon${skipped > 1 ? "s" : ""} ignoré${skipped > 1 ? "s" : ""}` : ""}`);
+    fetchData();
+  };
   const handleDelete = async (id: string) => { if (!confirm("Supprimer ?")) return; await deleteDoc(doc(db, "creneaux", id)); fetchData(); };
-  const handleDuplicateWeek = async () => { if (creneaux.length===0) return; setDuplicating(true); const count = await duplicateWeekCreneaux(creneaux, dupWeeks); setDuplicating(false);setShowDuplicate(false);alert(`${count} créneau${count>1?"x":""} dupliqué${count>1?"s":""}!`);fetchData(); };
+  const handleDuplicateWeek = async () => { if (creneaux.length===0) return; setDuplicating(true); const { count, skipped } = await duplicateWeekCreneaux(creneaux, dupWeeks); setDuplicating(false);setShowDuplicate(false);alert(`${count} créneau${count>1?"x":""} créé${count>1?"s":""}${skipped > 0 ? `\n${skipped} doublon${skipped>1?"s":""} ignoré${skipped>1?"s":""}` : ""}`);fetchData(); };
 
   const refreshCreneaux = async () => { const s=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[0]); const e=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[6]); const snap=await getDocs(query(collection(db,"creneaux"),where("date",">=",s),where("date","<=",e))); const fresh=snap.docs.map(d=>({id:d.id,...d.data()})) as (Creneau&{id:string})[]; setCreneaux(fresh); return fresh; };
 
@@ -1253,7 +1275,7 @@ export default function PlanningPage() {
           <div className="flex gap-2"><button onClick={()=>setWeekOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setWeekOffset(w=>w+1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Suiv.<ChevronRight size={16}/></button></div>
         </div>
         {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:
-        <div className="grid grid-cols-7 gap-1.5">
+        <div className="grid grid-cols-7 gap-1.5 overflow-x-auto" style={{ minWidth: "640px" }}>
           {weekDates.map((d,i)=><div key={i} onClick={()=>{setViewMode("day");setDayOffset(Math.round((d.getTime()-new Date().getTime())/86400000));}} className={`text-center py-2 rounded-lg font-body text-xs font-semibold cursor-pointer hover:ring-2 hover:ring-blue-300 ${isToday(d)?"bg-blue-500 text-white":"bg-sand text-gray-500"}`}>{fmtDateFR(d)}</div>)}
           {weekDates.map((d,i)=>{const ds=fmtDate(d);const dc=creneaux.filter(c=>c.date===ds).sort((a,b)=>a.startTime.localeCompare(b.startTime));return(
             <div key={`c${i}`} className="min-h-[140px] flex flex-col gap-1">
