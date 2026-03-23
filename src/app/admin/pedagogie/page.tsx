@@ -118,6 +118,32 @@ export default function PedagogiePage() {
     await updatePeda(child.familyId, child.id, { ...peda, objectifs: [...peda.objectifs, ...newObjs] });
   };
 
+  const deleteNote = async (child: any, noteIndex: number) => {
+    if (!confirm("Supprimer cette note ?")) return;
+    const peda = child.peda || { objectifs: [], notes: [] };
+    const newNotes = peda.notes.filter((_: any, i: number) => i !== noteIndex);
+    await updatePeda(child.familyId, child.id, { ...peda, notes: newNotes });
+  };
+
+  const deleteObjectif = async (child: any, objId: string) => {
+    if (!confirm("Supprimer cet objectif ?")) return;
+    const peda = child.peda || { objectifs: [], notes: [] };
+    await updatePeda(child.familyId, child.id, { ...peda, objectifs: peda.objectifs.filter((o: PedaObjectif) => o.id !== objId) });
+  };
+
+  const [editingNote, setEditingNote] = useState<{ childId: string; noteIndex: number; text: string } | null>(null);
+  const saveEditNote = async (child: any) => {
+    if (!editingNote || !editingNote.text.trim()) return;
+    const peda = child.peda || { objectifs: [], notes: [] };
+    const newNotes = peda.notes.map((n: PedaNote, i: number) =>
+      i === editingNote.noteIndex ? { ...n, text: editingNote.text.trim() } : n
+    );
+    await updatePeda(child.familyId, child.id, { ...peda, notes: newNotes });
+    setEditingNote(null);
+  };
+
+  const [showAllNotes, setShowAllNotes] = useState<string | null>(null);
+
   const objStatusColors = { en_cours: "blue", valide: "green", a_revoir: "orange" };
   const objStatusLabels = { en_cours: "En cours", valide: "Validé", a_revoir: "À revoir" };
 
@@ -207,10 +233,15 @@ export default function PedagogiePage() {
                             <span className={`font-body text-sm ${obj.status === "valide" ? "text-green-600 line-through" : "text-blue-800"}`}>
                               {obj.status === "valide" ? "● " : obj.status === "a_revoir" ? "▲ " : "○ "} {obj.label}
                             </span>
-                            <button onClick={() => toggleObjStatus(child, obj.id)}
-                              className="bg-transparent border-none cursor-pointer">
-                              <Badge color={objStatusColors[obj.status] as any}>{objStatusLabels[obj.status]}</Badge>
-                            </button>
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => toggleObjStatus(child, obj.id)}
+                                className={`px-2.5 py-1 rounded-lg border-none cursor-pointer font-body text-[10px] font-semibold ${
+                                  obj.status === "valide" ? "bg-green-100 text-green-600" : obj.status === "a_revoir" ? "bg-orange-100 text-orange-600" : "bg-blue-50 text-blue-500"
+                                }`}>
+                                {obj.status === "en_cours" ? "Valider" : obj.status === "valide" ? "À revoir" : "Reprendre"}
+                              </button>
+                              <button onClick={() => deleteObjectif(child, obj.id)} className="text-red-300 hover:text-red-500 bg-transparent border-none cursor-pointer p-0.5"><X size={12} /></button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -238,16 +269,40 @@ export default function PedagogiePage() {
                       <p className="font-body text-xs text-gray-400 italic">Aucune note pour l&apos;instant.</p>
                     ) : (
                       <div className="flex flex-col gap-2">
-                        {peda.notes.slice(0, 5).map((note: PedaNote, i: number) => (
-                          <div key={i} className="bg-sand rounded-lg px-4 py-3">
+                        {(showAllNotes === uniqueKey ? peda.notes : peda.notes.slice(0, 5)).map((note: PedaNote, i: number) => (
+                          <div key={i} className="bg-sand rounded-lg px-4 py-3 group">
                             <div className="flex justify-between items-center mb-1">
                               <span className="font-body text-[11px] font-semibold text-blue-500">{note.author}</span>
-                              <span className="font-body text-[11px] text-gray-400">{new Date(note.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-body text-[11px] text-gray-400">{new Date(note.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}</span>
+                                <button onClick={() => setEditingNote({ childId: child.id, noteIndex: i, text: note.text })} className="text-gray-300 hover:text-blue-500 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100"><MessageSquare size={11} /></button>
+                                <button onClick={() => deleteNote(child, i)} className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100"><X size={11} /></button>
+                              </div>
                             </div>
-                            <p className="font-body text-sm text-gray-600 leading-relaxed">{note.text}</p>
+                            {editingNote && editingNote.childId === child.id && editingNote.noteIndex === i ? (
+                              <div>
+                                <textarea value={editingNote.text} onChange={e => setEditingNote({ ...editingNote, text: e.target.value })} rows={2}
+                                  className="w-full px-2 py-1.5 rounded-lg border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none resize-vertical" />
+                                <div className="flex gap-2 mt-1">
+                                  <button onClick={() => saveEditNote(child)} className="font-body text-[10px] text-white bg-blue-500 px-2 py-1 rounded border-none cursor-pointer">Enregistrer</button>
+                                  <button onClick={() => setEditingNote(null)} className="font-body text-[10px] text-gray-500 bg-gray-100 px-2 py-1 rounded border-none cursor-pointer">Annuler</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="font-body text-sm text-gray-600 leading-relaxed">{note.text}</p>
+                            )}
                           </div>
                         ))}
-                        {peda.notes.length > 5 && <p className="font-body text-xs text-gray-400 text-center">+ {peda.notes.length - 5} notes antérieures</p>}
+                        {peda.notes.length > 5 && showAllNotes !== uniqueKey && (
+                          <button onClick={() => setShowAllNotes(uniqueKey)} className="font-body text-xs text-blue-500 bg-blue-50 py-1.5 rounded-lg border-none cursor-pointer text-center">
+                            Voir les {peda.notes.length - 5} notes antérieures
+                          </button>
+                        )}
+                        {showAllNotes === uniqueKey && peda.notes.length > 5 && (
+                          <button onClick={() => setShowAllNotes(null)} className="font-body text-xs text-gray-400 bg-sand py-1.5 rounded-lg border-none cursor-pointer text-center">
+                            Réduire
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
