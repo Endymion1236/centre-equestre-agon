@@ -1121,6 +1121,19 @@ export default function PlanningPage() {
       const priceHT = priceTTC / (1 + (c.tvaTaux || 5.5) / 100);
       await addDoc(collection(db, "payments"), { familyId: child.familyId, familyName: child.familyName, items: [{ activityTitle: c.activityTitle, childId: child.childId, childName: child.childName, creneauId: cid, activityType: c.activityType, priceHT: Math.round(priceHT * 100) / 100, tva: c.tvaTaux || 5.5, priceTTC: Math.round(priceTTC * 100) / 100 }], totalTTC: Math.round(priceTTC * 100) / 100, paymentMode: payMode, paymentRef: "", status: "paid", paidAmount: Math.round(priceTTC * 100) / 100, date: serverTimestamp() });
     }
+    // Email confirmation cours
+    const fam = families.find(f => f.firestoreId === child.familyId);
+    if (fam?.parentEmail && c.activityType !== "stage" && c.activityType !== "stage_journee") {
+      try {
+        const emailData = emailTemplates.confirmationCours({
+          parentName: fam.parentName || "", childName: child.childName,
+          coursTitle: c.activityTitle,
+          date: new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
+          horaire: `${c.startTime}–${c.endTime}`, prix: priceTTC,
+        });
+        await fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: fam.parentEmail, ...emailData }) });
+      } catch (e) { console.error("Email confirmation cours:", e); }
+    }
     const fresh = await refreshCreneaux(); const upd = fresh.find(x => x.id === cid); if (upd) setSelectedCreneau(upd);
   };
 
@@ -1183,6 +1196,17 @@ export default function PlanningPage() {
             const ref = await createAvoir(child.familyId, child.familyName, avoirMontant,
               `Désinscription ${child.childName} — ${c.activityTitle}`, paymentDoc.id, "desinscription");
             alert(`${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""}.\n\nAvoir créé : ${avoirMontant.toFixed(2)}€ (réf. ${ref})`);
+            // Email notification avoir
+            const fam2 = families.find(f => f.firestoreId === child.familyId);
+            if (fam2?.parentEmail) {
+              try {
+                const emailData = emailTemplates.desinscriptionAvoir({
+                  parentName: fam2.parentName || "", childName: child.childName,
+                  activite: c.activityTitle, montantAvoir: avoirMontant, refAvoir: ref,
+                });
+                await fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: fam2.parentEmail, ...emailData }) });
+              } catch (e) { console.error("Email avoir:", e); }
+            }
           } else {
             alert(`${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""}.\nPaiement ajusté.`);
           }

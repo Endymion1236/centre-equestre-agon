@@ -4,6 +4,7 @@ import { collection, getDocs, updateDoc, doc, query, where, serverTimestamp } fr
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
+import { emailTemplates } from "@/lib/email-templates";
 import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Printer, ClipboardList,
 } from "lucide-react";
 
@@ -18,21 +19,24 @@ export default function MontoirPage() {
   const [indisponibilites, setIndisponibilites] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [cartes, setCartes] = useState<any[]>([]);
+  const [families, setFamilies] = useState<any[]>([]);
   const currentDay = useMemo(() => { const d = new Date(); d.setDate(d.getDate()+dayOffset); return d; }, [dayOffset]);
   const dateStr = currentDay.toISOString().split("T")[0];
 
   const fetchData = async () => {
     try {
-      const [cSnap, eSnap, iSnap, cartSnap] = await Promise.all([
+      const [cSnap, eSnap, iSnap, cartSnap, famSnap] = await Promise.all([
         getDocs(query(collection(db,"creneaux"),where("date","==",dateStr))),
         getDocs(collection(db,"equides")),
         getDocs(collection(db,"indisponibilites")),
         getDocs(collection(db,"cartes")),
+        getDocs(collection(db,"families")),
       ]);
       setCreneaux(cSnap.docs.map(d=>({id:d.id,...d.data()})).sort((a:any,b:any)=>a.startTime.localeCompare(b.startTime)) as Creneau[]);
       setEquides(eSnap.docs.map(d=>({id:d.id,...d.data()})));
       setIndisponibilites(iSnap.docs.map(d=>({id:d.id,...d.data()})));
       setCartes(cartSnap.docs.map(d=>({id:d.id,...d.data()})));
+      setFamilies(famSnap.docs.map(d=>({id:d.id,...d.data()})));
     } catch(e){console.error(e);}
     setLoading(false);
   };
@@ -96,9 +100,8 @@ export default function MontoirPage() {
     // 1. Clôturer le créneau
     await updateDoc(doc(db, "creneaux", cid), { status: "closed", closedAt: serverTimestamp() });
 
-    // 2. Charger toutes les familles une seule fois
-    const famSnap = await getDocs(collection(db, "families"));
-    const allFams = famSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // 2. Charger toutes les familles (depuis le state)
+    const allFams = families;
 
     // 3. Créer une trace pédagogique pour chaque enfant présent
     let notesCreated = 0;
@@ -174,8 +177,7 @@ export default function MontoirPage() {
 
   const saveQuickNotes = async () => {
     if (!quickNoteChild) return;
-    const famSnap = await getDocs(collection(db, "families"));
-    const allFams = famSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const allFams = families;
     const authorName = "Moniteur"; // On pourrait passer le user ici
 
     for (const child of quickNoteChild.children) {
@@ -235,7 +237,32 @@ export default function MontoirPage() {
             </div>
             <div className="flex items-center gap-3">
               <Badge color={closed?"gray":pres===en.length&&en.length>0?"green":"orange"}>{closed?"Clôturée":`${pres}/${en.length} présents`}</Badge>
-              {!closed && en.length>0 && <button onClick={()=>closeCreneau(c.id)} className="font-body text-xs font-semibold text-gray-500 bg-sand px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">Clôturer</button>}
+              {!closed && en.length>0 && <>
+                <button onClick={async () => {
+                  const recipients = new Map<string, { email: string; parentName: string; children: string[] }>();
+                  en.forEach((e: any) => {
+                    const fam = families.find((f: any) => (f.children || []).some((ch: any) => ch.id === e.childId));
+                    if (fam?.parentEmail) {
+                      const key = fam.parentEmail;
+                      if (!recipients.has(key)) recipients.set(key, { email: key, parentName: fam.parentName || "", children: [] });
+                      recipients.get(key)!.children.push(e.childName);
+                    }
+                  });
+                  const isStageType = c.activityType === "stage" || c.activityType === "stage_journee";
+                  let sent = 0;
+                  for (const [, r] of recipients) {
+                    try {
+                      const emailData = isStageType
+                        ? emailTemplates.rappelStage({ parentName: r.parentName, enfants: r.children, stageTitle: c.activityTitle, dateDebut: new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }), horaire: `${c.startTime}–${c.endTime}` })
+                        : emailTemplates.rappelCours({ parentName: r.parentName, childName: r.children.join(", "), coursTitle: c.activityTitle, date: new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }), horaire: `${c.startTime}–${c.endTime}`, moniteur: c.monitor || "" });
+                      await fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: r.email, ...emailData }) });
+                      sent++;
+                    } catch (e) { console.error(e); }
+                  }
+                  toast(`${sent} rappel${sent > 1 ? "s" : ""} envoyé${sent > 1 ? "s" : ""}`, "success");
+                }} className="font-body text-xs font-semibold text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">Rappeler</button>
+                <button onClick={()=>closeCreneau(c.id)} className="font-body text-xs font-semibold text-gray-500 bg-sand px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">Clôturer</button>
+              </>}
             </div>
           </div>
           {en.length===0 ? <p className="font-body text-sm text-gray-400 italic">Aucun inscrit</p> :

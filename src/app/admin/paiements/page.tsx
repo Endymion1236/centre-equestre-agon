@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { collection, getDocs, addDoc, deleteDoc, updateDoc, doc, getDoc, serverTimestamp, query, where, orderBy, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { emailTemplates } from "@/lib/email-templates";
 import { Card, Badge, Button } from "@/components/ui";
 import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle } from "lucide-react";
 import type { Family, Activity } from "@/types";
@@ -626,6 +627,18 @@ export default function PaiementsPage() {
                         }
                         const resteFinal = totalPending - montant;
                         alert(`${montant.toFixed(2)}€ encaissé (${paymentModes.find(m => m.id === paymentMode)?.label || paymentMode}) pour ${family.parentName} !${resteFinal > 0 ? `\nReste dû : ${resteFinal.toFixed(2)}€` : "\nTout est réglé !"}`);
+                        // Email confirmation paiement
+                        if (family.parentEmail && montant > 0) {
+                          try {
+                            const emailData = emailTemplates.confirmationPaiement({
+                              parentName: family.parentName || "",
+                              montant,
+                              mode: paymentModes.find(m => m.id === paymentMode)?.label || paymentMode,
+                              prestations: familyPending.flatMap(p => (p.items || []).map((i: any) => i.activityTitle)).join(", "),
+                            });
+                            await fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: family.parentEmail, ...emailData }) });
+                          } catch (e) { console.error("Email confirmation paiement:", e); }
+                        }
                         setPaidAmount("");
                         setPaymentRef("");
                         await refreshAll();
@@ -1228,14 +1241,19 @@ export default function PaiementsPage() {
                             <Badge color={daysLate > 60 ? "red" : daysLate > 30 ? "orange" : "gray"}>
                               {daysLate > 60 ? "Urgent" : daysLate > 30 ? "Relance" : "Récent"}
                             </Badge>
-                            <button onClick={() => {
+                            <button onClick={async () => {
                               const fam = families.find(f => f.firestoreId === p.familyId);
                               const email = fam?.parentEmail || "";
-                              const subject = encodeURIComponent(`Rappel de paiement — Centre Équestre d'Agon-Coutainville`);
-                              const body = encodeURIComponent(
-                                `Bonjour ${p.familyName},\n\nNous nous permettons de vous rappeler qu'un solde de ${due.toFixed(2)}€ reste dû pour les prestations suivantes :\n${(p.items||[]).map((i:any) => `- ${i.activityTitle} (${i.priceTTC?.toFixed(2) || "—"}€)`).join("\n")}\n\nMerci de régulariser votre situation à votre convenance.\n\nCordialement,\nCentre Équestre d'Agon-Coutainville\n02 44 84 99 96`
-                              );
-                              window.open(`mailto:${email}?subject=${subject}&body=${body}`, "_blank");
+                              if (!email) { alert("Pas d'email pour cette famille."); return; }
+                              const emailData = emailTemplates.rappelImpaye({
+                                parentName: p.familyName || "",
+                                montant: due,
+                                prestations: (p.items||[]).map((i:any) => i.activityTitle).join(", "),
+                              });
+                              try {
+                                await fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: email, ...emailData }) });
+                                alert(`Relance envoyée à ${email}`);
+                              } catch (e) { console.error(e); alert("Erreur envoi."); }
                             }}
                               className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 whitespace-nowrap">
                               Relancer

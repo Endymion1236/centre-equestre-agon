@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, Timestamp, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { emailTemplates } from "@/lib/email-templates";
 import { Card, Badge } from "@/components/ui";
 import {
   Search, ChevronDown, ChevronUp, Loader2, Users, UserCheck, AlertTriangle,
@@ -127,6 +128,13 @@ export default function CavaliersPage() {
       setShowCreateFamily(false);
       setNewFamily({ parentName: "", parentEmail: "", parentPhone: "" });
       setNewChildren([{ firstName: "", birthDate: "", galopLevel: "—" }]);
+      // Email bienvenue
+      if (newFamily.parentEmail.trim()) {
+        try {
+          const emailData = emailTemplates.bienvenueNouvelleFamille({ parentName: newFamily.parentName.trim() });
+          await fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: newFamily.parentEmail.trim(), ...emailData }) });
+        } catch (e) { console.error("Email bienvenue:", e); }
+      }
       fetchFamilies();
     } catch (e) {
       console.error(e);
