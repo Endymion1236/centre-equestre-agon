@@ -4,8 +4,12 @@ import { Resend } from "resend";
 export const dynamic = "force-dynamic";
 
 // Email expéditeur — utilise le domaine vérifié dans Resend
-// En mode test (pas de domaine), Resend utilise onboarding@resend.dev
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "Centre Equestre Agon <onboarding@resend.dev>";
+
+// Mode test : si pas de domaine vérifié, tous les emails vont vers l'admin
+// Mettre RESEND_TEST_MODE=true dans Vercel pour activer (ou laisser vide pour prod)
+const TEST_MODE = !process.env.RESEND_FROM_EMAIL || process.env.RESEND_TEST_MODE === "true";
+const TEST_EMAIL = process.env.RESEND_TEST_EMAIL || "nicolasrichard16@hotmail.com";
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,8 +34,6 @@ export async function POST(request: NextRequest) {
 
     // to peut être un string ou un tableau
     const recipients = Array.isArray(to) ? to : [to];
-
-    // Filtrer les emails vides
     const validRecipients = recipients.filter(
       (email: string) => email && email.includes("@")
     );
@@ -43,11 +45,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // En mode test : rediriger vers l'email admin avec le vrai destinataire dans l'objet
+    const finalTo = TEST_MODE ? [TEST_EMAIL] : validRecipients;
+    const finalSubject = TEST_MODE
+      ? `[TEST → ${validRecipients.join(", ")}] ${subject}`
+      : subject;
+
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
-      to: validRecipients,
-      subject,
-      html,
+      to: finalTo,
+      subject: finalSubject,
+      html: TEST_MODE
+        ? `<div style="background:#fff3cd;padding:10px;border:1px solid #ffc107;border-radius:6px;margin-bottom:12px;font-family:sans-serif;font-size:12px;color:#856404;">
+            <strong>⚠️ MODE TEST</strong> — Cet email aurait été envoyé à : <strong>${validRecipients.join(", ")}</strong>
+          </div>${html}`
+        : html,
       replyTo: replyTo || "ceagon@orange.fr",
     });
 
@@ -60,6 +72,8 @@ export async function POST(request: NextRequest) {
       success: true,
       messageId: data?.id,
       recipients: validRecipients.length,
+      testMode: TEST_MODE,
+      sentTo: TEST_MODE ? TEST_EMAIL : validRecipients,
     });
   } catch (error: any) {
     console.error("Send email error:", error);
