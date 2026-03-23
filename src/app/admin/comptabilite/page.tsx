@@ -58,6 +58,8 @@ export default function ComptabilitePage() {
   const [showManualMatch, setShowManualMatch] = useState<number | null>(null); // index de la bankLine
   const [manualSearch, setManualSearch] = useState("");
 
+  const [encaissementsCompta, setEncaissementsCompta] = useState<any[]>([]);
+
   const fetchData = () => {
     getDocs(query(collection(db, "payments"), orderBy("date", "desc")))
       .then((snap) => setPayments(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Payment[]))
@@ -67,6 +69,8 @@ export default function ComptabilitePage() {
       .finally(() => setLoading(false));
     getDocs(collection(db, "remises"))
       .then((snap) => setRemises(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+    getDocs(collection(db, "encaissements"))
+      .then((snap) => setEncaissementsCompta(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -285,19 +289,31 @@ export default function ComptabilitePage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
-        {[
-          { label: "CA HT", value: `${totalHT.toFixed(0)}€`, color: "text-blue-500" },
-          { label: "TVA collectée", value: `${totalTVA.toFixed(0)}€`, color: "text-orange-500" },
-          { label: "CA TTC", value: `${totalTTC.toFixed(0)}€`, color: "text-green-600" },
-          { label: "Paiements", value: filteredPayments.length.toString(), color: "text-blue-500" },
-        ].map((k, i) => (
-          <Card key={i} padding="sm">
-            <div className={`font-body text-2xl font-bold ${k.color}`}>{k.value}</div>
-            <div className="font-body text-xs text-gray-400">{k.label}</div>
-          </Card>
-        ))}
-      </div>
+      {(() => {
+        const periodEncaissements = encaissementsCompta.filter(e => {
+          const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+          if (!d) return false;
+          const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          return pm === period;
+        });
+        const totalEncaisse = periodEncaissements.reduce((s, e) => s + (e.montant || 0), 0);
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+            {[
+              { label: "CA HT", value: `${totalHT.toFixed(0)}€`, color: "text-blue-500" },
+              { label: "TVA collectée", value: `${totalTVA.toFixed(0)}€`, color: "text-orange-500" },
+              { label: "CA TTC (facturé)", value: `${totalTTC.toFixed(0)}€`, color: "text-blue-800" },
+              { label: "Total encaissé", value: `${totalEncaisse.toFixed(0)}€`, color: "text-green-600" },
+              { label: "Paiements", value: filteredPayments.length.toString(), color: "text-gray-500" },
+            ].map((k, i) => (
+              <Card key={i} padding="sm">
+                <div className={`font-body text-xl font-bold ${k.color}`}>{k.value}</div>
+                <div className="font-body text-[10px] text-gray-400 uppercase">{k.label}</div>
+              </Card>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6">

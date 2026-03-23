@@ -271,20 +271,32 @@ export default function CavaleriePage() {
   const [mouvForm, setMouvForm] = useState(emptyMouv);
 
   // ─── Fetch Data ───
+  const [creneauxCharge, setCreneauxCharge] = useState<any[]>([]);
+
   const fetchData = async () => {
     try {
-      const [eSnap, sSnap, mSnap, dSnap, iSnap] = await Promise.all([
+      // Date du jour et semaine pour la charge de travail
+      const today = new Date().toISOString().split("T")[0];
+      const dow = new Date().getDay();
+      const monday = new Date(); monday.setDate(monday.getDate() - ((dow + 6) % 7));
+      const sunday = new Date(monday); sunday.setDate(sunday.getDate() + 6);
+      const monStr = monday.toISOString().split("T")[0];
+      const sunStr = sunday.toISOString().split("T")[0];
+
+      const [eSnap, sSnap, mSnap, dSnap, iSnap, cSnap] = await Promise.all([
         getDocs(collection(db, "equides")),
         getDocs(collection(db, "soins")),
         getDocs(collection(db, "mouvements_registre")),
         getDocs(collection(db, "documents_equide")),
         getDocs(collection(db, "indisponibilites")),
+        getDocs(query(collection(db, "creneaux"), where("date", ">=", monStr), where("date", "<=", sunStr))),
       ]);
       setEquides(eSnap.docs.map(d => ({ id: d.id, ...d.data() } as Equide)));
       setSoins(sSnap.docs.map(d => ({ id: d.id, ...d.data() } as SoinRecord)));
       setMouvements(mSnap.docs.map(d => ({ id: d.id, ...d.data() } as MouvementRegistre)));
       setDocuments(dSnap.docs.map(d => ({ id: d.id, ...d.data() } as DocumentEquide)));
       setIndispos(iSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setCreneauxCharge(cSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (e) {
       console.error("Erreur chargement cavalerie:", e);
     }
@@ -319,18 +331,40 @@ export default function CavaleriePage() {
       .sort((a, b) => a.daysUntil - b.daysUntil);
   }, [soins]);
 
-  // Charge de travail (simulée — en vrai, calculée depuis les créneaux du jour)
+  // Charge de travail réelle depuis les créneaux de la semaine
   const chargeJour = useMemo(() => {
-    // TODO: remplacer par un vrai calcul depuis la collection "creneaux"
-    return equides.filter(e => e.status === "actif").map(e => ({
-      equideId: e.id,
-      name: e.name,
-      maxReprises: e.maxReprisesPerDay,
-      maxHeuresHebdo: e.maxHeuresHebdo,
-      reprisesAujourdhui: 0, // À calculer
-      heuresSemaine: 0, // À calculer
-    }));
-  }, [equides]);
+    const today = new Date().toISOString().split("T")[0];
+    return equides.filter(e => e.status === "actif").map(e => {
+      // Compter les reprises aujourd'hui où ce poney est affecté
+      const todayCreneaux = creneauxCharge.filter(c => c.date === today);
+      let reprisesAujourdhui = 0;
+      todayCreneaux.forEach(c => {
+        (c.enrolled || []).forEach((en: any) => {
+          if (en.horseName === e.name) reprisesAujourdhui++;
+        });
+      });
+
+      // Compter les heures sur la semaine
+      let minutesSemaine = 0;
+      creneauxCharge.forEach(c => {
+        const hasHorse = (c.enrolled || []).some((en: any) => en.horseName === e.name);
+        if (hasHorse && c.startTime && c.endTime) {
+          const [sh, sm] = c.startTime.split(":").map(Number);
+          const [eh, em] = c.endTime.split(":").map(Number);
+          minutesSemaine += (eh * 60 + em) - (sh * 60 + sm);
+        }
+      });
+
+      return {
+        equideId: e.id,
+        name: e.name,
+        maxReprises: e.maxReprisesPerDay,
+        maxHeuresHebdo: e.maxHeuresHebdo,
+        reprisesAujourdhui,
+        heuresSemaine: Math.round(minutesSemaine / 60 * 10) / 10,
+      };
+    });
+  }, [equides, creneauxCharge]);
 
   // ─── KPIs ───
   const nbActifs = equides.filter(e => e.status === "actif").length;
