@@ -72,6 +72,11 @@ export default function PaiementsPage() {
   const [journalMode, setJournalMode] = useState("all");
   const [journalStatus, setJournalStatus] = useState("all");
   const [journalSearch, setJournalSearch] = useState("");
+  const [correctionEnc, setCorrectionEnc] = useState<any | null>(null);
+  const [correctionMontant, setCorrectionMontant] = useState("");
+  const [correctionMode, setCorrectionMode] = useState("");
+  const [correctionRef, setCorrectionRef] = useState("");
+  const [correctionRaison, setCorrectionRaison] = useState("");
 
   // Basket state
   const [selectedFamily, setSelectedFamily] = useState<string>("");
@@ -929,7 +934,7 @@ export default function PaiementsPage() {
                       <table className="w-full">
                         <thead>
                           <tr className="bg-sand border-b border-blue-500/8">
-                            {["Date", "Client", "Prestation", "Montant", "Mode", "Référence"].map(h => (
+                            {["Date", "Client", "Prestation", "Montant", "Mode", "Référence", ""].map(h => (
                               <th key={h} className="px-3 py-2.5 font-body text-[10px] font-semibold text-gray-400 uppercase tracking-wider text-left">{h}</th>
                             ))}
                           </tr>
@@ -938,13 +943,23 @@ export default function PaiementsPage() {
                           {filtered.map(enc => {
                             const d = enc.date?.seconds ? new Date(enc.date.seconds * 1000) : null;
                             return (
-                              <tr key={enc.id} className="border-b border-blue-500/5 hover:bg-blue-50/30">
+                              <tr key={enc.id} className={`border-b border-blue-500/5 hover:bg-blue-50/30 ${(enc.montant || 0) < 0 ? "bg-red-50/30" : ""}`}>
                                 <td className="px-3 py-2.5 font-body text-xs text-gray-500">{d ? d.toLocaleDateString("fr-FR") : "—"}</td>
                                 <td className="px-3 py-2.5 font-body text-sm font-semibold text-blue-800">{enc.familyName || "—"}</td>
-                                <td className="px-3 py-2.5 font-body text-xs text-gray-500 max-w-[250px] truncate">{enc.activityTitle || "—"}</td>
-                                <td className="px-3 py-2.5 font-body text-sm font-bold text-green-600">{(enc.montant || 0).toFixed(2)}€</td>
-                                <td className="px-3 py-2.5"><Badge color="blue">{enc.modeLabel || enc.mode || "—"}</Badge></td>
+                                <td className="px-3 py-2.5 font-body text-xs text-gray-500 max-w-[250px] truncate">
+                                  {enc.activityTitle || "—"}
+                                  {enc.correctionDe && <span className="text-red-400 ml-1">(annule #{enc.correctionDe.slice(-4)})</span>}
+                                  {enc.raison && <span className="text-orange-400 ml-1">— {enc.raison}</span>}
+                                </td>
+                                <td className={`px-3 py-2.5 font-body text-sm font-bold ${(enc.montant || 0) < 0 ? "text-red-500" : "text-green-600"}`}>{(enc.montant || 0).toFixed(2)}€</td>
+                                <td className="px-3 py-2.5"><Badge color={(enc.montant || 0) < 0 ? "red" : "blue"}>{enc.modeLabel || enc.mode || "—"}</Badge></td>
                                 <td className="px-3 py-2.5 font-body text-xs text-gray-400">{enc.ref || "—"}</td>
+                                <td className="px-3 py-2.5">
+                                  {!enc.id?.startsWith("fallback_") && (enc.montant || 0) > 0 && !enc.correctionDe && (
+                                    <button onClick={() => { setCorrectionEnc(enc); setCorrectionMontant(enc.montant?.toString() || ""); setCorrectionMode(enc.mode || ""); setCorrectionRef(enc.ref || ""); setCorrectionRaison(""); }}
+                                      className="font-body text-[10px] text-orange-500 bg-orange-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-orange-100">Corriger</button>
+                                  )}
+                                </td>
                               </tr>
                             );
                           })}
@@ -952,6 +967,105 @@ export default function PaiementsPage() {
                       </table>
                     </div>
                   </Card>
+                )}
+
+                {/* Modale correction encaissement */}
+                {correctionEnc && (
+                  <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setCorrectionEnc(null)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+                      <div className="p-5 border-b border-gray-100">
+                        <h2 className="font-display text-lg font-bold text-blue-800">Corriger un encaissement</h2>
+                        <p className="font-body text-xs text-gray-400 mt-1">
+                          Une contre-passation sera créée (écriture négative), puis le bon encaissement sera enregistré. Les deux écritures restent visibles pour la traçabilité.
+                        </p>
+                      </div>
+                      <div className="p-5">
+                        <div className="bg-red-50 rounded-lg p-3 mb-4">
+                          <div className="font-body text-xs text-red-500 font-semibold mb-1">Encaissement à corriger</div>
+                          <div className="font-body text-sm text-blue-800">{correctionEnc.familyName} — {correctionEnc.activityTitle}</div>
+                          <div className="font-body text-sm font-bold text-red-500">{(correctionEnc.montant || 0).toFixed(2)}€ ({correctionEnc.modeLabel || correctionEnc.mode})</div>
+                        </div>
+
+                        <div className="font-body text-xs font-semibold text-blue-800 mb-2">Raison de la correction *</div>
+                        <input value={correctionRaison} onChange={e => setCorrectionRaison(e.target.value)} placeholder="Ex: erreur de montant, mauvais mode de paiement..."
+                          className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream mb-3" />
+
+                        <div className="font-body text-xs font-semibold text-blue-800 mb-2">Nouveau montant (0 = annulation pure)</div>
+                        <input type="number" step="0.01" value={correctionMontant} onChange={e => setCorrectionMontant(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream mb-3" />
+
+                        <div className="font-body text-xs font-semibold text-blue-800 mb-2">Mode de paiement</div>
+                        <select value={correctionMode} onChange={e => setCorrectionMode(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream mb-3">
+                          {paymentModes.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                        </select>
+
+                        <div className="font-body text-xs font-semibold text-blue-800 mb-2">Référence</div>
+                        <input value={correctionRef} onChange={e => setCorrectionRef(e.target.value)} placeholder="N° chèque, réf virement..."
+                          className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream mb-4" />
+                      </div>
+                      <div className="p-5 border-t border-gray-100 flex gap-3">
+                        <button onClick={() => setCorrectionEnc(null)}
+                          className="flex-1 py-2.5 rounded-lg font-body text-sm text-gray-500 bg-gray-100 border-none cursor-pointer">Annuler</button>
+                        <button onClick={async () => {
+                          if (!correctionRaison) { alert("Indiquez la raison de la correction."); return; }
+                          const newMontant = parseFloat(correctionMontant) || 0;
+
+                          // 1. Contre-passation (écriture négative)
+                          await addDoc(collection(db, "encaissements"), {
+                            paymentId: correctionEnc.paymentId,
+                            familyId: correctionEnc.familyId,
+                            familyName: correctionEnc.familyName,
+                            montant: -(correctionEnc.montant || 0),
+                            mode: correctionEnc.mode,
+                            modeLabel: `ANNUL. ${correctionEnc.modeLabel || correctionEnc.mode}`,
+                            ref: correctionEnc.ref || "",
+                            activityTitle: correctionEnc.activityTitle,
+                            raison: `Correction : ${correctionRaison}`,
+                            correctionDe: correctionEnc.id,
+                            date: serverTimestamp(),
+                          });
+
+                          // 2. Nouvel encaissement correct (si montant > 0)
+                          if (newMontant > 0) {
+                            await addDoc(collection(db, "encaissements"), {
+                              paymentId: correctionEnc.paymentId,
+                              familyId: correctionEnc.familyId,
+                              familyName: correctionEnc.familyName,
+                              montant: newMontant,
+                              mode: correctionMode,
+                              modeLabel: paymentModes.find(m => m.id === correctionMode)?.label || correctionMode,
+                              ref: correctionRef,
+                              activityTitle: correctionEnc.activityTitle,
+                              raison: `Remplacement : ${correctionRaison}`,
+                              date: serverTimestamp(),
+                            });
+                          }
+
+                          // 3. Recalculer paidAmount du payment
+                          if (correctionEnc.paymentId) {
+                            const encSnap = await getDocs(query(collection(db, "encaissements"), where("paymentId", "==", correctionEnc.paymentId)));
+                            const totalEnc = encSnap.docs.reduce((s, d) => s + (d.data().montant || 0), 0);
+                            const payDocRef = doc(db, "payments", correctionEnc.paymentId);
+                            const paySnap2 = await getDoc(payDocRef);
+                            if (paySnap2.exists()) {
+                              const totalTTC = paySnap2.data().totalTTC || 0;
+                              await updateDoc(payDocRef, {
+                                paidAmount: Math.max(0, totalEnc),
+                                status: totalEnc >= totalTTC ? "paid" : totalEnc > 0 ? "partial" : "pending",
+                              });
+                            }
+                          }
+
+                          setCorrectionEnc(null);
+                          await refreshAll();
+                        }}
+                          className="flex-1 py-2.5 rounded-lg font-body text-sm font-semibold text-white bg-orange-500 border-none cursor-pointer hover:bg-orange-600">
+                          Contre-passer et corriger
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </>
             );
