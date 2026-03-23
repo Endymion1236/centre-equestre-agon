@@ -34,27 +34,33 @@ import {
 
 const navItems = [
   { href: "/admin/dashboard", icon: BarChart3, label: "Tableau de bord" },
-  { href: "/admin/activites", icon: ClipboardList, label: "Activités" },
+  // ─── Terrain ───
+  { separator: true, label: "Terrain" },
   { href: "/admin/planning", icon: CalendarDays, label: "Planning" },
   { href: "/admin/montoir", icon: ClipboardList, label: "Montoir" },
-  { href: "/admin/cavaliers", icon: Users, label: "Cavaliers" },
   { href: "/admin/cavalerie", icon: Heart, label: "Cavalerie" },
-  { href: "/admin/pedagogie", icon: GraduationCap, label: "Suivi pédagogique" },
-  { href: "/admin/passage", icon: UserPlus, label: "Cavaliers passage" },
-  { href: "/admin/forfaits", icon: CalendarDays, label: "Forfaits annuels" },
-  { href: "/admin/cartes", icon: CreditCard, label: "Cartes & tickets" },
+  { href: "/admin/pedagogie", icon: GraduationCap, label: "Suivi péda." },
+  // ─── Commercial ───
+  { separator: true, label: "Commercial" },
+  { href: "/admin/cavaliers", icon: Users, label: "Cavaliers" },
+  { href: "/admin/passage", icon: UserPlus, label: "Passage" },
   { href: "/admin/paiements", icon: CreditCard, label: "Paiements" },
-  { href: "/admin/avoirs", icon: Wallet, label: "Avoirs & avances" },
+  { href: "/admin/forfaits", icon: CalendarDays, label: "Forfaits" },
+  { href: "/admin/cartes", icon: CreditCard, label: "Cartes" },
+  { href: "/admin/avoirs", icon: Wallet, label: "Avoirs" },
+  // ─── Gestion ───
+  { separator: true, label: "Gestion" },
   { href: "/admin/comptabilite", icon: BookOpen, label: "Comptabilité" },
   { href: "/admin/statistiques", icon: TrendingUp, label: "Statistiques" },
   { href: "/admin/communication", icon: Mail, label: "Communication" },
-  { href: "/admin/documents", icon: FileText, label: "Documents" },
   { href: "/admin/email-reprise", icon: Send, label: "Email reprise" },
-  { href: "/admin/bons-cadeaux", icon: Settings, label: "Bons cadeaux" },
-  { href: "/admin/bons-recup", icon: Ticket, label: "Bons de récup." },
-  { href: "/admin/modeles", icon: LayoutTemplate, label: "Modèles reprises" },
+  // ─── Config ───
+  { separator: true, label: "Configuration" },
+  { href: "/admin/activites", icon: ClipboardList, label: "Activités" },
+  { href: "/admin/documents", icon: FileText, label: "Documents" },
+  { href: "/admin/modeles", icon: LayoutTemplate, label: "Modèles" },
   { href: "/admin/parametres", icon: Settings, label: "Paramètres" },
-];
+] as any[];
 
 function AdminSidebar() {
   const { user, signOut } = useAuth();
@@ -70,7 +76,14 @@ function AdminSidebar() {
         </div>
       </div>
 
-      {navItems.map((item) => {
+      {navItems.map((item, idx) => {
+        if (item.separator) {
+          return (
+            <div key={`sep-${idx}`} className="px-3 pt-4 pb-1">
+              <div className="font-body text-[9px] text-white/30 uppercase tracking-widest font-semibold">{item.label}</div>
+            </div>
+          );
+        }
         const Icon = item.icon;
         const active = pathname?.startsWith(item.href);
         return (
@@ -78,12 +91,12 @@ function AdminSidebar() {
             key={item.href}
             href={item.href}
             className={`
-              flex items-center gap-2.5 px-3 py-2.5 rounded-lg no-underline transition-all
+              flex items-center gap-2.5 px-3 py-2 rounded-lg no-underline transition-all
               ${active ? "bg-blue-500/30 text-white" : "text-white/50 hover:text-white/80 hover:bg-white/5"}
             `}
           >
-            <Icon size={16} />
-            <span className={`font-body text-[13px] ${active ? "font-semibold" : "font-normal"}`}>
+            <Icon size={15} />
+            <span className={`font-body text-[12px] ${active ? "font-semibold" : "font-normal"}`}>
               {item.label}
             </span>
           </Link>

@@ -136,6 +136,9 @@ export default function MontoirPage() {
         ct.childId === child.childId && ct.status === "active" && (ct.remainingSessions || 0) > 0
       );
       if (carte) {
+        // Anti-doublon : vérifier si ce créneau a déjà été débité sur cette carte
+        if ((carte.history || []).some((h: any) => h.creneauId === cid && h.auto)) continue;
+
         const newHistory = [...(carte.history || []), {
           date: new Date().toISOString(),
           activityTitle: c.activityTitle,
