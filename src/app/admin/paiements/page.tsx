@@ -4,9 +4,25 @@ import { useState, useEffect } from "react";
 import { collection, getDocs, addDoc, deleteDoc, updateDoc, doc, getDoc, serverTimestamp, query, where, orderBy, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { emailTemplates } from "@/lib/email-templates";
+import { safeNumber, round2 } from "@/lib/utils";
 import { Card, Badge, Button } from "@/components/ui";
 import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle } from "lucide-react";
 import type { Family, Activity } from "@/types";
+
+/** Normalise un payment chargé depuis Firestore — tue les NaN à la source */
+const normalizePayment = (d: any) => ({
+  ...d,
+  totalTTC: safeNumber(d.totalTTC),
+  paidAmount: safeNumber(d.paidAmount),
+  items: (d.items || []).map((i: any) => ({
+    ...i,
+    priceTTC: safeNumber(i.priceTTC),
+    priceHT: safeNumber(i.priceHT),
+    tva: safeNumber(i.tva || 5.5),
+  })),
+});
+
+const loadPayments = (docs: any[]) => docs.map(d => normalizePayment({ id: d.id, ...d.data() }));
 
 type PaymentMode = "cb_terminal" | "cb_online" | "cheque" | "especes" | "cheque_vacances" | "pass_sport" | "ancv" | "virement" | "avoir";
 
@@ -111,7 +127,7 @@ export default function PaiementsPage() {
     ]).then(([famSnap, actSnap, paySnap, encSnap, avoirsSnap, promoSnap]) => {
       setFamilies(famSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as any);
       setActivities(actSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as any);
-      setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+      setPayments(loadPayments(paySnap.docs) as any);
       setEncaissements(encSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
       setAvoirs(avoirsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
       if (promoSnap.exists() && promoSnap.data().items) setPromos(promoSnap.data().items);
@@ -170,7 +186,7 @@ export default function PaiementsPage() {
       getDocs(query(collection(db, "encaissements"), orderBy("date", "desc"), limit(500))),
       getDocs(collection(db, "avoirs")),
     ]);
-    setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+    setPayments(loadPayments(paySnap.docs) as any);
     setEncaissements(encSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
     setAvoirs(avoirsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
   };
@@ -481,7 +497,7 @@ export default function PaiementsPage() {
                   }
                   alert(`${totalPending.toFixed(2)}€ encaissé pour ${family.parentName} (${familyPending.length} prestation${familyPending.length > 1 ? "s" : ""}) !`);
                   const paySnap = await getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200)));
-                  setPayments(paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+                  setPayments(loadPayments(paySnap.docs) as any);
                 } catch (e) { console.error(e); alert("Erreur."); }
               };
 

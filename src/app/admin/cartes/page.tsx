@@ -76,7 +76,7 @@ export default function CartesPage() {
   const family = families.find(f => f.firestoreId === selFamily);
   const children = family?.children || [];
   const template = cardTemplates[selTemplate];
-  const unitPrice = parseFloat(unitPriceHT) || 0;
+  const unitPrice = Number.isFinite(Number(unitPriceHT)) ? Number(unitPriceHT) : 0;
   const totalHT = unitPrice * template.sessions * (1 - template.discount / 100);
   const totalTTC = totalHT * 1.055;
 

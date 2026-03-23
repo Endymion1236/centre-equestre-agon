@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, addDoc, updateDoc, doc, query, orderBy, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { safeNumber } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Download, Upload, Check, FileText, Building2, Receipt, Calculator, Search, Printer, Plus } from "lucide-react";
 

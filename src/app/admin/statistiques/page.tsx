@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, query, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { safeNumber } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
 import {
   Loader2,
@@ -155,7 +156,7 @@ export default function StatistiquesPage() {
     const months = Array.from({ length: 12 }, () => 0);
     yearPayments.forEach(p => {
       const d = toDate(p.date);
-      if (d) months[d.getMonth()] += p.totalTTC || 0;
+      if (d) months[d.getMonth()] += safeNumber(p.totalTTC);
     });
     return months;
   }, [yearPayments]);
