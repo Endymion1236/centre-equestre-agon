@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { collection, getDocs, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
 import { Search, Loader2, ChevronDown, ChevronUp, Plus, X, Save, Target, MessageSquare, TrendingUp, GraduationCap,
 } from "lucide-react";
@@ -34,6 +35,7 @@ const defaultObjectifs: Record<string, string[]> = {
 };
 
 export default function PedagogiePage() {
+  const { user } = useAuth();
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -77,7 +79,8 @@ export default function PedagogiePage() {
   const addNote = async (child: any) => {
     if (!noteText.trim()) return;
     const peda = child.peda || { objectifs: [], notes: [] };
-    const newNote: PedaNote = { date: new Date().toISOString(), text: noteText.trim(), author: "Emmeline" };
+    const authorName = user?.displayName || user?.email?.split("@")[0] || "Admin";
+    const newNote: PedaNote = { date: new Date().toISOString(), text: noteText.trim(), author: authorName };
     await updatePeda(child.familyId, child.id, { ...peda, notes: [newNote, ...peda.notes] });
     setNoteText("");
     setAddingNote(null);

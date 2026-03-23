@@ -121,7 +121,29 @@ export default function MontoirPage() {
                 <span className="w-8 font-body text-xs text-gray-400">{i+1}</span>
                 <span className="flex-1 font-body text-sm font-semibold text-blue-800">{e.childName}</span>
                 <span className="w-32 font-body text-xs text-gray-500">{e.familyName}</span>
-                <span className="w-36">{!closed ? <select value={e.horseName||""} onChange={ev=>assignHorse(c,e.childId,ev.target.value)} className="px-2 py-1.5 rounded-lg border border-blue-500/8 font-body text-xs bg-white w-full"><option value="">Affecter...</option>{availableHorses.map(h=><option key={h.id} value={h.name}>{h.name}</option>)}</select> : <span className="font-body text-xs font-semibold text-blue-800">{e.horseName||"—"}</span>}</span>
+                <span className="w-36">{!closed ? (() => {
+                  // Filtrer les poneys déjà affectés dans des créneaux qui se chevauchent
+                  const usedInOtherCreneaux = new Set<string>();
+                  creneaux.forEach(other => {
+                    if (other.id === c.id) return;
+                    // Vérifier chevauchement horaire
+                    if (other.startTime < c.endTime && other.endTime > c.startTime) {
+                      (other.enrolled || []).forEach((oe: any) => { if (oe.horseName) usedInOtherCreneaux.add(oe.horseName); });
+                    }
+                  });
+                  // Aussi exclure les poneys déjà affectés dans CE créneau (sauf pour ce cavalier)
+                  const usedInThis = new Set<string>();
+                  en.forEach((oe: any) => { if (oe.childId !== e.childId && oe.horseName) usedInThis.add(oe.horseName); });
+
+                  return <select value={e.horseName||""} onChange={ev=>assignHorse(c,e.childId,ev.target.value)} className="px-2 py-1.5 rounded-lg border border-blue-500/8 font-body text-xs bg-white w-full">
+                    <option value="">Affecter...</option>
+                    {availableHorses.map(h => {
+                      const usedOther = usedInOtherCreneaux.has(h.name);
+                      const usedHere = usedInThis.has(h.name);
+                      return <option key={h.id} value={h.name} disabled={usedOther || usedHere} style={usedOther || usedHere ? {color:"#ccc"} : {}}>{h.name}{usedOther ? " (autre reprise)" : usedHere ? " (déjà affecté)" : ""}</option>;
+                    })}
+                  </select>;
+                })() : <span className="font-body text-xs font-semibold text-blue-800">{e.horseName||"—"}</span>}</span>
                 <span className="w-24 flex justify-center gap-2">{!closed ? <>
                   <button onClick={()=>togglePresence(c,e.childId,"present")} className={`w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="present"?"bg-green-500 text-white":"bg-gray-100 text-gray-400 hover:bg-green-100"}`}><CheckCircle2 size={16}/></button>
                   <button onClick={()=>togglePresence(c,e.childId,"absent")} className={`w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent"?"bg-red-500 text-white":"bg-gray-100 text-gray-400 hover:bg-red-100"}`}><XCircle size={16}/></button>
