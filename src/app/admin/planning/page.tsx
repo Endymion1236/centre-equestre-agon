@@ -8,6 +8,7 @@ import {
   findLinkedPayment, computeTropPercu, createAvoir, duplicateWeekCreneaux, fmtDate as fmtDateSvc,
 } from "@/lib/planning-services";
 import { Card, Badge } from "@/components/ui";
+import { emailTemplates } from "@/lib/email-templates";
 import { Plus, ChevronLeft, ChevronRight, X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Calendar, CalendarDays, Briefcase, Bell, Mail,
 } from "lucide-react";
 import type { Activity, Family } from "@/types";
@@ -232,6 +233,25 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
         const noms = stageLines.map(l => l.childName).join(", ");
         setJustEnrolled(`${noms} inscrit(s) dans ${creneauxAInscrire.length} jour(s) — ${stageTotalTTC.toFixed(2)}€ ajouté au panier`);
 
+        // Envoyer email de confirmation stage automatiquement
+        if (fam.parentEmail) {
+          try {
+            const dates = creneauxAInscrire.map(c => new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })).join(", ");
+            const confirmEmail = emailTemplates.confirmationStage({
+              parentName: fam.parentName || "",
+              enfants: stageLines.map(l => ({ name: l.childName, prix: l.prixReduit, remise: l.remiseEuros })),
+              stageTitle: creneau.activityTitle,
+              dates: stageMode === "jour" ? new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : dates,
+              totalTTC: stageTotalTTC,
+            });
+            await fetch("/api/send-email", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ to: fam.parentEmail, ...confirmEmail }),
+            });
+          } catch (e) { console.error("Email confirmation stage:", e); }
+        }
+
         // Proposer envoi lien Stripe
         if (fam.parentEmail) {
           const acompte30 = Math.round(stageTotalTTC * 0.3 * 100) / 100;
@@ -260,26 +280,16 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
               });
               const data = await res.json();
               if (data.url) {
+                const emailData = emailTemplates.lienPaiement({
+                  parentName: fam.parentName || "",
+                  label: `Acompte ${creneau.activityTitle}`,
+                  montant: acompte30,
+                  lienStripe: data.url,
+                });
                 await fetch("/api/send-email", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    to: fam.parentEmail,
-                    subject: `Inscription stage — ${creneau.activityTitle}`,
-                    html: `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px;">
-                      <h2 style="color:#1e3a5f;">Centre Equestre d'Agon-Coutainville</h2>
-                      <p>Bonjour ${fam.parentName},</p>
-                      <p>Inscription confirmée au stage <strong>${creneau.activityTitle}</strong> :</p>
-                      <table style="width:100%;border-collapse:collapse;margin:15px 0;">
-                        ${stageLines.map(l => `<tr><td style="padding:5px 0;">${l.childName}</td><td style="text-align:right;padding:5px 0;">${l.prixReduit.toFixed(2)}€ <span style="color:#27ae60;">(-${l.remiseEuros}€)</span></td></tr>`).join("")}
-                        <tr style="border-top:2px solid #1e3a5f;font-weight:bold;"><td style="padding:8px 0;">Total</td><td style="text-align:right;padding:8px 0;">${stageTotalTTC.toFixed(2)}€</td></tr>
-                      </table>
-                      <p><strong>Acompte demande : ${acompte30.toFixed(2)}€</strong> (30%)<br/>Solde : ${(stageTotalTTC - acompte30).toFixed(2)}€ le jour du stage</p>
-                      <p style="text-align:center;margin:25px 0;">
-                        <a href="${data.url}" style="background:#27ae60;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;">Payer l'acompte</a>
-                      </p>
-                    </div>`,
-                  }),
+                  body: JSON.stringify({ to: fam.parentEmail, ...emailData }),
                 });
                 alert(`Lien envoyé à ${fam.parentEmail} !`);
               }
@@ -427,28 +437,16 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
                 // Envoyer par email
                 if (fam.parentEmail) {
                   try {
+                    const emailData = emailTemplates.lienPaiement({
+                      parentName: fam.parentName || "",
+                      label: `Forfait ${creneau.activityTitle} — ${childName}`,
+                      montant: totalAnnuel,
+                      lienStripe: data.url,
+                    });
                     await fetch("/api/send-email", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        to: fam.parentEmail,
-                        subject: `Lien de paiement — ${creneau.activityTitle} — ${childName}`,
-                        html: `
-                          <div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px;">
-                            <h2 style="color:#1e3a5f;">Centre Équestre d'Agon-Coutainville</h2>
-                            <p>Bonjour ${fam.parentName},</p>
-                            <p>Voici le lien de paiement pour le forfait de <strong>${childName}</strong> :</p>
-                            <p><strong>${creneau.activityTitle}</strong><br/>
-                            ${createdPaymentIds.length} mensualités de ${(totalAnnuel / createdPaymentIds.length).toFixed(2)}€</p>
-                            <p style="text-align:center;margin:25px 0;">
-                              <a href="${data.url}" style="background:#2050A0;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;">
-                                Payer en ligne
-                              </a>
-                            </p>
-                            <p style="color:#888;font-size:12px;">Le paiement est sécurisé par Stripe. Votre carte sera prélevée automatiquement chaque mois.</p>
-                          </div>
-                        `,
-                      }),
+                      body: JSON.stringify({ to: fam.parentEmail, ...emailData }),
                     });
                     alert(`Lien de paiement envoyé à ${fam.parentEmail} !`);
                   } catch (emailErr) {
