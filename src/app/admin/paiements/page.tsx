@@ -1467,14 +1467,14 @@ export default function PaiementsPage() {
                     const daysLate = Math.floor((Date.now() - date.getTime()) / 86400000);
                     return (
                       <Card key={p.id} padding="md">
-                        <div className="flex items-center justify-between">
-                          <div>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="min-w-0">
                             <div className="font-body text-sm font-semibold text-blue-800">{p.familyName}</div>
-                            <div className="font-body text-xs text-gray-400">{(p.items||[]).map((i:any)=>i.activityTitle).join(", ")} · {date.toLocaleDateString("fr-FR")}</div>
+                            <div className="font-body text-xs text-gray-400 truncate">{(p.items||[]).map((i:any)=>i.activityTitle).join(", ")} · {date.toLocaleDateString("fr-FR")}</div>
                             {daysLate > 30 && <div className="font-body text-xs text-red-500 mt-1">{daysLate} jours de retard</div>}
                           </div>
-                          <div className="flex items-center gap-3">
-                            <div className="text-right">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <div>
                               <div className="font-body text-lg font-bold text-red-500">{due.toFixed(2)}€</div>
                               <div className="font-body text-[10px] text-gray-400">dû sur {(p.totalTTC || 0).toFixed(2)}€</div>
                             </div>
