@@ -606,8 +606,10 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
               </div>
             )}
 
-            {/* Choix du mode d'inscription — COURS uniquement (pas stage) */}
-            {selChild && !isStage && (
+            {/* Choix du mode d'inscription — COURS réguliers uniquement */}
+            {selChild && !isStage && (() => {
+              const isCours = creneau.activityType === "cours" || creneau.activityType === "cours_collectif" || creneau.activityType === "cours_particulier";
+              return isCours ? (
               <div className="bg-sand rounded-xl p-4 space-y-3">
                 <div className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">Type d'inscription</div>
                 <div className="grid grid-cols-2 gap-2">
@@ -696,7 +698,22 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
                   </div>
                 )}
               </div>
-            )}
+            ) : (
+              /* Activités ponctuelles (balade, promenade, animation) — encaissement direct */
+              <div className="bg-sand rounded-xl p-4 space-y-3">
+                {priceTTC > 0 && (
+                  <div>
+                    <div className="font-body text-lg font-bold text-blue-500 mb-2">{priceTTC.toFixed(2)}€</div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={showPay} onChange={e => setShowPay(e.target.checked)} className="accent-blue-500 w-4 h-4"/>
+                      <span className="font-body text-sm text-blue-800 font-semibold">Encaisser maintenant</span>
+                    </label>
+                    {showPay && <div className="flex flex-wrap gap-1.5 mt-2">{payModes.map(m=><button key={m.id} onClick={()=>setPayMode(m.id)} className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${payMode===m.id?"bg-blue-500 text-white border-blue-500":"bg-white text-gray-500 border-gray-200"}`}>{m.icon} {m.label}</button>)}</div>}
+                  </div>
+                )}
+              </div>
+            );
+            })()}
 
             {/* Bouton Stage */}
             {isStage && selectedChildren.length > 0 && (
@@ -1140,9 +1157,33 @@ export default function PlanningPage() {
     const c = { id: snap.id, ...snap.data() } as any;
     await createReservation(child, c);
     const priceTTC = c.priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
-    if (payMode && priceTTC > 0) {
+    if (priceTTC > 0) {
       const priceHT = priceTTC / (1 + (c.tvaTaux || 5.5) / 100);
-      await addDoc(collection(db, "payments"), { familyId: child.familyId, familyName: child.familyName, items: [{ activityTitle: c.activityTitle, childId: child.childId, childName: child.childName, creneauId: cid, activityType: c.activityType, priceHT: Math.round(priceHT * 100) / 100, tva: c.tvaTaux || 5.5, priceTTC: Math.round(priceTTC * 100) / 100 }], totalTTC: Math.round(priceTTC * 100) / 100, paymentMode: payMode, paymentRef: "", status: "paid", paidAmount: Math.round(priceTTC * 100) / 100, date: serverTimestamp() });
+      const isPaid = !!payMode;
+      const payRef = await addDoc(collection(db, "payments"), {
+        familyId: child.familyId, familyName: child.familyName,
+        items: [{ activityTitle: c.activityTitle, childId: child.childId, childName: child.childName, creneauId: cid, activityType: c.activityType, priceHT: Math.round(priceHT * 100) / 100, tva: c.tvaTaux || 5.5, priceTTC: Math.round(priceTTC * 100) / 100 }],
+        totalTTC: Math.round(priceTTC * 100) / 100,
+        paymentMode: payMode || "",
+        paymentRef: "",
+        status: isPaid ? "paid" : "pending",
+        paidAmount: isPaid ? Math.round(priceTTC * 100) / 100 : 0,
+        date: serverTimestamp(),
+      });
+      // Si encaissé, créer aussi l'encaissement dans le journal
+      if (isPaid) {
+        await addDoc(collection(db, "encaissements"), {
+          paymentId: payRef.id,
+          familyId: child.familyId,
+          familyName: child.familyName,
+          montant: Math.round(priceTTC * 100) / 100,
+          mode: payMode,
+          modeLabel: payMode === "cb_terminal" ? "CB (terminal)" : payMode === "especes" ? "Espèces" : payMode === "cheque" ? "Chèque" : payMode || "",
+          ref: "",
+          activityTitle: c.activityTitle,
+          date: serverTimestamp(),
+        });
+      }
     }
     // Email confirmation cours
     const fam = families.find(f => f.firestoreId === child.familyId);
