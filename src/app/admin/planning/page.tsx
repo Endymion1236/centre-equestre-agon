@@ -1254,14 +1254,14 @@ export default function PlanningPage() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <h1 className="font-display text-2xl font-bold text-blue-800">Planning</h1>
-        <div className="flex gap-2">
-          <div className="flex bg-sand rounded-lg p-0.5">{(["month","week","day"] as const).map(v=><button key={v} onClick={()=>setViewMode(v)} className={`px-4 py-2 rounded-md font-body text-xs font-semibold cursor-pointer border-none ${viewMode===v?"bg-white text-blue-500 shadow-sm":"text-gray-400 bg-transparent"}`}>{v==="week"?"Semaine":v==="day"?"Jour":"Mois"}</button>)}</div>
-          <button onClick={()=>{setShowSimple(true);setShowGenerator(false);setSelectedDate(viewMode==="day"?fmtDate(currentDay):undefined);}} className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400"><Plus size={16}/>Créneau</button>
-          <button onClick={()=>setShowRdvForm(true)} className="flex items-center gap-2 font-body text-sm font-semibold text-orange-700 bg-orange-50 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-orange-100"><Briefcase size={16}/>RDV Pro</button>
-          <button onClick={()=>{setShowGenerator(true);setShowSimple(false);}} className="flex items-center gap-2 font-body text-sm font-semibold text-blue-800 bg-gold-400 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-gold-300"><Calendar size={16}/>Périodes</button>
-          {viewMode==="week"&&creneaux.length>0&&<button onClick={()=>setShowDuplicate(!showDuplicate)} className="font-body text-sm font-semibold text-blue-500 bg-blue-50 px-3 py-2.5 rounded-lg border-none cursor-pointer">Dupliquer</button>}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex bg-sand rounded-lg p-0.5">{(["month","week","day"] as const).map(v=><button key={v} onClick={()=>setViewMode(v)} className={`px-3 sm:px-4 py-2 rounded-md font-body text-xs font-semibold cursor-pointer border-none ${viewMode===v?"bg-white text-blue-500 shadow-sm":"text-gray-400 bg-transparent"}`}>{v==="week"?"Semaine":v==="day"?"Jour":"Mois"}</button>)}</div>
+          <button onClick={()=>{setShowSimple(true);setShowGenerator(false);setSelectedDate(viewMode==="day"?fmtDate(currentDay):undefined);}} className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-white bg-blue-500 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-400"><Plus size={14}/>Créneau</button>
+          <button onClick={()=>setShowRdvForm(true)} className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-orange-700 bg-orange-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-orange-100"><Briefcase size={14}/>RDV Pro</button>
+          <button onClick={()=>{setShowGenerator(true);setShowSimple(false);}} className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-blue-800 bg-gold-400 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-gold-300"><Calendar size={14}/>Périodes</button>
+          {viewMode==="week"&&creneaux.length>0&&<button onClick={()=>setShowDuplicate(!showDuplicate)} className="font-body text-xs sm:text-sm font-semibold text-blue-500 bg-blue-50 px-3 py-2 rounded-lg border-none cursor-pointer">Dupliquer</button>}
         </div>
       </div>
 
