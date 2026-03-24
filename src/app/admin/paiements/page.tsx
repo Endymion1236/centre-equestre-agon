@@ -207,50 +207,48 @@ export default function PaiementsPage() {
   const unenrollPaymentItem = async (payment: any, item: any) => {
     if (!item.childId) return;
 
-    // Cas 1 : créneau lié directement
-    if (item.creneauId) {
+    /** Helper : retire un enfant d'un créneau + met à jour enrolled + enrolledCount */
+    const removeFromCreneau = async (creneauId: string, childId: string) => {
       try {
-        const creneauRef = doc(db, "creneaux", item.creneauId);
+        const creneauRef = doc(db, "creneaux", creneauId);
         const cSnap = await getDoc(creneauRef);
         if (cSnap.exists()) {
           const enrolled = cSnap.data().enrolled || [];
-          const newEnrolled = enrolled.filter((e: any) => e.childId !== item.childId);
-          await updateDoc(creneauRef, { enrolled: newEnrolled });
+          const newEnrolled = enrolled.filter((e: any) => e.childId !== childId);
+          await updateDoc(creneauRef, { enrolled: newEnrolled, enrolledCount: newEnrolled.length });
         }
       } catch (e) { console.error("Erreur retrait créneau:", e); }
+    };
 
-      // Supprimer les réservations liées
-      try {
-        const resSnap = await getDocs(query(collection(db, "reservations"), where("creneauId", "==", item.creneauId), where("childId", "==", item.childId)));
-        for (const d of resSnap.docs) await deleteDoc(doc(db, "reservations", d.id));
-      } catch (e) { console.error("Erreur suppression réservation:", e); }
-      return;
-    }
-
-    // Cas 2 : stage ou activité sans creneauId → chercher toutes les réservations correspondantes
     try {
+      // Cas 1 : créneau lié directement par ID (le plus fiable)
+      if (item.creneauId) {
+        await removeFromCreneau(item.creneauId, item.childId);
+        // Supprimer les réservations liées
+        try {
+          const resSnap = await getDocs(query(collection(db, "reservations"), where("creneauId", "==", item.creneauId), where("childId", "==", item.childId)));
+          for (const d of resSnap.docs) await deleteDoc(doc(db, "reservations", d.id));
+        } catch (e) { console.error("Erreur suppression réservation:", e); }
+        return;
+      }
+
+      // Cas 2 : pas de creneauId → chercher les réservations par IDs puis fallback texte
       const resSnap = await getDocs(query(collection(db, "reservations"), where("familyId", "==", payment.familyId), where("childId", "==", item.childId)));
       for (const d of resSnap.docs) {
         const r = d.data();
-        const match = (item.activityTitle && r.activityTitle?.includes(item.activityTitle.split(" (")[0])) ||
-                      (item.stageKey && r.activityTitle?.includes(item.stageKey));
-        if (!match) continue;
+        // Matching par priorité : IDs d'abord, texte en fallback
+        const matchById = (item.activityId && r.activityId === item.activityId) ||
+                          (item.stageKey && r.stageKey === item.stageKey);
+        const matchByTitle = !matchById && item.activityTitle && r.activityTitle &&
+                             r.activityTitle.includes(item.activityTitle.split(" (")[0].split(" — ")[0]);
+        if (!matchById && !matchByTitle) continue;
 
-        // Retirer du créneau
-        if (r.creneauId) {
-          try {
-            const creneauRef = doc(db, "creneaux", r.creneauId);
-            const cSnap = await getDoc(creneauRef);
-            if (cSnap.exists()) {
-              const enrolled = cSnap.data().enrolled || [];
-              const newEnrolled = enrolled.filter((e: any) => e.childId !== item.childId);
-              await updateDoc(creneauRef, { enrolled: newEnrolled });
-            }
-          } catch (e) { console.error("Erreur retrait créneau stage:", e); }
-        }
+        if (r.creneauId) await removeFromCreneau(r.creneauId, item.childId);
         await deleteDoc(doc(db, "reservations", d.id));
       }
-    } catch (e) { console.error("Erreur désinscription fallback:", e); }
+    } catch (e) {
+      console.error("Erreur désinscription:", e);
+    }
   };
 
   const deletePaymentCommand = async (payment: any) => {
