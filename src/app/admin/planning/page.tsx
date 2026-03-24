@@ -471,7 +471,8 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
         }
       }
     } else {
-      setJustEnrolled(childName);
+      const payInfo = showPay ? " — encaissé ✅" : priceTTC > 0 ? " — paiement en attente" : "";
+      setJustEnrolled(`${childName}${payInfo}`);
     }
     setSelChild(""); setSelFam(""); setSearch(""); setEnrolling(false); setShowPay(false); setInscriptionMode("ponctuel");
     setTimeout(() => setJustEnrolled(""), 5000);
@@ -722,10 +723,10 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
               </button>
             )}
 
-            {/* Bouton Cours */}
+            {/* Bouton Cours / Activité ponctuelle */}
             {!isStage && selChild && (
               <button onClick={handleEnroll} disabled={!selChild||enrolling} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${!selChild||enrolling?"bg-gray-200 text-gray-400":inscriptionMode==="annuel"?"bg-green-600 text-white hover:bg-green-500":"bg-blue-500 text-white hover:bg-blue-400"}`}>
-                {enrolling ? "..." : inscriptionMode === "annuel" ? `Inscrire à l'année (${totalAnnuel.toFixed(2)}€)` : showPay ? `Inscrire + Encaisser` : "Inscrire (ponctuel)"}
+                {enrolling ? "..." : inscriptionMode === "annuel" ? `Inscrire à l'année (${totalAnnuel.toFixed(2)}€)` : showPay ? `Inscrire + Encaisser (${priceTTC.toFixed(2)}€)` : priceTTC > 0 ? `Inscrire — paiement en attente (${priceTTC.toFixed(2)}€)` : "Inscrire"}
               </button>
             )}
           </div></div>)}
