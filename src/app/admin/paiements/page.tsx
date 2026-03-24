@@ -791,15 +791,15 @@ export default function PaiementsPage() {
               
               {/* From activity catalog */}
               <div className="flex gap-2 mb-3">
-                <select value={selectedActivity} onChange={(e) => setSelectedActivity(e.target.value)} className={`${inputCls} flex-1`}>
+                <select value={selectedActivity} onChange={(e) => setSelectedActivity(e.target.value)} className={`${inputCls} flex-1 min-w-0`}>
                   <option value="">Choisir une activité...</option>
                   {activities.filter((a) => a.active !== false).map((a, idx) => {
                     const ttc = (a as any).priceTTC || (a.priceHT || 0) * (1 + (a.tvaTaux || 5.5) / 100);
-                    return <option key={`${a.firestoreId}-${idx}`} value={a.firestoreId}>{a.title} — {ttc.toFixed(2)}€ TTC</option>;
+                    return <option key={`${a.firestoreId}-${idx}`} value={a.firestoreId}>{a.title} — {ttc.toFixed(2)}€</option>;
                   })}
                 </select>
                 <button onClick={addToBasket} disabled={!selectedActivity}
-                  className={`px-4 py-2 rounded-lg font-body text-sm font-semibold border-none cursor-pointer
+                  className={`px-3 py-2 rounded-lg font-body text-sm font-semibold border-none cursor-pointer flex-shrink-0
                     ${selectedActivity ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-400"}`}>
                   <Plus size={16} />
                 </button>
@@ -812,7 +812,7 @@ export default function PaiementsPage() {
                 <div className="flex gap-2">
                   <input value={customPrice} onChange={(e) => setCustomPrice(e.target.value)} placeholder="Prix TTC" type="number" step="0.01" className={`${inputCls} w-24`} />
                   <button onClick={addToBasket} disabled={!customLabel || !customPrice}
-                    className={`px-4 py-2 rounded-lg font-body text-sm font-semibold border-none cursor-pointer
+                    className={`px-3 py-2 rounded-lg font-body text-sm font-semibold border-none cursor-pointer flex-shrink-0
                       ${customLabel && customPrice ? "bg-gold-400 text-blue-800" : "bg-gray-200 text-gray-400"}`}>
                     <Plus size={16} />
                   </button>
