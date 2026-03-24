@@ -899,7 +899,7 @@ export default function CavaliersPage() {
                                       <div className="flex items-center gap-2">
                                         <span className="font-semibold text-blue-500">{(p.totalTTC || 0).toFixed(2)}€</span>
                                         <Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : "red"}>
-                                          {p.status === "paid" ? "Payé" : p.status === "partial" ? "Partiel" : "Impayé"}
+                                          {p.status === "paid" ? "Réglé" : p.status === "partial" ? "Partiel" : "À régler"}
                                         </Badge>
                                       </div>
                                     </div>

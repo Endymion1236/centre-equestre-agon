@@ -281,7 +281,7 @@ export default function PassagePage() {
                 <span className="w-32 text-gray-500 text-xs">{p.niveau}</span>
                 <span className="w-32 text-gray-500 text-xs truncate">{activities.find(a => a.id === p.activite)?.title || p.activite || "—"}</span>
                 <span className="w-20 text-right font-semibold text-blue-800">{p.prixTTC ? `${p.prixTTC}€` : "—"}</span>
-                <span className="w-24 text-center"><Badge color={p.status === "paid" ? "green" : "orange"}>{p.status === "paid" ? "Payé" : "Non payé"}</Badge></span>
+                <span className="w-24 text-center"><Badge color={p.status === "paid" ? "green" : "orange"}>{p.status === "paid" ? "Réglé" : "À régler"}</Badge></span>
               </div>
             ))}
           </Card>}
