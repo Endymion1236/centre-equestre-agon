@@ -533,12 +533,12 @@ export default function PaiementsPage() {
     <div>
       <h1 className="font-display text-2xl font-bold text-blue-800 mb-6">Paiements & facturation</h1>
 
-      <div className="flex gap-2 mb-6">
+      <div className="flex gap-1.5 mb-6 overflow-x-auto pb-1 -mx-1 px-1">
         {([["encaisser", "Encaisser", ShoppingCart], ["journal", "Journal", Receipt], ["historique", "Historique", Receipt], ["echeances", "Échéances", Receipt], ["impayes", "Impayés", Receipt]] as const).map(([id, label, Icon]) => (
           <button key={id} onClick={() => setTab(id as any)}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all
+            className={`flex items-center gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg border font-body text-xs sm:text-sm font-medium cursor-pointer transition-all whitespace-nowrap flex-shrink-0
               ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
-            <Icon size={16} /> {label}
+            <Icon size={14} /> {label}
             {id === "impayes" && payments.filter(p => p.status !== "cancelled" && (p.status === "partial" || (p.paidAmount || 0) < (p.totalTTC || 0))).length > 0 && (
               <span className="bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{payments.filter(p => p.status !== "cancelled" && (p.status === "partial" || ((p.paidAmount || 0) < (p.totalTTC || 0) && p.status !== "paid"))).length}</span>
             )}
@@ -807,14 +807,16 @@ export default function PaiementsPage() {
 
               {/* Custom item */}
               <div className="font-body text-xs text-gray-400 mb-2">— ou saisie libre —</div>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input value={customLabel} onChange={(e) => setCustomLabel(e.target.value)} placeholder="Libellé (ex: Licence FFE)" className={`${inputCls} flex-1`} />
-                <input value={customPrice} onChange={(e) => setCustomPrice(e.target.value)} placeholder="Prix TTC" type="number" step="0.01" className={`${inputCls} w-24`} />
-                <button onClick={addToBasket} disabled={!customLabel || !customPrice}
-                  className={`px-4 py-2 rounded-lg font-body text-sm font-semibold border-none cursor-pointer
-                    ${customLabel && customPrice ? "bg-gold-400 text-blue-800" : "bg-gray-200 text-gray-400"}`}>
-                  <Plus size={16} />
-                </button>
+                <div className="flex gap-2">
+                  <input value={customPrice} onChange={(e) => setCustomPrice(e.target.value)} placeholder="Prix TTC" type="number" step="0.01" className={`${inputCls} w-24`} />
+                  <button onClick={addToBasket} disabled={!customLabel || !customPrice}
+                    className={`px-4 py-2 rounded-lg font-body text-sm font-semibold border-none cursor-pointer
+                      ${customLabel && customPrice ? "bg-gold-400 text-blue-800" : "bg-gray-200 text-gray-400"}`}>
+                    <Plus size={16} />
+                  </button>
+                </div>
               </div>
             </Card>
 
