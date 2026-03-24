@@ -533,7 +533,7 @@ export default function PaiementsPage() {
     <div>
       <h1 className="font-display text-2xl font-bold text-blue-800 mb-6">Paiements & facturation</h1>
 
-      <div className="flex gap-1.5 mb-6 overflow-x-auto pb-1 -mx-1 px-1">
+      <div className="flex gap-1.5 mb-6 overflow-x-auto pb-1 -mx-1 px-1 hide-scrollbar">
         {([["encaisser", "Encaisser", ShoppingCart], ["journal", "Journal", Receipt], ["historique", "Historique", Receipt], ["echeances", "Échéances", Receipt], ["impayes", "Impayés", Receipt]] as const).map(([id, label, Icon]) => (
           <button key={id} onClick={() => setTab(id as any)}
             className={`flex items-center gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg border font-body text-xs sm:text-sm font-medium cursor-pointer transition-all whitespace-nowrap flex-shrink-0
