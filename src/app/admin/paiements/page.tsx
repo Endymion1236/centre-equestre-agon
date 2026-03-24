@@ -257,14 +257,14 @@ export default function PaiementsPage() {
     const inscriptionMsg = hasInscriptions ? "\n\n⚠️ Les cavaliers seront aussi désinscrits des créneaux associés." : "";
 
     if (totalEnc === 0) {
-      if (!confirm(`Supprimer cette commande de ${(payment.totalTTC || 0).toFixed(2)}€ pour ${payment.familyName} ?\n\nAucun encaissement — suppression simple.${inscriptionMsg}`)) return;
+      if (!confirm(`Annuler l'inscription de ${payment.familyName} ?\n\n${(payment.items || []).map((i: any) => `• ${i.childName || ""} — ${i.activityTitle}`).join("\n")}\n\nTotal : ${(payment.totalTTC || 0).toFixed(2)}€ (non encaissé)${inscriptionMsg}`)) return;
       // Désinscrire avant suppression
       for (const item of payment.items || []) await unenrollPaymentItem(payment, item);
       await deleteDoc(doc(db, "payments", payment.id));
-      toast("Commande supprimée + cavaliers désinscrits", "success");
+      toast(`${payment.familyName} — inscription annulée et cavaliers désinscrits`, "success");
     } else {
       // Encaissé → avoir automatique
-      if (!confirm(`${totalEnc.toFixed(2)}€ ont déjà été encaissés.\n\nUn avoir de ${totalEnc.toFixed(2)}€ sera créé automatiquement pour ${payment.familyName}.${inscriptionMsg}\n\nConfirmer l'annulation ?`)) return;
+      if (!confirm(`Annuler l'inscription de ${payment.familyName} ?\n\n${(payment.items || []).map((i: any) => `• ${i.childName || ""} — ${i.activityTitle}`).join("\n")}\n\n💰 ${totalEnc.toFixed(2)}€ déjà encaissés → un avoir sera créé${inscriptionMsg}\n\nConfirmer ?`)) return;
 
       // Désinscrire avant annulation
       for (const item of payment.items || []) await unenrollPaymentItem(payment, item);
@@ -314,7 +314,7 @@ export default function PaiementsPage() {
 
     if (totalEnc === 0) {
       const hasInscription = itemToRemove.childId && (itemToRemove.creneauId || itemToRemove.activityType);
-      if (!confirm(`Retirer "${itemToRemove.activityTitle}" (${(itemToRemove.priceTTC || 0).toFixed(2)}€) ?${hasInscription ? "\n\n⚠️ Le cavalier sera aussi désinscrit." : ""}`)) return;
+      if (!confirm(`Désinscrire${itemToRemove.childName ? ` ${itemToRemove.childName} de` : ""} "${itemToRemove.activityTitle}" (${(itemToRemove.priceTTC || 0).toFixed(2)}€) ?${hasInscription ? "\n\n⚠️ Le cavalier sera désinscrit du créneau." : ""}`)) return;
 
       // Désinscrire l'enfant du créneau
       await unenrollPaymentItem(payment, itemToRemove);
@@ -1258,7 +1258,7 @@ export default function PaiementsPage() {
                 {/* Filtres : statut + recherche + période */}
                 <div className="flex flex-wrap gap-3 mb-4 items-center">
                   <div className="flex gap-1.5">
-                    {([["all", "Tous"], ["paid", "Encaissé"], ["pending", "En attente"], ["partial", "Partiel"]] as const).map(([val, label]) => (
+                    {([["all", "Tous"], ["paid", "Réglés"], ["pending", "À régler"], ["partial", "Partiels"]] as const).map(([val, label]) => (
                       <button key={val} onClick={() => setHistStatusFilter(val as any)}
                         className={`font-body text-xs px-3 py-1.5 rounded-lg border-none cursor-pointer transition-all ${histStatusFilter === val ? "bg-blue-500 text-white" : "bg-white text-gray-500 border border-gray-200"}`}>
                         {label}
@@ -1327,7 +1327,7 @@ export default function PaiementsPage() {
                           <span className="w-32 font-body text-xs text-gray-500 truncate">{(p.items || []).map((i: any) => i.activityTitle).join(", ")}</span>
                           <span className="w-20 text-right font-body text-sm font-bold text-blue-500">{p.totalTTC?.toFixed(2)}€</span>
                           <span className="w-20 text-center"><Badge color="blue">{mode?.label?.split(" ")[0] || p.paymentMode}</Badge></span>
-                          <span className="w-16 text-center"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "draft" ? "blue" : "gray"}>{p.status === "paid" ? "Payé" : p.status === "partial" ? "Partiel" : p.status === "draft" ? "Brouillon" : "Att."}</Badge></span>
+                          <span className="w-16 text-center"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "draft" ? "blue" : "gray"}>{p.status === "paid" ? "Réglé" : p.status === "partial" ? "Partiel" : p.status === "draft" ? "Brouillon" : "À régler"}</Badge></span>
                           <span className="w-16 text-center"><button onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button></span>
                         </div>
                       );
@@ -1508,7 +1508,7 @@ export default function PaiementsPage() {
                                 <span className="text-gray-500">{item.activityTitle}</span>
                                 <div className="flex items-center gap-2">
                                   <span className="text-blue-500 font-semibold">{(item.priceTTC || 0).toFixed(2)}€</span>
-                                  <button onClick={() => removePaymentItem(p, idx)}
+                                  <button onClick={() => removePaymentItem(p, idx)} title="Désinscrire et retirer cette prestation"
                                     className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-0.5"><X size={12} /></button>
                                 </div>
                               </div>
@@ -1523,7 +1523,7 @@ export default function PaiementsPage() {
                           </button>
                           <button onClick={() => deletePaymentCommand(p)}
                             className="font-body text-[10px] text-red-500 bg-red-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-red-100 flex items-center gap-1">
-                            <Trash2 size={10} /> Annuler la commande
+                            <Trash2 size={10} /> Annuler l'inscription
                           </button>
                         </div>
                       </Card>
