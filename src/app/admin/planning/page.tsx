@@ -10,6 +10,7 @@ import {
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { emailTemplates } from "@/lib/email-templates";
+import { generateOrderId } from "@/lib/utils";
 import { Plus, ChevronLeft, ChevronRight, X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Calendar, CalendarDays, Briefcase, Bell, Mail,
 } from "lucide-react";
 import type { Activity, Family } from "@/types";
@@ -235,7 +236,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
           });
         } else {
           // Créer une nouvelle commande
-          await addDoc(collection(db, "payments"), {
+          await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
             familyId: fam.firestoreId,
             familyName: fam.parentName || "",
             items: newItems,
@@ -351,7 +352,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
           echeanceDate.setMonth(echeanceDate.getMonth() + i);
           const montant = i === nbEcheances - 1 ? montantDerniereEcheance : montantEcheance;
 
-          const docRef = await addDoc(collection(db, "payments"), {
+          const docRef = await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
             familyId: fam.firestoreId,
             familyName: fam.parentName || "",
             items: i === 0 ? items : [{ activityTitle: `Échéance ${i + 1}/${nbEcheances} — ${childName}`, childId: selChild, childName, priceHT: montant / 1.055, tva: 5.5, priceTTC: montant }],
@@ -1082,7 +1083,7 @@ export default function PlanningPage() {
 
       if (isPaid) {
         // Encaissement immédiat → toujours créer un payment séparé (pas de fusion)
-        const payRef = await addDoc(collection(db, "payments"), {
+        const payRef = await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
           familyId: child.familyId, familyName: child.familyName,
           items: [newItem],
           totalTTC: Math.round(priceTTC * 100) / 100,
@@ -1116,7 +1117,7 @@ export default function PlanningPage() {
           });
           payRefId = openOrder.id;
         } else {
-          const payRef = await addDoc(collection(db, "payments"), {
+          const payRef = await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
             familyId: child.familyId, familyName: child.familyName,
             items: [newItem],
             totalTTC: Math.round(priceTTC * 100) / 100,

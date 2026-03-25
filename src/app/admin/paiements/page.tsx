@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { collection, getDocs, addDoc, deleteDoc, updateDoc, doc, getDoc, serverTimestamp, query, where, orderBy, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { emailTemplates } from "@/lib/email-templates";
-import { safeNumber, round2 } from "@/lib/utils";
+import { safeNumber, round2, generateOrderId } from "@/lib/utils";
 import { Card, Badge, Button } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle } from "lucide-react";
@@ -412,7 +412,7 @@ export default function PaiementsPage() {
       };
     });
     const totalTTC = round2(cleanedItems.reduce((sum: number, item: any) => sum + safeNumber(item.priceTTC), 0));
-    await addDoc(collection(db, "payments"), {
+    await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
       familyId: targetFamily.firestoreId,
       familyName: targetFamily.parentName || "",
       items: cleanedItems,
@@ -496,7 +496,7 @@ export default function PaiementsPage() {
     setSaving(true);
     const paid = paidAmount ? safeNumber(paidAmount) : basketTotal;
 
-    const payRef = await addDoc(collection(db, "payments"), {
+    const payRef = await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
       familyId: selectedFamily,
       familyName: family?.parentName || "—",
       items: basket,

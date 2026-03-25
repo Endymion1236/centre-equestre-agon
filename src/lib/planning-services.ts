@@ -180,13 +180,26 @@ export async function deleteReservations(creneauId: string, childId: string) {
 }
 
 /** Trouve le paiement lié à un enfant + activité */
-export async function findLinkedPayment(familyId: string, childId: string, activityTitle: string) {
+export async function findLinkedPayment(familyId: string, childId: string, activityTitle: string, creneauId?: string, activityId?: string) {
   const paySnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", familyId)));
   for (const pDoc of paySnap.docs) {
     const p = pDoc.data();
     if (p.status === "cancelled") continue;
     const items = p.items || [];
-    // Priorité 1 : match par childId (fiable)
+    
+    // Priorité 1 : match par childId + creneauId (le plus fiable)
+    if (creneauId) {
+      const matchByCreneau = items.find((i: any) => i.childId === childId && i.creneauId === creneauId);
+      if (matchByCreneau) return { paymentDoc: pDoc, paymentData: p, matchItem: matchByCreneau };
+    }
+    
+    // Priorité 2 : match par childId + activityId
+    if (activityId) {
+      const matchByActivity = items.find((i: any) => i.childId === childId && i.activityId === activityId);
+      if (matchByActivity) return { paymentDoc: pDoc, paymentData: p, matchItem: matchByActivity };
+    }
+    
+    // Priorité 3 : match par childId + activityTitle (texte)
     const matchById = items.find((i: any) =>
       i.childId === childId && (
         i.stageKey?.includes(activityTitle) ||
@@ -194,7 +207,8 @@ export async function findLinkedPayment(familyId: string, childId: string, activ
       )
     );
     if (matchById) return { paymentDoc: pDoc, paymentData: p, matchItem: matchById };
-    // Priorité 2 : fallback ancien format (sans childId) par nom d'activité
+    
+    // Priorité 4 : fallback ancien format (sans childId)
     const legacyMatch = items.find((i: any) =>
       !i.childId && typeof i.activityTitle === "string" && i.activityTitle.includes(activityTitle)
     );
