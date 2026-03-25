@@ -1518,14 +1518,45 @@ export default function PaiementsPage() {
                           </div>
                         )}
                         {/* Boutons actions commande */}
-                        <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between">
-                          <button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "" })}
-                            className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
-                            <Plus size={10} /> Dupliquer
-                          </button>
+                        <div className="mt-2 pt-2 border-t border-gray-100 flex flex-wrap gap-1.5 justify-between">
+                          <div className="flex gap-1.5">
+                            <button onClick={async () => {
+                              const items = p.items || [];
+                              const totalHT = items.reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
+                              const totalTTC = p.totalTTC || 0;
+                              const totalTVA = totalTTC - totalHT;
+                              const invDate = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
+                              const invoiceNumber = `F-${invDate.getFullYear()}${String(invDate.getMonth()+1).padStart(2,"0")}-${(p.id || "").slice(-4).toUpperCase()}`;
+                              try {
+                                const res = await fetch("/api/invoice", {
+                                  method: "POST", headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    invoiceNumber, date: invDate.toLocaleDateString("fr-FR"),
+                                    familyName: p.familyName, familyEmail: families.find(f => f.firestoreId === p.familyId)?.parentEmail || "",
+                                    items, totalHT, totalTVA, totalTTC,
+                                    paidAmount: p.paidAmount || 0,
+                                    paymentMode: p.paymentMode ? (paymentModes.find(m => m.id === p.paymentMode)?.label || p.paymentMode) : "",
+                                    paymentDate: p.paidAmount > 0 ? invDate.toLocaleDateString("fr-FR") : "",
+                                  }),
+                                });
+                                const data = await res.json();
+                                if (data.html) {
+                                  const w = window.open("", "_blank");
+                                  if (w) { w.document.write(data.html); w.document.close(); w.print(); }
+                                }
+                              } catch (e) { console.error(e); toast("Erreur génération facture", "error"); }
+                            }}
+                              className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1">
+                              <Receipt size={10} /> Facture
+                            </button>
+                            <button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "" })}
+                              className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
+                              <Plus size={10} /> Dupliquer
+                            </button>
+                          </div>
                           <button onClick={() => deletePaymentCommand(p)}
                             className="font-body text-[10px] text-red-500 bg-red-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-red-100 flex items-center gap-1">
-                            <Trash2 size={10} /> Annuler l'inscription
+                            <Trash2 size={10} /> Annuler
                           </button>
                         </div>
                       </Card>
