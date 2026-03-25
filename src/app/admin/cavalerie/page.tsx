@@ -641,7 +641,7 @@ export default function CavaleriePage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-1 hide-scrollbar">
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all whitespace-nowrap

@@ -199,18 +199,27 @@ export async function findLinkedPayment(familyId: string, childId: string, activ
       if (matchByActivity) return { paymentDoc: pDoc, paymentData: p, matchItem: matchByActivity };
     }
     
-    // Priorité 3 : match par childId + activityTitle (texte)
-    const matchById = items.find((i: any) =>
+    // Priorité 3 : match par childId + activityTitle (exact d'abord, puis includes)
+    const matchExact = items.find((i: any) =>
       i.childId === childId && (
+        i.activityTitle === activityTitle ||
+        i.stageKey === activityTitle
+      )
+    );
+    if (matchExact) return { paymentDoc: pDoc, paymentData: p, matchItem: matchExact };
+
+    // Priorité 4 : match par childId + activityTitle (includes, pour les titres avec suffixe)
+    const matchIncludes = items.find((i: any) =>
+      i.childId === childId && activityTitle.length > 3 && (
         i.stageKey?.includes(activityTitle) ||
         i.activityTitle?.includes(activityTitle)
       )
     );
-    if (matchById) return { paymentDoc: pDoc, paymentData: p, matchItem: matchById };
+    if (matchIncludes) return { paymentDoc: pDoc, paymentData: p, matchItem: matchIncludes };
     
-    // Priorité 4 : fallback ancien format (sans childId)
+    // Priorité 5 : fallback ancien format (sans childId) — match exact uniquement
     const legacyMatch = items.find((i: any) =>
-      !i.childId && typeof i.activityTitle === "string" && i.activityTitle.includes(activityTitle)
+      !i.childId && typeof i.activityTitle === "string" && i.activityTitle === activityTitle
     );
     if (legacyMatch) return { paymentDoc: pDoc, paymentData: p, matchItem: legacyMatch };
   }

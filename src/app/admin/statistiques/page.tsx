@@ -368,7 +368,7 @@ export default function StatistiquesPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-1 hide-scrollbar">
         {tabs.map(t => {
           const Icon = t.icon;
           return (

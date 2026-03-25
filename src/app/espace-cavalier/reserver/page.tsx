@@ -197,7 +197,6 @@ export default function ReserverPage() {
         totalTTC: cartTotal,
         paymentMode: "", paymentRef: "",
         status: "pending", paidAmount: 0,
-        isStageCart: cart.some(i => i.isStage),
         source: "client",
         date: serverTimestamp(),
       });
