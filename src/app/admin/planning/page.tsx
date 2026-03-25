@@ -220,8 +220,16 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
           where("status", "==", "pending"),
         ));
 
-        // Prendre la première commande ouverte (s'il y en a une)
-        const openOrder = existingSnap.docs.length > 0 ? existingSnap.docs[0] : null;
+        // Prendre la commande ouverte la plus récente
+        const pendingDocs = existingSnap.docs.sort((a, b) => {
+          const da = a.data().date?.seconds || 0;
+          const db2 = b.data().date?.seconds || 0;
+          return db2 - da;
+        });
+        if (pendingDocs.length > 1) {
+          console.warn(`⚠️ ${pendingDocs.length} commandes pending pour famille ${fam.firestoreId} — fusion dans la plus récente`);
+        }
+        const openOrder = pendingDocs.length > 0 ? pendingDocs[0] : null;
 
         if (openOrder) {
           // Fusionner avec la commande existante
@@ -540,10 +548,13 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
                 {/* Mode ponctuel */}
                 {inscriptionMode === "ponctuel" && priceTTC > 0 && (
                   <div className="bg-white rounded-lg p-3">
-                    <label className="flex items-center gap-2 cursor-pointer mb-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" checked={showPay} onChange={e => setShowPay(e.target.checked)} className="accent-blue-500 w-4 h-4"/>
                       <span className="font-body text-sm text-blue-800 font-semibold">Encaisser maintenant ({priceTTC.toFixed(2)}€)</span>
                     </label>
+                    <div className="font-body text-[10px] text-gray-400 mt-1 ml-6">
+                      {showPay ? "Le paiement sera enregistré immédiatement dans le journal." : "La prestation sera ajoutée aux impayés de la famille."}
+                    </div>
                     {showPay && <div className="flex flex-wrap gap-1.5 mt-2">{payModes.map(m=><button key={m.id} onClick={()=>setPayMode(m.id)} className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${payMode===m.id?"bg-blue-500 text-white border-blue-500":"bg-white text-gray-500 border-gray-200"}`}>{m.icon} {m.label}</button>)}</div>}
                   </div>
                 )}
@@ -617,6 +628,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
                       <input type="checkbox" checked={showPay} onChange={e => setShowPay(e.target.checked)} className="accent-blue-500 w-4 h-4"/>
                       <span className="font-body text-sm text-blue-800 font-semibold">Encaisser maintenant</span>
                     </label>
+                    <div className="font-body text-[10px] text-gray-400 mt-1 ml-6">
+                      {showPay ? "Le paiement sera enregistré immédiatement." : "Ajouté aux impayés de la famille."}
+                    </div>
                     {showPay && <div className="flex flex-wrap gap-1.5 mt-2">{payModes.map(m=><button key={m.id} onClick={()=>setPayMode(m.id)} className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${payMode===m.id?"bg-blue-500 text-white border-blue-500":"bg-white text-gray-500 border-gray-200"}`}>{m.icon} {m.label}</button>)}</div>}
                   </div>
                 )}
@@ -660,7 +674,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
                             childId: enfant.childId, childName: enfant.childName,
                             familyId: showAddDays.familyId, familyName: fam2.parentName || "—",
                             enrolledAt: new Date().toISOString(),
-                          });
+                          }, undefined, { skipPayment: true, skipEmail: true });
                         }
                       }
                       setJustEnrolled(`${showAddDays.enfants.map(e => e.childName).join(", ")} ajouté(s) le ${j.label}`);
@@ -1067,14 +1081,16 @@ export default function PlanningPage() {
   const handleEnroll = async (cid: string, child: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean }) => {
     const enrolled = await enrollChildInCreneau(cid, child);
     if (!enrolled) return;
-    const snap = await getDoc(doc(db, "creneaux", cid));
-    if (!snap.exists()) return;
-    const c = { id: snap.id, ...snap.data() } as any;
-    await createReservation(child, c);
 
-    // skipPayment = true pour les inscriptions stage multi-jours (le paiement global est créé séparément)
-    const priceTTC = c.priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
-    if (!options?.skipPayment && priceTTC > 0) {
+    try {
+      const snap = await getDoc(doc(db, "creneaux", cid));
+      if (!snap.exists()) return;
+      const c = { id: snap.id, ...snap.data() } as any;
+      await createReservation(child, c);
+
+      // skipPayment = true pour les inscriptions stage multi-jours
+      const priceTTC = c.priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
+      if (!options?.skipPayment && priceTTC > 0) {
       const priceHT = priceTTC / (1 + (c.tvaTaux || 5.5) / 100);
       const isPaid = !!payMode;
       const newItem = { activityTitle: c.activityTitle, childId: child.childId, childName: child.childName, creneauId: cid, activityType: c.activityType, priceHT: Math.round(priceHT * 100) / 100, tva: c.tvaTaux || 5.5, priceTTC: Math.round(priceTTC * 100) / 100 };
@@ -1102,9 +1118,18 @@ export default function PlanningPage() {
           date: serverTimestamp(),
         });
       } else {
-        // Paiement en attente → fusionner dans la commande ouverte de la famille
+        // Paiement en attente → fusionner dans la commande ouverte la plus récente
         const existingSnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", child.familyId), where("status", "==", "pending")));
-        const openOrder = existingSnap.docs.length > 0 ? existingSnap.docs[0] : null;
+        // Prendre la plus récente par date (la dernière créée)
+        const pendingDocs = existingSnap.docs.sort((a, b) => {
+          const da = a.data().date?.seconds || 0;
+          const db2 = b.data().date?.seconds || 0;
+          return db2 - da;
+        });
+        if (pendingDocs.length > 1) {
+          console.warn(`⚠️ ${pendingDocs.length} commandes pending pour famille ${child.familyId} — fusion dans la plus récente`);
+        }
+        const openOrder = pendingDocs.length > 0 ? pendingDocs[0] : null;
 
         if (openOrder) {
           const existData = openOrder.data();
@@ -1147,6 +1172,12 @@ export default function PlanningPage() {
       }
     }
     const fresh = await refreshCreneaux(); const upd = fresh.find(x => x.id === cid); if (upd) setSelectedCreneau(upd);
+    } catch (error) {
+      // Rollback : retirer l'enfant du créneau si le reste a échoué
+      console.error("Erreur handleEnroll, rollback inscription:", error);
+      try { await removeChildFromCreneau(cid, child.childId); } catch (e2) { console.error("Rollback failed:", e2); }
+      toast("Erreur lors de l'inscription. L'opération a été annulée.", "error");
+    }
   };
 
   const handleUnenroll = async (cid: string, childId: string) => {
