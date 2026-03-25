@@ -7,8 +7,11 @@ const CLUB = {
   address: "Route de la Plage, 50230 Agon-Coutainville",
   tel: "02 44 84 99 96",
   email: "ceagon@orange.fr",
-  siret: "", // À remplir
-  tvaIntra: "", // À remplir si assujetti
+  siret: "50756918400017",
+  tvaIntra: "",
+  iban: "", // À remplir : FR76 XXXX XXXX XXXX XXXX XXXX XXX
+  bic: "", // À remplir : XXXXXXXX
+  logoUrl: "/images/logo-ce-agon.png",
 };
 
 export async function POST(request: NextRequest) {
@@ -22,7 +25,9 @@ export async function POST(request: NextRequest) {
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Arial, sans-serif; }
   body { padding: 40px; color: #333; font-size: 13px; }
-  .header { display: flex; justify-content: space-between; margin-bottom: 30px; }
+  .header { display: flex; justify-content: space-between; margin-bottom: 30px; align-items: flex-start; }
+  .logo-block { display: flex; align-items: center; gap: 12px; }
+  .logo-img { width: 50px; height: 50px; border-radius: 8px; object-fit: contain; }
   .logo { font-size: 18px; font-weight: 700; color: #1e3a5f; }
   .logo-sub { font-size: 10px; color: #999; margin-top: 2px; }
   .invoice-title { text-align: right; }
@@ -52,11 +57,14 @@ export async function POST(request: NextRequest) {
 </style></head><body>
 
 <div class="header">
-  <div>
-    <div class="logo">${CLUB.name}</div>
-    <div class="logo-sub">${CLUB.address}</div>
-    <div class="logo-sub">${CLUB.tel} · ${CLUB.email}</div>
-    ${CLUB.siret ? `<div class="logo-sub">SIRET : ${CLUB.siret}</div>` : ""}
+  <div class="logo-block">
+    <img src="${CLUB.logoUrl}" class="logo-img" alt="Logo"/>
+    <div>
+      <div class="logo">${CLUB.name}</div>
+      <div class="logo-sub">${CLUB.address}</div>
+      <div class="logo-sub">${CLUB.tel} · ${CLUB.email}</div>
+      <div class="logo-sub">SIRET : ${CLUB.siret}</div>
+    </div>
   </div>
   <div class="invoice-title">
     <h1>FACTURE</h1>
@@ -113,6 +121,12 @@ export async function POST(request: NextRequest) {
   <div class="payment-label">${(paidAmount || 0) >= (totalTTC || 0) ? "✅ Réglé" : "⏳ En attente de règlement"}</div>
   ${(paidAmount || 0) > 0 ? `<div style="font-size:12px;color:#333;margin-top:4px;">Montant réglé : ${(paidAmount || 0).toFixed(2)}€${paymentMode ? ` (${paymentMode})` : ""}${paymentDate ? ` le ${paymentDate}` : ""}</div>` : ""}
   ${(paidAmount || 0) < (totalTTC || 0) ? `<div style="font-size:12px;color:#991b1b;margin-top:4px;">Reste dû : ${((totalTTC || 0) - (paidAmount || 0)).toFixed(2)}€</div>` : ""}
+  ${CLUB.iban && (paidAmount || 0) < (totalTTC || 0) ? `<div style="font-size:11px;color:#555;margin-top:8px;padding-top:8px;border-top:1px solid #eee;">
+    <strong>Règlement par virement :</strong><br/>
+    IBAN : ${CLUB.iban}<br/>
+    BIC : ${CLUB.bic}<br/>
+    Titulaire : ${CLUB.name}
+  </div>` : ""}
 </div>
 
 <div class="mentions">
@@ -122,7 +136,7 @@ export async function POST(request: NextRequest) {
 
 <div class="footer">
   ${CLUB.name} · ${CLUB.address}<br/>
-  ${CLUB.tel} · ${CLUB.email}${CLUB.siret ? ` · SIRET ${CLUB.siret}` : ""}
+  ${CLUB.tel} · ${CLUB.email} · SIRET ${CLUB.siret}
 </div>
 
 </body></html>`;
