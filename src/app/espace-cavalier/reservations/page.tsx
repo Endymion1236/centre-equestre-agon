@@ -110,19 +110,19 @@ export default function ReservationsPage() {
                         <div className="flex items-center gap-4">
                           <div className="w-14 h-14 rounded-xl bg-blue-50 flex flex-col items-center justify-center">
                             <div className="font-body text-xs font-bold text-blue-500">
-                              {new Date(r.date).toLocaleDateString("fr-FR", { weekday: "short" })}
+                              {(() => { try { const d = (r as any).date?.seconds ? new Date((r as any).date.seconds * 1000) : new Date(r.date); return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("fr-FR", { weekday: "short" }); } catch { return "—"; }})()}
                             </div>
                             <div className="font-body text-lg font-bold text-blue-800">
-                              {new Date(r.date).getDate()}
+                              {(() => { try { const d = (r as any).date?.seconds ? new Date((r as any).date.seconds * 1000) : new Date(r.date); return isNaN(d.getTime()) ? "—" : d.getDate(); } catch { return "—"; }})()}
                             </div>
                           </div>
                           <div>
                             <div className="font-body text-base font-semibold text-blue-800">{r.activityTitle}</div>
                             <div className="font-body text-xs text-gray-400">
-                              🧒 {r.childName} · {r.startTime}–{r.endTime}
+                              🧒 {r.childName} · {r.startTime || ""}–{r.endTime || ""}
                             </div>
                             <div className="font-body text-xs text-gray-400">
-                              {new Date(r.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+                              {(() => { try { const d = (r as any).date?.seconds ? new Date((r as any).date.seconds * 1000) : new Date(r.date); return isNaN(d.getTime()) ? (typeof r.date === "string" ? r.date : "Date non disponible") : d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }); } catch { return typeof r.date === "string" ? r.date : "—"; }})()}
                             </div>
                           </div>
                         </div>
@@ -150,7 +150,7 @@ export default function ReservationsPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <span className="font-body text-xs text-gray-400">
-                          {new Date(r.date).toLocaleDateString("fr-FR")}
+                          {(() => { try { const d = (r as any).date?.seconds ? new Date((r as any).date.seconds * 1000) : new Date(r.date); return isNaN(d.getTime()) ? (typeof r.date === "string" ? r.date : "—") : d.toLocaleDateString("fr-FR"); } catch { return "—"; }})()}
                         </span>
                         <span className="font-body text-sm text-gray-500">{r.activityTitle}</span>
                         <span className="font-body text-xs text-gray-400">🧒 {r.childName}</span>

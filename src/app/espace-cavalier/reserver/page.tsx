@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
@@ -160,24 +160,30 @@ export default function ReserverPage() {
     if (cart.length === 0 || !family || !user) return;
     setPaying(true);
     try {
-      // 1. Inscrire chaque enfant dans chaque créneau
+      // 1. Inscrire chaque enfant dans chaque créneau (relire depuis Firestore à chaque fois)
       for (const item of cart) {
         for (const cid of item.creneauIds) {
-          const creneau = creneaux.find(c => c.id === cid);
-          if (!creneau) continue;
-          const enrolled = creneau.enrolled || [];
+          // Relire le créneau depuis Firestore pour avoir l'état à jour
+          const creneauSnap = await getDoc(doc(db, "creneaux", cid));
+          if (!creneauSnap.exists()) continue;
+          const creneauData = creneauSnap.data();
+          const enrolled = creneauData.enrolled || [];
           if (enrolled.some((e: any) => e.childId === item.childId)) continue;
           await updateDoc(doc(db, "creneaux", cid), {
             enrolled: [...enrolled, { childId: item.childId, childName: item.childName, familyId: user.uid, familyName: family.parentName, enrolledAt: new Date().toISOString() }],
             enrolledCount: enrolled.length + 1,
           });
         }
-        // Réservation
+        // Réservation — stocker la date correctement
+        const firstCreneau = creneaux.find(c => c.id === item.creneauIds[0]);
         await addDoc(collection(db, "reservations"), {
           familyId: user.uid, familyName: family.parentName,
           childId: item.childId, childName: item.childName,
           activityTitle: item.activityTitle, activityType: item.isStage ? "stage" : "cours",
-          creneauId: item.creneauIds[0], date: item.dates,
+          creneauId: item.creneauIds[0],
+          date: firstCreneau?.date || new Date().toISOString().split("T")[0],
+          startTime: firstCreneau?.startTime || "",
+          endTime: firstCreneau?.endTime || "",
           priceTTC: item.prixFinal, status: "confirmed", source: "client",
           createdAt: serverTimestamp(),
         });
