@@ -237,9 +237,14 @@ export default function CavaliersPage() {
 
   // ─── Supprimer un enfant ───
   const handleDeleteChild = async (familyId: string, childId: string, childName: string) => {
-    if (!confirm(`Supprimer ${childName} de cette famille ?`)) return;
     const family = families.find(f => f.firestoreId === familyId);
     if (!family) return;
+    const nbChildren = (family.children || []).length;
+    if (nbChildren <= 1) {
+      if (!confirm(`⚠️ ${childName} est le DERNIER cavalier de cette famille.\n\nLa supprimer laissera la famille sans aucun cavalier.\n\nConfirmer la suppression ?`)) return;
+    } else {
+      if (!confirm(`Supprimer ${childName} de cette famille ? (${nbChildren - 1} cavalier(s) restant(s))`)) return;
+    }
     const updated = (family.children || []).filter((c: any) => c.id !== childId);
     await updateDoc(doc(db, "families", familyId), { children: updated, updatedAt: serverTimestamp() });
     fetchFamilies();
