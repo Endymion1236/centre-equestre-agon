@@ -164,21 +164,21 @@ export default function PaiementsPage() {
     });
 
     // 2. Recalculer paidAmount depuis TOUS les encaissements de ce payment
+    // On relit APRÈS l'écriture — le snapshot contient forcément le doc qu'on vient de créer
     const encSnap = await getDocs(query(collection(db, "encaissements"), where("paymentId", "==", paymentId)));
-    const totalEncaisse = encSnap.docs.reduce((s, d) => s + (d.data().montant || 0), 0) + montant;
-    // Note : le doc qu'on vient de créer n'est peut-être pas encore dans le snapshot, donc on ajoute montant
-    const realTotal = Math.round(totalEncaisse * 100) / 100;
-    const totalTTC = paymentData.totalTTC || 0;
-    const newStatus = realTotal >= totalTTC ? "paid" : realTotal > 0 ? "partial" : "pending";
+    const totalEncaisse = Math.round(encSnap.docs.reduce((s, d) => s + safeNumber(d.data().montant), 0) * 100) / 100;
+    const totalTTC = safeNumber(paymentData.totalTTC);
+    const newStatus = totalEncaisse >= totalTTC ? "paid" : totalEncaisse > 0 ? "partial" : "pending";
 
     // 3. Mettre à jour le payment avec paidAmount calculé
     await updateDoc(doc(db, "payments", paymentId), {
-      paidAmount: realTotal,
+      paidAmount: totalEncaisse,
       status: newStatus,
+      paymentMode: mode,
       updatedAt: serverTimestamp(),
     });
 
-    return { paidAmount: realTotal, status: newStatus };
+    return { paidAmount: totalEncaisse, status: newStatus };
   };
 
   // Rafraîchir les données

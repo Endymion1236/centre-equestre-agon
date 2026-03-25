@@ -47,7 +47,7 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
   // Stage multi-enfants
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [stageMode, setStageMode] = useState<"semaine" | "jour">("semaine");
-  const [showAddDays, setShowAddDays] = useState<{ enfants: string[]; joursRestants: { id: string; date: string; label: string }[] } | null>(null);
+  const [showAddDays, setShowAddDays] = useState<{ familyId: string; enfants: { childId: string; childName: string }[]; joursRestants: { id: string; date: string; label: string }[] } | null>(null);
   const isStage = creneau.activityType === "stage" || creneau.activityType === "stage_journee";
 
   const enrolled = creneau.enrolled || []; const enrolledIds = enrolled.map((e: any) => e.childId);
@@ -250,7 +250,7 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
         }
 
         const noms = stageLines.map(l => l.childName).join(", ");
-        setJustEnrolled(`${noms} inscrit(s) dans ${creneauxAInscrire.length} jour(s) — ${stageTotalTTC.toFixed(2)}€ ajouté au panier`);
+        setJustEnrolled(`${noms} inscrit(s) dans ${creneauxAInscrire.length} jour(s) — ${stageTotalTTC.toFixed(2)}€ — paiement en attente`);
 
         // Envoyer email de confirmation stage automatiquement
         if (fam.parentEmail) {
@@ -271,7 +271,7 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
           } catch (e) { console.error("Email confirmation stage:", e); }
         }
 
-        panelToast(`${noms} inscrit(s) — ${stageTotalTTC.toFixed(2)}€ ajouté au panier`, "success");
+        panelToast(`${noms} inscrit(s) — ${stageTotalTTC.toFixed(2)}€ — paiement en attente`, "success");
       } catch (e) { console.error(e); panelToast("Erreur lors de l'inscription", "error"); }
       setSelectedChildren([]);
       setSelFam(""); setSearch(""); setEnrolling(false);
@@ -294,7 +294,7 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
           label: new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
         }));
         if (autresJours.length > 0) {
-          setShowAddDays({ enfants: stageLines.map(l => l.childName), joursRestants: autresJours });
+          setShowAddDays({ familyId: fam.firestoreId, enfants: stageLines.map(l => ({ childId: l.childId, childName: l.childName })), joursRestants: autresJours });
         }
       }
       return;
@@ -627,7 +627,7 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
             {/* Bouton Stage */}
             {isStage && selectedChildren.length > 0 && (
               <button onClick={handleEnroll} disabled={enrolling} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${enrolling ? "bg-gray-200 text-gray-400" : "bg-green-600 text-white hover:bg-green-500"}`}>
-                {enrolling ? "..." : `Inscrire ${selectedChildren.length} enfant${selectedChildren.length > 1 ? "s" : ""} — Acompte ${stageAcompte.toFixed(2)}€`}
+                {enrolling ? "..." : `Inscrire ${selectedChildren.length} enfant${selectedChildren.length > 1 ? "s" : ""} — ${stageTotalTTC.toFixed(2)}€`}
               </button>
             )}
 
@@ -646,29 +646,24 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
                 Inscrire aussi dans d'autres jours ?
               </div>
               <p className="font-body text-xs text-gray-500 mb-3">
-                {showAddDays.enfants.join(", ")} inscrit(s) pour 1 jour. Voulez-vous ajouter d'autres jours du même stage ?
+                {showAddDays.enfants.map(e => e.childName).join(", ")} inscrit(s) pour 1 jour. Voulez-vous ajouter d'autres jours du même stage ?
               </p>
               <div className="flex flex-col gap-1.5 mb-3">
                 {showAddDays.joursRestants.map(j => (
                   <button key={j.id} onClick={async () => {
-                    // Inscrire dans ce jour supplémentaire
                     setEnrolling(true);
                     try {
-                      const fam2 = families.find(f => f.firestoreId === (creneau.enrolled || []).find((e: any) => showAddDays.enfants.includes(e.childName))?.familyId);
+                      const fam2 = families.find(f => f.firestoreId === showAddDays.familyId);
                       if (fam2) {
-                        for (const enfantName of showAddDays.enfants) {
-                          const child = (fam2.children || []).find((c: any) => c.firstName === enfantName);
-                          if (child) {
-                            await onEnroll(j.id, {
-                              childId: child.id, childName: child.firstName,
-                              familyId: fam2.firestoreId, familyName: fam2.parentName || "—",
-                              enrolledAt: new Date().toISOString(),
-                            });
-                          }
+                        for (const enfant of showAddDays.enfants) {
+                          await onEnroll(j.id, {
+                            childId: enfant.childId, childName: enfant.childName,
+                            familyId: showAddDays.familyId, familyName: fam2.parentName || "—",
+                            enrolledAt: new Date().toISOString(),
+                          });
                         }
                       }
-                      setJustEnrolled(`${showAddDays.enfants.join(", ")} ajouté(s) le ${j.label}`);
-                      // Retirer ce jour de la liste
+                      setJustEnrolled(`${showAddDays.enfants.map(e => e.childName).join(", ")} ajouté(s) le ${j.label}`);
                       const remaining = showAddDays.joursRestants.filter(jr => jr.id !== j.id);
                       if (remaining.length > 0) {
                         setShowAddDays({ ...showAddDays, joursRestants: remaining });
@@ -1078,59 +1073,53 @@ export default function PlanningPage() {
 
       let payRefId = "";
 
-      // Chercher une commande ouverte (pending) pour cette famille — PANIER UNIQUE
-      const existingSnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", child.familyId), where("status", "==", "pending")));
-      const openOrder = existingSnap.docs.length > 0 ? existingSnap.docs[0] : null;
-
-      if (openOrder) {
-        // Ajouter la ligne à la commande existante
-        const existData = openOrder.data();
-        const mergedItems = [...(existData.items || []), newItem];
-        const mergedTotal = Math.round(mergedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0) * 100) / 100;
-        await updateDoc(doc(db, "payments", openOrder.id), {
-          items: mergedItems,
-          totalTTC: mergedTotal,
-          updatedAt: serverTimestamp(),
-        });
-        payRefId = openOrder.id;
-
-        // Si encaissé maintenant → payer toute la commande d'un coup
-        if (isPaid) {
-          await updateDoc(doc(db, "payments", openOrder.id), {
-            status: "paid",
-            paidAmount: mergedTotal,
-            paymentMode: payMode,
-          });
-          await addDoc(collection(db, "encaissements"), {
-            paymentId: payRefId, familyId: child.familyId, familyName: child.familyName,
-            montant: mergedTotal, mode: payMode,
-            modeLabel: payMode === "cb_terminal" ? "CB (terminal)" : payMode === "especes" ? "Espèces" : payMode === "cheque" ? "Chèque" : payMode || "",
-            ref: "", activityTitle: mergedItems.map((i: any) => `${i.activityTitle} (${i.childName})`).join(", "),
-            date: serverTimestamp(),
-          });
-        }
-      } else {
-        // Créer une nouvelle commande
+      if (isPaid) {
+        // Encaissement immédiat → toujours créer un payment séparé (pas de fusion)
         const payRef = await addDoc(collection(db, "payments"), {
           familyId: child.familyId, familyName: child.familyName,
           items: [newItem],
           totalTTC: Math.round(priceTTC * 100) / 100,
-          paymentMode: isPaid ? payMode || "" : "",
+          paymentMode: payMode || "",
           paymentRef: "",
-          status: isPaid ? "paid" : "pending",
-          paidAmount: isPaid ? Math.round(priceTTC * 100) / 100 : 0,
+          status: "paid",
+          paidAmount: Math.round(priceTTC * 100) / 100,
           date: serverTimestamp(),
         });
         payRefId = payRef.id;
+        await addDoc(collection(db, "encaissements"), {
+          paymentId: payRefId, familyId: child.familyId, familyName: child.familyName,
+          montant: Math.round(priceTTC * 100) / 100, mode: payMode,
+          modeLabel: payMode === "cb_terminal" ? "CB (terminal)" : payMode === "especes" ? "Espèces" : payMode === "cheque" ? "Chèque" : payMode || "",
+          ref: "", activityTitle: `${c.activityTitle} — ${child.childName}`,
+          date: serverTimestamp(),
+        });
+      } else {
+        // Paiement en attente → fusionner dans la commande ouverte de la famille
+        const existingSnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", child.familyId), where("status", "==", "pending")));
+        const openOrder = existingSnap.docs.length > 0 ? existingSnap.docs[0] : null;
 
-        if (isPaid) {
-          await addDoc(collection(db, "encaissements"), {
-            paymentId: payRefId, familyId: child.familyId, familyName: child.familyName,
-            montant: Math.round(priceTTC * 100) / 100, mode: payMode,
-            modeLabel: payMode === "cb_terminal" ? "CB (terminal)" : payMode === "especes" ? "Espèces" : payMode === "cheque" ? "Chèque" : payMode || "",
-            ref: "", activityTitle: `${c.activityTitle} — ${child.childName}`,
+        if (openOrder) {
+          const existData = openOrder.data();
+          const mergedItems = [...(existData.items || []), newItem];
+          const mergedTotal = Math.round(mergedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0) * 100) / 100;
+          await updateDoc(doc(db, "payments", openOrder.id), {
+            items: mergedItems,
+            totalTTC: mergedTotal,
+            updatedAt: serverTimestamp(),
+          });
+          payRefId = openOrder.id;
+        } else {
+          const payRef = await addDoc(collection(db, "payments"), {
+            familyId: child.familyId, familyName: child.familyName,
+            items: [newItem],
+            totalTTC: Math.round(priceTTC * 100) / 100,
+            paymentMode: "",
+            paymentRef: "",
+            status: "pending",
+            paidAmount: 0,
             date: serverTimestamp(),
           });
+          payRefId = payRef.id;
         }
       }
     }
