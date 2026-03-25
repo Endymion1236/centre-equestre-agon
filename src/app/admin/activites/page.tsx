@@ -221,6 +221,38 @@ function ActivityForm({
           </div>
         </div>
 
+        {/* Tarifs multi-jours (stages uniquement) */}
+        {(form.type === "stage" || form.type === "stage_journee") && (
+          <div className="bg-green-50 rounded-lg p-4">
+            <div className="font-body text-xs font-semibold text-green-700 uppercase tracking-wider mb-2">Tarifs par durée (optionnel)</div>
+            <p className="font-body text-[10px] text-gray-500 mb-3">Le prix ci-dessus = semaine complète (5j). Configurez les prix pour des durées plus courtes.</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[2, 3, 4].map(days => (
+                <div key={days}>
+                  <label className="font-body text-[10px] font-semibold text-green-700 block mb-1">{days} jours (€ TTC)</label>
+                  <input
+                    type="number" step="0.01"
+                    value={(form as any)[`price${days}days`] || ""}
+                    onChange={(e) => update(`price${days}days` as any, parseFloat(e.target.value) || 0)}
+                    placeholder={`${Math.round(((form as any).priceTTC || 0) / 5 * days)}€`}
+                    className="w-full px-3 py-2 rounded-lg border border-green-200 font-body text-sm bg-white focus:border-green-500 focus:outline-none"
+                  />
+                </div>
+              ))}
+              <div>
+                <label className="font-body text-[10px] font-semibold text-green-700 block mb-1">1 jour (€ TTC)</label>
+                <input
+                  type="number" step="0.01"
+                  value={(form as any).price1day || ""}
+                  onChange={(e) => update("price1day" as any, parseFloat(e.target.value) || 0)}
+                  placeholder={`${Math.round(((form as any).priceTTC || 0) / 5)}€`}
+                  className="w-full px-3 py-2 rounded-lg border border-green-200 font-body text-sm bg-white focus:border-green-500 focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Prix HT calculé */}
         <div className="bg-blue-50 rounded-lg p-3">
           <div className="flex justify-between items-center mb-1">

@@ -118,11 +118,27 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
       new Date(c.date) >= mon && new Date(c.date) <= sun
     ).length || 1;
 
-    // Prix du stage : le prix configuré dans l'activité = prix pour TOUS les jours du planning
-    // Si on inscrit pour moins de jours (mode jour), on proratise
-    const prixStageComplet = priceTTC; // = prix configuré dans l'activité
-    const prixJour = Math.round((prixStageComplet / nbJoursStage) * 100) / 100;
-    const prixEffectif = stageMode === "jour" ? prixJour : prixStageComplet;
+    // Prix du stage selon le nombre de jours
+    // Chercher un tarif configuré pour ce nombre de jours (stocké sur le créneau)
+    const configuredPrices: Record<number, number> = {};
+    const cr = creneau as any;
+    if (cr.price1day) configuredPrices[1] = cr.price1day;
+    if (cr.price2days) configuredPrices[2] = cr.price2days;
+    if (cr.price3days) configuredPrices[3] = cr.price3days;
+    if (cr.price4days) configuredPrices[4] = cr.price4days;
+
+    const prixStageComplet = priceTTC; // = prix semaine complète
+    let prixEffectif: number;
+
+    if (stageMode === "jour") {
+      // Mode 1 jour : tarif journalier configuré ou prorata
+      prixEffectif = configuredPrices[1] || Math.round((prixStageComplet / nbJoursStage) * 100) / 100;
+    } else {
+      // Mode semaine : tarif configuré pour ce nombre de jours ou prix complet
+      prixEffectif = configuredPrices[nbJoursStage] || prixStageComplet;
+    }
+
+    const prixJour = Math.round((prixEffectif / (stageMode === "jour" ? 1 : nbJoursStage)) * 100) / 100;
 
     return selectedChildren.map((childId, idx) => {
       const child = children.find((c: any) => c.id === childId);
@@ -721,6 +737,11 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
               monitor: slot.monitor, maxPlaces: slot.maxPlaces, enrolledCount: 0, enrolled: [],
               status: "planned", priceHT: actPriceTTC / (1 + (act.tvaTaux || 5.5) / 100),
               priceTTC: actPriceTTC, tvaTaux: act.tvaTaux || 5.5,
+              // Tarifs multi-jours (stages)
+              ...((act as any).price1day ? { price1day: (act as any).price1day } : {}),
+              ...((act as any).price2days ? { price2days: (act as any).price2days } : {}),
+              ...((act as any).price3days ? { price3days: (act as any).price3days } : {}),
+              ...((act as any).price4days ? { price4days: (act as any).price4days } : {}),
             });
           }
           cur.setDate(cur.getDate() + 1);
