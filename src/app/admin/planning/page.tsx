@@ -1163,56 +1163,63 @@ export default function PlanningPage() {
       const isPaid = !!payMode;
       const newItem = { activityTitle: c.activityTitle, childId: child.childId, childName: child.childName, creneauId: cid, activityType: c.activityType, priceHT: Math.round(priceHT * 100) / 100, tva: c.tvaTaux || 5.5, priceTTC: Math.round(priceTTC * 100) / 100 };
 
-      // Chercher un payment pending existant pour cette famille + ce créneau (fusion multi-enfants)
       let payRefId = "";
-      const existingSnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", child.familyId)));
-      const existingPay = existingSnap.docs.find(d => {
-        const p = d.data();
-        return p.status === "pending" && (p.items || []).some((i: any) => i.creneauId === cid);
-      });
 
-      if (existingPay) {
-        // Ajouter la ligne au payment existant
-        const existData = existingPay.data();
+      // Chercher une commande ouverte (pending) pour cette famille
+      // → panier unique : on ajoute tout dedans (multi-enfants, multi-activités)
+      const existingSnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", child.familyId), where("status", "==", "pending")));
+      const openOrder = existingSnap.docs.length > 0 ? existingSnap.docs[0] : null;
+
+      if (openOrder) {
+        // Ajouter la ligne à la commande existante
+        const existData = openOrder.data();
         const mergedItems = [...(existData.items || []), newItem];
-        const mergedTotal = mergedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
-        await updateDoc(doc(db, "payments", existingPay.id), {
+        const mergedTotal = Math.round(mergedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0) * 100) / 100;
+        await updateDoc(doc(db, "payments", openOrder.id), {
           items: mergedItems,
-          totalTTC: Math.round(mergedTotal * 100) / 100,
-          paidAmount: isPaid ? Math.round(mergedTotal * 100) / 100 : 0,
-          status: isPaid ? "paid" : "pending",
-          paymentMode: payMode || existData.paymentMode || "",
+          totalTTC: mergedTotal,
           updatedAt: serverTimestamp(),
         });
-        payRefId = existingPay.id;
+        payRefId = openOrder.id;
+
+        // Si encaissé maintenant → payer toute la commande d'un coup
+        if (isPaid) {
+          await updateDoc(doc(db, "payments", openOrder.id), {
+            status: "paid",
+            paidAmount: mergedTotal,
+            paymentMode: payMode,
+          });
+          await addDoc(collection(db, "encaissements"), {
+            paymentId: payRefId, familyId: child.familyId, familyName: child.familyName,
+            montant: mergedTotal, mode: payMode,
+            modeLabel: payMode === "cb_terminal" ? "CB (terminal)" : payMode === "especes" ? "Espèces" : payMode === "cheque" ? "Chèque" : payMode || "",
+            ref: "", activityTitle: mergedItems.map((i: any) => `${i.activityTitle} (${i.childName})`).join(", "),
+            date: serverTimestamp(),
+          });
+        }
       } else {
-        // Créer un nouveau payment
+        // Créer une nouvelle commande
         const payRef = await addDoc(collection(db, "payments"), {
           familyId: child.familyId, familyName: child.familyName,
           items: [newItem],
           totalTTC: Math.round(priceTTC * 100) / 100,
-          paymentMode: payMode || "",
+          paymentMode: isPaid ? payMode || "" : "",
           paymentRef: "",
           status: isPaid ? "paid" : "pending",
           paidAmount: isPaid ? Math.round(priceTTC * 100) / 100 : 0,
           date: serverTimestamp(),
         });
         payRefId = payRef.id;
-      }
 
-      // Si encaissé, créer l'encaissement (montant = juste cet enfant)
-      if (isPaid) {
-        await addDoc(collection(db, "encaissements"), {
-          paymentId: payRefId,
-          familyId: child.familyId,
-          familyName: child.familyName,
-          montant: Math.round(priceTTC * 100) / 100,
-          mode: payMode,
-          modeLabel: payMode === "cb_terminal" ? "CB (terminal)" : payMode === "especes" ? "Espèces" : payMode === "cheque" ? "Chèque" : payMode || "",
-          ref: "",
-          activityTitle: `${c.activityTitle} — ${child.childName}`,
-          date: serverTimestamp(),
-        });
+        if (isPaid) {
+          await addDoc(collection(db, "encaissements"), {
+            paymentId: payRefId, familyId: child.familyId, familyName: child.familyName,
+            montant: Math.round(priceTTC * 100) / 100, mode: payMode,
+            modeLabel: payMode === "cb_terminal" ? "CB (terminal)" : payMode === "especes" ? "Espèces" : payMode === "cheque" ? "Chèque" : payMode || "",
+            ref: "", activityTitle: `${c.activityTitle} — ${child.childName}`,
+            date: serverTimestamp(),
+          });
+        }
       }
     }
     // Email confirmation cours
