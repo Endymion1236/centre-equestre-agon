@@ -4,13 +4,14 @@ export const dynamic = "force-dynamic";
 
 const CLUB = {
   name: "Centre Equestre d'Agon-Coutainville",
+  legalName: "E.A.R.L. Centre Equestre Poney Club d'Agon-Coutainville",
   address: "Route de la Plage, 50230 Agon-Coutainville",
   tel: "02 44 84 99 96",
   email: "ceagon@orange.fr",
   siret: "50756918400017",
   tvaIntra: "",
-  iban: "", // À remplir : FR76 XXXX XXXX XXXX XXXX XXXX XXX
-  bic: "", // À remplir : XXXXXXXX
+  iban: "FR76 1660 6100 6400 1353 9343 253",
+  bic: "AGRIFRPP866",
   logoUrl: "/images/logo-ce-agon.png",
 };
 
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
   <div class="party">
     <div class="party-label">Émetteur</div>
     <div class="party-name">${CLUB.name}</div>
-    <div class="party-detail">${CLUB.address}<br/>${CLUB.tel}<br/>${CLUB.email}</div>
+    <div class="party-detail">${CLUB.legalName}<br/>${CLUB.address}<br/>${CLUB.tel}<br/>${CLUB.email}</div>
   </div>
   <div class="party">
     <div class="party-label">Client</div>
