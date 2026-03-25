@@ -487,8 +487,9 @@ export default function CavaliersPage() {
       {/* Recherche */}
       <div className="relative mb-5">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une famille, un enfant, un email..."
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher : nom parent, prénom enfant, email..."
           className={`${inputStyle} !pl-10`} />
+        {search && <div className="font-body text-[10px] text-gray-400 mt-1 ml-1">{filtered.length} famille{filtered.length > 1 ? "s" : ""} trouvée{filtered.length > 1 ? "s" : ""}</div>}
       </div>
 
       {/* Liste des familles */}
@@ -783,13 +784,13 @@ export default function CavaliersPage() {
                     {addChildTo === family.firestoreId ? (
                       <div className="bg-blue-50 rounded-lg p-4 flex flex-col gap-3">
                         <div className="font-body text-xs font-semibold text-blue-800">Ajouter un cavalier</div>
+                        <input placeholder="Prénom *" value={newChildForm.firstName} onChange={e => setNewChildForm({ ...newChildForm, firstName: e.target.value })}
+                          className={`${inputStyle} w-full`} />
                         <div className="flex gap-2">
-                          <input placeholder="Prénom *" value={newChildForm.firstName} onChange={e => setNewChildForm({ ...newChildForm, firstName: e.target.value })}
+                          <input type="date" placeholder="Date de naissance" value={newChildForm.birthDate} onChange={e => setNewChildForm({ ...newChildForm, birthDate: e.target.value })}
                             className={`${inputStyle} flex-1`} />
-                          <input type="date" value={newChildForm.birthDate} onChange={e => setNewChildForm({ ...newChildForm, birthDate: e.target.value })}
-                            className={`${inputStyle} w-40`} />
                           <select value={newChildForm.galopLevel} onChange={e => setNewChildForm({ ...newChildForm, galopLevel: e.target.value })}
-                            className={`${inputStyle} w-32`}>
+                            className={`${inputStyle} flex-1`}>
                             {galopLevels.map(g => <option key={g} value={g}>{g === "—" ? "Débutant" : `Galop ${g}`}</option>)}
                           </select>
                         </div>
