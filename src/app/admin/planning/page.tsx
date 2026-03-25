@@ -858,6 +858,11 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: { acti
       activityId: actId, activityTitle: act.title, activityType: act.type, date: d,
       startTime: st, endTime: et, monitor: mon, maxPlaces: mp, enrolledCount: 0, enrolled: [],
       status: "planned", priceHT: ttc / (1 + (act.tvaTaux || 5.5) / 100), priceTTC: ttc, tvaTaux: act.tvaTaux || 5.5,
+      // Tarifs multi-jours (stages)
+      ...((act as any).price1day ? { price1day: (act as any).price1day } : {}),
+      ...((act as any).price2days ? { price2days: (act as any).price2days } : {}),
+      ...((act as any).price3days ? { price3days: (act as any).price3days } : {}),
+      ...((act as any).price4days ? { price4days: (act as any).price4days } : {}),
     }));
     await onSave(creneaux);
     setSaving(false);
