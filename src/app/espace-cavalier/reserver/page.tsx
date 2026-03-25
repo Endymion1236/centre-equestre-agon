@@ -28,6 +28,7 @@ export default function ReserverPage() {
   const [selectedCreneau, setSelectedCreneau] = useState<Creneau | null>(null);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [paying, setPaying] = useState(false);
+  const [depositMode, setDepositMode] = useState<"full" | "deposit">("full");
   const [success, setSuccess] = useState(false);
 
   const children = family?.children || [];
@@ -201,7 +202,11 @@ export default function ReserverPage() {
         date: serverTimestamp(),
       });
 
-      // 3. Stripe checkout (paiement unique)
+      // 3. Stripe checkout (paiement unique ou acompte)
+      const hasStage = cart.some(i => i.isStage);
+      const isDeposit = hasStage && depositMode === "deposit";
+      const stageDate = hasStage ? cart.find(i => i.isStage)?.dates || "" : "";
+      
       try {
         const res = await fetch("/api/stripe/checkout", {
           method: "POST",
@@ -210,6 +215,8 @@ export default function ReserverPage() {
             familyId: user.uid,
             familyEmail: family.parentEmail || user.email,
             familyName: family.parentName,
+            depositPercent: isDeposit ? 30 : undefined,
+            stageDate,
             items: cart.map(i => ({
               name: `${i.activityTitle} — ${i.childName}`,
               description: i.dates || undefined,
@@ -450,10 +457,32 @@ export default function ReserverPage() {
                     <span>Total</span><span className="text-green-600">{cartTotal.toFixed(2)}€</span>
                   </div>
 
+                  {/* Choix acompte si stages dans le panier */}
+                  {cart.some(i => i.isStage) && (
+                    <div className="bg-blue-50 rounded-lg p-3 mb-4">
+                      <div className="font-body text-xs font-semibold text-blue-800 mb-2">Mode de paiement</div>
+                      <div className="flex gap-2">
+                        <button onClick={() => setDepositMode("full")}
+                          className={`flex-1 py-2 px-3 rounded-lg font-body text-xs font-semibold border cursor-pointer ${depositMode === "full" ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-500 border-gray-200"}`}>
+                          Payer tout ({cartTotal.toFixed(0)}€)
+                        </button>
+                        <button onClick={() => setDepositMode("deposit")}
+                          className={`flex-1 py-2 px-3 rounded-lg font-body text-xs font-semibold border cursor-pointer ${depositMode === "deposit" ? "bg-orange-500 text-white border-orange-500" : "bg-white text-gray-500 border-gray-200"}`}>
+                          Acompte 30% ({(cartTotal * 0.3).toFixed(0)}€)
+                        </button>
+                      </div>
+                      {depositMode === "deposit" && (
+                        <div className="font-body text-[10px] text-orange-600 mt-2">
+                          Le solde de {(cartTotal * 0.7).toFixed(0)}€ sera prélevé automatiquement 3 jours avant le stage sur la même carte.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <button onClick={handlePay} disabled={paying}
-                    className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying ? "bg-gray-200 text-gray-400" : "bg-green-600 text-white hover:bg-green-500"}`}>
+                    className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying ? "bg-gray-200 text-gray-400" : depositMode === "deposit" ? "bg-orange-500 text-white hover:bg-orange-400" : "bg-green-600 text-white hover:bg-green-500"}`}>
                     {paying ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
-                    {paying ? "Paiement en cours..." : `Payer ${cartTotal.toFixed(2)}€`}
+                    {paying ? "Paiement en cours..." : depositMode === "deposit" ? `Payer l'acompte ${(cartTotal * 0.3).toFixed(2)}€` : `Payer ${cartTotal.toFixed(2)}€`}
                   </button>
                   <p className="font-body text-[10px] text-gray-400 text-center mt-2">Paiement securise par Stripe</p>
                 </>
