@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, addDoc, deleteDoc, updateDoc, doc, getDoc, serverTimestamp, query, where, orderBy, limit } from "firebase/firestore";
+import { collection, getDocs, addDoc, deleteDoc, updateDoc, doc, getDoc, serverTimestamp, query, where, orderBy, limit, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { emailTemplates } from "@/lib/email-templates";
 import { safeNumber, round2, generateOrderId } from "@/lib/utils";
@@ -1517,7 +1517,7 @@ export default function PaiementsPage() {
                               const totalTTC = p.totalTTC || 0;
                               const totalTVA = totalTTC - totalHT;
                               const invDate = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
-                              const invoiceNumber = `F-${invDate.getFullYear()}${String(invDate.getMonth()+1).padStart(2,"0")}-${(p.id || "").slice(-4).toUpperCase()}`;
+                              const invoiceNumber = (p as any).orderId || `F-${invDate.getFullYear()}${String(invDate.getMonth()+1).padStart(2,"0")}-${(p.id || "").slice(-4).toUpperCase()}`;
                               try {
                                 const res = await fetch("/api/invoice", {
                                   method: "POST", headers: { "Content-Type": "application/json" },

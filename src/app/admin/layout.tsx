@@ -80,8 +80,9 @@ function AdminSidebar() {
       {navItems.map((item, idx) => {
         if (item.separator) {
           return (
-            <div key={`sep-${idx}`} className="px-3 pt-4 pb-1">
-              <div className="font-body text-[9px] text-white/30 uppercase tracking-widest font-semibold">{item.label}</div>
+            <div key={`sep-${idx}`} className="px-3 pt-5 pb-1.5">
+              {idx > 0 && <div className="border-t border-white/10 mb-3"></div>}
+              <div className="font-body text-[10px] text-gold-400/80 uppercase tracking-widest font-bold">{item.label}</div>
             </div>
           );
         }
@@ -214,8 +215,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               {navItems.map((item: any, idx: number) => {
                 if (item.separator) {
                   return (
-                    <div key={`msep-${idx}`} className="px-3 pt-4 pb-1">
-                      <div className="font-body text-[9px] text-white/30 uppercase tracking-widest font-semibold">{item.label}</div>
+                    <div key={`msep-${idx}`} className="px-3 pt-5 pb-1.5">
+                      {idx > 0 && <div className="border-t border-white/10 mb-3"></div>}
+                      <div className="font-body text-[10px] text-gold-400/80 uppercase tracking-widest font-bold">{item.label}</div>
                     </div>
                   );
                 }

@@ -91,8 +91,8 @@ export default function BonsRecupPage() {
   };
 
   const markUsed = async (bonId: string) => {
-    const usedActivity = prompt("Activité de récupération (ex: Cours mercredi 14h)");
-    if (!usedActivity) return;
+    const usedActivity = ""; // TODO: remplacer par input inline
+    if (!usedActivity) { alert("Veuillez indiquer l'activité."); return; }
     await updateDoc(doc(db, "bonsRecup", bonId), {
       status: "used",
       usedDate: new Date().toISOString().split("T")[0],

@@ -697,20 +697,8 @@ export default function ParametresPage() {
 
             <div className="border-t border-gray-200 pt-4">
               <button onClick={async () => {
-                const msg = "TOUT SUPPRIMER ?\n\n" +
-                  "Cela va supprimer :\n" +
-                  "- Tous les paiements et factures\n" +
-                  "- Toutes les réservations\n" +
-                  "- Tous les forfaits\n" +
-                  "- Tous les avoirs\n" +
-                  "- Tous les créneaux du planning\n" +
-                  "- Tous les emails envoyés\n" +
-                  "- Tous les RDV pro\n" +
-                  "- Toutes les cartes/tickets\n\n" +
-                  "CONSERVÉ : familles, cavaliers, cavalerie, soins, registre, activités, paramètres.\n\n" +
-                  "Tapez NETTOYER pour confirmer.";
-                const input = prompt(msg);
-                if (input !== "NETTOYER") { if (input !== null) alert("Confirmation incorrecte."); return; }
+                if (!confirm("⚠️ NETTOYAGE COMPLET\n\nCeci va supprimer :\n- Paiements, encaissements, réservations\n- Forfaits, avoirs, créneaux, cartes\n- Emails, RDV pro\n\nCONSERVÉ : familles, cavaliers, cavalerie, soins, activités.\n\nContinuer ?")) return;
+                if (!confirm("DERNIÈRE CONFIRMATION\n\nAction IRRÉVERSIBLE.\nConfirmer le nettoyage complet ?")) return;
 
                 const collections = ["payments", "reservations", "forfaits", "avoirs", "creneaux", "emailsReprise", "rdv_pro", "cartes", "encaissements", "remises"];
                 let total = 0;

@@ -62,9 +62,11 @@ export const PAYMENT_MODES = [
 
 export type PaymentMode = typeof PAYMENT_MODES[number]["id"];
 
-/** Génère un orderId stable et lisible : CMD-2026-A3F7 */
+/** Génère un orderId stable et lisible : CMD-2026-0001 */
 export const generateOrderId = (): string => {
   const year = new Date().getFullYear();
-  const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
-  return `CMD-${year}-${rand}`;
+  const month = String(new Date().getMonth() + 1).padStart(2, "0");
+  const ts = Date.now().toString(36).slice(-4).toUpperCase();
+  const rand = Math.random().toString(36).substring(2, 4).toUpperCase();
+  return `CMD-${year}${month}-${ts}${rand}`;
 };

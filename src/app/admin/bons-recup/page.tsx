@@ -28,6 +28,7 @@ export default function BonsRecupPage() {
   const [tab, setTab] = useState<"active" | "generate" | "history">("active");
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
+  const [usedBon, setUsedBon] = useState<{ id: string; activity: string } | null>(null);
 
   // Generate form
   const [dayOffset, setDayOffset] = useState(0);
@@ -90,14 +91,14 @@ export default function BonsRecupPage() {
     fetchData();
   };
 
-  const markUsed = async (bonId: string) => {
-    const usedActivity = prompt("Activité de récupération (ex: Cours mercredi 14h)");
-    if (!usedActivity) return;
+  const markUsed = async (bonId: string, activity: string) => {
+    if (!activity.trim()) return;
     await updateDoc(doc(db, "bonsRecup", bonId), {
       status: "used",
       usedDate: new Date().toISOString().split("T")[0],
-      usedActivity,
+      usedActivity: activity,
     });
+    setUsedBon(null);
     fetchData();
   };
 
@@ -193,9 +194,26 @@ export default function BonsRecupPage() {
                       </Badge>
                       {b.status === "active" && (
                         <>
-                          <button onClick={() => markUsed(b.id)} className="font-body text-xs font-semibold text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border-none cursor-pointer">
-                            ✓ Marquer utilisé
-                          </button>
+                          {usedBon?.id === b.id ? (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                autoFocus
+                                value={usedBon.activity}
+                                onChange={e => setUsedBon({ ...usedBon, activity: e.target.value })}
+                                onKeyDown={e => { if (e.key === "Enter") markUsed(b.id, usedBon.activity); if (e.key === "Escape") setUsedBon(null); }}
+                                placeholder="Cours mercredi 14h"
+                                className="px-2 py-1 rounded border border-green-300 font-body text-xs w-40 focus:outline-none focus:border-green-500"
+                              />
+                              <button onClick={() => markUsed(b.id, usedBon.activity)} disabled={!usedBon.activity.trim()}
+                                className="font-body text-xs font-semibold text-white bg-green-600 px-2 py-1 rounded border-none cursor-pointer disabled:bg-gray-300">OK</button>
+                              <button onClick={() => setUsedBon(null)}
+                                className="font-body text-xs text-gray-400 bg-transparent border-none cursor-pointer">✕</button>
+                            </div>
+                          ) : (
+                            <button onClick={() => setUsedBon({ id: b.id, activity: "" })} className="font-body text-xs font-semibold text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border-none cursor-pointer">
+                              ✓ Marquer utilisé
+                            </button>
+                          )}
                           <button onClick={() => markExpired(b.id)} className="font-body text-xs text-gray-400 bg-transparent border-none cursor-pointer hover:text-red-500">
                             <XCircle size={14} />
                           </button>

@@ -10,7 +10,7 @@
  * - duplicateWeek() : duplique les créneaux sur N semaines
  */
 
-import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 // ═══ TYPES ═══
@@ -119,16 +119,25 @@ export function computeStageReductions(
 
 /** Inscrit un enfant dans un créneau (lecture fraîche Firestore) */
 export async function enrollChildInCreneau(creneauId: string, child: EnrolledChild): Promise<boolean> {
-  const snap = await getDoc(doc(db, "creneaux", creneauId));
-  if (!snap.exists()) return false;
-  const c = snap.data();
-  const enrolled = c.enrolled || [];
-  if (enrolled.some((e: any) => e.childId === child.childId)) return false; // déjà inscrit
-  await updateDoc(doc(db, "creneaux", creneauId), {
-    enrolled: [...enrolled, child],
-    enrolledCount: enrolled.length + 1,
-  });
-  return true;
+  try {
+    const result = await runTransaction(db, async (transaction) => {
+      const creneauRef = doc(db, "creneaux", creneauId);
+      const snap = await transaction.get(creneauRef);
+      if (!snap.exists()) return false;
+      const c = snap.data();
+      const enrolled = c.enrolled || [];
+      if (enrolled.some((e: any) => e.childId === child.childId)) return false;
+      transaction.update(creneauRef, {
+        enrolled: [...enrolled, child],
+        enrolledCount: enrolled.length + 1,
+      });
+      return true;
+    });
+    return result;
+  } catch (e) {
+    console.error("Transaction enrollChildInCreneau failed:", e);
+    return false;
+  }
 }
 
 /** Crée une réservation pour un enfant */
@@ -159,14 +168,21 @@ export async function createReservation(
 
 /** Retire un enfant d'un créneau */
 export async function removeChildFromCreneau(creneauId: string, childId: string) {
-  const snap = await getDoc(doc(db, "creneaux", creneauId));
-  if (!snap.exists()) return;
-  const enrolled = snap.data().enrolled || [];
-  const newEnrolled = enrolled.filter((e: any) => e.childId !== childId);
-  await updateDoc(doc(db, "creneaux", creneauId), {
-    enrolled: newEnrolled,
-    enrolledCount: newEnrolled.length,
-  });
+  try {
+    await runTransaction(db, async (transaction) => {
+      const creneauRef = doc(db, "creneaux", creneauId);
+      const snap = await transaction.get(creneauRef);
+      if (!snap.exists()) return;
+      const enrolled = snap.data().enrolled || [];
+      const newEnrolled = enrolled.filter((e: any) => e.childId !== childId);
+      transaction.update(creneauRef, {
+        enrolled: newEnrolled,
+        enrolledCount: newEnrolled.length,
+      });
+    });
+  } catch (e) {
+    console.error("Transaction removeChildFromCreneau failed:", e);
+  }
 }
 
 /** Supprime les réservations d'un enfant pour un créneau */
