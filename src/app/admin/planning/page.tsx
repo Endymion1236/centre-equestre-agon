@@ -56,7 +56,17 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
   const priceTTC = (creneau as any).priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux || 5.5) / 100);
   const filteredFamilies = useMemo(() => { if (!search) return families; const q = search.toLowerCase(); return families.filter(f => f.parentName?.toLowerCase().includes(q) || f.parentEmail?.toLowerCase().includes(q) || (f.children || []).some((c: any) => c.firstName?.toLowerCase().includes(q))); }, [families, search]);
   const fam = families.find(f => f.firestoreId === selFam); const children = fam?.children || [];
-  const available = children.filter((c: any) => !enrolledIds.includes(c.id));
+  const available = children.filter((c: any) => {
+    if (enrolledIds.includes(c.id)) return false;
+    // Vérifier si l'enfant est déjà inscrit sur un autre créneau au même horaire le même jour
+    const conflict = allCreneaux.find(other => 
+      other.id !== creneau.id &&
+      other.date === creneau.date &&
+      other.startTime === creneau.startTime &&
+      (other.enrolled || []).some((e: any) => e.childId === c.id)
+    );
+    return !conflict;
+  });
 
   // Calcul forfait annuel avec prorata
   const prixAdhesion = 60;
@@ -400,7 +410,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
     <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
         <div className="p-5 border-b border-blue-500/8" style={{ borderLeftWidth: 4, borderLeftColor: color }}>
-          <div className="flex justify-between items-start"><div><div className="font-body text-sm font-semibold" style={{ color }}>{creneau.startTime}–{creneau.endTime}</div><h2 className="font-display text-lg font-bold text-blue-800">{creneau.activityTitle}</h2><div className="font-body text-xs text-gray-400 mt-1">{new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · {creneau.monitor}{priceTTC > 0 ? ` · ${priceTTC.toFixed(2)}€/séance` : ""}</div></div><button onClick={onClose} className="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button></div>
+          <div className="flex justify-between items-start"><div><div className="font-body text-sm font-semibold" style={{ color }}>{creneau.startTime}–{creneau.endTime}</div><h2 className="font-display text-lg font-bold text-blue-800">{creneau.activityTitle}</h2><div className="font-body text-xs text-gray-400 mt-1">{new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · {creneau.monitor}{priceTTC > 0 ? ` · ${priceTTC.toFixed(2)}€${isStage ? "" : "/séance"}` : ""}</div></div><button onClick={onClose} className="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button></div>
           <div className="flex items-center gap-3 mt-3">
             <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>{spots > 0 ? `${spots} place${spots > 1 ? "s" : ""}` : "COMPLET"}</Badge>
             <span className="font-body text-xs text-gray-400">{enrolled.length}/{creneau.maxPlaces}</span>

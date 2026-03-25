@@ -32,7 +32,12 @@ export interface StageLine {
 }
 
 // ═══ UTILITAIRES ═══
-export const fmtDate = (d: Date) => d.toISOString().split("T")[0];
+export const fmtDate = (d: Date) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 export const safeNumber = (v: any) => Number.isFinite(Number(v)) ? Number(v) : 0;
 
 export function getWeekBounds(dateStr: string) {
@@ -323,6 +328,10 @@ export async function duplicateWeekCreneaux(creneaux: any[], nbWeeks: number) {
         priceHT: c.priceHT || 0,
         priceTTC: c.priceTTC || 0,
         tvaTaux: c.tvaTaux || 5.5,
+        ...(c.price1day ? { price1day: c.price1day } : {}),
+        ...(c.price2days ? { price2days: c.price2days } : {}),
+        ...(c.price3days ? { price3days: c.price3days } : {}),
+        ...(c.price4days ? { price4days: c.price4days } : {}),
         createdAt: serverTimestamp(),
       });
       count++;
