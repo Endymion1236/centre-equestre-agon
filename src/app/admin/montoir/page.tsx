@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { validateChildrenUpdate } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { emailTemplates } from "@/lib/email-templates";
@@ -128,6 +129,7 @@ export default function MontoirPage() {
         const updatedChildren = famDoc.children.map((ch: any) =>
           ch.id === child.childId ? { ...ch, peda: { ...peda, notes: [seanceNote, ...peda.notes], updatedAt: new Date().toISOString() } } : ch
         );
+        if (!validateChildrenUpdate(famDoc.id, famDoc.parentName || "", famDoc.children || [], updatedChildren, "montoir-cloture")) continue;
         await updateDoc(doc(db, "families", famDoc.id), { children: updatedChildren, updatedAt: serverTimestamp() });
         notesCreated++;
       } catch (e) { console.error("Erreur trace péda:", e); }

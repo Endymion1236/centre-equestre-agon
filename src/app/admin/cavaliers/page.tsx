@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, Timestamp, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { validateChildrenUpdate } from "@/lib/utils";
 import { emailTemplates } from "@/lib/email-templates";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
@@ -246,6 +247,10 @@ export default function CavaliersPage() {
       if (!confirm(`Supprimer ${childName} de cette famille ? (${nbChildren - 1} cavalier(s) restant(s))`)) return;
     }
     const updated = (family.children || []).filter((c: any) => c.id !== childId);
+    if (!validateChildrenUpdate(familyId, family.parentName, family.children || [], updated, "handleDeleteChild")) {
+      alert("Opération bloquée : impossible de supprimer tous les enfants d'une famille.");
+      return;
+    }
     await updateDoc(doc(db, "families", familyId), { children: updated, updatedAt: serverTimestamp() });
     fetchFamilies();
   };

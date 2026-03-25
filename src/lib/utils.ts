@@ -70,3 +70,25 @@ export const generateOrderId = (): string => {
   const rand = Math.random().toString(36).substring(2, 4).toUpperCase();
   return `CMD-${year}${month}-${ts}${rand}`;
 };
+
+/** 
+ * Mise à jour sécurisée des enfants d'une famille.
+ * Refuse d'écrire un tableau vide (protection anti-effacement accidentel).
+ * Logge la modification dans la console pour audit.
+ */
+export function validateChildrenUpdate(
+  familyId: string,
+  familyName: string,
+  currentChildren: any[],
+  newChildren: any[],
+  context: string,
+): boolean {
+  if (newChildren.length === 0 && currentChildren.length > 0) {
+    console.error(`🚨 BLOQUÉ — tentative d'effacement de TOUS les enfants de "${familyName}" (${familyId}) depuis ${context}. ${currentChildren.length} enfant(s) auraient été supprimés.`);
+    return false;
+  }
+  if (newChildren.length < currentChildren.length) {
+    console.warn(`⚠️ Réduction enfants "${familyName}" : ${currentChildren.length} → ${newChildren.length} (${context})`);
+  }
+  return true;
+}
