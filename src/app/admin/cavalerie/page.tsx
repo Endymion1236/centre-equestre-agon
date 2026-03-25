@@ -1,5 +1,7 @@
 "use client";
 
+const fmtDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+
 import { useState, useEffect, useMemo } from "react";
 import {
   collection,
@@ -285,8 +287,8 @@ export default function CavaleriePage() {
       const dow = new Date().getDay();
       const monday = new Date(); monday.setDate(monday.getDate() - ((dow + 6) % 7));
       const sunday = new Date(monday); sunday.setDate(sunday.getDate() + 6);
-      const monStr = monday.toISOString().split("T")[0];
-      const sunStr = sunday.toISOString().split("T")[0];
+      const monStr = fmtDate(monday);
+      const sunStr = fmtDate(sunday);
 
       const [eSnap, sSnap, mSnap, dSnap, iSnap, cSnap] = await Promise.all([
         getDocs(collection(db, "equides")),

@@ -21,7 +21,7 @@ interface Period { startDate: string; endDate: string; }
 interface SlotDef { activityId: string; day: number; startTime: string; endTime: string; monitor: string; maxPlaces: number; }
 
 function getWeekDates(offset: number): Date[] { const t = new Date(); const m = new Date(t); m.setDate(t.getDate() - ((t.getDay() + 6) % 7) + offset * 7); return Array.from({ length: 7 }, (_, i) => { const d = new Date(m); d.setDate(m.getDate() + i); return d; }); }
-function fmtDate(d: Date) { return d.toISOString().split("T")[0]; }
+function fmtDate(d: Date) { const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const day = String(d.getDate()).padStart(2, "0"); return `${y}-${m}-${day}`; }
 function fmtDateFR(d: Date) { return d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" }); }
 function fmtMonthFR(d: Date) { return d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" }); }
 const dayNames = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
@@ -383,7 +383,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
             paidAmount: 0,
             echeance: i + 1,
             echeancesTotal: nbEcheances,
-            echeanceDate: echeanceDate.toISOString().split("T")[0],
+            echeanceDate: fmtDate(echeanceDate),
             forfaitRef: slotKey,
             date: serverTimestamp(),
           });
@@ -1358,7 +1358,7 @@ export default function PlanningPage() {
       {viewMode==="month"&&<>
         <div className="flex items-center justify-between mb-5">
           <button onClick={()=>setMonthOffset(m=>m-1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16}/>Préc.</button>
-          <div className="text-center"><div className="font-display text-lg font-bold text-blue-800 capitalize">{currentMonth.toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}</div><div className="font-body text-xs text-gray-400">{creneaux.length} créneaux · {rdvPros.filter(r => r.date?.startsWith(currentMonth.toISOString().slice(0,7))).length} RDV pro</div></div>
+          <div className="text-center"><div className="font-display text-lg font-bold text-blue-800 capitalize">{currentMonth.toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}</div><div className="font-body text-xs text-gray-400">{creneaux.length} créneaux · {rdvPros.filter(r => r.date?.startsWith(fmtDate(currentMonth).slice(0,7))).length} RDV pro</div></div>
           <div className="flex gap-2"><button onClick={()=>setMonthOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setMonthOffset(m=>m+1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Suiv.<ChevronRight size={16}/></button></div>
         </div>
         {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:
@@ -1398,11 +1398,11 @@ export default function PlanningPage() {
       </>}
 
       {/* RDV Pros du mois (visible en vue mois) */}
-      {viewMode === "month" && rdvPros.filter(r => r.date?.startsWith(currentMonth.toISOString().slice(0,7))).length > 0 && (
+      {viewMode === "month" && rdvPros.filter(r => r.date?.startsWith(fmtDate(currentMonth).slice(0,7))).length > 0 && (
         <div className="mt-6">
           <h3 className="font-body text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">RDV professionnels du mois</h3>
           <div className="flex flex-col gap-2">
-            {rdvPros.filter(r => r.date?.startsWith(currentMonth.toISOString().slice(0,7))).sort((a:any,b:any) => a.date.localeCompare(b.date)).map((r: any) => (
+            {rdvPros.filter(r => r.date?.startsWith(fmtDate(currentMonth).slice(0,7))).sort((a:any,b:any) => a.date.localeCompare(b.date)).map((r: any) => (
               <Card key={r.id} padding="sm">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
