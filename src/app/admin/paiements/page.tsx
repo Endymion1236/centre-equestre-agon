@@ -1363,7 +1363,7 @@ export default function PaiementsPage() {
 
                   return (
                     <Card key={key} padding="md">
-                      <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center justify-between mb-2">
                         <div>
                           <div className="font-body text-sm font-semibold text-blue-800">{first.familyName}</div>
                           <div className="font-body text-xs text-gray-400">{(first as any).forfaitRef || (first.items || []).map((i: any) => i.activityTitle).join(", ")}</div>
@@ -1373,6 +1373,17 @@ export default function PaiementsPage() {
                           <div className="font-body text-[10px] text-gray-400">{nbPayes}/{nbTotal} échéances payées</div>
                         </div>
                       </div>
+                      {/* Détail des items du forfait (depuis la première échéance) */}
+                      {(first.items || []).length > 0 && (
+                        <div className="mb-3 bg-sand rounded-lg p-2">
+                          {(first.items || []).map((item: any, idx: number) => (
+                            <div key={idx} className="flex justify-between font-body text-[11px] py-0.5">
+                              <span className="text-gray-600">{item.activityTitle}</span>
+                              <span className="text-blue-500 font-semibold">{(item.priceTTC || 0).toFixed(2)}€</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
                       {/* Barre de progression */}
                       <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden mb-3">
@@ -1443,7 +1454,13 @@ export default function PaiementsPage() {
         <div>
           {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
           (() => {
-            const unpaid = payments.filter(p => p.status !== "cancelled" && (p.status === "partial" || p.status === "pending" || ((p.paidAmount || 0) < (p.totalTTC || 0) && p.status !== "paid")));
+            const unpaid = payments.filter(p => {
+              if (p.status === "cancelled" || p.status === "paid") return false;
+              if ((p.paidAmount || 0) >= (p.totalTTC || 0)) return false;
+              // Exclure les échéances individuelles (elles sont dans l'onglet Échéances)
+              if ((p as any).echeancesTotal > 1) return false;
+              return true;
+            });
             const totalDue = unpaid.reduce((s, p) => s + ((p.totalTTC || 0) - (p.paidAmount || 0)), 0);
             return unpaid.length === 0 ? (
               <Card padding="lg" className="text-center"><div className="w-14 h-14 rounded-2xl bg-green-50 flex items-center justify-center mx-auto mb-3"><Check size={28} className="text-green-400" /></div><p className="font-body text-sm text-gray-500">Aucun impayé ! Toutes les factures sont réglées.</p></Card>

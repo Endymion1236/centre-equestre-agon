@@ -230,12 +230,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
           where("status", "==", "pending"),
         ));
 
-        // Prendre la commande ouverte la plus récente
-        const pendingDocs = existingSnap.docs.sort((a, b) => {
-          const da = a.data().date?.seconds || 0;
-          const db2 = b.data().date?.seconds || 0;
-          return db2 - da;
-        });
+        // Prendre la commande ouverte la plus récente — EXCLURE les échéances de forfait
+        const pendingDocs = existingSnap.docs
+          .filter(d => !(d.data().echeancesTotal > 1))
+          .sort((a, b) => {
+            const da = a.data().date?.seconds || 0;
+            const db2 = b.data().date?.seconds || 0;
+            return db2 - da;
+          });
         if (pendingDocs.length > 1) {
           console.warn(`⚠️ ${pendingDocs.length} commandes pending pour famille ${fam.firestoreId} — fusion dans la plus récente`);
         }
@@ -1130,12 +1132,14 @@ export default function PlanningPage() {
       } else {
         // Paiement en attente → fusionner dans la commande ouverte la plus récente
         const existingSnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", child.familyId), where("status", "==", "pending")));
-        // Prendre la plus récente par date (la dernière créée)
-        const pendingDocs = existingSnap.docs.sort((a, b) => {
-          const da = a.data().date?.seconds || 0;
-          const db2 = b.data().date?.seconds || 0;
-          return db2 - da;
-        });
+        // Prendre la plus récente par date — EXCLURE les échéances de forfait
+        const pendingDocs = existingSnap.docs
+          .filter(d => !(d.data().echeancesTotal > 1))
+          .sort((a, b) => {
+            const da = a.data().date?.seconds || 0;
+            const db2 = b.data().date?.seconds || 0;
+            return db2 - da;
+          });
         if (pendingDocs.length > 1) {
           console.warn(`⚠️ ${pendingDocs.length} commandes pending pour famille ${child.familyId} — fusion dans la plus récente`);
         }
