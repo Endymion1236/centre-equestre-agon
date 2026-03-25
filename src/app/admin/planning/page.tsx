@@ -118,19 +118,18 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
       new Date(c.date) >= mon && new Date(c.date) <= sun
     ).length || 1;
 
-    // Prix proratisé selon le nombre de jours réels dans le planning
-    // L'activité est configurée pour un nombre de jours de référence (5 par défaut = semaine complète)
-    const prixStageComplet = priceTTC;
-    const joursRef = (creneau as any).stageDaysRef || 5; // jours de référence de l'activité
-    const prixJour = Math.round((prixStageComplet / joursRef) * 100) / 100;
-    const prixEffectif = stageMode === "jour" ? prixJour : Math.round(prixJour * nbJoursStage * 100) / 100;
+    // Prix du stage : le prix configuré dans l'activité = prix pour TOUS les jours du planning
+    // Si on inscrit pour moins de jours (mode jour), on proratise
+    const prixStageComplet = priceTTC; // = prix configuré dans l'activité
+    const prixJour = Math.round((prixStageComplet / nbJoursStage) * 100) / 100;
+    const prixEffectif = stageMode === "jour" ? prixJour : prixStageComplet;
 
     return selectedChildren.map((childId, idx) => {
       const child = children.find((c: any) => c.id === childId);
       const rang = existingStageCount + idx;
       const remiseEuros = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
       // La réduction s'applique au prorata aussi (mais plafonnée au prix)
-      const remiseEffective = stageMode === "jour" ? Math.round((remiseEuros / joursRef) * 100) / 100 : remiseEuros;
+      const remiseEffective = stageMode === "jour" ? Math.round((remiseEuros / nbJoursStage) * 100) / 100 : remiseEuros;
       const prixReduit = Math.max(0, Math.round((prixEffectif - remiseEffective) * 100) / 100);
       return {
         childId,
@@ -198,28 +197,29 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
           priceTTC: l.prixReduit,
         }));
 
-        // Chercher un paiement pending existant pour cette famille
+        // Chercher un paiement pending existant pour cette famille (PANIER UNIQUE)
         const existingSnap = await getDocs(query(
           collection(db, "payments"),
           where("familyId", "==", fam.firestoreId),
           where("status", "==", "pending"),
-          where("isStageCart", "==", true),
         ));
 
-        if (existingSnap.docs.length > 0) {
-          // Fusionner avec le panier existant
-          const existing = existingSnap.docs[0];
-          const existingData = existing.data();
+        // Prendre la première commande ouverte (s'il y en a une)
+        const openOrder = existingSnap.docs.length > 0 ? existingSnap.docs[0] : null;
+
+        if (openOrder) {
+          // Fusionner avec la commande existante
+          const existingData = openOrder.data();
           const mergedItems = [...(existingData.items || []), ...newItems];
           const mergedTotal = mergedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
 
-          await updateDoc(doc(db, "payments", existing.id), {
+          await updateDoc(doc(db, "payments", openOrder.id), {
             items: mergedItems,
             totalTTC: Math.round(mergedTotal * 100) / 100,
             updatedAt: serverTimestamp(),
           });
         } else {
-          // Créer le panier
+          // Créer une nouvelle commande
           await addDoc(collection(db, "payments"), {
             familyId: fam.firestoreId,
             familyName: fam.parentName || "",
@@ -229,7 +229,6 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
             paymentRef: "",
             status: "pending",
             paidAmount: 0,
-            isStageCart: true,
             date: serverTimestamp(),
           });
         }
@@ -460,8 +459,8 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
                     )}
                     <div className="font-body text-[10px] text-blue-500 bg-blue-50 rounded px-2 py-1">
                       {stageMode === "semaine"
-                        ? `${nbJours} jour${nbJours > 1 ? "s" : ""} sur ${(creneau as any).stageDaysRef || 5} — ${(priceTTC / ((creneau as any).stageDaysRef || 5) * nbJours).toFixed(2)}€${nbJours < ((creneau as any).stageDaysRef || 5) ? " (prorata)" : ""}`
-                        : `1 jour — ${(priceTTC / ((creneau as any).stageDaysRef || 5)).toFixed(2)}€`}
+                        ? `${nbJours} jour${nbJours > 1 ? "s" : ""} — ${priceTTC.toFixed(2)}€`
+                        : `1 jour sur ${nbJours} — ${(priceTTC / nbJours).toFixed(2)}€/jour (prorata)`}
                     </div>
                     {existingStageCount > 0 && (
                       <div className="font-body text-[10px] text-orange-500 bg-orange-50 rounded px-2 py-1">
@@ -1058,10 +1057,9 @@ export default function PlanningPage() {
 
       let payRefId = "";
 
-      // Chercher une commande ouverte (pending, non-stage) pour cette famille
+      // Chercher une commande ouverte (pending) pour cette famille — PANIER UNIQUE
       const existingSnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", child.familyId), where("status", "==", "pending")));
-      // Exclure les paniers stage (isStageCart) — ils ont leur propre flux
-      const openOrder = existingSnap.docs.find(d => !d.data().isStageCart) || null;
+      const openOrder = existingSnap.docs.length > 0 ? existingSnap.docs[0] : null;
 
       if (openOrder) {
         // Ajouter la ligne à la commande existante
