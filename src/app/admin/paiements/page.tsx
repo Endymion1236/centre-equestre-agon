@@ -1197,8 +1197,8 @@ export default function PaiementsPage() {
             const [searchFilter, setSearchFilter] = [histSearch, setHistSearch];
             const [periodFilter, setPeriodFilter] = [histPeriod, setHistPeriod];
 
-            // Filtrage
-            let filtered = [...payments];
+            // Filtrage — exclure les annulés par défaut
+            let filtered = payments.filter(p => p.status !== "cancelled");
             if (modeFilter !== "all") filtered = filtered.filter(p => p.paymentMode === modeFilter);
             if (statusFilter !== "all") filtered = filtered.filter(p => p.status === statusFilter);
             if (searchFilter) {
