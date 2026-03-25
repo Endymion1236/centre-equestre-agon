@@ -118,17 +118,19 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
       new Date(c.date) >= mon && new Date(c.date) <= sun
     ).length || 1;
 
-    // Prix proratisé si mode jour
+    // Prix proratisé selon le nombre de jours réels dans le planning
+    // L'activité est configurée pour un nombre de jours de référence (5 par défaut = semaine complète)
     const prixStageComplet = priceTTC;
-    const prixJour = Math.round((prixStageComplet / nbJoursStage) * 100) / 100;
-    const prixEffectif = stageMode === "jour" ? prixJour : prixStageComplet;
+    const joursRef = (creneau as any).stageDaysRef || 5; // jours de référence de l'activité
+    const prixJour = Math.round((prixStageComplet / joursRef) * 100) / 100;
+    const prixEffectif = stageMode === "jour" ? prixJour : Math.round(prixJour * nbJoursStage * 100) / 100;
 
     return selectedChildren.map((childId, idx) => {
       const child = children.find((c: any) => c.id === childId);
       const rang = existingStageCount + idx;
       const remiseEuros = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
       // La réduction s'applique au prorata aussi (mais plafonnée au prix)
-      const remiseEffective = stageMode === "jour" ? Math.round((remiseEuros / nbJoursStage) * 100) / 100 : remiseEuros;
+      const remiseEffective = stageMode === "jour" ? Math.round((remiseEuros / joursRef) * 100) / 100 : remiseEuros;
       const prixReduit = Math.max(0, Math.round((prixEffectif - remiseEffective) * 100) / 100);
       return {
         childId,
@@ -254,50 +256,7 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
           } catch (e) { console.error("Email confirmation stage:", e); }
         }
 
-        // Proposer envoi lien Stripe
-        if (fam.parentEmail) {
-          const acompte30 = Math.round(stageTotalTTC * 0.3 * 100) / 100;
-          const choix = prompt(
-            `Inscription ajoutée au panier !\n` +
-            `${stageLines.length} enfant(s) dans ${creneauxAInscrire.length} jour(s) — ${stageTotalTTC.toFixed(2)}€\n\n` +
-            `Encaisser maintenant ?\n` +
-            `1 = Envoyer un lien de paiement par email (acompte 30% = ${acompte30.toFixed(2)}€)\n` +
-            `2 = Plus tard (tout est dans Paiements > Encaisser)\n\nTapez 1 ou 2 :`
-          );
-          if (choix === "1") {
-            try {
-              const res = await fetch("/api/stripe-checkout", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  familyId: fam.firestoreId,
-                  familyName: fam.parentName || "",
-                  childName: noms,
-                  email: fam.parentEmail,
-                  forfaitLabel: `Stages — ${fam.parentName}`,
-                  totalTTC: acompte30,
-                  nbEcheances: 1,
-                  paymentIds: [],
-                }),
-              });
-              const data = await res.json();
-              if (data.url) {
-                const emailData = emailTemplates.lienPaiement({
-                  parentName: fam.parentName || "",
-                  label: `Acompte ${creneau.activityTitle}`,
-                  montant: acompte30,
-                  lienStripe: data.url,
-                });
-                await fetch("/api/send-email", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ to: fam.parentEmail, ...emailData }),
-                });
-                panelToast(`Lien envoyé à ${fam.parentEmail}`, "success");
-              }
-            } catch (e) { console.error(e); }
-          }
-        }
+        panelToast(`${noms} inscrit(s) — ${stageTotalTTC.toFixed(2)}€ ajouté au panier`, "success");
       } catch (e) { console.error(e); panelToast("Erreur lors de l'inscription", "error"); }
       setSelectedChildren([]);
       setSelFam(""); setSearch(""); setEnrolling(false);
@@ -403,73 +362,7 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
 
     if (inscriptionMode === "annuel") {
       setJustEnrolled(`${childName} inscrit(e) en forfait annuel — ${sessionsRestantes} séances — ${totalAnnuel.toFixed(2)}€ en ${payPlan}`);
-
-      // Proposer le paiement Stripe si 3x ou 10x
-      if ((payPlan === "3x" || payPlan === "10x") && createdPaymentIds.length > 0) {
-        const choix = prompt(
-          `Forfait créé en ${payPlan} (${createdPaymentIds.length} échéances de ${(totalAnnuel / createdPaymentIds.length).toFixed(2)}€).\n\n` +
-          `Comment encaisser ?\n\n` +
-          `1 = Ouvrir la page de paiement Stripe (vous ou le parent présent)\n` +
-          `2 = Envoyer le lien de paiement par email à ${fam.parentEmail || "pas d'email"}\n` +
-          `3 = Plus tard (encaissement manuel dans Paiements)\n\n` +
-          `Tapez 1, 2 ou 3 :`
-        );
-
-        if (choix === "1" || choix === "2") {
-          try {
-            const res = await fetch("/api/stripe-checkout", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                familyId: fam.firestoreId,
-                familyName: fam.parentName || "",
-                childName,
-                email: fam.parentEmail || "",
-                forfaitLabel: `${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long" })} ${creneau.startTime}`,
-                totalTTC: totalAnnuel,
-                nbEcheances: payPlan === "10x" ? 10 : 3,
-                paymentIds: createdPaymentIds,
-              }),
-            });
-            const data = await res.json();
-            if (data.url) {
-              if (choix === "1") {
-                window.open(data.url, "_blank");
-              } else {
-                // Envoyer par email
-                if (fam.parentEmail) {
-                  try {
-                    const emailData = emailTemplates.lienPaiement({
-                      parentName: fam.parentName || "",
-                      label: `Forfait ${creneau.activityTitle} — ${childName}`,
-                      montant: totalAnnuel,
-                      lienStripe: data.url,
-                    });
-                    await fetch("/api/send-email", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ to: fam.parentEmail, ...emailData }),
-                    });
-                    panelToast(`Lien envoyé à ${fam.parentEmail}`, "success");
-                  } catch (emailErr) {
-                    // Fallback : copier le lien
-                    await navigator.clipboard.writeText(data.url);
-                    panelToast("Lien copié dans le presse-papier", "warning");
-                  }
-                } else {
-                  await navigator.clipboard.writeText(data.url);
-                  panelToast("Pas d'email — lien copié dans le presse-papier", "warning");
-                }
-              }
-            } else if (data.error) {
-              panelToast(`Erreur Stripe : ${data.error}`, "error");
-            }
-          } catch (e) {
-            console.error(e);
-            panelToast("Stripe indisponible — encaissement manuel dans Paiements", "error");
-          }
-        }
-      }
+      panelToast(`Forfait créé — ${totalAnnuel.toFixed(2)}€ en ${payPlan}`, "success");
     } else {
       const payInfo = showPay ? " — encaissé ✅" : priceTTC > 0 ? " — paiement en attente" : "";
       setJustEnrolled(`${childName}${payInfo}`);
@@ -567,8 +460,8 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
                     )}
                     <div className="font-body text-[10px] text-blue-500 bg-blue-50 rounded px-2 py-1">
                       {stageMode === "semaine"
-                        ? `L'inscription couvre les ${nbJours} jour(s) — ${priceTTC.toFixed(2)}€`
-                        : `1 jour sur ${nbJours} — ${(priceTTC / nbJours).toFixed(2)}€/jour (prorata)`}
+                        ? `${nbJours} jour${nbJours > 1 ? "s" : ""} sur ${(creneau as any).stageDaysRef || 5} — ${(priceTTC / ((creneau as any).stageDaysRef || 5) * nbJours).toFixed(2)}€${nbJours < ((creneau as any).stageDaysRef || 5) ? " (prorata)" : ""}`
+                        : `1 jour — ${(priceTTC / ((creneau as any).stageDaysRef || 5)).toFixed(2)}€`}
                     </div>
                     {existingStageCount > 0 && (
                       <div className="font-body text-[10px] text-orange-500 bg-orange-50 rounded px-2 py-1">
@@ -1165,10 +1058,10 @@ export default function PlanningPage() {
 
       let payRefId = "";
 
-      // Chercher une commande ouverte (pending) pour cette famille
-      // → panier unique : on ajoute tout dedans (multi-enfants, multi-activités)
+      // Chercher une commande ouverte (pending, non-stage) pour cette famille
       const existingSnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", child.familyId), where("status", "==", "pending")));
-      const openOrder = existingSnap.docs.length > 0 ? existingSnap.docs[0] : null;
+      // Exclure les paniers stage (isStageCart) — ils ont leur propre flux
+      const openOrder = existingSnap.docs.find(d => !d.data().isStageCart) || null;
 
       if (openOrder) {
         // Ajouter la ligne à la commande existante
