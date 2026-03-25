@@ -393,7 +393,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
     }
 
     // Dans les 2 cas : inscrire dans le créneau
-    await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, inscriptionMode === "ponctuel" && showPay ? payMode : undefined);
+    // Pour les forfaits annuels : skipPayment car les échéances sont déjà créées
+    const enrollOptions = inscriptionMode === "annuel" ? { skipPayment: true, skipEmail: true } : undefined;
+    await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, inscriptionMode === "ponctuel" && showPay ? payMode : undefined, enrollOptions);
 
     if (inscriptionMode === "annuel") {
       setJustEnrolled(`${childName} inscrit(e) en forfait annuel — ${sessionsRestantes} séances — ${totalAnnuel.toFixed(2)}€ en ${payPlan}`);

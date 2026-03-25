@@ -539,8 +539,8 @@ export default function PaiementsPage() {
             className={`flex items-center gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg border font-body text-xs sm:text-sm font-medium cursor-pointer transition-all whitespace-nowrap flex-shrink-0
               ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
             <Icon size={14} /> {label}
-            {id === "impayes" && payments.filter(p => p.status !== "cancelled" && (p.status === "partial" || (p.paidAmount || 0) < (p.totalTTC || 0))).length > 0 && (
-              <span className="bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{payments.filter(p => p.status !== "cancelled" && (p.status === "partial" || ((p.paidAmount || 0) < (p.totalTTC || 0) && p.status !== "paid"))).length}</span>
+            {id === "impayes" && payments.filter(p => p.status !== "cancelled" && !(p as any).echeancesTotal && (p.status === "partial" || (p.paidAmount || 0) < (p.totalTTC || 0))).length > 0 && (
+              <span className="bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{payments.filter(p => p.status !== "cancelled" && !(p as any).echeancesTotal && (p.status === "partial" || ((p.paidAmount || 0) < (p.totalTTC || 0) && p.status !== "paid"))).length}</span>
             )}
           </button>
         ))}
