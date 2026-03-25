@@ -201,19 +201,21 @@ export default function ReserverPage() {
         date: serverTimestamp(),
       });
 
-      // 3. Stripe checkout
+      // 3. Stripe checkout (paiement unique)
       try {
-        const res = await fetch("/api/stripe-checkout", {
+        const res = await fetch("/api/stripe/checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            familyId: user.uid, familyName: family.parentName,
-            childName: cart.map(i => i.childName).join(", "),
-            email: family.parentEmail || user.email,
-            forfaitLabel: cart.map(i => i.activityTitle).join(" + "),
-            totalTTC: cartTotal,
-            nbEcheances: 1,
-            paymentIds: [],
+            familyId: user.uid,
+            familyEmail: family.parentEmail || user.email,
+            familyName: family.parentName,
+            items: cart.map(i => ({
+              name: `${i.activityTitle} — ${i.childName}`,
+              description: i.dates || undefined,
+              priceInCents: Math.round(i.prixFinal * 100),
+              quantity: 1,
+            })),
           }),
         });
         const data = await res.json();
