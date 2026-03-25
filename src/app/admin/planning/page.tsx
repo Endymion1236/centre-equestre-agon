@@ -29,8 +29,8 @@ const typeColors: Record<string, string> = { stage: "#27ae60", stage_journee: "#
 const payModes = [{ id: "cb_terminal", label: "CB", icon: "💳" }, { id: "cheque", label: "Chèque", icon: "📝" }, { id: "especes", label: "Espèces", icon: "💶" }, { id: "cheque_vacances", label: "Chq.Vac.", icon: "🏖️" }, { id: "pass_sport", label: "Pass'Sport", icon: "🎽" }, { id: "ancv", label: "ANCV", icon: "🎫" }, { id: "carte", label: "Carte", icon: "🎟️" }];
 
 // ─── Enroll Panel ───
-function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnenroll }: {
-  creneau: Creneau & { id: string }; families: (Family & { firestoreId: string })[]; allCreneaux: (Creneau & { id: string })[]; onClose: () => void;
+function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnroll, onUnenroll }: {
+  creneau: Creneau & { id: string }; families: (Family & { firestoreId: string })[]; allCreneaux: (Creneau & { id: string })[]; payments: any[]; onClose: () => void;
   onEnroll: (id: string, c: EnrolledChild, payMode?: string) => Promise<void>;
   onUnenroll: (id: string, childId: string) => Promise<void>;
 }) {
@@ -496,17 +496,13 @@ function EnrollPanel({ creneau, families, allCreneaux, onClose, onEnroll, onUnen
                       </div>
                     ))}
                     <div className="flex items-center justify-between pt-2 border-t border-green-200 font-body">
-                      <span className="text-sm font-bold text-blue-800">Total</span>
-                      <span className="text-lg font-bold text-green-600">{stageTotalTTC.toFixed(2)}€</span>
+                      <span className="text-sm font-bold text-blue-800">Total à régler</span>
+                      <span className="text-2xl font-bold text-green-600">{stageTotalTTC.toFixed(2)}€</span>
                     </div>
-                    <div className="bg-white rounded-lg p-3 space-y-1">
-                      <div className="flex justify-between font-body text-sm">
-                        <span className="text-orange-600 font-semibold">Acompte 30%</span>
-                        <span className="font-bold text-orange-600">{stageAcompte.toFixed(2)}€</span>
-                      </div>
-                      <div className="flex justify-between font-body text-xs text-gray-400">
-                        <span>Solde le jour du stage</span>
-                        <span>{stageSolde.toFixed(2)}€</span>
+                    <div className="bg-white rounded-lg p-3">
+                      <div className="font-body text-xs text-gray-500 text-center">
+                        La commande sera ajoutée aux impayés.<br/>
+                        Encaissement possible depuis <strong>Paiements → Encaisser</strong>.
                       </div>
                     </div>
                   </div>
@@ -944,6 +940,7 @@ export default function PlanningPage() {
   const [creneaux, setCreneaux] = useState<(Creneau & { id: string })[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showSimple, setShowSimple] = useState(false); const [showGenerator, setShowGenerator] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string|undefined>();
@@ -979,9 +976,10 @@ export default function PlanningPage() {
 
   const fetchData = async () => {
     try {
-      const [aS, fS] = await Promise.all([getDocs(collection(db, "activities")), getDocs(collection(db, "families"))]);
+      const [aS, fS, pS] = await Promise.all([getDocs(collection(db, "activities")), getDocs(collection(db, "families")), getDocs(collection(db, "payments"))]);
       setActivities(aS.docs.map(d => ({ id: d.id, ...d.data() })) as Activity[]);
       setFamilies(fS.docs.map(d => ({ firestoreId: d.id, ...d.data() })) as any);
+      setPayments(pS.docs.map(d => ({ id: d.id, ...d.data() })));
 
       let s: string, e: string;
       if (viewMode === "day") { s = fmtDate(currentDay); e = s; }
@@ -1289,7 +1287,15 @@ export default function PlanningPage() {
           <Card key={c.id} padding="md" className="cursor-pointer hover:shadow-lg" hover>
             <div onClick={()=>setSelectedCreneau(c)}>
               <div className="flex items-start justify-between mb-3"><div className="flex items-center gap-4"><div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px] text-gray-400">{c.endTime}</div></div><div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs text-gray-400">{c.monitor} · {c.maxPlaces} pl.{ttc>0?` · ${ttc.toFixed(0)}€`:""}</div></div></div><div className="flex items-center gap-3"><Badge color={fill>=1?"red":fill>=0.7?"orange":"green"}>{en.length}/{c.maxPlaces}</Badge><button onClick={e=>{e.stopPropagation();handleDelete(c.id!);}} className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={16}/></button></div></div>
-              {en.length>0&&<div className="ml-[68px] flex flex-wrap gap-2">{en.map((e:any)=><span key={e.childId} className="font-body text-xs bg-sand text-blue-800 px-3 py-1 rounded-full">🧒 {e.childName} <span className="text-gray-400">({e.familyName})</span></span>)}</div>}
+              {en.length>0&&<div className="ml-[68px] flex flex-wrap gap-2">{en.map((e:any)=>{
+                // Vérifier si un payment paid existe pour cet enfant + ce créneau
+                const hasPaid = payments.some((p: any) => p.familyId === e.familyId && p.status === "paid" && (p.items||[]).some((i:any) => i.childId === e.childId && (i.creneauId === c.id || i.activityTitle === c.activityTitle)));
+                const hasPending = !hasPaid && payments.some((p: any) => p.familyId === e.familyId && (p.status === "pending" || p.status === "partial") && (p.items||[]).some((i:any) => i.childId === e.childId));
+                return <span key={e.childId} className="font-body text-xs bg-sand text-blue-800 px-3 py-1 rounded-full flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${hasPaid ? "bg-green-500" : hasPending ? "bg-orange-400" : "bg-gray-300"}`}></span>
+                  🧒 {e.childName} <span className="text-gray-400">({e.familyName})</span>
+                </span>;
+              })}</div>}
             </div>
           </Card>);})}</div>}
       </>}
@@ -1445,7 +1451,7 @@ export default function PlanningPage() {
         </div>
       )}
 
-      {selectedCreneau&&<EnrollPanel creneau={selectedCreneau as any} families={families} allCreneaux={creneaux} onClose={()=>{setSelectedCreneau(null);fetchData();}} onEnroll={handleEnroll} onUnenroll={handleUnenroll}/>}
+      {selectedCreneau&&<EnrollPanel creneau={selectedCreneau as any} families={families} allCreneaux={creneaux} payments={payments} onClose={()=>{setSelectedCreneau(null);fetchData();}} onEnroll={handleEnroll} onUnenroll={handleUnenroll}/>}
     </div>
   );
 }
