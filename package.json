@@ -12,6 +12,7 @@
   "dependencies": {
     "@stripe/stripe-js": "^4.0.0",
     "firebase": "^11.0.0",
+    "firebase-admin": "^13.7.0",
     "lucide-react": "^0.460.0",
     "next": "^15.0.0",
     "react": "^19.0.0",
