@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, where, orderBy, updateDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
@@ -34,6 +34,35 @@ export default function ReservationsPage() {
   const [loading, setLoading] = useState(true);
   const searchParams = useSearchParams();
   const success = searchParams.get("success");
+  const deposit = searchParams.get("deposit");
+
+  // Quand Stripe redirige avec success=true, marquer les payments pending comme payés
+  useEffect(() => {
+    if (!user || success !== "true") return;
+    const markPaid = async () => {
+      try {
+        const paySnap = await getDocs(query(
+          collection(db, "payments"),
+          where("familyId", "==", user.uid),
+          where("status", "==", "pending"),
+          where("source", "==", "client"),
+        ));
+        for (const pDoc of paySnap.docs) {
+          const p = pDoc.data();
+          const isDepositMode = deposit === "true";
+          const paidAmount = isDepositMode ? Math.round((p.totalTTC || 0) * 0.3 * 100) / 100 : (p.totalTTC || 0);
+          await updateDoc(doc(db, "payments", pDoc.id), {
+            status: isDepositMode ? "partial" : "paid",
+            paidAmount,
+            paymentMode: "stripe",
+            stripePaymentDate: new Date().toISOString(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      } catch (e) { console.error("Erreur mise à jour paiement Stripe:", e); }
+    };
+    markPaid();
+  }, [user, success, deposit]);
 
   useEffect(() => {
     if (!user) return;
