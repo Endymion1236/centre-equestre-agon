@@ -203,11 +203,35 @@ export default function FacturesPage() {
                             <Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : "gray"}>
                               {p.status === "paid" ? "Payé" : p.status === "partial" ? "Partiel" : "En attente"}
                             </Badge>
-                            <button onClick={() => {
+                            <button onClick={async () => {
                               const d2 = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
-                              const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reçu</title><style>body{font-family:Arial,sans-serif;max-width:600px;margin:40px auto;color:#333}h1{color:#2050A0;font-size:20px;border-bottom:2px solid #2050A0;padding-bottom:10px}table{width:100%;border-collapse:collapse;margin:20px 0}th,td{text-align:left;padding:8px;border-bottom:1px solid #eee}th{font-size:11px;text-transform:uppercase;color:#999}td{font-size:13px}.total{font-size:18px;font-weight:bold;color:#2050A0;text-align:right;margin-top:20px}.footer{margin-top:40px;font-size:11px;color:#999;text-align:center}</style></head><body><h1>Centre Équestre d'Agon-Coutainville</h1><p style="font-size:12px;color:#666">56 Charrière du Commerce — 50230 Agon-Coutainville<br>Tél : 02 44 84 99 96 — ceagon@orange.fr</p><p><strong>Reçu de paiement</strong><br>Date : ${d2.toLocaleDateString("fr-FR")}<br>Client : ${p.familyName}</p><table><thead><tr><th>Prestation</th><th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">TTC</th></tr></thead><tbody>${(p.items||[]).map((i: any) => `<tr><td>${i.activityTitle}</td><td style="text-align:right">${(i.priceHT||0).toFixed(2)}€</td><td style="text-align:right">${((i.priceTTC||0)-(i.priceHT||0)).toFixed(2)}€</td><td style="text-align:right">${(i.priceTTC||0).toFixed(2)}€</td></tr>`).join("")}</tbody></table><div class="total">Total TTC : ${(p.totalTTC||0).toFixed(2)}€</div><p style="font-size:12px;margin-top:10px">Mode de paiement : ${modeLabels[p.paymentMode]||p.paymentMode}</p><div class="footer">Centre Équestre Poney Club d'Agon-Coutainville — SIRET : [à compléter]</div></body></html>`;
-                              const w = window.open("", "_blank");
-                              if (w) { w.document.write(html); w.document.close(); w.print(); }
+                              const items = p.items || [];
+                              const totalHT = items.reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
+                              const totalTTC = p.totalTTC || 0;
+                              const totalTVA = totalTTC - totalHT;
+                              const invoiceNumber = (p as any).orderId || `F-${d2.getFullYear()}${String(d2.getMonth()+1).padStart(2,"0")}-${(p.id || "").slice(-4).toUpperCase()}`;
+                              try {
+                                const res = await fetch("/api/invoice", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    invoiceNumber,
+                                    date: d2.toLocaleDateString("fr-FR"),
+                                    familyName: p.familyName,
+                                    familyEmail: "",
+                                    items: items.map((i: any) => ({ ...i, childName: i.childName || "" })),
+                                    totalHT, totalTVA, totalTTC,
+                                    paidAmount: p.paidAmount || 0,
+                                    paymentMode: modeLabels[p.paymentMode] || p.paymentMode || "",
+                                    paymentDate: p.paidAmount > 0 ? d2.toLocaleDateString("fr-FR") : "",
+                                  }),
+                                });
+                                const data = await res.json();
+                                if (data.html) {
+                                  const w = window.open("", "_blank");
+                                  if (w) { w.document.write(data.html); w.document.close(); w.print(); }
+                                }
+                              } catch (e) { console.error(e); }
                             }}
                               className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 hover:text-blue-500 hover:bg-blue-50 cursor-pointer border-none"
                               title="Télécharger le reçu">

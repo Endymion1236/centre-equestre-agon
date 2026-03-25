@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { readFileSync } from "fs";
+import { join } from "path";
 
 export const dynamic = "force-dynamic";
+
+// Encoder le logo en base64 au démarrage
+let logoBase64 = "";
+try {
+  const logoPath = join(process.cwd(), "public", "images", "logo-ce-agon.png");
+  const logoBuffer = readFileSync(logoPath);
+  logoBase64 = `data:image/png;base64,${logoBuffer.toString("base64")}`;
+} catch (e) {
+  console.warn("Logo non trouvé, facture sans logo");
+}
 
 const CLUB = {
   name: "Centre Equestre d'Agon-Coutainville",
@@ -12,7 +24,6 @@ const CLUB = {
   tvaIntra: "",
   iban: "FR76 1660 6100 6400 1353 9343 253",
   bic: "AGRIFRPP866",
-  logoUrl: "/images/logo-ce-agon.png",
 };
 
 export async function POST(request: NextRequest) {
@@ -59,7 +70,7 @@ export async function POST(request: NextRequest) {
 
 <div class="header">
   <div class="logo-block">
-    <img src="${CLUB.logoUrl}" class="logo-img" alt="Logo"/>
+    <img src="${logoBase64}" class="logo-img" alt="Logo"/>
     <div>
       <div class="logo">${CLUB.name}</div>
       <div class="logo-sub">${CLUB.address}</div>
