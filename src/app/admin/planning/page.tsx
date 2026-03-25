@@ -1161,27 +1161,56 @@ export default function PlanningPage() {
     if (priceTTC > 0) {
       const priceHT = priceTTC / (1 + (c.tvaTaux || 5.5) / 100);
       const isPaid = !!payMode;
-      const payRef = await addDoc(collection(db, "payments"), {
-        familyId: child.familyId, familyName: child.familyName,
-        items: [{ activityTitle: c.activityTitle, childId: child.childId, childName: child.childName, creneauId: cid, activityType: c.activityType, priceHT: Math.round(priceHT * 100) / 100, tva: c.tvaTaux || 5.5, priceTTC: Math.round(priceTTC * 100) / 100 }],
-        totalTTC: Math.round(priceTTC * 100) / 100,
-        paymentMode: payMode || "",
-        paymentRef: "",
-        status: isPaid ? "paid" : "pending",
-        paidAmount: isPaid ? Math.round(priceTTC * 100) / 100 : 0,
-        date: serverTimestamp(),
+      const newItem = { activityTitle: c.activityTitle, childId: child.childId, childName: child.childName, creneauId: cid, activityType: c.activityType, priceHT: Math.round(priceHT * 100) / 100, tva: c.tvaTaux || 5.5, priceTTC: Math.round(priceTTC * 100) / 100 };
+
+      // Chercher un payment pending existant pour cette famille + ce créneau (fusion multi-enfants)
+      let payRefId = "";
+      const existingSnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", child.familyId)));
+      const existingPay = existingSnap.docs.find(d => {
+        const p = d.data();
+        return p.status === "pending" && (p.items || []).some((i: any) => i.creneauId === cid);
       });
-      // Si encaissé, créer aussi l'encaissement dans le journal
+
+      if (existingPay) {
+        // Ajouter la ligne au payment existant
+        const existData = existingPay.data();
+        const mergedItems = [...(existData.items || []), newItem];
+        const mergedTotal = mergedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
+        await updateDoc(doc(db, "payments", existingPay.id), {
+          items: mergedItems,
+          totalTTC: Math.round(mergedTotal * 100) / 100,
+          paidAmount: isPaid ? Math.round(mergedTotal * 100) / 100 : 0,
+          status: isPaid ? "paid" : "pending",
+          paymentMode: payMode || existData.paymentMode || "",
+          updatedAt: serverTimestamp(),
+        });
+        payRefId = existingPay.id;
+      } else {
+        // Créer un nouveau payment
+        const payRef = await addDoc(collection(db, "payments"), {
+          familyId: child.familyId, familyName: child.familyName,
+          items: [newItem],
+          totalTTC: Math.round(priceTTC * 100) / 100,
+          paymentMode: payMode || "",
+          paymentRef: "",
+          status: isPaid ? "paid" : "pending",
+          paidAmount: isPaid ? Math.round(priceTTC * 100) / 100 : 0,
+          date: serverTimestamp(),
+        });
+        payRefId = payRef.id;
+      }
+
+      // Si encaissé, créer l'encaissement (montant = juste cet enfant)
       if (isPaid) {
         await addDoc(collection(db, "encaissements"), {
-          paymentId: payRef.id,
+          paymentId: payRefId,
           familyId: child.familyId,
           familyName: child.familyName,
           montant: Math.round(priceTTC * 100) / 100,
           mode: payMode,
           modeLabel: payMode === "cb_terminal" ? "CB (terminal)" : payMode === "especes" ? "Espèces" : payMode === "cheque" ? "Chèque" : payMode || "",
           ref: "",
-          activityTitle: c.activityTitle,
+          activityTitle: `${c.activityTitle} — ${child.childName}`,
           date: serverTimestamp(),
         });
       }
