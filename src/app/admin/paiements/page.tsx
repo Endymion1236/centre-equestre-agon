@@ -595,22 +595,6 @@ export default function PaiementsPage() {
               if (familyPending.length === 0) return null;
               const totalPending = familyPending.reduce((s, p) => s + (p.totalTTC || 0) - (p.paidAmount || 0), 0);
 
-              const encaisserTout = async (payModeId: string) => {
-                try {
-                  for (const p of familyPending) {
-                    await updateDoc(doc(db, "payments", p.id!), {
-                      status: "paid",
-                      paidAmount: p.totalTTC || 0,
-                      paymentMode: payModeId,
-                      date: serverTimestamp(),
-                    });
-                  }
-                  toast(`${totalPending.toFixed(2)}€ encaissé pour ${family.parentName} (${familyPending.length} prestation${familyPending.length > 1 ? "s" : ""}) !`);
-                  const paySnap = await getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200)));
-                  setPayments(loadPayments(paySnap.docs) as any);
-                } catch (e) { console.error(e); toast("Erreur.", "error"); }
-              };
-
               return (
                 <Card padding="md" className="mb-4 border-orange-200 bg-orange-50/30">
                   <div className="flex items-center justify-between mb-3">

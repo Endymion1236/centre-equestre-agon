@@ -31,7 +31,7 @@ const payModes = [{ id: "cb_terminal", label: "CB", icon: "💳" }, { id: "chequ
 // ─── Enroll Panel ───
 function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnroll, onUnenroll }: {
   creneau: Creneau & { id: string }; families: (Family & { firestoreId: string })[]; allCreneaux: (Creneau & { id: string })[]; payments: any[]; onClose: () => void;
-  onEnroll: (id: string, c: EnrolledChild, payMode?: string) => Promise<void>;
+  onEnroll: (id: string, c: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean }) => Promise<void>;
   onUnenroll: (id: string, childId: string) => Promise<void>;
 }) {
   const { toast: panelToast } = useToast();
@@ -187,17 +187,16 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
         }
         // Mode "jour" → juste le créneau cliqué (déjà par défaut)
 
-        // Inscrire chaque enfant dans TOUS les jours du stage
+        // Inscrire chaque enfant dans TOUS les jours du stage (inscription technique seulement, pas de paiement par jour)
         for (const line of stageLines) {
           for (const sc of creneauxAInscrire) {
-            // Vérifier si pas déjà inscrit
             const enrolled = sc.enrolled || [];
             if (enrolled.some((e: any) => e.childId === line.childId)) continue;
             await onEnroll(sc.id!, {
               childId: line.childId, childName: line.childName,
               familyId: fam.firestoreId, familyName: fam.parentName || "—",
               enrolledAt: new Date().toISOString(),
-            });
+            }, undefined, { skipPayment: true, skipEmail: true });
           }
         }
 
@@ -1060,16 +1059,17 @@ export default function PlanningPage() {
 
   const refreshCreneaux = async () => { const s=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[0]); const e=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[6]); const snap=await getDocs(query(collection(db,"creneaux"),where("date",">=",s),where("date","<=",e))); const fresh=snap.docs.map(d=>({id:d.id,...d.data()})) as (Creneau&{id:string})[]; setCreneaux(fresh); return fresh; };
 
-  const handleEnroll = async (cid: string, child: EnrolledChild, payMode?: string) => {
+  const handleEnroll = async (cid: string, child: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean }) => {
     const enrolled = await enrollChildInCreneau(cid, child);
     if (!enrolled) return;
-    // Lire le créneau pour la réservation + paiement
     const snap = await getDoc(doc(db, "creneaux", cid));
     if (!snap.exists()) return;
     const c = { id: snap.id, ...snap.data() } as any;
     await createReservation(child, c);
+
+    // skipPayment = true pour les inscriptions stage multi-jours (le paiement global est créé séparément)
     const priceTTC = c.priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
-    if (priceTTC > 0) {
+    if (!options?.skipPayment && priceTTC > 0) {
       const priceHT = priceTTC / (1 + (c.tvaTaux || 5.5) / 100);
       const isPaid = !!payMode;
       const newItem = { activityTitle: c.activityTitle, childId: child.childId, childName: child.childName, creneauId: cid, activityType: c.activityType, priceHT: Math.round(priceHT * 100) / 100, tva: c.tvaTaux || 5.5, priceTTC: Math.round(priceTTC * 100) / 100 };
@@ -1126,9 +1126,10 @@ export default function PlanningPage() {
         }
       }
     }
-    // Email confirmation cours
-    const fam = families.find(f => f.firestoreId === child.familyId);
-    if (fam?.parentEmail && c.activityType !== "stage" && c.activityType !== "stage_journee") {
+    // Email confirmation cours (skip pour les stages multi-jours — email envoyé séparément)
+    if (!options?.skipEmail) {
+      const fam = families.find(f => f.firestoreId === child.familyId);
+      if (fam?.parentEmail && c.activityType !== "stage" && c.activityType !== "stage_journee") {
       try {
         const emailData = emailTemplates.confirmationCours({
           parentName: fam.parentName || "", childName: child.childName,
@@ -1138,6 +1139,7 @@ export default function PlanningPage() {
         });
         await fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: fam.parentEmail, ...emailData }) });
       } catch (e) { console.error("Email confirmation cours:", e); }
+      }
     }
     const fresh = await refreshCreneaux(); const upd = fresh.find(x => x.id === cid); if (upd) setSelectedCreneau(upd);
   };
