@@ -490,41 +490,41 @@ export default function ComptabilitePage() {
                   })}
                 </div>
                 {/* Bouton créer remise */}
-                <div className="flex gap-2">
-                  <button onClick={async () => {
-                    const modeChoix = prompt(
-                      `Créer un bordereau de remise pour :\n\n` +
-                      Object.entries(nonRemisByMode).map(([m, ps]) => `${modeLabels[m] || m} : ${ps.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0).toFixed(2)}€ (${ps.length})`).join("\n") +
-                      `\n\nTotal : ${totalNonRemis.toFixed(2)}€\n\n` +
-                      `Filtrer par mode ? (laisser vide = tout inclure)\n1=CB  2=Chèque  3=Espèces  4=Virement  5=Tout`
-                    );
-                    if (modeChoix === null) return;
-                    const modeMap: Record<string,string> = {"1":"cb_terminal","2":"cheque","3":"especes","4":"virement"};
-                    const filterMode = modeMap[modeChoix] || "";
-                    const toRemise = filterMode ? nonRemis.filter(p => p.paymentMode === filterMode) : nonRemis;
-                    if (toRemise.length === 0) { alert("Aucun paiement correspondant."); return; }
+                <div className="flex gap-2 flex-wrap">
+                  {[
+                    { id: "", label: "Tout remettre", color: "bg-blue-500 text-white" },
+                    { id: "cb_terminal", label: "CB", color: "bg-blue-100 text-blue-800" },
+                    { id: "cheque", label: "Chèques", color: "bg-orange-100 text-orange-800" },
+                    { id: "especes", label: "Espèces", color: "bg-green-100 text-green-800" },
+                    { id: "virement", label: "Virements", color: "bg-purple-100 text-purple-800" },
+                  ].map(m => {
+                    const toRemise = m.id ? nonRemis.filter(p => p.paymentMode === m.id) : nonRemis;
+                    if (m.id && toRemise.length === 0) return null;
                     const remiseTotal = toRemise.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
+                    return (
+                      <button key={m.id || "all"} onClick={async () => {
+                        if (!confirm(`Créer un bordereau de remise ?\n\n${toRemise.length} paiement(s) — ${remiseTotal.toFixed(2)}€${m.id ? ` (${m.label})` : ""}`)) return;
 
                     try {
                       const remiseRef = await addDoc(collection(db, "remises"), {
                         date: serverTimestamp(),
                         paymentIds: toRemise.map(p => p.id),
-                        paymentMode: filterMode || "mixte",
+                        paymentMode: m.id || "mixte",
                         total: remiseTotal,
                         nbPaiements: toRemise.length,
                         status: "created",
                         createdAt: serverTimestamp(),
                       });
-                      // Marquer les paiements comme remis
                       for (const p of toRemise) {
                         await updateDoc(doc(db, "payments", p.id!), { remiseId: remiseRef.id });
                       }
-                      alert(`Bordereau créé : ${toRemise.length} paiement(s) — ${remiseTotal.toFixed(2)}€`);
                       fetchData();
-                    } catch (e) { console.error(e); alert("Erreur."); }
-                  }} className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600">
-                    <Plus size={16} /> Créer un bordereau de remise
-                  </button>
+                    } catch (e) { console.error(e); }
+                  }} className={`font-body text-[11px] font-semibold ${m.color} px-3 py-2 rounded-lg border-none cursor-pointer`}>
+                        {m.label} {m.id ? `(${remiseTotal.toFixed(0)}€)` : `(${remiseTotal.toFixed(0)}€)`}
+                      </button>
+                    );
+                  })}
                 </div>
               </>
             )}

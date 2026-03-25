@@ -1421,17 +1421,24 @@ export default function PaiementsPage() {
                                 {isPaid && <Badge color="green">Payé</Badge>}
                                 {isOverdue && <Badge color="red">En retard</Badge>}
                                 {isCurrent && !isPaid && (
-                                  <button onClick={async () => {
-                                    const mode = prompt(`Encaisser ${(e.totalTTC || 0).toFixed(2)}€\n\n1=CB  2=Chèque  3=Espèces  4=Virement`);
-                                    if (!mode) return;
-                                    const modeMap: Record<string,string> = {"1":"cb_terminal","2":"cheque","3":"especes","4":"virement"};
-                                    await enregistrerEncaissement(e.id, e, e.totalTTC || 0, modeMap[mode] || "cb_terminal", "",
-                                      (e as any).forfaitRef || (first as any).forfaitRef || (e.items || []).map((i: any) => i.activityTitle).join(", "));
-                                    await refreshAll();
-                                  }}
-                                    className="font-body text-[10px] font-semibold text-white bg-green-600 px-2 py-1 rounded border-none cursor-pointer hover:bg-green-500">
-                                    Encaisser
-                                  </button>
+                                  <div className="flex gap-1 flex-wrap">
+                                    {[
+                                      { id: "cb_terminal", label: "CB", color: "bg-blue-500" },
+                                      { id: "cheque", label: "Chq", color: "bg-orange-500" },
+                                      { id: "especes", label: "Esp", color: "bg-green-600" },
+                                      { id: "virement", label: "Vir", color: "bg-purple-500" },
+                                    ].map(m => (
+                                      <button key={m.id} onClick={async () => {
+                                        await enregistrerEncaissement(e.id, e, e.totalTTC || 0, m.id, "",
+                                          (e as any).forfaitRef || (first as any).forfaitRef || (e.items || []).map((i: any) => i.activityTitle).join(", "));
+                                        await refreshAll();
+                                        toast(`${(e.totalTTC || 0).toFixed(2)}€ encaissé (${m.label})`, "success");
+                                      }}
+                                        className={`font-body text-[9px] font-semibold text-white ${m.color} px-2 py-1 rounded border-none cursor-pointer`}>
+                                        {m.label}
+                                      </button>
+                                    ))}
+                                  </div>
                                 )}
                               </div>
                             </div>
