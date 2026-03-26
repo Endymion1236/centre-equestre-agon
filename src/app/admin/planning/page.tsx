@@ -460,9 +460,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
           <h3 className="font-body text-sm font-semibold text-blue-800 mb-3"><Users size={16} className="inline mr-1" />Inscrits ({enrolled.length})</h3>
           {enrolled.length === 0 ? <p className="font-body text-sm text-gray-400 italic mb-4">Aucun</p> :
           <div className="flex flex-col gap-2 mb-4">{enrolled.map((e: any) => {
-            const hasPaid = payments.some((p: any) => p.familyId === e.familyId && p.status === "paid" && (p.items||[]).some((i:any) => i.childId === e.childId));
+            const isCard = e.paymentSource === "card";
+            const hasPaid = isCard || payments.some((p: any) => p.familyId === e.familyId && p.status === "paid" && (p.items||[]).some((i:any) => i.childId === e.childId));
             const hasPending = !hasPaid && payments.some((p: any) => p.familyId === e.familyId && (p.status === "pending" || p.status === "partial") && (p.items||[]).some((i:any) => i.childId === e.childId));
-            return (<div key={e.childId} className="flex items-center justify-between bg-sand rounded-lg px-4 py-2.5"><div className="flex items-center gap-3"><div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center"><Users size={12} className="text-blue-500" /></div><div><div className="font-body text-sm font-semibold text-blue-800 flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${hasPaid ? "bg-green-500" : hasPending ? "bg-orange-400" : "bg-gray-300"}`}></span>{e.childName}</div><div className="font-body text-xs text-gray-400">{e.familyName}{hasPaid ? " · réglé" : hasPending ? " · en attente" : ""}</div></div></div><button onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId} className="flex items-center gap-1 font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-red-50">{unenrolling===e.childId ? <Loader2 size={12} className="animate-spin"/> : <Trash2 size={12}/>} Désinscrire</button></div>);
+            return (<div key={e.childId} className="flex items-center justify-between bg-sand rounded-lg px-4 py-2.5"><div className="flex items-center gap-3"><div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center"><Users size={12} className="text-blue-500" /></div><div><div className="font-body text-sm font-semibold text-blue-800 flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${isCard ? "bg-blue-500" : hasPaid ? "bg-green-500" : hasPending ? "bg-orange-400" : "bg-gray-300"}`}></span>{e.childName}</div><div className="font-body text-xs text-gray-400">{e.familyName}{isCard ? " · carte" : hasPaid ? " · réglé" : hasPending ? " · en attente" : ""}</div></div></div><button onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId} className="flex items-center gap-1 font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-red-50">{unenrolling===e.childId ? <Loader2 size={12} className="animate-spin"/> : <Trash2 size={12}/>} Désinscrire</button></div>);
           })}</div>}
 
           {spots > 0 && (creneau as any).status !== "closed" && (<div className="border-t border-blue-500/8 pt-4"><h3 className="font-body text-sm font-semibold text-blue-800 mb-3"><UserPlus size={16} className="inline mr-1"/>Inscrire</h3><div className="flex flex-col gap-3">
@@ -1162,6 +1163,53 @@ export default function PlanningPage() {
       // skipPayment = true pour les inscriptions stage multi-jours
       const priceTTC = c.priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
       if (!options?.skipPayment && priceTTC > 0) {
+
+      // ─── LOGIQUE CARTE : vérifier si l'enfant a une carte active ───
+      const isCoursType = ["cours", "cours_collectif", "cours_particulier"].includes(c.activityType);
+      if (isCoursType) {
+        try {
+          const cartesSnap = await getDocs(query(
+            collection(db, "cartes"),
+            where("childId", "==", child.childId),
+            where("status", "==", "active")
+          ));
+          const carteActive = cartesSnap.docs.find(d => (d.data().remainingSessions || 0) > 0);
+          if (carteActive) {
+            // Carte trouvée → consommer 1 séance au lieu de facturer
+            const carteData = carteActive.data();
+            const newRemaining = (carteData.remainingSessions || 0) - 1;
+            const newHistory = [...(carteData.history || []), {
+              date: new Date().toISOString(),
+              activityTitle: c.activityTitle,
+              childName: child.childName,
+              creneauId: cid,
+              creneauDate: c.date,
+              startTime: c.startTime,
+              auto: false,
+            }];
+            await updateDoc(doc(db, "cartes", carteActive.id), {
+              remainingSessions: newRemaining,
+              usedSessions: (carteData.usedSessions || 0) + 1,
+              history: newHistory,
+              status: newRemaining <= 0 ? "used" : "active",
+              updatedAt: serverTimestamp(),
+            });
+            // Pas de payment créé — la carte couvre cette séance
+            // Marquer dans l'enrollment que c'est payé par carte
+            const creneauRef2 = doc(db, "creneaux", cid);
+            const cSnap2 = await getDoc(creneauRef2);
+            if (cSnap2.exists()) {
+              const enrolled2 = cSnap2.data().enrolled || [];
+              const updatedEnrolled = enrolled2.map((e: any) =>
+                e.childId === child.childId ? { ...e, paymentSource: "card", cardId: carteActive.id } : e
+              );
+              await updateDoc(creneauRef2, { enrolled: updatedEnrolled });
+            }
+            return; // Pas de payment → sortir
+          }
+        } catch (e) { console.error("Erreur vérification carte:", e); }
+      }
+      // ─── FIN LOGIQUE CARTE ───
       const priceHT = priceTTC / (1 + (c.tvaTaux || 5.5) / 100);
       const isPaid = !!payMode;
       const newItem = { activityTitle: c.activityTitle, childId: child.childId, childName: child.childName, creneauId: cid, activityType: c.activityType, date: c.date, startTime: c.startTime, endTime: c.endTime, priceHT: Math.round(priceHT * 100) / 100, tva: c.tvaTaux || 5.5, priceTTC: Math.round(priceTTC * 100) / 100 };
@@ -1280,7 +1328,34 @@ export default function PlanningPage() {
       await deleteReservations(crId, childId);
     }
 
-    // 2. Gestion financière
+    // 2. Si payé par carte → recréditer la carte
+    if (child.paymentSource === "card" && child.cardId) {
+      try {
+        const carteRef = doc(db, "cartes", child.cardId);
+        const carteSnap = await getDoc(carteRef);
+        if (carteSnap.exists()) {
+          const carteData = carteSnap.data();
+          const newHistory = [...(carteData.history || []), {
+            date: new Date().toISOString(),
+            activityTitle: `Recrédit — ${c.activityTitle}`,
+            childName: child.childName,
+            creneauId: cid,
+            credit: true,
+          }];
+          await updateDoc(carteRef, {
+            remainingSessions: (carteData.remainingSessions || 0) + 1,
+            usedSessions: Math.max(0, (carteData.usedSessions || 0) - 1),
+            history: newHistory,
+            status: "active",
+            updatedAt: serverTimestamp(),
+          });
+        }
+      } catch (e) { console.error("Erreur recrédit carte:", e); }
+      await fetchData();
+      return;
+    }
+
+    // 3. Gestion financière (paiement classique)
     try {
       const linked = await findLinkedPayment(child.familyId, childId, c.activityTitle);
       if (linked) {
