@@ -3,13 +3,12 @@ import { Resend } from "resend";
 
 export const dynamic = "force-dynamic";
 
-// Email expéditeur — utilise le domaine vérifié dans Resend
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "Centre Equestre Agon <onboarding@resend.dev>";
+// Email expéditeur — en mode test, utiliser EXACTEMENT l'adresse Resend
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
 
 // Mode test : si pas de domaine vérifié, tous les emails vont vers l'email du compte Resend
-// IMPORTANT : Resend gratuit n'autorise l'envoi qu'à l'email du propriétaire du compte
 const TEST_MODE = !process.env.RESEND_FROM_EMAIL || process.env.RESEND_TEST_MODE === "true";
-const TEST_EMAIL = process.env.RESEND_OWNER_EMAIL || process.env.RESEND_TEST_EMAIL || "delivered@resend.dev";
+const TEST_EMAIL = process.env.RESEND_OWNER_EMAIL || "nicolasrichard16@hotmail.com";
 
 export async function POST(request: NextRequest) {
   try {
