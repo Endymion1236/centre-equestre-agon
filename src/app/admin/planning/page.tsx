@@ -751,16 +751,23 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
                           const oldItems = pData.items || [];
                           // Nombre de jours maintenant inscrits = joursInscrits + 1
                           const totalDaysNow = showAddDays.joursInscrits + 1;
+                          const totalDaysBefore = showAddDays.joursInscrits;
                           const cr = showAddDays.creneauRef as any;
                           const prices: Record<number, number> = {};
                           if (cr.price1day) prices[1] = cr.price1day;
                           if (cr.price2days) prices[2] = cr.price2days;
                           if (cr.price3days) prices[3] = cr.price3days;
                           if (cr.price4days) prices[4] = cr.price4days;
-                          const newPrice = prices[totalDaysNow] || prices[Math.max(...Object.keys(prices).map(Number).filter(k => k <= totalDaysNow))] || priceTTC;
+                          // Prix de référence avant et après
+                          const priceKeys = Object.keys(prices).map(Number).sort((a,b) => a-b);
+                          const refBefore = prices[totalDaysBefore] || prices[priceKeys.filter(k => k <= totalDaysBefore).at(-1) || 1] || 0;
+                          const refAfter = prices[totalDaysNow] || prices[priceKeys.filter(k => k <= totalDaysNow).at(-1) || 1] || 0;
+                          // Ratio de progression — préserve les remises individuelles
+                          const ratio = refBefore > 0 ? refAfter / refBefore : 1;
                           const updatedItems = oldItems.map((item: any) => {
                             if (item.activityType === "stage" || item.activityType === "stage_journee") {
-                              return { ...item, priceTTC: Math.round(newPrice * 100) / 100, priceHT: Math.round(newPrice / 1.055 * 100) / 100 };
+                              const newPriceTTC = Math.round(item.priceTTC * ratio * 100) / 100;
+                              return { ...item, priceTTC: newPriceTTC, priceHT: Math.round(newPriceTTC / 1.055 * 100) / 100 };
                             }
                             return item;
                           });
@@ -1177,35 +1184,47 @@ export default function PlanningPage() {
     const enrolled = await enrollChildInCreneau(cid, child);
     if (!enrolled) return;
 
+    // Variables de rollback — capturées au fur et à mesure pour être disponibles dans le catch
+    let usedCardId: string | null = null;
+    let reservationCreated = false;
+
     try {
       const snap = await getDoc(doc(db, "creneaux", cid));
       if (!snap.exists()) return;
       const c = { id: snap.id, ...snap.data() } as any;
       await createReservation(child, c);
+      reservationCreated = true;
 
       // skipPayment = true pour les inscriptions stage multi-jours
       const priceTTC = c.priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
       if (!options?.skipPayment && priceTTC > 0) {
 
-      // ─── LOGIQUE CARTE : vérifier si l'enfant a une carte active ───
+      // ─── LOGIQUE CARTE ───
       const isCoursType = ["cours", "cours_collectif", "cours_particulier"].includes(c.activityType);
       const isBaladeType = ["balade", "promenade", "ponyride"].includes(c.activityType);
       if (isCoursType || isBaladeType) {
         try {
-          // Si l'enfant a un forfait annuel actif → le forfait prime, pas de débit carte
+          // Forfait actif sur le MÊME type d'activité → prime sur la carte
           const forfaitSnap = await getDocs(query(
             collection(db, "forfaits"),
             where("childId", "==", child.childId),
             where("status", "==", "actif")
           ));
-          const hasForfaitActif = !forfaitSnap.empty;
+          // Vérifier que le forfait concerne bien le même type d'activité
+          const hasForfaitActif = forfaitSnap.docs.some(d => {
+            const fd = d.data();
+            const forfaitType = fd.activityType || "cours";
+            if (forfaitType === "all") return true;
+            if (forfaitType === "cours" && isCoursType) return true;
+            if (forfaitType === "balade" && isBaladeType) return true;
+            return false;
+          });
           if (!hasForfaitActif) {
           const cartesSnap = await getDocs(query(
             collection(db, "cartes"),
             where("childId", "==", child.childId),
             where("status", "==", "active")
           ));
-          // Chercher une carte compatible : même type, type balade, ou "all"
           const carteActive = cartesSnap.docs.find(d => {
             const data = d.data();
             if ((data.remainingSessions || 0) <= 0) return false;
@@ -1215,7 +1234,7 @@ export default function PlanningPage() {
             return false;
           });
           if (carteActive) {
-            // Carte trouvée → consommer 1 séance au lieu de facturer
+            usedCardId = carteActive.id; // ← capturer AVANT le débit pour le rollback
             const carteData = carteActive.data();
             const newRemaining = (carteData.remainingSessions || 0) - 1;
             const newHistory = [...(carteData.history || []), {
@@ -1234,8 +1253,6 @@ export default function PlanningPage() {
               status: newRemaining <= 0 ? "used" : "active",
               updatedAt: serverTimestamp(),
             });
-            // Pas de payment créé — la carte couvre cette séance
-            // Marquer dans l'enrollment que c'est payé par carte
             const creneauRef2 = doc(db, "creneaux", cid);
             const cSnap2 = await getDoc(creneauRef2);
             if (cSnap2.exists()) {
@@ -1245,7 +1262,7 @@ export default function PlanningPage() {
               );
               await updateDoc(creneauRef2, { enrolled: updatedEnrolled });
             }
-            return; // Pas de payment → sortir
+            return;
           }
           } // fin if !hasForfaitActif
         } catch (e) { console.error("Erreur vérification carte:", e); }
@@ -1335,30 +1352,24 @@ export default function PlanningPage() {
     }
     const fresh = await refreshCreneaux(); const upd = fresh.find(x => x.id === cid); if (upd) setSelectedCreneau(upd);
     } catch (error) {
-      // Rollback complet en cas d'erreur après inscription
       console.error("Erreur handleEnroll, rollback:", error);
       try {
         // 1. Retirer l'enfant du créneau
         await removeChildFromCreneau(cid, child.childId);
-        // 2. Supprimer la réservation créée
-        await deleteReservations(cid, child.childId);
-        // 3. Re-créditer la carte si elle a été débitée
-        const crSnap = await getDoc(doc(db, "creneaux", cid));
-        if (crSnap.exists()) {
-          const enrolled2 = crSnap.data().enrolled || [];
-          const entry = enrolled2.find((e: any) => e.childId === child.childId);
-          if (entry?.paymentSource === "card" && entry?.cardId) {
-            const carteRef = doc(db, "cartes", entry.cardId);
-            const carteSnap = await getDoc(carteRef);
-            if (carteSnap.exists()) {
-              const cd = carteSnap.data();
-              await updateDoc(carteRef, {
-                remainingSessions: (cd.remainingSessions || 0) + 1,
-                usedSessions: Math.max(0, (cd.usedSessions || 0) - 1),
-                status: "active",
-                updatedAt: serverTimestamp(),
-              });
-            }
+        // 2. Supprimer la réservation si elle a été créée
+        if (reservationCreated) await deleteReservations(cid, child.childId);
+        // 3. Re-créditer la carte si elle a été débitée — usedCardId capturé AVANT le débit
+        if (usedCardId) {
+          const carteRef = doc(db, "cartes", usedCardId);
+          const carteSnap = await getDoc(carteRef);
+          if (carteSnap.exists()) {
+            const cd = carteSnap.data();
+            await updateDoc(carteRef, {
+              remainingSessions: (cd.remainingSessions || 0) + 1,
+              usedSessions: Math.max(0, (cd.usedSessions || 0) - 1),
+              status: "active",
+              updatedAt: serverTimestamp(),
+            });
           }
         }
       } catch (e2) { console.error("Rollback partiel échoué:", e2); }
