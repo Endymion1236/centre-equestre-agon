@@ -122,14 +122,17 @@ export default function PaiementsPage() {
     Promise.all([
       getDocs(collection(db, "families")),
       getDocs(collection(db, "activities")),
-      getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200))),
+      getDocs(collection(db, "payments")),
       getDocs(query(collection(db, "encaissements"), orderBy("date", "desc"), limit(500))),
       getDocs(collection(db, "avoirs")),
       getDoc(doc(db, "settings", "promos")),
     ]).then(([famSnap, actSnap, paySnap, encSnap, avoirsSnap, promoSnap]) => {
       setFamilies(famSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as any);
       setActivities(actSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as any);
-      setPayments(loadPayments(paySnap.docs) as any);
+      // Trier côté client — évite d'exclure les docs sans champ date
+      const pays = loadPayments(paySnap.docs) as any[];
+      pays.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
+      setPayments(pays as any);
       setEncaissements(encSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
       setAvoirs(avoirsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
       if (promoSnap.exists() && promoSnap.data().items) setPromos(promoSnap.data().items);
@@ -190,11 +193,13 @@ export default function PaiementsPage() {
   // Rafraîchir les données
   const refreshAll = async () => {
     const [paySnap, encSnap, avoirsSnap] = await Promise.all([
-      getDocs(query(collection(db, "payments"), orderBy("date", "desc"), limit(200))),
+      getDocs(collection(db, "payments")),
       getDocs(query(collection(db, "encaissements"), orderBy("date", "desc"), limit(500))),
       getDocs(collection(db, "avoirs")),
     ]);
-    setPayments(loadPayments(paySnap.docs) as any);
+    const pays = loadPayments(paySnap.docs) as any[];
+    pays.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
+    setPayments(pays as any);
     setEncaissements(encSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
     setAvoirs(avoirsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
   };
