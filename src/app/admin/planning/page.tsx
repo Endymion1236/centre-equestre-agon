@@ -78,13 +78,17 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
   const fam = families.find(f => f.firestoreId === selFam); const children = fam?.children || [];
   const available = children.filter((c: any) => {
     if (enrolledIds.includes(c.id)) return false;
-    // Vérifier si l'enfant est déjà inscrit sur un autre créneau au même horaire le même jour
-    const conflict = allCreneaux.find(other => 
-      other.id !== creneau.id &&
-      other.date === creneau.date &&
-      other.startTime === creneau.startTime &&
-      (other.enrolled || []).some((e: any) => e.childId === c.id)
-    );
+    // Vérifier si l'enfant est déjà inscrit sur un autre créneau qui chevauche cet horaire
+    const conflict = allCreneaux.find(other => {
+      if (other.id === creneau.id) return false;
+      if (other.date !== creneau.date) return false;
+      if (!(other.enrolled || []).some((e: any) => e.childId === c.id)) return false;
+      // Vérifier le chevauchement horaire : deux créneaux se chevauchent si
+      // l'un commence avant que l'autre ne finisse et vice versa
+      const s1 = creneau.startTime, e1 = creneau.endTime;
+      const s2 = other.startTime, e2 = other.endTime;
+      return s1 < e2 && s2 < e1;
+    });
     return !conflict;
   });
 
@@ -219,16 +223,31 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
         // Mode "jour" → juste le créneau cliqué (déjà par défaut)
 
         // Inscrire chaque enfant dans TOUS les jours du stage (inscription technique seulement, pas de paiement par jour)
+        const conflictsFound: string[] = [];
         for (const line of stageLines) {
           for (const sc of creneauxAInscrire) {
             const enrolled = sc.enrolled || [];
             if (enrolled.some((e: any) => e.childId === line.childId)) continue;
+            // Vérifier conflit horaire avec un autre créneau ce jour
+            const hasConflict = allCreneaux.find(other =>
+              other.id !== sc.id &&
+              other.date === sc.date &&
+              (other.enrolled || []).some((e: any) => e.childId === line.childId) &&
+              sc.startTime < other.endTime && other.startTime < sc.endTime
+            );
+            if (hasConflict) {
+              conflictsFound.push(`${line.childName} (${sc.date} : conflit avec ${hasConflict.activityTitle})`);
+              continue;
+            }
             await onEnroll(sc.id!, {
               childId: line.childId, childName: line.childName,
               familyId: fam.firestoreId, familyName: fam.parentName || "—",
               enrolledAt: new Date().toISOString(),
             }, undefined, { skipPayment: true, skipEmail: true });
           }
+        }
+        if (conflictsFound.length > 0) {
+          panelToast(`Conflits horaires ignorés : ${conflictsFound.join(", ")}`, "warning");
         }
 
         // Ajouter les lignes au panier de la famille (1 seul paiement pending)
