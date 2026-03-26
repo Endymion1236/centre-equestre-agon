@@ -449,7 +449,7 @@ export default function PaiementsPage() {
   };
 
   const filteredFamilies = familySearch
-    ? families.filter((f) => f.parentName?.toLowerCase().includes(familySearch.toLowerCase()) || f.parentEmail?.toLowerCase().includes(familySearch.toLowerCase()))
+    ? families.filter((f) => { const terms = familySearch.toLowerCase().trim().split(/\s+/); const childText = (f.children || []).map((c: any) => `${c.firstName || ""} ${(c as any).lastName || ""}`).join(" "); const searchable = `${f.parentName || ""} ${f.parentEmail || ""} ${childText}`.toLowerCase(); return terms.every(t => searchable.includes(t)); })
     : families;
 
   const addToBasket = () => {

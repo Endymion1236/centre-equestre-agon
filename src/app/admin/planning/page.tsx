@@ -54,7 +54,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
   const enrolled = creneau.enrolled || []; const enrolledIds = enrolled.map((e: any) => e.childId);
   const spots = creneau.maxPlaces - enrolled.length; const color = typeColors[creneau.activityType] || "#666";
   const priceTTC = (creneau as any).priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux || 5.5) / 100);
-  const filteredFamilies = useMemo(() => { if (!search) return families; const q = search.toLowerCase(); return families.filter(f => f.parentName?.toLowerCase().includes(q) || f.parentEmail?.toLowerCase().includes(q) || (f.children || []).some((c: any) => c.firstName?.toLowerCase().includes(q))); }, [families, search]);
+  const filteredFamilies = useMemo(() => { if (!search) return families; const terms = search.toLowerCase().trim().split(/\s+/); return families.filter(f => { const childText = (f.children || []).map((c: any) => `${c.firstName || ""} ${c.lastName || ""}`).join(" "); const searchable = `${f.parentName || ""} ${f.parentEmail || ""} ${childText}`.toLowerCase(); return terms.every(t => searchable.includes(t)); }); }, [families, search]);
   const fam = families.find(f => f.firestoreId === selFam); const children = fam?.children || [];
   const available = children.filter((c: any) => {
     if (enrolledIds.includes(c.id)) return false;
