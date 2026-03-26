@@ -170,11 +170,17 @@ export default function PaiementsPage() {
     const totalTTC = safeNumber(paymentData.totalTTC);
     const newStatus = totalEncaisse >= totalTTC ? "paid" : totalEncaisse > 0 ? "partial" : "pending";
 
-    // 3. Mettre à jour le payment avec paidAmount calculé
+    // 3. Déterminer le mode de paiement à afficher
+    const allModes = encSnap.docs.map(d => d.data().mode).filter(Boolean);
+    const uniqueModes = [...new Set(allModes)];
+    const displayMode = uniqueModes.length === 1 ? uniqueModes[0] : uniqueModes.length > 1 ? "mixte" : mode;
+
+    // 4. Mettre à jour le payment avec paidAmount calculé
     await updateDoc(doc(db, "payments", paymentId), {
       paidAmount: totalEncaisse,
       status: newStatus,
-      paymentMode: mode,
+      paymentMode: displayMode,
+      paymentModes: uniqueModes,
       updatedAt: serverTimestamp(),
     });
 
@@ -1312,7 +1318,7 @@ export default function PaiementsPage() {
                           <span className="flex-1"><div className="font-body text-sm font-semibold text-blue-800">{p.familyName}</div></span>
                           <span className="w-32 font-body text-xs text-gray-500 truncate">{(p.items || []).map((i: any) => i.activityTitle).join(", ")}</span>
                           <span className="w-20 text-right font-body text-sm font-bold text-blue-500">{p.totalTTC?.toFixed(2)}€</span>
-                          <span className="w-20 text-center"><Badge color="blue">{mode?.label?.split(" ")[0] || p.paymentMode}</Badge></span>
+                          <span className="w-20 text-center"><Badge color="blue">{(p.paymentMode as string) === "mixte" && (p as any).paymentModes ? (p as any).paymentModes.map((m: string) => paymentModes.find(pm => pm.id === m)?.label?.split(" ")[0] || m).join(" + ") : mode?.label?.split(" ")[0] || p.paymentMode}</Badge></span>
                           <span className="w-16 text-center"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "draft" ? "blue" : "gray"}>{p.status === "paid" ? "Réglé" : p.status === "partial" ? "Partiel" : p.status === "draft" ? "Brouillon" : "À régler"}</Badge></span>
                           <span className="w-16 text-center"><button onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button></span>
                         </div>
