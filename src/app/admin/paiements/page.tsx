@@ -395,29 +395,43 @@ export default function PaiementsPage() {
     await refreshAll();
   };
 
-  const [duplicateTarget, setDuplicateTarget] = useState<{ payment: any; targetFamilyId: string; targetSearch: string } | null>(null);
+  const [duplicateTarget, setDuplicateTarget] = useState<{ payment: any; targetFamilyId: string; targetSearch: string; mode: "choose" | "other_family" | "paid_invoice"; paidMode: string; paidRef: string; paidDate: string } | null>(null);
 
-  const duplicatePayment = async (payment: any, targetFamilyId?: string) => {
-    const targetFamily = targetFamilyId
-      ? families.find(f => f.firestoreId === targetFamilyId)
-      : families.find(f => f.firestoreId === payment.familyId);
+  // ─── Duplication Mode 1 : pré-remplir le panier (même famille, créneaux à choisir) ───
+  const duplicateToBasket = (payment: any) => {
+    const family = families.find(f => f.firestoreId === payment.familyId);
+    if (!family) return;
+    const items: BasketItem[] = (payment.items || []).map((item: any) => ({
+      id: `dup_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      activityTitle: item.activityTitle || item.label || "",
+      childId: item.childId || "",
+      childName: item.childName || "",
+      activityId: item.activityId || "",
+      activityType: item.activityType || "",
+      description: item.description || item.activityTitle || "",
+      priceHT: safeNumber(item.priceHT),
+      tva: safeNumber(item.tva || item.tvaTaux || 5.5),
+      priceTTC: safeNumber(item.priceTTC),
+      creneauId: "",
+    }));
+    setSelectedFamily(family.firestoreId);
+    setFamilySearch(family.parentName || "");
+    setBasket(items);
+    setTab("encaisser");
+    setDuplicateTarget(null);
+    toast(`Panier pré-rempli pour ${family.parentName} — ${items.length} prestation(s). Ajustez les créneaux puis encaissez.`);
+  };
+
+  // ─── Duplication Mode 2 : commande pending vers une autre famille ───
+  const duplicateToFamily = async (payment: any, targetFamilyId: string) => {
+    const targetFamily = families.find(f => f.firestoreId === targetFamilyId);
     if (!targetFamily) return;
-
     const targetChildren = targetFamily.children || [];
-    const sourceChildren = (payment.items || []).map((i: any) => i.childName).filter(Boolean);
-
     const cleanedItems = (payment.items || []).map((item: any, idx: number) => {
-      let targetChild: { childId: string; childName: string };
-      if (targetFamilyId) {
-        // Autre famille : mapper par position, fallback sur le premier enfant disponible
-        const mapped = targetChildren[idx] || targetChildren[0];
-        targetChild = mapped
-          ? { childId: mapped.id || "", childName: mapped.firstName || "" }
-          : { childId: item.childId || "", childName: item.childName || "" };
-      } else {
-        // Même famille : conserver l'enfant d'origine
-        targetChild = { childId: item.childId || "", childName: item.childName || "" };
-      }
+      const mapped = targetChildren[idx] || targetChildren[0];
+      const targetChild = mapped
+        ? { childId: mapped.id || "", childName: mapped.firstName || "" }
+        : { childId: "", childName: "" };
       return {
         ...targetChild,
         activityType: item.activityType || "",
@@ -430,9 +444,9 @@ export default function PaiementsPage() {
         reservationId: "",
       };
     });
-    const totalTTC = round2(cleanedItems.reduce((sum: number, item: any) => sum + safeNumber(item.priceTTC), 0));
-    // IM-07 : status "pending" (pas "draft") pour que la commande apparaisse dans Impayés
-    await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
+    const totalTTC = round2(cleanedItems.reduce((s: number, i: any) => s + safeNumber(i.priceTTC), 0));
+    await addDoc(collection(db, "payments"), {
+      orderId: generateOrderId(),
       familyId: targetFamily.firestoreId,
       familyName: targetFamily.parentName || "",
       items: cleanedItems,
@@ -448,6 +462,44 @@ export default function PaiementsPage() {
     });
     setDuplicateTarget(null);
     await refreshAll();
+    toast(`Commande créée pour ${targetFamily.parentName} — ${totalTTC.toFixed(2)}€ à encaisser (onglet Impayés).`);
+  };
+
+  // ─── Duplication Mode 3 : facture manuelle déjà réglée ───
+  const duplicateAsPaid = async (payment: any, mode: string, ref: string, dateStr: string) => {
+    const family = families.find(f => f.firestoreId === payment.familyId);
+    if (!family) return;
+    const items = (payment.items || []).map((item: any) => ({
+      activityType: item.activityType || "",
+      activityTitle: item.activityTitle || item.label || "",
+      childId: item.childId || "",
+      childName: item.childName || "",
+      priceHT: safeNumber(item.priceHT),
+      priceTTC: safeNumber(item.priceTTC),
+      tva: safeNumber(item.tva || item.tvaTaux || 5.5),
+      creneauId: "",
+    }));
+    const totalTTC = round2(items.reduce((s: number, i: any) => s + safeNumber(i.priceTTC), 0));
+    const parsedDate = dateStr ? new Date(dateStr) : new Date();
+    await addDoc(collection(db, "payments"), {
+      orderId: generateOrderId(),
+      familyId: family.firestoreId,
+      familyName: family.parentName || "",
+      items,
+      totalTTC,
+      status: "paid",
+      paidAmount: totalTTC,
+      paymentMode: mode,
+      paymentRef: ref,
+      source: "duplicate_paid",
+      sourcePaymentId: payment.id,
+      date: parsedDate,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    setDuplicateTarget(null);
+    await refreshAll();
+    toast(`Facture créée et marquée réglée — ${totalTTC.toFixed(2)}€ (${mode}).`);
   };
 
   const basketSubtotal = basket.reduce((s, i) => s + i.priceTTC, 0);
@@ -1336,7 +1388,7 @@ export default function PaiementsPage() {
                           <span className="w-20 text-center"><Badge color="blue">{(p.paymentMode as string) === "mixte" && (p as any).paymentModes ? (p as any).paymentModes.map((m: string) => paymentModes.find(pm => pm.id === m)?.label?.split(" ")[0] || m).join(" + ") : mode?.label?.split(" ")[0] || p.paymentMode}</Badge></span>
                           <span className="w-16 text-center"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "draft" ? "blue" : "gray"}>{p.status === "paid" ? "Réglé" : p.status === "partial" ? "Partiel" : p.status === "draft" ? "Brouillon" : "À régler"}</Badge></span>
                           <span className="w-16 text-center"><button onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button></span>
-                          <span className="w-16 text-center"><button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "" })} title="Dupliquer cette commande" className="font-body text-xs text-purple-500 bg-purple-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-purple-100"><Copy size={12} /></button></span>
+                          <span className="w-16 text-center"><button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose", paidMode: "cb_terminal", paidRef: "", paidDate: new Date().toISOString().slice(0,10) })} title="Dupliquer cette commande" className="font-body text-xs text-purple-500 bg-purple-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-purple-100"><Copy size={12} /></button></span>
                         </div>
                       );
                     })}
@@ -1582,7 +1634,7 @@ export default function PaiementsPage() {
                               className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1">
                               <Receipt size={10} /> Facture
                             </button>
-                            <button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "" })}
+                            <button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose", paidMode: "cb_terminal", paidRef: "", paidDate: new Date().toISOString().slice(0,10) })}
                               className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
                               <Plus size={10} /> Dupliquer
                             </button>
@@ -1601,74 +1653,156 @@ export default function PaiementsPage() {
           })()}
         </div>
       )}
-      {/* Modale duplication commande */}
+      {/* ─── Modale duplication 3 modes ─── */}
       {duplicateTarget && (() => {
         const p = duplicateTarget.payment;
+        const mode = duplicateTarget.mode;
         const searchLower = duplicateTarget.targetSearch.toLowerCase();
         const filteredFams = families.filter(f =>
-          f.parentName?.toLowerCase().includes(searchLower) ||
-          (f.children || []).some((c: any) => c.firstName?.toLowerCase().includes(searchLower))
+          f.firestoreId !== p.familyId &&
+          (f.parentName?.toLowerCase().includes(searchLower) ||
+          (f.children || []).some((c: any) => c.firstName?.toLowerCase().includes(searchLower)))
         ).slice(0, 8);
+
         return (
           <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDuplicateTarget(null)}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+
+              {/* En-tête */}
               <div className="p-5 border-b border-gray-100">
-                <h2 className="font-display text-lg font-bold text-blue-800">Dupliquer la commande</h2>
-                <p className="font-body text-xs text-gray-400 mt-1">
-                  {(p.items || []).map((i: any) => i.activityTitle).join(", ")} — {safeNumber(p.totalTTC).toFixed(2)}€
-                </p>
-              </div>
-              <div className="p-5 flex flex-col gap-3">
-                {/* Option 1 : même famille */}
-                <button onClick={async () => { await duplicatePayment(p); }}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg border border-blue-200 bg-blue-50 cursor-pointer hover:bg-blue-100 text-left">
-                  <div className="w-10 h-10 rounded-lg bg-blue-200 flex items-center justify-center font-body text-sm font-bold text-blue-700">
-                    {(p.familyName || "?")[0]}
-                  </div>
-                  <div>
-                    <div className="font-body text-sm font-semibold text-blue-800">{p.familyName}</div>
-                    <div className="font-body text-xs text-gray-400">Même famille (mêmes enfants)</div>
-                  </div>
-                </button>
-
-                {/* Séparateur */}
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 h-px bg-gray-200" />
-                  <span className="font-body text-[10px] text-gray-400 uppercase">ou pour une autre famille</span>
-                  <div className="flex-1 h-px bg-gray-200" />
+                <h2 className="font-display text-lg font-bold text-blue-800">Utiliser cette commande</h2>
+                <div className="mt-2 p-3 bg-sand rounded-lg">
+                  <div className="font-body text-sm font-semibold text-blue-800">{p.familyName}</div>
+                  <div className="font-body text-xs text-gray-500 mt-0.5">{(p.items || []).map((i: any) => i.activityTitle).join(" · ")}</div>
+                  <div className="font-body text-sm font-bold text-blue-500 mt-1">{safeNumber(p.totalTTC).toFixed(2)}€</div>
                 </div>
-
-                {/* Recherche famille */}
-                <div className="relative">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
-                  <input value={duplicateTarget.targetSearch}
-                    onChange={e => setDuplicateTarget({ ...duplicateTarget, targetSearch: e.target.value })}
-                    placeholder="Chercher une famille..."
-                    className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
-                </div>
-
-                {duplicateTarget.targetSearch && (
-                  <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto">
-                    {filteredFams.length === 0 ? (
-                      <p className="font-body text-xs text-gray-400 text-center py-2">Aucune famille trouvée</p>
-                    ) : filteredFams.map(f => (
-                      <button key={f.firestoreId} onClick={async () => { await duplicatePayment(p, f.firestoreId); }}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-200 bg-white cursor-pointer hover:bg-blue-50 text-left">
-                        <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center font-body text-xs font-bold text-gray-500">
-                          {(f.parentName || "?")[0]}
-                        </div>
-                        <div>
-                          <div className="font-body text-sm font-semibold text-blue-800">{f.parentName}</div>
-                          <div className="font-body text-xs text-gray-400">{(f.children || []).map((c: any) => c.firstName).join(", ") || "Pas d'enfant"}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
+
+              {/* Choix du mode */}
+              {mode === "choose" && (
+                <div className="p-5 flex flex-col gap-3">
+                  {/* Mode 1 : pré-remplir le panier */}
+                  <button onClick={() => duplicateToBasket(p)}
+                    className="w-full flex items-center gap-4 px-4 py-4 rounded-xl border-2 border-blue-200 bg-blue-50 cursor-pointer hover:bg-blue-100 hover:border-blue-400 text-left transition-all">
+                    <div className="w-10 h-10 rounded-lg bg-blue-500 flex items-center justify-center flex-shrink-0">
+                      <ShoppingCart size={18} className="text-white" />
+                    </div>
+                    <div>
+                      <div className="font-body text-sm font-bold text-blue-800">Pré-remplir le panier</div>
+                      <div className="font-body text-xs text-gray-500 mt-0.5">Même famille · les prestations sont chargées dans le panier, vous choisissez les créneaux puis encaissez</div>
+                    </div>
+                  </button>
+
+                  {/* Mode 2 : commande à encaisser pour autre famille */}
+                  <button onClick={() => setDuplicateTarget({ ...duplicateTarget, mode: "other_family" })}
+                    className="w-full flex items-center gap-4 px-4 py-4 rounded-xl border-2 border-purple-200 bg-purple-50 cursor-pointer hover:bg-purple-100 hover:border-purple-400 text-left transition-all">
+                    <div className="w-10 h-10 rounded-lg bg-purple-500 flex items-center justify-center flex-shrink-0">
+                      <Plus size={18} className="text-white" />
+                    </div>
+                    <div>
+                      <div className="font-body text-sm font-bold text-purple-800">Commande pour une autre famille</div>
+                      <div className="font-body text-xs text-gray-500 mt-0.5">Crée une commande en attente pour une famille différente · apparaît dans Impayés</div>
+                    </div>
+                  </button>
+
+                  {/* Mode 3 : facture déjà réglée */}
+                  <button onClick={() => setDuplicateTarget({ ...duplicateTarget, mode: "paid_invoice" })}
+                    className="w-full flex items-center gap-4 px-4 py-4 rounded-xl border-2 border-green-200 bg-green-50 cursor-pointer hover:bg-green-100 hover:border-green-400 text-left transition-all">
+                    <div className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center flex-shrink-0">
+                      <Receipt size={18} className="text-white" />
+                    </div>
+                    <div>
+                      <div className="font-body text-sm font-bold text-green-800">Facture déjà réglée</div>
+                      <div className="font-body text-xs text-gray-500 mt-0.5">Même famille · enregistre un paiement déjà encaissé hors système (chèque reçu, virement…)</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+
+              {/* Mode 2 : sélection autre famille */}
+              {mode === "other_family" && (
+                <div className="p-5 flex flex-col gap-3">
+                  <button onClick={() => setDuplicateTarget({ ...duplicateTarget, mode: "choose" })}
+                    className="flex items-center gap-1 font-body text-xs text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer p-0 mb-1">
+                    ← Retour
+                  </button>
+                  <p className="font-body text-sm text-gray-600">Chercher la famille destinataire :</p>
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+                    <input autoFocus value={duplicateTarget.targetSearch}
+                      onChange={e => setDuplicateTarget({ ...duplicateTarget, targetSearch: e.target.value })}
+                      placeholder="Nom de famille ou prénom enfant..."
+                      className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:border-blue-500 focus:outline-none" />
+                  </div>
+                  {duplicateTarget.targetSearch.length > 0 && (
+                    <div className="flex flex-col gap-1 max-h-[260px] overflow-y-auto">
+                      {filteredFams.length === 0 ? (
+                        <p className="font-body text-xs text-gray-400 text-center py-3">Aucune famille trouvée</p>
+                      ) : filteredFams.map(f => (
+                        <button key={f.firestoreId} onClick={async () => { await duplicateToFamily(p, f.firestoreId); }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-200 bg-white cursor-pointer hover:bg-purple-50 hover:border-purple-200 text-left transition-all">
+                          <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center font-body text-xs font-bold text-purple-600 flex-shrink-0">
+                            {(f.parentName || "?")[0]}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-body text-sm font-semibold text-blue-800">{f.parentName}</div>
+                            <div className="font-body text-xs text-gray-400 truncate">{(f.children || []).map((c: any) => c.firstName).join(", ") || "Aucun enfant enregistré"}</div>
+                          </div>
+                          <div className="font-body text-xs text-purple-500 flex-shrink-0">Sélectionner →</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Mode 3 : facture déjà réglée */}
+              {mode === "paid_invoice" && (
+                <div className="p-5 flex flex-col gap-4">
+                  <button onClick={() => setDuplicateTarget({ ...duplicateTarget, mode: "choose" })}
+                    className="flex items-center gap-1 font-body text-xs text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer p-0">
+                    ← Retour
+                  </button>
+                  <p className="font-body text-sm text-gray-600">Informations du paiement déjà encaissé :</p>
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <label className="font-body text-xs text-gray-500 mb-1 block">Mode de paiement</label>
+                      <select value={duplicateTarget.paidMode}
+                        onChange={e => setDuplicateTarget({ ...duplicateTarget, paidMode: e.target.value })}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 font-body text-sm bg-white focus:border-blue-500 focus:outline-none">
+                        {paymentModes.filter(m => m.id !== "cb_online").map(m => (
+                          <option key={m.id} value={m.id}>{m.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="font-body text-xs text-gray-500 mb-1 block">Référence (n° chèque, bordereau…)</label>
+                      <input value={duplicateTarget.paidRef}
+                        onChange={e => setDuplicateTarget({ ...duplicateTarget, paidRef: e.target.value })}
+                        placeholder="Optionnel"
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 font-body text-sm bg-white focus:border-blue-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="font-body text-xs text-gray-500 mb-1 block">Date du paiement</label>
+                      <input type="date" value={duplicateTarget.paidDate}
+                        onChange={e => setDuplicateTarget({ ...duplicateTarget, paidDate: e.target.value })}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 font-body text-sm bg-white focus:border-blue-500 focus:outline-none" />
+                    </div>
+                  </div>
+                  <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                    <div className="font-body text-xs text-green-700">Une facture <strong>réglée</strong> de <strong>{safeNumber(p.totalTTC).toFixed(2)}€</strong> sera créée pour <strong>{p.familyName}</strong> et ajoutée à l'historique.</div>
+                  </div>
+                  <button onClick={async () => { await duplicateAsPaid(p, duplicateTarget.paidMode, duplicateTarget.paidRef, duplicateTarget.paidDate); }}
+                    className="w-full py-3 rounded-xl font-body text-sm font-bold text-white bg-green-500 border-none cursor-pointer hover:bg-green-600 transition-all">
+                    Enregistrer le paiement — {safeNumber(p.totalTTC).toFixed(2)}€
+                  </button>
+                </div>
+              )}
+
+              {/* Footer */}
               <div className="p-5 border-t border-gray-100">
                 <button onClick={() => setDuplicateTarget(null)}
-                  className="w-full py-2.5 rounded-lg font-body text-sm text-gray-500 bg-gray-100 border-none cursor-pointer">Annuler</button>
+                  className="w-full py-2.5 rounded-lg font-body text-sm text-gray-500 bg-gray-100 border-none cursor-pointer hover:bg-gray-200">Annuler</button>
               </div>
             </div>
           </div>
