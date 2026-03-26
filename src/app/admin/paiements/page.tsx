@@ -7,7 +7,7 @@ import { emailTemplates } from "@/lib/email-templates";
 import { safeNumber, round2, generateOrderId } from "@/lib/utils";
 import { Card, Badge, Button } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
-import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle, Copy } from "lucide-react";
 import type { Family, Activity } from "@/types";
 
 /** Normalise un payment chargé depuis Firestore — tue les NaN à la source */
@@ -1303,6 +1303,7 @@ export default function PaiementsPage() {
                       <span className="w-20 text-center">Mode</span>
                       <span className="w-16 text-center">Statut</span>
                       <span className="w-16 text-center">PDF</span>
+                      <span className="w-16 text-center">Copier</span>
                     </div>
                     {filtered.map((p, idx) => {
                       const date = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
@@ -1335,6 +1336,7 @@ export default function PaiementsPage() {
                           <span className="w-20 text-center"><Badge color="blue">{(p.paymentMode as string) === "mixte" && (p as any).paymentModes ? (p as any).paymentModes.map((m: string) => paymentModes.find(pm => pm.id === m)?.label?.split(" ")[0] || m).join(" + ") : mode?.label?.split(" ")[0] || p.paymentMode}</Badge></span>
                           <span className="w-16 text-center"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "draft" ? "blue" : "gray"}>{p.status === "paid" ? "Réglé" : p.status === "partial" ? "Partiel" : p.status === "draft" ? "Brouillon" : "À régler"}</Badge></span>
                           <span className="w-16 text-center"><button onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button></span>
+                          <span className="w-16 text-center"><button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "" })} title="Dupliquer cette commande" className="font-body text-xs text-purple-500 bg-purple-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-purple-100"><Copy size={12} /></button></span>
                         </div>
                       );
                     })}
