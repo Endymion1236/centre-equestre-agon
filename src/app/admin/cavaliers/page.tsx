@@ -42,11 +42,11 @@ export default function CavaliersPage() {
 
   // ─── Ajout enfant à famille existante ───
   const [addChildTo, setAddChildTo] = useState<string | null>(null);
-  const [newChildForm, setNewChildForm] = useState({ firstName: "", birthDate: "", galopLevel: "—" });
+  const [newChildForm, setNewChildForm] = useState({ firstName: "", lastName: "", birthDate: "", galopLevel: "—" });
 
   // ─── Édition d'un enfant existant ───
   const [editingChild, setEditingChild] = useState<{ familyId: string; childId: string } | null>(null);
-  const [editChildForm, setEditChildForm] = useState({ firstName: "", birthDate: "", galopLevel: "—" });
+  const [editChildForm, setEditChildForm] = useState({ firstName: "", lastName: "", birthDate: "", galopLevel: "—" });
 
   // ─── Fiche sanitaire ───
   const [editingSanitary, setEditingSanitary] = useState<{ familyId: string; childId: string } | null>(null);
@@ -155,6 +155,7 @@ export default function CavaliersPage() {
     const child = {
       id: `child_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       firstName: newChildForm.firstName.trim(),
+      lastName: newChildForm.lastName.trim() || family.parentName?.split(" ").pop() || "",
       birthDate: newChildForm.birthDate ? new Date(newChildForm.birthDate) : null,
       galopLevel: newChildForm.galopLevel || "—",
       sanitaryForm: null,
@@ -165,7 +166,7 @@ export default function CavaliersPage() {
         updatedAt: serverTimestamp(),
       });
       setAddChildTo(null);
-      setNewChildForm({ firstName: "", birthDate: "", galopLevel: "—" });
+      setNewChildForm({ firstName: "", lastName: "", birthDate: "", galopLevel: "—" });
       fetchFamilies();
     } catch (e) { console.error(e); }
     setSaving(false);
@@ -212,7 +213,7 @@ export default function CavaliersPage() {
     setEditingChild({ familyId, childId: child.id });
     const bd = child.birthDate;
     const dateStr = bd ? (typeof bd === "string" ? bd.split("T")[0] : bd?.seconds ? new Date(bd.seconds * 1000).toISOString().split("T")[0] : bd instanceof Date ? bd.toISOString().split("T")[0] : "") : "";
-    setEditChildForm({ firstName: child.firstName || "", birthDate: dateStr, galopLevel: child.galopLevel || "—" });
+    setEditChildForm({ firstName: child.firstName || "", lastName: child.lastName || "", birthDate: dateStr, galopLevel: child.galopLevel || "—" });
   };
 
   const handleSaveChild = async () => {
@@ -224,6 +225,7 @@ export default function CavaliersPage() {
       c.id === editingChild.childId ? {
         ...c,
         firstName: editChildForm.firstName.trim(),
+        lastName: editChildForm.lastName?.trim() || c.lastName || "",
         birthDate: editChildForm.birthDate ? new Date(editChildForm.birthDate) : c.birthDate,
         galopLevel: editChildForm.galopLevel,
       } : c
@@ -451,8 +453,12 @@ export default function CavaliersPage() {
 
   const filtered = families.filter((f) => {
     if (!search) return true;
-    const q = search.toLowerCase();
-    return f.parentName?.toLowerCase().includes(q) || f.parentEmail?.toLowerCase().includes(q) || (f.children || []).some((c: any) => c.firstName?.toLowerCase().includes(q));
+    // Construire un texte searchable avec tout : nom parent, email, prénoms enfants
+    const childNames = (f.children || []).map((c: any) => `${c.firstName || ""} ${c.lastName || ""}`).join(" ");
+    const searchable = `${f.parentName || ""} ${f.parentEmail || ""} ${childNames}`.toLowerCase();
+    // Chaque mot de la recherche doit matcher quelque part
+    const terms = search.toLowerCase().trim().split(/\s+/);
+    return terms.every(term => searchable.includes(term));
   });
 
   const inputStyle = "w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 bg-white";
@@ -698,7 +704,7 @@ export default function CavaliersPage() {
                                     <Users size={14} className="text-blue-500" />
                                   </div>
                                   <div className="flex-1 min-w-0">
-                                    <div className="font-body text-sm font-semibold text-blue-800">{child.firstName}</div>
+                                    <div className="font-body text-sm font-semibold text-blue-800">{child.firstName}{child.lastName ? ` ${child.lastName}` : ""}</div>
                                     <div className="font-body text-xs text-gray-400">
                                       {child.birthDate ? `Né(e) le ${new Date(typeof child.birthDate === "string" ? child.birthDate : child.birthDate?.seconds ? child.birthDate.seconds * 1000 : child.birthDate).toLocaleDateString("fr-FR")}` : ""}
                                     </div>
@@ -784,8 +790,12 @@ export default function CavaliersPage() {
                     {addChildTo === family.firestoreId ? (
                       <div className="bg-blue-50 rounded-lg p-4 flex flex-col gap-3">
                         <div className="font-body text-xs font-semibold text-blue-800">Ajouter un cavalier</div>
-                        <input placeholder="Prénom *" value={newChildForm.firstName} onChange={e => setNewChildForm({ ...newChildForm, firstName: e.target.value })}
-                          className={`${inputStyle} w-full`} />
+                        <div className="flex gap-2">
+                          <input placeholder="Prénom *" value={newChildForm.firstName} onChange={e => setNewChildForm({ ...newChildForm, firstName: e.target.value })}
+                            className={`${inputStyle} flex-1`} />
+                          <input placeholder="Nom" value={newChildForm.lastName} onChange={e => setNewChildForm({ ...newChildForm, lastName: e.target.value })}
+                            className={`${inputStyle} flex-1`} />
+                        </div>
                         <div className="flex gap-2">
                           <input type="date" placeholder="Date de naissance" value={newChildForm.birthDate} onChange={e => setNewChildForm({ ...newChildForm, birthDate: e.target.value })}
                             className={`${inputStyle} flex-1`} />
@@ -803,7 +813,7 @@ export default function CavaliersPage() {
                         </div>
                       </div>
                     ) : (
-                      <button onClick={() => { setAddChildTo(family.firestoreId); setNewChildForm({ firstName: "", birthDate: "", galopLevel: "—" }); }}
+                      <button onClick={() => { setAddChildTo(family.firestoreId); setNewChildForm({ firstName: "", lastName: "", birthDate: "", galopLevel: "—" }); }}
                         className="font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1 mt-1">
                         <Plus size={14} /> Ajouter un cavalier
                       </button>
@@ -815,7 +825,7 @@ export default function CavaliersPage() {
                         <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Fiches sanitaires</div>
                         {children.filter((c: any) => c.sanitaryForm).map((child: any) => (
                           <div key={child.id} className="flex gap-6 text-xs font-body text-gray-500 mb-2">
-                            <span className="font-semibold text-blue-800 min-w-[60px]">{child.firstName}</span>
+                            <span className="font-semibold text-blue-800 min-w-[60px]">{child.firstName}{child.lastName ? ` ${child.lastName}` : ""}</span>
                             <span>Allergies : {child.sanitaryForm.allergies || "Aucune"}</span>
                             <span>Urgence : {child.sanitaryForm.emergencyContactName} ({child.sanitaryForm.emergencyContactPhone})</span>
                           </div>
