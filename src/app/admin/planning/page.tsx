@@ -30,8 +30,8 @@ const typeColors: Record<string, string> = { stage: "#27ae60", stage_journee: "#
 const payModes = [{ id: "cb_terminal", label: "CB", icon: "💳" }, { id: "cheque", label: "Chèque", icon: "📝" }, { id: "especes", label: "Espèces", icon: "💶" }, { id: "cheque_vacances", label: "Chq.Vac.", icon: "🏖️" }, { id: "pass_sport", label: "Pass'Sport", icon: "🎽" }, { id: "ancv", label: "ANCV", icon: "🎫" }, { id: "carte", label: "Carte", icon: "🎟️" }];
 
 // ─── Enroll Panel ───
-function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnroll, onUnenroll }: {
-  creneau: Creneau & { id: string }; families: (Family & { firestoreId: string })[]; allCreneaux: (Creneau & { id: string })[]; payments: any[]; onClose: () => void;
+function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onClose, onEnroll, onUnenroll }: {
+  creneau: Creneau & { id: string }; families: (Family & { firestoreId: string })[]; allCreneaux: (Creneau & { id: string })[]; payments: any[]; allCartes: any[];  onClose: () => void;
   onEnroll: (id: string, c: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean }) => Promise<void>;
   onUnenroll: (id: string, childId: string) => Promise<void>;
 }) {
@@ -588,9 +588,34 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
             {/* Choix du mode d'inscription — COURS réguliers uniquement */}
             {selChild && !isStage && (() => {
               const isCours = creneau.activityType === "cours" || creneau.activityType === "cours_collectif" || creneau.activityType === "cours_particulier";
+              const isBalade = ["balade","promenade","ponyride"].includes(creneau.activityType);
+              // Détecter une carte active compatible pour cet enfant
+              const carteActive = allCartes.find((c: any) => {
+                if (c.childId !== selChild) return false;
+                if (c.status !== "active" || (c.remainingSessions || 0) <= 0) return false;
+                if (c.dateFin && new Date(c.dateFin) < new Date()) return false;
+                const ct = c.activityType || "cours";
+                return (ct === "cours" && isCours) || (ct === "balade" && isBalade);
+              });
               return isCours ? (
               <div className="bg-sand rounded-xl p-4 space-y-3">
                 <div className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">Type d'inscription</div>
+
+                {/* Bannière carte active */}
+                {carteActive && (
+                  <div className="bg-gold-50 border border-gold-300 rounded-xl p-3 flex items-center gap-3">
+                    <span className="text-2xl">🎟️</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-body text-sm font-bold text-gold-700">Carte de séances disponible</div>
+                      <div className="font-body text-xs text-gold-600">
+                        {carteActive.remainingSessions} séance{carteActive.remainingSessions > 1 ? "s" : ""} restante{carteActive.remainingSessions > 1 ? "s" : ""} · {carteActive.activityType === "balade" ? "Balades" : "Cours"}
+                        {carteActive.dateFin ? ` · valide jusqu'au ${new Date(carteActive.dateFin).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}` : ""}
+                      </div>
+                      <div className="font-body text-[10px] text-gold-500 mt-0.5">La séance sera débitée à la confirmation de présence au montoir.</div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-2">
                   <button onClick={() => setInscriptionMode("ponctuel")}
                     className={`p-3 rounded-lg border-2 text-left cursor-pointer transition-all ${inscriptionMode === "ponctuel" ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white"}`}>
@@ -610,14 +635,22 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
                 {/* Mode ponctuel */}
                 {inscriptionMode === "ponctuel" && priceTTC > 0 && (
                   <div className="bg-white rounded-lg p-3">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={showPay} onChange={e => setShowPay(e.target.checked)} className="accent-blue-500 w-4 h-4"/>
-                      <span className="font-body text-sm text-blue-800 font-semibold">Encaisser maintenant ({priceTTC.toFixed(2)}€)</span>
-                    </label>
-                    <div className="font-body text-[10px] text-gray-400 mt-1 ml-6">
-                      {showPay ? "Le paiement sera enregistré immédiatement dans le journal." : "La prestation sera ajoutée aux impayés de la famille."}
-                    </div>
-                    {showPay && <div className="flex flex-wrap gap-1.5 mt-2">{payModes.map(m=><button key={m.id} onClick={()=>setPayMode(m.id)} className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${payMode===m.id?"bg-blue-500 text-white border-blue-500":"bg-white text-gray-500 border-gray-200"}`}>{m.icon} {m.label}</button>)}</div>}
+                    {carteActive ? (
+                      <div className="font-body text-xs text-gold-600 bg-gold-50 rounded-lg px-3 py-2">
+                        🎟️ La carte sera débitée automatiquement à la clôture du montoir si l'enfant est présent. Aucun paiement à encaisser maintenant.
+                      </div>
+                    ) : (
+                      <>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={showPay} onChange={e => setShowPay(e.target.checked)} className="accent-blue-500 w-4 h-4"/>
+                          <span className="font-body text-sm text-blue-800 font-semibold">Encaisser maintenant ({priceTTC.toFixed(2)}€)</span>
+                        </label>
+                        <div className="font-body text-[10px] text-gray-400 mt-1 ml-6">
+                          {showPay ? "Le paiement sera enregistré immédiatement dans le journal." : "La prestation sera ajoutée aux impayés de la famille."}
+                        </div>
+                        {showPay && <div className="flex flex-wrap gap-1.5 mt-2">{payModes.filter(m => m.id !== "carte").map(m=><button key={m.id} onClick={()=>setPayMode(m.id)} className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${payMode===m.id?"bg-blue-500 text-white border-blue-500":"bg-white text-gray-500 border-gray-200"}`}>{m.icon} {m.label}</button>)}</div>}
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -1062,6 +1095,7 @@ export default function PlanningPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
+  const [allCartes, setAllCartes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showSimple, setShowSimple] = useState(false); const [showGenerator, setShowGenerator] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string|undefined>();
@@ -1097,10 +1131,11 @@ export default function PlanningPage() {
 
   const fetchData = async () => {
     try {
-      const [aS, fS, pS] = await Promise.all([getDocs(collection(db, "activities")), getDocs(collection(db, "families")), getDocs(collection(db, "payments"))]);
+      const [aS, fS, pS, cartesS] = await Promise.all([getDocs(collection(db, "activities")), getDocs(collection(db, "families")), getDocs(collection(db, "payments")), getDocs(collection(db, "cartes"))]);
       setActivities(aS.docs.map(d => ({ id: d.id, ...d.data() })) as Activity[]);
       setFamilies(fS.docs.map(d => ({ firestoreId: d.id, ...d.data() })) as any);
       setPayments(pS.docs.map(d => ({ id: d.id, ...d.data() })));
+      setAllCartes(cartesS.docs.map(d => ({ id: d.id, ...d.data() })));
 
       let s: string, e: string;
       if (viewMode === "day") { s = fmtDate(currentDay); e = s; }
@@ -1699,7 +1734,7 @@ export default function PlanningPage() {
         </div>
       )}
 
-      {selectedCreneau&&<EnrollPanel creneau={selectedCreneau as any} families={families} allCreneaux={creneaux} payments={payments} onClose={()=>{setSelectedCreneau(null);fetchData();}} onEnroll={handleEnroll} onUnenroll={handleUnenroll}/>}
+      {selectedCreneau&&<EnrollPanel creneau={selectedCreneau as any} families={families} allCreneaux={creneaux} payments={payments} allCartes={allCartes} onClose={()=>{setSelectedCreneau(null);fetchData();}} onEnroll={handleEnroll} onUnenroll={handleUnenroll}/>}
     </div>
   );
 }
