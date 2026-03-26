@@ -637,9 +637,11 @@ export default function CavaliersPage() {
                             {editingChild?.familyId === family.firestoreId && editingChild?.childId === child.id ? (
                               <div className="flex flex-col gap-2">
                                 <div className="font-body text-xs font-semibold text-blue-500 uppercase">Modifier le cavalier</div>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                   <input value={editChildForm.firstName} onChange={e => setEditChildForm({ ...editChildForm, firstName: e.target.value })}
                                     className={inputStyle} placeholder="Prénom" />
+                                  <input value={editChildForm.lastName} onChange={e => setEditChildForm({ ...editChildForm, lastName: e.target.value })}
+                                    className={inputStyle} placeholder="Nom" />
                                   <input type="date" value={editChildForm.birthDate} onChange={e => setEditChildForm({ ...editChildForm, birthDate: e.target.value })}
                                     className={inputStyle} />
                                   <select value={editChildForm.galopLevel} onChange={e => setEditChildForm({ ...editChildForm, galopLevel: e.target.value })}
