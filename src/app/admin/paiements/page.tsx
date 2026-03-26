@@ -1521,10 +1521,13 @@ export default function PaiementsPage() {
                           <div className="mt-2 pt-2 border-t border-gray-100">
                             {(p.items || []).map((item: any, idx: number) => (
                               <div key={idx} className="flex items-center justify-between py-1 font-body text-xs">
-                                <span className="text-gray-500">{item.activityTitle}</span>
-                                <div className="flex items-center gap-2">
+                                <span className="text-gray-500 flex-1 min-w-0 truncate">{item.childName ? `${item.childName} — ` : ""}{item.activityTitle}</span>
+                                <div className="flex items-center gap-2 flex-shrink-0">
                                   <span className="text-blue-500 font-semibold">{(item.priceTTC || 0).toFixed(2)}€</span>
-                                  <button onClick={() => removePaymentItem(p, idx)} title="Désinscrire et retirer cette prestation"
+                                  <button onClick={() => {
+                                    if (!confirm(`Retirer "${item.childName || ""} — ${item.activityTitle}" (${(item.priceTTC||0).toFixed(2)}€) ?\n\nL'enfant sera désinscrit du créneau.`)) return;
+                                    removePaymentItem(p, idx);
+                                  }} title="Désinscrire et retirer cette prestation"
                                     className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-0.5"><X size={12} /></button>
                                 </div>
                               </div>
