@@ -397,6 +397,13 @@ export default function PaiementsPage() {
 
   const [duplicateTarget, setDuplicateTarget] = useState<{ payment: any; targetFamilyId: string; targetSearch: string; mode: "choose" | "other_family" } | null>(null);
 
+  // ─── Broadcast concours : state ───
+  interface BroadcastRow { familyId: string; familyName: string; childId: string; childName: string; items: any[]; totalTTC: number; overrides: Record<number, number>; }
+  const [broadcastSource, setBroadcastSource] = useState<any | null>(null); // payment source
+  const [broadcastRows, setBroadcastRows] = useState<BroadcastRow[]>([]);
+  const [broadcastSearch, setBroadcastSearch] = useState("");
+  const [broadcastSending, setBroadcastSending] = useState(false);
+
   // ─── Duplication Mode 1 : pré-remplir le panier (même famille, créneaux à choisir) ───
   const duplicateToBasket = (payment: any) => {
     const family = families.find(f => f.firestoreId === payment.familyId);
@@ -465,6 +472,72 @@ export default function PaiementsPage() {
     toast(`Commande créée pour ${targetFamily.parentName} — ${totalTTC.toFixed(2)}€ à encaisser (onglet Impayés).`);
   };
 
+  // ─── Broadcast concours : envoi en masse ───
+  const broadcastToFamilies = async () => {
+    if (broadcastRows.length === 0) return;
+    setBroadcastSending(true);
+    let ok = 0; let err = 0;
+    for (const row of broadcastRows) {
+      try {
+        // Recalculer les items avec les overrides de prix
+        const items = row.items.map((item: any, idx: number) => {
+          const overrideTTC = row.overrides[idx];
+          if (overrideTTC !== undefined) {
+            const tva = safeNumber(item.tva || item.tvaTaux || 5.5);
+            return { ...item, priceTTC: overrideTTC, priceHT: round2(overrideTTC / (1 + tva / 100)) };
+          }
+          return item;
+        });
+        const totalTTC = round2(items.reduce((s: number, i: any) => s + safeNumber(i.priceTTC), 0));
+        await addDoc(collection(db, "payments"), {
+          orderId: generateOrderId(),
+          familyId: row.familyId,
+          familyName: row.familyName,
+          items,
+          totalTTC,
+          status: "pending",
+          paidAmount: 0,
+          paymentMode: "",
+          paymentRef: "",
+          source: "broadcast",
+          sourcePaymentId: broadcastSource?.id || "",
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        ok++;
+      } catch (e) { console.error("Erreur broadcast famille", row.familyName, e); err++; }
+    }
+    setBroadcastSending(false);
+    setBroadcastSource(null);
+    setBroadcastRows([]);
+    setBroadcastSearch("");
+    await refreshAll();
+    toast(`${ok} commande${ok > 1 ? "s" : ""} créée${ok > 1 ? "s" : ""} dans Impayés${err > 0 ? ` — ${err} erreur(s)` : ""}.`);
+  };
+
+  // Toggle une famille dans la sélection broadcast
+  const toggleBroadcastFamily = (family: Family & { firestoreId: string }) => {
+    const already = broadcastRows.find(r => r.familyId === family.firestoreId);
+    if (already) {
+      setBroadcastRows(broadcastRows.filter(r => r.familyId !== family.firestoreId));
+      return;
+    }
+    if (!broadcastSource) return;
+    const children = family.children || [];
+    // Mapper les items du source sur les enfants de la famille cible
+    const items = (broadcastSource.items || []).map((item: any, idx: number) => {
+      const child = children[idx] || children[0];
+      return {
+        ...item,
+        childId: child?.id || "",
+        childName: child?.firstName || "",
+        creneauId: "",
+        reservationId: "",
+      };
+    });
+    const totalTTC = round2(items.reduce((s: number, i: any) => s + safeNumber(i.priceTTC), 0));
+    setBroadcastRows([...broadcastRows, { familyId: family.firestoreId, familyName: family.parentName || "", childId: children[0]?.id || "", childName: children[0]?.firstName || "", items, totalTTC, overrides: {} }]);
+  };
   const basketSubtotal = basket.reduce((s, i) => s + i.priceTTC, 0);
   const promoDiscount = appliedPromo
     ? (appliedPromo.discountMode === "percent" ? basketSubtotal * appliedPromo.discountValue / 100 : appliedPromo.discountValue)
@@ -1655,7 +1728,6 @@ export default function PaiementsPage() {
                       <div className="font-body text-xs text-gray-500 mt-0.5">Même famille · les prestations sont chargées dans le panier, vous choisissez les créneaux puis encaissez</div>
                     </div>
                   </button>
-
                   {/* Mode 2 : commande à encaisser pour autre famille */}
                   <button onClick={() => setDuplicateTarget({ ...duplicateTarget, mode: "other_family" })}
                     className="w-full flex items-center gap-4 px-4 py-4 rounded-xl border-2 border-purple-200 bg-purple-50 cursor-pointer hover:bg-purple-100 hover:border-purple-400 text-left transition-all">
@@ -1667,11 +1739,19 @@ export default function PaiementsPage() {
                       <div className="font-body text-xs text-gray-500 mt-0.5">Crée une commande en attente pour une famille différente · apparaît dans Impayés</div>
                     </div>
                   </button>
-
-
+                  {/* Mode 3 : diffusion concours */}
+                  <button onClick={() => { setBroadcastSource(duplicateTarget.payment); setDuplicateTarget(null); setBroadcastRows([]); setBroadcastSearch(""); }}
+                    className="w-full flex items-center gap-4 px-4 py-4 rounded-xl border-2 border-orange-200 bg-orange-50 cursor-pointer hover:bg-orange-100 hover:border-orange-400 text-left transition-all">
+                    <div className="w-10 h-10 rounded-lg bg-orange-500 flex items-center justify-center flex-shrink-0">
+                      <Copy size={18} className="text-white" />
+                    </div>
+                    <div>
+                      <div className="font-body text-sm font-bold text-orange-800">Diffusion concours / coaching</div>
+                      <div className="font-body text-xs text-gray-500 mt-0.5">Cochez plusieurs familles · ajustez les montants · créez toutes les commandes d'un coup</div>
+                    </div>
+                  </button>
                 </div>
               )}
-
               {/* Mode 2 : sélection autre famille */}
               {mode === "other_family" && (
                 <div className="p-5 flex flex-col gap-3">
@@ -1709,8 +1789,6 @@ export default function PaiementsPage() {
                 </div>
               )}
 
-
-
               {/* Footer */}
               <div className="p-5 border-t border-gray-100">
                 <button onClick={() => setDuplicateTarget(null)}
@@ -1720,6 +1798,128 @@ export default function PaiementsPage() {
           </div>
         );
       })()}
+
+      {/* ─── Modale Broadcast Concours ─── */}
+      {broadcastSource && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="p-5 border-b border-gray-100 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="font-display text-lg font-bold text-orange-700">Diffusion concours / coaching</h2>
+                  <p className="font-body text-xs text-gray-400 mt-0.5">Basé sur : <span className="font-semibold">{(broadcastSource.items || []).map((i: any) => i.activityTitle).join(" · ")}</span></p>
+                </div>
+                <button onClick={() => setBroadcastSource(null)} className="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button>
+              </div>
+              {/* Barre de recherche */}
+              <div className="relative mt-3">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+                <input autoFocus value={broadcastSearch} onChange={e => setBroadcastSearch(e.target.value)}
+                  placeholder="Filtrer les familles par nom ou prénom cavalier..."
+                  className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:border-orange-400 focus:outline-none" />
+              </div>
+            </div>
+
+            {/* Liste familles cochables */}
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
+              {families
+                .filter(f => {
+                  if (!broadcastSearch) return true;
+                  const q = broadcastSearch.toLowerCase();
+                  return f.parentName?.toLowerCase().includes(q) ||
+                    (f.children || []).some((c: any) => c.firstName?.toLowerCase().includes(q));
+                })
+                .map(f => {
+                  const row = broadcastRows.find(r => r.familyId === f.firestoreId);
+                  const checked = !!row;
+                  return (
+                    <div key={f.firestoreId}
+                      className={`rounded-xl border-2 transition-all ${checked ? "border-orange-400 bg-orange-50" : "border-gray-200 bg-white hover:border-gray-300"}`}>
+                      {/* Ligne principale — clic pour cocher */}
+                      <div className="flex items-center gap-3 px-4 py-3 cursor-pointer" onClick={() => toggleBroadcastFamily(f)}>
+                        <div className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 transition-all ${checked ? "bg-orange-500" : "bg-gray-200"}`}>
+                          {checked && <Check size={12} className="text-white" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-body text-sm font-semibold text-blue-800">{f.parentName}</div>
+                          <div className="font-body text-xs text-gray-400">{(f.children || []).map((c: any) => c.firstName).join(", ") || "Aucun cavalier"}</div>
+                        </div>
+                        {checked && (
+                          <div className="font-body text-sm font-bold text-orange-600 flex-shrink-0">
+                            {row!.totalTTC.toFixed(2)}€
+                          </div>
+                        )}
+                      </div>
+                      {/* Détail ajustable si coché */}
+                      {checked && (
+                        <div className="px-4 pb-3 pt-0 border-t border-orange-200 mt-0">
+                          {row!.items.map((item: any, idx: number) => {
+                            const currentPrice = row!.overrides[idx] !== undefined ? row!.overrides[idx] : safeNumber(item.priceTTC);
+                            return (
+                              <div key={idx} className="flex items-center gap-3 mt-2">
+                                <span className="font-body text-xs text-gray-600 flex-1 truncate">
+                                  {item.childName ? <span className="text-blue-500 font-semibold">{item.childName}</span> : null}
+                                  {item.childName ? " — " : ""}{item.activityTitle}
+                                </span>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  <input
+                                    type="number" step="0.01" min="0"
+                                    value={currentPrice}
+                                    onChange={e => {
+                                      const val = safeNumber(e.target.value);
+                                      setBroadcastRows(prev => prev.map(r => {
+                                        if (r.familyId !== f.firestoreId) return r;
+                                        const newOverrides = { ...r.overrides, [idx]: val };
+                                        const newTotal = round2(r.items.reduce((s: number, it: any, i: number) =>
+                                          s + (newOverrides[i] !== undefined ? newOverrides[i] : safeNumber(it.priceTTC)), 0));
+                                        return { ...r, overrides: newOverrides, totalTTC: newTotal };
+                                      }));
+                                    }}
+                                    className="w-20 text-right border border-orange-300 rounded px-2 py-1 font-body text-sm font-bold text-orange-700 bg-white focus:outline-none focus:border-orange-500"
+                                  />
+                                  <span className="font-body text-xs text-gray-400">€</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* Footer */}
+            <div className="p-5 border-t border-gray-100 flex-shrink-0">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  {broadcastRows.length > 0 ? (
+                    <div>
+                      <span className="font-body text-sm font-bold text-orange-700">{broadcastRows.length} famille{broadcastRows.length > 1 ? "s" : ""} sélectionnée{broadcastRows.length > 1 ? "s" : ""}</span>
+                      <span className="font-body text-xs text-gray-400 ml-2">· {broadcastRows.reduce((s, r) => s + r.totalTTC, 0).toFixed(2)}€ total à encaisser</span>
+                    </div>
+                  ) : (
+                    <span className="font-body text-xs text-gray-400">Cochez les familles concernées</span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setBroadcastSource(null)}
+                    className="font-body text-sm text-gray-500 bg-gray-100 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">
+                    Annuler
+                  </button>
+                  <button onClick={broadcastToFamilies}
+                    disabled={broadcastRows.length === 0 || broadcastSending}
+                    className={`font-body text-sm font-bold text-white px-5 py-2.5 rounded-lg border-none cursor-pointer transition-all flex items-center gap-2 ${broadcastRows.length === 0 || broadcastSending ? "bg-gray-300 cursor-not-allowed" : "bg-orange-500 hover:bg-orange-600"}`}>
+                    {broadcastSending ? <><Loader2 size={14} className="animate-spin" /> Envoi...</> : <>Créer {broadcastRows.length > 0 ? broadcastRows.length : ""} commande{broadcastRows.length > 1 ? "s" : ""}</>}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
