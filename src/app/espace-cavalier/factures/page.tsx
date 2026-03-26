@@ -42,6 +42,10 @@ interface Card10 {
   remainingSessions: number;
   priceTTC: number;
   status: string;
+  activityType?: string;
+  dateDebut?: string;
+  dateFin?: string;
+  history?: any[];
   createdAt: any;
 }
 
@@ -59,6 +63,7 @@ export default function FacturesPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"factures" | "reservations" | "cartes">("factures");
   const [clientAvoirs, setClientAvoirs] = useState<any[]>([]);
+  const [openCardId, setOpenCardId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -312,33 +317,82 @@ export default function FacturesPage() {
                   <p className="font-body text-sm text-gray-500">Aucune carte de séances. Renseignez-vous au secrétariat !</p>
                 </Card>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-4">
                   {cards.map(card => {
                     const pct = card.totalSessions > 0 ? (card.remainingSessions / card.totalSessions) * 100 : 0;
+                    const expired = (card as any).dateFin && new Date((card as any).dateFin) < new Date();
+                    const isOpen = openCardId === card.id;
+                    const seancesUtilisees = (card.history || []).filter((h: any) => !h.credit && h.presence !== "absent");
                     return (
                       <Card key={card.id} padding="md">
+                        {/* En-tête */}
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center gap-3">
                             <div className="w-12 h-12 rounded-xl bg-gold-50 flex items-center justify-center text-2xl">🎟️</div>
                             <div>
-                              <div className="font-body text-base font-semibold text-blue-800">Carte {card.totalSessions} séances</div>
+                              <div className="font-body text-base font-semibold text-blue-800">
+                                Carte {card.totalSessions} séances · {(card as any).activityType === "balade" ? "Balades" : "Cours"}
+                              </div>
                               <div className="font-body text-xs text-gray-400">🧒 {card.childName}</div>
+                              {(card as any).dateDebut && (card as any).dateFin && (
+                                <div className="font-body text-[10px] text-gray-400 mt-0.5">
+                                  {new Date((card as any).dateDebut).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}
+                                  {" → "}
+                                  {new Date((card as any).dateFin).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}
+                                  {expired && <span className="text-red-400 ml-1">· Expirée</span>}
+                                </div>
+                              )}
                             </div>
                           </div>
-                          <Badge color={card.status === "active" ? "green" : card.status === "used" ? "gray" : "red"}>
-                            {card.status === "active" ? "Active" : card.status === "used" ? "Épuisée" : "Expirée"}
+                          <Badge color={expired || card.status === "used" ? "gray" : card.remainingSessions > 2 ? "green" : "orange"}>
+                            {card.remainingSessions}/{card.totalSessions}
                           </Badge>
                         </div>
-                        <div className="mb-2">
+
+                        {/* Barre de progression */}
+                        <div className="mb-3">
                           <div className="h-3 rounded-full bg-gray-100 overflow-hidden">
-                            <div className="h-3 rounded-full bg-gradient-to-r from-gold-400 to-gold-300" style={{ width: `${pct}%` }} />
+                            <div className="h-3 rounded-full bg-gradient-to-r from-gold-400 to-gold-300 transition-all" style={{ width: `${pct}%` }} />
                           </div>
                           <div className="flex justify-between mt-1">
                             <span className="font-body text-xs text-gray-400">{card.usedSessions} utilisée{card.usedSessions > 1 ? "s" : ""}</span>
                             <span className="font-body text-xs font-semibold text-gold-500">{card.remainingSessions} restante{card.remainingSessions > 1 ? "s" : ""}</span>
                           </div>
                         </div>
-                        <div className="font-body text-xs text-gray-400">Valeur : {card.priceTTC?.toFixed(2)}€ TTC</div>
+
+                        {/* Historique déroulant */}
+                        {(card.history || []).length > 0 && (
+                          <div className="pt-2 border-t border-gray-100">
+                            <button
+                              onClick={() => setOpenCardId(isOpen ? null : card.id)}
+                              className="w-full flex items-center justify-between font-body text-xs text-gray-400 bg-transparent border-none cursor-pointer py-1 hover:text-blue-500">
+                              <span>Historique ({seancesUtilisees.length} séance{seancesUtilisees.length > 1 ? "s" : ""})</span>
+                              <span>{isOpen ? "▲ Masquer" : "▼ Voir le détail"}</span>
+                            </button>
+                            {isOpen && (
+                              <div className="flex flex-col gap-1.5 mt-2">
+                                {[...(card.history as any[])].reverse().map((h: any, i: number) => (
+                                  <div key={i} className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-body ${h.credit ? "bg-green-50" : h.presence === "absent" ? "bg-red-50 opacity-60" : "bg-sand"}`}>
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${h.credit ? "bg-green-400" : h.presence === "absent" ? "bg-red-400" : "bg-gold-400"}`} />
+                                      <div className="min-w-0">
+                                        <div className="text-blue-800 font-semibold truncate">{h.activityTitle || "Séance"}</div>
+                                        <div className="text-gray-400 text-[10px]">
+                                          {h.date ? new Date(h.date).toLocaleDateString("fr-FR", { weekday:"short", day:"numeric", month:"short" }) : ""}
+                                          {h.horseName ? ` · ${h.horseName}` : ""}
+                                          {h.credit ? " · Recrédit" : ""}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <span className={`font-semibold flex-shrink-0 ml-2 ${h.credit ? "text-green-500" : h.presence === "absent" ? "text-red-400" : "text-gold-500"}`}>
+                                      {h.credit ? "+1" : h.presence === "absent" ? "Absent" : "Vérifié"}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </Card>
                     );
                   })}
