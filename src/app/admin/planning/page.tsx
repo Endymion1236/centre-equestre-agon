@@ -48,7 +48,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
   // Stage multi-enfants
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [stageMode, setStageMode] = useState<"semaine" | "jour">("semaine");
-  const [showAddDays, setShowAddDays] = useState<{ familyId: string; enfants: { childId: string; childName: string }[]; joursRestants: { id: string; date: string; label: string }[] } | null>(null);
+  const [showAddDays, setShowAddDays] = useState<{ familyId: string; enfants: { childId: string; childName: string }[]; joursRestants: { id: string; date: string; label: string }[]; totalJoursStage: number; joursInscrits: number; stageTitle: string; creneauRef: any } | null>(null);
   const isStage = creneau.activityType === "stage" || creneau.activityType === "stage_journee";
 
   const enrolled = creneau.enrolled || []; const enrolledIds = enrolled.map((e: any) => e.childId);
@@ -353,7 +353,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
           label: new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
         }));
         if (autresJours.length > 0) {
-          setShowAddDays({ familyId: fam.firestoreId, enfants: stageLines.map(l => ({ childId: l.childId, childName: l.childName })), joursRestants: autresJours });
+          setShowAddDays({
+            familyId: fam.firestoreId,
+            enfants: stageLines.map(l => ({ childId: l.childId, childName: l.childName })),
+            joursRestants: autresJours,
+            totalJoursStage: autresJours.length + 1, // tous les jours de la semaine pour ce stage
+            joursInscrits: 1, // on vient d'en inscrire 1
+            stageTitle: creneau.activityTitle,
+            creneauRef: creneau, // pour accéder aux prix multi-jours
+          });
         }
       }
       return;
@@ -731,8 +739,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
                           }, undefined, { skipPayment: true, skipEmail: true });
                         }
                       }
-                      // Mettre à jour le payment existant avec le nouveau nombre de jours
-                      // Recalculer le tarif stage avec nbJours+1
+                      // Recalcul tarif : jours inscrits AVANT + 1 (ce jour qu'on vient d'ajouter)
                       try {
                         const paySnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", showAddDays.familyId), where("status", "==", "pending")));
                         const stagePayment = paySnap.docs.find(d => {
@@ -742,18 +749,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
                         if (stagePayment) {
                           const pData = stagePayment.data();
                           const oldItems = pData.items || [];
-                          // Recalculer : compter les jours inscrits maintenant
-                          const totalDaysNow = (showAddDays.joursRestants.length - 1) === 0 
-                            ? allCreneaux.filter(c => c.activityTitle === creneau.activityTitle && (c.activityType === "stage" || c.activityType === "stage_journee")).length
-                            : allCreneaux.filter(c => c.activityTitle === creneau.activityTitle && (c.activityType === "stage" || c.activityType === "stage_journee")).length - showAddDays.joursRestants.length + 1;
-                          const cr = creneau as any;
+                          // Nombre de jours maintenant inscrits = joursInscrits + 1
+                          const totalDaysNow = showAddDays.joursInscrits + 1;
+                          const cr = showAddDays.creneauRef as any;
                           const prices: Record<number, number> = {};
                           if (cr.price1day) prices[1] = cr.price1day;
                           if (cr.price2days) prices[2] = cr.price2days;
                           if (cr.price3days) prices[3] = cr.price3days;
                           if (cr.price4days) prices[4] = cr.price4days;
-                          const newPrice = prices[totalDaysNow] || priceTTC;
-                          // Mettre à jour chaque item stage avec le nouveau prix
+                          const newPrice = prices[totalDaysNow] || prices[Math.max(...Object.keys(prices).map(Number).filter(k => k <= totalDaysNow))] || priceTTC;
                           const updatedItems = oldItems.map((item: any) => {
                             if (item.activityType === "stage" || item.activityType === "stage_journee") {
                               return { ...item, priceTTC: Math.round(newPrice * 100) / 100, priceHT: Math.round(newPrice / 1.055 * 100) / 100 };
@@ -771,7 +775,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
                       setJustEnrolled(`${showAddDays.enfants.map(e => e.childName).join(", ")} ajouté(s) le ${j.label}`);
                       const remaining = showAddDays.joursRestants.filter(jr => jr.id !== j.id);
                       if (remaining.length > 0) {
-                        setShowAddDays({ ...showAddDays, joursRestants: remaining });
+                        setShowAddDays({ ...showAddDays, joursRestants: remaining, joursInscrits: showAddDays.joursInscrits + 1 });
                       } else {
                         setShowAddDays(null);
                       }
@@ -1188,6 +1192,14 @@ export default function PlanningPage() {
       const isBaladeType = ["balade", "promenade", "ponyride"].includes(c.activityType);
       if (isCoursType || isBaladeType) {
         try {
+          // Si l'enfant a un forfait annuel actif → le forfait prime, pas de débit carte
+          const forfaitSnap = await getDocs(query(
+            collection(db, "forfaits"),
+            where("childId", "==", child.childId),
+            where("status", "==", "actif")
+          ));
+          const hasForfaitActif = !forfaitSnap.empty;
+          if (!hasForfaitActif) {
           const cartesSnap = await getDocs(query(
             collection(db, "cartes"),
             where("childId", "==", child.childId),
@@ -1235,6 +1247,7 @@ export default function PlanningPage() {
             }
             return; // Pas de payment → sortir
           }
+          } // fin if !hasForfaitActif
         } catch (e) { console.error("Erreur vérification carte:", e); }
       }
       // ─── FIN LOGIQUE CARTE ───
@@ -1322,9 +1335,33 @@ export default function PlanningPage() {
     }
     const fresh = await refreshCreneaux(); const upd = fresh.find(x => x.id === cid); if (upd) setSelectedCreneau(upd);
     } catch (error) {
-      // Rollback : retirer l'enfant du créneau si le reste a échoué
-      console.error("Erreur handleEnroll, rollback inscription:", error);
-      try { await removeChildFromCreneau(cid, child.childId); } catch (e2) { console.error("Rollback failed:", e2); }
+      // Rollback complet en cas d'erreur après inscription
+      console.error("Erreur handleEnroll, rollback:", error);
+      try {
+        // 1. Retirer l'enfant du créneau
+        await removeChildFromCreneau(cid, child.childId);
+        // 2. Supprimer la réservation créée
+        await deleteReservations(cid, child.childId);
+        // 3. Re-créditer la carte si elle a été débitée
+        const crSnap = await getDoc(doc(db, "creneaux", cid));
+        if (crSnap.exists()) {
+          const enrolled2 = crSnap.data().enrolled || [];
+          const entry = enrolled2.find((e: any) => e.childId === child.childId);
+          if (entry?.paymentSource === "card" && entry?.cardId) {
+            const carteRef = doc(db, "cartes", entry.cardId);
+            const carteSnap = await getDoc(carteRef);
+            if (carteSnap.exists()) {
+              const cd = carteSnap.data();
+              await updateDoc(carteRef, {
+                remainingSessions: (cd.remainingSessions || 0) + 1,
+                usedSessions: Math.max(0, (cd.usedSessions || 0) - 1),
+                status: "active",
+                updatedAt: serverTimestamp(),
+              });
+            }
+          }
+        }
+      } catch (e2) { console.error("Rollback partiel échoué:", e2); }
       toast("Erreur lors de l'inscription. L'opération a été annulée.", "error");
     }
   };
@@ -1502,12 +1539,12 @@ export default function PlanningPage() {
             <div onClick={()=>setSelectedCreneau(c)}>
               <div className="flex items-start justify-between mb-3"><div className="flex items-center gap-4"><div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px] text-gray-400">{c.endTime}</div></div><div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs text-gray-400">{c.monitor} · {c.maxPlaces} pl.{ttc>0?` · ${ttc.toFixed(0)}€`:""}</div></div></div><div className="flex items-center gap-3"><Badge color={fill>=1?"red":fill>=0.7?"orange":"green"}>{en.length}/{c.maxPlaces}</Badge><button onClick={e=>{e.stopPropagation();handleDelete(c.id!);}} className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={16}/></button></div></div>
               {en.length>0&&<div className="ml-[68px] flex flex-wrap gap-2">{en.map((e:any)=>{
-                // Vérifier si un payment paid existe pour cet enfant + ce créneau
-                const hasPaid = payments.some((p: any) => p.familyId === e.familyId && p.status === "paid" && (p.items||[]).some((i:any) => i.childId === e.childId && (i.creneauId === c.id || i.activityTitle === c.activityTitle)));
-                const hasPending = !hasPaid && payments.some((p: any) => p.familyId === e.familyId && (p.status === "pending" || p.status === "partial") && (p.items||[]).some((i:any) => i.childId === e.childId));
+                const isCard = e.paymentSource === "card";
+                const hasPaid = isCard || payments.some((p: any) => p.familyId === e.familyId && p.status === "paid" && (p.items||[]).some((i:any) => i.childId === e.childId && (i.creneauId === c.id || i.activityTitle === c.activityTitle)));
+                const hasPending = !hasPaid && !isCard && payments.some((p: any) => p.familyId === e.familyId && (p.status === "pending" || p.status === "partial") && (p.items||[]).some((i:any) => i.childId === e.childId));
                 return <span key={e.childId} className="font-body text-xs bg-sand text-blue-800 px-3 py-1 rounded-full flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${hasPaid ? "bg-green-500" : hasPending ? "bg-orange-400" : "bg-gray-300"}`}></span>
-                  🧒 {e.childName} <span className="text-gray-400">({e.familyName})</span>
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isCard ? "bg-blue-500" : hasPaid ? "bg-green-500" : hasPending ? "bg-orange-400" : "bg-gray-300"}`}></span>
+                  🧒 {e.childName} <span className="text-gray-400">({e.familyName}{isCard ? " · 🎟️" : ""})</span>
                 </span>;
               })}</div>}
             </div>
