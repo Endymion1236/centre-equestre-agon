@@ -758,10 +758,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
                           if (cr.price2days) prices[2] = cr.price2days;
                           if (cr.price3days) prices[3] = cr.price3days;
                           if (cr.price4days) prices[4] = cr.price4days;
-                          // Prix de référence avant et après
+                          // Prix de référence avant et après — fallback sur le tarif max si nbJours > prix configurés
                           const priceKeys = Object.keys(prices).map(Number).sort((a,b) => a-b);
-                          const refBefore = prices[totalDaysBefore] || prices[priceKeys.filter(k => k <= totalDaysBefore).at(-1) || 1] || 0;
-                          const refAfter = prices[totalDaysNow] || prices[priceKeys.filter(k => k <= totalDaysNow).at(-1) || 1] || 0;
+                          const maxKey = priceKeys.at(-1) || 1;
+                          const refBefore = prices[totalDaysBefore] || prices[priceKeys.filter(k => k <= totalDaysBefore).at(-1) || maxKey] || prices[maxKey] || 0;
+                          const refAfter  = prices[totalDaysNow]    || prices[priceKeys.filter(k => k <= totalDaysNow).at(-1)    || maxKey] || prices[maxKey] || 0;
                           // Ratio de progression — préserve les remises individuelles
                           const ratio = refBefore > 0 ? refAfter / refBefore : 1;
                           const updatedItems = oldItems.map((item: any) => {
