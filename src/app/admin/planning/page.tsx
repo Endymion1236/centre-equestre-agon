@@ -1185,14 +1185,24 @@ export default function PlanningPage() {
 
       // ─── LOGIQUE CARTE : vérifier si l'enfant a une carte active ───
       const isCoursType = ["cours", "cours_collectif", "cours_particulier"].includes(c.activityType);
-      if (isCoursType) {
+      const isBaladeType = ["balade", "promenade", "ponyride"].includes(c.activityType);
+      if (isCoursType || isBaladeType) {
         try {
           const cartesSnap = await getDocs(query(
             collection(db, "cartes"),
             where("childId", "==", child.childId),
             where("status", "==", "active")
           ));
-          const carteActive = cartesSnap.docs.find(d => (d.data().remainingSessions || 0) > 0);
+          // Chercher une carte compatible : même type, type balade, ou "all"
+          const carteActive = cartesSnap.docs.find(d => {
+            const data = d.data();
+            if ((data.remainingSessions || 0) <= 0) return false;
+            const cardType = data.activityType || "cours";
+            if (cardType === "all") return true;
+            if (cardType === "cours" && isCoursType) return true;
+            if (cardType === "balade" && isBaladeType) return true;
+            return false;
+          });
           if (carteActive) {
             // Carte trouvée → consommer 1 séance au lieu de facturer
             const carteData = carteActive.data();

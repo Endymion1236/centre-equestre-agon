@@ -51,6 +51,7 @@ export default function CartesPage() {
   const [selTemplate, setSelTemplate] = useState(1); // index
   const [unitPriceHT, setUnitPriceHT] = useState("15");
   const [payMode, setPayMode] = useState("cb_terminal");
+  const [selActivityType, setSelActivityType] = useState<"cours" | "balade" | "all">("cours");
   const [creating, setCreating] = useState(false);
   const [familySearch, setFamilySearch] = useState("");
 
@@ -99,7 +100,7 @@ export default function CartesPage() {
       familyName: family.parentName || "—",
       childId: selChild,
       childName: (child as any)?.firstName || "—",
-      activityType: "cours",
+      activityType: selActivityType,
       totalSessions: template.sessions,
       usedSessions: 0,
       remainingSessions: template.sessions,
@@ -216,7 +217,7 @@ export default function CartesPage() {
                         <div className="w-12 h-12 rounded-xl bg-gold-50 flex items-center justify-center text-2xl">🎟️</div>
                         <div>
                           <div className="font-body text-base font-semibold text-blue-800">{card.childName}</div>
-                          <div className="font-body text-xs text-gray-400">{card.familyName}</div>
+                          <div className="font-body text-xs text-gray-400">{card.familyName} · {card.activityType === "all" ? "Toutes activités" : card.activityType === "balade" ? "Balades" : "Cours"}</div>
                         </div>
                       </div>
                       <Badge color={card.remainingSessions > 2 ? "green" : card.remainingSessions > 0 ? "orange" : "red"}>
@@ -308,6 +309,19 @@ export default function CartesPage() {
                 </div>
               </div>
             )}
+
+            {/* Type d'activité valable */}
+            <div>
+              <label className="font-body text-xs font-semibold text-blue-800 block mb-2">Valable pour</label>
+              <div className="flex gap-2">
+                {([["cours", "🐴 Cours"], ["balade", "🌿 Balades"], ["all", "✨ Tout"]] as const).map(([val, label]) => (
+                  <button key={val} onClick={() => setSelActivityType(val)}
+                    className={`flex-1 py-2.5 rounded-lg border font-body text-sm cursor-pointer transition-all ${selActivityType === val ? "border-blue-500 bg-blue-50 text-blue-800 font-semibold" : "border-gray-200 bg-white text-gray-500"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {/* Card template */}
             <div>

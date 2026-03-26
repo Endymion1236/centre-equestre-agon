@@ -1757,42 +1757,125 @@ export default function PaiementsPage() {
                   </button>
                 </div>
               )}
-              {/* Mode 2 : sélection autre famille */}
-              {mode === "other_family" && (
-                <div className="p-5 flex flex-col gap-3">
-                  <button onClick={() => setDuplicateTarget({ ...duplicateTarget, mode: "choose" })}
-                    className="flex items-center gap-1 font-body text-xs text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer p-0 mb-1">
-                    ← Retour
-                  </button>
-                  <p className="font-body text-sm text-gray-600">Chercher la famille destinataire :</p>
-                  <div className="relative">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
-                    <input autoFocus value={duplicateTarget.targetSearch}
-                      onChange={e => setDuplicateTarget({ ...duplicateTarget, targetSearch: e.target.value })}
-                      placeholder="Nom de famille ou prénom enfant..."
-                      className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:border-blue-500 focus:outline-none" />
+              {/* Mode 2 : sélection autre famille + mapping enfants */}
+              {mode === "other_family" && (() => {
+                const targetFam = duplicateTarget.targetFamilyId
+                  ? families.find(f => f.firestoreId === duplicateTarget.targetFamilyId)
+                  : null;
+                const targetChildren = targetFam?.children || [];
+                const sourceItems = p.items || [];
+
+                // Phase A : chercher la famille
+                if (!targetFam) return (
+                  <div className="p-5 flex flex-col gap-3">
+                    <button onClick={() => setDuplicateTarget({ ...duplicateTarget, mode: "choose" })}
+                      className="flex items-center gap-1 font-body text-xs text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer p-0 mb-1">
+                      ← Retour
+                    </button>
+                    <p className="font-body text-sm text-gray-600">Chercher la famille destinataire :</p>
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+                      <input autoFocus value={duplicateTarget.targetSearch}
+                        onChange={e => setDuplicateTarget({ ...duplicateTarget, targetSearch: e.target.value })}
+                        placeholder="Nom de famille ou prénom enfant..."
+                        className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:border-blue-500 focus:outline-none" />
+                    </div>
+                    {duplicateTarget.targetSearch.length > 0 && (
+                      <div className="flex flex-col gap-1 max-h-[260px] overflow-y-auto">
+                        {filteredFams.length === 0 ? (
+                          <p className="font-body text-xs text-gray-400 text-center py-3">Aucune famille trouvée</p>
+                        ) : filteredFams.map(f => (
+                          <button key={f.firestoreId}
+                            onClick={() => setDuplicateTarget({ ...duplicateTarget, targetFamilyId: f.firestoreId, targetSearch: "" })}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-200 bg-white cursor-pointer hover:bg-purple-50 hover:border-purple-200 text-left transition-all">
+                            <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center font-body text-xs font-bold text-purple-600 flex-shrink-0">
+                              {(f.parentName || "?")[0]}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-body text-sm font-semibold text-blue-800">{f.parentName}</div>
+                              <div className="font-body text-xs text-gray-400 truncate">{(f.children || []).map((c: any) => c.firstName).join(", ") || "Aucun enfant enregistré"}</div>
+                            </div>
+                            <div className="font-body text-xs text-purple-500 flex-shrink-0">Choisir →</div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {duplicateTarget.targetSearch.length > 0 && (
-                    <div className="flex flex-col gap-1 max-h-[260px] overflow-y-auto">
-                      {filteredFams.length === 0 ? (
-                        <p className="font-body text-xs text-gray-400 text-center py-3">Aucune famille trouvée</p>
-                      ) : filteredFams.map(f => (
-                        <button key={f.firestoreId} onClick={async () => { await duplicateToFamily(p, f.firestoreId); }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-200 bg-white cursor-pointer hover:bg-purple-50 hover:border-purple-200 text-left transition-all">
-                          <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center font-body text-xs font-bold text-purple-600 flex-shrink-0">
-                            {(f.parentName || "?")[0]}
-                          </div>
+                );
+
+                // Phase B : mapper les enfants
+                return (
+                  <div className="p-5 flex flex-col gap-4">
+                    <button onClick={() => setDuplicateTarget({ ...duplicateTarget, targetFamilyId: "", targetSearch: "" })}
+                      className="flex items-center gap-1 font-body text-xs text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer p-0">
+                      ← Changer de famille
+                    </button>
+                    <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+                      <div className="font-body text-sm font-bold text-purple-800">{targetFam.parentName}</div>
+                      <div className="font-body text-xs text-gray-500 mt-0.5">{targetChildren.map((c: any) => c.firstName).join(", ") || "Aucun enfant"}</div>
+                    </div>
+                    <p className="font-body text-xs text-gray-500">Pour chaque prestation, indiquer quel cavalier de la famille cible :</p>
+                    <div className="flex flex-col gap-3">
+                      {sourceItems.map((item: any, idx: number) => (
+                        <div key={idx} className="flex items-center gap-3 p-3 rounded-lg bg-sand">
                           <div className="flex-1 min-w-0">
-                            <div className="font-body text-sm font-semibold text-blue-800">{f.parentName}</div>
-                            <div className="font-body text-xs text-gray-400 truncate">{(f.children || []).map((c: any) => c.firstName).join(", ") || "Aucun enfant enregistré"}</div>
+                            <div className="font-body text-xs font-semibold text-blue-800 truncate">{item.activityTitle}</div>
+                            <div className="font-body text-[10px] text-gray-400">Original : {item.childName || "—"} · {(item.priceTTC || 0).toFixed(2)}€</div>
                           </div>
-                          <div className="font-body text-xs text-purple-500 flex-shrink-0">Sélectionner →</div>
-                        </button>
+                          <select
+                            defaultValue={targetChildren[idx]?.id || targetChildren[0]?.id || ""}
+                            id={`child-map-${idx}`}
+                            className="border border-purple-200 rounded-lg px-2 py-1.5 font-body text-xs bg-white focus:border-purple-500 focus:outline-none flex-shrink-0">
+                            {targetChildren.length === 0
+                              ? <option value="">Aucun enfant</option>
+                              : targetChildren.map((c: any) => (
+                                <option key={c.id} value={c.id}>{c.firstName}</option>
+                              ))
+                            }
+                          </select>
+                        </div>
                       ))}
                     </div>
-                  )}
-                </div>
-              )}
+                    <button onClick={async () => {
+                      // Lire le mapping depuis les selects
+                      const mappedItems = sourceItems.map((item: any, idx: number) => {
+                        const sel = document.getElementById(`child-map-${idx}`) as HTMLSelectElement;
+                        const childId = sel?.value || "";
+                        const child = targetChildren.find((c: any) => c.id === childId);
+                        return {
+                          ...item,
+                          childId,
+                          childName: child?.firstName || "",
+                          creneauId: "",
+                          reservationId: "",
+                        };
+                      });
+                      const totalTTC = round2(mappedItems.reduce((s: number, i: any) => s + safeNumber(i.priceTTC), 0));
+                      await addDoc(collection(db, "payments"), {
+                        orderId: generateOrderId(),
+                        familyId: targetFam.firestoreId,
+                        familyName: targetFam.parentName || "",
+                        items: mappedItems,
+                        totalTTC,
+                        status: "pending",
+                        paidAmount: 0,
+                        paymentMode: "",
+                        paymentRef: "",
+                        source: "duplicate",
+                        sourcePaymentId: p.id,
+                        createdAt: serverTimestamp(),
+                        updatedAt: serverTimestamp(),
+                      });
+                      setDuplicateTarget(null);
+                      await refreshAll();
+                      toast(`Commande créée pour ${targetFam.parentName} — ${totalTTC.toFixed(2)}€ dans Impayés.`);
+                    }}
+                      className="w-full py-3 rounded-xl font-body text-sm font-bold text-white bg-purple-500 border-none cursor-pointer hover:bg-purple-600 transition-all">
+                      Créer la commande — {round2(sourceItems.reduce((s: number, i: any) => s + safeNumber(i.priceTTC), 0)).toFixed(2)}€
+                    </button>
+                  </div>
+                );
+              })()}
 
               {/* Footer */}
               <div className="p-5 border-t border-gray-100">
