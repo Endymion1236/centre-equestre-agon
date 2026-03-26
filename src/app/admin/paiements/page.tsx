@@ -1521,7 +1521,7 @@ export default function PaiementsPage() {
                           <div className="mt-2 pt-2 border-t border-gray-100">
                             {(p.items || []).map((item: any, idx: number) => (
                               <div key={idx} className="flex items-center justify-between py-1 font-body text-xs">
-                                <span className="text-gray-500 flex-1 min-w-0 truncate">{item.childName ? `${item.childName} — ` : ""}{item.activityTitle}</span>
+                                <span className="text-gray-500 flex-1 min-w-0 truncate">{item.childName ? `${item.childName} — ` : ""}{item.activityTitle}{item.date ? ` · ${new Date(item.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}` : ""}{item.startTime ? ` ${item.startTime}` : ""}</span>
                                 <div className="flex items-center gap-2 flex-shrink-0">
                                   <span className="text-blue-500 font-semibold">{(item.priceTTC || 0).toFixed(2)}€</span>
                                   <button onClick={() => {

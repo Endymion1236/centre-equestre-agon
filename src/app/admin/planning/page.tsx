@@ -1164,7 +1164,7 @@ export default function PlanningPage() {
       if (!options?.skipPayment && priceTTC > 0) {
       const priceHT = priceTTC / (1 + (c.tvaTaux || 5.5) / 100);
       const isPaid = !!payMode;
-      const newItem = { activityTitle: c.activityTitle, childId: child.childId, childName: child.childName, creneauId: cid, activityType: c.activityType, priceHT: Math.round(priceHT * 100) / 100, tva: c.tvaTaux || 5.5, priceTTC: Math.round(priceTTC * 100) / 100 };
+      const newItem = { activityTitle: c.activityTitle, childId: child.childId, childName: child.childName, creneauId: cid, activityType: c.activityType, date: c.date, startTime: c.startTime, endTime: c.endTime, priceHT: Math.round(priceHT * 100) / 100, tva: c.tvaTaux || 5.5, priceTTC: Math.round(priceTTC * 100) / 100 };
 
       let payRefId = "";
 
