@@ -1198,7 +1198,6 @@ export default function PlanningPage() {
             const data = d.data();
             if ((data.remainingSessions || 0) <= 0) return false;
             const cardType = data.activityType || "cours";
-            if (cardType === "all") return true;
             if (cardType === "cours" && isCoursType) return true;
             if (cardType === "balade" && isBaladeType) return true;
             return false;
