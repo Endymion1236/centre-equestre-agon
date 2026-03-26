@@ -395,7 +395,7 @@ export default function PaiementsPage() {
     await refreshAll();
   };
 
-  const [duplicateTarget, setDuplicateTarget] = useState<{ payment: any; targetFamilyId: string; targetSearch: string; mode: "choose" | "other_family" | "paid_invoice"; paidMode: string; paidRef: string; paidDate: string } | null>(null);
+  const [duplicateTarget, setDuplicateTarget] = useState<{ payment: any; targetFamilyId: string; targetSearch: string; mode: "choose" | "other_family" } | null>(null);
 
   // ─── Duplication Mode 1 : pré-remplir le panier (même famille, créneaux à choisir) ───
   const duplicateToBasket = (payment: any) => {
@@ -463,43 +463,6 @@ export default function PaiementsPage() {
     setDuplicateTarget(null);
     await refreshAll();
     toast(`Commande créée pour ${targetFamily.parentName} — ${totalTTC.toFixed(2)}€ à encaisser (onglet Impayés).`);
-  };
-
-  // ─── Duplication Mode 3 : facture manuelle déjà réglée ───
-  const duplicateAsPaid = async (payment: any, mode: string, ref: string, dateStr: string) => {
-    const family = families.find(f => f.firestoreId === payment.familyId);
-    if (!family) return;
-    const items = (payment.items || []).map((item: any) => ({
-      activityType: item.activityType || "",
-      activityTitle: item.activityTitle || item.label || "",
-      childId: item.childId || "",
-      childName: item.childName || "",
-      priceHT: safeNumber(item.priceHT),
-      priceTTC: safeNumber(item.priceTTC),
-      tva: safeNumber(item.tva || item.tvaTaux || 5.5),
-      creneauId: "",
-    }));
-    const totalTTC = round2(items.reduce((s: number, i: any) => s + safeNumber(i.priceTTC), 0));
-    const parsedDate = dateStr ? new Date(dateStr) : new Date();
-    await addDoc(collection(db, "payments"), {
-      orderId: generateOrderId(),
-      familyId: family.firestoreId,
-      familyName: family.parentName || "",
-      items,
-      totalTTC,
-      status: "paid",
-      paidAmount: totalTTC,
-      paymentMode: mode,
-      paymentRef: ref,
-      source: "duplicate_paid",
-      sourcePaymentId: payment.id,
-      date: parsedDate,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-    setDuplicateTarget(null);
-    await refreshAll();
-    toast(`Facture créée et marquée réglée — ${totalTTC.toFixed(2)}€ (${mode}).`);
   };
 
   const basketSubtotal = basket.reduce((s, i) => s + i.priceTTC, 0);
@@ -1388,7 +1351,7 @@ export default function PaiementsPage() {
                           <span className="w-20 text-center"><Badge color="blue">{(p.paymentMode as string) === "mixte" && (p as any).paymentModes ? (p as any).paymentModes.map((m: string) => paymentModes.find(pm => pm.id === m)?.label?.split(" ")[0] || m).join(" + ") : mode?.label?.split(" ")[0] || p.paymentMode}</Badge></span>
                           <span className="w-16 text-center"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "draft" ? "blue" : "gray"}>{p.status === "paid" ? "Réglé" : p.status === "partial" ? "Partiel" : p.status === "draft" ? "Brouillon" : "À régler"}</Badge></span>
                           <span className="w-16 text-center"><button onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button></span>
-                          <span className="w-16 text-center"><button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose", paidMode: "cb_terminal", paidRef: "", paidDate: new Date().toISOString().slice(0,10) })} title="Dupliquer cette commande" className="font-body text-xs text-purple-500 bg-purple-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-purple-100"><Copy size={12} /></button></span>
+                          <span className="w-16 text-center"><button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} title="Dupliquer cette commande" className="font-body text-xs text-purple-500 bg-purple-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-purple-100"><Copy size={12} /></button></span>
                         </div>
                       );
                     })}
@@ -1634,7 +1597,7 @@ export default function PaiementsPage() {
                               className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1">
                               <Receipt size={10} /> Facture
                             </button>
-                            <button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose", paidMode: "cb_terminal", paidRef: "", paidDate: new Date().toISOString().slice(0,10) })}
+                            <button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })}
                               className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
                               <Plus size={10} /> Dupliquer
                             </button>
@@ -1705,17 +1668,7 @@ export default function PaiementsPage() {
                     </div>
                   </button>
 
-                  {/* Mode 3 : facture déjà réglée */}
-                  <button onClick={() => setDuplicateTarget({ ...duplicateTarget, mode: "paid_invoice" })}
-                    className="w-full flex items-center gap-4 px-4 py-4 rounded-xl border-2 border-green-200 bg-green-50 cursor-pointer hover:bg-green-100 hover:border-green-400 text-left transition-all">
-                    <div className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center flex-shrink-0">
-                      <Receipt size={18} className="text-white" />
-                    </div>
-                    <div>
-                      <div className="font-body text-sm font-bold text-green-800">Facture déjà réglée</div>
-                      <div className="font-body text-xs text-gray-500 mt-0.5">Même famille · enregistre un paiement déjà encaissé hors système (chèque reçu, virement…)</div>
-                    </div>
-                  </button>
+
                 </div>
               )}
 
@@ -1756,48 +1709,7 @@ export default function PaiementsPage() {
                 </div>
               )}
 
-              {/* Mode 3 : facture déjà réglée */}
-              {mode === "paid_invoice" && (
-                <div className="p-5 flex flex-col gap-4">
-                  <button onClick={() => setDuplicateTarget({ ...duplicateTarget, mode: "choose" })}
-                    className="flex items-center gap-1 font-body text-xs text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer p-0">
-                    ← Retour
-                  </button>
-                  <p className="font-body text-sm text-gray-600">Informations du paiement déjà encaissé :</p>
-                  <div className="flex flex-col gap-3">
-                    <div>
-                      <label className="font-body text-xs text-gray-500 mb-1 block">Mode de paiement</label>
-                      <select value={duplicateTarget.paidMode}
-                        onChange={e => setDuplicateTarget({ ...duplicateTarget, paidMode: e.target.value })}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 font-body text-sm bg-white focus:border-blue-500 focus:outline-none">
-                        {paymentModes.filter(m => m.id !== "cb_online").map(m => (
-                          <option key={m.id} value={m.id}>{m.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="font-body text-xs text-gray-500 mb-1 block">Référence (n° chèque, bordereau…)</label>
-                      <input value={duplicateTarget.paidRef}
-                        onChange={e => setDuplicateTarget({ ...duplicateTarget, paidRef: e.target.value })}
-                        placeholder="Optionnel"
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 font-body text-sm bg-white focus:border-blue-500 focus:outline-none" />
-                    </div>
-                    <div>
-                      <label className="font-body text-xs text-gray-500 mb-1 block">Date du paiement</label>
-                      <input type="date" value={duplicateTarget.paidDate}
-                        onChange={e => setDuplicateTarget({ ...duplicateTarget, paidDate: e.target.value })}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 font-body text-sm bg-white focus:border-blue-500 focus:outline-none" />
-                    </div>
-                  </div>
-                  <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                    <div className="font-body text-xs text-green-700">Une facture <strong>réglée</strong> de <strong>{safeNumber(p.totalTTC).toFixed(2)}€</strong> sera créée pour <strong>{p.familyName}</strong> et ajoutée à l'historique.</div>
-                  </div>
-                  <button onClick={async () => { await duplicateAsPaid(p, duplicateTarget.paidMode, duplicateTarget.paidRef, duplicateTarget.paidDate); }}
-                    className="w-full py-3 rounded-xl font-body text-sm font-bold text-white bg-green-500 border-none cursor-pointer hover:bg-green-600 transition-all">
-                    Enregistrer le paiement — {safeNumber(p.totalTTC).toFixed(2)}€
-                  </button>
-                </div>
-              )}
+
 
               {/* Footer */}
               <div className="p-5 border-t border-gray-100">
