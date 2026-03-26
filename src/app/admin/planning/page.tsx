@@ -618,10 +618,19 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
 
                 <div className="grid grid-cols-2 gap-2">
                   <button onClick={() => setInscriptionMode("ponctuel")}
-                    className={`p-3 rounded-lg border-2 text-left cursor-pointer transition-all ${inscriptionMode === "ponctuel" ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white"}`}>
+                    className={`p-3 rounded-lg border-2 text-left cursor-pointer transition-all ${inscriptionMode === "ponctuel" ? "border-gold-400 bg-gold-50" : "border-gray-200 bg-white"}`}>
                     <div className="font-body text-sm font-semibold text-blue-800">Séance ponctuelle</div>
-                    <div className="font-body text-xs text-gray-400 mt-0.5">Paiement à l'unité ou débit carte</div>
-                    {priceTTC > 0 && <div className="font-body text-lg font-bold text-blue-500 mt-1">{priceTTC.toFixed(2)}€</div>}
+                    {carteActive ? (
+                      <>
+                        <div className="font-body text-xs text-gold-600 mt-0.5">Débit sur la carte 🎟️</div>
+                        <div className="font-body text-lg font-bold text-gold-500 mt-1">0€</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="font-body text-xs text-gray-400 mt-0.5">Paiement à l'unité</div>
+                        {priceTTC > 0 && <div className="font-body text-lg font-bold text-blue-500 mt-1">{priceTTC.toFixed(2)}€</div>}
+                      </>
+                    )}
                   </button>
                   <button onClick={() => setInscriptionMode("annuel")}
                     className={`p-3 rounded-lg border-2 text-left cursor-pointer transition-all ${inscriptionMode === "annuel" ? "border-green-500 bg-green-50" : "border-gray-200 bg-white"}`}>
