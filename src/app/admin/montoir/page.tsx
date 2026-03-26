@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, getDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { validateChildrenUpdate } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
@@ -138,23 +138,28 @@ export default function MontoirPage() {
     // 4. Débiter automatiquement les cartes des cavaliers présents
     let cartesDebitees = 0;
     for (const child of presents) {
-      // Chercher une carte active pour cet enfant
-      const carte = cartes.find((ct: any) =>
-        ct.childId === child.childId && ct.status === "active" && (ct.remainingSessions || 0) > 0
-      );
-      if (carte) {
-        // Anti-doublon : vérifier si ce créneau a déjà été débité sur cette carte
-        if ((carte.history || []).some((h: any) => h.creneauId === cid && h.auto)) continue;
-
+      if ((child as any).paymentSource !== "card" || !(child as any).cardId) continue;
+      const carteId = (child as any).cardId;
+      try {
+        const carteSnap = await getDoc(doc(db, "cartes", carteId));
+        if (!carteSnap.exists()) continue;
+        const carte = carteSnap.data();
+        if ((carte.remainingSessions || 0) <= 0) continue;
+        // Anti-doublon : vérifier si ce créneau a déjà été débité
+        if ((carte.history || []).some((h: any) => h.creneauId === cid && !h.credit)) continue;
         const newHistory = [...(carte.history || []), {
           date: new Date().toISOString(),
           activityTitle: c.activityTitle,
-          deductedAt: new Date().toISOString(),
           creneauId: cid,
+          creneauDate: c.date,
+          startTime: c.startTime,
+          horseName: (child as any).horseName || (child as any).equideName || "",
+          childName: child.childName,
+          presence: "present",
           auto: true,
         }];
         const newRemaining = (carte.remainingSessions || 0) - 1;
-        await updateDoc(doc(db, "cartes", carte.id), {
+        await updateDoc(doc(db, "cartes", carteId), {
           remainingSessions: newRemaining,
           usedSessions: (carte.usedSessions || 0) + 1,
           history: newHistory,
@@ -162,7 +167,36 @@ export default function MontoirPage() {
           updatedAt: serverTimestamp(),
         });
         cartesDebitees++;
-      }
+      } catch (e) { console.error("Erreur débit carte montoir:", e); }
+    }
+
+    // 4b. Tracer les absents dans l'historique de leur carte (sans débiter)
+    for (const child of absents) {
+      if ((child as any).paymentSource !== "card" || !(child as any).cardId) continue;
+      const carteId = (child as any).cardId;
+      try {
+        const carteSnap = await getDoc(doc(db, "cartes", carteId));
+        if (!carteSnap.exists()) continue;
+        const carte = carteSnap.data();
+        // Ne pas tracer si déjà tracé pour ce créneau
+        if ((carte.history || []).some((h: any) => h.creneauId === cid && h.presence === "absent")) continue;
+        const newHistory = [...(carte.history || []), {
+          date: new Date().toISOString(),
+          activityTitle: c.activityTitle,
+          creneauId: cid,
+          creneauDate: c.date,
+          startTime: c.startTime,
+          horseName: (child as any).horseName || "",
+          childName: child.childName,
+          presence: "absent",
+          auto: true,
+        }];
+        await updateDoc(doc(db, "cartes", carteId), {
+          history: newHistory,
+          updatedAt: serverTimestamp(),
+        });
+        // Pas de débit — la séance reste disponible
+      } catch (e) { console.error("Erreur trace absent carte:", e); }
     }
 
     // 5. Proposer l'ajout de notes rapides

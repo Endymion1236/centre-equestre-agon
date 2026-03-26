@@ -54,6 +54,11 @@ export default function CartesPage() {
   const [selActivityType, setSelActivityType] = useState<"cours" | "balade">("cours");
   const [creating, setCreating] = useState(false);
   const [familySearch, setFamilySearch] = useState("");
+  // Dates de validité
+  const defaultDateDebut = new Date().toISOString().slice(0, 10);
+  const defaultDateFin = (() => { const d = new Date(); d.setMonth(d.getMonth() + 6); return d.toISOString().slice(0, 10); })();
+  const [dateDebut, setDateDebut] = useState(defaultDateDebut);
+  const [dateFin, setDateFin] = useState(defaultDateFin);
 
   // Debit
   const [debitCardId, setDebitCardId] = useState<string | null>(null);
@@ -109,6 +114,8 @@ export default function CartesPage() {
       priceTTC: Math.round(totalTTC * 100) / 100,
       status: "active",
       history: [],
+      dateDebut,
+      dateFin,
       createdAt: serverTimestamp(),
     });
 
@@ -218,6 +225,14 @@ export default function CartesPage() {
                         <div>
                           <div className="font-body text-base font-semibold text-blue-800">{card.childName}</div>
                           <div className="font-body text-xs text-gray-400">{card.familyName} · {card.activityType === "balade" ? "Balades" : "Cours"}</div>
+                          {(card as any).dateDebut && (card as any).dateFin && (
+                            <div className="font-body text-[10px] text-gray-400 mt-0.5">
+                              {new Date((card as any).dateDebut).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}
+                              {" → "}
+                              {new Date((card as any).dateFin).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}
+                              {new Date((card as any).dateFin) < new Date() && <span className="text-red-400 ml-1">· Expirée</span>}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <Badge color={card.remainingSessions > 2 ? "green" : card.remainingSessions > 0 ? "orange" : "red"}>
@@ -260,10 +275,30 @@ export default function CartesPage() {
                       )
                     )}
 
-                    {/* Last usage */}
+                    {/* Historique détaillé par séance — style Céléris */}
                     {(card.history || []).length > 0 && (
-                      <div className="mt-2 font-body text-[10px] text-gray-400">
-                        Dernière utilisation : {(card.history as any[]).at(-1)?.date} — {(card.history as any[]).at(-1)?.activityTitle}
+                      <div className="mt-3 pt-3 border-t border-gray-100">
+                        <div className="font-body text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Historique des séances</div>
+                        <div className="flex flex-col gap-1.5">
+                          {[...(card.history as any[])].reverse().map((h: any, i: number) => (
+                            <div key={i} className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-body ${h.credit ? "bg-green-50" : h.presence === "absent" ? "bg-red-50 opacity-60" : "bg-sand"}`}>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${h.credit ? "bg-green-400" : h.presence === "absent" ? "bg-red-400" : "bg-gold-400"}`} />
+                                <div className="min-w-0">
+                                  <div className="text-blue-800 font-semibold truncate">{h.activityTitle || "Séance"}</div>
+                                  <div className="text-gray-400 text-[10px]">
+                                    {h.date ? new Date(h.date).toLocaleDateString("fr-FR", { weekday:"short", day:"numeric", month:"short" }) : ""}
+                                    {h.horseName ? ` · ${h.horseName}` : ""}
+                                    {h.credit ? " · Recrédit" : ""}
+                                  </div>
+                                </div>
+                              </div>
+                              <span className={`font-semibold flex-shrink-0 ml-2 ${h.credit ? "text-green-500" : h.presence === "absent" ? "text-red-400" : "text-gold-500"}`}>
+                                {h.credit ? "+1" : h.presence === "absent" ? "Absent" : "Vérifié"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </Card>
@@ -335,6 +370,18 @@ export default function CartesPage() {
                     {t.discount > 0 && <div className="font-body text-xs font-semibold text-green-600 mt-1">-{t.discount}%</div>}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* Dates de validité */}
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Début de validité</label>
+                <input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} className={inp} />
+              </div>
+              <div className="flex-1">
+                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Fin de validité</label>
+                <input type="date" value={dateFin} onChange={e => setDateFin(e.target.value)} className={inp} />
               </div>
             </div>
 

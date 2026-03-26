@@ -1200,18 +1200,18 @@ export default function PlanningPage() {
       const priceTTC = c.priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
       if (!options?.skipPayment && priceTTC > 0) {
 
-      // ─── LOGIQUE CARTE ───
+      // ─── LOGIQUE CARTE : noter paymentSource=card si carte compatible, sans débiter ───
+      // Le débit réel se fait au montoir lors de la clôture (confirmation de présence)
       const isCoursType = ["cours", "cours_collectif", "cours_particulier"].includes(c.activityType);
       const isBaladeType = ["balade", "promenade", "ponyride"].includes(c.activityType);
       if (isCoursType || isBaladeType) {
         try {
-          // Forfait actif sur le MÊME type d'activité → prime sur la carte
+          // Forfait actif sur le MÊME type → pas de carte
           const forfaitSnap = await getDocs(query(
             collection(db, "forfaits"),
             where("childId", "==", child.childId),
             where("status", "==", "actif")
           ));
-          // Vérifier que le forfait concerne bien le même type d'activité
           const hasForfaitActif = forfaitSnap.docs.some(d => {
             const fd = d.data();
             const forfaitType = fd.activityType || "cours";
@@ -1221,51 +1221,36 @@ export default function PlanningPage() {
             return false;
           });
           if (!hasForfaitActif) {
-          const cartesSnap = await getDocs(query(
-            collection(db, "cartes"),
-            where("childId", "==", child.childId),
-            where("status", "==", "active")
-          ));
-          const carteActive = cartesSnap.docs.find(d => {
-            const data = d.data();
-            if ((data.remainingSessions || 0) <= 0) return false;
-            const cardType = data.activityType || "cours";
-            if (cardType === "cours" && isCoursType) return true;
-            if (cardType === "balade" && isBaladeType) return true;
-            return false;
-          });
-          if (carteActive) {
-            usedCardId = carteActive.id; // ← capturer AVANT le débit pour le rollback
-            const carteData = carteActive.data();
-            const newRemaining = (carteData.remainingSessions || 0) - 1;
-            const newHistory = [...(carteData.history || []), {
-              date: new Date().toISOString(),
-              activityTitle: c.activityTitle,
-              childName: child.childName,
-              creneauId: cid,
-              creneauDate: c.date,
-              startTime: c.startTime,
-              auto: false,
-            }];
-            await updateDoc(doc(db, "cartes", carteActive.id), {
-              remainingSessions: newRemaining,
-              usedSessions: (carteData.usedSessions || 0) + 1,
-              history: newHistory,
-              status: newRemaining <= 0 ? "used" : "active",
-              updatedAt: serverTimestamp(),
+            const cartesSnap = await getDocs(query(
+              collection(db, "cartes"),
+              where("childId", "==", child.childId),
+              where("status", "==", "active")
+            ));
+            const carteActive = cartesSnap.docs.find(d => {
+              const data = d.data();
+              if ((data.remainingSessions || 0) <= 0) return false;
+              // Vérifier expiration
+              if (data.dateFin && new Date(data.dateFin) < new Date()) return false;
+              const cardType = data.activityType || "cours";
+              if (cardType === "cours" && isCoursType) return true;
+              if (cardType === "balade" && isBaladeType) return true;
+              return false;
             });
-            const creneauRef2 = doc(db, "creneaux", cid);
-            const cSnap2 = await getDoc(creneauRef2);
-            if (cSnap2.exists()) {
-              const enrolled2 = cSnap2.data().enrolled || [];
-              const updatedEnrolled = enrolled2.map((e: any) =>
-                e.childId === child.childId ? { ...e, paymentSource: "card", cardId: carteActive.id } : e
-              );
-              await updateDoc(creneauRef2, { enrolled: updatedEnrolled });
+            if (carteActive) {
+              usedCardId = null; // Pas de débit à l'inscription — le montoir s'en charge
+              // Marquer paymentSource=card pour que le montoir sache quoi faire
+              const creneauRef2 = doc(db, "creneaux", cid);
+              const cSnap2 = await getDoc(creneauRef2);
+              if (cSnap2.exists()) {
+                const enrolled2 = cSnap2.data().enrolled || [];
+                const updatedEnrolled = enrolled2.map((e: any) =>
+                  e.childId === child.childId ? { ...e, paymentSource: "card", cardId: carteActive.id } : e
+                );
+                await updateDoc(creneauRef2, { enrolled: updatedEnrolled });
+              }
+              return; // Pas de payment pending — le débit se fait à la présence confirmée
             }
-            return;
           }
-          } // fin if !hasForfaitActif
         } catch (e) { console.error("Erreur vérification carte:", e); }
       }
       // ─── FIN LOGIQUE CARTE ───
