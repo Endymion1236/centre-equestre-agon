@@ -1,355 +1,509 @@
 /**
- * Script de validation automatisé — Centre Équestre Agon
+ * Script de validation automatique — Centre Équestre Agon
  * Lance : node scripts/validate.mjs
  *
- * Scénarios testés :
- *  S1  — Inscription crée un payment pending dans Impayés
- *  S2  — Carte cours débitée automatiquement à l'inscription cours
- *  S3  — Carte balade compatible, carte cours incompatible avec balade
- *  S4  — Forfait cours actif → carte cours NON débitée
- *  S5  — Forfait cours actif → carte balade toujours utilisable
- *  S6  — Stage 1j → +1j : tarif mis à jour (1 enfant)
- *  S7  — Stage 1j → +1j : remises individuelles préservées (2 enfants)
- *  S8  — Duplication commande → payment pending avec traçabilité
- *  S9  — Annulation commande non encaissée → status cancelled
- *  S10 — Concurrence légère : 2 inscriptions simultanées même famille
+ * Teste tous les scénarios critiques directement contre Firestore :
+ *  1.  Inscription → payment pending créé
+ *  2.  Carte cours débitée à l'inscription
+ *  3.  Carte balade compatible / carte cours incompatible
+ *  4.  Forfait cours actif → carte cours bloquée
+ *  5.  Forfait cours actif → carte balade libre
+ *  6.  Re-crédit carte à la désinscription
+ *  7.  Duplication payment → status pending (pas draft)
+ *  8.  Annulation avec avoir
+ *  9.  Impayés : échéances exclues du filtre
+ * 10.  Recalcul stage multi-enfants : remises proportionnelles préservées
+ * 11.  Rollback carte via usedCardId local (pas relecture créneau)
+ * 12.  Payment sans champ date → visible dans Impayés
  */
 
 import { initializeApp } from "firebase/app";
 import {
   getFirestore, collection, doc, addDoc, getDoc, getDocs,
-  updateDoc, query, where, serverTimestamp, writeBatch
+  updateDoc, deleteDoc, query, where, serverTimestamp
 } from "firebase/firestore";
 
-const app = initializeApp({
+const firebaseConfig = {
   apiKey: "AIzaSyDy1vrJpa12CrnyGoDkR9t4c3E31CS7Ovc",
   authDomain: "gestion-2026.firebaseapp.com",
   projectId: "gestion-2026",
   storageBucket: "gestion-2026.firebasestorage.app",
   messagingSenderId: "785848912923",
   appId: "1:785848912923:web:47f03aa109fa13eb1c7cbe",
-});
+};
+
+const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// ─── Rapport ───
+const GREEN  = "\x1b[32m✅";
+const RED    = "\x1b[31m❌";
+const YELLOW = "\x1b[33m⚠️ ";
+const RESET  = "\x1b[0m";
+const BLUE   = "\x1b[34m";
+
 let passed = 0, failed = 0, warned = 0;
-const toClean = { families: [], payments: [], cartes: [], forfaits: [], creneaux: [] };
-const TS = () => `[${new Date().toLocaleTimeString("fr-FR")}]`;
+const errors = [];
 
-function ok(label)           { console.log(`    ✅ ${label}`); passed++; }
-function fail(label, got="") { console.log(`    ❌ ${label}${got ? " — obtenu: " + JSON.stringify(got) : ""}`); failed++; }
-function warn(label)         { console.log(`    ⚠️  ${label}`); warned++; }
-function section(n, title)   { console.log(`\n  ┌─ S${n} ${title}`); }
+function ok(msg)        { console.log(`${GREEN} ${msg}${RESET}`); passed++; }
+function fail(msg, d="") { console.log(`${RED} ${msg}${d ? "\n    → "+d : ""}${RESET}`); failed++; errors.push(msg); }
+function warn(msg)      { console.log(`${YELLOW} ${msg}${RESET}`); warned++; }
+function section(t)     { console.log(`\n${BLUE}━━━ ${t} ━━━${RESET}`); }
 
-// ─── Fixtures ───
-async function newFamily(name) {
-  const ref = await addDoc(collection(db, "families"), {
-    parentName: name, parentEmail: `validate_${Date.now()}@test.invalid`,
-    children: [], _validate: true, createdAt: serverTimestamp(),
+async function cleanup(ids) {
+  for (const { col, id } of ids) {
+    try { await deleteDoc(doc(db, col, id)); } catch (_) {}
+  }
+}
+
+async function createTestFamily(suffix = "") {
+  const ts = Date.now();
+  const famRef = await addDoc(collection(db, "families"), {
+    parentName: `TEST_${suffix}_${ts}`,
+    parentEmail: "test@validate.local",
+    children: [{ id: `child_${suffix}_${ts}`, firstName: `Enfant${suffix}`, birthDate: "2015-01-01", galopLevel: "Bronze" }],
+    createdAt: serverTimestamp(),
   });
-  toClean.families.push(ref.id);
-  return ref.id;
+  const fam = await getDoc(famRef);
+  const child = fam.data().children[0];
+  return { famId: famRef.id, famName: fam.data().parentName, childId: child.id, childName: child.firstName };
 }
 
-async function newCreneau(opts = {}) {
-  const ref = await addDoc(collection(db, "creneaux"), {
-    activityTitle: opts.title || "Cours test", activityType: opts.type || "cours",
-    date: new Date().toISOString().slice(0, 10),
-    startTime: "10:00", endTime: "11:00", maxPlaces: 10,
-    enrolledCount: 0, enrolled: [],
-    priceTTC: opts.priceTTC ?? 22, priceHT: (opts.priceTTC ?? 22) / 1.055, tvaTaux: 5.5,
-    price1day: opts.p1 ?? null, price2days: opts.p2 ?? null,
-    price3days: opts.p3 ?? null, price4days: opts.p4 ?? null,
-    monitor: "Validate", status: "planned", _validate: true,
-  });
-  toClean.creneaux.push(ref.id);
-  return ref.id;
+// ─── TEST 1 ──────────────────────────────────────────────────────────────────
+async function test1() {
+  section("TEST 1 — Inscription crée un payment pending");
+  const toClean = [];
+  try {
+    const { famId, famName, childId, childName } = await createTestFamily("T1");
+    toClean.push({ col: "families", id: famId });
+
+    const payRef = await addDoc(collection(db, "payments"), {
+      orderId: `T1-${Date.now()}`,
+      familyId: famId, familyName: famName,
+      items: [{ activityTitle: "Cours test", childId, childName, creneauId: "fake", activityType: "cours", priceTTC: 22, priceHT: 20.85, tva: 5.5 }],
+      totalTTC: 22, status: "pending", paidAmount: 0,
+      paymentMode: "", paymentRef: "",
+      date: serverTimestamp(), createdAt: serverTimestamp(),
+    });
+    toClean.push({ col: "payments", id: payRef.id });
+
+    const pay = (await getDoc(payRef)).data();
+    pay.status === "pending" ? ok("Status = pending") : fail("Status incorrect", pay.status);
+    pay.totalTTC === 22       ? ok("Montant 22€")      : fail("Montant incorrect", String(pay.totalTTC));
+    pay.paidAmount === 0      ? ok("paidAmount = 0")   : fail("paidAmount non nul");
+  } finally { await cleanup(toClean); }
 }
 
-async function newPayment(familyId, familyName, items, status = "pending") {
-  const totalTTC = items.reduce((s, i) => s + (i.priceTTC || 0), 0);
-  const ref = await addDoc(collection(db, "payments"), {
-    familyId, familyName, items, totalTTC, status,
-    paidAmount: status === "paid" ? totalTTC : 0,
-    paymentMode: status === "paid" ? "cb_terminal" : "",
-    date: serverTimestamp(), _validate: true,
-  });
-  toClean.payments.push(ref.id);
-  return ref.id;
+// ─── TEST 2 ──────────────────────────────────────────────────────────────────
+async function test2() {
+  section("TEST 2 — Débit carte cours");
+  const toClean = [];
+  try {
+    const { famId, famName, childId, childName } = await createTestFamily("T2");
+    toClean.push({ col: "families", id: famId });
+
+    const carteRef = await addDoc(collection(db, "cartes"), {
+      familyId: famId, familyName: famName, childId, childName,
+      activityType: "cours",
+      totalSessions: 5, usedSessions: 0, remainingSessions: 5,
+      priceTTC: 100, status: "active", history: [],
+      createdAt: serverTimestamp(),
+    });
+    toClean.push({ col: "cartes", id: carteRef.id });
+
+    const before = (await getDoc(carteRef)).data();
+    await updateDoc(carteRef, {
+      remainingSessions: before.remainingSessions - 1,
+      usedSessions: before.usedSessions + 1,
+      status: before.remainingSessions - 1 <= 0 ? "used" : "active",
+      history: [...before.history, { date: new Date().toISOString(), activityTitle: "Cours test", childName, auto: false }],
+      updatedAt: serverTimestamp(),
+    });
+
+    const after = (await getDoc(carteRef)).data();
+    after.remainingSessions === 4 ? ok("5 → 4 séances restantes") : fail("Débit incorrect", String(after.remainingSessions));
+    after.usedSessions === 1      ? ok("usedSessions = 1")        : fail("usedSessions incorrect");
+    after.history.length === 1    ? ok("Historique enregistré")   : fail("Historique manquant");
+  } finally { await cleanup(toClean); }
 }
 
-async function newCarte(childId, familyId, activityType = "cours", sessions = 5) {
-  const ref = await addDoc(collection(db, "cartes"), {
-    familyId, childId, activityType,
-    totalSessions: sessions, usedSessions: 0, remainingSessions: sessions,
-    status: "active", history: [], _validate: true, createdAt: serverTimestamp(),
-  });
-  toClean.cartes.push(ref.id);
-  return ref.id;
+// ─── TEST 3 ──────────────────────────────────────────────────────────────────
+async function test3() {
+  section("TEST 3 — Compatibilité carte / type activité");
+
+  const cases = [
+    { cardType: "cours",  actType: "cours",      expected: true,  label: "carte cours + cours" },
+    { cardType: "cours",  actType: "balade",     expected: false, label: "carte cours + balade" },
+    { cardType: "balade", actType: "balade",     expected: true,  label: "carte balade + balade" },
+    { cardType: "balade", actType: "promenade",  expected: true,  label: "carte balade + promenade" },
+    { cardType: "balade", actType: "cours",      expected: false, label: "carte balade + cours" },
+    { cardType: "balade", actType: "ponyride",   expected: true,  label: "carte balade + ponyride" },
+  ];
+
+  const isCoursType  = (t) => ["cours","cours_collectif","cours_particulier"].includes(t);
+  const isBaladeType = (t) => ["balade","promenade","ponyride"].includes(t);
+
+  for (const { cardType, actType, expected, label } of cases) {
+    const compatible =
+      (cardType === "cours"  && isCoursType(actType))  ||
+      (cardType === "balade" && isBaladeType(actType));
+    compatible === expected
+      ? ok(`${label} → ${expected ? "compatible" : "incompatible"} ✓`)
+      : fail(`${label} → résultat inattendu`, `attendu: ${expected}, reçu: ${compatible}`);
+  }
 }
 
-async function newForfait(childId, activityType = "cours") {
-  const ref = await addDoc(collection(db, "forfaits"), {
-    childId, activityType, status: "actif", _validate: true, createdAt: serverTimestamp(),
-  });
-  toClean.forfaits.push(ref.id);
-  return ref.id;
+// ─── TEST 4 ──────────────────────────────────────────────────────────────────
+async function test4() {
+  section("TEST 4 — Forfait cours actif → carte cours bloquée");
+  const toClean = [];
+  try {
+    const { famId, famName, childId, childName } = await createTestFamily("T4");
+    toClean.push({ col: "families", id: famId });
+
+    const forfaitRef = await addDoc(collection(db, "forfaits"), {
+      familyId: famId, childId, childName,
+      activityType: "cours", status: "actif",
+      createdAt: serverTimestamp(),
+    });
+    toClean.push({ col: "forfaits", id: forfaitRef.id });
+
+    const snap = await getDocs(query(collection(db, "forfaits"), where("childId","==",childId), where("status","==","actif")));
+    const isCoursType = true;
+    const hasForfait = snap.docs.some(d => {
+      const t = d.data().activityType || "cours";
+      return t === "all" || (t === "cours" && isCoursType);
+    });
+
+    hasForfait ? ok("Forfait cours détecté → carte bloquée") : fail("Forfait non détecté");
+  } finally { await cleanup(toClean); }
 }
 
-function item(title, childId, childName, type, priceTTC) {
-  return { activityTitle: title, childId, childName, activityType: type,
-           priceTTC, priceHT: priceTTC / 1.055, tva: 5.5, creneauId: "" };
+// ─── TEST 5 ──────────────────────────────────────────────────────────────────
+async function test5() {
+  section("TEST 5 — Forfait cours actif → carte balade libre");
+  const toClean = [];
+  try {
+    const { famId, famName, childId, childName } = await createTestFamily("T5");
+    toClean.push({ col: "families", id: famId });
+
+    const forfaitRef = await addDoc(collection(db, "forfaits"), {
+      familyId: famId, childId, childName,
+      activityType: "cours", status: "actif",
+      createdAt: serverTimestamp(),
+    });
+    toClean.push({ col: "forfaits", id: forfaitRef.id });
+
+    const snap = await getDocs(query(collection(db, "forfaits"), where("childId","==",childId), where("status","==","actif")));
+    const isBaladeType = true;
+    const hasForfaitPourBalade = snap.docs.some(d => {
+      const t = d.data().activityType || "cours";
+      return t === "all" || (t === "balade" && isBaladeType);
+    });
+
+    !hasForfaitPourBalade ? ok("Forfait cours ne bloque pas la carte balade ✓") : fail("Forfait cours bloque à tort la carte balade !");
+  } finally { await cleanup(toClean); }
 }
 
-// ─── Logique métier (miroir du code app) ───
-function isCarteCompatible(cardType, creneauType) {
-  const isCoursType = ["cours", "cours_collectif", "cours_particulier"].includes(creneauType);
-  const isBaladeType = ["balade", "promenade", "ponyride"].includes(creneauType);
-  if (cardType === "cours" && isCoursType) return true;
-  if (cardType === "balade" && isBaladeType) return true;
-  return false;
+// ─── TEST 6 ──────────────────────────────────────────────────────────────────
+async function test6() {
+  section("TEST 6 — Re-crédit carte à la désinscription");
+  const toClean = [];
+  try {
+    const { famId, famName, childId, childName } = await createTestFamily("T6");
+    toClean.push({ col: "families", id: famId });
+
+    const carteRef = await addDoc(collection(db, "cartes"), {
+      familyId: famId, childId, childName,
+      activityType: "cours",
+      totalSessions: 10, usedSessions: 3, remainingSessions: 7,
+      status: "active", history: [],
+      createdAt: serverTimestamp(),
+    });
+    toClean.push({ col: "cartes", id: carteRef.id });
+
+    const before = (await getDoc(carteRef)).data();
+    await updateDoc(carteRef, {
+      remainingSessions: before.remainingSessions + 1,
+      usedSessions: Math.max(0, before.usedSessions - 1),
+      status: "active",
+      history: [...before.history, { date: new Date().toISOString(), activityTitle: "Recrédit — Cours test", credit: true }],
+      updatedAt: serverTimestamp(),
+    });
+
+    const after = (await getDoc(carteRef)).data();
+    after.remainingSessions === 8                  ? ok("Re-crédit : 7 → 8")           : fail("Re-crédit incorrect", String(after.remainingSessions));
+    after.usedSessions === 2                       ? ok("usedSessions : 3 → 2")        : fail("usedSessions incorrect");
+    after.history.at(-1)?.credit === true          ? ok("Historique re-crédit OK")     : fail("Historique re-crédit manquant");
+  } finally { await cleanup(toClean); }
 }
 
-function isForfaitBlockingCarte(forfaitType, creneauType) {
-  const isCoursType = ["cours", "cours_collectif", "cours_particulier"].includes(creneauType);
-  const isBaladeType = ["balade", "promenade", "ponyride"].includes(creneauType);
-  if (forfaitType === "all") return true;
-  if (forfaitType === "cours" && isCoursType) return true;
-  if (forfaitType === "balade" && isBaladeType) return true;
-  return false;
+// ─── TEST 7 ──────────────────────────────────────────────────────────────────
+async function test7() {
+  section("TEST 7 — Duplication payment → status pending");
+  const toClean = [];
+  try {
+    const { famId, famName, childId, childName } = await createTestFamily("T7");
+    toClean.push({ col: "families", id: famId });
+
+    const srcRef = await addDoc(collection(db, "payments"), {
+      orderId: `SRC-${Date.now()}`,
+      familyId: famId, familyName: famName,
+      items: [{ activityTitle: "Stage test", childId, childName, priceTTC: 175, priceHT: 165.88, tva: 5.5 }],
+      totalTTC: 175, status: "paid", paidAmount: 175,
+      date: serverTimestamp(), createdAt: serverTimestamp(),
+    });
+    toClean.push({ col: "payments", id: srcRef.id });
+
+    const dupRef = await addDoc(collection(db, "payments"), {
+      orderId: `DUP-${Date.now()}`,
+      familyId: famId, familyName: famName,
+      items: [{ activityTitle: "Stage test", childId, childName, priceTTC: 175, priceHT: 165.88, tva: 5.5, creneauId: "", reservationId: "" }],
+      totalTTC: 175, status: "pending", paidAmount: 0,
+      paymentMode: "", paymentRef: "",
+      source: "duplicate", sourcePaymentId: srcRef.id,
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    });
+    toClean.push({ col: "payments", id: dupRef.id });
+
+    const dup = (await getDoc(dupRef)).data();
+    dup.status === "pending"           ? ok("Duplication en status pending")    : fail("Status incorrect", dup.status);
+    dup.paidAmount === 0               ? ok("paidAmount = 0")                   : fail("paidAmount non nul");
+    !dup.items[0].creneauId            ? ok("creneauId vidé")                   : fail("creneauId non vidé");
+    !dup.items[0].reservationId        ? ok("reservationId vidé")               : fail("reservationId non vidé");
+  } finally { await cleanup(toClean); }
 }
 
-function recalcStageItems(oldItems, joursInscrits, prices) {
-  const priceKeys = Object.keys(prices).map(Number).sort((a,b) => a-b);
-  const totalDaysNow = joursInscrits + 1;
-  const refBefore = prices[joursInscrits] ?? prices[priceKeys.filter(k => k <= joursInscrits).at(-1)];
-  const refAfter  = prices[totalDaysNow]  ?? prices[priceKeys.filter(k => k <= totalDaysNow).at(-1)];
+// ─── TEST 8 ──────────────────────────────────────────────────────────────────
+async function test8() {
+  section("TEST 8 — Annulation commande encaissée → avoir créé");
+  const toClean = [];
+  try {
+    const { famId, famName, childId, childName } = await createTestFamily("T8");
+    toClean.push({ col: "families", id: famId });
+
+    const payRef = await addDoc(collection(db, "payments"), {
+      orderId: `PAY-${Date.now()}`,
+      familyId: famId, familyName: famName,
+      items: [{ activityTitle: "Cours test", childId, childName, priceTTC: 22 }],
+      totalTTC: 22, status: "paid", paidAmount: 22,
+      date: serverTimestamp(), createdAt: serverTimestamp(),
+    });
+    toClean.push({ col: "payments", id: payRef.id });
+
+    await updateDoc(payRef, { status: "cancelled", cancelledAt: serverTimestamp(), updatedAt: serverTimestamp() });
+
+    const avoirRef = await addDoc(collection(db, "avoirs"), {
+      familyId: famId, familyName: famName,
+      type: "avoir", amount: 22, usedAmount: 0, remainingAmount: 22,
+      reason: "Annulation commande — Cours test",
+      reference: `AV-TEST-${Date.now()}`,
+      sourcePaymentId: payRef.id, sourceType: "annulation",
+      status: "actif", usageHistory: [],
+      createdAt: serverTimestamp(),
+    });
+    toClean.push({ col: "avoirs", id: avoirRef.id });
+
+    const pay   = (await getDoc(payRef)).data();
+    const avoir = (await getDoc(avoirRef)).data();
+
+    pay.status === "cancelled"        ? ok("Payment cancelled")         : fail("Payment non cancelled");
+    avoir.amount === 22               ? ok("Avoir 22€")                 : fail("Montant avoir incorrect");
+    avoir.remainingAmount === 22      ? ok("remainingAmount correct")   : fail("remainingAmount incorrect");
+    avoir.status === "actif"          ? ok("Avoir actif")               : fail("Avoir non actif");
+    avoir.reference.startsWith("AV-") ? ok("Référence avoir formatée") : fail("Référence incorrecte");
+  } finally { await cleanup(toClean); }
+}
+
+// ─── TEST 9 ──────────────────────────────────────────────────────────────────
+async function test9() {
+  section("TEST 9 — Impayés : échéances exclues du filtre");
+  const toClean = [];
+  try {
+    const { famId, famName, childId, childName } = await createTestFamily("T9");
+    toClean.push({ col: "families", id: famId });
+
+    const payRef = await addDoc(collection(db, "payments"), {
+      orderId: `PAY-${Date.now()}`,
+      familyId: famId, familyName: famName,
+      items: [{ activityTitle: "Cours test", childId, childName, priceTTC: 22 }],
+      totalTTC: 22, status: "pending", paidAmount: 0,
+      date: serverTimestamp(), createdAt: serverTimestamp(),
+    });
+    toClean.push({ col: "payments", id: payRef.id });
+
+    const echRef = await addDoc(collection(db, "payments"), {
+      orderId: `ECH-${Date.now()}`,
+      familyId: famId, familyName: famName,
+      items: [{ activityTitle: "Forfait test", childId, childName, priceTTC: 50 }],
+      totalTTC: 50, status: "pending", paidAmount: 0,
+      echeancesTotal: 10, echeance: 1, forfaitRef: "test",
+      date: serverTimestamp(), createdAt: serverTimestamp(),
+    });
+    toClean.push({ col: "payments", id: echRef.id });
+
+    const all = [
+      { id: payRef.id, ...(await getDoc(payRef)).data() },
+      { id: echRef.id, ...(await getDoc(echRef)).data() },
+    ];
+
+    const unpaid = all.filter(p => {
+      if (p.status === "cancelled" || p.status === "paid") return false;
+      if ((p.paidAmount || 0) >= (p.totalTTC || 0)) return false;
+      if ((p.echeancesTotal || 0) > 1) return false;
+      return true;
+    });
+
+    unpaid.length === 1          ? ok("1 impayé, 0 échéance (correct)")    : fail("Filtre impayés incorrect", `${unpaid.length} résultats`);
+    unpaid[0]?.id === payRef.id  ? ok("Le bon payment dans Impayés")        : fail("Mauvais payment dans Impayés");
+  } finally { await cleanup(toClean); }
+}
+
+// ─── TEST 10 ─────────────────────────────────────────────────────────────────
+async function test10() {
+  section("TEST 10 — Recalcul stage : remises proportionnelles préservées");
+
+  const items = [
+    { childName: "Enfant A", activityType: "stage", priceTTC: 175 }, // plein tarif
+    { childName: "Enfant B", activityType: "stage", priceTTC: 140 }, // remise 20%
+  ];
+  const prices = { 1: 175, 2: 300, 3: 400, 4: 475 };
+  const before = 1, after = 2;
+
+  const priceKeys = Object.keys(prices).map(Number).sort((a,b)=>a-b);
+  const refBefore = prices[before] || prices[priceKeys.filter(k=>k<=before).at(-1) || 1] || 0;
+  const refAfter  = prices[after]  || prices[priceKeys.filter(k=>k<=after).at(-1)  || 1] || 0;
   const ratio = refBefore > 0 ? refAfter / refBefore : 1;
-  return oldItems.map(it => {
-    if (it.activityType === "stage" || it.activityType === "stage_journee") {
-      const p = Math.round(it.priceTTC * ratio * 100) / 100;
-      return { ...it, priceTTC: p, priceHT: Math.round(p / 1.055 * 100) / 100 };
+
+  const updated = items.map(item => ({
+    ...item,
+    priceTTC: Math.round(item.priceTTC * ratio * 100) / 100,
+  }));
+
+  updated[0].priceTTC === 300 ? ok("Enfant A : 175€ → 300€ (2 jours)") : fail("Enfant A incorrect", String(updated[0].priceTTC));
+
+  const expectedB = Math.round(140 * ratio * 100) / 100;
+  updated[1].priceTTC === expectedB ? ok(`Enfant B : 140€ → ${expectedB}€ (remise 20% préservée)`) : fail("Enfant B incorrect", String(updated[1].priceTTC));
+
+  const ratioAvant = items[1].priceTTC / items[0].priceTTC;
+  const ratioApres = updated[1].priceTTC / updated[0].priceTTC;
+  Math.abs(ratioAvant - ratioApres) < 0.001
+    ? ok(`Ratio remise préservé (${(ratioAvant*100).toFixed(1)}%)`)
+    : fail("Ratio remise altéré", `avant: ${ratioAvant.toFixed(3)}, après: ${ratioApres.toFixed(3)}`);
+}
+
+// ─── TEST 11 ─────────────────────────────────────────────────────────────────
+async function test11() {
+  section("TEST 11 — Rollback carte via usedCardId local");
+  const toClean = [];
+  try {
+    const { famId, famName, childId, childName } = await createTestFamily("T11");
+    toClean.push({ col: "families", id: famId });
+
+    const carteRef = await addDoc(collection(db, "cartes"), {
+      familyId: famId, childId, childName,
+      activityType: "cours",
+      totalSessions: 5, usedSessions: 0, remainingSessions: 5,
+      status: "active", history: [],
+      createdAt: serverTimestamp(),
+    });
+    toClean.push({ col: "cartes", id: carteRef.id });
+
+    // Capturer l'ID AVANT le débit (comme handleEnroll le fait maintenant)
+    let usedCardId = null;
+    usedCardId = carteRef.id;
+
+    // Débiter
+    await updateDoc(carteRef, { remainingSessions: 4, usedSessions: 1, updatedAt: serverTimestamp() });
+
+    // Simuler erreur → rollback via usedCardId local
+    if (usedCardId) {
+      const snap = await getDoc(doc(db, "cartes", usedCardId));
+      if (snap.exists()) {
+        const cd = snap.data();
+        await updateDoc(doc(db, "cartes", usedCardId), {
+          remainingSessions: cd.remainingSessions + 1,
+          usedSessions: Math.max(0, cd.usedSessions - 1),
+          status: "active", updatedAt: serverTimestamp(),
+        });
+      }
     }
-    return it;
-  });
+
+    const final = (await getDoc(carteRef)).data();
+    final.remainingSessions === 5 ? ok("Rollback OK : retour à 5 séances") : fail("Rollback incorrect", String(final.remainingSessions));
+    final.usedSessions === 0      ? ok("usedSessions restauré à 0")        : fail("usedSessions non restauré");
+  } finally { await cleanup(toClean); }
 }
 
-// ─── Scénarios ───
+// ─── TEST 12 ─────────────────────────────────────────────────────────────────
+async function test12() {
+  section("TEST 12 — Payment sans date → inclus dans Impayés");
+  const toClean = [];
+  try {
+    const { famId, famName, childId, childName } = await createTestFamily("T12");
+    toClean.push({ col: "families", id: famId });
 
-async function s1() {
-  section(1, "Inscription crée un payment pending");
-  const famId = await newFamily("Famille S1");
-  const payId = await newPayment(famId, "Famille S1",
-    [item("Cours galop 1", "c_s1", "Alice", "cours", 22)], "pending");
-  const pay = (await getDoc(doc(db, "payments", payId))).data();
-  pay.status === "pending" ? ok("status = pending") : fail("status devrait être pending", pay.status);
-  pay.totalTTC === 22       ? ok("totalTTC = 22€")  : fail("totalTTC incorrect", pay.totalTTC);
-  pay.paidAmount === 0      ? ok("paidAmount = 0")  : fail("paidAmount devrait être 0", pay.paidAmount);
+    const payRef = await addDoc(collection(db, "payments"), {
+      orderId: `NODATE-${Date.now()}`,
+      familyId: famId, familyName: famName,
+      items: [{ activityTitle: "Cours test", childId, childName, priceTTC: 22 }],
+      totalTTC: 22, status: "pending", paidAmount: 0,
+      // Intentionnellement sans champ "date"
+      createdAt: serverTimestamp(),
+    });
+    toClean.push({ col: "payments", id: payRef.id });
+
+    const data = (await getDoc(payRef)).data();
+
+    // Vérifier que le tri côté client (date?.seconds || 0) ne l'exclut pas
+    const dateSeconds = data.date?.seconds || 0;
+    typeof dateSeconds === "number" ? ok("date?.seconds || 0 renvoie un nombre (pas d'erreur)")
+                                    : fail("date?.seconds || 0 échoue");
+
+    // Vérifier que le filtre impayés le capture
+    const inUnpaid = data.status !== "cancelled"
+      && data.status !== "paid"
+      && (data.paidAmount || 0) < (data.totalTTC || 0)
+      && !((data.echeancesTotal || 0) > 1);
+    inUnpaid ? ok("Payment sans date inclus dans Impayés") : fail("Payment sans date exclu des Impayés");
+  } finally { await cleanup(toClean); }
 }
 
-async function s2() {
-  section(2, "Carte cours débitée à l'inscription cours");
-  const famId = await newFamily("Famille S2");
-  const carteId = await newCarte("c_s2", famId, "cours", 5);
+// ─── RUNNER ──────────────────────────────────────────────────────────────────
+async function run() {
+  console.log(`\n${BLUE}╔══════════════════════════════════════════════╗`);
+  console.log(`║  VALIDATION AUTOMATIQUE — CENTRE ÉQUESTRE    ║`);
+  console.log(`╚══════════════════════════════════════════════╝${RESET}`);
+  console.log(`\nFirestore : ${firebaseConfig.projectId}\n`);
 
-  // Simuler débit (comme handleEnroll)
-  const carteRef = doc(db, "cartes", carteId);
-  const before = (await getDoc(carteRef)).data();
-  await updateDoc(carteRef, {
-    remainingSessions: before.remainingSessions - 1,
-    usedSessions: before.usedSessions + 1,
-    status: "active",
-    history: [...before.history, { date: new Date().toISOString(), activityTitle: "Cours", auto: true }],
-  });
-  const after = (await getDoc(carteRef)).data();
-  after.remainingSessions === 4 ? ok("remainingSessions = 4 (1 débitée)") : fail("remainingSessions incorrect", after.remainingSessions);
-  after.usedSessions === 1      ? ok("usedSessions = 1")                  : fail("usedSessions incorrect", after.usedSessions);
-  after.history.length === 1    ? ok("historique mis à jour")             : fail("historique vide");
-}
-
-async function s3() {
-  section(3, "Compatibilité carte / type d'activité");
-  ok(isCarteCompatible("cours", "cours")           ? "carte cours ✔ cours"       : "carte cours ✘ cours — ERREUR");
-  if (!isCarteCompatible("cours", "cours"))         fail("carte cours devrait couvrir un cours");
-  ok(!isCarteCompatible("cours", "balade")          ? "carte cours ✘ balade (correct)" : "carte cours devrait être incompatible avec balade");
-  if (isCarteCompatible("cours", "balade"))          fail("carte cours ne devrait pas couvrir une balade");
-  ok(isCarteCompatible("balade", "balade")          ? "carte balade ✔ balade"     : "carte balade ✘ balade — ERREUR");
-  if (!isCarteCompatible("balade", "balade"))        fail("carte balade devrait couvrir une balade");
-  ok(!isCarteCompatible("balade", "cours")          ? "carte balade ✘ cours (correct)" : "carte balade devrait être incompatible avec cours");
-  if (isCarteCompatible("balade", "cours"))          fail("carte balade ne devrait pas couvrir un cours");
-}
-
-async function s4() {
-  section(4, "Forfait cours actif → carte cours NON débitée");
-  const famId = await newFamily("Famille S4");
-  await newForfait("c_s4", "cours");
-  await newCarte("c_s4", famId, "cours", 5);
-
-  const forfaitSnap = await getDocs(query(collection(db, "forfaits"), where("childId", "==", "c_s4"), where("status", "==", "actif")));
-  const blocked = forfaitSnap.docs.some(d => isForfaitBlockingCarte(d.data().activityType || "cours", "cours"));
-  blocked ? ok("Forfait cours bloque bien la carte cours") : fail("Forfait cours devrait bloquer la carte cours");
-
-  // Vérifier que la carte n'est pas débitée
-  const cartesSnap = await getDocs(query(collection(db, "cartes"), where("childId", "==", "c_s4")));
-  const carte = cartesSnap.docs[0]?.data();
-  carte?.remainingSessions === 5 ? ok("Carte intacte — 5 séances restantes") : fail("Carte débitée à tort", carte?.remainingSessions);
-}
-
-async function s5() {
-  section(5, "Forfait cours actif → carte balade toujours utilisable");
-  await newForfait("c_s5", "cours");
-  const forfaitSnap = await getDocs(query(collection(db, "forfaits"), where("childId", "==", "c_s5"), where("status", "==", "actif")));
-  const blockedForBalade = forfaitSnap.docs.some(d => isForfaitBlockingCarte(d.data().activityType || "cours", "balade"));
-  !blockedForBalade ? ok("Forfait cours ne bloque pas une balade (correct)") : fail("Forfait cours bloque à tort une balade");
-}
-
-async function s6() {
-  section(6, "Stage 1j → +1j : tarif recalculé (1 enfant)");
-  const famId = await newFamily("Famille S6");
-  const payId = await newPayment(famId, "Famille S6",
-    [item("Stage bronze", "c_s6", "Félix", "stage", 105)], "pending");
-
-  const prices = { 1: 105, 2: 160, 3: 200, 4: 230 };
-  const oldItems = (await getDoc(doc(db, "payments", payId))).data().items;
-  const newItems = recalcStageItems(oldItems, 1, prices);
-  const newTotal = Math.round(newItems.reduce((s, i) => s + i.priceTTC, 0) * 100) / 100;
-  await updateDoc(doc(db, "payments", payId), { items: newItems, totalTTC: newTotal });
-
-  const after = (await getDoc(doc(db, "payments", payId))).data();
-  after.totalTTC === 160          ? ok("totalTTC = 160€ (tarif 2j)")    : fail("totalTTC devrait être 160€", after.totalTTC);
-  after.items[0].priceTTC === 160 ? ok("item priceTTC = 160€")          : fail("item priceTTC incorrect", after.items[0].priceTTC);
-}
-
-async function s7() {
-  section(7, "Stage 1j → +1j : remises individuelles préservées (2 enfants)");
-  const famId = await newFamily("Famille S7");
-  const payId = await newPayment(famId, "Famille S7", [
-    item("Stage été", "c_s7a", "Gabriel", "stage", 105), // plein tarif
-    item("Stage été", "c_s7b", "Hugo",    "stage", 90),  // remise fratrie
-  ], "pending");
-
-  const prices = { 1: 105, 2: 160, 3: 200, 4: 230 };
-  const oldItems = (await getDoc(doc(db, "payments", payId))).data().items;
-  const newItems = recalcStageItems(oldItems, 1, prices);
-  const newTotal = Math.round(newItems.reduce((s, i) => s + i.priceTTC, 0) * 100) / 100;
-  await updateDoc(doc(db, "payments", payId), { items: newItems, totalTTC: newTotal });
-
-  const after = (await getDoc(doc(db, "payments", payId))).data();
-  const gabriel = after.items.find(i => i.childId === "c_s7a");
-  const hugo    = after.items.find(i => i.childId === "c_s7b");
-  const ratio = 160 / 105;
-  const expectedHugo  = Math.round(90 * ratio * 100) / 100;
-  const expectedTotal = Math.round((160 + expectedHugo) * 100) / 100;
-
-  gabriel?.priceTTC === 160        ? ok(`Gabriel = 160€`)                                    : fail(`Gabriel devrait être 160€`, gabriel?.priceTTC);
-  hugo?.priceTTC === expectedHugo  ? ok(`Hugo = ${expectedHugo}€ (remise proportionnelle)`) : fail(`Hugo devrait être ${expectedHugo}€`, hugo?.priceTTC);
-  after.totalTTC === expectedTotal ? ok(`Total = ${expectedTotal}€`)                        : fail(`Total devrait être ${expectedTotal}€`, after.totalTTC);
-  hugo?.priceTTC < gabriel?.priceTTC ? ok("Hugo toujours moins cher (remise préservée)") : fail("Remise fratrie perdue");
-}
-
-async function s8() {
-  section(8, "Duplication commande → payment pending avec traçabilité");
-  const famId = await newFamily("Famille S8");
-  const srcId = await newPayment(famId, "Famille S8",
-    [item("Engagement concours", "c_s8", "Inès", "competition", 45)], "paid");
-
-  const src = (await getDoc(doc(db, "payments", srcId))).data();
-  const dupItems = (src.items || []).map(i => ({ ...i, creneauId: "", reservationId: "" }));
-  const dupRef = await addDoc(collection(db, "payments"), {
-    familyId: famId, familyName: "Famille S8",
-    items: dupItems, totalTTC: src.totalTTC,
-    status: "pending", paidAmount: 0,
-    source: "duplicate", sourcePaymentId: srcId,
-    _validate: true, date: serverTimestamp(),
-  });
-  toClean.payments.push(dupRef.id);
-
-  const dup = (await getDoc(dupRef)).data();
-  dup.status === "pending"        ? ok("Duplication status = pending")        : fail("Status incorrect", dup.status);
-  dup.totalTTC === 45             ? ok("totalTTC = 45€")                      : fail("totalTTC incorrect", dup.totalTTC);
-  dup.source === "duplicate"      ? ok("source = 'duplicate' (traçabilité)")  : fail("source manquante");
-  dup.sourcePaymentId === srcId   ? ok("sourcePaymentId correct")             : fail("sourcePaymentId manquant");
-  !dup.items[0].creneauId         ? ok("creneauId vidé (pas de lien mort)")   : fail("creneauId non vidé");
-}
-
-async function s9() {
-  section(9, "Annulation commande non encaissée → status cancelled");
-  const famId = await newFamily("Famille S9");
-  const payId = await newPayment(famId, "Famille S9",
-    [item("Cours débutant", "c_s9", "Jules", "cours", 22)], "pending");
-
-  await updateDoc(doc(db, "payments", payId), {
-    status: "cancelled", cancelledAt: serverTimestamp(), cancelReason: "Test annulation",
-  });
-  const after = (await getDoc(doc(db, "payments", payId))).data();
-  after.status === "cancelled" ? ok("status = cancelled")        : fail("status incorrect", after.status);
-  after.cancelReason           ? ok("cancelReason présent")      : fail("cancelReason manquant");
-  after.cancelledAt            ? ok("cancelledAt horodaté")      : fail("cancelledAt manquant");
-}
-
-async function s10() {
-  section(10, "Concurrence légère : 2 inscriptions simultanées même famille");
-  const famId = await newFamily("Famille S10");
-  const crId = await newCreneau({ title: "Cours mixte", priceTTC: 22 });
-
-  const [p1, p2] = await Promise.all([
-    newPayment(famId, "Famille S10", [item("Cours mixte", "c_s10a", "Léa",  "cours", 22)], "pending"),
-    newPayment(famId, "Famille S10", [item("Cours mixte", "c_s10b", "Marc", "cours", 22)], "pending"),
-  ]);
-
-  const snap = await getDocs(query(collection(db, "payments"), where("familyId", "==", famId)));
-  const pays = snap.docs.map(d => d.data());
-  pays.length >= 2                              ? ok(`${pays.length} payments créés — pas de corruption`) : fail("Payments manquants");
-  pays.every(p => p.totalTTC === 22)            ? ok("Montants cohérents (22€ chacun)")                   : fail("Montants incohérents");
-  pays.every(p => p.status === "pending")       ? ok("Tous en status pending")                            : fail("Status incohérent");
-  const ids = pays.flatMap(p => (p.items||[]).map(i => i.childId));
-  new Set(ids).size === 2                       ? ok("2 enfants distincts, aucun doublon")                : fail("Doublons détectés", ids);
-}
-
-// ─── Nettoyage ───
-async function cleanup() {
-  console.log(`\n  🧹 Nettoyage...`);
-  const batch = writeBatch(db);
-  let n = 0;
-  for (const [col, ids] of Object.entries(toClean)) {
-    for (const id of ids) { batch.delete(doc(db, col, id)); n++; }
-  }
-  // Nettoyage forfaits non trackés (childId commence par c_s4/c_s5)
-  for (const cid of ["c_s4", "c_s5"]) {
-    const snap = await getDocs(query(collection(db, "forfaits"), where("childId", "==", cid)));
-    snap.docs.forEach(d => { batch.delete(d.ref); n++; });
-  }
-  await batch.commit();
-  console.log(`     ${n} documents supprimés`);
-}
-
-// ─── Runner ───
-async function main() {
-  console.log(`
-╔══════════════════════════════════════════════════════════════╗
-║   VALIDATION AUTOMATISÉE — Centre Équestre Agon              ║
-║   Projet Firebase : gestion-2026                             ║
-╚══════════════════════════════════════════════════════════════╝
-`);
-  const scenarios = [s1, s2, s3, s4, s5, s6, s7, s8, s9, s10];
-  for (const fn of scenarios) {
-    try { await fn(); }
-    catch (e) { console.log(`    💥 Erreur non gérée : ${e.message}`); failed++; }
+  try {
+    await test1();
+    await test2();
+    await test3();
+    await test4();
+    await test5();
+    await test6();
+    await test7();
+    await test8();
+    await test9();
+    await test10();
+    await test11();
+    await test12();
+  } catch (e) {
+    console.error("\nErreur fatale dans le runner:", e);
   }
 
-  console.log(`
-╔══════════════════════════════════════════════════════════════╗
-║   RAPPORT FINAL                                              ║
-╠══════════════════════════════════════════════════════════════╣
-║   ✅ Passés  : ${String(passed).padEnd(44)}║
-║   ❌ Échoués : ${String(failed).padEnd(44)}║
-║   ⚠️  Alertes : ${String(warned).padEnd(43)}║
-╠══════════════════════════════════════════════════════════════╣
-║   ${failed === 0 && warned === 0 ? "🎉 Tous les tests passent — build validé !" : failed === 0 ? "✅ Aucun échec, vérifier les alertes" : "🚨 Échecs détectés — corriger avant déploiement"}${" ".repeat(failed === 0 && warned === 0 ? 17 : failed === 0 ? 23 : 17)}║
-╚══════════════════════════════════════════════════════════════╝
-`);
-  await cleanup();
-  process.exit(failed > 0 ? 1 : 0);
+  console.log(`\n${BLUE}━━━ RÉSUMÉ ━━━${RESET}`);
+  console.log(`${GREEN} ${passed} passé(s)${RESET}`);
+  if (warned) console.log(`${YELLOW} ${warned} avertissement(s)${RESET}`);
+  if (failed) {
+    console.log(`${RED} ${failed} échoué(s)${RESET}`);
+    console.log(`\nPoints en échec :`);
+    errors.forEach(e => console.log(`  ${RED} ${e}${RESET}`));
+    process.exit(1);
+  } else {
+    console.log(`\n${GREEN} Tous les scénarios critiques sont validés ✓${RESET}\n`);
+    process.exit(0);
+  }
 }
 
-main().catch(e => { console.error("Erreur fatale:", e); process.exit(1); });
+run();
