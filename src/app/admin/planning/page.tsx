@@ -711,6 +711,43 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
                           }, undefined, { skipPayment: true, skipEmail: true });
                         }
                       }
+                      // Mettre à jour le payment existant avec le nouveau nombre de jours
+                      // Recalculer le tarif stage avec nbJours+1
+                      try {
+                        const paySnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", showAddDays.familyId), where("status", "==", "pending")));
+                        const stagePayment = paySnap.docs.find(d => {
+                          const items = d.data().items || [];
+                          return items.some((i: any) => i.activityType === "stage" || i.activityType === "stage_journee");
+                        });
+                        if (stagePayment) {
+                          const pData = stagePayment.data();
+                          const oldItems = pData.items || [];
+                          // Recalculer : compter les jours inscrits maintenant
+                          const totalDaysNow = (showAddDays.joursRestants.length - 1) === 0 
+                            ? allCreneaux.filter(c => c.activityTitle === creneau.activityTitle && (c.activityType === "stage" || c.activityType === "stage_journee")).length
+                            : allCreneaux.filter(c => c.activityTitle === creneau.activityTitle && (c.activityType === "stage" || c.activityType === "stage_journee")).length - showAddDays.joursRestants.length + 1;
+                          const cr = creneau as any;
+                          const prices: Record<number, number> = {};
+                          if (cr.price1day) prices[1] = cr.price1day;
+                          if (cr.price2days) prices[2] = cr.price2days;
+                          if (cr.price3days) prices[3] = cr.price3days;
+                          if (cr.price4days) prices[4] = cr.price4days;
+                          const newPrice = prices[totalDaysNow] || priceTTC;
+                          // Mettre à jour chaque item stage avec le nouveau prix
+                          const updatedItems = oldItems.map((item: any) => {
+                            if (item.activityType === "stage" || item.activityType === "stage_journee") {
+                              return { ...item, priceTTC: Math.round(newPrice * 100) / 100, priceHT: Math.round(newPrice / 1.055 * 100) / 100 };
+                            }
+                            return item;
+                          });
+                          const newTotal = Math.round(updatedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0) * 100) / 100;
+                          await updateDoc(doc(db, "payments", stagePayment.id), {
+                            items: updatedItems,
+                            totalTTC: newTotal,
+                            updatedAt: serverTimestamp(),
+                          });
+                        }
+                      } catch (e) { console.error("Erreur mise à jour tarif stage:", e); }
                       setJustEnrolled(`${showAddDays.enfants.map(e => e.childName).join(", ")} ajouté(s) le ${j.label}`);
                       const remaining = showAddDays.joursRestants.filter(jr => jr.id !== j.id);
                       if (remaining.length > 0) {
