@@ -135,7 +135,7 @@ export default function CavaliersPage() {
       if (newFamily.parentEmail.trim()) {
         try {
           const emailData = emailTemplates.bienvenueNouvelleFamille({ parentName: newFamily.parentName.trim() });
-          await fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: newFamily.parentEmail.trim(), ...emailData }) });
+          fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: newFamily.parentEmail.trim(), ...emailData }) }).catch(e => console.warn("Email:", e));
         } catch (e) { console.error("Email bienvenue:", e); }
       }
       fetchFamilies();

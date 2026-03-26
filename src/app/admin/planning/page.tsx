@@ -303,11 +303,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, onClose, onEnro
               dates: stageMode === "jour" ? new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : dates,
               totalTTC: stageTotalTTC,
             });
-            await fetch("/api/send-email", {
+            fetch("/api/send-email", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ to: fam.parentEmail, ...confirmEmail }),
-            });
+            }).catch(e => console.warn("Email stage:", e));
           } catch (e) { console.error("Email confirmation stage:", e); }
         }
 
@@ -1288,7 +1288,7 @@ export default function PlanningPage() {
           date: new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
           horaire: `${c.startTime}–${c.endTime}`, prix: priceTTC,
         });
-        await fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: fam.parentEmail, ...emailData }) });
+        fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: fam.parentEmail, ...emailData }) }).catch(e => console.warn("Email:", e));
       } catch (e) { console.error("Email confirmation cours:", e); }
       }
     }
@@ -1395,7 +1395,7 @@ export default function PlanningPage() {
                   parentName: fam2.parentName || "", childName: child.childName,
                   activite: c.activityTitle, montantAvoir: avoirMontant, refAvoir: ref,
                 });
-                await fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: fam2.parentEmail, ...emailData }) });
+                fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: fam2.parentEmail, ...emailData }) }).catch(e => console.warn("Email avoir:", e));
               } catch (e) { console.error("Email avoir:", e); }
             }
           } else {

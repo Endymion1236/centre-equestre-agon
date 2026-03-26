@@ -757,7 +757,7 @@ export default function PaiementsPage() {
                               mode: paymentModes.find(m => m.id === paymentMode)?.label || paymentMode,
                               prestations: familyPending.flatMap(p => (p.items || []).map((i: any) => i.activityTitle)).join(", "),
                             });
-                            await fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: family.parentEmail, ...emailData }) });
+                            fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: family.parentEmail, ...emailData }) }).catch(e => console.warn("Email:", e));
                           } catch (e) { console.error("Email confirmation paiement:", e); }
                         }
                         setPaidAmount("");
@@ -1507,7 +1507,7 @@ export default function PaiementsPage() {
                                 prestations: (p.items||[]).map((i:any) => i.activityTitle).join(", "),
                               });
                               try {
-                                await fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: email, ...emailData }) });
+                                fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: email, ...emailData }) }).catch(e => console.warn("Email:", e));
                                 toast(`Relance envoyée à ${email}`);
                               } catch (e) { console.error(e); toast("Erreur envoi.", "error"); }
                             }}
