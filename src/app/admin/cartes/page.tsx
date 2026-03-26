@@ -44,6 +44,7 @@ export default function CartesPage() {
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [openCardId, setOpenCardId] = useState<string | null>(null);
 
   // Create form
   const [selFamily, setSelFamily] = useState("");
@@ -64,6 +65,8 @@ export default function CartesPage() {
   const [debitCardId, setDebitCardId] = useState<string | null>(null);
   const [debitActivity, setDebitActivity] = useState("");
   const [debiting, setDebiting] = useState(false);
+  // Accordéon détail carte
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
@@ -223,7 +226,7 @@ export default function CartesPage() {
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-xl bg-gold-50 flex items-center justify-center text-2xl">🎟️</div>
                         <div>
-                          <div className="font-body text-base font-semibold text-blue-800">{card.childName}</div>
+                          <div className="font-body text-base font-semibold text-blue-800">{card.childName} <span className="font-normal text-gray-400 text-sm">· {card.familyName}</span></div>
                           <div className="font-body text-xs text-gray-400">{card.familyName} · {card.activityType === "balade" ? "Balades" : "Cours"}</div>
                           {(card as any).dateDebut && (card as any).dateFin && (
                             <div className="font-body text-[10px] text-gray-400 mt-0.5">
@@ -275,31 +278,38 @@ export default function CartesPage() {
                       )
                     )}
 
-                    {/* Historique détaillé par séance — style Céléris */}
-                    {(card.history || []).length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-gray-100">
-                        <div className="font-body text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Historique des séances</div>
-                        <div className="flex flex-col gap-1.5">
-                          {[...(card.history as any[])].reverse().map((h: any, i: number) => (
-                            <div key={i} className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-body ${h.credit ? "bg-green-50" : h.presence === "absent" ? "bg-red-50 opacity-60" : "bg-sand"}`}>
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${h.credit ? "bg-green-400" : h.presence === "absent" ? "bg-red-400" : "bg-gold-400"}`} />
-                                <div className="min-w-0">
-                                  <div className="text-blue-800 font-semibold truncate">{h.activityTitle || "Séance"}</div>
-                                  <div className="text-gray-400 text-[10px]">
-                                    {h.date ? new Date(h.date).toLocaleDateString("fr-FR", { weekday:"short", day:"numeric", month:"short" }) : ""}
-                                    {h.horseName ? ` · ${h.horseName}` : ""}
-                                    {h.credit ? " · Recrédit" : ""}
-                                  </div>
+                    {/* Bouton détail + historique replié */}
+                    <button onClick={() => setOpenCardId(openCardId === card.id ? null : card.id)}
+                      className="w-full flex items-center justify-between mt-2 pt-2 border-t border-gray-100 font-body text-xs text-gray-400 hover:text-blue-500 bg-transparent border-none cursor-pointer px-0 pb-0">
+                      <span>{(card.history || []).filter((h:any) => !h.credit && h.presence !== "absent").length} séance{(card.history || []).filter((h:any) => !h.credit && h.presence !== "absent").length > 1 ? "s" : ""} utilisée{(card.history || []).filter((h:any) => !h.credit && h.presence !== "absent").length > 1 ? "s" : ""}</span>
+                      <span>{openCardId === card.id ? "▲ Masquer" : "▼ Voir le détail"}</span>
+                    </button>
+
+                    {/* Historique détaillé — visible uniquement si ouvert */}
+                    {openCardId === card.id && (card.history || []).length > 0 && (
+                      <div className="mt-2 flex flex-col gap-1.5">
+                        {[...(card.history as any[])].reverse().map((h: any, i: number) => (
+                          <div key={i} className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-body ${h.credit ? "bg-green-50" : h.presence === "absent" ? "bg-red-50 opacity-60" : "bg-sand"}`}>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${h.credit ? "bg-green-400" : h.presence === "absent" ? "bg-red-400" : "bg-gold-400"}`} />
+                              <div className="min-w-0">
+                                <div className="text-blue-800 font-semibold truncate">{h.activityTitle || "Séance"}</div>
+                                <div className="text-gray-400 text-[10px]">
+                                  {h.date ? new Date(h.date).toLocaleDateString("fr-FR", { weekday:"short", day:"numeric", month:"short" }) : ""}
+                                  {h.horseName ? ` · ${h.horseName}` : ""}
+                                  {h.credit ? " · Recrédit" : ""}
                                 </div>
                               </div>
-                              <span className={`font-semibold flex-shrink-0 ml-2 ${h.credit ? "text-green-500" : h.presence === "absent" ? "text-red-400" : "text-gold-500"}`}>
-                                {h.credit ? "+1" : h.presence === "absent" ? "Absent" : "Vérifié"}
-                              </span>
                             </div>
-                          ))}
-                        </div>
+                            <span className={`font-semibold flex-shrink-0 ml-2 ${h.credit ? "text-green-500" : h.presence === "absent" ? "text-red-400" : "text-gold-500"}`}>
+                              {h.credit ? "+1" : h.presence === "absent" ? "Absent" : "Vérifié"}
+                            </span>
+                          </div>
+                        ))}
                       </div>
+                    )}
+                    {openCardId === card.id && (card.history || []).length === 0 && (
+                      <p className="font-body text-xs text-gray-400 text-center py-2 mt-1">Aucune séance utilisée</p>
                     )}
                   </Card>
                 );
