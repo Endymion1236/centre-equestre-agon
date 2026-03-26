@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
@@ -61,9 +61,12 @@ export default function FacturesPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [cards, setCards] = useState<Card10[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"factures" | "reservations" | "cartes">("factures");
+  const [tab, setTab] = useState<"factures" | "reservations" | "cartes" | "fidelite">("factures");
   const [clientAvoirs, setClientAvoirs] = useState<any[]>([]);
   const [openCardId, setOpenCardId] = useState<string | null>(null);
+  const [fidelite, setFidelite] = useState<any>(null);
+  const [fideliteSettings, setFideliteSettings] = useState<{ taux: number; minPoints: number; enabled: boolean } | null>(null);
+  const [convertingPoints, setConvertingPoints] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -113,6 +116,16 @@ export default function FacturesPage() {
         } catch { setClientAvoirs([]); }
       }
 
+      // Fidélité
+      try {
+        const [fidSnap, settingsSnap] = await Promise.all([
+          getDoc(doc(db, "fidelite", user.uid)),
+          getDoc(doc(db, "settings", "fidelite")),
+        ]);
+        if (fidSnap.exists()) setFidelite({ id: fidSnap.id, ...fidSnap.data() });
+        if (settingsSnap.exists()) setFideliteSettings(settingsSnap.data() as any);
+      } catch { /* pas de fidélité */ }
+
       setLoading(false);
     };
     fetchAll();
@@ -128,15 +141,27 @@ export default function FacturesPage() {
       <p className="font-body text-sm text-gray-400 mb-6">Retrouvez l&apos;historique de tous vos paiements et réservations.</p>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
         {([["factures", "Paiements", Receipt], ["reservations", "Réservations", CreditCard], ["cartes", "Cartes", Ticket]] as const).map(([id, label, Icon]) => (
-          <button key={id} onClick={() => setTab(id)}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all
+          <button key={id} onClick={() => setTab(id as any)}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all whitespace-nowrap
               ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
             <Icon size={16} /> {label}
             {id === "factures" && payments.length > 0 && <span className="bg-white/20 text-[10px] px-1.5 py-0.5 rounded-full">{payments.length}</span>}
           </button>
         ))}
+        {fideliteSettings?.enabled && (
+          <button onClick={() => setTab("fidelite")}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all whitespace-nowrap
+              ${tab === "fidelite" ? "bg-yellow-500 text-white border-yellow-500" : "bg-white text-gray-500 border-gray-200"}`}>
+            🏆 Fidélité
+            {fidelite && fidelite.points > 0 && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${tab === "fidelite" ? "bg-white/20 text-white" : "bg-yellow-100 text-yellow-700"}`}>
+                {fidelite.points} pts
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -397,6 +422,118 @@ export default function FacturesPage() {
                     );
                   })}
                 </div>
+              )}
+            </div>
+          )}
+          {/* ─── Fidélité ─── */}
+          {tab === "fidelite" && fideliteSettings?.enabled && (
+            <div className="flex flex-col gap-4">
+              {/* Solde points */}
+              <Card padding="md" className="bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-200">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-2xl bg-yellow-400 flex items-center justify-center text-3xl flex-shrink-0">🏆</div>
+                  <div className="flex-1">
+                    <div className="font-body text-xs text-yellow-600 uppercase font-semibold tracking-wider mb-1">Solde de points</div>
+                    <div className="font-display text-4xl font-bold text-yellow-700">{fidelite?.points || 0}</div>
+                    <div className="font-body text-xs text-yellow-600 mt-0.5">
+                      = {((fidelite?.points || 0) / fideliteSettings.taux).toFixed(2)}€ de réduction disponible
+                    </div>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Convertir les points */}
+              {(fidelite?.points || 0) >= fideliteSettings.minPoints ? (
+                <Card padding="md">
+                  <div className="font-body text-sm font-semibold text-blue-800 mb-2">Utiliser mes points</div>
+                  <div className="font-body text-xs text-gray-500 mb-4">
+                    Vous avez <strong>{fidelite.points} points</strong> soit <strong>{(fidelite.points / fideliteSettings.taux).toFixed(2)}€</strong> de réduction à utiliser sur votre prochaine facture.
+                  </div>
+                  <button
+                    disabled={convertingPoints}
+                    onClick={async () => {
+                      if (!user) return;
+                      if (!confirm(`Convertir ${fidelite.points} points en ${(fidelite.points / fideliteSettings.taux).toFixed(2)}€ d'avoir ?\n\nUn avoir sera ajouté à votre compte.`)) return;
+                      setConvertingPoints(true);
+                      try {
+                        const montantAvoir = Math.floor(fidelite.points / fideliteSettings.taux * 100) / 100;
+                        const pointsUtilises = Math.floor(montantAvoir * fideliteSettings.taux);
+                        const expiry = new Date();
+                        expiry.setFullYear(expiry.getFullYear() + 1);
+                        // Créer l'avoir
+                        await addDoc(collection(db, "avoirs"), {
+                          familyId: user.uid,
+                          familyName: fidelite.familyName || "",
+                          type: "avoir",
+                          amount: montantAvoir,
+                          usedAmount: 0,
+                          remainingAmount: montantAvoir,
+                          reason: `Conversion points fidélité (${pointsUtilises} pts)`,
+                          reference: `FIDELITE-${Date.now().toString(36).toUpperCase()}`,
+                          sourceType: "fidelite",
+                          status: "actif",
+                          expiryDate: expiry,
+                          usageHistory: [],
+                          createdAt: serverTimestamp(),
+                        });
+                        // Déduire les points
+                        const newPoints = (fidelite.points || 0) - pointsUtilises;
+                        await updateDoc(doc(db, "fidelite", user.uid), {
+                          points: newPoints,
+                          history: [...(fidelite.history || []), {
+                            date: new Date().toISOString(),
+                            points: -pointsUtilises,
+                            type: "conversion",
+                            label: `Conversion en avoir (${montantAvoir.toFixed(2)}€)`,
+                          }],
+                          updatedAt: serverTimestamp(),
+                        });
+                        setFidelite({ ...fidelite, points: newPoints });
+                        alert(`✅ ${montantAvoir.toFixed(2)}€ d'avoir créé ! Il apparaît dans vos paiements.`);
+                      } catch (e) { console.error(e); alert("Erreur lors de la conversion."); }
+                      setConvertingPoints(false);
+                    }}
+                    className="w-full py-3 rounded-xl font-body text-sm font-bold text-white bg-yellow-500 border-none cursor-pointer hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed">
+                    {convertingPoints ? "Conversion en cours..." : `Convertir en avoir — ${(fidelite.points / fideliteSettings.taux).toFixed(2)}€`}
+                  </button>
+                </Card>
+              ) : (
+                <Card padding="md" className="text-center">
+                  <div className="font-body text-sm text-gray-500 mb-1">
+                    Encore <strong className="text-blue-800">{fideliteSettings.minPoints - (fidelite?.points || 0)} points</strong> avant de pouvoir utiliser vos points
+                  </div>
+                  <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden mt-3">
+                    <div className="h-full rounded-full bg-yellow-400 transition-all"
+                      style={{ width: `${Math.min(100, ((fidelite?.points || 0) / fideliteSettings.minPoints) * 100)}%` }} />
+                  </div>
+                  <div className="flex justify-between font-body text-[10px] text-gray-400 mt-1">
+                    <span>{fidelite?.points || 0} pts</span>
+                    <span>{fideliteSettings.minPoints} pts requis</span>
+                  </div>
+                </Card>
+              )}
+
+              {/* Historique des points */}
+              {(fidelite?.history || []).length > 0 && (
+                <Card padding="md">
+                  <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Historique des points</div>
+                  <div className="flex flex-col gap-2">
+                    {[...(fidelite.history || [])].reverse().slice(0, 20).map((h: any, i: number) => (
+                      <div key={i} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
+                        <div>
+                          <div className="font-body text-xs font-semibold text-blue-800">{h.label}</div>
+                          <div className="font-body text-[10px] text-gray-400">
+                            {h.date ? new Date(h.date).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" }) : ""}
+                            {h.expiry && h.type === "gain" ? ` · expire le ${new Date(h.expiry).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}` : ""}
+                          </div>
+                        </div>
+                        <span className={`font-body text-sm font-bold ${h.points > 0 ? "text-yellow-500" : "text-gray-400"}`}>
+                          {h.points > 0 ? "+" : ""}{h.points} pts
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
               )}
             </div>
           )}

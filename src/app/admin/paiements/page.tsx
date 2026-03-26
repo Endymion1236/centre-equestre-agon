@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, addDoc, deleteDoc, updateDoc, doc, getDoc, serverTimestamp, query, where, orderBy, limit, runTransaction } from "firebase/firestore";
+import { collection, getDocs, addDoc, deleteDoc, updateDoc, setDoc, doc, getDoc, serverTimestamp, query, where, orderBy, limit, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { emailTemplates } from "@/lib/email-templates";
 import { safeNumber, round2, generateOrderId } from "@/lib/utils";
@@ -188,6 +188,53 @@ export default function PaiementsPage() {
     });
 
     return { paidAmount: totalEncaisse, status: newStatus };
+
+    // 5. Attribuer des points de fidélité (1 point par euro encaissé)
+    // Ne pas attribuer sur les avoirs ni les remboursements
+    if (montant > 0 && mode !== "avoir") {
+      try {
+        const settingsSnap = await getDoc(doc(db, "settings", "fidelite"));
+        const fideliteEnabled = settingsSnap.exists() ? (settingsSnap.data()?.enabled !== false) : false;
+        if (fideliteEnabled) {
+          const pointsGagnes = Math.floor(montant);
+          const expiry = new Date();
+          expiry.setFullYear(expiry.getFullYear() + 1);
+          const fidRef = doc(db, "fidelite", paymentData.familyId);
+          const fidSnap = await getDoc(fidRef);
+          if (fidSnap.exists()) {
+            const current = fidSnap.data() || {};
+            await updateDoc(fidRef, {
+              points: ((current.points as number) || 0) + pointsGagnes,
+              history: [...((current.history as any[]) || []), {
+                date: new Date().toISOString(),
+                points: pointsGagnes,
+                type: "gain",
+                label: activityTitle || "Encaissement",
+                expiry: expiry.toISOString(),
+                montant,
+              }],
+              updatedAt: serverTimestamp(),
+            });
+          } else {
+            await setDoc(fidRef, {
+              familyId: paymentData.familyId,
+              familyName: paymentData.familyName,
+              points: pointsGagnes,
+              history: [{
+                date: new Date().toISOString(),
+                points: pointsGagnes,
+                type: "gain",
+                label: activityTitle || "Encaissement",
+                expiry: expiry.toISOString(),
+                montant,
+              }],
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+          }
+        }
+      } catch (e) { console.error("Erreur attribution points fidélité:", e); }
+    }
   };
 
   // Rafraîchir les données
