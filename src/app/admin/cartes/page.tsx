@@ -65,8 +65,6 @@ export default function CartesPage() {
   const [debitCardId, setDebitCardId] = useState<string | null>(null);
   const [debitActivity, setDebitActivity] = useState("");
   const [debiting, setDebiting] = useState(false);
-  // Accordéon détail carte
-  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {

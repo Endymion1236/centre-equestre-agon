@@ -27,6 +27,7 @@ export default function CavaliersPage() {
   const [allReservations, setAllReservations] = useState<any[]>([]);
   const [allPayments, setAllPayments] = useState<any[]>([]);
   const [allAvoirs, setAllAvoirs] = useState<any[]>([]);
+  const [allCartes, setAllCartes] = useState<any[]>([]);
 
   // ─── Édition infos famille ───
   const [editingFamily, setEditingFamily] = useState<string | null>(null);
@@ -67,16 +68,18 @@ export default function CavaliersPage() {
 
   const fetchFamilies = async () => {
     try {
-      const [famSnap, resSnap, paySnap, avoirsSnap] = await Promise.all([
+      const [famSnap, resSnap, paySnap, avoirsSnap, cartesSnap] = await Promise.all([
         getDocs(collection(db, "families")),
         getDocs(collection(db, "reservations")),
         getDocs(collection(db, "payments")),
         getDocs(collection(db, "avoirs")),
+        getDocs(collection(db, "cartes")),
       ]);
       setFamilies(famSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as (Family & { firestoreId: string })[]);
       setAllReservations(resSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setAllPayments(paySnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setAllAvoirs(avoirsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setAllCartes(cartesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (e) { console.error(e); }
     setLoading(false);
   };
@@ -975,6 +978,54 @@ export default function CavaliersPage() {
                               })}
                             </div>
                           )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* ─── Cartes de séances ─── */}
+                    {(() => {
+                      const famCartes = allCartes.filter((c: any) => c.familyId === family.firestoreId);
+                      const activeCartes = famCartes.filter((c: any) => c.status === "active" && (c.remainingSessions || 0) > 0);
+                      if (famCartes.length === 0) return null;
+                      return (
+                        <div className="mt-4 pt-3 border-t border-blue-500/8">
+                          <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                            🎟️ Cartes de séances ({famCartes.length})
+                            {activeCartes.length > 0 && <Badge color="green">{activeCartes.length} active{activeCartes.length > 1 ? "s" : ""}</Badge>}
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            {famCartes.map((carte: any) => {
+                              const pct = carte.totalSessions > 0 ? (carte.remainingSessions / carte.totalSessions) * 100 : 0;
+                              const expired = carte.dateFin && new Date(carte.dateFin) < new Date();
+                              const used = carte.status === "used" || carte.remainingSessions <= 0;
+                              return (
+                                <div key={carte.id} className={`font-body text-xs px-3 py-2.5 rounded-lg border ${used || expired ? "bg-gray-50 border-gray-200 opacity-60" : "bg-sand border-gold-200"}`}>
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <div>
+                                      <span className="font-semibold text-blue-800">{carte.childName}</span>
+                                      <span className="text-gray-400 ml-1">· {carte.activityType === "balade" ? "Balades" : "Cours"}</span>
+                                    </div>
+                                    <Badge color={used || expired ? "gray" : carte.remainingSessions > 2 ? "green" : "orange"}>
+                                      {carte.remainingSessions}/{carte.totalSessions}
+                                    </Badge>
+                                  </div>
+                                  {/* Barre de progression */}
+                                  <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden mb-1.5">
+                                    <div className="h-full rounded-full bg-gold-400 transition-all" style={{ width: `${pct}%` }} />
+                                  </div>
+                                  <div className="flex justify-between text-[10px] text-gray-400">
+                                    <span>
+                                      {carte.dateDebut && carte.dateFin
+                                        ? `${new Date(carte.dateDebut).toLocaleDateString("fr-FR", { day:"numeric", month:"short" })} → ${new Date(carte.dateFin).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}`
+                                        : ""}
+                                      {expired && <span className="text-red-400 ml-1">· Expirée</span>}
+                                    </span>
+                                    <span>{carte.usedSessions} utilisée{carte.usedSessions > 1 ? "s" : ""}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       );
                     })()}
