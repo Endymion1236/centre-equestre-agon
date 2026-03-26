@@ -272,8 +272,20 @@ export default function PaiementsPage() {
       // Encaissé → avoir automatique
       if (!confirm(`Annuler l'inscription de ${payment.familyName} ?\n\n${(payment.items || []).map((i: any) => `• ${i.childName || ""} — ${i.activityTitle}`).join("\n")}\n\n💰 ${totalEnc.toFixed(2)}€ déjà encaissés → un avoir sera créé${inscriptionMsg}\n\nConfirmer ?`)) return;
 
-      // Désinscrire avant annulation
-      for (const item of payment.items || []) await unenrollPaymentItem(payment, item);
+      // Marquer cancelled d'abord pour éviter double-traitement
+      await updateDoc(doc(db, "payments", payment.id), {
+        status: "cancelled",
+        cancelledAt: serverTimestamp(),
+        cancelReason: "Annulation manuelle",
+        updatedAt: serverTimestamp(),
+      });
+
+      // Désinscrire chaque cavalier (erreurs silencieuses pour ne pas bloquer l'avoir)
+      let unenrollErrors = 0;
+      for (const item of payment.items || []) {
+        try { await unenrollPaymentItem(payment, item); }
+        catch (e) { console.error("Erreur désinscription item:", item.activityTitle, e); unenrollErrors++; }
+      }
 
       const ref = `AV-${Date.now().toString(36).toUpperCase()}`;
       const expiry = new Date();
@@ -297,14 +309,8 @@ export default function PaiementsPage() {
         updatedAt: serverTimestamp(),
       });
 
-      await updateDoc(doc(db, "payments", payment.id), {
-        status: "cancelled",
-        cancelledAt: serverTimestamp(),
-        cancelReason: "Annulation manuelle",
-        updatedAt: serverTimestamp(),
-      });
-
-      toast(`Commande annulée.\nAvoir créé : ${totalEnc.toFixed(2)}€ (réf. ${ref})`);
+      const warnMsg = unenrollErrors > 0 ? `\n⚠️ ${unenrollErrors} désinscription(s) à vérifier manuellement.` : "";
+      toast(`Commande annulée. Avoir créé : ${totalEnc.toFixed(2)}€ (réf. ${ref})${warnMsg}`);
     }
     await refreshAll();
   };
@@ -401,10 +407,17 @@ export default function PaiementsPage() {
     const sourceChildren = (payment.items || []).map((i: any) => i.childName).filter(Boolean);
 
     const cleanedItems = (payment.items || []).map((item: any, idx: number) => {
-      // Si autre famille : remplacer l'enfant par celui de la cible (par position)
-      const targetChild = targetFamilyId && targetChildren[idx]
-        ? { childId: targetChildren[idx].id, childName: targetChildren[idx].firstName }
-        : { childId: item.childId || "", childName: item.childName || "" };
+      let targetChild: { childId: string; childName: string };
+      if (targetFamilyId) {
+        // Autre famille : mapper par position, fallback sur le premier enfant disponible
+        const mapped = targetChildren[idx] || targetChildren[0];
+        targetChild = mapped
+          ? { childId: mapped.id || "", childName: mapped.firstName || "" }
+          : { childId: item.childId || "", childName: item.childName || "" };
+      } else {
+        // Même famille : conserver l'enfant d'origine
+        targetChild = { childId: item.childId || "", childName: item.childName || "" };
+      }
       return {
         ...targetChild,
         activityType: item.activityType || "",
@@ -418,12 +431,13 @@ export default function PaiementsPage() {
       };
     });
     const totalTTC = round2(cleanedItems.reduce((sum: number, item: any) => sum + safeNumber(item.priceTTC), 0));
+    // IM-07 : status "pending" (pas "draft") pour que la commande apparaisse dans Impayés
     await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
       familyId: targetFamily.firestoreId,
       familyName: targetFamily.parentName || "",
       items: cleanedItems,
       totalTTC,
-      status: "draft",
+      status: "pending",
       paidAmount: 0,
       paymentMode: "",
       paymentRef: "",
