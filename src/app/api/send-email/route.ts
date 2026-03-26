@@ -6,10 +6,10 @@ export const dynamic = "force-dynamic";
 // Email expéditeur — utilise le domaine vérifié dans Resend
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "Centre Equestre Agon <onboarding@resend.dev>";
 
-// Mode test : si pas de domaine vérifié, tous les emails vont vers l'admin
-// Mettre RESEND_TEST_MODE=true dans Vercel pour activer (ou laisser vide pour prod)
+// Mode test : si pas de domaine vérifié, tous les emails vont vers l'email du compte Resend
+// IMPORTANT : Resend gratuit n'autorise l'envoi qu'à l'email du propriétaire du compte
 const TEST_MODE = !process.env.RESEND_FROM_EMAIL || process.env.RESEND_TEST_MODE === "true";
-const TEST_EMAIL = process.env.RESEND_TEST_EMAIL || "nicolasrichard16@hotmail.com";
+const TEST_EMAIL = process.env.RESEND_OWNER_EMAIL || process.env.RESEND_TEST_EMAIL || "delivered@resend.dev";
 
 export async function POST(request: NextRequest) {
   try {
