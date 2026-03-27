@@ -69,7 +69,24 @@ interface EmailRepriseRequest {
   context?: string; // info supplémentaire optionnelle (météo, annulation, etc.)
 }
 
-type IARequest = RapprochementRequest | AssistantRequest | SuggestionsRequest | EmailRepriseRequest;
+interface BilanPedaRequest {
+  type: "bilan_peda";
+  transcript: string;
+  child: {
+    firstName: string;
+    lastName?: string;
+    galopLevel?: string;
+    objectifs?: { id: string; label: string; status: string }[];
+    recentNotes?: string[];
+  };
+  seance: {
+    activityTitle: string;
+    date: string;
+    horseName?: string;
+  };
+}
+
+type IARequest = RapprochementRequest | AssistantRequest | SuggestionsRequest | EmailRepriseRequest | BilanPedaRequest;
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
@@ -282,6 +299,72 @@ CONSIGNES :
         emailBody: emailMsg.content[0].type === "text" ? emailMsg.content[0].text : "",
         suggestedSubject: subjectMsg.content[0].type === "text" ? subjectMsg.content[0].text.trim() : "",
       });
+    }
+
+    // ── Bilan pédagogique IA ──────────────────────────────────────────────────
+    if (body.type === "bilan_peda") {
+      const { transcript, child, seance } = body;
+      const childFullName = child.lastName ? `${child.firstName} ${child.lastName}` : child.firstName;
+      const objectifsActuels = (child.objectifs || [])
+        .map(o => `- ${o.label} [${o.status}]`).join("\n") || "Aucun objectif défini";
+      const notesRecentes = (child.recentNotes || []).slice(0, 3).join("\n") || "Aucune note récente";
+
+      const prompt = `Tu es moniteur d'équitation au Centre Équestre d'Agon-Coutainville.
+Tu viens de terminer une reprise et tu analyses le bilan dicté vocalement pour ${childFullName}.
+
+CONTEXTE CAVALIER :
+- Prénom/Nom : ${childFullName}
+- Niveau actuel : ${child.galopLevel || "Non renseigné"}
+- Séance : ${seance.activityTitle} le ${seance.date}${seance.horseName ? ` sur ${seance.horseName}` : ""}
+
+OBJECTIFS EN COURS :
+${objectifsActuels}
+
+NOTES RÉCENTES :
+${notesRecentes}
+
+BILAN DICTÉ PAR LE MONITEUR :
+"${transcript}"
+
+Génère une réponse JSON structurée (et UNIQUEMENT du JSON, sans markdown ni backticks) :
+{
+  "note": {
+    "pointsForts": "résumé des points positifs observés (2-3 phrases)",
+    "aTravailler": "ce qui nécessite du travail (2-3 phrases)",
+    "objectifSuivant": "1 objectif concret et mesurable pour la prochaine séance"
+  },
+  "galopUpdate": null ou "G1"/"G2"/"Bronze"/"Argent"/"Or"/etc. si le transcript mentionne clairement un changement de niveau,
+  "objectifsAValider": ["id1", "id2"] liste des IDs d'objectifs existants à passer en 'valide' si le transcript le mentionne,
+  "nouvelObjectif": null ou { "label": "...", "category": "technique/comportement/sécurité" } si un nouvel objectif doit être créé
+}`;
+
+      const message = await client.messages.create({
+        model: "claude-sonnet-4-5",
+        max_tokens: 800,
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      const raw = message.content[0].type === "text" ? message.content[0].text.trim() : "{}";
+      let parsed: any = {};
+      try {
+        // Nettoyer les éventuels backticks
+        const clean = raw.replace(/```json|```/g, "").trim();
+        parsed = JSON.parse(clean);
+      } catch {
+        // Si JSON invalide, on retourne au moins le texte brut
+        parsed = {
+          note: {
+            pointsForts: raw,
+            aTravailler: "",
+            objectifSuivant: "",
+          },
+          galopUpdate: null,
+          objectifsAValider: [],
+          nouvelObjectif: null,
+        };
+      }
+
+      return NextResponse.json({ success: true, bilan: parsed });
     }
 
   } catch (error: any) {

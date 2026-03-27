@@ -1,12 +1,12 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { collection, getDocs, getDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { validateChildrenUpdate } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { emailTemplates } from "@/lib/email-templates";
-import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Printer, ClipboardList,
+import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Printer, ClipboardList, Mic, MicOff, Sparkles,
 } from "lucide-react";
 
 interface Creneau { id: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolled: any[]; status: string; }
@@ -79,6 +79,12 @@ export default function MontoirPage() {
   const assignHorse = (c: Creneau, childId: string, h: string) => { updateEnrolled(c.id, (c.enrolled||[]).map(e => e.childId===childId ? {...e, horseName: h} : e)); };
   const [quickNoteChild, setQuickNoteChild] = useState<{ cid: string; children: any[] } | null>(null);
   const [quickNotes, setQuickNotes] = useState<Record<string, string>>({});
+  // ── Bilan IA ──────────────────────────────────────────────────────────────
+  const [recording, setRecording] = useState<string | null>(null); // childId en cours d'enregistrement
+  const [transcripts, setTranscripts] = useState<Record<string, string>>({}); // childId → texte dicté
+  const [iaLoading, setIaLoading] = useState<Record<string, boolean>>({}); // childId → loading
+  const [iaBilans, setIaBilans] = useState<Record<string, any>>({}); // childId → bilan structuré
+  const recognitionRef = useRef<any>(null);
 
   const closeCreneau = async (cid: string) => {
     const c = creneaux.find(x => x.id === cid);
@@ -215,6 +221,140 @@ export default function MontoirPage() {
     fetchData();
   };
 
+  // ── Dictée vocale ──────────────────────────────────────────────────────────
+  const startRecording = (childId: string) => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) { alert("La dictée vocale n'est pas supportée sur ce navigateur. Utilisez Chrome ou Safari."); return; }
+    if (recognitionRef.current) { recognitionRef.current.stop(); }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "fr-FR";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    let finalText = transcripts[childId] || "";
+    recognition.onresult = (e: any) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) finalText += e.results[i][0].transcript + " ";
+        else interim = e.results[i][0].transcript;
+      }
+      setTranscripts(prev => ({ ...prev, [childId]: finalText + interim }));
+    };
+    recognition.onend = () => { setRecording(null); };
+    recognition.onerror = () => { setRecording(null); };
+    recognitionRef.current = recognition;
+    recognition.start();
+    setRecording(childId);
+  };
+
+  const stopRecording = () => {
+    if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null; }
+    setRecording(null);
+  };
+
+  const analyserBilanIA = async (child: any, creneauInfo: any) => {
+    const transcript = transcripts[child.childId];
+    if (!transcript?.trim()) return;
+    setIaLoading(prev => ({ ...prev, [child.childId]: true }));
+
+    // Récupérer les infos pédagogiques de l'enfant
+    const famDoc = families.find((f: any) => (f.children || []).some((ch: any) => ch.id === child.childId)) as any;
+    const matchChild = famDoc?.children.find((ch: any) => ch.id === child.childId);
+    const peda = matchChild?.peda || { objectifs: [], notes: [] };
+    const recentNotes = (peda.notes || []).slice(0, 3).map((n: any) => n.text);
+
+    try {
+      const res = await fetch("/api/ia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "bilan_peda",
+          transcript,
+          child: {
+            firstName: matchChild?.firstName || child.childName,
+            lastName: matchChild?.lastName || "",
+            galopLevel: matchChild?.galopLevel || "—",
+            objectifs: peda.objectifs || [],
+            recentNotes,
+          },
+          seance: {
+            activityTitle: creneauInfo.activityTitle,
+            date: new Date(creneauInfo.date).toLocaleDateString("fr-FR"),
+            horseName: child.horseName || "",
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data.success) setIaBilans(prev => ({ ...prev, [child.childId]: { ...data.bilan, creneauId: creneauInfo.id } }));
+      else alert(`Erreur IA : ${data.error}`);
+    } catch (e: any) { alert(`Erreur : ${e.message}`); }
+    setIaLoading(prev => ({ ...prev, [child.childId]: false }));
+  };
+
+  const saveBilanIA = async (child: any, bilan: any) => {
+    const famDoc = families.find((f: any) => (f.children || []).some((ch: any) => ch.id === child.childId)) as any;
+    if (!famDoc) return;
+    const matchChild = famDoc.children.find((ch: any) => ch.id === child.childId);
+    if (!matchChild) return;
+    const peda = matchChild.peda || { objectifs: [], notes: [] };
+
+    // 1. Créer la note structurée
+    const noteTexte = [
+      bilan.note.pointsForts ? `✅ Points forts : ${bilan.note.pointsForts}` : "",
+      bilan.note.aTravailler ? `🔧 À travailler : ${bilan.note.aTravailler}` : "",
+      bilan.note.objectifSuivant ? `🎯 Prochain objectif : ${bilan.note.objectifSuivant}` : "",
+    ].filter(Boolean).join("\n");
+
+    const newNote = {
+      date: new Date().toISOString(),
+      text: noteTexte,
+      rawTranscript: transcripts[child.childId] || "",
+      author: "Bilan IA — Moniteur",
+      type: "bilan_ia",
+      creneauId: bilan.creneauId || "",
+      activityTitle: quickNoteChild?.cid || "",
+    };
+
+    let updatedPeda = { ...peda, notes: [newNote, ...peda.notes], updatedAt: new Date().toISOString() };
+
+    // 2. Mettre à jour le galop si mentionné
+    let galopUpdate = matchChild.galopLevel;
+    if (bilan.galopUpdate && bilan.galopUpdate !== matchChild.galopLevel) {
+      galopUpdate = bilan.galopUpdate;
+    }
+
+    // 3. Valider des objectifs existants
+    if (bilan.objectifsAValider?.length > 0) {
+      updatedPeda.objectifs = (updatedPeda.objectifs || []).map((o: any) =>
+        bilan.objectifsAValider.includes(o.id) ? { ...o, status: "valide", validatedAt: new Date().toISOString() } : o
+      );
+    }
+
+    // 4. Créer un nouvel objectif si suggéré
+    if (bilan.nouvelObjectif?.label) {
+      const newObj = {
+        id: `obj_${Date.now()}`,
+        label: bilan.nouvelObjectif.label,
+        category: bilan.nouvelObjectif.category || "technique",
+        status: "en_cours",
+        createdAt: new Date().toISOString(),
+      };
+      updatedPeda.objectifs = [newObj, ...(updatedPeda.objectifs || [])];
+    }
+
+    const updatedChildren = famDoc.children.map((ch: any) =>
+      ch.id === child.childId
+        ? { ...ch, peda: updatedPeda, galopLevel: galopUpdate }
+        : ch
+    );
+
+    await updateDoc(doc(db, "families", famDoc.id), { children: updatedChildren, updatedAt: serverTimestamp() });
+
+    // Supprimer le bilan de l'état local
+    setIaBilans(prev => { const n = { ...prev }; delete n[child.childId]; return n; });
+    setTranscripts(prev => { const n = { ...prev }; delete n[child.childId]; return n; });
+    toast(`✅ Bilan IA enregistré pour ${child.childName}`, "success");
+  };
+
   const saveQuickNotes = async () => {
     if (!quickNoteChild) return;
     const allFams = families;
@@ -348,35 +488,138 @@ export default function MontoirPage() {
         </Card>); })}</div>}
       </>}
 
-      {/* Panel notes rapides post-clôture */}
+      {/* Panel bilan pédagogique IA post-clôture */}
       {quickNoteChild && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onClick={() => setQuickNoteChild(null)}>
-          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] overflow-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onClick={() => { stopRecording(); setQuickNoteChild(null); setQuickNotes({}); setTranscripts({}); setIaBilans({}); }}>
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-xl max-h-[92vh] overflow-auto shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="p-5 border-b border-gray-100">
-              <h2 className="font-display text-lg font-bold text-blue-800">Notes rapides (facultatif)</h2>
-              <p className="font-body text-xs text-gray-400 mt-1">Ajoutez une observation pour chaque cavalier. Laissez vide pour passer.</p>
-            </div>
-            <div className="p-5 flex flex-col gap-3">
-              {quickNoteChild.children.map(child => (
-                <div key={child.childId} className="bg-sand rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="font-body text-sm font-semibold text-blue-800">{child.childName}</span>
-                    {child.horseName && <Badge color="blue">{child.horseName}</Badge>}
-                  </div>
-                  <input
-                    value={quickNotes[child.childId] || ""}
-                    onChange={e => setQuickNotes({ ...quickNotes, [child.childId]: e.target.value })}
-                    placeholder="Progrès, point à travailler, remarque..."
-                    className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none"
-                  />
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg,#7c3aed,#2050A0)" }}>
+                  <Sparkles size={16} className="text-white" />
                 </div>
-              ))}
+                <div>
+                  <h2 className="font-display text-lg font-bold text-blue-800">Bilan pédagogique</h2>
+                  <p className="font-body text-xs text-gray-400">Dictez votre observation — l'IA structure la fiche cavalier</p>
+                </div>
+              </div>
             </div>
-            <div className="p-5 border-t border-gray-100 flex gap-3">
-              <button onClick={() => { setQuickNoteChild(null); setQuickNotes({}); }}
-                className="flex-1 py-2.5 rounded-lg font-body text-sm text-gray-500 bg-gray-100 border-none cursor-pointer">Passer</button>
+
+            <div className="p-4 flex flex-col gap-4">
+              {quickNoteChild.children.map(child => {
+                const isRec = recording === child.childId;
+                const transcript = transcripts[child.childId] || "";
+                const loading = iaLoading[child.childId] || false;
+                const bilan = iaBilans[child.childId];
+                // Trouver la reprise
+                const creneau = creneaux.find(c => c.id === quickNoteChild.cid);
+
+                return (
+                  <div key={child.childId} className="border border-gray-100 rounded-2xl p-4">
+                    {/* En-tête enfant */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-body text-sm font-semibold text-blue-800">{child.childName}</span>
+                        {child.horseName && <Badge color="blue">🐴 {child.horseName}</Badge>}
+                      </div>
+                      {bilan && <Badge color="green">✓ Analysé</Badge>}
+                    </div>
+
+                    {/* Bouton dictée + transcription */}
+                    {!bilan && (
+                      <div className="flex flex-col gap-2">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => isRec ? stopRecording() : startRecording(child.childId)}
+                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-body text-sm font-semibold border-none cursor-pointer transition-all ${isRec ? "bg-red-500 text-white animate-pulse" : "bg-purple-50 text-purple-700 hover:bg-purple-100"}`}>
+                            {isRec ? <><MicOff size={16} /> Arrêter</> : <><Mic size={16} /> Dicter le bilan</>}
+                          </button>
+                          {transcript && !loading && (
+                            <button onClick={() => analyserBilanIA(child, creneau)}
+                              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-white border-none cursor-pointer"
+                              style={{ background: "linear-gradient(135deg,#7c3aed,#2050A0)" }}>
+                              <Sparkles size={14} /> Analyser
+                            </button>
+                          )}
+                          {loading && <div className="flex items-center gap-2 px-4 py-2.5 text-purple-600 font-body text-sm"><Loader2 size={14} className="animate-spin" /> Analyse...</div>}
+                        </div>
+
+                        {/* Zone transcript */}
+                        <textarea
+                          value={transcript}
+                          onChange={e => setTranscripts(prev => ({ ...prev, [child.childId]: e.target.value }))}
+                          placeholder={isRec ? "🎙️ Dictez votre observation..." : "Ou tapez directement votre observation..."}
+                          rows={3}
+                          className={`w-full px-3 py-2.5 rounded-xl border font-body text-sm bg-white focus:outline-none resize-none transition-all ${isRec ? "border-red-300 bg-red-50/30" : "border-gray-200 focus:border-purple-400"}`}
+                        />
+                        {isRec && <p className="font-body text-[10px] text-red-500 text-center">● Enregistrement en cours...</p>}
+                      </div>
+                    )}
+
+                    {/* Résultat bilan IA */}
+                    {bilan && (
+                      <div className="flex flex-col gap-3">
+                        <div className="bg-purple-50 rounded-xl p-3 flex flex-col gap-2">
+                          {bilan.note.pointsForts && (
+                            <div>
+                              <div className="font-body text-[10px] font-semibold text-green-600 uppercase tracking-wider mb-0.5">✅ Points forts</div>
+                              <div className="font-body text-xs text-blue-800">{bilan.note.pointsForts}</div>
+                            </div>
+                          )}
+                          {bilan.note.aTravailler && (
+                            <div>
+                              <div className="font-body text-[10px] font-semibold text-orange-500 uppercase tracking-wider mb-0.5">🔧 À travailler</div>
+                              <div className="font-body text-xs text-blue-800">{bilan.note.aTravailler}</div>
+                            </div>
+                          )}
+                          {bilan.note.objectifSuivant && (
+                            <div>
+                              <div className="font-body text-[10px] font-semibold text-purple-600 uppercase tracking-wider mb-0.5">🎯 Prochain objectif</div>
+                              <div className="font-body text-xs text-blue-800">{bilan.note.objectifSuivant}</div>
+                            </div>
+                          )}
+                        </div>
+                        {/* Mises à jour détectées */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {bilan.galopUpdate && <Badge color="blue">📈 Niveau → {bilan.galopUpdate}</Badge>}
+                          {bilan.objectifsAValider?.length > 0 && <Badge color="green">✓ {bilan.objectifsAValider.length} objectif(s) validé(s)</Badge>}
+                          {bilan.nouvelObjectif && <Badge color="purple">+ Nouvel objectif</Badge>}
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => saveBilanIA(child, bilan)}
+                            className="flex-1 py-2 rounded-xl font-body text-sm font-semibold text-white bg-green-500 border-none cursor-pointer hover:bg-green-600">
+                            ✓ Enregistrer
+                          </button>
+                          <button onClick={() => { setIaBilans(prev => { const n={...prev}; delete n[child.childId]; return n; }); }}
+                            className="px-4 py-2 rounded-xl font-body text-sm text-gray-500 bg-gray-100 border-none cursor-pointer">
+                            Modifier
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Note manuelle si pas de dictée */}
+                    {!transcript && !bilan && (
+                      <div className="mt-2">
+                        <input
+                          value={quickNotes[child.childId] || ""}
+                          onChange={e => setQuickNotes({ ...quickNotes, [child.childId]: e.target.value })}
+                          placeholder="Ou saisir une note rapide sans IA..."
+                          className="w-full px-3 py-2 rounded-lg border border-gray-100 font-body text-xs bg-gray-50 focus:border-blue-300 focus:outline-none"
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="p-4 border-t border-gray-100 flex gap-3">
+              <button onClick={() => { stopRecording(); setQuickNoteChild(null); setQuickNotes({}); setTranscripts({}); setIaBilans({}); }}
+                className="flex-1 py-2.5 rounded-xl font-body text-sm text-gray-500 bg-gray-100 border-none cursor-pointer">Fermer</button>
               <button onClick={saveQuickNotes}
-                className="flex-1 py-2.5 rounded-lg font-body text-sm font-semibold text-white bg-blue-500 border-none cursor-pointer hover:bg-blue-600">Enregistrer</button>
+                className="flex-1 py-2.5 rounded-xl font-body text-sm font-semibold text-blue-500 bg-blue-50 border-none cursor-pointer hover:bg-blue-100">
+                Enregistrer les notes manuelles
+              </button>
             </div>
           </div>
         </div>
