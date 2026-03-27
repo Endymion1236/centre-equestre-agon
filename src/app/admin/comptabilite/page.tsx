@@ -60,6 +60,7 @@ export default function ComptabilitePage() {
   // Pointage manuel remise
   const [pointageRemiseId, setPointageRemiseId] = useState<string | null>(null);
   const [pointageNote, setPointageNote] = useState("");
+  const [openRemiseId, setOpenRemiseId] = useState<string | null>(null);
   const [period, setPeriod] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -594,42 +595,50 @@ export default function ComptabilitePage() {
 
                   return (
                     <Card key={r.id} padding="md" className={r.pointee ? "border-green-200" : ""}>
-                      {/* En-tête remise */}
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <div className="font-body text-sm font-semibold text-blue-800">Remise du {rDate.toLocaleDateString("fr-FR")}</div>
+                      {/* ── En-tête cliquable ── */}
+                      <div className="flex justify-between items-center cursor-pointer select-none"
+                        onClick={() => setOpenRemiseId(openRemiseId === r.id ? null : r.id)}>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <div className="font-body text-sm font-semibold text-blue-800">
+                              Remise du {rDate.toLocaleDateString("fr-FR")}
+                            </div>
                             {r.pointee
-                              ? <Badge color="green">✓ Pointée{r.pointeeDate ? ` le ${new Date(r.pointeeDate).toLocaleDateString("fr-FR")}` : ""}</Badge>
+                              ? <Badge color="green">✓ Pointée</Badge>
                               : <Badge color="orange">Non pointée</Badge>}
+                            <span className="font-body text-xs text-gray-400">{rPayments.length} paiement{rPayments.length > 1 ? "s" : ""} · {modeLabels[r.paymentMode] || r.paymentMode || "Mixte"}</span>
                           </div>
-                          <div className="font-body text-xs text-gray-400">{rPayments.length} paiement{rPayments.length > 1 ? "s" : ""} · {modeLabels[r.paymentMode] || r.paymentMode || "Mixte"}</div>
-                          {r.pointeeNote && <div className="font-body text-xs text-gray-400 mt-0.5 italic">{r.pointeeNote}</div>}
+                          {r.pointeeNote && <div className="font-body text-[10px] text-gray-400 mt-0.5 italic truncate">{r.pointeeNote}</div>}
                         </div>
-                        <div className="flex items-center gap-2 flex-wrap justify-end">
-                          <span className="font-body text-lg font-bold text-blue-500">{(r.total || 0).toFixed(2)}€</span>
-                          {/* Bouton pointer/dépointer */}
-                          <button onClick={() => { setPointageRemiseId(isPointing ? null : r.id); setPointageNote(r.pointeeNote || ""); }}
-                            className={`font-body text-xs px-3 py-1.5 rounded-lg border-none cursor-pointer flex items-center gap-1 ${r.pointee ? "bg-green-50 text-green-600 hover:bg-red-50 hover:text-red-500" : "bg-orange-50 text-orange-600 hover:bg-orange-100"}`}>
-                            {r.pointee ? "✓ Dépointer" : "◎ Pointer"}
-                          </button>
-                          {/* Bouton éditer */}
-                          <button onClick={() => { setEditingRemiseId(isEditing ? null : r.id); setEditingRemiseSearch(""); }}
-                            className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
-                            ✏️ Modifier
-                          </button>
-                          {/* Bouton imprimer */}
-                          <button onClick={() => {
-                            const html = `<html><head><meta charset="utf-8"><title>Bordereau de remise</title><style>body{font-family:Arial;max-width:600px;margin:30px auto}h1{font-size:18px;color:#2050A0;border-bottom:2px solid #2050A0;padding-bottom:8px}table{width:100%;border-collapse:collapse;margin:16px 0}th,td{padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;text-align:left}th{font-size:11px;color:#999;text-transform:uppercase}.total{font-size:16px;font-weight:bold;color:#2050A0;text-align:right;margin-top:12px}.status{font-size:12px;color:${r.pointee?"#16a34a":"#d97706"};margin-top:4px;text-align:right}.footer{font-size:11px;color:#999;margin-top:30px}</style></head><body><h1>Bordereau de remise — ${rDate.toLocaleDateString("fr-FR")}</h1><p style="font-size:12px;color:#666">Centre Equestre d'Agon-Coutainville</p><table><thead><tr><th>Date</th><th>Client</th><th>Prestation</th><th>Mode</th><th style="text-align:right">Montant</th></tr></thead><tbody>${rPayments.map(p => { const pd = p.date?.seconds ? new Date(p.date.seconds * 1000).toLocaleDateString("fr-FR") : "—"; return `<tr><td>${pd}</td><td>${p.familyName||"—"}</td><td>${(p.items||[]).map((i: any)=>i.activityTitle).join(", ")||"—"}</td><td>${modeLabels[p.paymentMode]||p.paymentMode}</td><td style="text-align:right">${(p.paidAmount||p.totalTTC||0).toFixed(2)}€</td></tr>`; }).join("")}</tbody></table><div class="total">Total : ${(r.total || 0).toFixed(2)}€</div><div class="status">${r.pointee ? "✓ Remise pointée" : "Non pointée"}</div>${r.pointeeNote?`<div style="font-size:11px;color:#666;text-align:right">${r.pointeeNote}</div>`:""}<div class="footer">Imprimé le ${new Date().toLocaleDateString("fr-FR")} — Signature : _______________</div></body></html>`;
-                            const w = window.open("", "_blank"); if (w) { w.document.write(html); w.document.close(); w.print(); }
-                          }} className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
-                            <Printer size={12} /> Imprimer
-                          </button>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                          <span className="font-body text-base font-bold text-blue-500">{(r.total || 0).toFixed(2)}€</span>
+                          <span className="font-body text-xs text-gray-400 w-4">{openRemiseId === r.id ? "▲" : "▼"}</span>
                         </div>
                       </div>
 
+                      {/* ── Contenu déroulant ── */}
+                      {openRemiseId === r.id && (
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                          {/* Boutons d'action */}
+                          <div className="flex gap-2 flex-wrap mb-3">
+                            <button onClick={e => { e.stopPropagation(); setPointageRemiseId(isPointing ? null : r.id); setPointageNote(r.pointeeNote || ""); }}
+                              className={`font-body text-xs px-3 py-1.5 rounded-lg border-none cursor-pointer flex items-center gap-1 ${r.pointee ? "bg-green-50 text-green-600 hover:bg-red-50 hover:text-red-500" : "bg-orange-50 text-orange-600 hover:bg-orange-100"}`}>
+                              {r.pointee ? "✓ Dépointer" : "◎ Pointer"}
+                            </button>
+                            <button onClick={e => { e.stopPropagation(); setEditingRemiseId(isEditing ? null : r.id); setEditingRemiseSearch(""); }}
+                              className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
+                              ✏️ Modifier
+                            </button>
+                            <button onClick={e => { e.stopPropagation();
+                              const html = `<html><head><meta charset="utf-8"><title>Bordereau de remise</title><style>body{font-family:Arial;max-width:600px;margin:30px auto}h1{font-size:18px;color:#2050A0;border-bottom:2px solid #2050A0;padding-bottom:8px}table{width:100%;border-collapse:collapse;margin:16px 0}th,td{padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;text-align:left}th{font-size:11px;color:#999;text-transform:uppercase}.total{font-size:16px;font-weight:bold;color:#2050A0;text-align:right;margin-top:12px}.status{font-size:12px;color:${r.pointee?"#16a34a":"#d97706"};margin-top:4px;text-align:right}.footer{font-size:11px;color:#999;margin-top:30px}</style></head><body><h1>Bordereau de remise — ${rDate.toLocaleDateString("fr-FR")}</h1><p style="font-size:12px;color:#666">Centre Equestre d'Agon-Coutainville</p><table><thead><tr><th>Date</th><th>Client</th><th>Prestation</th><th>Mode</th><th style="text-align:right">Montant</th></tr></thead><tbody>${rPayments.map(p => { const pd = p.date?.seconds ? new Date(p.date.seconds * 1000).toLocaleDateString("fr-FR") : "—"; return `<tr><td>${pd}</td><td>${p.familyName||"—"}</td><td>${(p.items||[]).map((i: any)=>i.activityTitle).join(", ")||"—"}</td><td>${modeLabels[p.paymentMode]||p.paymentMode}</td><td style="text-align:right">${(p.paidAmount||p.totalTTC||0).toFixed(2)}€</td></tr>`; }).join("")}</tbody></table><div class="total">Total : ${(r.total || 0).toFixed(2)}€</div><div class="status">${r.pointee ? "✓ Remise pointée" : "Non pointée"}</div>${r.pointeeNote?`<div style="font-size:11px;color:#666;text-align:right">${r.pointeeNote}</div>`:""}<div class="footer">Imprimé le ${new Date().toLocaleDateString("fr-FR")} — Signature : _______________</div></body></html>`;
+                              const w = window.open("", "_blank"); if (w) { w.document.write(html); w.document.close(); w.print(); }
+                            }} className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
+                              <Printer size={12} /> Imprimer
+                            </button>
+                          </div>
+
                       {/* ── Pointage manuel ── */}
-                      {isPointing && (
+                      {isPointing && openRemiseId === r.id && (
                         <div className="mt-3 pt-3 border-t border-gray-100 bg-sand rounded-xl p-4 flex flex-col gap-3">
                           <div className="font-body text-sm font-semibold text-blue-800">
                             {r.pointee ? "Dépointer la remise" : "Pointer la remise manuellement"}
@@ -664,8 +673,8 @@ export default function ComptabilitePage() {
                         </div>
                       )}
 
-                      {/* ── Édition remise : ajouter/retirer paiements ── */}
-                      {isEditing && (
+                      {/* ── Édition remise ── */}
+                      {isEditing && openRemiseId === r.id && (
                         <div className="mt-3 pt-3 border-t border-gray-100">
                           <div className="font-body text-xs font-semibold text-blue-800 mb-2">Modifier la remise</div>
 
@@ -741,8 +750,9 @@ export default function ComptabilitePage() {
                       )}
 
                       {/* Détail paiements (masqué si en édition) */}
-                      {!isEditing && (
-                        <div className="border-t border-gray-100 pt-2">
+                      {/* Détail paiements */}
+                      {!isEditing && openRemiseId === r.id && (
+                        <div className="mt-2">
                           {rPayments.map(p => {
                             const pd = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
                             return (
@@ -758,6 +768,8 @@ export default function ComptabilitePage() {
                           })}
                         </div>
                       )}
+                        </div>
+                      )} {/* fin bloc déroulant */}
                     </Card>
                   );
                 })}
