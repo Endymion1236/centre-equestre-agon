@@ -61,6 +61,7 @@ export default function FacturesPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [cards, setCards] = useState<Card10[]>([]);
   const [loading, setLoading] = useState(true);
+  const [payingOnline, setPayingOnline] = useState<string | null>(null); // paymentId en cours
   const [tab, setTab] = useState<"factures" | "reservations" | "cartes" | "fidelite">("factures");
   const [clientAvoirs, setClientAvoirs] = useState<any[]>([]);
   const [openCardId, setOpenCardId] = useState<string | null>(null);
@@ -233,6 +234,39 @@ export default function FacturesPage() {
                             <Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : "gray"}>
                               {p.status === "paid" ? "Payé" : p.status === "partial" ? "Partiel" : "En attente"}
                             </Badge>
+                            {/* Bouton payer en ligne pour les pending */}
+                            {(p.status === "pending" || p.status === "partial") && (
+                              <button
+                                disabled={payingOnline === p.id}
+                                onClick={async () => {
+                                  setPayingOnline(p.id!);
+                                  try {
+                                    const restant = (p.totalTTC || 0) - (p.paidAmount || 0);
+                                    const res = await fetch("/api/stripe/checkout", {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({
+                                        familyId: user?.uid,
+                                        familyEmail: user?.email,
+                                        familyName: p.familyName,
+                                        paymentId: p.id,
+                                        items: [{
+                                          name: (p.items || []).map((i: any) => i.activityTitle).join(", ") || "Prestation",
+                                          priceInCents: Math.round(restant * 100),
+                                          quantity: 1,
+                                        }],
+                                      }),
+                                    });
+                                    const data = await res.json();
+                                    if (data.url) window.location.href = data.url;
+                                  } catch (e) { console.error(e); }
+                                  setPayingOnline(null);
+                                }}
+                                className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                                {payingOnline === p.id ? <Loader2 size={12} className="animate-spin" /> : <CreditCard size={12} />}
+                                Payer
+                              </button>
+                            )}
                             <button onClick={async () => {
                               const d2 = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
                               const items = p.items || [];

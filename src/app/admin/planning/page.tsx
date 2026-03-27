@@ -460,6 +460,30 @@ export default function PlanningPage() {
       } else {
         toast(`${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""}`, "success");
       }
+
+      // ── Nettoyage : annuler tous les paiements pending orphelins ──────────
+      // (cas où l'enfant a été inscrit/désinscrit plusieurs fois)
+      try {
+        const allPaysSnap = await getDocs(query(
+          collection(db, "payments"),
+          where("familyId", "==", child.familyId),
+          where("status", "==", "pending"),
+        ));
+        for (const pd of allPaysSnap.docs) {
+          const pdata = pd.data();
+          // Si ce paiement pending concerne cet enfant + cette activité
+          const hasItem = (pdata.items || []).some((i: any) =>
+            i.childId === childId &&
+            (i.activityTitle?.includes(c.activityTitle) || c.activityTitle.includes(i.activityTitle || ""))
+          );
+          if (hasItem && pd.id !== linked?.paymentDoc?.id) {
+            await updateDoc(doc(db, "payments", pd.id), {
+              status: "cancelled", cancelledAt: serverTimestamp(),
+              cancelReason: `Nettoyage désinscription ${child.childName}`, updatedAt: serverTimestamp(),
+            });
+          }
+        }
+      } catch (e) { console.error("Nettoyage paiements orphelins:", e); }
     } catch (e) {
       console.error("Erreur gestion paiement/avoir:", e);
       toast(`${child.childName} désinscrit(e) — erreur ajustement paiement`, "warning");
