@@ -61,7 +61,15 @@ export default function PedagogiePage() {
   })));
 
   const filtered = search
-    ? allChildren.filter(c => c.firstName?.toLowerCase().includes(search.toLowerCase()) || c.familyName?.toLowerCase().includes(search.toLowerCase()))
+    ? allChildren.filter(c => {
+        const q = search.toLowerCase().trim();
+        const firstName = (c.firstName || "").toLowerCase();
+        const lastName = (c.lastName || "").toLowerCase();
+        const familyName = (c.familyName || "").toLowerCase();
+        const full = `${firstName} ${lastName}`.trim();
+        const fullRev = `${lastName} ${firstName}`.trim();
+        return firstName.includes(q) || lastName.includes(q) || familyName.includes(q) || full.includes(q) || fullRev.includes(q);
+      })
     : allChildren;
 
   const updatePeda = async (familyId: string, childId: string, peda: PedaData) => {
@@ -169,7 +177,7 @@ export default function PedagogiePage() {
 
       <div className="relative mb-5">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un cavalier..."
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par prénom, nom ou famille..."
           className="w-full pl-10 pr-4 py-3 rounded-xl border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none" />
       </div>
 
@@ -191,7 +199,9 @@ export default function PedagogiePage() {
                     <GraduationCap size={18} className="text-blue-500" />
                   </div>
                   <div className="min-w-0">
-                    <div className="font-body text-sm font-semibold text-blue-800">{child.firstName} <span className="text-xs text-gray-400 font-normal">({child.familyName})</span></div>
+                    <div className="font-body text-sm font-semibold text-blue-800">
+                      {child.firstName}{child.lastName ? ` ${child.lastName}` : ""} <span className="text-xs text-gray-400 font-normal">({child.familyName})</span>
+                    </div>
                     <div className="font-body text-xs text-gray-400">Niveau : {child.galopLevel || "Débutant"} · {objDone}/{objTotal} objectifs validés</div>
                   </div>
                 </div>
