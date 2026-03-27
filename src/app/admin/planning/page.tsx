@@ -28,6 +28,7 @@ export default function PlanningPage() {
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [allCartes, setAllCartes] = useState<any[]>([]);
+  const [allForfaits, setAllForfaits] = useState<any[]>([]);
 
   // ── IA Planning ───────────────────────────────────────────────────────────
   const [iaLoading, setIaLoading] = useState(false);
@@ -69,11 +70,12 @@ export default function PlanningPage() {
 
   const fetchData = async () => {
     try {
-      const [aS, fS, pS, cartesS] = await Promise.all([getDocs(collection(db, "activities")), getDocs(collection(db, "families")), getDocs(collection(db, "payments")), getDocs(collection(db, "cartes"))]);
+      const [aS, fS, pS, cartesS, forfaitsS] = await Promise.all([getDocs(collection(db, "activities")), getDocs(collection(db, "families")), getDocs(collection(db, "payments")), getDocs(collection(db, "cartes")), getDocs(query(collection(db, "forfaits"), where("status", "==", "actif")))]);
       setActivities(aS.docs.map(d => ({ id: d.id, ...d.data() })) as Activity[]);
       setFamilies(fS.docs.map(d => ({ firestoreId: d.id, ...d.data() })) as any);
       setPayments(pS.docs.map(d => ({ id: d.id, ...d.data() })));
       setAllCartes(cartesS.docs.map(d => ({ id: d.id, ...d.data() })));
+      setAllForfaits(forfaitsS.docs.map(d => ({ id: d.id, ...d.data() })));
 
       let s: string, e: string;
       if (viewMode === "day") { s = fmtDate(currentDay); e = s; }
@@ -197,7 +199,9 @@ export default function PlanningPage() {
       const isBaladeType = ["balade", "promenade", "ponyride"].includes(c.activityType);
       if (isCoursType || isBaladeType) {
         try {
-          // Forfait actif sur le MÊME type → pas de carte
+          // Forfait actif sur le MÊME créneau précis → pas de carte
+          // On calcule le slotKey du créneau courant pour comparer
+          const currentSlotKey = `${c.activityTitle} — ${new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long" })} ${c.startTime}`;
           const forfaitSnap = await getDocs(query(
             collection(db, "forfaits"),
             where("childId", "==", child.childId),
@@ -206,10 +210,16 @@ export default function PlanningPage() {
           const hasForfaitActif = forfaitSnap.docs.some(d => {
             const fd = d.data();
             const forfaitType = fd.activityType || "cours";
-            if (forfaitType === "all") return true;
-            if (forfaitType === "cours" && isCoursType) return true;
-            if (forfaitType === "balade" && isBaladeType) return true;
-            return false;
+            // Vérification 1 : type compatible
+            const typeMatch =
+              forfaitType === "all" ||
+              (forfaitType === "cours" && isCoursType) ||
+              (forfaitType === "balade" && isBaladeType);
+            if (!typeMatch) return false;
+            // Vérification 2 : même créneau précis via slotKey
+            // Si le forfait a un slotKey, il doit correspondre au créneau courant
+            if (fd.slotKey && fd.slotKey !== currentSlotKey) return false;
+            return true;
           });
           if (!hasForfaitActif) {
             const cartesSnap = await getDocs(query(
@@ -786,7 +796,7 @@ export default function PlanningPage() {
         </div>
       )}
 
-      {selectedCreneau&&<EnrollPanel creneau={selectedCreneau as any} families={families} allCreneaux={creneaux} payments={payments} allCartes={allCartes} onClose={()=>{setSelectedCreneau(null);fetchData();}} onEnroll={handleEnroll} onUnenroll={handleUnenroll}/>}
+      {selectedCreneau&&<EnrollPanel creneau={selectedCreneau as any} families={families} allCreneaux={creneaux} payments={payments} allCartes={allCartes} allForfaits={allForfaits} onClose={()=>{setSelectedCreneau(null);fetchData();}} onEnroll={handleEnroll} onUnenroll={handleUnenroll}/>}
     </div>
   );
 }

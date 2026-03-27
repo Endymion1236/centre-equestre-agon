@@ -15,8 +15,8 @@ import { X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera,
 import type { Activity, Family } from "@/types";
 import { Creneau, EnrolledChild, payModes, typeColors, fmtDate } from "./types";
 
-function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onClose, onEnroll, onUnenroll }: {
-  creneau: Creneau & { id: string }; families: (Family & { firestoreId: string })[]; allCreneaux: (Creneau & { id: string })[]; payments: any[]; allCartes: any[];  onClose: () => void;
+function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allForfaits, onClose, onEnroll, onUnenroll }: {
+  creneau: Creneau & { id: string }; families: (Family & { firestoreId: string })[]; allCreneaux: (Creneau & { id: string })[]; payments: any[]; allCartes: any[]; allForfaits: any[];  onClose: () => void;
   onEnroll: (id: string, c: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean }) => Promise<void>;
   onUnenroll: (id: string, childId: string) => Promise<void>;
 }) {
@@ -795,20 +795,30 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
             {selChild && !isStage && (() => {
               const isCours = creneau.activityType === "cours" || creneau.activityType === "cours_collectif" || creneau.activityType === "cours_particulier";
               const isBalade = ["balade","promenade","ponyride"].includes(creneau.activityType);
-              // Détecter une carte active compatible pour cet enfant
-          const carteActive = allCartes.find((c: any) => {
-            if (c.status !== "active" || (c.remainingSessions || 0) <= 0) return false;
-            if (c.dateFin && new Date(c.dateFin) < new Date()) return false;
-            // Carte familiale : vérifier que c'est la bonne famille
-            if (c.familiale) {
-              if (c.familyId !== fam?.firestoreId) return false;
-            } else {
-              // Carte individuelle : vérifier l'enfant
-              if (c.childId !== selChild) return false;
-            }
-            const ct = c.activityType || "cours";
-            return (ct === "cours" && isCours) || (ct === "balade" && isBalade);
-          });
+              // SlotKey du créneau courant pour vérification précise du forfait
+              const currentSlotKey = `${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long" })} ${creneau.startTime}`;
+              // Forfait actif pour CE créneau précis ?
+              const hasForfaitPourCeCreneau = allForfaits.some((f: any) => {
+                if (f.childId !== selChild || f.status !== "actif") return false;
+                const ft = f.activityType || "cours";
+                const typeMatch = ft === "all" || (ft === "cours" && isCours) || (ft === "balade" && isBalade);
+                if (!typeMatch) return false;
+                // Si slotKey défini, doit correspondre exactement
+                if (f.slotKey && f.slotKey !== currentSlotKey) return false;
+                return true;
+              });
+              // Détecter une carte active compatible pour cet enfant (seulement si pas de forfait actif)
+              const carteActive = hasForfaitPourCeCreneau ? null : allCartes.find((c: any) => {
+                if (c.status !== "active" || (c.remainingSessions || 0) <= 0) return false;
+                if (c.dateFin && new Date(c.dateFin) < new Date()) return false;
+                if (c.familiale) {
+                  if (c.familyId !== fam?.firestoreId) return false;
+                } else {
+                  if (c.childId !== selChild) return false;
+                }
+                const ct = c.activityType || "cours";
+                return (ct === "cours" && isCours) || (ct === "balade" && isBalade);
+              });
               return isCours ? (
               <div className="bg-sand rounded-xl p-4 space-y-3">
                 <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider">Type d'inscription</div>
@@ -998,39 +1008,41 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
                         const paySnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", showAddDays.familyId), where("status", "==", "pending")));
                         const stagePayment = paySnap.docs.find(d => {
                           const items = d.data().items || [];
+                          return items.some((i: any) => (i.activityType === "stage" || i.activityType === "stage_journee") && i.stageKey?.includes(showAddDays.stageTitle));
+                        }) || paySnap.docs.find(d => {
+                          const items = d.data().items || [];
                           return items.some((i: any) => i.activityType === "stage" || i.activityType === "stage_journee");
                         });
                         if (stagePayment) {
                           const pData = stagePayment.data();
                           const oldItems = pData.items || [];
-                          // Nombre de jours maintenant inscrits = joursInscrits + 1
                           const totalDaysNow = showAddDays.joursInscrits + 1;
-                          const totalDaysBefore = showAddDays.joursInscrits;
                           const cr = showAddDays.creneauRef as any;
                           const prices: Record<number, number> = {};
                           if (cr.price1day) prices[1] = cr.price1day;
                           if (cr.price2days) prices[2] = cr.price2days;
                           if (cr.price3days) prices[3] = cr.price3days;
                           if (cr.price4days) prices[4] = cr.price4days;
-                          // Prix de référence avant et après — fallback sur le tarif max si nbJours > prix configurés
                           const priceKeys = Object.keys(prices).map(Number).sort((a,b) => a-b);
                           const maxKey = priceKeys.at(-1) || 1;
-                          const refBefore = prices[totalDaysBefore] || prices[priceKeys.filter(k => k <= totalDaysBefore).at(-1) || maxKey] || prices[maxKey] || 0;
-                          const refAfter  = prices[totalDaysNow]    || prices[priceKeys.filter(k => k <= totalDaysNow).at(-1)    || maxKey] || prices[maxKey] || 0;
-                          // Ratio de progression — préserve les remises individuelles
-                          const ratio = refBefore > 0 ? refAfter / refBefore : 1;
+                          // Prix de base pour le nouveau nombre de jours
+                          const prixBase = prices[totalDaysNow] || prices[priceKeys.filter(k => k <= totalDaysNow).at(-1) || maxKey] || prices[maxKey] || 0;
+
+                          // Recalcul individuel par enfant — préserve les remises par rang dans la fratrie
+                          const stageItems = oldItems.filter((i: any) => i.activityType === "stage" || i.activityType === "stage_journee");
                           const updatedItems = oldItems.map((item: any) => {
-                            if (item.activityType === "stage" || item.activityType === "stage_journee") {
-                              const newPriceTTC = Math.round(item.priceTTC * ratio * 100) / 100;
-                              return { ...item, priceTTC: newPriceTTC, priceHT: Math.round(newPriceTTC / 1.055 * 100) / 100 };
-                            }
-                            return item;
+                            if (item.activityType !== "stage" && item.activityType !== "stage_journee") return item;
+                            // Trouver le rang de cet enfant parmi les items stage
+                            const rang = stageItems.findIndex((si: any) => si.childId === item.childId);
+                            // Remise selon rang : 0% pour le 1er, 10% pour le 2e, 20% pour le 3e, etc.
+                            const remisePct = rang <= 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
+                            const remiseEuros = Math.round(prixBase * remisePct / 100 * 100) / 100;
+                            const newPriceTTC = Math.max(0, Math.round((prixBase - remiseEuros) * 100) / 100);
+                            return { ...item, priceTTC: newPriceTTC, priceHT: Math.round(newPriceTTC / 1.055 * 100) / 100 };
                           });
                           const newTotal = Math.round(updatedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0) * 100) / 100;
                           await updateDoc(doc(db, "payments", stagePayment.id), {
-                            items: updatedItems,
-                            totalTTC: newTotal,
-                            updatedAt: serverTimestamp(),
+                            items: updatedItems, totalTTC: newTotal, updatedAt: serverTimestamp(),
                           });
                         }
                       } catch (e) { console.error("Erreur mise à jour tarif stage:", e); }

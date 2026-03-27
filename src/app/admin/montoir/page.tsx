@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useRef } from "react";
-import { collection, getDocs, getDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, getDoc, updateDoc, addDoc, doc, query, where, serverTimestamp, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { validateChildrenUpdate } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
@@ -145,15 +145,35 @@ export default function MontoirPage() {
     // 4. Débiter automatiquement les cartes des cavaliers présents
     let cartesDebitees = 0;
     for (const child of presents) {
-      if ((child as any).paymentSource !== "card" || !(child as any).cardId) continue;
-      const carteId = (child as any).cardId;
+      // Cas 1 : paymentSource=card avec cardId explicite
+      // Cas 2 : fallback — chercher une carte compatible si paymentSource non défini
+      let carteId = (child as any).cardId;
+      if (!carteId && (child as any).paymentSource !== "card") {
+        // Chercher une carte active compatible pour cet enfant
+        try {
+          const isCours = ["cours","cours_collectif","cours_particulier"].includes(c.activityType);
+          const isBalade = ["balade","promenade","ponyride"].includes(c.activityType);
+          const cartesSnap = await getDocs(query(
+            collection(db, "cartes"),
+            where("childId", "==", child.childId),
+            where("status", "==", "active")
+          ));
+          const carteDoc = cartesSnap.docs.find(d => {
+            const cd = d.data();
+            if ((cd.remainingSessions || 0) <= 0) return false;
+            if (cd.dateFin && new Date(cd.dateFin) < new Date()) return false;
+            const ct = cd.activityType || "cours";
+            return (ct === "cours" && isCours) || (ct === "balade" && isBalade);
+          });
+          if (carteDoc) carteId = carteDoc.id;
+        } catch {}
+      }
+      if (!carteId) continue;
       try {
         const carteSnap = await getDoc(doc(db, "cartes", carteId));
         if (!carteSnap.exists()) continue;
         const carte = carteSnap.data();
         if ((carte.remainingSessions || 0) <= 0) continue;
-        // Anti-doublon : vérifier si ce créneau+enfant a déjà été débité
-        // Pour carte familiale : même créneau mais enfant différent = débit OK
         const dejaDebite = (carte.history || []).some((h: any) =>
           h.creneauId === cid && !h.credit && h.childName === child.childName
         );
@@ -161,21 +181,36 @@ export default function MontoirPage() {
         const newHistory = [...(carte.history || []), {
           date: new Date().toISOString(),
           activityTitle: c.activityTitle,
-          creneauId: cid,
-          creneauDate: c.date,
-          startTime: c.startTime,
+          creneauId: cid, creneauDate: c.date, startTime: c.startTime,
           horseName: (child as any).horseName || (child as any).equideName || "",
-          childName: child.childName,
-          presence: "present",
-          auto: true,
+          childName: child.childName, presence: "present", auto: true,
         }];
         const newRemaining = (carte.remainingSessions || 0) - 1;
-        await updateDoc(doc(db, "cartes", carteId), {
-          remainingSessions: newRemaining,
-          usedSessions: (carte.usedSessions || 0) + 1,
-          history: newHistory,
-          status: newRemaining <= 0 ? "used" : "active",
-          updatedAt: serverTimestamp(),
+        await runTransaction(db, async (tx) => {
+          // Re-lire dans la transaction pour éviter les race conditions
+          const freshSnap = await tx.get(doc(db, "cartes", carteId));
+          if (!freshSnap.exists()) throw new Error("Carte introuvable");
+          const freshData = freshSnap.data();
+          if ((freshData.remainingSessions || 0) <= 0) throw new Error("Carte épuisée");
+          // Vérifier anti-doublon dans la transaction
+          if ((freshData.history || []).some((h: any) => h.creneauId === cid && !h.credit && h.childName === child.childName)) {
+            throw new Error("Déjà débité");
+          }
+          const updatedHistory = [...(freshData.history || []), {
+            date: new Date().toISOString(),
+            activityTitle: c.activityTitle,
+            creneauId: cid, creneauDate: c.date, startTime: c.startTime,
+            horseName: (child as any).horseName || (child as any).equideName || "",
+            childName: child.childName, presence: "present", auto: true,
+          }];
+          const newRem = (freshData.remainingSessions || 0) - 1;
+          tx.update(doc(db, "cartes", carteId), {
+            remainingSessions: newRem,
+            usedSessions: (freshData.usedSessions || 0) + 1,
+            history: updatedHistory,
+            status: newRem <= 0 ? "used" : "active",
+            updatedAt: serverTimestamp(),
+          });
         });
         cartesDebitees++;
       } catch (e) { console.error("Erreur débit carte montoir:", e); }
