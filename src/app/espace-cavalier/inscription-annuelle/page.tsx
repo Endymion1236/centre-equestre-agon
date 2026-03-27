@@ -141,7 +141,7 @@ export default function InscriptionAnnuellePage() {
         date: serverTimestamp(),
       });
 
-      // Stripe checkout pour le premier paiement
+      // Stripe checkout — abonnement ou paiement unique
       try {
         const res = await fetch("/api/stripe/checkout", {
           method: "POST",
@@ -151,10 +151,18 @@ export default function InscriptionAnnuellePage() {
             familyEmail: family.parentEmail || user.email,
             familyName: family.parentName,
             paymentId: payRef.id,
+            // Mensualités → mode subscription Stripe
+            ...(nbEcheances > 1 ? {
+              subscription: true,
+              nbEcheances,
+              montantEcheance,
+            } : {}),
             items: [{
-              name: nbEcheances > 1 ? `Acompte 1/${nbEcheances} — ${slotLabel}` : slotLabel,
+              name: nbEcheances > 1
+                ? `Mensualité ${slotLabel} (${nbEcheances}×)`
+                : slotLabel,
               description: nbEcheances > 1
-                ? `1ère échéance sur ${nbEcheances} — Total ${grandTotal.toFixed(2)}€`
+                ? `${nbEcheances} prélèvements mensuels de ${montantEcheance.toFixed(2)}€ — Total ${grandTotal.toFixed(2)}€`
                 : `${selectedSlotData.totalSessions} séances`,
               priceInCents: Math.round(premierPaiement * 100),
               quantity: 1,

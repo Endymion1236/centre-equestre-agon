@@ -32,8 +32,54 @@ export async function POST(req: NextRequest) {
         const isDeposit = meta.isDeposit === "true";
         const depositPercent = parseInt(meta.depositPercent || "100");
         const amountPaid = (session.amount_total || 0) / 100;
+        const isSubscription = meta.isSubscription === "true";
 
-        console.log(`✅ Stripe checkout: ${meta.familyName} — ${amountPaid}€ ${isDeposit ? `(acompte ${depositPercent}%)` : ""}`);
+        console.log(`✅ Stripe checkout: ${meta.familyName} — ${amountPaid}€ ${isDeposit ? `(acompte ${depositPercent}%)` : ""} ${isSubscription ? `(abonnement ${meta.nbEcheances}×)` : ""}`);
+
+        // Pour les abonnements, enregistrer le subscriptionId
+        if (isSubscription && session.subscription && paymentId) {
+          await adminDb.collection("payments").doc(paymentId).update({
+            stripeSubscriptionId: session.subscription,
+            stripeCustomerId: session.customer || "",
+            status: "partial",
+            paidAmount: amountPaid,
+            paidEcheances: 1,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+          await adminDb.collection("encaissements").add({
+            paymentId, familyId,
+            familyName: meta.familyName || "",
+            montant: amountPaid,
+            mode: "stripe_subscription",
+            modeLabel: `Stripe — Échéance 1/${meta.nbEcheances}`,
+            ref: session.id,
+            date: FieldValue.serverTimestamp(),
+          });
+          // Email confirmation abonnement
+          const parentEmail = session.customer_details?.email || "";
+          const resendKey = process.env.RESEND_API_KEY;
+          if (parentEmail && resendKey) {
+            await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                from: process.env.RESEND_FROM_EMAIL || "Centre Equestre <onboarding@resend.dev>",
+                to: parentEmail,
+                subject: `Inscription confirmée — Paiement mensuel en ${meta.nbEcheances} fois`,
+                html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+                  <p>Bonjour <strong>${meta.familyName}</strong>,</p>
+                  <p>Votre inscription est confirmée avec un paiement en <strong>${meta.nbEcheances} mensualités</strong>.</p>
+                  <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
+                    <p style="margin:0;color:#166534;font-weight:600;">✅ 1ère échéance : ${amountPaid.toFixed(2)}€ reçue</p>
+                    <p style="margin:8px 0 0;color:#555;font-size:13px;">Les ${parseInt(meta.nbEcheances)-1} prochaines mensualités de ${amountPaid.toFixed(2)}€ seront prélevées automatiquement.</p>
+                  </div>
+                  <p>À bientôt au centre équestre !</p>
+                </div>`,
+              }),
+            }).catch(e => console.error("Email error:", e));
+          }
+          break;
+        }
 
         if (familyId) {
           let payRef;
@@ -184,6 +230,75 @@ export async function POST(req: NextRequest) {
       case "payment_intent.payment_failed": {
         const intent = event.data.object;
         console.error(`❌ Payment failed: ${intent.metadata?.familyName} — ${intent.last_payment_error?.message}`);
+        break;
+      }
+
+      // ── Prélèvement mensuel automatique réussi ────────────────────────────
+      case "invoice.paid": {
+        const invoice = event.data.object as any;
+        const subscriptionId = invoice.subscription;
+        if (!subscriptionId) break;
+
+        // Trouver le paiement associé à cette subscription
+        const paySnap = await adminDb.collection("payments")
+          .where("stripeSubscriptionId", "==", subscriptionId)
+          .limit(1).get();
+        if (paySnap.empty) break;
+
+        const payRef = paySnap.docs[0].ref;
+        const pData = paySnap.docs[0].data();
+        const amountPaid = invoice.amount_paid / 100;
+        const paidEcheances = (pData.paidEcheances || 0) + 1;
+        const nbEcheances = pData.echeancesTotal || 10;
+        const totalTTC = pData.totalTTC || 0;
+        const newPaidAmount = Math.round(((pData.paidAmount || 0) + amountPaid) * 100) / 100;
+        const isComplete = paidEcheances >= nbEcheances;
+
+        await payRef.update({
+          paidAmount: newPaidAmount,
+          paidEcheances,
+          status: isComplete ? "paid" : "partial",
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+
+        await adminDb.collection("encaissements").add({
+          paymentId: payRef.id,
+          familyId: pData.familyId,
+          familyName: pData.familyName || "",
+          montant: amountPaid,
+          mode: "stripe_subscription",
+          modeLabel: `Stripe — Échéance ${paidEcheances}/${nbEcheances}`,
+          ref: invoice.id,
+          date: FieldValue.serverTimestamp(),
+        });
+
+        console.log(`✅ Mensualité ${paidEcheances}/${nbEcheances} — ${pData.familyName} — ${amountPaid}€`);
+        if (isComplete) {
+          console.log(`  → Abonnement terminé pour ${pData.familyName}`);
+          // Annuler la subscription Stripe automatiquement
+          try {
+            await stripe.subscriptions.cancel(subscriptionId);
+          } catch (e) { console.error("Erreur annulation subscription:", e); }
+        }
+        break;
+      }
+
+      // ── Échec prélèvement mensuel ─────────────────────────────────────────
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as any;
+        const subscriptionId = invoice.subscription;
+        if (!subscriptionId) break;
+
+        const paySnap = await adminDb.collection("payments")
+          .where("stripeSubscriptionId", "==", subscriptionId)
+          .limit(1).get();
+        if (!paySnap.empty) {
+          await paySnap.docs[0].ref.update({
+            lastPaymentError: invoice.last_payment_error?.message || "Échec prélèvement",
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
+        console.error(`❌ Échec mensualité — subscription ${subscriptionId}`);
         break;
       }
     }

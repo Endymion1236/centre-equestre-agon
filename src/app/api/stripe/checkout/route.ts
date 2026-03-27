@@ -4,27 +4,75 @@ import { stripe } from "@/lib/stripe";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { items, familyId, familyEmail, familyName, depositPercent, paymentId, stageDate } = body;
+    const {
+      items, familyId, familyEmail, familyName,
+      depositPercent, paymentId, stageDate,
+      subscription, nbEcheances, montantEcheance,
+    } = body;
 
     if (!items || items.length === 0) {
       return NextResponse.json({ error: "Panier vide" }, { status: 400 });
     }
 
-    const isDeposit = depositPercent && depositPercent > 0 && depositPercent < 100;
-    const multiplier = isDeposit ? depositPercent / 100 : 1;
-
-    // Créer ou trouver le customer Stripe (pour réutiliser la carte plus tard)
+    // Créer ou trouver le customer Stripe
     let customer;
     const existingCustomers = await stripe.customers.list({ email: familyEmail, limit: 1 });
     if (existingCustomers.data.length > 0) {
       customer = existingCustomers.data[0];
     } else {
       customer = await stripe.customers.create({
-        email: familyEmail,
-        name: familyName,
+        email: familyEmail, name: familyName,
         metadata: { familyId },
       });
     }
+
+    // ── Mode abonnement mensuel ───────────────────────────────────────────
+    if (subscription && nbEcheances > 1 && montantEcheance > 0) {
+      const price = await stripe.prices.create({
+        currency: "eur",
+        unit_amount: Math.round(montantEcheance * 100),
+        recurring: { interval: "month", interval_count: 1 },
+        product_data: {
+          name: items[0]?.name || "Inscription cours équitation",
+          metadata: { familyId, paymentId: paymentId || "" },
+        },
+      });
+
+      // Date de fin = aujourd'hui + nbEcheances mois
+      const cancelAt = Math.floor(Date.now() / 1000) + nbEcheances * 31 * 24 * 60 * 60;
+
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "subscription",
+        customer: customer.id,
+        line_items: [{ price: price.id, quantity: 1 }],
+        subscription_data: {
+          metadata: {
+            familyId, familyName,
+            paymentId: paymentId || "",
+            nbEcheances: nbEcheances.toString(),
+            montantEcheance: montantEcheance.toString(),
+            cancelAfterMonths: nbEcheances.toString(),
+            type: "mensualites",
+          },
+        },
+        metadata: {
+          familyId, familyName,
+          paymentId: paymentId || "",
+          nbEcheances: nbEcheances.toString(),
+          montantEcheance: montantEcheance.toString(),
+          isSubscription: "true",
+        },
+        success_url: `${req.nextUrl.origin}/espace-cavalier/reservations?success=true&plan=${nbEcheances}x`,
+        cancel_url: `${req.nextUrl.origin}/espace-cavalier/inscription-annuelle?cancelled=true`,
+      });
+
+      return NextResponse.json({ url: session.url, sessionId: session.id, customerId: customer.id });
+    }
+
+    // ── Mode paiement unique / acompte ────────────────────────────────────
+    const isDeposit = depositPercent && depositPercent > 0 && depositPercent < 100;
+    const multiplier = isDeposit ? depositPercent / 100 : 1;
 
     const lineItems = items.map((item: any) => ({
       price_data: {
@@ -45,8 +93,7 @@ export async function POST(req: NextRequest) {
       payment_intent_data: {
         setup_future_usage: "off_session",
         metadata: {
-          familyId,
-          familyName,
+          familyId, familyName,
           paymentId: paymentId || "",
           isDeposit: isDeposit ? "true" : "false",
           depositPercent: (depositPercent || 100).toString(),
@@ -54,8 +101,7 @@ export async function POST(req: NextRequest) {
         },
       },
       metadata: {
-        familyId,
-        familyName,
+        familyId, familyName,
         source: "online",
         isDeposit: isDeposit ? "true" : "false",
         depositPercent: (depositPercent || 100).toString(),
