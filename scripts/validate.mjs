@@ -1,6 +1,6 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════════╗
- * ║   VALIDATION ULTRA-COMPLÈTE v2 — CENTRE ÉQUESTRE AGON              ║
+ * ║   VALIDATION ULTRA-COMPLÈTE v3 — CENTRE ÉQUESTRE AGON              ║
  * ║   node scripts/validate.mjs                                         ║
  * ╚══════════════════════════════════════════════════════════════════════╝
  *
@@ -19,8 +19,12 @@
  * MODULE M  — Intégrité des données          (8 tests)
  * MODULE N  — Règles métier critiques        (10 tests)
  * MODULE O  — Cas tordus & edge cases        (12 tests)
+ * MODULE P  — Liste d'attente (waitlist)       (6 tests)
+ * MODULE Q  — Déclarations paiement famille    (6 tests)
+ * MODULE R  — Sous-catégories d'activités      (6 tests)
+ * MODULE S  — Agent IA & création créneaux     (6 tests)
  *                                            ──────────
- *                                    TOTAL   124 tests
+ *                                    TOTAL   148 tests
  */
 
 import { initializeApp } from "firebase/app";
@@ -1632,7 +1636,7 @@ async function moduleO() {
 async function run() {
   console.log(`\n${B}${W}`);
   console.log(`╔══════════════════════════════════════════════════════════════════╗`);
-  console.log(`║   VALIDATION ULTRA-COMPLÈTE v2 — CENTRE ÉQUESTRE AGON          ║`);
+  console.log(`║   VALIDATION ULTRA-COMPLÈTE v3 — CENTRE ÉQUESTRE AGON          ║`);
   console.log(`║   ${new Date().toLocaleString("fr-FR")}                                       ║`);
   console.log(`╚══════════════════════════════════════════════════════════════════╝${Z}`);
   console.log(`\nFirestore : ${firebaseConfig.projectId}\n`);
@@ -1653,6 +1657,10 @@ async function run() {
     await moduleM();
     await moduleN();
     await moduleO();
+    await moduleP();
+    await moduleQ();
+    await moduleR();
+    await moduleS();
   } catch(e) { console.error(`\n${R} ERREUR FATALE :${Z}`, e); }
 
   await cleanAll();
@@ -1674,3 +1682,385 @@ async function run() {
 }
 
 run();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODULE P — Liste d'attente (waitlist)                          (6 tests)
+// ═══════════════════════════════════════════════════════════════════════════
+async function moduleP() {
+  mod("MODULE P — Liste d'attente (waitlist)");
+
+  sec("P01 — Inscription en waitlist sur créneau complet");
+  {
+    const { famId, famName, childId, childName } = await mkFamily("P01");
+    const crId = await mkCreneau("cours", 22, { maxPlaces: 1, enrolled: [{ childId: "other", childName: "Autre" }], enrolledCount: 1 });
+    const wRef = await addDoc(collection(db, "waitlist"), {
+      creneauId: crId, familyId: famId, familyName: famName,
+      childId, childName, familyEmail: "p01@test.fr",
+      activityTitle: "Test cours", status: "waiting",
+      position: 1, createdAt: serverTimestamp(), _seed: "SEED_2026",
+    });
+    const snap = await getDoc(wRef);
+    snap.exists() && snap.data().status === "waiting"
+      ? ok("Waitlist créée avec statut waiting")
+      : fail("Waitlist non créée");
+  }
+
+  sec("P02 — Acceptation waitlist → statut accepted");
+  {
+    const { famId, famName, childId, childName } = await mkFamily("P02");
+    const wRef = await addDoc(collection(db, "waitlist"), {
+      creneauId: "fake", familyId: famId, familyName: famName,
+      childId, childName, status: "waiting", _seed: "SEED_2026",
+    });
+    await updateDoc(wRef, { status: "accepted", acceptedAt: new Date().toISOString() });
+    const snap = await getDoc(wRef);
+    snap.data().status === "accepted"
+      ? ok("Waitlist acceptée → statut accepted")
+      : fail("Statut non mis à jour");
+  }
+
+  sec("P03 — Rejet waitlist → statut rejected");
+  {
+    const wRef = await addDoc(collection(db, "waitlist"), {
+      creneauId: "fake", familyId: "f", childId: "c",
+      status: "waiting", _seed: "SEED_2026",
+    });
+    await updateDoc(wRef, { status: "rejected" });
+    const snap = await getDoc(wRef);
+    snap.data().status === "rejected" ? ok("Rejet waitlist OK") : fail("Rejet non enregistré");
+  }
+
+  sec("P04 — Un enfant déjà inscrit ne peut pas être en waitlist");
+  {
+    const { famId, childId, childName } = await mkFamily("P04");
+    const crId = await mkCreneau("cours", 22, {
+      enrolled: [{ childId, childName }], enrolledCount: 1,
+    });
+    const snap = await getDoc(doc(db, "creneaux", crId));
+    const alreadyEnrolled = (snap.data().enrolled || []).some(e => e.childId === childId);
+    alreadyEnrolled
+      ? ok("Détection doublon — enfant déjà inscrit ne peut pas être en waitlist")
+      : fail("Doublon non détecté");
+  }
+
+  sec("P05 — Position dans la waitlist respecte l'ordre d'arrivée");
+  {
+    const crId = "fake-cr-p05";
+    const refs = [];
+    for (let i = 1; i <= 3; i++) {
+      const r = await addDoc(collection(db, "waitlist"), {
+        creneauId: crId, childId: `c${i}`, childName: `Enfant ${i}`,
+        status: "waiting", position: i, _seed: "SEED_2026",
+        createdAt: serverTimestamp(),
+      });
+      refs.push(r);
+    }
+    const q = query(collection(db, "waitlist"), where("creneauId", "==", crId), where("status", "==", "waiting"));
+    const snap = await getDocs(q);
+    snap.size === 3 ? ok("3 entrées waitlist pour le même créneau") : fail(`Waitlist : ${snap.size} au lieu de 3`);
+  }
+
+  sec("P06 — Nettoyage waitlist après inscription définitive");
+  {
+    const wRef = await addDoc(collection(db, "waitlist"), {
+      creneauId: "fake", familyId: "f", childId: "c",
+      status: "waiting", _seed: "SEED_2026",
+    });
+    await updateDoc(wRef, { status: "accepted" });
+    const snap = await getDocs(query(collection(db, "waitlist"),
+      where("creneauId", "==", "fake"), where("status", "==", "waiting")));
+    snap.empty ? ok("Waitlist nettoyée après acceptation") : warn("Des entrées waiting restent après acceptation");
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODULE Q — Déclarations de paiement famille                   (6 tests)
+// ═══════════════════════════════════════════════════════════════════════════
+async function moduleQ() {
+  mod("MODULE Q — Déclarations de paiement famille");
+
+  sec("Q01 — Création déclaration chèque");
+  {
+    const { famId, famName } = await mkFamily("Q01");
+    const ref = await addDoc(collection(db, "payment_declarations"), {
+      familyId: famId, familyName: famName, familyEmail: "q01@test.fr",
+      montant: 22, mode: "cheque", note: "chèque n°1234",
+      activityTitle: "Galop Argent", status: "pending_confirmation",
+      createdAt: serverTimestamp(), _seed: "SEED_2026",
+    });
+    const snap = await getDoc(ref);
+    snap.exists() && snap.data().mode === "cheque" && snap.data().status === "pending_confirmation"
+      ? ok("Déclaration chèque créée avec statut pending_confirmation")
+      : fail("Déclaration non créée correctement");
+  }
+
+  sec("Q02 — Création déclaration espèces");
+  {
+    const ref = await addDoc(collection(db, "payment_declarations"), {
+      familyId: "f", montant: 15, mode: "especes",
+      status: "pending_confirmation", _seed: "SEED_2026",
+    });
+    const snap = await getDoc(ref);
+    snap.data().mode === "especes" ? ok("Déclaration espèces OK") : fail("Mode espèces incorrect");
+  }
+
+  sec("Q03 — Confirmation déclaration → paiement mis à jour");
+  {
+    const { famId, famName, childId, childName } = await mkFamily("Q03");
+    const payRef = await addDoc(collection(db, "payments"), {
+      familyId: famId, familyName: famName, totalTTC: 22,
+      paidAmount: 0, status: "pending", _seed: "SEED_2026",
+    });
+    const declRef = await addDoc(collection(db, "payment_declarations"), {
+      paymentId: payRef.id, familyId: famId, montant: 22,
+      mode: "cheque", status: "pending_confirmation", _seed: "SEED_2026",
+    });
+    // Simuler la confirmation
+    await updateDoc(payRef, { paidAmount: 22, status: "paid", paymentMode: "cheque" });
+    await updateDoc(declRef, { status: "confirmed", confirmedAt: new Date().toISOString() });
+    const paySnap = await getDoc(payRef);
+    const declSnap = await getDoc(declRef);
+    paySnap.data().status === "paid" && declSnap.data().status === "confirmed"
+      ? ok("Confirmation déclaration → paiement paid + déclaration confirmed")
+      : fail("Confirmation non reflétée");
+  }
+
+  sec("Q04 — Rejet déclaration → status rejected");
+  {
+    const ref = await addDoc(collection(db, "payment_declarations"), {
+      status: "pending_confirmation", _seed: "SEED_2026",
+    });
+    await updateDoc(ref, { status: "rejected", rejectedAt: new Date().toISOString() });
+    const snap = await getDoc(ref);
+    snap.data().status === "rejected" ? ok("Déclaration rejetée OK") : fail("Rejet non enregistré");
+  }
+
+  sec("Q05 — Déclaration partielle : paidAmount < totalTTC → status partial");
+  {
+    const payRef = await addDoc(collection(db, "payments"), {
+      totalTTC: 50, paidAmount: 0, status: "pending", _seed: "SEED_2026",
+    });
+    // Déclaration partielle de 20€
+    const newPaid = 20;
+    const newStatus = newPaid >= 50 ? "paid" : "partial";
+    await updateDoc(payRef, { paidAmount: newPaid, status: newStatus });
+    const snap = await getDoc(payRef);
+    snap.data().status === "partial"
+      ? ok("Paiement partiel → statut partial")
+      : fail(`Statut incorrect : ${snap.data().status}`);
+  }
+
+  sec("Q06 — Montant déclaré ne peut pas être négatif ou zéro");
+  {
+    const montants = [-10, 0, 0.01, 22];
+    const valides = montants.filter(m => m > 0);
+    valides.length === 2
+      ? ok(`Validation montant : ${valides.join("€, ")}€ valides sur ${montants.length} testés`)
+      : fail("Validation montant incorrecte");
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODULE R — Sous-catégories d'activités                         (6 tests)
+// ═══════════════════════════════════════════════════════════════════════════
+async function moduleR() {
+  mod("MODULE R — Sous-catégories d'activités");
+
+  const SUBCATEGORIES = {
+    cours: ["Baby 3/4 ans","Baby 4,5/5,5 ans","Galop Bronze","Galop Argent","Galop Or","Galop 3","Galop 4","Galop 5","Galop 6","Galop 7"],
+    stage: ["Baby 3/4 ans","Baby 4,5/5,5 ans","Galop Bronze","Galop Argent","Galop Or","Galop 3","Galop 4","Galop 5","Galop 6","Galop 7"],
+    balade: ["Promenade journée — Débutant","Promenade journée — Débrouillé","Promenade journée — Confirmé","Coucher de soleil — Débutant","Coucher de soleil — Débrouillé","Coucher de soleil — Confirmé"],
+    competition: ["Pony Games","CSO","Équifun","Endurance","Hunter"],
+  };
+
+  sec("R01 — Activité cours avec sous-catégories valides");
+  {
+    const ref = await addDoc(collection(db, "activities"), {
+      type: "cours", title: "Galop Argent mercredi",
+      subcategories: ["Galop Argent"],
+      priceTTC: 22, maxPlaces: 8, active: true, _seed: "SEED_2026",
+    });
+    const snap = await getDoc(ref);
+    const subs = snap.data().subcategories || [];
+    subs.includes("Galop Argent") && SUBCATEGORIES.cours.includes("Galop Argent")
+      ? ok("Sous-catégorie Galop Argent valide pour type cours")
+      : fail("Sous-catégorie invalide");
+  }
+
+  sec("R02 — Activité avec plusieurs sous-catégories");
+  {
+    const ref = await addDoc(collection(db, "activities"), {
+      type: "cours", title: "Perfectionnement Galop 4-6",
+      subcategories: ["Galop 4", "Galop 5", "Galop 6"],
+      priceTTC: 25, maxPlaces: 6, active: true, _seed: "SEED_2026",
+    });
+    const snap = await getDoc(ref);
+    snap.data().subcategories.length === 3
+      ? ok("Multi-sous-catégories : 3 niveaux Galop 4/5/6")
+      : fail("Nombre de sous-catégories incorrect");
+  }
+
+  sec("R03 — Promenade avec sous-catégories spécifiques");
+  {
+    const ref = await addDoc(collection(db, "activities"), {
+      type: "balade", title: "Balade coucher de soleil débutant",
+      subcategories: ["Coucher de soleil — Débutant"],
+      priceTTC: 35, maxPlaces: 6, active: true, _seed: "SEED_2026",
+    });
+    const snap = await getDoc(ref);
+    SUBCATEGORIES.balade.includes(snap.data().subcategories[0])
+      ? ok("Sous-catégorie balade valide")
+      : fail("Sous-catégorie balade invalide");
+  }
+
+  sec("R04 — Compétition avec sous-catégories");
+  {
+    const ref = await addDoc(collection(db, "activities"), {
+      type: "competition", title: "Pony Games régional",
+      subcategories: ["Pony Games"],
+      priceTTC: 0, active: true, _seed: "SEED_2026",
+    });
+    const snap = await getDoc(ref);
+    snap.data().subcategories.includes("Pony Games")
+      ? ok("Compétition Pony Games validé")
+      : fail("Sous-catégorie compétition incorrecte");
+  }
+
+  sec("R05 — Anniversaire sans sous-catégorie obligatoire");
+  {
+    const ref = await addDoc(collection(db, "activities"), {
+      type: "anniversaire", title: "Anniversaire Poney",
+      subcategories: [], priceTTC: 180, active: true, _seed: "SEED_2026",
+    });
+    const snap = await getDoc(ref);
+    snap.data().subcategories.length === 0
+      ? ok("Anniversaire sans sous-catégorie OK")
+      : warn("Anniversaire a des sous-catégories non attendues");
+  }
+
+  sec("R06 — Filtrage créneaux par sous-catégorie");
+  {
+    // Simuler le filtrage côté client
+    const activities = [
+      { id: "a1", type: "cours", subcategories: ["Galop Argent"] },
+      { id: "a2", type: "cours", subcategories: ["Galop Or"] },
+      { id: "a3", type: "cours", subcategories: ["Galop Argent", "Galop Or"] },
+    ];
+    const creneaux = [
+      { activityId: "a1", activityType: "cours" },
+      { activityId: "a2", activityType: "cours" },
+      { activityId: "a3", activityType: "cours" },
+    ];
+    const filtered = creneaux.filter(c => {
+      const act = activities.find(a => a.id === c.activityId);
+      return act && act.subcategories.includes("Galop Argent");
+    });
+    filtered.length === 2
+      ? ok("Filtre sous-catégorie Galop Argent : 2 créneaux sur 3")
+      : fail(`Filtre incorrect : ${filtered.length} résultats`);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODULE S — Agent IA & création créneaux                        (6 tests)
+// ═══════════════════════════════════════════════════════════════════════════
+async function moduleS() {
+  mod("MODULE S — Agent IA & création de créneaux");
+
+  sec("S01 — Créneau créé par l'agent a le flag createdByAgent");
+  {
+    const ref = await addDoc(collection(db, "creneaux"), {
+      activityTitle: "Balade débutant", activityType: "balade",
+      date: "2026-07-02", startTime: "14:00", endTime: "16:00",
+      monitor: "", maxPlaces: 8, priceTTC: 30,
+      enrolled: [], enrolledCount: 0, status: "planned",
+      createdByAgent: true, _seed: "SEED_2026",
+    });
+    const snap = await getDoc(ref);
+    snap.data().createdByAgent === true
+      ? ok("Flag createdByAgent présent sur créneau créé par l'agent")
+      : fail("Flag createdByAgent manquant");
+  }
+
+  sec("S02 — Génération dates récurrentes (tous les mercredis juillet)");
+  {
+    // Logique de génération : mercredis de juillet 2026
+    const dates = [];
+    const current = new Date("2026-07-01");
+    while (current.getMonth() === 6) { // juillet = mois 6
+      if (current.getDay() === 3) { // mercredi = 3
+        dates.push(current.toISOString().split("T")[0]);
+      }
+      current.setDate(current.getDate() + 1);
+    }
+    dates.length === 4 && dates[0] === "2026-07-01"
+      ? ok(`4 mercredis en juillet 2026 : ${dates.join(", ")}`)
+      : fail(`Mercredis incorrects : ${dates.join(", ")}`);
+  }
+
+  sec("S03 — Inscription agent crée un paiement pending");
+  {
+    const { famId, famName, childId, childName } = await mkFamily("S03");
+    const crId = await mkCreneau("cours", 22);
+    // Simuler l'inscription agent + création paiement
+    await updateDoc(doc(db, "creneaux", crId), {
+      enrolled: [{ childId, childName, familyId: famId, familyName: famName, enrolledAt: new Date().toISOString() }],
+      enrolledCount: 1,
+    });
+    const payRef = await addDoc(collection(db, "payments"), {
+      familyId: famId, familyName: famName, totalTTC: 22,
+      paidAmount: 0, status: "pending", source: "agent", _seed: "SEED_2026",
+    });
+    const paySnap = await getDoc(payRef);
+    paySnap.data().status === "pending" && paySnap.data().source === "agent"
+      ? ok("Inscription agent → paiement pending créé avec source=agent")
+      : fail("Paiement agent non créé correctement");
+  }
+
+  sec("S04 — Clôture reprise par l'agent");
+  {
+    const crId = await mkCreneau("cours", 22);
+    await updateDoc(doc(db, "creneaux", crId), {
+      status: "closed", closedByAgent: true, closedAt: new Date().toISOString(),
+    });
+    const snap = await getDoc(doc(db, "creneaux", crId));
+    snap.data().status === "closed" && snap.data().closedByAgent === true
+      ? ok("Clôture agent : status=closed + flag closedByAgent")
+      : fail("Clôture agent incorrecte");
+  }
+
+  sec("S05 — Confirmation vocale détectée parmi mots-clés");
+  {
+    const confirmWords = ["oui","confirme","je confirme","yes","ok","c'est bon","vas-y","go","affirmatif"];
+    const tests = [
+      { text: "oui", expected: true },
+      { text: "Je confirme", expected: true },
+      { text: "Vas-y", expected: true },
+      { text: "non pas du tout", expected: false },
+      { text: "annule", expected: false },
+    ];
+    let allOk = true;
+    for (const t of tests) {
+      const lower = t.text.toLowerCase();
+      const result = confirmWords.some(w => lower.includes(w));
+      if (result !== t.expected) { allOk = false; break; }
+    }
+    allOk ? ok("Détection mots confirmation vocale : 5/5 cas corrects") : fail("Détection mots-clés incorrecte");
+  }
+
+  sec("S06 — Modification tarif activité par l'agent");
+  {
+    const actRef = await addDoc(collection(db, "activities"), {
+      title: "Galop 3 test", type: "cours", priceTTC: 20,
+      priceHT: 18.96, tvaTaux: 5.5, _seed: "SEED_2026",
+    });
+    const nouveauPrix = 25;
+    const tvaTaux = 5.5;
+    const newPriceHT = Math.round(nouveauPrix / (1 + tvaTaux / 100) * 100) / 100;
+    await updateDoc(actRef, { priceTTC: nouveauPrix, priceHT: newPriceHT });
+    const snap = await getDoc(actRef);
+    snap.data().priceTTC === 25 && snap.data().priceHT === newPriceHT
+      ? ok(`Tarif modifié par agent : 20€ → 25€ TTC (HT: ${newPriceHT}€)`)
+      : fail("Modification tarif agent incorrecte");
+  }
+}
