@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, storage } from "@/lib/firebase";
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { emailTemplates } from "@/lib/email-templates";
@@ -68,20 +69,34 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
     if (!creneau.id) return;
     setPlanUploading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("creneauId", creneau.id);
-      const res = await fetch("/api/upload-plan", { method: "POST", body: formData });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error);
-      // Sauvegarder l'URL dans le créneau
+      // Vérifier type et taille
+      const allowed = ["image/jpeg","image/png","image/webp","image/heic","application/pdf"];
+      if (!allowed.includes(file.type)) throw new Error("Format non supporté (JPG, PNG, WEBP, PDF)");
+      if (file.size > 10 * 1024 * 1024) throw new Error("Fichier trop volumineux (max 10 Mo)");
+
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `plans-seance/${creneau.id}_${Date.now()}.${ext}`;
+      const storageRef = ref(storage, path);
+
+      // Upload direct depuis le navigateur
+      const snapshot = await uploadBytesResumable(storageRef, file, {
+        contentType: file.type,
+      });
+      const url = await getDownloadURL(snapshot.ref);
+
+      // Supprimer l'ancien fichier si existant
+      if ((creneau as any).planSeancePath) {
+        try { await deleteObject(ref(storage, (creneau as any).planSeancePath)); } catch {}
+      }
+
       await updateDoc(doc(db, "creneaux", creneau.id), {
-        planSeanceUrl: data.url,
-        planSeanceType: data.contentType,
+        planSeanceUrl: url,
+        planSeancePath: path,
+        planSeanceType: file.type,
         planSeanceUpdatedAt: new Date().toISOString(),
       });
-      setPlanUrl(data.url);
-      setPlanType(data.contentType);
+      setPlanUrl(url);
+      setPlanType(file.type);
     } catch (e: any) {
       alert(`Erreur upload : ${e.message}`);
     }
@@ -90,8 +105,13 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
 
   const deletePlan = async () => {
     if (!creneau.id || !confirm("Supprimer le plan de séance ?")) return;
+    // Supprimer le fichier du Storage
+    if ((creneau as any).planSeancePath) {
+      try { await deleteObject(ref(storage, (creneau as any).planSeancePath)); } catch {}
+    }
     await updateDoc(doc(db, "creneaux", creneau.id), {
       planSeanceUrl: null,
+      planSeancePath: null,
       planSeanceType: null,
     });
     setPlanUrl(null);
