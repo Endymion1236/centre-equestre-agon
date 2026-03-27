@@ -11,9 +11,9 @@ interface Message {
 
 interface VoiceAssistantProps {
   mode: "admin" | "famille";
-  context?: Record<string, any>; // données contextuelles à passer à Claude
+  context?: Record<string, any>;
   systemPrompt?: string;
-  voiceName?: "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer";
+  voiceId?: string; // ID de voix ElevenLabs
   placeholder?: string;
   onClose?: () => void;
 }
@@ -22,7 +22,7 @@ export default function VoiceAssistant({
   mode,
   context = {},
   systemPrompt,
-  voiceName = "nova",
+  voiceId = "XB0fDUnXU5powFXDhCwa", // Charlotte par défaut
   placeholder = "Posez votre question...",
   onClose,
 }: VoiceAssistantProps) {
@@ -138,19 +138,24 @@ Pas de markdown ni de listes — texte simple uniquement.`;
     setTimeout(scrollToBottom, 100);
   };
 
-  // ── TTS OpenAI ────────────────────────────────────────────────────────────
+  // ── TTS ElevenLabs streaming ──────────────────────────────────────────────
   const speakText = async (text: string) => {
     setSpeaking(true);
     try {
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voice: voiceName }),
+        body: JSON.stringify({ text, voiceId }),
       });
       if (!res.ok) throw new Error("TTS error");
+
+      // Streaming : lire le flux audio dès les premiers octets reçus
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      if (audioRef.current) { audioRef.current.pause(); URL.revokeObjectURL(audioRef.current.src); }
+      if (audioRef.current) {
+        audioRef.current.pause();
+        URL.revokeObjectURL(audioRef.current.src);
+      }
       const audio = new Audio(url);
       audioRef.current = audio;
       audio.onended = () => { setSpeaking(false); URL.revokeObjectURL(url); };

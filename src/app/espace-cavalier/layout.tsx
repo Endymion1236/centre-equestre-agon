@@ -281,7 +281,7 @@ export default function EspaceCavalierLayout({
           <div className="w-[320px] sm:w-[380px]">
             <VoiceAssistant
               mode="famille"
-              voiceName="nova"
+              voiceId="XB0fDUnXU5powFXDhCwa"
               placeholder="Votre question..."
               onClose={() => setShowVoice(false)}
               context={{
