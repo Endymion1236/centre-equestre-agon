@@ -499,7 +499,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           forfaitPriceTTC: totalAnnuel,
           totalPaidTTC: 0,
           paymentPlan: payPlan,
-          status: "active",
+          status: "actif",
           createdAt: serverTimestamp(),
         });
         // Créer les paiements en attente selon le plan

@@ -146,19 +146,20 @@ export default function MontoirPage() {
     let cartesDebitees = 0;
     for (const child of presents) {
       // Cas 1 : paymentSource=card avec cardId explicite
-      // Cas 2 : fallback — chercher une carte compatible si paymentSource non défini
+      // Cas 2 : fallback — chercher une carte compatible (individuelle ou familiale)
       let carteId = (child as any).cardId;
       if (!carteId && (child as any).paymentSource !== "card") {
-        // Chercher une carte active compatible pour cet enfant
         try {
           const isCours = ["cours","cours_collectif","cours_particulier"].includes(c.activityType);
           const isBalade = ["balade","promenade","ponyride"].includes(c.activityType);
-          const cartesSnap = await getDocs(query(
-            collection(db, "cartes"),
-            where("childId", "==", child.childId),
-            where("status", "==", "active")
-          ));
-          const carteDoc = cartesSnap.docs.find(d => {
+          // Récupérer la famille de l'enfant pour chercher les cartes familiales
+          const famDoc = families.find((f: any) => (f.children || []).some((ch: any) => ch.id === child.childId)) as any;
+          const [cartesIndivSnap, cartesFamSnap] = await Promise.all([
+            getDocs(query(collection(db, "cartes"), where("childId", "==", child.childId), where("status", "==", "active"))),
+            famDoc ? getDocs(query(collection(db, "cartes"), where("familyId", "==", famDoc.id || famDoc.firestoreId), where("familiale", "==", true), where("status", "==", "active"))) : Promise.resolve({ docs: [] }),
+          ]);
+          const allDocs = [...cartesIndivSnap.docs, ...(cartesFamSnap as any).docs];
+          const carteDoc = allDocs.find(d => {
             const cd = d.data();
             if ((cd.remainingSessions || 0) <= 0) return false;
             if (cd.dateFin && new Date(cd.dateFin) < new Date()) return false;

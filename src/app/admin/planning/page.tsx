@@ -222,15 +222,15 @@ export default function PlanningPage() {
             return true;
           });
           if (!hasForfaitActif) {
-            const cartesSnap = await getDocs(query(
-              collection(db, "cartes"),
-              where("childId", "==", child.childId),
-              where("status", "==", "active")
-            ));
-            const carteActive = cartesSnap.docs.find(d => {
+            // Chercher carte individuelle OU carte familiale
+            const [cartesIndivSnap, cartesFamSnap] = await Promise.all([
+              getDocs(query(collection(db, "cartes"), where("childId", "==", child.childId), where("status", "==", "active"))),
+              getDocs(query(collection(db, "cartes"), where("familyId", "==", child.familyId), where("familiale", "==", true), where("status", "==", "active"))),
+            ]);
+            const allCartesDocs = [...cartesIndivSnap.docs, ...cartesFamSnap.docs];
+            const carteActive = allCartesDocs.find(d => {
               const data = d.data();
               if ((data.remainingSessions || 0) <= 0) return false;
-              // Vérifier expiration
               if (data.dateFin && new Date(data.dateFin) < new Date()) return false;
               const cardType = data.activityType || "cours";
               if (cardType === "cours" && isCoursType) return true;
