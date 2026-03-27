@@ -50,6 +50,16 @@ export default function ComptabilitePage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [remises, setRemises] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  // Filtres remise
+  const [remiseDateFrom, setRemiseDateFrom] = useState("");
+  const [remiseDateTo, setRemiseDateTo] = useState("");
+  const [remiseModeFilter, setRemiseModeFilter] = useState("");
+  // Édition remise (ajouter/retirer paiements)
+  const [editingRemiseId, setEditingRemiseId] = useState<string | null>(null);
+  const [editingRemiseSearch, setEditingRemiseSearch] = useState("");
+  // Pointage manuel remise
+  const [pointageRemiseId, setPointageRemiseId] = useState<string | null>(null);
+  const [pointageNote, setPointageNote] = useState("");
   const [period, setPeriod] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -433,7 +443,6 @@ export default function ComptabilitePage() {
 
       {/* ─── Bordereaux de remise ─── */}
       {!loading && tab === "remise" && (() => {
-        // Paiements encaissés non encore remis
         const paidPayments = payments.filter(p => p.status === "paid" && p.paidAmount > 0);
         const remisPaymentIds = (remises || []).flatMap((r: any) => r.paymentIds || []);
         const nonRemis = paidPayments.filter(p => !remisPaymentIds.includes(p.id) && !(p as any).remiseId);
@@ -445,9 +454,22 @@ export default function ComptabilitePage() {
         });
         const totalNonRemis = nonRemis.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
 
+        // Filtre date sur l'historique des remises
+        const remisesFiltrees = (remises || []).filter((r: any) => {
+          const d = r.createdAt?.seconds ? new Date(r.createdAt.seconds * 1000) : null;
+          if (!d) return true;
+          if (remiseDateFrom && d < new Date(remiseDateFrom)) return false;
+          if (remiseDateTo && d > new Date(remiseDateTo + "T23:59:59")) return false;
+          if (remiseModeFilter && r.paymentMode !== remiseModeFilter) return false;
+          return true;
+        }).sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+
+        const editingRemise = editingRemiseId ? remises.find((r: any) => r.id === editingRemiseId) : null;
+
         return (
         <div className="flex flex-col gap-5">
-          {/* Non encore remis */}
+
+          {/* À remettre */}
           <Card padding="md" className={totalNonRemis > 0 ? "border-orange-200 bg-orange-50/30" : ""}>
             <div className="flex items-center justify-between mb-3">
               <div>
@@ -457,10 +479,9 @@ export default function ComptabilitePage() {
               {nonRemis.length > 0 && <span className="font-body text-xl font-bold text-orange-500">{totalNonRemis.toFixed(2)}€</span>}
             </div>
             {nonRemis.length === 0 ? (
-              <p className="font-body text-sm text-green-600">Tous les encaissements ont été remis en banque.</p>
+              <p className="font-body text-sm text-green-600">✓ Tous les encaissements ont été remis en banque.</p>
             ) : (
               <>
-                {/* Par mode */}
                 <div className="flex flex-wrap gap-2 mb-3">
                   {Object.entries(nonRemisByMode).map(([mode, ps]) => {
                     const mTotal = ps.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
@@ -472,7 +493,6 @@ export default function ComptabilitePage() {
                     );
                   })}
                 </div>
-                {/* Détail */}
                 <div className="flex flex-col gap-1 mb-4 max-h-[300px] overflow-y-auto">
                   {nonRemis.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)).map(p => {
                     const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
@@ -489,7 +509,6 @@ export default function ComptabilitePage() {
                     );
                   })}
                 </div>
-                {/* Bouton créer remise */}
                 <div className="flex gap-2 flex-wrap">
                   {[
                     { id: "", label: "Tout remettre", color: "bg-blue-500 text-white" },
@@ -504,24 +523,18 @@ export default function ComptabilitePage() {
                     return (
                       <button key={m.id || "all"} onClick={async () => {
                         if (!confirm(`Créer un bordereau de remise ?\n\n${toRemise.length} paiement(s) — ${remiseTotal.toFixed(2)}€${m.id ? ` (${m.label})` : ""}`)) return;
-
-                    try {
-                      const remiseRef = await addDoc(collection(db, "remises"), {
-                        date: serverTimestamp(),
-                        paymentIds: toRemise.map(p => p.id),
-                        paymentMode: m.id || "mixte",
-                        total: remiseTotal,
-                        nbPaiements: toRemise.length,
-                        status: "created",
-                        createdAt: serverTimestamp(),
-                      });
-                      for (const p of toRemise) {
-                        await updateDoc(doc(db, "payments", p.id!), { remiseId: remiseRef.id });
-                      }
-                      fetchData();
-                    } catch (e) { console.error(e); }
-                  }} className={`font-body text-[11px] font-semibold ${m.color} px-3 py-2 rounded-lg border-none cursor-pointer`}>
-                        {m.label} {m.id ? `(${remiseTotal.toFixed(0)}€)` : `(${remiseTotal.toFixed(0)}€)`}
+                        try {
+                          const remiseRef = await addDoc(collection(db, "remises"), {
+                            date: serverTimestamp(), paymentIds: toRemise.map(p => p.id),
+                            paymentMode: m.id || "mixte", total: remiseTotal,
+                            nbPaiements: toRemise.length, status: "created",
+                            pointee: false, createdAt: serverTimestamp(),
+                          });
+                          for (const p of toRemise) await updateDoc(doc(db, "payments", p.id!), { remiseId: remiseRef.id });
+                          fetchData();
+                        } catch (e) { console.error(e); }
+                      }} className={`font-body text-[11px] font-semibold ${m.color} px-3 py-2 rounded-lg border-none cursor-pointer`}>
+                        {m.label} ({remiseTotal.toFixed(0)}€)
                       </button>
                     );
                   })}
@@ -530,50 +543,227 @@ export default function ComptabilitePage() {
             )}
           </Card>
 
-          {/* Historique des remises */}
+          {/* Historique + filtres */}
           {(remises || []).length > 0 && (
             <div>
-              <h3 className="font-body text-base font-semibold text-blue-800 mb-3">Historique des remises</h3>
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
+                <h3 className="font-body text-base font-semibold text-blue-800">Historique des remises</h3>
+                {/* ── Filtres ── */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1">
+                    <span className="font-body text-xs text-gray-400">Du</span>
+                    <input type="date" value={remiseDateFrom} onChange={e => setRemiseDateFrom(e.target.value)}
+                      className="font-body text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-blue-400" />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="font-body text-xs text-gray-400">au</span>
+                    <input type="date" value={remiseDateTo} onChange={e => setRemiseDateTo(e.target.value)}
+                      className="font-body text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-blue-400" />
+                  </div>
+                  <select value={remiseModeFilter} onChange={e => setRemiseModeFilter(e.target.value)}
+                    className="font-body text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-blue-400">
+                    <option value="">Tous modes</option>
+                    <option value="cb_terminal">CB</option>
+                    <option value="cheque">Chèques</option>
+                    <option value="especes">Espèces</option>
+                    <option value="virement">Virements</option>
+                    <option value="mixte">Mixte</option>
+                  </select>
+                  {(remiseDateFrom || remiseDateTo || remiseModeFilter) && (
+                    <button onClick={() => { setRemiseDateFrom(""); setRemiseDateTo(""); setRemiseModeFilter(""); }}
+                      className="font-body text-xs text-gray-400 bg-transparent border-none cursor-pointer hover:text-red-500">✕ Effacer</button>
+                  )}
+                </div>
+              </div>
+
               <div className="flex flex-col gap-3">
-                {(remises || []).sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).map((r: any) => {
+                {remisesFiltrees.map((r: any) => {
                   const rDate = r.createdAt?.seconds ? new Date(r.createdAt.seconds * 1000) : new Date();
                   const rPayments = payments.filter(p => (r.paymentIds || []).includes(p.id));
+                  const isEditing = editingRemiseId === r.id;
+                  const isPointing = pointageRemiseId === r.id;
+
+                  // Paiements éligibles à ajouter (pas encore dans une remise)
+                  const addablePays = nonRemis.filter(p => {
+                    if (editingRemiseSearch) {
+                      const q = editingRemiseSearch.toLowerCase();
+                      return p.familyName?.toLowerCase().includes(q) || (p.items||[]).some((i:any)=>i.activityTitle?.toLowerCase().includes(q));
+                    }
+                    return true;
+                  }).slice(0, 20);
+
                   return (
-                    <Card key={r.id} padding="md">
-                      <div className="flex justify-between items-center mb-2">
+                    <Card key={r.id} padding="md" className={r.pointee ? "border-green-200" : ""}>
+                      {/* En-tête remise */}
+                      <div className="flex justify-between items-start mb-2">
                         <div>
-                          <div className="font-body text-sm font-semibold text-blue-800">Remise du {rDate.toLocaleDateString("fr-FR")}</div>
-                          <div className="font-body text-xs text-gray-400">{r.nbPaiements} paiement{r.nbPaiements > 1 ? "s" : ""} · {modeLabels[r.paymentMode] || r.paymentMode || "Mixte"}</div>
+                          <div className="flex items-center gap-2">
+                            <div className="font-body text-sm font-semibold text-blue-800">Remise du {rDate.toLocaleDateString("fr-FR")}</div>
+                            {r.pointee
+                              ? <Badge color="green">✓ Pointée{r.pointeeDate ? ` le ${new Date(r.pointeeDate).toLocaleDateString("fr-FR")}` : ""}</Badge>
+                              : <Badge color="orange">Non pointée</Badge>}
+                          </div>
+                          <div className="font-body text-xs text-gray-400">{rPayments.length} paiement{rPayments.length > 1 ? "s" : ""} · {modeLabels[r.paymentMode] || r.paymentMode || "Mixte"}</div>
+                          {r.pointeeNote && <div className="font-body text-xs text-gray-400 mt-0.5 italic">{r.pointeeNote}</div>}
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 flex-wrap justify-end">
                           <span className="font-body text-lg font-bold text-blue-500">{(r.total || 0).toFixed(2)}€</span>
+                          {/* Bouton pointer/dépointer */}
+                          <button onClick={() => { setPointageRemiseId(isPointing ? null : r.id); setPointageNote(r.pointeeNote || ""); }}
+                            className={`font-body text-xs px-3 py-1.5 rounded-lg border-none cursor-pointer flex items-center gap-1 ${r.pointee ? "bg-green-50 text-green-600 hover:bg-red-50 hover:text-red-500" : "bg-orange-50 text-orange-600 hover:bg-orange-100"}`}>
+                            {r.pointee ? "✓ Dépointer" : "◎ Pointer"}
+                          </button>
+                          {/* Bouton éditer */}
+                          <button onClick={() => { setEditingRemiseId(isEditing ? null : r.id); setEditingRemiseSearch(""); }}
+                            className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
+                            ✏️ Modifier
+                          </button>
+                          {/* Bouton imprimer */}
                           <button onClick={() => {
-                            const html = `<html><head><meta charset="utf-8"><title>Bordereau de remise</title><style>body{font-family:Arial;max-width:600px;margin:30px auto}h1{font-size:18px;color:#2050A0;border-bottom:2px solid #2050A0;padding-bottom:8px}table{width:100%;border-collapse:collapse;margin:16px 0}th,td{padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;text-align:left}th{font-size:11px;color:#999;text-transform:uppercase}.total{font-size:16px;font-weight:bold;color:#2050A0;text-align:right;margin-top:12px}.footer{font-size:11px;color:#999;margin-top:30px}</style></head><body><h1>Bordereau de remise — ${rDate.toLocaleDateString("fr-FR")}</h1><p style="font-size:12px;color:#666">Centre Equestre d'Agon-Coutainville</p><table><thead><tr><th>Date</th><th>Client</th><th>Prestation</th><th>Mode</th><th style="text-align:right">Montant</th></tr></thead><tbody>${rPayments.map(p => { const pd = p.date?.seconds ? new Date(p.date.seconds * 1000).toLocaleDateString("fr-FR") : "—"; return `<tr><td>${pd}</td><td>${p.familyName||"—"}</td><td>${(p.items||[]).map((i: any)=>i.activityTitle).join(", ")||"—"}</td><td>${modeLabels[p.paymentMode]||p.paymentMode}</td><td style="text-align:right">${(p.paidAmount||p.totalTTC||0).toFixed(2)}€</td></tr>`; }).join("")}</tbody></table><div class="total">Total : ${(r.total || 0).toFixed(2)}€</div><div class="footer">Imprime le ${new Date().toLocaleDateString("fr-FR")} — Signature : _______________</div></body></html>`;
+                            const html = `<html><head><meta charset="utf-8"><title>Bordereau de remise</title><style>body{font-family:Arial;max-width:600px;margin:30px auto}h1{font-size:18px;color:#2050A0;border-bottom:2px solid #2050A0;padding-bottom:8px}table{width:100%;border-collapse:collapse;margin:16px 0}th,td{padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;text-align:left}th{font-size:11px;color:#999;text-transform:uppercase}.total{font-size:16px;font-weight:bold;color:#2050A0;text-align:right;margin-top:12px}.status{font-size:12px;color:${r.pointee?"#16a34a":"#d97706"};margin-top:4px;text-align:right}.footer{font-size:11px;color:#999;margin-top:30px}</style></head><body><h1>Bordereau de remise — ${rDate.toLocaleDateString("fr-FR")}</h1><p style="font-size:12px;color:#666">Centre Equestre d'Agon-Coutainville</p><table><thead><tr><th>Date</th><th>Client</th><th>Prestation</th><th>Mode</th><th style="text-align:right">Montant</th></tr></thead><tbody>${rPayments.map(p => { const pd = p.date?.seconds ? new Date(p.date.seconds * 1000).toLocaleDateString("fr-FR") : "—"; return `<tr><td>${pd}</td><td>${p.familyName||"—"}</td><td>${(p.items||[]).map((i: any)=>i.activityTitle).join(", ")||"—"}</td><td>${modeLabels[p.paymentMode]||p.paymentMode}</td><td style="text-align:right">${(p.paidAmount||p.totalTTC||0).toFixed(2)}€</td></tr>`; }).join("")}</tbody></table><div class="total">Total : ${(r.total || 0).toFixed(2)}€</div><div class="status">${r.pointee ? "✓ Remise pointée" : "Non pointée"}</div>${r.pointeeNote?`<div style="font-size:11px;color:#666;text-align:right">${r.pointeeNote}</div>`:""}<div class="footer">Imprimé le ${new Date().toLocaleDateString("fr-FR")} — Signature : _______________</div></body></html>`;
                             const w = window.open("", "_blank"); if (w) { w.document.write(html); w.document.close(); w.print(); }
                           }} className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
                             <Printer size={12} /> Imprimer
                           </button>
                         </div>
                       </div>
-                      {/* Détail */}
-                      <div className="border-t border-gray-100 pt-2">
-                        {rPayments.map(p => {
-                          const pd = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
-                          return (
-                            <div key={p.id} className="flex justify-between py-1 font-body text-xs">
-                              <div className="flex items-center gap-2">
-                                <span className="text-gray-400">{pd ? pd.toLocaleDateString("fr-FR") : "—"}</span>
-                                <Badge color="gray">{modeLabels[p.paymentMode] || p.paymentMode}</Badge>
-                                <span className="text-blue-800">{p.familyName}</span>
+
+                      {/* ── Pointage manuel ── */}
+                      {isPointing && (
+                        <div className="mt-3 pt-3 border-t border-gray-100 bg-sand rounded-xl p-4 flex flex-col gap-3">
+                          <div className="font-body text-sm font-semibold text-blue-800">
+                            {r.pointee ? "Dépointer la remise" : "Pointer la remise manuellement"}
+                          </div>
+                          <p className="font-body text-xs text-gray-500">
+                            {r.pointee
+                              ? "Cette remise sera marquée comme non vérifiée."
+                              : "Confirmez que vous avez vérifié cette remise avec votre relevé bancaire."}
+                          </p>
+                          <div>
+                            <label className="font-body text-xs text-gray-500 block mb-1">Note de rapprochement (optionnel)</label>
+                            <input value={pointageNote} onChange={e => setPointageNote(e.target.value)}
+                              placeholder="Ex: Vérifiée relevé BNP 15/03/2026, réf. VIR-12345..."
+                              className="w-full font-body text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-blue-400" />
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={async () => {
+                              await updateDoc(doc(db, "remises", r.id), {
+                                pointee: !r.pointee,
+                                pointeeDate: !r.pointee ? new Date().toISOString() : null,
+                                pointeeNote: pointageNote.trim() || null,
+                                updatedAt: serverTimestamp(),
+                              });
+                              setPointageRemiseId(null);
+                              fetchData();
+                            }} className={`font-body text-xs font-semibold px-4 py-2 rounded-lg border-none cursor-pointer text-white ${r.pointee ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"}`}>
+                              {r.pointee ? "Confirmer le dépointage" : "✓ Confirmer le pointage"}
+                            </button>
+                            <button onClick={() => setPointageRemiseId(null)}
+                              className="font-body text-xs text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── Édition remise : ajouter/retirer paiements ── */}
+                      {isEditing && (
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                          <div className="font-body text-xs font-semibold text-blue-800 mb-2">Modifier la remise</div>
+
+                          {/* Retirer des paiements */}
+                          {rPayments.length > 0 && (
+                            <div className="mb-3">
+                              <div className="font-body text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Paiements inclus — cliquer pour retirer</div>
+                              <div className="flex flex-col gap-1">
+                                {rPayments.map(p => (
+                                  <div key={p.id} className="flex items-center justify-between px-3 py-1.5 bg-sand rounded-lg">
+                                    <div className="flex items-center gap-2 font-body text-xs">
+                                      <Badge color="gray">{modeLabels[p.paymentMode] || p.paymentMode}</Badge>
+                                      <span className="text-blue-800 font-semibold">{p.familyName}</span>
+                                      <span className="text-gray-400">{(p.items||[]).map((i:any)=>i.activityTitle).join(", ").slice(0,35)}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-body text-xs font-semibold text-blue-500">{(p.paidAmount||p.totalTTC||0).toFixed(2)}€</span>
+                                      <button onClick={async () => {
+                                        if (!confirm(`Retirer ${p.familyName} de cette remise ?`)) return;
+                                        const newIds = (r.paymentIds||[]).filter((id:string)=>id!==p.id);
+                                        const newTotal = newIds.reduce((s:number,id:string)=>{const pp=payments.find(x=>x.id===id);return s+(pp?.paidAmount||pp?.totalTTC||0);},0);
+                                        await updateDoc(doc(db,"remises",r.id),{paymentIds:newIds,total:newTotal,nbPaiements:newIds.length,updatedAt:serverTimestamp()});
+                                        await updateDoc(doc(db,"payments",p.id!),{remiseId:null});
+                                        fetchData();
+                                      }} className="font-body text-[10px] text-red-400 bg-red-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-red-100">
+                                        − Retirer
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                              <span className="text-blue-500 font-semibold">{(p.paidAmount || p.totalTTC || 0).toFixed(2)}€</span>
                             </div>
-                          );
-                        })}
-                      </div>
+                          )}
+
+                          {/* Ajouter des paiements */}
+                          {nonRemis.length > 0 && (
+                            <div>
+                              <div className="font-body text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Ajouter un encaissement non remis</div>
+                              <input value={editingRemiseSearch} onChange={e => setEditingRemiseSearch(e.target.value)}
+                                placeholder="Rechercher une famille ou activité..."
+                                className="w-full font-body text-xs border border-gray-200 rounded-lg px-3 py-2 mb-2 bg-white focus:outline-none focus:border-blue-400" />
+                              <div className="flex flex-col gap-1 max-h-[180px] overflow-y-auto">
+                                {addablePays.map(p => (
+                                  <div key={p.id} className="flex items-center justify-between px-3 py-1.5 bg-white border border-gray-100 rounded-lg">
+                                    <div className="flex items-center gap-2 font-body text-xs">
+                                      <Badge color="gray">{modeLabels[p.paymentMode] || p.paymentMode}</Badge>
+                                      <span className="text-blue-800 font-semibold">{p.familyName}</span>
+                                      <span className="text-gray-400">{(p.items||[]).map((i:any)=>i.activityTitle).join(", ").slice(0,35)}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-body text-xs font-semibold text-blue-500">{(p.paidAmount||p.totalTTC||0).toFixed(2)}€</span>
+                                      <button onClick={async () => {
+                                        const newIds = [...(r.paymentIds||[]), p.id];
+                                        const newTotal = newIds.reduce((s:number,id:string)=>{const pp=payments.find(x=>x.id===id);return s+(pp?.paidAmount||pp?.totalTTC||0);},0);
+                                        await updateDoc(doc(db,"remises",r.id),{paymentIds:newIds,total:newTotal,nbPaiements:newIds.length,updatedAt:serverTimestamp()});
+                                        await updateDoc(doc(db,"payments",p.id!),{remiseId:r.id});
+                                        fetchData();
+                                      }} className="font-body text-[10px] text-green-600 bg-green-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-green-100">
+                                        + Ajouter
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          <button onClick={() => setEditingRemiseId(null)}
+                            className="mt-3 font-body text-xs text-gray-400 bg-transparent border-none cursor-pointer hover:text-blue-500">
+                            ✓ Terminer la modification
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Détail paiements (masqué si en édition) */}
+                      {!isEditing && (
+                        <div className="border-t border-gray-100 pt-2">
+                          {rPayments.map(p => {
+                            const pd = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
+                            return (
+                              <div key={p.id} className="flex justify-between py-1 font-body text-xs">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-gray-400">{pd ? pd.toLocaleDateString("fr-FR") : "—"}</span>
+                                  <Badge color="gray">{modeLabels[p.paymentMode] || p.paymentMode}</Badge>
+                                  <span className="text-blue-800">{p.familyName}</span>
+                                </div>
+                                <span className="text-blue-500 font-semibold">{(p.paidAmount || p.totalTTC || 0).toFixed(2)}€</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </Card>
                   );
                 })}
+                {remisesFiltrees.length === 0 && (remiseDateFrom || remiseDateTo || remiseModeFilter) && (
+                  <p className="font-body text-sm text-gray-400 text-center py-4">Aucune remise sur cette période.</p>
+                )}
               </div>
             </div>
           )}
