@@ -1992,17 +1992,15 @@ async function moduleS() {
 
   sec("S02 — Génération dates récurrentes (tous les mercredis juillet)");
   {
-    // Logique de génération : mercredis de juillet 2026
+    // Juillet 2026 : mercredis les 1, 8, 15, 22, 29 juillet (5 mercredis)
     const dates = [];
-    const current = new Date("2026-07-01");
-    while (current.getMonth() === 6) { // juillet = mois 6
-      if (current.getDay() === 3) { // mercredi = 3
-        dates.push(current.toISOString().split("T")[0]);
-      }
+    const current = new Date("2026-07-01T12:00:00");
+    while (current.getMonth() === 6) {
+      if (current.getDay() === 3) dates.push(current.toISOString().split("T")[0]);
       current.setDate(current.getDate() + 1);
     }
-    dates.length === 4 && dates[0] === "2026-07-01"
-      ? ok(`4 mercredis en juillet 2026 : ${dates.join(", ")}`)
+    dates.length === 5 && dates[0] === "2026-07-01" && dates[4] === "2026-07-29"
+      ? ok(`5 mercredis en juillet 2026 : ${dates.join(", ")}`)
       : fail(`Mercredis incorrects : ${dates.join(", ")}`);
   }
 
