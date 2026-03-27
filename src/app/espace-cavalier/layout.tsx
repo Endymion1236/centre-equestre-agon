@@ -99,53 +99,83 @@ function CavalierSidebar() {
   const pathname = usePathname();
 
   return (
-    <div className="w-[230px] bg-white border-r border-blue-500/8 p-4 flex flex-col gap-0.5 flex-shrink-0 min-h-screen hidden md:flex">
-      {/* Family header */}
-      <div className="px-3 py-3 pb-5 border-b border-blue-500/8 mb-2">
-        <div className="font-display text-sm font-bold text-blue-800">
-          {family?.parentName || "Ma famille"}
+    <div className="w-[230px] flex-shrink-0 min-h-screen hidden md:flex flex-col"
+      style={{ background: "linear-gradient(180deg, #0C1A2E 0%, #122A5A 100%)" }}>
+
+      {/* Logo + nom centre */}
+      <div className="px-5 pt-6 pb-5 border-b border-white/10">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center font-display font-bold text-sm flex-shrink-0"
+            style={{ background: "linear-gradient(135deg, #F0A010, #F4B840)", color: "#0C1A2E" }}>
+            CE
+          </div>
+          <div>
+            <div className="font-display text-xs font-bold text-white leading-tight">Centre Équestre</div>
+            <div className="font-body text-[10px] text-white/50 leading-tight">Agon-Coutainville</div>
+          </div>
         </div>
-        <div className="font-body text-xs text-gray-400 mt-0.5">
-          {family?.children?.length || 0} cavalier{(family?.children?.length || 0) > 1 ? "s" : ""} inscrit{(family?.children?.length || 0) > 1 ? "s" : ""}
+        {/* Famille */}
+        <div className="bg-white/8 rounded-xl px-3 py-2.5">
+          <div className="font-body text-xs font-bold text-white truncate">
+            {family?.parentName || "Ma famille"}
+          </div>
+          <div className="font-body text-[10px] mt-0.5" style={{ color: "#F0A010" }}>
+            🐴 {family?.children?.length || 0} cavalier{(family?.children?.length || 0) > 1 ? "s" : ""}
+          </div>
         </div>
       </div>
 
       {/* Nav items */}
-      {navItems.map((item) => {
-        const Icon = item.icon;
-        const active = pathname === item.href;
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`
-              flex items-center gap-3 px-3 py-2.5 rounded-lg no-underline transition-all
-              ${active ? "bg-blue-50 text-blue-500" : "text-gray-400 hover:bg-gray-50 hover:text-gray-600"}
-            `}
-          >
-            <Icon size={18} />
-            <span className={`font-body text-[13px] ${active ? "font-semibold" : "font-medium"}`}>
-              {item.label}
-            </span>
-          </Link>
-        );
-      })}
+      <nav className="flex-1 px-3 py-4 flex flex-col gap-0.5">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const active = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl no-underline transition-all"
+              style={active ? {
+                background: "linear-gradient(135deg, rgba(240,160,16,0.2), rgba(244,184,64,0.1))",
+                borderLeft: "3px solid #F0A010",
+                paddingLeft: "9px",
+              } : {
+                color: "rgba(255,255,255,0.55)",
+              }}
+            >
+              <Icon size={17} color={active ? "#F0A010" : "rgba(255,255,255,0.55)"} />
+              <span className="font-body text-[13px]" style={{
+                color: active ? "#F4B840" : "rgba(255,255,255,0.55)",
+                fontWeight: active ? 600 : 400,
+              }}>
+                {item.label}
+              </span>
+            </Link>
+          );
+        })}
+      </nav>
 
-      {/* Logout */}
-      <div className="mt-auto pt-4 border-t border-blue-500/8">
+      {/* Bas : retour site + déconnexion */}
+      <div className="px-3 pb-5 border-t border-white/10 pt-4 flex flex-col gap-0.5">
         <Link
           href="/"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-500 transition-all no-underline mb-1"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl no-underline transition-all"
+          style={{ color: "rgba(255,255,255,0.4)" }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color="rgba(255,255,255,0.8)"; (e.currentTarget as HTMLElement).style.background="rgba(255,255,255,0.06)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color="rgba(255,255,255,0.4)"; (e.currentTarget as HTMLElement).style.background="transparent"; }}
         >
-          <ExternalLink size={18} />
-          <span className="font-body text-[13px] font-medium">Retour au site</span>
+          <ExternalLink size={17} />
+          <span className="font-body text-[13px]">Retour au site</span>
         </Link>
         <button
           onClick={signOut}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-all w-full bg-transparent border-none cursor-pointer"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl w-full bg-transparent border-none cursor-pointer transition-all text-left"
+          style={{ color: "rgba(255,100,100,0.6)" }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color="rgba(255,100,100,1)"; (e.currentTarget as HTMLElement).style.background="rgba(255,80,80,0.1)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color="rgba(255,100,100,0.6)"; (e.currentTarget as HTMLElement).style.background="transparent"; }}
         >
-          <LogOut size={18} />
-          <span className="font-body text-[13px] font-medium">Déconnexion</span>
+          <LogOut size={17} />
+          <span className="font-body text-[13px]">Déconnexion</span>
         </button>
       </div>
     </div>
