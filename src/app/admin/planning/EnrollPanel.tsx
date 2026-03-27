@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
@@ -10,7 +10,7 @@ import {
   findStageCreneaux, countExistingStageInscriptions, computeStageReductions,
   enrollChildInCreneau, createReservation, removeChildFromCreneau, deleteReservations,
 } from "@/lib/planning-services";
-import { X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard } from "lucide-react";
+import { X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera, FileImage } from "lucide-react";
 import type { Activity, Family } from "@/types";
 import { Creneau, EnrolledChild, payModes, typeColors, fmtDate } from "./types";
 
@@ -29,7 +29,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
   const [licence, setLicence] = useState(true);
   const [payPlan, setPayPlan] = useState<"1x" | "3x" | "10x">("1x");
 
-  // Stage multi-enfants
+  // Plan de séance
+  const [planUploading, setPlanUploading] = useState(false);
+  const [planUrl, setPlanUrl] = useState<string | null>((creneau as any).planSeanceUrl || null);
+  const [planType, setPlanType] = useState<string | null>((creneau as any).planSeanceType || null);
+  const planInputRef = useRef<HTMLInputElement>(null);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [stageMode, setStageMode] = useState<"semaine" | "jour">("semaine");
   const [showAddDays, setShowAddDays] = useState<{ familyId: string; enfants: { childId: string; childName: string }[]; joursRestants: { id: string; date: string; label: string }[]; totalJoursStage: number; joursInscrits: number; stageTitle: string; creneauRef: any } | null>(null);
@@ -59,6 +63,40 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
     return prices[nbJours] || priceTTC;
   }, [isStage, priceTTC, creneau, allCreneaux]);
   const filteredFamilies = useMemo(() => { if (!search) return families; const terms = search.toLowerCase().trim().split(/\s+/); return families.filter(f => { const childText = (f.children || []).map((c: any) => `${c.firstName || ""} ${c.lastName || ""}`).join(" "); const searchable = `${f.parentName || ""} ${f.parentEmail || ""} ${childText}`.toLowerCase(); return terms.every(t => searchable.includes(t)); }); }, [families, search]);
+
+  const uploadPlan = async (file: File) => {
+    if (!creneau.id) return;
+    setPlanUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("creneauId", creneau.id);
+      const res = await fetch("/api/upload-plan", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+      // Sauvegarder l'URL dans le créneau
+      await updateDoc(doc(db, "creneaux", creneau.id), {
+        planSeanceUrl: data.url,
+        planSeanceType: data.contentType,
+        planSeanceUpdatedAt: new Date().toISOString(),
+      });
+      setPlanUrl(data.url);
+      setPlanType(data.contentType);
+    } catch (e: any) {
+      alert(`Erreur upload : ${e.message}`);
+    }
+    setPlanUploading(false);
+  };
+
+  const deletePlan = async () => {
+    if (!creneau.id || !confirm("Supprimer le plan de séance ?")) return;
+    await updateDoc(doc(db, "creneaux", creneau.id), {
+      planSeanceUrl: null,
+      planSeanceType: null,
+    });
+    setPlanUrl(null);
+    setPlanType(null);
+  };
   const fam = families.find(f => f.firestoreId === selFam); const children = fam?.children || [];
   const available = children.filter((c: any) => {
     if (enrolledIds.includes(c.id)) return false;
@@ -454,6 +492,51 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
             <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>{spots > 0 ? `${spots} place${spots > 1 ? "s" : ""}` : "COMPLET"}</Badge>
             <span className="font-body text-xs text-gray-400">{enrolled.length}/{creneau.maxPlaces}</span>
             {(creneau as any).status === "closed" && <Badge color="gray">Clôturée</Badge>}
+          </div>
+
+          {/* ── Plan de séance ── */}
+          <div className="mt-3 pt-3 border-t border-blue-500/8">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider">Plan de séance</span>
+              {!planUploading && (
+                <label className="flex items-center gap-1.5 font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-blue-100">
+                  {planUrl ? <><FileImage size={12} /> Remplacer</> : <><Camera size={12} /> Ajouter photo / PDF</>}
+                  <input ref={planInputRef} type="file" accept="image/*,.pdf" capture="environment" className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadPlan(f); e.target.value = ""; }} />
+                </label>
+              )}
+              {planUploading && <div className="flex items-center gap-1.5 font-body text-xs text-blue-500"><Loader2 size={12} className="animate-spin" /> Upload...</div>}
+            </div>
+
+            {planUrl ? (
+              <div className="relative group">
+                {planType === "application/pdf" ? (
+                  <a href={planUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-3 py-2.5 bg-red-50 border border-red-100 rounded-xl no-underline hover:bg-red-100">
+                    <FileImage size={20} className="text-red-500 flex-shrink-0" />
+                    <div>
+                      <div className="font-body text-sm font-semibold text-red-700">Plan de séance PDF</div>
+                      <div className="font-body text-xs text-red-400">Cliquer pour ouvrir</div>
+                    </div>
+                  </a>
+                ) : (
+                  <a href={planUrl} target="_blank" rel="noopener noreferrer">
+                    <img src={planUrl} alt="Plan de séance" className="w-full rounded-xl object-cover max-h-48 cursor-zoom-in hover:opacity-90 transition-opacity" />
+                  </a>
+                )}
+                <button onClick={deletePlan}
+                  className="absolute top-2 right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity text-xs">
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-all"
+                onClick={() => planInputRef.current?.click()}>
+                <Camera size={20} className="text-gray-300 mx-auto mb-1" />
+                <p className="font-body text-xs text-gray-400">Photo ou PDF du plan de séance</p>
+                <p className="font-body text-[10px] text-gray-300 mt-0.5">JPG · PNG · WEBP · PDF · max 10 Mo</p>
+              </div>
+            )}
           </div>
         </div>
 
