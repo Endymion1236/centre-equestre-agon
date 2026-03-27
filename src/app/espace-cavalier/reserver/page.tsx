@@ -30,6 +30,8 @@ export default function ReserverPage() {
   const [paying, setPaying] = useState(false);
   const [depositMode, setDepositMode] = useState<"full" | "deposit">("full");
   const [success, setSuccess] = useState(false);
+  const [waitlistSuccess, setWaitlistSuccess] = useState<string | null>(null); // creneauId confirmé
+  const [waitlistLoading, setWaitlistLoading] = useState<string | null>(null); // creneauId en cours
 
   const children = family?.children || [];
   const familyId = user?.uid || "";
@@ -55,7 +57,7 @@ export default function ReserverPage() {
     const now = new Date(); const todayStr = fmtDate(now);
     let result = creneaux.filter(c => {
       if (c.date < todayStr) return false;
-      return (c.enrolled?.length || 0) < c.maxPlaces;
+      return true; // inclure les complets pour afficher la liste d'attente
     });
     if (filter !== "all") result = result.filter(c => c.activityType === filter);
     return result.sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
@@ -245,6 +247,46 @@ export default function ReserverPage() {
 
   const spotsLeft = (c: Creneau) => c.maxPlaces - (c.enrolled?.length || 0);
 
+  const addToWaitlist = async (c: Creneau, childId: string) => {
+    if (!user || !family) return;
+    const childObj = children.find((ch: any) => ch.id === childId) as any;
+    const childName = childObj?.lastName ? `${childObj.firstName} ${childObj.lastName}` : childObj?.firstName || "Cavalier";
+    setWaitlistLoading(c.id);
+    try {
+      // Vérifier si déjà en attente
+      const existing = await getDocs(query(
+        collection(db, "waitlist"),
+        where("creneauId", "==", c.id),
+        where("childId", "==", childId),
+        where("familyId", "==", user.uid)
+      ));
+      if (!existing.empty) {
+        alert("Vous êtes déjà en liste d'attente pour ce créneau.");
+        setWaitlistLoading(null); return;
+      }
+      await addDoc(collection(db, "waitlist"), {
+        creneauId: c.id,
+        activityTitle: c.activityTitle,
+        activityType: c.activityType,
+        date: c.date,
+        startTime: c.startTime,
+        endTime: c.endTime,
+        monitor: c.monitor,
+        familyId: user.uid,
+        familyName: family.parentName,
+        familyEmail: family.parentEmail || user.email || "",
+        childId,
+        childName,
+        status: "waiting",
+        position: existing.size + 1,
+        createdAt: serverTimestamp(),
+      });
+      setWaitlistSuccess(c.id);
+      setTimeout(() => setWaitlistSuccess(null), 4000);
+    } catch (e) { console.error(e); alert("Erreur. Réessayez."); }
+    setWaitlistLoading(null);
+  };
+
   if (!user || !family) return (
     <div className="text-center py-20">
       <Card padding="lg"><p className="font-body text-sm text-gray-500">Connectez-vous et complétez votre profil pour réserver.</p></Card>
@@ -381,23 +423,27 @@ export default function ReserverPage() {
                       const tl = typeLabels[c.activityType] || { label: c.activityType, color: "#666" };
                       const isSelected = selectedCreneau?.id === c.id;
                       return (
-                        <Card key={c.id} padding="sm" className={`cursor-pointer ${isSelected ? "ring-2 ring-blue-500" : ""}`} onClick={() => { setSelectedCreneau(isSelected ? null : c); setSelectedChildren([]); }}>
+                        <Card key={c.id} padding="sm" className={`cursor-pointer ${isSelected ? "ring-2 ring-blue-500" : ""} ${spots === 0 ? "opacity-80" : ""}`} onClick={() => { if (spots > 0) { setSelectedCreneau(isSelected ? null : c); setSelectedChildren([]); } else { setSelectedCreneau(isSelected ? null : c); } }}>
                           <div className="flex justify-between items-center">
                             <div className="flex items-center gap-3">
                               <div className="w-1 h-10 rounded-full" style={{ backgroundColor: tl.color }} />
                               <div>
                                 <div className="font-body text-sm font-semibold text-blue-800">{c.activityTitle}</div>
-                                <div className="font-body text-xs text-gray-400">{c.startTime}–{c.endTime} · {c.monitor}</div>
+                                <div className="font-body text-xs text-slate-500">{c.startTime}–{c.endTime} · {c.monitor}</div>
                               </div>
                             </div>
                             <div className="text-right">
                               <div className="font-body text-sm font-bold text-blue-500">{prix.toFixed(0)}€</div>
-                              <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>{spots} pl.</Badge>
+                              <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>
+                                {spots > 0 ? `${spots} pl.` : "Complet"}
+                              </Badge>
                             </div>
                           </div>
+
+                          {/* Créneau disponible — sélection enfant */}
                           {isSelected && spots > 0 && (
                             <div className="mt-3 pt-3 border-t border-blue-100">
-                              <div className="font-body text-xs text-gray-400 mb-2">Pour quel enfant ?</div>
+                              <div className="font-body text-xs text-slate-500 mb-2">Pour quel enfant ?</div>
                               <div className="flex flex-wrap gap-2">
                                 {children.filter((ch: any) => !(c.enrolled || []).some((e: any) => e.childId === ch.id)).map((ch: any) => (
                                   <button key={ch.id} onClick={(e) => { e.stopPropagation(); addCoursToCart(c, ch.id); }}
@@ -406,6 +452,33 @@ export default function ReserverPage() {
                                   </button>
                                 ))}
                               </div>
+                            </div>
+                          )}
+
+                          {/* Créneau complet — liste d'attente */}
+                          {isSelected && spots === 0 && (
+                            <div className="mt-3 pt-3 border-t border-orange-100">
+                              {waitlistSuccess === c.id ? (
+                                <div className="flex items-center gap-2 text-green-600 font-body text-xs">
+                                  <Check size={14} /> Inscrit en liste d&apos;attente ! Vous serez notifié par email si une place se libère.
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="font-body text-xs text-orange-600 mb-2">
+                                    🔔 Ce créneau est complet. Inscrivez-vous en liste d&apos;attente :
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {children.filter((ch: any) => !(c.enrolled || []).some((e: any) => e.childId === ch.id)).map((ch: any) => (
+                                      <button key={ch.id}
+                                        onClick={(e) => { e.stopPropagation(); addToWaitlist(c, ch.id); }}
+                                        disabled={waitlistLoading === c.id}
+                                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-orange-200 bg-orange-50 font-body text-xs text-orange-700 cursor-pointer hover:bg-orange-100 disabled:opacity-50">
+                                        {waitlistLoading === c.id ? <Loader2 size={12} className="animate-spin" /> : "🔔"} {ch.firstName}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
                             </div>
                           )}
                         </Card>

@@ -35,6 +35,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
   const [planUrl, setPlanUrl] = useState<string | null>((creneau as any).planSeanceUrl || null);
   const [planType, setPlanType] = useState<string | null>((creneau as any).planSeanceType || null);
   const planInputRef = useRef<HTMLInputElement>(null);
+  // Liste d'attente
+  const [waitlist, setWaitlist] = useState<any[]>([]);
+  const [waitlistLoading, setWaitlistLoading] = useState(false);
+
+  useEffect(() => {
+    if (!creneau.id) return;
+    getDocs(query(collection(db, "waitlist"), where("creneauId", "==", creneau.id), where("status", "==", "waiting")))
+      .then(snap => setWaitlist(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))));
+  }, [creneau.id]);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [stageMode, setStageMode] = useState<"semaine" | "jour">("semaine");
   const [showAddDays, setShowAddDays] = useState<{ familyId: string; enfants: { childId: string; childName: string }[]; joursRestants: { id: string; date: string; label: string }[]; totalJoursStage: number; joursInscrits: number; stageTitle: string; creneauRef: any } | null>(null);
@@ -64,6 +73,49 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
     return prices[nbJours] || priceTTC;
   }, [isStage, priceTTC, creneau, allCreneaux]);
   const filteredFamilies = useMemo(() => { if (!search) return families; const terms = search.toLowerCase().trim().split(/\s+/); return families.filter(f => { const childText = (f.children || []).map((c: any) => `${c.firstName || ""} ${c.lastName || ""}`).join(" "); const searchable = `${f.parentName || ""} ${f.parentEmail || ""} ${childText}`.toLowerCase(); return terms.every(t => searchable.includes(t)); }); }, [families, search]);
+
+  const acceptWaitlist = async (entry: any) => {
+    if (spots <= 0) { alert("Toujours pas de place disponible."); return; }
+    setWaitlistLoading(true);
+    try {
+      // Inscrire dans le créneau
+      const newEnrolled = [...enrolled, {
+        childId: entry.childId, childName: entry.childName,
+        familyId: entry.familyId, familyName: entry.familyName,
+        enrolledAt: new Date().toISOString(), presence: null,
+      }];
+      await updateDoc(doc(db, "creneaux", creneau.id!), {
+        enrolled: newEnrolled, enrolledCount: newEnrolled.length,
+      });
+      // Mettre à jour le statut waitlist
+      await updateDoc(doc(db, "waitlist", entry.id), { status: "accepted", acceptedAt: new Date().toISOString() });
+      // Notifier la famille par email
+      fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: entry.familyEmail,
+          subject: `🎉 Une place s'est libérée — ${creneau.activityTitle}`,
+          html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+            <p>Bonjour <strong>${entry.familyName}</strong>,</p>
+            <p>Bonne nouvelle ! Une place s'est libérée pour <strong>${entry.childName}</strong> :</p>
+            <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
+              <p style="margin:0;color:#166534;font-weight:600;">✅ ${creneau.activityTitle}</p>
+              <p style="margin:8px 0 0;color:#555;font-size:13px;">📅 ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })}</p>
+              <p style="margin:4px 0 0;color:#555;font-size:13px;">🕐 ${creneau.startTime}–${creneau.endTime}</p>
+            </div>
+            <p><strong>${entry.childName} est maintenant inscrit(e).</strong> Vous recevrez prochainement les informations de paiement.</p>
+            <p>À bientôt au centre équestre !</p>
+          </div>`,
+        }),
+      }).catch(e => console.warn("Email waitlist:", e));
+      // Mettre à jour la liste locale
+      setWaitlist(prev => prev.filter(w => w.id !== entry.id));
+      panelToast(`✅ ${entry.childName} inscrit(e) et notifié(e) par email`, "success");
+      onClose(); // Fermer le panel pour forcer un rechargement
+    } catch (e) { console.error(e); }
+    setWaitlistLoading(false);
+  };
 
   const uploadPlan = async (file: File) => {
     if (!creneau.id) return;
@@ -502,7 +554,33 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
     setTimeout(() => setJustEnrolled(""), 5000);
   };
 
-  const handleUnenroll = async (childId: string) => { setUnenrolling(childId); await onUnenroll(creneau.id!, childId); setUnenrolling(""); };
+  const handleUnenroll = async (childId: string) => {
+    setUnenrolling(childId);
+    await onUnenroll(creneau.id!, childId);
+    // Notifier le premier en liste d'attente s'il y en a
+    if (waitlist.length > 0) {
+      const first = waitlist[0];
+      fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: first.familyEmail,
+          subject: `🎉 Une place s'est libérée — ${creneau.activityTitle}`,
+          html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+            <p>Bonjour <strong>${first.familyName}</strong>,</p>
+            <p>Une place vient de se libérer pour <strong>${first.childName}</strong> !</p>
+            <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:16px;margin:16px 0;">
+              <p style="margin:0;color:#c2410c;font-weight:600;">🔔 ${creneau.activityTitle}</p>
+              <p style="margin:8px 0 0;color:#555;font-size:13px;">📅 ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })}</p>
+              <p style="margin:4px 0 0;color:#555;font-size:13px;">🕐 ${creneau.startTime}–${creneau.endTime}</p>
+            </div>
+            <p>Connectez-vous à votre espace cavalier pour confirmer l'inscription avant qu'une autre famille ne la prenne.</p>
+          </div>`,
+        }),
+      }).catch(e => console.warn("Email waitlist notif:", e));
+    }
+    setUnenrolling("");
+  };
 
   return (
     <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -593,6 +671,33 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
             const hasPending = !hasPaid && payments.some((p: any) => p.familyId === e.familyId && (p.status === "pending" || p.status === "partial") && (p.items||[]).some((i:any) => i.childId === e.childId));
             return (<div key={e.childId} className="flex items-center justify-between bg-sand rounded-lg px-4 py-2.5"><div className="flex items-center gap-3"><div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center"><Users size={12} className="text-blue-500" /></div><div><div className="font-body text-sm font-semibold text-blue-800 flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${isCard ? "bg-blue-500" : hasPaid ? "bg-green-500" : hasPending ? "bg-orange-400" : "bg-gray-300"}`}></span>{e.childName}</div><div className="font-body text-xs text-slate-500">{e.familyName}{isCard ? " · carte" : hasPaid ? " · réglé" : hasPending ? " · en attente" : ""}</div></div></div><button onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId} className="flex items-center gap-1 font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-red-50">{unenrolling===e.childId ? <Loader2 size={12} className="animate-spin"/> : <Trash2 size={12}/>} Désinscrire</button></div>);
           })}</div>}
+
+          {/* ── Liste d'attente ── */}
+          {waitlist.length > 0 && (
+            <div className="mb-4 border border-orange-200 rounded-xl overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-orange-50">
+                <span className="font-body text-xs font-semibold text-orange-700">🔔 Liste d'attente ({waitlist.length})</span>
+                {spots > 0 && <span className="font-body text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded">Place disponible !</span>}
+              </div>
+              {waitlist.map((entry: any, i: number) => (
+                <div key={entry.id} className="flex items-center justify-between px-4 py-2.5 border-t border-orange-100">
+                  <div>
+                    <div className="font-body text-sm font-semibold text-blue-800">
+                      <span className="text-orange-400 mr-1.5">#{i + 1}</span>
+                      {entry.childName}
+                    </div>
+                    <div className="font-body text-xs text-slate-500">{entry.familyName}</div>
+                  </div>
+                  <button
+                    onClick={() => acceptWaitlist(entry)}
+                    disabled={waitlistLoading || spots <= 0}
+                    className={`font-body text-xs font-semibold px-3 py-1.5 rounded-lg border-none cursor-pointer ${spots > 0 ? "bg-green-500 text-white hover:bg-green-600" : "bg-gray-100 text-slate-400 cursor-not-allowed"} disabled:opacity-50`}>
+                    {waitlistLoading ? <Loader2 size={12} className="animate-spin inline" /> : "✓ Accepter"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           {spots > 0 && (creneau as any).status !== "closed" && (<div className="border-t border-blue-500/8 pt-4"><h3 className="font-body text-sm font-semibold text-blue-800 mb-3"><UserPlus size={16} className="inline mr-1"/>Inscrire</h3><div className="flex flex-col gap-3">
             {/* Recherche famille */}
