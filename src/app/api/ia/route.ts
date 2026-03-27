@@ -50,7 +50,26 @@ interface SuggestionsRequest {
   viewMode: string;
 }
 
-type IARequest = RapprochementRequest | AssistantRequest | SuggestionsRequest;
+interface EmailRepriseRequest {
+  type: "email_reprise";
+  creneau: {
+    activityTitle: string;
+    activityType: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    monitor: string;
+    maxPlaces: number;
+  };
+  cavaliers: {
+    firstName: string;
+    galopLevel: string;
+    parentName: string;
+  }[];
+  context?: string; // info supplémentaire optionnelle (météo, annulation, etc.)
+}
+
+type IARequest = RapprochementRequest | AssistantRequest | SuggestionsRequest | EmailRepriseRequest;
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
@@ -211,14 +230,57 @@ Sois direct, pratique, en français. Chaque suggestion doit être immédiatement
         success: true,
         suggestions: text,
         stats: {
-          tauxGlobal,
-          totalInscrits,
-          totalPlaces,
-          sousRemplis: sousRemplis.length,
-          complets: complets.length,
-          vides: vides.length,
-          total: creneaux.length,
+          tauxGlobal, totalInscrits, totalPlaces,
+          sousRemplis: sousRemplis.length, complets: complets.length,
+          vides: vides.length, total: creneaux.length,
         },
+      });
+    }
+
+    // ── Email reprise IA ──────────────────────────────────────────────────────
+    if (body.type === "email_reprise") {
+      const { creneau, cavaliers, context } = body as any;
+      const dateFormatee = new Date(creneau.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long", year:"numeric" });
+      const niveaux = [...new Set((cavaliers as any[]).map((c:any) => c.galopLevel).filter((g:string) => g && g !== "—"))];
+      const prenoms = (cavaliers as any[]).map((c:any) => c.firstName).slice(0, 5);
+      const typeLabel: Record<string,string> = { cours:"cours collectif", cours_collectif:"cours collectif", cours_particulier:"cours particulier", stage:"stage", balade:"balade", ponyride:"pony ride", anniversaire:"anniversaire" };
+
+      const [emailMsg, subjectMsg] = await Promise.all([
+        client.messages.create({
+          model: "claude-sonnet-4-5", max_tokens: 600,
+          messages: [{ role: "user", content:
+            `Tu es le responsable de communication du Centre Équestre d'Agon-Coutainville.
+Rédige un email professionnel mais chaleureux pour les familles d'une reprise équestre.
+
+REPRISE :
+- Activité : ${creneau.activityTitle} (${typeLabel[creneau.activityType] || creneau.activityType})
+- Date : ${dateFormatee}
+- Horaire : ${creneau.startTime}–${creneau.endTime}
+- Moniteur : ${creneau.monitor}
+- Cavaliers : ${cavaliers.length} inscrits — prénoms : ${prenoms.join(", ")}${cavaliers.length > 5 ? "..." : ""}
+- Niveaux : ${niveaux.length > 0 ? (niveaux as string[]).join(", ") : "mixtes"}
+${context ? `- Contexte : ${context}` : ""}
+
+CONSIGNES :
+- Corps du message uniquement (sans "Objet:")
+- Ton chaleureux, adapté au type (stage=enthousiaste, cours=rassurant, balade=convivial)
+- Rappel date, heure et lieu
+- Rappel casque homologué obligatoire, tenue adaptée
+- 8-12 lignes
+- Commence par "Bonjour,"
+- Termine par "Cordialement,\nL'équipe du Centre Équestre d'Agon-Coutainville"` }],
+        }),
+        client.messages.create({
+          model: "claude-sonnet-4-5", max_tokens: 60,
+          messages: [{ role: "user", content:
+            `Propose un objet d'email court (max 60 caractères) pour cette reprise équestre : "${creneau.activityTitle}" le ${dateFormatee} à ${creneau.startTime}. Réponds uniquement avec l'objet, sans guillemets.` }],
+        }),
+      ]);
+
+      return NextResponse.json({
+        success: true,
+        emailBody: emailMsg.content[0].type === "text" ? emailMsg.content[0].text : "",
+        suggestedSubject: subjectMsg.content[0].type === "text" ? subjectMsg.content[0].text.trim() : "",
       });
     }
 
