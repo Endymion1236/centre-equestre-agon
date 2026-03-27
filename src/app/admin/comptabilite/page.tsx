@@ -168,89 +168,144 @@ export default function ComptabilitePage() {
         };
       });
 
-      // Smart matching
+      // Smart matching amélioré
       const matched = parsed.map((bl) => {
         const label = bl.label.toUpperCase();
 
-        // 1. Stripe payout → match total Stripe payments around that date
+        // Parse la date de la ligne bancaire (formats : DD/MM/YYYY ou YYYY-MM-DD)
+        const parseBankDate = (s: string): Date | null => {
+          if (!s) return null;
+          const p1 = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+          if (p1) return new Date(`${p1[3]}-${p1[2]}-${p1[1]}`);
+          const p2 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          if (p2) return new Date(s);
+          return null;
+        };
+        const bankDate = parseBankDate(bl.date);
+
+        // Encaissements de la période, avec leur date
+        const periodEnc = encaissementsCompta.filter(e => {
+          const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+          if (!d) return false;
+          const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          return pm === period;
+        });
+
+        // Fenêtre de ±3 jours autour de la date bancaire
+        const inWindow = (enc: any) => {
+          if (!bankDate) return true; // pas de date → on essaie quand même
+          const d = enc.date?.seconds ? new Date(enc.date.seconds * 1000) : null;
+          if (!d) return false;
+          const diff = Math.abs(bankDate.getTime() - d.getTime()) / (1000 * 60 * 60 * 24);
+          return diff <= 3;
+        };
+
+        // ── 1. Stripe payout ──────────────────────────────────────────────
         if (label.includes("STRIPE") || label.includes("STP")) {
           const stripeTotal = filteredPayments
-            .filter((p) => p.paymentMode === "cb_online")
+            .filter(p => p.paymentMode === "cb_online")
             .reduce((s, p) => s + (p.totalTTC || 0), 0);
-          // Stripe sends weekly payouts — match if amount is plausible
           if (bl.amount > 0 && stripeTotal > 0) {
-            return { ...bl, matched: true, matchType: "Stripe", matchDetail: `Virement Stripe (total période: ${stripeTotal.toFixed(2)}€)` };
+            return { ...bl, matched: true, matchType: "Stripe", matchDetail: `Virement Stripe (${stripeTotal.toFixed(2)}€)` };
           }
         }
 
-        // 2. CB terminal remise → match daily total of cb_terminal payments
-        if (label.includes("REMISE") || label.includes("CB") || label.includes("TPE") || label.includes("CARTE")) {
-          // Try to find the date in the label or use bl.date
-          const dateKey = bl.date;
-          // Check all daily totals for a match
-          for (const [day, modes] of Object.entries(dailyTotals)) {
-            const cbTotal = modes["cb_terminal"] || 0;
-            if (cbTotal > 0 && Math.abs(cbTotal - bl.amount) < 0.02) {
-              return { ...bl, matched: true, matchType: "CB Terminal", matchDetail: `Remise CB du ${day} (${cbTotal.toFixed(2)}€)` };
+        // ── 2. CB terminal — matching agrégat ─────────────────────────────
+        // Ta banque remet en 1 virement le total CB de la journée (J, J+1 ou J+2)
+        if (label.includes("REMISE") || label.includes("CB") || label.includes("TPE") || label.includes("CARTE") || label.includes("PAIEMENT")) {
+          const cbEncs = periodEnc.filter(e => e.mode === "cb_terminal");
+
+          // a) Essai fenêtre ±3 jours
+          for (let window = 0; window <= 3; window++) {
+            const encsInWindow = cbEncs.filter(e => {
+              if (!bankDate) return true;
+              const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+              if (!d) return false;
+              const diff = Math.abs(bankDate.getTime() - d.getTime()) / (1000 * 60 * 60 * 24);
+              return diff <= window;
+            });
+            const windowTotal = encsInWindow.reduce((s, e) => s + (e.montant || 0), 0);
+            if (windowTotal > 0 && Math.abs(windowTotal - bl.amount) < 0.02) {
+              const dayLabel = window === 0 ? "même jour" : `J+${window}`;
+              return {
+                ...bl, matched: true, matchType: "CB Terminal",
+                matchDetail: `${encsInWindow.length} transaction(s) CB sur ${dayLabel} = ${windowTotal.toFixed(2)}€`,
+              };
             }
           }
-          // Try matching total CB for the whole period
-          const totalCB = filteredPayments
-            .filter((p) => p.paymentMode === "cb_terminal")
-            .reduce((s, p) => s + (p.totalTTC || 0), 0);
-          if (totalCB > 0 && Math.abs(totalCB - bl.amount) < 0.50) {
-            return { ...bl, matched: true, matchType: "CB Terminal", matchDetail: `Total CB période (${totalCB.toFixed(2)}€)` };
+
+          // b) Matching agrégat sur toute la période — trouver un sous-ensemble dont la somme = bl.amount
+          // (on ne teste que jusqu'à 15 encaissements pour les perfs)
+          const cbSlice = cbEncs.slice(0, 15);
+          const target = Math.round(bl.amount * 100);
+          // Recherche gloutonne par date proche
+          const sorted = [...cbSlice].sort((a, b) => {
+            if (!bankDate) return 0;
+            const da = a.date?.seconds ? Math.abs(new Date(a.date.seconds*1000).getTime() - bankDate.getTime()) : Infinity;
+            const db2 = b.date?.seconds ? Math.abs(new Date(b.date.seconds*1000).getTime() - bankDate.getTime()) : Infinity;
+            return da - db2;
+          });
+          let running = 0;
+          const matched2: any[] = [];
+          for (const e of sorted) {
+            running += Math.round((e.montant || 0) * 100);
+            matched2.push(e);
+            if (running === target) {
+              return {
+                ...bl, matched: true, matchType: "CB Terminal",
+                matchDetail: `Agrégat ${matched2.length} transaction(s) CB = ${bl.amount.toFixed(2)}€ (${matched2.map(e=>e.familyName).join(", ")})`,
+              };
+            }
+            if (running > target) break;
           }
         }
 
-        // 3. Virement / SEPA → match any single encaissement
+        // ── 3. Virement / SEPA ────────────────────────────────────────────
         if (label.includes("VIR") || label.includes("SEPA")) {
-          const periodEnc = encaissementsCompta.filter(e => {
-            const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
-            if (!d) return false;
-            const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-            return pm === period;
-          });
-          const match = periodEnc.find((e) =>
-            (e.mode === "virement" || e.mode === "sepa") &&
-            Math.abs((e.montant || 0) - bl.amount) < 0.02
+          const match = periodEnc.filter(inWindow).find(e =>
+            (e.mode === "virement" || e.mode === "sepa") && Math.abs((e.montant || 0) - bl.amount) < 0.02
           );
-          if (match) {
-            return { ...bl, matched: true, matchType: "Virement", matchDetail: `Paiement ${match.familyName}` };
-          }
+          if (match) return { ...bl, matched: true, matchType: "Virement", matchDetail: `Virement ${match.familyName}` };
         }
 
-        // 4. Chèque → match any cheque encaissement
+        // ── 4. Chèque ─────────────────────────────────────────────────────
         if (label.includes("CHQ") || label.includes("CHEQUE") || label.includes("REMISE CHQ")) {
-          const periodEnc = encaissementsCompta.filter(e => {
-            const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
-            if (!d) return false;
-            const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-            return pm === period;
-          });
-          const match = periodEnc.find((e) =>
+          // Chèque unitaire
+          const match = periodEnc.filter(inWindow).find(e =>
             e.mode === "cheque" && Math.abs((e.montant || 0) - bl.amount) < 0.02
           );
-          if (match) {
-            return { ...bl, matched: true, matchType: "Chèque", matchDetail: `Chèque ${match.familyName} (${match.ref || ""})` };
-          }
-          // Try daily total cheques
-          for (const [day, modes] of Object.entries(dailyTotals)) {
-            const chqTotal = modes["cheque"] || 0;
+          if (match) return { ...bl, matched: true, matchType: "Chèque", matchDetail: `Chèque ${match.familyName}` };
+          // Remise chèques groupée ±3 jours
+          for (let w = 0; w <= 3; w++) {
+            const chqEncs = periodEnc.filter(e => {
+              if (!bankDate) return e.mode === "cheque";
+              const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+              return e.mode === "cheque" && d && Math.abs(bankDate.getTime() - d.getTime()) / (1000*60*60*24) <= w;
+            });
+            const chqTotal = chqEncs.reduce((s, e) => s + (e.montant || 0), 0);
             if (chqTotal > 0 && Math.abs(chqTotal - bl.amount) < 0.02) {
-              return { ...bl, matched: true, matchType: "Chèques", matchDetail: `Remise chèques du ${day}` };
+              return { ...bl, matched: true, matchType: "Chèques", matchDetail: `Remise ${chqEncs.length} chèque(s) J+${w} = ${chqTotal.toFixed(2)}€` };
             }
           }
         }
 
-        // 5. Espèces → match daily total
+        // ── 5. Espèces ────────────────────────────────────────────────────
         if (label.includes("ESP") || label.includes("VERSEMENT")) {
           for (const [day, modes] of Object.entries(dailyTotals)) {
-            const espTotal = modes["especes"] || 0;
+            const espTotal = (modes as any)["especes"] || 0;
             if (espTotal > 0 && Math.abs(espTotal - bl.amount) < 0.02) {
               return { ...bl, matched: true, matchType: "Espèces", matchDetail: `Dépôt espèces du ${day}` };
             }
           }
+        }
+
+        // ── 6. Montant exact toutes modes ─────────────────────────────────
+        // Dernier recours : trouver un encaissement de même montant dans la fenêtre
+        const exactMatch = periodEnc.filter(inWindow).find(e =>
+          Math.abs((e.montant || 0) - bl.amount) < 0.02
+        );
+        if (exactMatch) {
+          return { ...bl, matched: true, matchType: "Montant exact", matchDetail: `${exactMatch.familyName} — ${exactMatch.activityTitle || ""}` };
         }
 
         return bl;
