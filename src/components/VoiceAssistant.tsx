@@ -32,6 +32,7 @@ export default function VoiceAssistant({
   const [speaking, setSpeaking] = useState(false);
   const [textInput, setTextInput] = useState("");
   const [muted, setMuted] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{ tool: string; input: any } | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -96,25 +97,10 @@ export default function VoiceAssistant({
     await askClaude(q);
   };
 
-  // ── Claude → réponse ──────────────────────────────────────────────────────
-  const askClaude = async (question: string) => {
+  // ── Claude → réponse / Agent ─────────────────────────────────────────────
+  const askClaude = async (question: string, isConfirmation = false) => {
     setLoading(true);
-    addMessage("user", question);
-
-    const defaultSystemAdmin = `Tu es l'assistant vocal de Nicolas, gérant du Centre Équestre d'Agon-Coutainville.
-Réponds en français, de façon concise et naturelle (max 3 phrases) — la réponse sera lue à voix haute.
-Tu as accès aux données du planning :
-${JSON.stringify(context, null, 2)}
-
-RÈGLES IMPORTANTES :
-- Tu peux consulter et analyser les données ci-dessus (inscrits, créneaux, taux de remplissage, etc.)
-- Tu NE peux PAS créer, modifier ou supprimer quoi que ce soit — c'est l'interface web qui le fait
-- Quand Nicolas demande une ACTION (créer un créneau, inscrire quelqu'un, modifier un tarif...), réponds en lui indiquant EXACTEMENT où aller dans l'interface. Exemples :
-  * "Pour créer ce créneau, va dans Planning → clique sur le jour voulu → Nouveau créneau"
-  * "Pour inscrire quelqu'un, ouvre le créneau dans Planning et clique sur Inscrire"
-  * "Pour modifier le tarif, va dans Configuration → Activités → modifie l'activité"
-- Sois toujours utile et oriente vers la bonne action, ne dis jamais juste "je ne peux pas"
-- Texte simple uniquement, pas de markdown ni de listes`;
+    if (!isConfirmation) addMessage("user", question);
 
     const defaultSystemFamille = `Tu es l'assistant vocal du Centre Équestre d'Agon-Coutainville.
 Tu réponds aux questions des familles sur les cours, tarifs, disponibilités et activités.
@@ -124,22 +110,46 @@ ${JSON.stringify(context, null, 2)}
 Pas de markdown ni de listes — texte simple uniquement.`;
 
     try {
-      const res = await fetch("/api/ia", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "assistant",
-          question,
-          context: {
-            ...context,
-            _systemOverride: systemPrompt || (mode === "admin" ? defaultSystemAdmin : defaultSystemFamille),
-          },
-        }),
-      });
-      const data = await res.json();
-      const answer = data.answer || data.error || "Je n'ai pas pu répondre.";
-      addMessage("assistant", answer);
-      if (!muted) await speakText(answer);
+      if (mode === "admin") {
+        // ── Agent avec outils Firestore ──────────────────────────────────
+        const res = await fetch("/api/agent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question,
+            context,
+            confirmed: isConfirmation,
+            pendingAction: isConfirmation ? pendingAction : null,
+          }),
+        });
+        const data = await res.json();
+        if (data.type === "confirm") {
+          setPendingAction(data.pendingAction);
+          addMessage("assistant", data.message);
+          if (!muted) await speakText(data.message);
+          setLoading(false);
+          return;
+        }
+        setPendingAction(null);
+        const answer = data.message || data.answer || data.error || "Je n'ai pas pu répondre.";
+        addMessage("assistant", answer);
+        if (!muted) await speakText(answer);
+      } else {
+        // ── Chatbot famille simple ───────────────────────────────────────
+        const res = await fetch("/api/ia", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "assistant",
+            question,
+            context: { ...context, _systemOverride: systemPrompt || defaultSystemFamille },
+          }),
+        });
+        const data = await res.json();
+        const answer = data.answer || data.error || "Je n'ai pas pu répondre.";
+        addMessage("assistant", answer);
+        if (!muted) await speakText(answer);
+      }
     } catch (e: any) {
       addMessage("assistant", "Désolé, une erreur est survenue.");
     }
@@ -307,6 +317,24 @@ Pas de markdown ni de listes — texte simple uniquement.`;
             </button>
           )}
         </div>
+
+        {/* Boutons confirmation agent */}
+        {pendingAction && mode === "admin" && (
+          <div className="flex gap-2 mt-2 px-1">
+            <button
+              onClick={() => askClaude("Oui, confirme.", true)}
+              disabled={loading}
+              className="flex-1 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-green-500 hover:bg-green-600 border-none cursor-pointer disabled:opacity-50">
+              ✓ Oui, confirmer
+            </button>
+            <button
+              onClick={() => { setPendingAction(null); addMessage("assistant", "Action annulée."); }}
+              disabled={loading}
+              className="flex-1 py-2.5 rounded-xl font-body text-sm font-semibold text-slate-600 bg-gray-100 hover:bg-gray-200 border-none cursor-pointer disabled:opacity-50">
+              ✕ Annuler
+            </button>
+          </div>
+        )}
         {recording && (
           <div className="flex items-center gap-2 mt-2 px-2">
             <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
