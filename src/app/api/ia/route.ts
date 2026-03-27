@@ -31,7 +31,26 @@ interface AssistantRequest {
   };
 }
 
-type IARequest = RapprochementRequest | AssistantRequest;
+interface SuggestionsRequest {
+  type: "suggestions_planning";
+  creneaux: {
+    id: string;
+    activityTitle: string;
+    activityType: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    monitor: string;
+    maxPlaces: number;
+    enrolled: number;
+    fill: number; // 0-1
+    status: string;
+  }[];
+  periode: string; // "semaine du X au Y" ou "jour du X"
+  viewMode: string;
+}
+
+type IARequest = RapprochementRequest | AssistantRequest | SuggestionsRequest;
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
@@ -136,7 +155,72 @@ Réponds directement à la question. Sois précis, chiffré si possible, et sugg
       return NextResponse.json({ success: true, answer: text });
     }
 
-    return NextResponse.json({ error: "Type de requête inconnu" }, { status: 400 });
+    // ── Suggestions planning ──────────────────────────────────────────────────
+    if (body.type === "suggestions_planning") {
+      const { creneaux, periode, viewMode } = body;
+
+      const sousRemplis = creneaux.filter(c => c.fill < 0.5 && c.status !== "closed" && c.enrolled < c.maxPlaces);
+      const complets = creneaux.filter(c => c.fill >= 1);
+      const vides = creneaux.filter(c => c.enrolled === 0 && c.status !== "closed");
+      const totalPlaces = creneaux.reduce((s, c) => s + c.maxPlaces, 0);
+      const totalInscrits = creneaux.reduce((s, c) => s + c.enrolled, 0);
+      const tauxGlobal = totalPlaces > 0 ? Math.round((totalInscrits / totalPlaces) * 100) : 0;
+
+      // Grouper par type d'activité
+      const parType: Record<string, { total: number; inscrits: number }> = {};
+      creneaux.forEach(c => {
+        if (!parType[c.activityType]) parType[c.activityType] = { total: 0, inscrits: 0 };
+        parType[c.activityType].total += c.maxPlaces;
+        parType[c.activityType].inscrits += c.enrolled;
+      });
+
+      const prompt = `Tu es le conseiller en gestion du Centre Équestre d'Agon-Coutainville.
+Analyse le planning de cette période et donne des suggestions concrètes et actionnables.
+
+PÉRIODE ANALYSÉE : ${periode}
+TAUX DE REMPLISSAGE GLOBAL : ${tauxGlobal}% (${totalInscrits}/${totalPlaces} places)
+
+RÉPARTITION PAR ACTIVITÉ :
+${Object.entries(parType).map(([type, d]) => `- ${type} : ${d.inscrits}/${d.total} (${Math.round(d.inscrits/d.total*100)}%)`).join("\n")}
+
+CRÉNEAUX COMPLETS (${complets.length}) :
+${complets.length === 0 ? "Aucun" : complets.map(c => `- ${c.date} ${c.startTime} | ${c.activityTitle} | ${c.monitor} | ${c.enrolled}/${c.maxPlaces} places`).join("\n")}
+
+CRÉNEAUX SOUS-REMPLIS <50% (${sousRemplis.length}) :
+${sousRemplis.length === 0 ? "Aucun ✅" : sousRemplis.map(c => `- ${c.date} ${c.startTime} | ${c.activityTitle} | ${c.monitor} | ${c.enrolled}/${c.maxPlaces} places (${Math.round(c.fill*100)}%)`).join("\n")}
+
+CRÉNEAUX VIDES (${vides.length}) :
+${vides.length === 0 ? "Aucun ✅" : vides.map(c => `- ${c.date} ${c.startTime} | ${c.activityTitle} | ${c.monitor}`).join("\n")}
+
+Fournis une analyse en 3 parties :
+1. **Bilan rapide** (1-2 phrases sur le taux de remplissage)
+2. **Actions prioritaires** — liste de 3 à 5 actions concrètes pour les créneaux sous-remplis (ex: envoyer un rappel email, fusionner deux créneaux, ouvrir à de nouveaux inscrits, proposer une promotion, annuler si trop vide)
+3. **Opportunités** — créneaux complets où tu pourrais ouvrir plus de places ou créer un créneau supplémentaire
+
+Sois direct, pratique, en français. Chaque suggestion doit être immédiatement actionnable.`;
+
+      const message = await client.messages.create({
+        model: "claude-sonnet-4-5",
+        max_tokens: 1024,
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      const text = message.content[0].type === "text" ? message.content[0].text : "";
+
+      return NextResponse.json({
+        success: true,
+        suggestions: text,
+        stats: {
+          tauxGlobal,
+          totalInscrits,
+          totalPlaces,
+          sousRemplis: sousRemplis.length,
+          complets: complets.length,
+          vides: vides.length,
+          total: creneaux.length,
+        },
+      });
+    }
 
   } catch (error: any) {
     console.error("IA API error:", error);

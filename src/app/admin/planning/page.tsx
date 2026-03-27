@@ -11,7 +11,7 @@ import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { emailTemplates } from "@/lib/email-templates";
 import { generateOrderId } from "@/lib/utils";
-import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Loader2, Trash2, Users, CalendarDays, Briefcase, Bell, Mail } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Loader2, Trash2, Users, CalendarDays, Briefcase, Bell, Mail, Sparkles } from "lucide-react";
 import type { Activity, Family } from "@/types";
 import { Creneau, EnrolledChild, typeColors, dayNames, dayNamesFull, payModes, getWeekDates, fmtDate, fmtDateFR, fmtMonthFR } from "./types";
 import EnrollPanel from "./EnrollPanel";
@@ -28,6 +28,12 @@ export default function PlanningPage() {
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [allCartes, setAllCartes] = useState<any[]>([]);
+
+  // ── IA Planning ───────────────────────────────────────────────────────────
+  const [iaLoading, setIaLoading] = useState(false);
+  const [iaSuggestions, setIaSuggestions] = useState<string | null>(null);
+  const [iaStats, setIaStats] = useState<any>(null);
+  const [showIaPanel, setShowIaPanel] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showSimple, setShowSimple] = useState(false); const [showGenerator, setShowGenerator] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string|undefined>();
@@ -146,6 +152,24 @@ export default function PlanningPage() {
   const handleDelete = async (id: string) => { if (!confirm("Supprimer ?")) return; await deleteDoc(doc(db, "creneaux", id)); fetchData(); };
   const handleDuplicateWeek = async () => { if (creneaux.length===0) return; setDuplicating(true); const { count, skipped } = await duplicateWeekCreneaux(creneaux, dupWeeks); setDuplicating(false);setShowDuplicate(false);toast(`${count} créneau${count>1?"x":""} créé${count>1?"s":""}${skipped > 0 ? ` (${skipped} doublon${skipped>1?"s":""})` : ""}`, "success");fetchData(); };
 
+
+  const analyserPlanning = async () => {
+    const visibleCreneaux = viewMode === "day" ? dayCreneaux : creneaux;
+    if (visibleCreneaux.length === 0) return;
+    setIaLoading(true); setIaSuggestions(null); setShowIaPanel(true);
+    try {
+      const periodeLabel = viewMode === "day"
+        ? `Journée du ${currentDay.toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })}`
+        : viewMode === "month" ? fmtMonthFR(currentMonth)
+        : `Semaine du ${fmtDateFR(weekDates[0])} au ${fmtDateFR(weekDates[6])}`;
+      const payload = visibleCreneaux.map(c => ({ id: c.id||"", activityTitle: c.activityTitle, activityType: c.activityType, date: c.date, startTime: c.startTime, endTime: c.endTime, monitor: c.monitor, maxPlaces: c.maxPlaces, enrolled: (c.enrolled||[]).length, fill: c.maxPlaces>0?(c.enrolled||[]).length/c.maxPlaces:0, status: c.status }));
+      const res = await fetch("/api/ia", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ type:"suggestions_planning", creneaux:payload, periode:periodeLabel, viewMode }) });
+      const data = await res.json();
+      if (data.success) { setIaSuggestions(data.suggestions); setIaStats(data.stats); }
+      else setIaSuggestions(`Erreur : ${data.error}`);
+    } catch(e: any) { setIaSuggestions(`Erreur : ${e.message}`); }
+    setIaLoading(false);
+  };
   const refreshCreneaux = async () => { const s=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[0]); const e=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[6]); const snap=await getDocs(query(collection(db,"creneaux"),where("date",">=",s),where("date","<=",e))); const fresh=snap.docs.map(d=>({id:d.id,...d.data()})) as (Creneau&{id:string})[]; setCreneaux(fresh); return fresh; };
 
   const handleEnroll = async (cid: string, child: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean }) => {
@@ -459,12 +483,71 @@ export default function PlanningPage() {
           <button onClick={()=>setShowRdvForm(true)} className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-orange-700 bg-orange-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-orange-100"><Briefcase size={14}/>RDV Pro</button>
           <button onClick={()=>{setShowGenerator(true);setShowSimple(false);}} className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-blue-800 bg-gold-400 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-gold-300"><Calendar size={14}/>Périodes</button>
           {viewMode==="week"&&creneaux.length>0&&<button onClick={()=>setShowDuplicate(!showDuplicate)} className="font-body text-xs sm:text-sm font-semibold text-blue-500 bg-blue-50 px-3 py-2 rounded-lg border-none cursor-pointer">Dupliquer</button>}
+          <button onClick={analyserPlanning} disabled={iaLoading || (viewMode==="day"?dayCreneaux:creneaux).length===0}
+            className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-white px-3 py-2 rounded-lg border-none cursor-pointer disabled:opacity-40"
+            style={{ background: "linear-gradient(135deg,#7c3aed,#2050A0)" }}>
+            {iaLoading ? <Loader2 size={14} className="animate-spin"/> : <Sparkles size={14}/>}
+            {iaLoading ? "Analyse..." : "IA"}
+          </button>
         </div>
       </div>
 
       {showSimple && <SimpleCreneauForm activities={activities} onSave={handleCreate} onCancel={()=>setShowSimple(false)} defaultDate={selectedDate}/>}
       {showGenerator && <PeriodGenerator activities={activities} onGenerate={handleCreate} onCancel={()=>setShowGenerator(false)}/>}
       {showDuplicate && <Card padding="md" className="mb-6 border-gold-400/20 bg-gold-50"><div className="flex justify-between items-center mb-3"><h3 className="font-body text-base font-semibold text-blue-800">📋 Dupliquer semaine</h3><button onClick={()=>setShowDuplicate(false)} className="text-gray-400 bg-transparent border-none cursor-pointer"><X size={18}/></button></div><div className="flex items-center gap-4 mb-3"><label className="font-body text-sm text-blue-800">Semaines:</label><input type="number" min={1} max={20} value={dupWeeks} onChange={e=>setDupWeeks(parseInt(e.target.value)||1)} className="w-20 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-white text-center"/></div><button onClick={handleDuplicateWeek} disabled={duplicating} className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-body text-sm font-semibold border-none cursor-pointer ${duplicating?"bg-gray-200 text-gray-400":"bg-gold-400 text-blue-800"}`}>{duplicating?<Loader2 size={16} className="animate-spin"/>:<Check size={16}/>} Dupliquer</button></Card>}
+
+      {/* ── Panneau suggestions IA ── */}
+      {showIaPanel && (
+        <div className="mb-6 rounded-2xl border p-5" style={{ borderColor: "#7c3aed33", background: "linear-gradient(135deg,#f5f3ff,#eff6ff)" }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg,#7c3aed,#2050A0)" }}>
+                <Sparkles size={15} className="text-white" />
+              </div>
+              <div>
+                <div className="font-body text-sm font-semibold text-blue-800">Analyse IA du planning</div>
+                {iaStats && (
+                  <div className="font-body text-xs text-gray-400">
+                    {iaStats.tauxGlobal}% de remplissage · {iaStats.sousRemplis} sous-remplis · {iaStats.complets} complets · {iaStats.vides} vides
+                  </div>
+                )}
+              </div>
+            </div>
+            <button onClick={() => { setShowIaPanel(false); setIaSuggestions(null); setIaStats(null); }}
+              className="text-gray-400 bg-transparent border-none cursor-pointer hover:text-gray-600"><X size={16}/></button>
+          </div>
+
+          {/* Jauges de remplissage rapides */}
+          {iaStats && (
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              {[
+                { label: "Taux global", value: iaStats.tauxGlobal, color: iaStats.tauxGlobal >= 70 ? "#16a34a" : iaStats.tauxGlobal >= 40 ? "#d97706" : "#dc2626" },
+                { label: "Sous-remplis", value: iaStats.total > 0 ? Math.round(iaStats.sousRemplis/iaStats.total*100) : 0, color: "#d97706", suffix: ` (${iaStats.sousRemplis})` },
+                { label: "Complets", value: iaStats.total > 0 ? Math.round(iaStats.complets/iaStats.total*100) : 0, color: "#16a34a", suffix: ` (${iaStats.complets})` },
+              ].map(s => (
+                <div key={s.label} className="bg-white rounded-xl p-2.5">
+                  <div className="font-body text-xs text-gray-400 mb-1">{s.label}</div>
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, s.value)}%`, background: s.color }} />
+                  </div>
+                  <div className="font-body text-sm font-bold" style={{ color: s.color }}>{s.value}%{s.suffix || ""}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {iaLoading ? (
+            <div className="flex items-center gap-2 py-4 justify-center text-purple-600">
+              <Loader2 size={16} className="animate-spin" />
+              <span className="font-body text-sm">Analyse en cours...</span>
+            </div>
+          ) : iaSuggestions ? (
+            <div className="font-body text-sm text-blue-800 whitespace-pre-wrap leading-relaxed bg-white rounded-xl p-4">
+              {iaSuggestions}
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {viewMode==="week"&&<>
         <div className="flex items-center justify-between mb-5">
