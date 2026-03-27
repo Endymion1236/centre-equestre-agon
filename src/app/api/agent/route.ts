@@ -157,6 +157,7 @@ async function executeTool(name: string, input: any): Promise<string> {
         if (enrolled.some((e: any) => e.childId === input.childId)) {
           return `⚠️ ${input.childName} est déjà inscrit dans ce créneau`;
         }
+        // Inscrire dans le créneau
         await adminDb.collection("creneaux").doc(input.creneauId).update({
           enrolled: FieldValue.arrayUnion({
             childId: input.childId,
@@ -168,6 +169,32 @@ async function executeTool(name: string, input: any): Promise<string> {
           }),
           enrolledCount: FieldValue.increment(1),
         });
+        // Créer le paiement pending si prix > 0
+        const priceTTC = data.priceTTC || 0;
+        if (priceTTC > 0) {
+          await adminDb.collection("payments").add({
+            familyId: input.familyId,
+            familyName: input.familyName,
+            items: [{
+              activityTitle: data.activityTitle,
+              activityType: data.activityType,
+              childId: input.childId,
+              childName: input.childName,
+              creneauId: input.creneauId,
+              priceHT: priceTTC / 1.055,
+              tva: 5.5,
+              priceTTC,
+            }],
+            totalTTC: priceTTC,
+            paidAmount: 0,
+            status: "pending",
+            paymentMode: "",
+            paymentRef: "",
+            source: "agent",
+            date: FieldValue.serverTimestamp(),
+          });
+          return `✅ ${input.childName} inscrit dans "${data.activityTitle}" le ${data.date} — Paiement de ${priceTTC.toFixed(2)}€ créé en attente`;
+        }
         return `✅ ${input.childName} inscrit dans "${data.activityTitle}" le ${data.date}`;
       }
 

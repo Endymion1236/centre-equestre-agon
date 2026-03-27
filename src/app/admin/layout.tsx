@@ -313,9 +313,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
 
         {/* ── Assistant vocal admin flottant ── */}
-        <div className="fixed bottom-6 left-6 z-[100] flex flex-col items-start gap-3">
+        <div className="fixed bottom-6 left-4 right-4 sm:left-6 sm:right-auto z-[100] flex flex-col items-start gap-3">
           {showVoice && (
-            <div className="w-[360px] sm:w-[420px]" style={{ maxHeight: "70vh" }}>
+            <div className="w-full sm:w-[420px]" style={{ maxHeight: "75vh" }}>
               <VoiceAssistant
                 mode="admin"
                 voiceId="XB0fDUnXU5powFXDhCwa"
