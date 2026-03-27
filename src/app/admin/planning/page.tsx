@@ -478,7 +478,7 @@ export default function PlanningPage() {
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <h1 className="font-display text-2xl font-bold text-blue-800">Planning</h1>
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex bg-sand rounded-lg p-0.5">{(["month","week","day"] as const).map(v=><button key={v} onClick={()=>setViewMode(v)} className={`px-3 sm:px-4 py-2 rounded-md font-body text-xs font-semibold cursor-pointer border-none ${viewMode===v?"bg-white text-blue-500 shadow-sm":"text-gray-400 bg-transparent"}`}>{v==="week"?"Semaine":v==="day"?"Jour":"Mois"}</button>)}</div>
+          <div className="flex bg-sand rounded-lg p-0.5">{(["month","week","day"] as const).map(v=><button key={v} onClick={()=>setViewMode(v)} className={`px-3 sm:px-4 py-2 rounded-md font-body text-xs font-semibold cursor-pointer border-none ${viewMode===v?"bg-white text-blue-500 shadow-sm":"text-gray-500 bg-transparent"}`}>{v==="week"?"Semaine":v==="day"?"Jour":"Mois"}</button>)}</div>
           <button onClick={()=>{setShowSimple(true);setShowGenerator(false);setSelectedDate(viewMode==="day"?fmtDate(currentDay):undefined);}} className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-white bg-blue-500 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-400"><Plus size={14}/>Créneau</button>
           <button onClick={()=>setShowRdvForm(true)} className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-orange-700 bg-orange-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-orange-100"><Briefcase size={14}/>RDV Pro</button>
           <button onClick={()=>{setShowGenerator(true);setShowSimple(false);}} className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-blue-800 bg-gold-400 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-gold-300"><Calendar size={14}/>Périodes</button>
@@ -494,7 +494,7 @@ export default function PlanningPage() {
 
       {showSimple && <SimpleCreneauForm activities={activities} onSave={handleCreate} onCancel={()=>setShowSimple(false)} defaultDate={selectedDate}/>}
       {showGenerator && <PeriodGenerator activities={activities} onGenerate={handleCreate} onCancel={()=>setShowGenerator(false)}/>}
-      {showDuplicate && <Card padding="md" className="mb-6 border-gold-400/20 bg-gold-50"><div className="flex justify-between items-center mb-3"><h3 className="font-body text-base font-semibold text-blue-800">📋 Dupliquer semaine</h3><button onClick={()=>setShowDuplicate(false)} className="text-gray-400 bg-transparent border-none cursor-pointer"><X size={18}/></button></div><div className="flex items-center gap-4 mb-3"><label className="font-body text-sm text-blue-800">Semaines:</label><input type="number" min={1} max={20} value={dupWeeks} onChange={e=>setDupWeeks(parseInt(e.target.value)||1)} className="w-20 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-white text-center"/></div><button onClick={handleDuplicateWeek} disabled={duplicating} className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-body text-sm font-semibold border-none cursor-pointer ${duplicating?"bg-gray-200 text-gray-400":"bg-gold-400 text-blue-800"}`}>{duplicating?<Loader2 size={16} className="animate-spin"/>:<Check size={16}/>} Dupliquer</button></Card>}
+      {showDuplicate && <Card padding="md" className="mb-6 border-gold-400/20 bg-gold-50"><div className="flex justify-between items-center mb-3"><h3 className="font-body text-base font-semibold text-blue-800">📋 Dupliquer semaine</h3><button onClick={()=>setShowDuplicate(false)} className="text-gray-500 bg-transparent border-none cursor-pointer"><X size={18}/></button></div><div className="flex items-center gap-4 mb-3"><label className="font-body text-sm text-blue-800">Semaines:</label><input type="number" min={1} max={20} value={dupWeeks} onChange={e=>setDupWeeks(parseInt(e.target.value)||1)} className="w-20 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-white text-center"/></div><button onClick={handleDuplicateWeek} disabled={duplicating} className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-body text-sm font-semibold border-none cursor-pointer ${duplicating?"bg-gray-200 text-gray-500":"bg-gold-400 text-blue-800"}`}>{duplicating?<Loader2 size={16} className="animate-spin"/>:<Check size={16}/>} Dupliquer</button></Card>}
 
       {/* ── Panneau suggestions IA ── */}
       {showIaPanel && (
@@ -507,14 +507,14 @@ export default function PlanningPage() {
               <div>
                 <div className="font-body text-sm font-semibold text-blue-800">Analyse IA du planning</div>
                 {iaStats && (
-                  <div className="font-body text-xs text-gray-400">
+                  <div className="font-body text-xs text-gray-500">
                     {iaStats.tauxGlobal}% de remplissage · {iaStats.sousRemplis} sous-remplis · {iaStats.complets} complets · {iaStats.vides} vides
                   </div>
                 )}
               </div>
             </div>
             <button onClick={() => { setShowIaPanel(false); setIaSuggestions(null); setIaStats(null); }}
-              className="text-gray-400 bg-transparent border-none cursor-pointer hover:text-gray-600"><X size={16}/></button>
+              className="text-gray-500 bg-transparent border-none cursor-pointer hover:text-gray-600"><X size={16}/></button>
           </div>
 
           {/* Jauges de remplissage rapides */}
@@ -526,7 +526,7 @@ export default function PlanningPage() {
                 { label: "Complets", value: iaStats.total > 0 ? Math.round(iaStats.complets/iaStats.total*100) : 0, color: "#16a34a", suffix: ` (${iaStats.complets})` },
               ].map(s => (
                 <div key={s.label} className="bg-white rounded-xl p-2.5">
-                  <div className="font-body text-xs text-gray-400 mb-1">{s.label}</div>
+                  <div className="font-body text-xs text-gray-500 mb-1">{s.label}</div>
                   <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1">
                     <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, s.value)}%`, background: s.color }} />
                   </div>
@@ -552,7 +552,7 @@ export default function PlanningPage() {
       {viewMode==="week"&&<>
         <div className="flex items-center justify-between mb-5">
           <button onClick={()=>setWeekOffset(w=>w-1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16}/>Préc.</button>
-          <div className="text-center"><div className="font-display text-lg font-bold text-blue-800 capitalize">{fmtMonthFR(weekDates[0])}</div><div className="font-body text-xs text-gray-400">Du {weekDates[0].toLocaleDateString("fr-FR",{day:"numeric",month:"short"})} au {weekDates[6].toLocaleDateString("fr-FR",{day:"numeric",month:"short"})}</div></div>
+          <div className="text-center"><div className="font-display text-lg font-bold text-blue-800 capitalize">{fmtMonthFR(weekDates[0])}</div><div className="font-body text-xs text-gray-500">Du {weekDates[0].toLocaleDateString("fr-FR",{day:"numeric",month:"short"})} au {weekDates[6].toLocaleDateString("fr-FR",{day:"numeric",month:"short"})}</div></div>
           <div className="flex gap-2"><button onClick={()=>setWeekOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setWeekOffset(w=>w+1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Suiv.<ChevronRight size={16}/></button></div>
         </div>
         {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:
@@ -564,15 +564,15 @@ export default function PlanningPage() {
                 <div key={c.id} onClick={()=>setSelectedCreneau(c)} className="bg-white rounded-lg p-2 border border-blue-500/8 group relative hover:shadow-md cursor-pointer" style={{borderLeftWidth:3,borderLeftColor:col}}>
                   <div className="font-body text-[11px] font-semibold" style={{color:col}}>{c.startTime}–{c.endTime}</div>
                   <div className="font-body text-xs font-semibold text-blue-800 leading-tight mt-0.5">{c.activityTitle}</div>
-                  <div className="font-body text-[10px] text-gray-400 mt-0.5">{c.monitor}</div>
-                  <div className="flex items-center gap-1 mt-1"><Users size={10} className="text-gray-400"/><span className={`font-body text-[10px] font-semibold ${fill>=1?"text-red-500":fill>=0.7?"text-orange-500":"text-green-600"}`}>{en.length}/{c.maxPlaces}</span></div>
+                  <div className="font-body text-[10px] text-gray-500 mt-0.5">{c.monitor}</div>
+                  <div className="flex items-center gap-1 mt-1"><Users size={10} className="text-gray-500"/><span className={`font-body text-[10px] font-semibold ${fill>=1?"text-red-500":fill>=0.7?"text-orange-500":"text-green-600"}`}>{en.length}/{c.maxPlaces}</span></div>
                   {en.length>0&&<div className="flex flex-wrap gap-0.5 mt-1">{en.slice(0,4).map((e:any)=>{
                     const isCard=e.paymentSource==="card";
                     const hasPaid=isCard||payments.some((p:any)=>p.familyId===e.familyId&&p.status==="paid");
                     const hasPending=!hasPaid&&!isCard&&payments.some((p:any)=>p.familyId===e.familyId&&(p.status==="pending"||p.status==="partial"));
                     return <span key={e.childId} title={`${e.childName} — ${isCard?"carte":hasPaid?"réglé":hasPending?"en attente":"non réglé"}`}
                       className={`w-2 h-2 rounded-full flex-shrink-0 ${isCard?"bg-blue-500":hasPaid?"bg-green-500":hasPending?"bg-orange-400":"bg-gray-300"}`}/>;
-                  })}{en.length>4&&<span className="font-body text-[9px] text-gray-400">+{en.length-4}</span>}</div>}
+                  })}{en.length>4&&<span className="font-body text-[9px] text-gray-500">+{en.length-4}</span>}</div>}
                   <button onClick={e=>{e.stopPropagation();handleDelete(c.id!);}} className="absolute top-1 right-1 w-5 h-5 rounded bg-red-50 text-red-400 hover:bg-red-100 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Trash2 size={10}/></button>
                 </div>);})}
               <button onClick={()=>{setSelectedDate(ds);setShowSimple(true);setShowGenerator(false);}} className="mt-auto py-2 rounded-lg border border-dashed border-gray-200 text-gray-300 hover:border-blue-300 hover:text-blue-400 bg-transparent cursor-pointer font-body text-lg">+</button>
@@ -583,7 +583,7 @@ export default function PlanningPage() {
       {viewMode==="day"&&<>
         <div className="flex items-center justify-between mb-5">
           <button onClick={()=>setDayOffset(d=>d-1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16}/>Veille</button>
-          <div className="text-center"><div className="font-display text-lg font-bold text-blue-800 capitalize">{currentDay.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div><div className="font-body text-xs text-gray-400">{dayCreneaux.length} créneau{dayCreneaux.length>1?"x":""}</div></div>
+          <div className="text-center"><div className="font-display text-lg font-bold text-blue-800 capitalize">{currentDay.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div><div className="font-body text-xs text-gray-500">{dayCreneaux.length} créneau{dayCreneaux.length>1?"x":""}</div></div>
           <div className="flex gap-2"><button onClick={()=>setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setDayOffset(d=>d+1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain<ChevronRight size={16}/></button></div>
         </div>
         {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:
@@ -591,7 +591,7 @@ export default function PlanningPage() {
         <div className="flex flex-col gap-3">{dayCreneaux.map(c=>{const en=c.enrolled||[];const fill=c.maxPlaces>0?en.length/c.maxPlaces:0;const col=typeColors[c.activityType]||"#666";const ttc=(c as any).priceTTC||(c.priceHT||0)*(1+(c.tvaTaux||5.5)/100);return(
           <Card key={c.id} padding="md" className="cursor-pointer hover:shadow-lg" hover>
             <div onClick={()=>setSelectedCreneau(c)}>
-              <div className="flex items-start justify-between mb-3"><div className="flex items-center gap-4"><div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px] text-gray-400">{c.endTime}</div></div><div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs text-gray-400">{c.monitor} · {c.maxPlaces} pl.{ttc>0?` · ${ttc.toFixed(0)}€`:""}</div></div></div><div className="flex items-center gap-3"><Badge color={fill>=1?"red":fill>=0.7?"orange":"green"}>{en.length}/{c.maxPlaces}</Badge><button onClick={e=>{e.stopPropagation();handleDelete(c.id!);}} className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={16}/></button></div></div>
+              <div className="flex items-start justify-between mb-3"><div className="flex items-center gap-4"><div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px] text-gray-500">{c.endTime}</div></div><div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs text-gray-500">{c.monitor} · {c.maxPlaces} pl.{ttc>0?` · ${ttc.toFixed(0)}€`:""}</div></div></div><div className="flex items-center gap-3"><Badge color={fill>=1?"red":fill>=0.7?"orange":"green"}>{en.length}/{c.maxPlaces}</Badge><button onClick={e=>{e.stopPropagation();handleDelete(c.id!);}} className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={16}/></button></div></div>
               {en.length>0&&<div className="ml-[68px] flex flex-wrap gap-2">{en.map((e:any)=>{
                 const isCard = e.paymentSource === "card";
                 const hasPaid = isCard || payments.some((p: any) => p.familyId === e.familyId && p.status === "paid" && (p.items||[]).some((i:any) => i.childId === e.childId && (i.creneauId === c.id || i.activityTitle === c.activityTitle)));
@@ -615,13 +615,13 @@ export default function PlanningPage() {
       {viewMode==="month"&&<>
         <div className="flex items-center justify-between mb-5">
           <button onClick={()=>setMonthOffset(m=>m-1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16}/>Préc.</button>
-          <div className="text-center"><div className="font-display text-lg font-bold text-blue-800 capitalize">{currentMonth.toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}</div><div className="font-body text-xs text-gray-400">{creneaux.length} créneaux · {rdvPros.filter(r => r.date?.startsWith(fmtDate(currentMonth).slice(0,7))).length} RDV pro</div></div>
+          <div className="text-center"><div className="font-display text-lg font-bold text-blue-800 capitalize">{currentMonth.toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}</div><div className="font-body text-xs text-gray-500">{creneaux.length} créneaux · {rdvPros.filter(r => r.date?.startsWith(fmtDate(currentMonth).slice(0,7))).length} RDV pro</div></div>
           <div className="flex gap-2"><button onClick={()=>setMonthOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setMonthOffset(m=>m+1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Suiv.<ChevronRight size={16}/></button></div>
         </div>
         {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:
         <div>
           <div className="grid grid-cols-7 gap-1 mb-1">
-            {["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"].map(d=><div key={d} className="text-center font-body text-[10px] font-semibold text-gray-400 uppercase py-1">{d}</div>)}
+            {["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"].map(d=><div key={d} className="text-center font-body text-[10px] font-semibold text-gray-500 uppercase py-1">{d}</div>)}
           </div>
           <div className="grid grid-cols-7 gap-1">
             {monthDays.map((d,i) => {
@@ -666,7 +666,7 @@ export default function PlanningPage() {
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: rdvCategories[r.category]?.color || "#95a5a6" }} />
                     <div>
                       <div className="font-body text-sm font-semibold text-blue-800">{r.title}</div>
-                      <div className="font-body text-xs text-gray-400">
+                      <div className="font-body text-xs text-gray-500">
                         {new Date(r.date).toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"})} · {r.startTime}–{r.endTime}
                         {r.notes && ` · ${r.notes}`}
                       </div>
@@ -686,7 +686,7 @@ export default function PlanningPage() {
 
       <div className="mt-6 flex gap-4 flex-wrap">
         {[["text-blue-500",(viewMode==="day"?dayCreneaux:creneaux).length,"créneaux"],["text-green-600",(viewMode==="day"?dayCreneaux:creneaux).reduce((s:number,c:any)=>s+(c.enrolled?.length||0),0),"inscrits"],["text-gold-400",(viewMode==="day"?dayCreneaux:creneaux).reduce((s:number,c:any)=>s+c.maxPlaces,0),"places"]].map(([col,val,lab],i)=>(
-          <Card key={i} padding="sm" className="flex items-center gap-3"><span className={`font-body text-xl font-bold ${col}`}>{val}</span><span className="font-body text-xs text-gray-400">{lab as string}</span></Card>
+          <Card key={i} padding="sm" className="flex items-center gap-3"><span className={`font-body text-xl font-bold ${col}`}>{val}</span><span className="font-body text-xs text-gray-500">{lab as string}</span></Card>
         ))}
       </div>
 
@@ -733,12 +733,12 @@ export default function PlanningPage() {
                 <div className="font-body text-xs font-semibold text-orange-500 uppercase tracking-wider mb-2 flex items-center gap-1"><Bell size={12} /> Rappel email</div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="font-body text-[10px] text-gray-400 block mb-1">Email de rappel</label>
+                    <label className="font-body text-[10px] text-gray-500 block mb-1">Email de rappel</label>
                     <input type="email" className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400" value={rdvForm.reminderEmail} onChange={e => setRdvForm({...rdvForm, reminderEmail: e.target.value})}
                       placeholder="ceagon@orange.fr" />
                   </div>
                   <div>
-                    <label className="font-body text-[10px] text-gray-400 block mb-1">Combien de jours avant</label>
+                    <label className="font-body text-[10px] text-gray-500 block mb-1">Combien de jours avant</label>
                     <select className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400" value={rdvForm.reminderDays} onChange={e => setRdvForm({...rdvForm, reminderDays: parseInt(e.target.value)})}>
                       <option value={1}>1 jour avant</option>
                       <option value={2}>2 jours avant</option>
@@ -748,7 +748,7 @@ export default function PlanningPage() {
                     </select>
                   </div>
                 </div>
-                <p className="font-body text-[10px] text-gray-400 mt-1">Laissez l'email vide pour ne pas envoyer de rappel.</p>
+                <p className="font-body text-[10px] text-gray-500 mt-1">Laissez l'email vide pour ne pas envoyer de rappel.</p>
               </div>
             </div>
             <div className="flex justify-end gap-3 p-5 border-t border-gray-100">

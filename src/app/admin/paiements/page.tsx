@@ -732,7 +732,7 @@ export default function PaiementsPage() {
               </select>
               {family && children.length > 0 && (
                 <div className="mt-3">
-                  <div className="font-body text-xs font-semibold text-gray-400 mb-1">Cavalier</div>
+                  <div className="font-body text-xs font-semibold text-gray-500 mb-1">Cavalier</div>
                   <div className="flex flex-wrap gap-2">
                     {children.map((c: any) => (
                       <button key={c.id} onClick={() => setSelectedChild(c.id)}
@@ -772,7 +772,7 @@ export default function PaiementsPage() {
                         <div key={p.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
                           <div>
                             <div className="font-body text-sm text-blue-800">{(p.items || []).map((i: any) => i.activityTitle).join(", ") || "Prestation"}</div>
-                            <div className="font-body text-xs text-gray-400">{reste.toFixed(2)}€ dû sur {(p.totalTTC || 0).toFixed(2)}€</div>
+                            <div className="font-body text-xs text-gray-500">{reste.toFixed(2)}€ dû sur {(p.totalTTC || 0).toFixed(2)}€</div>
                             {(() => {
                               const payEnc = encaissements.filter((e: any) => e.paymentId === p.id);
                               if (payEnc.length === 0) return null;
@@ -851,13 +851,13 @@ export default function PaiementsPage() {
 
                     {/* Montant à encaisser */}
                     <div className="mb-3">
-                      <div className="font-body text-xs font-semibold text-gray-400 mb-1">Montant encaissé</div>
+                      <div className="font-body text-xs font-semibold text-gray-500 mb-1">Montant encaissé</div>
                       <div className="flex gap-2 items-center">
                         <input type="number" step="0.01" value={paidAmount} onChange={e => setPaidAmount(e.target.value)}
                           placeholder={totalPending.toFixed(2)}
                           className={`${inputCls} w-32`} />
-                        <span className="font-body text-xs text-gray-400">€</span>
-                        {!paidAmount && <span className="font-body text-[10px] text-gray-400">(vide = tout encaisser)</span>}
+                        <span className="font-body text-xs text-gray-500">€</span>
+                        {!paidAmount && <span className="font-body text-[10px] text-gray-500">(vide = tout encaisser)</span>}
                       </div>
                       {paidAmount && safeNumber(paidAmount) < totalPending && safeNumber(paidAmount) > 0 && (
                         <div className="font-body text-xs text-orange-500 mt-1">
@@ -867,7 +867,7 @@ export default function PaiementsPage() {
                     </div>
 
                     {/* Mode de paiement */}
-                    <div className="font-body text-xs font-semibold text-gray-400 mb-2">Mode de paiement</div>
+                    <div className="font-body text-xs font-semibold text-gray-500 mb-2">Mode de paiement</div>
                     <div className="flex flex-wrap gap-1.5 mb-3">
                       {paymentModes.map(m => (
                         <button key={m.id} onClick={() => setPaymentMode(m.id)}
@@ -944,20 +944,20 @@ export default function PaiementsPage() {
                 </select>
                 <button onClick={addToBasket} disabled={!selectedActivity}
                   className={`px-3 py-2 rounded-lg font-body text-sm font-semibold border-none cursor-pointer flex-shrink-0
-                    ${selectedActivity ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-400"}`}>
+                    ${selectedActivity ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-500"}`}>
                   <Plus size={16} />
                 </button>
               </div>
 
               {/* Custom item */}
-              <div className="font-body text-xs text-gray-400 mb-2">— ou saisie libre —</div>
+              <div className="font-body text-xs text-gray-500 mb-2">— ou saisie libre —</div>
               <div className="flex flex-col sm:flex-row gap-2">
                 <input value={customLabel} onChange={(e) => setCustomLabel(e.target.value)} placeholder="Libellé (ex: Licence FFE)" className={`${inputCls} flex-1`} />
                 <div className="flex gap-2">
                   <input value={customPrice} onChange={(e) => setCustomPrice(e.target.value)} placeholder="Prix TTC" type="number" step="0.01" className={`${inputCls} w-24`} />
                   <button onClick={addToBasket} disabled={!customLabel || !customPrice}
                     className={`px-3 py-2 rounded-lg font-body text-sm font-semibold border-none cursor-pointer flex-shrink-0
-                      ${customLabel && customPrice ? "bg-gold-400 text-blue-800" : "bg-gray-200 text-gray-400"}`}>
+                      ${customLabel && customPrice ? "bg-gold-400 text-blue-800" : "bg-gray-200 text-gray-500"}`}>
                     <Plus size={16} />
                   </button>
                 </div>
@@ -1027,7 +1027,7 @@ export default function PaiementsPage() {
               {basket.length === 0 ? (
                 <div className="text-center py-8">
                   <span className="text-3xl block mb-2 opacity-30">🛒</span>
-                  <p className="font-body text-xs text-gray-400">Panier vide</p>
+                  <p className="font-body text-xs text-gray-500">Panier vide</p>
                 </div>
               ) : (
                 <>
@@ -1036,8 +1036,8 @@ export default function PaiementsPage() {
                       <div key={item.id} className="flex items-start justify-between bg-sand rounded-lg p-3">
                         <div className="flex-1 min-w-0">
                           <div className="font-body text-sm font-semibold text-blue-800 truncate">{item.activityTitle}</div>
-                          <div className="font-body text-xs text-gray-400">{item.childName}</div>
-                          <div className="font-body text-xs text-gray-400">{item.description}</div>
+                          <div className="font-body text-xs text-gray-500">{item.childName}</div>
+                          <div className="font-body text-xs text-gray-500">{item.description}</div>
                         </div>
                         <div className="flex items-center gap-2 ml-2">
                           <span className="font-body text-sm font-bold text-blue-500">{item.priceTTC.toFixed(2)}€</span>
@@ -1053,7 +1053,7 @@ export default function PaiementsPage() {
                   {/* Réductions */}
                   {basket.length > 0 && (
                     <div className="border-t border-blue-500/8 pt-3 mb-3">
-                      <div className="font-body text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Réduction</div>
+                      <div className="font-body text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Réduction</div>
                       {appliedPromo && (
                         <div className="bg-green-50 rounded-lg px-3 py-2 mb-2 flex items-center justify-between">
                           <span className="font-body text-xs text-green-800">{appliedPromo.label} ({appliedPromo.discountMode === "percent" ? `-${appliedPromo.discountValue}%` : `-${appliedPromo.discountValue}€`})</span>
@@ -1064,15 +1064,15 @@ export default function PaiementsPage() {
                         <input value={promoCode} onChange={e => setPromoCode(e.target.value.toUpperCase())} placeholder="Code promo"
                           className="flex-1 px-2 py-1.5 rounded border border-blue-500/8 font-body text-xs bg-cream font-mono uppercase focus:border-blue-500 focus:outline-none" />
                         <button onClick={applyPromoCode} disabled={!promoCode}
-                          className={`px-3 py-1.5 rounded font-body text-xs font-semibold border-none cursor-pointer ${!promoCode ? "bg-gray-200 text-gray-400" : "bg-blue-500 text-white"}`}>
+                          className={`px-3 py-1.5 rounded font-body text-xs font-semibold border-none cursor-pointer ${!promoCode ? "bg-gray-200 text-gray-500" : "bg-blue-500 text-white"}`}>
                           OK
                         </button>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <span className="font-body text-[10px] text-gray-400">ou remise :</span>
+                        <span className="font-body text-[10px] text-gray-500">ou remise :</span>
                         <input type="number" value={manualDiscount} onChange={e => { setManualDiscount(e.target.value); setAppliedPromo(null); }}
                           placeholder="0" className="w-16 px-2 py-1.5 rounded border border-blue-500/8 font-body text-xs bg-cream text-center focus:border-blue-500 focus:outline-none" />
-                        <span className="font-body text-[10px] text-gray-400">€</span>
+                        <span className="font-body text-[10px] text-gray-500">€</span>
                       </div>
                     </div>
                   )}
@@ -1080,11 +1080,11 @@ export default function PaiementsPage() {
                   {/* Totals */}
                   <div className="border-t border-blue-500/8 pt-3">
                     <div className="flex justify-between mb-1">
-                      <span className="font-body text-xs text-gray-400">Sous-total HT</span>
+                      <span className="font-body text-xs text-gray-500">Sous-total HT</span>
                       <span className="font-body text-xs text-gray-500">{basket.reduce((s, i) => s + i.priceHT, 0).toFixed(2)}€</span>
                     </div>
                     <div className="flex justify-between mb-1">
-                      <span className="font-body text-xs text-gray-400">TVA</span>
+                      <span className="font-body text-xs text-gray-500">TVA</span>
                       <span className="font-body text-xs text-gray-500">{(basketSubtotal - basket.reduce((s, i) => s + i.priceHT, 0)).toFixed(2)}€</span>
                     </div>
                     {promoDiscount > 0 && (
@@ -1096,7 +1096,7 @@ export default function PaiementsPage() {
                     <div className="flex justify-between pt-2 border-t border-blue-500/8">
                       <span className="font-body text-base font-bold text-blue-800">Total TTC</span>
                       <div className="flex items-center gap-2">
-                        {promoDiscount > 0 && <span className="font-body text-xs text-gray-400 line-through">{basketSubtotal.toFixed(2)}€</span>}
+                        {promoDiscount > 0 && <span className="font-body text-xs text-gray-500 line-through">{basketSubtotal.toFixed(2)}€</span>}
                         <span className="font-body text-xl font-bold text-blue-500">{basketTotal.toFixed(2)}€</span>
                       </div>
                     </div>
@@ -1161,7 +1161,7 @@ export default function PaiementsPage() {
                     return (
                       <div key={mode} onClick={() => setJournalMode(journalMode === mode ? "all" : mode)}
                         className={`flex flex-col items-center px-4 py-2.5 rounded-xl cursor-pointer transition-all ${journalMode === mode ? "bg-blue-500 text-white ring-2 ring-blue-300" : "bg-sand hover:bg-blue-50"}`}>
-                        <div className={`font-body text-[10px] uppercase font-semibold ${journalMode === mode ? "text-white/70" : "text-gray-400"}`}>{modeObj?.label || mode}</div>
+                        <div className={`font-body text-[10px] uppercase font-semibold ${journalMode === mode ? "text-white/70" : "text-gray-500"}`}>{modeObj?.label || mode}</div>
                         <div className={`font-body text-lg font-bold ${journalMode === mode ? "text-white" : "text-blue-800"}`}>{total.toFixed(2)}€</div>
                       </div>
                     );
@@ -1175,10 +1175,10 @@ export default function PaiementsPage() {
                 {/* Filtres */}
                 <Card padding="sm" className="mb-4">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
-                    <div><label className="font-body text-[10px] text-gray-400 uppercase block mb-0.5">Date de</label><input type="date" value={journalDateFrom} onChange={e => setJournalDateFrom(e.target.value)} className={inputCls} /></div>
-                    <div><label className="font-body text-[10px] text-gray-400 uppercase block mb-0.5">Date à</label><input type="date" value={journalDateTo} onChange={e => setJournalDateTo(e.target.value)} className={inputCls} /></div>
-                    <div><label className="font-body text-[10px] text-gray-400 uppercase block mb-0.5">Montant min</label><input type="number" step="0.01" placeholder="0" value={journalMontantMin} onChange={e => setJournalMontantMin(e.target.value)} className={inputCls} /></div>
-                    <div><label className="font-body text-[10px] text-gray-400 uppercase block mb-0.5">Montant max</label><input type="number" step="0.01" placeholder="9999" value={journalMontantMax} onChange={e => setJournalMontantMax(e.target.value)} className={inputCls} /></div>
+                    <div><label className="font-body text-[10px] text-gray-500 uppercase block mb-0.5">Date de</label><input type="date" value={journalDateFrom} onChange={e => setJournalDateFrom(e.target.value)} className={inputCls} /></div>
+                    <div><label className="font-body text-[10px] text-gray-500 uppercase block mb-0.5">Date à</label><input type="date" value={journalDateTo} onChange={e => setJournalDateTo(e.target.value)} className={inputCls} /></div>
+                    <div><label className="font-body text-[10px] text-gray-500 uppercase block mb-0.5">Montant min</label><input type="number" step="0.01" placeholder="0" value={journalMontantMin} onChange={e => setJournalMontantMin(e.target.value)} className={inputCls} /></div>
+                    <div><label className="font-body text-[10px] text-gray-500 uppercase block mb-0.5">Montant max</label><input type="number" step="0.01" placeholder="9999" value={journalMontantMax} onChange={e => setJournalMontantMax(e.target.value)} className={inputCls} /></div>
                   </div>
                   <div className="flex flex-wrap gap-2 items-center">
                     <select value={journalMode} onChange={e => setJournalMode(e.target.value)} className={`${inputCls} w-40`}>
@@ -1193,7 +1193,7 @@ export default function PaiementsPage() {
                       <button onClick={() => { setJournalDateFrom(""); setJournalDateTo(""); setJournalMontantMin(""); setJournalMontantMax(""); setJournalMode("all"); setJournalSearch(""); }}
                         className="font-body text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-100">Effacer</button>
                     )}
-                    <span className="font-body text-xs text-gray-400">{filtered.length} mouvement{filtered.length > 1 ? "s" : ""}</span>
+                    <span className="font-body text-xs text-gray-500">{filtered.length} mouvement{filtered.length > 1 ? "s" : ""}</span>
                   </div>
                 </Card>
 
@@ -1207,7 +1207,7 @@ export default function PaiementsPage() {
                         <thead>
                           <tr className="bg-sand border-b border-blue-500/8">
                             {["Date", "Client", "Prestation", "Montant", "Mode", "Référence", ""].map(h => (
-                              <th key={h} className="px-3 py-2.5 font-body text-[10px] font-semibold text-gray-400 uppercase tracking-wider text-left">{h}</th>
+                              <th key={h} className="px-3 py-2.5 font-body text-[10px] font-semibold text-gray-500 uppercase tracking-wider text-left">{h}</th>
                             ))}
                           </tr>
                         </thead>
@@ -1225,7 +1225,7 @@ export default function PaiementsPage() {
                                 </td>
                                 <td className={`px-3 py-2.5 font-body text-sm font-bold ${(enc.montant || 0) < 0 ? "text-red-500" : "text-green-600"}`}>{(enc.montant || 0).toFixed(2)}€</td>
                                 <td className="px-3 py-2.5"><Badge color={(enc.montant || 0) < 0 ? "red" : "blue"}>{enc.modeLabel || enc.mode || "—"}</Badge></td>
-                                <td className="px-3 py-2.5 font-body text-xs text-gray-400">{enc.ref || "—"}</td>
+                                <td className="px-3 py-2.5 font-body text-xs text-gray-500">{enc.ref || "—"}</td>
                                 <td className="px-3 py-2.5">
                                   {!enc.id?.startsWith("fallback_") && (enc.montant || 0) > 0 && !enc.correctionDe && (
                                     <button onClick={() => { setCorrectionEnc(enc); setCorrectionMontant(enc.montant?.toString() || ""); setCorrectionMode(enc.mode || ""); setCorrectionRef(enc.ref || ""); setCorrectionRaison(""); }}
@@ -1247,7 +1247,7 @@ export default function PaiementsPage() {
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
                       <div className="p-5 border-b border-gray-100">
                         <h2 className="font-display text-lg font-bold text-blue-800">Corriger un encaissement</h2>
-                        <p className="font-body text-xs text-gray-400 mt-1">
+                        <p className="font-body text-xs text-gray-500 mt-1">
                           Une contre-passation sera créée (écriture négative), puis le bon encaissement sera enregistré. Les deux écritures restent visibles pour la traçabilité.
                         </p>
                       </div>
@@ -1388,7 +1388,7 @@ export default function PaiementsPage() {
                     return (
                       <div key={mode} onClick={() => setHistModeFilter(modeFilter === mode ? "all" : mode as any)}
                         className={`flex flex-col items-center px-4 py-2.5 rounded-xl cursor-pointer transition-all ${modeFilter === mode ? "bg-blue-500 text-white ring-2 ring-blue-300" : "bg-sand hover:bg-blue-50"}`}>
-                        <div className={`font-body text-[10px] uppercase font-semibold ${modeFilter === mode ? "text-white/70" : "text-gray-400"}`}>
+                        <div className={`font-body text-[10px] uppercase font-semibold ${modeFilter === mode ? "text-white/70" : "text-gray-500"}`}>
                           {modeObj?.label?.split("(")[0]?.trim() || mode}
                         </div>
                         <div className={`font-body text-base font-bold ${modeFilter === mode ? "text-white" : "text-blue-800"}`}>{total.toFixed(2)}€</div>
@@ -1424,7 +1424,7 @@ export default function PaiementsPage() {
                       Réinitialiser
                     </button>
                   )}
-                  <span className="font-body text-xs text-gray-400">{filtered.length} paiement{filtered.length > 1 ? "s" : ""}</span>
+                  <span className="font-body text-xs text-gray-500">{filtered.length} paiement{filtered.length > 1 ? "s" : ""}</span>
                 </div>
 
                 {/* Tableau */}
@@ -1434,7 +1434,7 @@ export default function PaiementsPage() {
                   </Card>
                 ) : (
                   <Card className="!p-0 overflow-hidden">
-                    <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                    <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
                       <span className="w-20">Date</span>
                       <span className="w-20">N° Facture</span>
                       <span className="flex-1">Client</span>
@@ -1468,7 +1468,7 @@ export default function PaiementsPage() {
                       };
                       return (
                         <div key={p.id || idx} className="px-5 py-3 border-b border-blue-500/8 last:border-b-0 flex items-center hover:bg-blue-50/30 transition-colors">
-                          <span className="w-20 font-body text-xs text-gray-400">{date.toLocaleDateString("fr-FR")}</span>
+                          <span className="w-20 font-body text-xs text-gray-500">{date.toLocaleDateString("fr-FR")}</span>
                           <span className="w-20 font-body text-xs font-semibold text-blue-800">{invoiceNum}</span>
                           <span className="flex-1"><div className="font-body text-sm font-semibold text-blue-800">{p.familyName}</div></span>
                           <span className="w-32 font-body text-xs text-gray-500 truncate">{(p.items || []).map((i: any) => i.activityTitle).join(", ")}</span>
@@ -1528,11 +1528,11 @@ export default function PaiementsPage() {
                       <div className="flex items-center justify-between mb-2">
                         <div>
                           <div className="font-body text-sm font-semibold text-blue-800">{first.familyName}</div>
-                          <div className="font-body text-xs text-gray-400">{(first as any).forfaitRef || (first.items || []).map((i: any) => i.activityTitle).join(", ")}</div>
+                          <div className="font-body text-xs text-gray-500">{(first as any).forfaitRef || (first.items || []).map((i: any) => i.activityTitle).join(", ")}</div>
                         </div>
                         <div className="text-right">
                           <div className="font-body text-base font-bold text-blue-500">{totalForfait.toFixed(2)}€</div>
-                          <div className="font-body text-[10px] text-gray-400">{nbPayes}/{nbTotal} échéances payées</div>
+                          <div className="font-body text-[10px] text-gray-500">{nbPayes}/{nbTotal} échéances payées</div>
                         </div>
                       </div>
                       {/* Détail des items du forfait (depuis la première échéance) */}
@@ -1568,7 +1568,7 @@ export default function PaiementsPage() {
                                   <div className={`font-body text-xs font-semibold ${isPaid ? "text-green-700" : isOverdue ? "text-red-600" : "text-blue-800"}`}>
                                     Échéance {e.echeance}/{e.echeancesTotal}
                                   </div>
-                                  <div className="font-body text-[10px] text-gray-400">
+                                  <div className="font-body text-[10px] text-gray-500">
                                     {e.echeanceDate ? new Date(e.echeanceDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : "—"}
                                   </div>
                                 </div>
@@ -1630,7 +1630,7 @@ export default function PaiementsPage() {
               <div>
                 <Card padding="sm" className="mb-4 flex items-center gap-3">
                   <span className="font-body text-2xl font-bold text-red-500">{totalDue.toFixed(2)}€</span>
-                  <span className="font-body text-xs text-gray-400">total impayé sur {unpaid.length} facture{unpaid.length > 1 ? "s" : ""}</span>
+                  <span className="font-body text-xs text-gray-500">total impayé sur {unpaid.length} facture{unpaid.length > 1 ? "s" : ""}</span>
                 </Card>
                 <div className="flex flex-col gap-3">
                   {unpaid.map(p => {
@@ -1642,13 +1642,13 @@ export default function PaiementsPage() {
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                           <div className="min-w-0">
                             <div className="font-body text-sm font-semibold text-blue-800">{p.familyName}</div>
-                            <div className="font-body text-xs text-gray-400 truncate">{(p.items||[]).map((i:any)=>i.activityTitle).join(", ")} · {date.toLocaleDateString("fr-FR")}</div>
+                            <div className="font-body text-xs text-gray-500 truncate">{(p.items||[]).map((i:any)=>i.activityTitle).join(", ")} · {date.toLocaleDateString("fr-FR")}</div>
                             {daysLate > 30 && <div className="font-body text-xs text-red-500 mt-1">{daysLate} jours de retard</div>}
                           </div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <div>
                               <div className="font-body text-lg font-bold text-red-500">{due.toFixed(2)}€</div>
-                              <div className="font-body text-[10px] text-gray-400">dû sur {(p.totalTTC || 0).toFixed(2)}€</div>
+                              <div className="font-body text-[10px] text-gray-500">dû sur {(p.totalTTC || 0).toFixed(2)}€</div>
                             </div>
                             <Badge color={daysLate > 60 ? "red" : daysLate > 30 ? "orange" : "gray"}>
                               {daysLate > 60 ? "Urgent" : daysLate > 30 ? "Relance" : "Récent"}
@@ -1819,7 +1819,7 @@ export default function PaiementsPage() {
                 if (!targetFam) return (
                   <div className="p-5 flex flex-col gap-3">
                     <button onClick={() => setDuplicateTarget({ ...duplicateTarget, mode: "choose" })}
-                      className="flex items-center gap-1 font-body text-xs text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer p-0 mb-1">
+                      className="flex items-center gap-1 font-body text-xs text-gray-500 hover:text-gray-600 bg-transparent border-none cursor-pointer p-0 mb-1">
                       ← Retour
                     </button>
                     <p className="font-body text-sm text-gray-600">Chercher la famille destinataire :</p>
@@ -1833,7 +1833,7 @@ export default function PaiementsPage() {
                     {duplicateTarget.targetSearch.length > 0 && (
                       <div className="flex flex-col gap-1 max-h-[260px] overflow-y-auto">
                         {filteredFams.length === 0 ? (
-                          <p className="font-body text-xs text-gray-400 text-center py-3">Aucune famille trouvée</p>
+                          <p className="font-body text-xs text-gray-500 text-center py-3">Aucune famille trouvée</p>
                         ) : filteredFams.map(f => (
                           <button key={f.firestoreId}
                             onClick={() => setDuplicateTarget({ ...duplicateTarget, targetFamilyId: f.firestoreId, targetSearch: "" })}
@@ -1843,7 +1843,7 @@ export default function PaiementsPage() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="font-body text-sm font-semibold text-blue-800">{f.parentName}</div>
-                              <div className="font-body text-xs text-gray-400 truncate">{(f.children || []).map((c: any) => c.firstName).join(", ") || "Aucun enfant enregistré"}</div>
+                              <div className="font-body text-xs text-gray-500 truncate">{(f.children || []).map((c: any) => c.firstName).join(", ") || "Aucun enfant enregistré"}</div>
                             </div>
                             <div className="font-body text-xs text-purple-500 flex-shrink-0">Choisir →</div>
                           </button>
@@ -1857,7 +1857,7 @@ export default function PaiementsPage() {
                 return (
                   <div className="p-5 flex flex-col gap-4">
                     <button onClick={() => setDuplicateTarget({ ...duplicateTarget, targetFamilyId: "", targetSearch: "" })}
-                      className="flex items-center gap-1 font-body text-xs text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer p-0">
+                      className="flex items-center gap-1 font-body text-xs text-gray-500 hover:text-gray-600 bg-transparent border-none cursor-pointer p-0">
                       ← Changer de famille
                     </button>
                     <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
@@ -1870,7 +1870,7 @@ export default function PaiementsPage() {
                         <div key={idx} className="flex items-center gap-3 p-3 rounded-lg bg-sand">
                           <div className="flex-1 min-w-0">
                             <div className="font-body text-xs font-semibold text-blue-800 truncate">{item.activityTitle}</div>
-                            <div className="font-body text-[10px] text-gray-400">Original : {item.childName || "—"} · {(item.priceTTC || 0).toFixed(2)}€</div>
+                            <div className="font-body text-[10px] text-gray-500">Original : {item.childName || "—"} · {(item.priceTTC || 0).toFixed(2)}€</div>
                           </div>
                           <select
                             defaultValue={targetChildren[idx]?.id || targetChildren[0]?.id || ""}
@@ -1947,9 +1947,9 @@ export default function PaiementsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="font-display text-lg font-bold text-orange-700">Diffusion concours / coaching</h2>
-                  <p className="font-body text-xs text-gray-400 mt-0.5">Basé sur : <span className="font-semibold">{(broadcastSource.items || []).map((i: any) => i.activityTitle).join(" · ")}</span></p>
+                  <p className="font-body text-xs text-gray-500 mt-0.5">Basé sur : <span className="font-semibold">{(broadcastSource.items || []).map((i: any) => i.activityTitle).join(" · ")}</span></p>
                 </div>
-                <button onClick={() => setBroadcastSource(null)} className="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button>
+                <button onClick={() => setBroadcastSource(null)} className="text-gray-500 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button>
               </div>
               {/* Barre de recherche */}
               <div className="relative mt-3">
@@ -1985,7 +1985,7 @@ export default function PaiementsPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="font-body text-sm font-semibold text-blue-800">{f.parentName}</div>
-                          <div className="font-body text-xs text-gray-400">{(f.children || []).map((c: any) => c.firstName).join(", ") || "Aucun cavalier"}</div>
+                          <div className="font-body text-xs text-gray-500">{(f.children || []).map((c: any) => c.firstName).join(", ") || "Aucun cavalier"}</div>
                         </div>
                         {checked && (
                           <div className="font-body text-sm font-bold text-orange-600 flex-shrink-0">
@@ -2020,7 +2020,7 @@ export default function PaiementsPage() {
                                     }}
                                     className="w-20 text-right border border-orange-300 rounded px-2 py-1 font-body text-sm font-bold text-orange-700 bg-white focus:outline-none focus:border-orange-500"
                                   />
-                                  <span className="font-body text-xs text-gray-400">€</span>
+                                  <span className="font-body text-xs text-gray-500">€</span>
                                 </div>
                               </div>
                             );
@@ -2039,10 +2039,10 @@ export default function PaiementsPage() {
                   {broadcastRows.length > 0 ? (
                     <div>
                       <span className="font-body text-sm font-bold text-orange-700">{broadcastRows.length} famille{broadcastRows.length > 1 ? "s" : ""} sélectionnée{broadcastRows.length > 1 ? "s" : ""}</span>
-                      <span className="font-body text-xs text-gray-400 ml-2">· {broadcastRows.reduce((s, r) => s + r.totalTTC, 0).toFixed(2)}€ total à encaisser</span>
+                      <span className="font-body text-xs text-gray-500 ml-2">· {broadcastRows.reduce((s, r) => s + r.totalTTC, 0).toFixed(2)}€ total à encaisser</span>
                     </div>
                   ) : (
-                    <span className="font-body text-xs text-gray-400">Cochez les familles concernées</span>
+                    <span className="font-body text-xs text-gray-500">Cochez les familles concernées</span>
                   )}
                 </div>
                 <div className="flex gap-2">

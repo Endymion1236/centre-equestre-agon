@@ -414,12 +414,12 @@ export default function MontoirPage() {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <div><h1 className="font-display text-2xl font-bold text-blue-800">Montoir</h1><p className="font-body text-xs text-gray-400">Présences · Affectation poneys · Clôture reprises</p></div>
+        <div><h1 className="font-display text-2xl font-bold text-blue-800">Montoir</h1><p className="font-body text-xs text-gray-500">Présences · Affectation poneys · Clôture reprises</p></div>
         <button onClick={()=>window.print()} className="flex items-center gap-2 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><Printer size={16} /> Imprimer</button>
       </div>
       <div className="flex items-center justify-between mb-6">
         <button onClick={()=>setDayOffset(d=>d-1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16} /> Veille</button>
-        <div className="text-center"><div className="font-display text-lg font-bold text-blue-800 capitalize">{currentDay.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div><div className="font-body text-xs text-gray-400">{creneaux.length} reprise{creneaux.length>1?"s":""} · {totalE} inscrits · {totalP} présents</div></div>
+        <div className="text-center"><div className="font-display text-lg font-bold text-blue-800 capitalize">{currentDay.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div><div className="font-body text-xs text-gray-500">{creneaux.length} reprise{creneaux.length>1?"s":""} · {totalE} inscrits · {totalP} présents</div></div>
         <div className="flex gap-2"><button onClick={()=>setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setDayOffset(d=>d+1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain <ChevronRight size={16} /></button></div>
       </div>
       {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
@@ -442,8 +442,8 @@ export default function MontoirPage() {
         <Card key={c.id} padding="md" className={closed?"opacity-60":""}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-blue-500/8">
             <div className="flex items-center gap-4">
-              <div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px] text-gray-400">{c.endTime}</div></div>
-              <div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs text-gray-400">{c.monitor} · {en.length}/{c.maxPlaces}</div></div>
+              <div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px] text-gray-500">{c.endTime}</div></div>
+              <div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs text-gray-500">{c.monitor} · {en.length}/{c.maxPlaces}</div></div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <Badge color={closed?"gray":pres===en.length&&en.length>0?"green":"orange"}>{closed?"Clôturée":`${pres}/${en.length} présents`}</Badge>
@@ -475,14 +475,14 @@ export default function MontoirPage() {
               </>}
             </div>
           </div>
-          {en.length===0 ? <p className="font-body text-sm text-gray-400 italic">Aucun inscrit</p> :
+          {en.length===0 ? <p className="font-body text-sm text-gray-500 italic">Aucun inscrit</p> :
           <div>
-            <div className="flex items-center px-3 py-2 font-body text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+            <div className="flex items-center px-3 py-2 font-body text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
               <span className="w-8 hidden sm:block">#</span><span className="flex-1">Cavalier</span><span className="w-32 hidden sm:block">Famille</span><span className="w-28 sm:w-36">Poney</span><span className="w-20 sm:w-24 text-center">Présence</span>
             </div>
             {en.map((e:any, i:number) => (
               <div key={e.childId} className={`flex items-center px-3 py-2.5 rounded-lg ${i%2===0?"bg-sand":""} ${e.presence==="absent"?"opacity-40":""}`}>
-                <span className="w-8 font-body text-xs text-gray-400 hidden sm:block">{i+1}</span>
+                <span className="w-8 font-body text-xs text-gray-500 hidden sm:block">{i+1}</span>
                 <span className="flex-1 font-body text-sm font-semibold text-blue-800">{e.childName}</span>
                 <span className="w-32 font-body text-xs text-gray-500 hidden sm:block">{e.familyName}</span>
                 <span className="w-28 sm:w-36">{!closed ? (() => {
@@ -509,8 +509,8 @@ export default function MontoirPage() {
                   </select>;
                 })() : <span className="font-body text-xs font-semibold text-blue-800">{e.horseName||"—"}</span>}</span>
                 <span className="w-20 sm:w-24 flex justify-center gap-1 sm:gap-2">{!closed ? <>
-                  <button onClick={()=>togglePresence(c,e.childId,"present")} className={`w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="present"?"bg-green-500 text-white":"bg-gray-100 text-gray-400 hover:bg-green-100"}`}><CheckCircle2 size={18}/></button>
-                  <button onClick={()=>togglePresence(c,e.childId,"absent")} className={`w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent"?"bg-red-500 text-white":"bg-gray-100 text-gray-400 hover:bg-red-100"}`}><XCircle size={18}/></button>
+                  <button onClick={()=>togglePresence(c,e.childId,"present")} className={`w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="present"?"bg-green-500 text-white":"bg-gray-100 text-gray-500 hover:bg-green-100"}`}><CheckCircle2 size={18}/></button>
+                  <button onClick={()=>togglePresence(c,e.childId,"absent")} className={`w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent"?"bg-red-500 text-white":"bg-gray-100 text-gray-500 hover:bg-red-100"}`}><XCircle size={18}/></button>
                 </> : <Badge color={e.presence==="present"?"green":e.presence==="absent"?"red":"gray"}>{e.presence==="present"?"Présent":e.presence==="absent"?"Absent":"—"}</Badge>}</span>
               </div>
             ))}
@@ -529,7 +529,7 @@ export default function MontoirPage() {
                 </div>
                 <div>
                   <h2 className="font-display text-lg font-bold text-blue-800">Bilan pédagogique</h2>
-                  <p className="font-body text-xs text-gray-400">Dictez votre observation — l'IA structure la fiche cavalier</p>
+                  <p className="font-body text-xs text-gray-500">Dictez votre observation — l'IA structure la fiche cavalier</p>
                 </div>
               </div>
             </div>

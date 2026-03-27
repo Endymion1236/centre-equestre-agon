@@ -29,6 +29,12 @@
   --color-cream: #FEFCF8;
   --color-sand: #FAF6F0;
 
+  /* Grays renforcés — meilleure lisibilité sur fond crème */
+  --color-gray-300: #94A3B8;
+  --color-gray-400: #64748B;
+  --color-gray-500: #475569;
+  --color-gray-600: #334155;
+
   --font-display: "Libre Baskerville", Georgia, serif;
   --font-body: "Outfit", system-ui, sans-serif;
 }
@@ -43,6 +49,20 @@ body {
   font-family: var(--font-body);
   color: #1C2A3E;
   background: var(--color-cream);
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Renforcer le contraste des labels et textes secondaires dans l'admin */
+.font-body {
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Inputs plus lisibles */
+input, select, textarea {
+  color: #1C2A3E;
+  font-size: 14px;
 }
 
 h1, h2, h3, h4 {
