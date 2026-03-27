@@ -81,6 +81,69 @@ export async function POST(req: NextRequest) {
               date: FieldValue.serverTimestamp(),
             });
 
+            // ── Email de confirmation ──────────────────────────────────────
+            const parentEmail = session.customer_details?.email || pData.familyEmail || "";
+            const parentName  = meta.familyName || pData.familyName || "Client";
+            const prestations = (pData.items || []).map((i: any) => i.activityTitle).join(", ") || "Prestation";
+            const resendKey   = process.env.RESEND_API_KEY;
+            const fromEmail   = process.env.RESEND_FROM_EMAIL || "Centre Equestre <onboarding@resend.dev>";
+
+            if (parentEmail && resendKey) {
+              try {
+                // Déterminer le type d'email selon le contenu du panier
+                const hasStage  = (pData.items || []).some((i: any) => i.activityType === "stage");
+                const hasForfait = pData.echeancesTotal > 1 || pData.type === "annuel";
+
+                let subject = `Paiement reçu — ${amountPaid.toFixed(2)}€`;
+                let html = "";
+
+                if (hasForfait) {
+                  subject = `Inscription annuelle confirmée — ${(pData.items?.[0]?.childName) || ""}`;
+                  html = `<p>Bonjour <strong>${parentName}</strong>,</p>
+                  <p>L'inscription annuelle de <strong>${(pData.items?.[0]?.childName) || ""}</strong> est confirmée.</p>
+                  <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:16px 0;">
+                    <p style="margin:0;color:#854d0e;font-weight:600;">${prestations}</p>
+                    <p style="margin:8px 0 0;color:#1e3a5f;font-weight:bold;font-size:16px;">${amountPaid.toFixed(2)}€ reçus${isDeposit ? ` (acompte ${depositPercent}%)` : ""}</p>
+                    ${isDeposit ? `<p style="margin:6px 0 0;color:#92400e;font-size:13px;">Le solde sera prélevé selon votre échéancier.</p>` : ""}
+                  </div>
+                  <p>À bientôt au centre équestre !</p>`;
+                } else if (hasStage) {
+                  const dates = (pData.items || []).map((i: any) => i.activityTitle).join(", ");
+                  subject = `Stage confirmé — ${(pData.items?.[0]?.activityTitle) || ""}`;
+                  html = `<p>Bonjour <strong>${parentName}</strong>,</p>
+                  <p>L'inscription au stage est confirmée !</p>
+                  <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
+                    <p style="margin:0;color:#166534;font-weight:600;">${dates}</p>
+                    <p style="margin:8px 0 0;color:#1e3a5f;font-weight:bold;font-size:16px;">${amountPaid.toFixed(2)}€ reçus${isDeposit ? ` (acompte ${depositPercent}%)` : ""}</p>
+                    ${isDeposit ? `<p style="margin:6px 0 0;color:#065f46;font-size:13px;">Le solde de ${(pData.totalTTC * 0.7).toFixed(2)}€ sera prélevé 3 jours avant le stage.</p>` : ""}
+                  </div>
+                  <p>À bientôt pour ce stage !</p>`;
+                } else {
+                  html = `<p>Bonjour <strong>${parentName}</strong>,</p>
+                  <p>Nous avons bien reçu votre paiement :</p>
+                  <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
+                    <p style="margin:0;color:#166534;font-weight:600;font-size:18px;">✅ ${amountPaid.toFixed(2)}€ reçus</p>
+                    <p style="margin:8px 0 0;color:#555;font-size:13px;">${prestations}</p>
+                  </div>
+                  <p>À bientôt au centre équestre !</p>`;
+                }
+
+                await fetch("https://api.resend.com/emails", {
+                  method: "POST",
+                  headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    from: fromEmail,
+                    to: parentEmail,
+                    subject,
+                    html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">${html}<hr style="margin:24px 0;border:none;border-top:1px solid #eee;"><p style="color:#999;font-size:11px;text-align:center;">Centre Équestre d'Agon-Coutainville — Paiement sécurisé par Stripe</p></div>`,
+                  }),
+                });
+                console.log(`  → Email confirmation envoyé à ${parentEmail}`);
+              } catch (emailErr) {
+                console.error("  ⚠️ Email confirmation failed:", emailErr);
+              }
+            }
+
             console.log(`  → Payment ${payRef.id}: ${isDeposit ? "partial" : "paid"} — ${paidAmount}€`);
           }
         }
