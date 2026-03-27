@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { doc, getDoc, setDoc, collection, getDocs, deleteDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, getDocs, deleteDoc, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { Save, Plus, Trash2, Loader2, AlertTriangle } from "lucide-react";
@@ -824,6 +824,28 @@ export default function ParametresPage() {
                 <Trash2 size={16} /> Tout nettoyer (confirmation requise)
               </button>
             </div>
+          </Card>
+
+          <Card padding="md" className="bg-blue-50 border-blue-200">
+            <h3 className="font-body text-base font-semibold text-blue-800 mb-2">🧪 Données de test</h3>
+            <p className="font-body text-xs text-blue-600 mb-4">
+              Supprimer uniquement les données marquées <code className="bg-blue-100 px-1 rounded">SEED_TEST_2026</code> (familles test, créneaux fictifs, paiements de démo).
+              Les vraies données ne sont pas affectées.
+            </p>
+            <button onClick={async () => {
+              if (!confirm("Supprimer toutes les données de test (SEED_TEST_2026) ?\n\nLes vraies données restent intactes.")) return;
+              const collections = ["families","creneaux","payments","encaissements","forfaits","avoirs","cartes","reservations","equides","passages","fidelite","bonsRecup"];
+              let total = 0;
+              for (const colName of collections) {
+                try {
+                  const snap = await getDocs(query(collection(db, colName), where("_seed","==","SEED_TEST_2026")));
+                  for (const docSnap of snap.docs) { await deleteDoc(docSnap.ref); total++; }
+                } catch(e) { console.error(colName, e); }
+              }
+              alert(`✅ ${total} documents de test supprimés.`);
+            }} className="flex items-center gap-2 font-body text-sm font-semibold text-blue-700 bg-blue-100 px-5 py-2.5 rounded-lg border border-blue-300 cursor-pointer hover:bg-blue-200">
+              🗑️ Nettoyer les données de test
+            </button>
           </Card>
 
           <Card padding="md">

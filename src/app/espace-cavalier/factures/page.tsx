@@ -353,12 +353,21 @@ export default function FacturesPage() {
                         {/* En-tête */}
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-xl bg-gold-50 flex items-center justify-center text-2xl">🎟️</div>
+                            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
+                              style={{ background: (card as any).familiale ? "linear-gradient(135deg,#FFF8E8,#FAECC0)" : "#FFF8E8" }}>
+                              {(card as any).familiale ? "👨‍👩‍👧" : "🎟️"}
+                            </div>
                             <div>
                               <div className="font-body text-base font-semibold text-blue-800">
                                 Carte {card.totalSessions} séances · {(card as any).activityType === "balade" ? "Balades" : "Cours"}
                               </div>
-                              <div className="font-body text-xs text-gray-400">🧒 {card.childName}</div>
+                              {(card as any).familiale ? (
+                                <div className="font-body text-xs font-semibold mt-0.5" style={{ color: "#F0A010" }}>
+                                  👨‍👩‍👧 Carte familiale — valable pour tous vos cavaliers
+                                </div>
+                              ) : (
+                                <div className="font-body text-xs text-gray-400">🧒 {card.childName}</div>
+                              )}
                               {(card as any).dateDebut && (card as any).dateFin && (
                                 <div className="font-body text-[10px] text-gray-400 mt-0.5">
                                   {new Date((card as any).dateDebut).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}

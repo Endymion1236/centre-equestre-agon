@@ -8,7 +8,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "validate": "node scripts/validate.mjs"
+    "validate": "node scripts/validate.mjs",
+    "seed": "node scripts/seed.mjs",
+    "seed:clean": "node scripts/seed.mjs --clean"
   },
   "dependencies": {
     "@stripe/stripe-js": "^4.0.0",

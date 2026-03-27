@@ -1566,6 +1566,13 @@ export default function PlanningPage() {
                   <div className="font-body text-xs font-semibold text-blue-800 leading-tight mt-0.5">{c.activityTitle}</div>
                   <div className="font-body text-[10px] text-gray-400 mt-0.5">{c.monitor}</div>
                   <div className="flex items-center gap-1 mt-1"><Users size={10} className="text-gray-400"/><span className={`font-body text-[10px] font-semibold ${fill>=1?"text-red-500":fill>=0.7?"text-orange-500":"text-green-600"}`}>{en.length}/{c.maxPlaces}</span></div>
+                  {en.length>0&&<div className="flex flex-wrap gap-0.5 mt-1">{en.slice(0,4).map((e:any)=>{
+                    const isCard=e.paymentSource==="card";
+                    const hasPaid=isCard||payments.some((p:any)=>p.familyId===e.familyId&&p.status==="paid");
+                    const hasPending=!hasPaid&&!isCard&&payments.some((p:any)=>p.familyId===e.familyId&&(p.status==="pending"||p.status==="partial"));
+                    return <span key={e.childId} title={`${e.childName} — ${isCard?"carte":hasPaid?"réglé":hasPending?"en attente":"non réglé"}`}
+                      className={`w-2 h-2 rounded-full flex-shrink-0 ${isCard?"bg-blue-500":hasPaid?"bg-green-500":hasPending?"bg-orange-400":"bg-gray-300"}`}/>;
+                  })}{en.length>4&&<span className="font-body text-[9px] text-gray-400">+{en.length-4}</span>}</div>}
                   <button onClick={e=>{e.stopPropagation();handleDelete(c.id!);}} className="absolute top-1 right-1 w-5 h-5 rounded bg-red-50 text-red-400 hover:bg-red-100 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Trash2 size={10}/></button>
                 </div>);})}
               <button onClick={()=>{setSelectedDate(ds);setShowSimple(true);setShowGenerator(false);}} className="mt-auto py-2 rounded-lg border border-dashed border-gray-200 text-gray-300 hover:border-blue-300 hover:text-blue-400 bg-transparent cursor-pointer font-body text-lg">+</button>
@@ -1589,9 +1596,15 @@ export default function PlanningPage() {
                 const isCard = e.paymentSource === "card";
                 const hasPaid = isCard || payments.some((p: any) => p.familyId === e.familyId && p.status === "paid" && (p.items||[]).some((i:any) => i.childId === e.childId && (i.creneauId === c.id || i.activityTitle === c.activityTitle)));
                 const hasPending = !hasPaid && !isCard && payments.some((p: any) => p.familyId === e.familyId && (p.status === "pending" || p.status === "partial") && (p.items||[]).some((i:any) => i.childId === e.childId));
-                return <span key={e.childId} className="font-body text-xs bg-sand text-blue-800 px-3 py-1 rounded-full flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isCard ? "bg-blue-500" : hasPaid ? "bg-green-500" : hasPending ? "bg-orange-400" : "bg-gray-300"}`}></span>
-                  🧒 {e.childName} <span className="text-gray-400">({e.familyName}{isCard ? " · 🎟️" : ""})</span>
+                const statusColor = isCard ? "#2050A0" : hasPaid ? "#16a34a" : hasPending ? "#d97706" : "#9ca3af";
+                const statusBg   = isCard ? "#EDF2FA"  : hasPaid ? "#f0fdf4"  : hasPending ? "#fffbeb"  : "#f3f4f6";
+                const statusIcon = isCard ? "🎟️" : hasPaid ? "✓" : hasPending ? "…" : "—";
+                const statusLabel = isCard ? "carte" : hasPaid ? "réglé" : hasPending ? "en attente" : "non réglé";
+                return <span key={e.childId} className="font-body text-xs px-2.5 py-1.5 rounded-full flex items-center gap-1.5 border"
+                  style={{ background: statusBg, borderColor: statusColor+"33", color: "#0C1A2E" }}>
+                  <span className="text-[11px]">{statusIcon}</span>
+                  <span className="font-semibold">{e.childName}</span>
+                  <span style={{ color: statusColor, fontSize: 10 }}>{statusLabel}</span>
                 </span>;
               })}</div>}
             </div>
