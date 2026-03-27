@@ -326,6 +326,25 @@ Pas de markdown ni de listes — texte simple uniquement.`;
 
       {/* Input */}
       <div className="p-4 border-t border-gray-100">
+
+        {/* Boutons confirmation agent — au-dessus de la saisie */}
+        {pendingAction && mode === "admin" && (
+          <div className="flex gap-2 mb-3">
+            <button
+              onClick={() => askClaude("Oui, confirme.", true)}
+              disabled={loading}
+              className="flex-1 py-3 rounded-xl font-body text-sm font-bold text-white bg-green-500 hover:bg-green-600 border-none cursor-pointer disabled:opacity-50 shadow-sm">
+              ✓ Oui, confirmer
+            </button>
+            <button
+              onClick={() => { setPendingAction(null); addMessage("assistant", "Action annulée."); }}
+              disabled={loading}
+              className="flex-1 py-3 rounded-xl font-body text-sm font-bold text-slate-700 bg-gray-200 hover:bg-gray-300 border-none cursor-pointer disabled:opacity-50">
+              ✕ Annuler
+            </button>
+          </div>
+        )}
+
         <div className="flex gap-2 items-center">
           {/* Bouton micro */}
           <button
@@ -356,23 +375,6 @@ Pas de markdown ni de listes — texte simple uniquement.`;
           )}
         </div>
 
-        {/* Boutons confirmation agent */}
-        {pendingAction && mode === "admin" && (
-          <div className="flex gap-2 mt-2 px-1">
-            <button
-              onClick={() => askClaude("Oui, confirme.", true)}
-              disabled={loading}
-              className="flex-1 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-green-500 hover:bg-green-600 border-none cursor-pointer disabled:opacity-50">
-              ✓ Oui, confirmer
-            </button>
-            <button
-              onClick={() => { setPendingAction(null); addMessage("assistant", "Action annulée."); }}
-              disabled={loading}
-              className="flex-1 py-2.5 rounded-xl font-body text-sm font-semibold text-slate-600 bg-gray-100 hover:bg-gray-200 border-none cursor-pointer disabled:opacity-50">
-              ✕ Annuler
-            </button>
-          </div>
-        )}
         {recording && (
           <div className="flex items-center gap-2 mt-2 px-2">
             <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />

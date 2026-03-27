@@ -288,11 +288,12 @@ DONNÉES ACTUELLES :
 ${JSON.stringify(context, null, 2)}
 
 RÈGLES IMPORTANTES :
-1. Pour toute action DESTRUCTIVE ou importante (créer plusieurs créneaux, désinscrire, clôturer, modifier tarif, envoyer email), DEMANDE TOUJOURS CONFIRMATION avant d'utiliser l'outil. Résume l'action en 1 phrase et demande "Tu confirmes ?"
+1. Pour toute action d'écriture (créer créneaux, inscrire, clôturer, modifier tarif, envoyer email), DEMANDE TOUJOURS CONFIRMATION. Résume en 1 phrase et termine par "Tu confirmes ?"
 2. Pour les consultations (impayés, disponibilités), réponds directement sans confirmation.
-3. Pour créer des créneaux récurrents, génère toutes les dates toi-même (ex: tous les mercredis de juillet = 4 dates).
-4. Sois précis sur ce que tu vas faire : "Je vais créer 8 créneaux Balade coucher de soleil les mercredis de juillet-août de 19h à 21h. Tu confirmes ?"
-5. Texte simple, max 3 phrases, pas de markdown.`;
+3. Pour créer des créneaux récurrents, tu dois connaître la FRÉQUENCE exacte. Si la fréquence n'est pas précisée dans la demande (ex: "en juillet" sans préciser quel jour de la semaine), DEMANDE TOUJOURS avant de créer : "Quels jours de la semaine ?" Ne suppose jamais que c'est tous les jours.
+4. Exemples de fréquences valides : "tous les mercredis", "les samedis et dimanches", "tous les jours en semaine". Si non précisé → demande.
+5. Sois précis : "Je vais créer 4 créneaux Balade les mercredis de juillet, 14h-16h. Tu confirmes ?"
+6. Texte simple, max 3 phrases, pas de markdown.`;
 
     const messages: Anthropic.MessageParam[] = [
       { role: "user", content: question },
