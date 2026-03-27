@@ -230,17 +230,38 @@ export default function MontoirPage() {
     recognition.lang = "fr-FR";
     recognition.continuous = true;
     recognition.interimResults = true;
-    let finalText = transcripts[childId] || "";
+
+    // Texte déjà dicté avant ce lancement (si l'user a déjà dicté puis réouvert)
+    const existingText = transcripts[childId] ? transcripts[childId].trim() + " " : "";
+    // Accumulateur LOCAL — ne dépend pas du state React (évite les closures périmées)
+    let finalSegments = existingText;
+
     recognition.onresult = (e: any) => {
+      // Reconstruire depuis TOUS les résultats finals disponibles
+      // + le dernier résultat intermédiaire en cours
+      let finals = existingText;
       let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) finalText += e.results[i][0].transcript + " ";
-        else interim = e.results[i][0].transcript;
+      for (let i = 0; i < e.results.length; i++) {
+        if (e.results[i].isFinal) {
+          finals += e.results[i][0].transcript + " ";
+        } else {
+          interim = e.results[i][0].transcript;
+        }
       }
-      setTranscripts(prev => ({ ...prev, [childId]: finalText + interim }));
+      finalSegments = finals;
+      setTranscripts(prev => ({ ...prev, [childId]: (finals + interim).trim() }));
     };
-    recognition.onend = () => { setRecording(null); };
-    recognition.onerror = () => { setRecording(null); };
+
+    recognition.onend = () => {
+      // Figer le texte final propre sans doublons
+      setTranscripts(prev => ({ ...prev, [childId]: finalSegments.trim() }));
+      setRecording(null);
+    };
+    recognition.onerror = (e: any) => {
+      // Ignorer les erreurs "no-speech" — juste un silence
+      if (e.error !== "no-speech") setRecording(null);
+    };
+
     recognitionRef.current = recognition;
     recognition.start();
     setRecording(childId);
