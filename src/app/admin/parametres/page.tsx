@@ -829,16 +829,16 @@ export default function ParametresPage() {
           <Card padding="md" className="bg-blue-50 border-blue-200">
             <h3 className="font-body text-base font-semibold text-blue-800 mb-2">🧪 Données de test</h3>
             <p className="font-body text-xs text-blue-600 mb-4">
-              Supprimer uniquement les données marquées <code className="bg-blue-100 px-1 rounded">SEED_TEST_2026</code> (familles test, créneaux fictifs, paiements de démo).
+              Supprimer uniquement les données marquées <code className="bg-blue-100 px-1 rounded">SEED_2026</code> (familles test, créneaux fictifs, paiements de démo).
               Les vraies données ne sont pas affectées.
             </p>
             <button onClick={async () => {
-              if (!confirm("Supprimer toutes les données de test (SEED_TEST_2026) ?\n\nLes vraies données restent intactes.")) return;
+              if (!confirm("Supprimer toutes les données de test (SEED_2026) ?\n\nLes vraies données restent intactes.")) return;
               const collections = ["families","creneaux","payments","encaissements","forfaits","avoirs","cartes","reservations","equides","passages","fidelite","bonsRecup"];
               let total = 0;
               for (const colName of collections) {
                 try {
-                  const snap = await getDocs(query(collection(db, colName), where("_seed","==","SEED_TEST_2026")));
+                  const snap = await getDocs(query(collection(db, colName), where("_seed","==","SEED_2026")));
                   for (const docSnap of snap.docs) { await deleteDoc(docSnap.ref); total++; }
                 } catch(e) { console.error(colName, e); }
               }
