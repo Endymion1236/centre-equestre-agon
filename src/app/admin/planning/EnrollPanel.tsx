@@ -508,17 +508,17 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
     <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
         <div className="p-5 border-b border-blue-500/8" style={{ borderLeftWidth: 4, borderLeftColor: color }}>
-          <div className="flex justify-between items-start"><div><div className="font-body text-sm font-semibold" style={{ color }}>{creneau.startTime}–{creneau.endTime}</div><h2 className="font-display text-lg font-bold text-blue-800">{creneau.activityTitle}</h2><div className="font-body text-xs text-gray-400 mt-1">{new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · {creneau.monitor}{displayPrice > 0 ? ` · ${displayPrice.toFixed(2)}€${isStage ? "" : "/séance"}` : ""}</div></div><button onClick={onClose} className="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button></div>
+          <div className="flex justify-between items-start"><div><div className="font-body text-sm font-semibold" style={{ color }}>{creneau.startTime}–{creneau.endTime}</div><h2 className="font-display text-lg font-bold text-blue-800">{creneau.activityTitle}</h2><div className="font-body text-xs text-slate-500 mt-1">{new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · {creneau.monitor}{displayPrice > 0 ? ` · ${displayPrice.toFixed(2)}€${isStage ? "" : "/séance"}` : ""}</div></div><button onClick={onClose} className="text-slate-500 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button></div>
           <div className="flex items-center gap-3 mt-3">
             <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>{spots > 0 ? `${spots} place${spots > 1 ? "s" : ""}` : "COMPLET"}</Badge>
-            <span className="font-body text-xs text-gray-400">{enrolled.length}/{creneau.maxPlaces}</span>
+            <span className="font-body text-xs text-slate-500">{enrolled.length}/{creneau.maxPlaces}</span>
             {(creneau as any).status === "closed" && <Badge color="gray">Clôturée</Badge>}
           </div>
 
           {/* ── Plan de séance ── */}
           <div className="mt-3 pt-3 border-t border-blue-500/8">
             <div className="flex items-center justify-between mb-2">
-              <span className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider">Plan de séance</span>
+              <span className="font-body text-xs font-semibold text-slate-500 uppercase tracking-wider">Plan de séance</span>
               {!planUploading && (
                 <div className="flex gap-1.5">
                   {/* Bouton appareil photo */}
@@ -562,9 +562,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
             ) : (
               <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-all"
                 onClick={() => planInputRef.current?.click()}>
-                <Camera size={20} className="text-gray-300 mx-auto mb-1" />
-                <p className="font-body text-xs text-gray-400">Photo ou PDF du plan de séance</p>
-                <p className="font-body text-[10px] text-gray-300 mt-0.5">Tous formats image · PDF · max 10 Mo</p>
+                <Camera size={20} className="text-slate-400 mx-auto mb-1" />
+                <p className="font-body text-xs text-slate-500">Photo ou PDF du plan de séance</p>
+                <p className="font-body text-[10px] text-slate-400 mt-0.5">Tous formats image · PDF · max 10 Mo</p>
               </div>
             )}
           </div>
@@ -573,7 +573,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
         {/* Verrou si clôturée */}
         {(creneau as any).status === "closed" && (
           <div className="p-5 bg-gray-50 border-b border-gray-200">
-            <p className="font-body text-sm text-gray-500 mb-2">Cette séance est clôturée. Les inscriptions et modifications sont verrouillées.</p>
+            <p className="font-body text-sm text-slate-600 mb-2">Cette séance est clôturée. Les inscriptions et modifications sont verrouillées.</p>
             <button onClick={async () => {
               if (!confirm("Réouvrir cette séance ?\n\nLes modifications seront à nouveau possibles.\nLes traces pédagogiques et débits de cartes déjà créés ne seront pas affectés.")) return;
               await updateDoc(doc(db, "creneaux", creneau.id!), { status: "planned" });
@@ -586,30 +586,30 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
         <div className="p-5">
           {justEnrolled && <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg font-body text-sm text-green-700"><Check size={16} className="inline mr-1" /> {justEnrolled} inscrit(e) !</div>}
           <h3 className="font-body text-sm font-semibold text-blue-800 mb-3"><Users size={16} className="inline mr-1" />Inscrits ({enrolled.length})</h3>
-          {enrolled.length === 0 ? <p className="font-body text-sm text-gray-400 italic mb-4">Aucun</p> :
+          {enrolled.length === 0 ? <p className="font-body text-sm text-slate-500 italic mb-4">Aucun</p> :
           <div className="flex flex-col gap-2 mb-4">{enrolled.map((e: any) => {
             const isCard = e.paymentSource === "card";
             const hasPaid = isCard || payments.some((p: any) => p.familyId === e.familyId && p.status === "paid" && (p.items||[]).some((i:any) => i.childId === e.childId));
             const hasPending = !hasPaid && payments.some((p: any) => p.familyId === e.familyId && (p.status === "pending" || p.status === "partial") && (p.items||[]).some((i:any) => i.childId === e.childId));
-            return (<div key={e.childId} className="flex items-center justify-between bg-sand rounded-lg px-4 py-2.5"><div className="flex items-center gap-3"><div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center"><Users size={12} className="text-blue-500" /></div><div><div className="font-body text-sm font-semibold text-blue-800 flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${isCard ? "bg-blue-500" : hasPaid ? "bg-green-500" : hasPending ? "bg-orange-400" : "bg-gray-300"}`}></span>{e.childName}</div><div className="font-body text-xs text-gray-400">{e.familyName}{isCard ? " · carte" : hasPaid ? " · réglé" : hasPending ? " · en attente" : ""}</div></div></div><button onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId} className="flex items-center gap-1 font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-red-50">{unenrolling===e.childId ? <Loader2 size={12} className="animate-spin"/> : <Trash2 size={12}/>} Désinscrire</button></div>);
+            return (<div key={e.childId} className="flex items-center justify-between bg-sand rounded-lg px-4 py-2.5"><div className="flex items-center gap-3"><div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center"><Users size={12} className="text-blue-500" /></div><div><div className="font-body text-sm font-semibold text-blue-800 flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${isCard ? "bg-blue-500" : hasPaid ? "bg-green-500" : hasPending ? "bg-orange-400" : "bg-gray-300"}`}></span>{e.childName}</div><div className="font-body text-xs text-slate-500">{e.familyName}{isCard ? " · carte" : hasPaid ? " · réglé" : hasPending ? " · en attente" : ""}</div></div></div><button onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId} className="flex items-center gap-1 font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-red-50">{unenrolling===e.childId ? <Loader2 size={12} className="animate-spin"/> : <Trash2 size={12}/>} Désinscrire</button></div>);
           })}</div>}
 
           {spots > 0 && (creneau as any).status !== "closed" && (<div className="border-t border-blue-500/8 pt-4"><h3 className="font-body text-sm font-semibold text-blue-800 mb-3"><UserPlus size={16} className="inline mr-1"/>Inscrire</h3><div className="flex flex-col gap-3">
             {/* Recherche famille */}
-            <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300"/><input value={search} onChange={e=>{setSearch(e.target.value);setSelFam("");setSelChild("");}} placeholder="Nom parent, prénom enfant, email..." className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/></div>
+            <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={search} onChange={e=>{setSearch(e.target.value);setSelFam("");setSelChild("");}} placeholder="Nom parent, prénom enfant, email..." className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/></div>
             <select value={selFam} onChange={e=>{setSelFam(e.target.value);setSelChild("");}} className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream"><option value="">Famille ({filteredFamilies.length})</option>{filteredFamilies.map(f=>{const n=(f.children||[]).map((c:any)=>c.firstName).join(", ");return<option key={f.firestoreId} value={f.firestoreId}>{f.parentName} {n?`(${n})`:""}</option>})}</select>
-            {fam && available.length > 0 && !isStage && <div className="flex flex-wrap gap-2">{available.map((c:any)=><button key={c.id} onClick={()=>setSelChild(c.id)} className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${selChild===c.id?"bg-blue-500 text-white border-blue-500":"bg-white text-gray-500 border-gray-200"}`}><Users size={12}/> {c.firstName}</button>)}</div>}
+            {fam && available.length > 0 && !isStage && <div className="flex flex-wrap gap-2">{available.map((c:any)=><button key={c.id} onClick={()=>setSelChild(c.id)} className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${selChild===c.id?"bg-blue-500 text-white border-blue-500":"bg-white text-slate-600 border-gray-200"}`}><Users size={12}/> {c.firstName}</button>)}</div>}
 
             {/* Stage : sélection multiple d'enfants */}
             {fam && available.length > 0 && isStage && (
               <div>
-                <div className="font-body text-xs font-semibold text-gray-400 mb-2">Sélectionner les enfants (multi-sélection)</div>
+                <div className="font-body text-xs font-semibold text-slate-500 mb-2">Sélectionner les enfants (multi-sélection)</div>
                 <div className="flex flex-wrap gap-2 mb-3">
                   {available.map((c: any) => {
                     const sel = selectedChildren.includes(c.id);
                     return (
                       <button key={c.id} onClick={() => setSelectedChildren(sel ? selectedChildren.filter(x => x !== c.id) : [...selectedChildren, c.id])}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${sel ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-500 border-gray-200"}`}>
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${sel ? "bg-green-600 text-white border-green-600" : "bg-white text-slate-600 border-gray-200"}`}>
                         {sel ? <Check size={12}/> : <Users size={12}/>} {c.firstName}
                       </button>
                     );
@@ -639,11 +639,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
                     {nbJours > 1 && (
                       <div className="flex gap-2">
                         <button onClick={() => setStageMode("semaine")}
-                          className={`flex-1 py-2 rounded-lg font-body text-xs font-semibold border cursor-pointer ${stageMode === "semaine" ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
+                          className={`flex-1 py-2 rounded-lg font-body text-xs font-semibold border cursor-pointer ${stageMode === "semaine" ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
                           Semaine complète ({nbJours}j)
                         </button>
                         <button onClick={() => setStageMode("jour")}
-                          className={`flex-1 py-2 rounded-lg font-body text-xs font-semibold border cursor-pointer ${stageMode === "jour" ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
+                          className={`flex-1 py-2 rounded-lg font-body text-xs font-semibold border cursor-pointer ${stageMode === "jour" ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
                           Ce jour uniquement
                         </button>
                       </div>
@@ -665,7 +665,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
                           <Badge color="green">-{l.remiseEuros}€ ({l.rang}{l.rang === 1 ? "ère" : "ème"} inscr.)</Badge>
                         </div>
                         <div className="text-right">
-                          <span className="text-gray-400 line-through text-xs mr-1">{l.prixBase.toFixed(2)}€</span>
+                          <span className="text-slate-500 line-through text-xs mr-1">{l.prixBase.toFixed(2)}€</span>
                           <span className="font-bold text-blue-500">{l.prixReduit.toFixed(2)}€</span>
                         </div>
                       </div>
@@ -675,7 +675,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
                       <span className="text-2xl font-bold text-green-600">{stageTotalTTC.toFixed(2)}€</span>
                     </div>
                     <div className="bg-white rounded-lg p-3">
-                      <div className="font-body text-xs text-gray-500 text-center">
+                      <div className="font-body text-xs text-slate-600 text-center">
                         La commande sera ajoutée aux impayés.<br/>
                         Encaissement possible depuis <strong>Paiements → Encaisser</strong>.
                       </div>
@@ -706,7 +706,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
           });
               return isCours ? (
               <div className="bg-sand rounded-xl p-4 space-y-3">
-                <div className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">Type d'inscription</div>
+                <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider">Type d'inscription</div>
 
                 {/* Bannière carte active */}
                 {carteActive && (
@@ -734,7 +734,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
                       </>
                     ) : (
                       <>
-                        <div className="font-body text-xs text-gray-400 mt-0.5">Paiement à l'unité</div>
+                        <div className="font-body text-xs text-slate-500 mt-0.5">Paiement à l'unité</div>
                         {priceTTC > 0 && <div className="font-body text-lg font-bold text-blue-500 mt-1">{priceTTC.toFixed(2)}€</div>}
                       </>
                     )}
@@ -742,7 +742,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
                   <button onClick={() => setInscriptionMode("annuel")}
                     className={`p-3 rounded-lg border-2 text-left cursor-pointer transition-all ${inscriptionMode === "annuel" ? "border-green-500 bg-green-50" : "border-gray-200 bg-white"}`}>
                     <div className="font-body text-sm font-semibold text-green-700">Forfait à l'année</div>
-                    <div className="font-body text-xs text-gray-400 mt-0.5">{sessionsRestantes} séances restantes sur {totalSessionsSaison}</div>
+                    <div className="font-body text-xs text-slate-500 mt-0.5">{sessionsRestantes} séances restantes sur {totalSessionsSaison}</div>
                     <div className="font-body text-lg font-bold text-green-600 mt-1">{totalAnnuel.toFixed(2)}€</div>
                     {prorata < 1 && <div className="font-body text-[10px] text-orange-500 mt-0.5">Prorata : {Math.round(prorata * 100)}% du tarif annuel</div>}
                   </button>
@@ -761,10 +761,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
                           <input type="checkbox" checked={showPay} onChange={e => setShowPay(e.target.checked)} className="accent-blue-500 w-4 h-4"/>
                           <span className="font-body text-sm text-blue-800 font-semibold">Encaisser maintenant ({priceTTC.toFixed(2)}€)</span>
                         </label>
-                        <div className="font-body text-[10px] text-gray-400 mt-1 ml-6">
+                        <div className="font-body text-[10px] text-slate-500 mt-1 ml-6">
                           {showPay ? "Le paiement sera enregistré immédiatement dans le journal." : "La prestation sera ajoutée aux impayés de la famille."}
                         </div>
-                        {showPay && <div className="flex flex-wrap gap-1.5 mt-2">{payModes.filter(m => m.id !== "carte").map(m=><button key={m.id} onClick={()=>setPayMode(m.id)} className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${payMode===m.id?"bg-blue-500 text-white border-blue-500":"bg-white text-gray-500 border-gray-200"}`}>{m.icon} {m.label}</button>)}</div>}
+                        {showPay && <div className="flex flex-wrap gap-1.5 mt-2">{payModes.filter(m => m.id !== "carte").map(m=><button key={m.id} onClick={()=>setPayMode(m.id)} className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${payMode===m.id?"bg-blue-500 text-white border-blue-500":"bg-white text-slate-600 border-gray-200"}`}>{m.icon} {m.label}</button>)}</div>}
                       </>
                     )}
                   </div>
@@ -793,8 +793,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
                       </label>
                       {licence && (
                         <div className="flex gap-2 mt-1.5 ml-6">
-                          <button onClick={() => setLicenceType("moins18")} className={`px-3 py-1 rounded-lg font-body text-xs cursor-pointer border ${licenceType === "moins18" ? "bg-green-500 text-white border-green-500" : "bg-white text-gray-500 border-gray-200"}`}>-18 ans (25€)</button>
-                          <button onClick={() => setLicenceType("plus18")} className={`px-3 py-1 rounded-lg font-body text-xs cursor-pointer border ${licenceType === "plus18" ? "bg-green-500 text-white border-green-500" : "bg-white text-gray-500 border-gray-200"}`}>+18 ans (36€)</button>
+                          <button onClick={() => setLicenceType("moins18")} className={`px-3 py-1 rounded-lg font-body text-xs cursor-pointer border ${licenceType === "moins18" ? "bg-green-500 text-white border-green-500" : "bg-white text-slate-600 border-gray-200"}`}>-18 ans (25€)</button>
+                          <button onClick={() => setLicenceType("plus18")} className={`px-3 py-1 rounded-lg font-body text-xs cursor-pointer border ${licenceType === "plus18" ? "bg-green-500 text-white border-green-500" : "bg-white text-slate-600 border-gray-200"}`}>+18 ans (36€)</button>
                         </div>
                       )}
                     </div>
@@ -804,7 +804,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
                         <span className="font-body text-sm text-blue-800">Forfait {creneau.activityTitle}</span>
                         <span className="font-body text-sm font-semibold text-blue-500">{prixForfait}€</span>
                       </div>
-                      <div className="font-body text-[10px] text-gray-400 mt-0.5">
+                      <div className="font-body text-[10px] text-slate-500 mt-0.5">
                         {sessionsRestantes} séances restantes jusqu'au 30 juin
                         {prorata < 1 && <> · {prixForfaitAnnuel}€ × {sessionsRestantes}/{totalSessionsSaison} = {prixForfait}€</>}
                         {prorata >= 1 && <> · Tarif plein (début de saison)</>}
@@ -817,10 +817,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
                     </div>
                     {/* Plan de paiement */}
                     <div>
-                      <div className="font-body text-[10px] text-gray-400 mb-1">Plan de paiement</div>
+                      <div className="font-body text-[10px] text-slate-500 mb-1">Plan de paiement</div>
                       <div className="flex gap-2">
                         {(["1x", "3x", "10x"] as const).map(p => (
-                          <button key={p} onClick={() => setPayPlan(p)} className={`flex-1 py-2 rounded-lg font-body text-xs font-semibold cursor-pointer border ${payPlan === p ? "bg-green-500 text-white border-green-500" : "bg-white text-gray-500 border-gray-200"}`}>
+                          <button key={p} onClick={() => setPayPlan(p)} className={`flex-1 py-2 rounded-lg font-body text-xs font-semibold cursor-pointer border ${payPlan === p ? "bg-green-500 text-white border-green-500" : "bg-white text-slate-600 border-gray-200"}`}>
                             {p === "1x" ? `1× ${totalAnnuel.toFixed(0)}€` : p === "3x" ? `3× ${(totalAnnuel / 3).toFixed(0)}€` : `10× ${(totalAnnuel / 10).toFixed(0)}€`}
                           </button>
                         ))}
@@ -839,10 +839,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
                       <input type="checkbox" checked={showPay} onChange={e => setShowPay(e.target.checked)} className="accent-blue-500 w-4 h-4"/>
                       <span className="font-body text-sm text-blue-800 font-semibold">Encaisser maintenant</span>
                     </label>
-                    <div className="font-body text-[10px] text-gray-400 mt-1 ml-6">
+                    <div className="font-body text-[10px] text-slate-500 mt-1 ml-6">
                       {showPay ? "Le paiement sera enregistré immédiatement." : "Ajouté aux impayés de la famille."}
                     </div>
-                    {showPay && <div className="flex flex-wrap gap-1.5 mt-2">{payModes.map(m=><button key={m.id} onClick={()=>setPayMode(m.id)} className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${payMode===m.id?"bg-blue-500 text-white border-blue-500":"bg-white text-gray-500 border-gray-200"}`}>{m.icon} {m.label}</button>)}</div>}
+                    {showPay && <div className="flex flex-wrap gap-1.5 mt-2">{payModes.map(m=><button key={m.id} onClick={()=>setPayMode(m.id)} className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${payMode===m.id?"bg-blue-500 text-white border-blue-500":"bg-white text-slate-600 border-gray-200"}`}>{m.icon} {m.label}</button>)}</div>}
                   </div>
                 )}
               </div>
@@ -851,14 +851,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
 
             {/* Bouton Stage */}
             {isStage && selectedChildren.length > 0 && (
-              <button onClick={handleEnroll} disabled={enrolling} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${enrolling ? "bg-gray-200 text-gray-400" : "bg-green-600 text-white hover:bg-green-500"}`}>
+              <button onClick={handleEnroll} disabled={enrolling} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${enrolling ? "bg-gray-200 text-slate-500" : "bg-green-600 text-white hover:bg-green-500"}`}>
                 {enrolling ? "..." : `Inscrire ${selectedChildren.length} enfant${selectedChildren.length > 1 ? "s" : ""} — ${stageTotalTTC.toFixed(2)}€`}
               </button>
             )}
 
             {/* Bouton Cours / Activité ponctuelle */}
             {!isStage && selChild && (
-              <button onClick={handleEnroll} disabled={!selChild||enrolling} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${!selChild||enrolling?"bg-gray-200 text-gray-400":inscriptionMode==="annuel"?"bg-green-600 text-white hover:bg-green-500":"bg-blue-500 text-white hover:bg-blue-400"}`}>
+              <button onClick={handleEnroll} disabled={!selChild||enrolling} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${!selChild||enrolling?"bg-gray-200 text-slate-500":inscriptionMode==="annuel"?"bg-green-600 text-white hover:bg-green-500":"bg-blue-500 text-white hover:bg-blue-400"}`}>
                 {enrolling ? "..." : inscriptionMode === "annuel" ? `Inscrire à l'année (${totalAnnuel.toFixed(2)}€)` : showPay ? `Inscrire + Encaisser (${priceTTC.toFixed(2)}€)` : priceTTC > 0 ? `Inscrire — paiement en attente (${priceTTC.toFixed(2)}€)` : "Inscrire"}
               </button>
             )}
@@ -870,7 +870,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
               <div className="font-body text-sm font-semibold text-green-700 mb-2">
                 Inscrire aussi dans d'autres jours ?
               </div>
-              <p className="font-body text-xs text-gray-500 mb-3">
+              <p className="font-body text-xs text-slate-600 mb-3">
                 {showAddDays.enfants.map(e => e.childName).join(", ")} inscrit(s) pour 1 jour. Voulez-vous ajouter d'autres jours du même stage ?
               </p>
               <div className="flex flex-col gap-1.5 mb-3">
@@ -947,7 +947,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
                 ))}
               </div>
               <button onClick={() => setShowAddDays(null)}
-                className="w-full py-2 rounded-lg font-body text-xs text-gray-500 bg-gray-100 border-none cursor-pointer">
+                className="w-full py-2 rounded-lg font-body text-xs text-slate-600 bg-gray-100 border-none cursor-pointer">
                 Terminé
               </button>
             </div>

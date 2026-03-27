@@ -195,7 +195,7 @@ export default function CartesPage() {
         {([["active", "Cartes actives", Ticket], ["create", "Nouvelle carte", Plus], ["history", "Historique", History]] as const).map(([id, label, Icon]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all
-              ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
+              ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
             <Icon size={16} /> {label}
           </button>
         ))}
@@ -205,7 +205,7 @@ export default function CartesPage() {
       {tab === "active" && (
         <div>
           <div className="relative mb-4">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher prénom, nom ou famille..."
               className={`${inp} !pl-9`} />
           </div>
@@ -214,7 +214,7 @@ export default function CartesPage() {
           filteredCards.length === 0 ? (
             <Card padding="lg" className="text-center">
               <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><Ticket size={28} className="text-blue-300" /></div>
-              <p className="font-body text-sm text-gray-500 mb-3">{search ? "Aucune carte trouvée." : "Aucune carte active."}</p>
+              <p className="font-body text-sm text-slate-600 mb-3">{search ? "Aucune carte trouvée." : "Aucune carte active."}</p>
               <button onClick={() => setTab("create")} className="font-body text-sm font-semibold text-blue-500 bg-transparent border-none cursor-pointer">+ Créer une carte</button>
             </Card>
           ) : (
@@ -227,10 +227,10 @@ export default function CartesPage() {
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-xl bg-gold-50 flex items-center justify-center text-2xl">🎟️</div>
                         <div>
-                          <div className="font-body text-base font-semibold text-blue-800">{card.childName} <span className="font-normal text-gray-400 text-sm">· {card.familyName}</span></div>
-                          <div className="font-body text-xs text-gray-400">{card.familyName} · {card.activityType === "balade" ? "Balades" : "Cours"}{(card as any).familiale ? " · 👨‍👩‍👧 Familiale" : ""}</div>
+                          <div className="font-body text-base font-semibold text-blue-800">{card.childName} <span className="font-normal text-slate-500 text-sm">· {card.familyName}</span></div>
+                          <div className="font-body text-xs text-slate-500">{card.familyName} · {card.activityType === "balade" ? "Balades" : "Cours"}{(card as any).familiale ? " · 👨‍👩‍👧 Familiale" : ""}</div>
                           {(card as any).dateDebut && (card as any).dateFin && (
-                            <div className="font-body text-[10px] text-gray-400 mt-0.5">
+                            <div className="font-body text-[10px] text-slate-500 mt-0.5">
                               {new Date((card as any).dateDebut).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}
                               {" → "}
                               {new Date((card as any).dateFin).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}
@@ -251,7 +251,7 @@ export default function CartesPage() {
                           style={{ width: `${pct}%` }} />
                       </div>
                       <div className="flex justify-between mt-1">
-                        <span className="font-body text-[10px] text-gray-400">{card.usedSessions} utilisée{card.usedSessions > 1 ? "s" : ""}</span>
+                        <span className="font-body text-[10px] text-slate-500">{card.usedSessions} utilisée{card.usedSessions > 1 ? "s" : ""}</span>
                         <span className="font-body text-[10px] font-semibold text-gold-500">{card.remainingSessions} restante{card.remainingSessions > 1 ? "s" : ""}</span>
                       </div>
                     </div>
@@ -267,7 +267,7 @@ export default function CartesPage() {
                             {debiting ? "..." : "−1"}
                           </button>
                           <button onClick={() => setDebitCardId(null)}
-                            className="px-2 py-2 rounded-lg text-gray-400 bg-transparent border border-gray-200 cursor-pointer">
+                            className="px-2 py-2 rounded-lg text-slate-500 bg-transparent border border-gray-200 cursor-pointer">
                             <X size={14} />
                           </button>
                         </div>
@@ -281,7 +281,7 @@ export default function CartesPage() {
 
                     {/* Bouton détail + historique replié */}
                     <button onClick={() => setOpenCardId(openCardId === card.id ? null : card.id)}
-                      className="w-full flex items-center justify-between mt-2 pt-2 border-t border-gray-100 font-body text-xs text-gray-400 hover:text-blue-500 bg-transparent border-none cursor-pointer px-0 pb-0">
+                      className="w-full flex items-center justify-between mt-2 pt-2 border-t border-gray-100 font-body text-xs text-slate-500 hover:text-blue-500 bg-transparent border-none cursor-pointer px-0 pb-0">
                       <span>{(card.history || []).filter((h:any) => !h.credit && h.presence !== "absent").length} séance{(card.history || []).filter((h:any) => !h.credit && h.presence !== "absent").length > 1 ? "s" : ""} utilisée{(card.history || []).filter((h:any) => !h.credit && h.presence !== "absent").length > 1 ? "s" : ""}</span>
                       <span>{openCardId === card.id ? "▲ Masquer" : "▼ Voir le détail"}</span>
                     </button>
@@ -295,7 +295,7 @@ export default function CartesPage() {
                               <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${h.credit ? "bg-green-400" : h.presence === "absent" ? "bg-red-400" : "bg-gold-400"}`} />
                               <div className="min-w-0">
                                 <div className="text-blue-800 font-semibold truncate">{h.activityTitle || "Séance"}</div>
-                                <div className="text-gray-400 text-[10px]">
+                                <div className="text-slate-500 text-[10px]">
                                   {h.date ? new Date(h.date).toLocaleDateString("fr-FR", { weekday:"short", day:"numeric", month:"short" }) : ""}
                                   {h.horseName ? ` · ${h.horseName}` : ""}
                                   {h.credit ? " · Recrédit" : ""}
@@ -310,7 +310,7 @@ export default function CartesPage() {
                       </div>
                     )}
                     {openCardId === card.id && (card.history || []).length === 0 && (
-                      <p className="font-body text-xs text-gray-400 text-center py-2 mt-1">Aucune séance utilisée</p>
+                      <p className="font-body text-xs text-slate-500 text-center py-2 mt-1">Aucune séance utilisée</p>
                     )}
                   </Card>
                 );
@@ -329,7 +329,7 @@ export default function CartesPage() {
             <div>
               <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Famille</label>
               <div className="relative mb-2">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input value={familySearch} onChange={e => setFamilySearch(e.target.value)} placeholder="Rechercher..." className={`${inp} !pl-9`} />
               </div>
               <select value={selFamily} onChange={e => { setSelFamily(e.target.value); setSelChild(""); }} className={inp}>
@@ -349,7 +349,7 @@ export default function CartesPage() {
                 <div className="flex items-center justify-between p-3 bg-sand rounded-xl mb-3">
                   <div>
                     <div className="font-body text-sm font-semibold text-blue-800">Carte familiale</div>
-                    <div className="font-body text-xs text-gray-400 mt-0.5">Utilisable par tous les enfants de la famille</div>
+                    <div className="font-body text-xs text-slate-500 mt-0.5">Utilisable par tous les enfants de la famille</div>
                   </div>
                   <button onClick={() => { setCarteFamiliale(!carteFamiliale); setSelChild(""); }}
                     className={`w-12 h-6 rounded-full transition-all border-none cursor-pointer flex-shrink-0 ${carteFamiliale ? "bg-blue-500" : "bg-gray-200"}`}>
@@ -361,7 +361,7 @@ export default function CartesPage() {
                   <div className="flex flex-wrap gap-2">
                     {children.map((c: any) => (
                       <button key={c.id} onClick={() => setSelChild(c.id)}
-                        className={`px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${selChild === c.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
+                        className={`px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${selChild === c.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
                         🧒 {c.firstName}
                       </button>
                     ))}
@@ -385,7 +385,7 @@ export default function CartesPage() {
               <div className="flex gap-2">
                 {([["cours", "🐴 Cours"], ["balade", "🌿 Balades"]] as const).map(([val, label]) => (
                   <button key={val} onClick={() => setSelActivityType(val)}
-                    className={`flex-1 py-2.5 rounded-lg border font-body text-sm cursor-pointer transition-all ${selActivityType === val ? "border-blue-500 bg-blue-50 text-blue-800 font-semibold" : "border-gray-200 bg-white text-gray-500"}`}>
+                    className={`flex-1 py-2.5 rounded-lg border font-body text-sm cursor-pointer transition-all ${selActivityType === val ? "border-blue-500 bg-blue-50 text-blue-800 font-semibold" : "border-gray-200 bg-white text-slate-600"}`}>
                     {label}
                   </button>
                 ))}
@@ -400,7 +400,7 @@ export default function CartesPage() {
                   <button key={i} onClick={() => setSelTemplate(i)}
                     className={`flex-1 p-4 rounded-xl border text-center cursor-pointer transition-all ${selTemplate === i ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white"}`}>
                     <div className="font-body text-2xl font-bold text-blue-800">{t.sessions}</div>
-                    <div className="font-body text-xs text-gray-500">séances</div>
+                    <div className="font-body text-xs text-slate-600">séances</div>
                     {t.discount > 0 && <div className="font-body text-xs font-semibold text-green-600 mt-1">-{t.discount}%</div>}
                   </button>
                 ))}
@@ -436,8 +436,8 @@ export default function CartesPage() {
             {/* Price summary */}
             <div className="bg-blue-50 rounded-lg p-4">
               <div className="flex justify-between mb-1">
-                <span className="font-body text-sm text-gray-500">{template.sessions} × {unitPrice.toFixed(2)}€ HT</span>
-                <span className="font-body text-sm text-gray-500">{(unitPrice * template.sessions).toFixed(2)}€</span>
+                <span className="font-body text-sm text-slate-600">{template.sessions} × {unitPrice.toFixed(2)}€ HT</span>
+                <span className="font-body text-sm text-slate-600">{(unitPrice * template.sessions).toFixed(2)}€</span>
               </div>
               {template.discount > 0 && (
                 <div className="flex justify-between mb-1">
@@ -446,7 +446,7 @@ export default function CartesPage() {
                 </div>
               )}
               <div className="flex justify-between mb-1">
-                <span className="font-body text-sm text-gray-500">Total HT</span>
+                <span className="font-body text-sm text-slate-600">Total HT</span>
                 <span className="font-body text-sm font-semibold text-gray-700">{totalHT.toFixed(2)}€</span>
               </div>
               <div className="flex justify-between pt-2 border-t border-blue-500/8">
@@ -457,7 +457,7 @@ export default function CartesPage() {
 
             <button onClick={handleCreate} disabled={!selFamily || (!carteFamiliale && !selChild) || creating}
               className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer
-                ${!selFamily || !selChild || creating ? "bg-gray-200 text-gray-400" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
+                ${!selFamily || !selChild || creating ? "bg-gray-200 text-slate-500" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
               {creating ? "Création..." : `Créer la carte ${template.sessions} séances + Encaisser ${totalTTC.toFixed(2)}€`}
             </button>
           </div>
@@ -470,11 +470,11 @@ export default function CartesPage() {
           {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
           cards.length === 0 ? (
             <Card padding="lg" className="text-center">
-              <p className="font-body text-sm text-gray-500">Aucune carte créée.</p>
+              <p className="font-body text-sm text-slate-600">Aucune carte créée.</p>
             </Card>
           ) : (
             <Card className="!p-0 overflow-hidden">
-              <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+              <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                 <span className="flex-1">Cavalier</span>
                 <span className="w-24">Famille</span>
                 <span className="w-16 text-center">Type</span>
@@ -485,10 +485,10 @@ export default function CartesPage() {
               {cards.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).map(card => (
                 <div key={card.id} className="px-5 py-3 border-b border-blue-500/8 last:border-b-0 flex items-center hover:bg-blue-50/30">
                   <span className="flex-1 font-body text-sm font-semibold text-blue-800">🧒 {card.childName}</span>
-                  <span className="w-24 font-body text-xs text-gray-500">{card.familyName}</span>
+                  <span className="w-24 font-body text-xs text-slate-600">{card.familyName}</span>
                   <span className="w-16 text-center font-body text-xs font-semibold text-blue-500">{card.totalSessions} séances</span>
                   <span className="w-20 text-center font-body text-sm font-semibold text-blue-800">{card.usedSessions}/{card.totalSessions}</span>
-                  <span className="w-20 text-right font-body text-sm text-gray-500">{card.priceTTC?.toFixed(2)}€</span>
+                  <span className="w-20 text-right font-body text-sm text-slate-600">{card.priceTTC?.toFixed(2)}€</span>
                   <span className="w-20 text-center">
                     <Badge color={card.status === "active" ? "green" : card.status === "used" ? "gray" : "red"}>
                       {card.status === "active" ? "Active" : card.status === "used" ? "Épuisée" : "Expirée"}

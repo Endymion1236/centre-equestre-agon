@@ -465,7 +465,7 @@ export default function CavaliersPage() {
   });
 
   const inputStyle = "w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 bg-white";
-  const labelStyle = "font-body text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block";
+  const labelStyle = "font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5 block";
 
   return (
     <div>
@@ -481,24 +481,24 @@ export default function CavaliersPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <Card padding="sm" className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><Users size={20} className="text-blue-500" /></div>
-          <div><div className="font-body text-xl font-bold text-blue-500">{families.length}</div><div className="font-body text-xs text-gray-500">familles</div></div>
+          <div><div className="font-body text-xl font-bold text-blue-500">{families.length}</div><div className="font-body text-xs text-slate-600">familles</div></div>
         </Card>
         <Card padding="sm" className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center"><UserCheck size={20} className="text-green-600" /></div>
-          <div><div className="font-body text-xl font-bold text-green-600">{allChildren.length}</div><div className="font-body text-xs text-gray-500">cavaliers</div></div>
+          <div><div className="font-body text-xl font-bold text-green-600">{allChildren.length}</div><div className="font-body text-xs text-slate-600">cavaliers</div></div>
         </Card>
         <Card padding="sm" className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center"><AlertTriangle size={20} className="text-orange-500" /></div>
-          <div><div className="font-body text-xl font-bold text-orange-500">{missingForms}</div><div className="font-body text-xs text-gray-500">fiches manquantes</div></div>
+          <div><div className="font-body text-xl font-bold text-orange-500">{missingForms}</div><div className="font-body text-xs text-slate-600">fiches manquantes</div></div>
         </Card>
       </div>
 
       {/* Recherche */}
       <div className="relative mb-5">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher : prénom + nom enfant, famille, email..."
           className={`${inputStyle} !pl-10`} />
-        {search && <div className="font-body text-[10px] text-gray-500 mt-1 ml-1">{filtered.length} famille{filtered.length > 1 ? "s" : ""} trouvée{filtered.length > 1 ? "s" : ""}</div>}
+        {search && <div className="font-body text-[10px] text-slate-600 mt-1 ml-1">{filtered.length} famille{filtered.length > 1 ? "s" : ""} trouvée{filtered.length > 1 ? "s" : ""}</div>}
       </div>
 
       {/* Liste des familles */}
@@ -507,7 +507,7 @@ export default function CavaliersPage() {
       ) : filtered.length === 0 ? (
         <Card padding="lg" className="text-center">
           <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><Users size={28} className="text-blue-300" /></div>
-          <p className="font-body text-sm text-gray-500">{search ? "Aucun résultat." : "Aucune famille inscrite. Cliquez sur \"Nouvelle famille\" pour commencer."}</p>
+          <p className="font-body text-sm text-slate-600">{search ? "Aucun résultat." : "Aucune famille inscrite. Cliquez sur \"Nouvelle famille\" pour commencer."}</p>
         </Card>
       ) : (
         <div className="flex flex-col gap-3">
@@ -523,7 +523,7 @@ export default function CavaliersPage() {
                     </div>
                     <div>
                       <div className="font-body text-base font-semibold text-blue-800">{family.parentName || "Sans nom"}</div>
-                      <div className="font-body text-xs text-gray-500">
+                      <div className="font-body text-xs text-slate-600">
                         {family.parentEmail && <><Mail size={10} className="inline mr-1" />{family.parentEmail} · </>}
                         {family.parentPhone && <><Phone size={10} className="inline mr-1" />{family.parentPhone} · </>}
                         {children.length} cavalier{children.length > 1 ? "s" : ""}
@@ -534,7 +534,7 @@ export default function CavaliersPage() {
                     <Badge color={(family as any).authProvider === "admin" ? "gray" : (family as any).authProvider === "google" ? "blue" : "purple"}>
                       {(family as any).authProvider === "admin" ? "Créé admin" : (family as any).authProvider === "google" ? "Google" : "Facebook"}
                     </Badge>
-                    {isExp ? <ChevronUp size={18} className="text-gray-500" /> : <ChevronDown size={18} className="text-gray-500" />}
+                    {isExp ? <ChevronUp size={18} className="text-slate-600" /> : <ChevronDown size={18} className="text-slate-600" />}
                   </div>
                 </div>
 
@@ -546,15 +546,15 @@ export default function CavaliersPage() {
                         <div className="font-body text-xs font-semibold text-blue-500 uppercase tracking-wider mb-3">Modifier les informations</div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
                           <div>
-                            <label className="font-body text-[10px] font-semibold text-gray-500 uppercase block mb-1">Nom</label>
+                            <label className="font-body text-[10px] font-semibold text-slate-600 uppercase block mb-1">Nom</label>
                             <input value={editForm.parentName} onChange={e => setEditForm({ ...editForm, parentName: e.target.value })} className={inputStyle} />
                           </div>
                           <div>
-                            <label className="font-body text-[10px] font-semibold text-gray-500 uppercase block mb-1">Email</label>
+                            <label className="font-body text-[10px] font-semibold text-slate-600 uppercase block mb-1">Email</label>
                             <input type="email" value={editForm.parentEmail} onChange={e => setEditForm({ ...editForm, parentEmail: e.target.value })} className={inputStyle} />
                           </div>
                           <div>
-                            <label className="font-body text-[10px] font-semibold text-gray-500 uppercase block mb-1">Téléphone</label>
+                            <label className="font-body text-[10px] font-semibold text-slate-600 uppercase block mb-1">Téléphone</label>
                             <input type="tel" value={editForm.parentPhone} onChange={e => setEditForm({ ...editForm, parentPhone: e.target.value })} className={inputStyle} />
                           </div>
                         </div>
@@ -564,7 +564,7 @@ export default function CavaliersPage() {
                             {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer
                           </button>
                           <button onClick={() => setEditingFamily(null)}
-                            className="font-body text-xs text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                            className="font-body text-xs text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
                         </div>
                       </div>
                     ) : (
@@ -584,9 +584,9 @@ export default function CavaliersPage() {
                           </button>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div><div className="font-body text-[11px] font-semibold text-gray-500">Email</div><div className="font-body text-sm text-blue-800 break-all">{family.parentEmail || "—"}</div></div>
-                          <div><div className="font-body text-[11px] font-semibold text-gray-500">Téléphone</div><div className="font-body text-sm text-blue-800">{family.parentPhone || "Non renseigné"}</div></div>
-                          <div><div className="font-body text-[11px] font-semibold text-gray-500">Inscription</div><div className="font-body text-sm text-blue-800">{(family as any).authProvider === "admin" ? "Créé par l'admin" : `Via ${(family as any).authProvider}`}</div></div>
+                          <div><div className="font-body text-[11px] font-semibold text-slate-600">Email</div><div className="font-body text-sm text-blue-800 break-all">{family.parentEmail || "—"}</div></div>
+                          <div><div className="font-body text-[11px] font-semibold text-slate-600">Téléphone</div><div className="font-body text-sm text-blue-800">{family.parentPhone || "Non renseigné"}</div></div>
+                          <div><div className="font-body text-[11px] font-semibold text-slate-600">Inscription</div><div className="font-body text-sm text-blue-800">{(family as any).authProvider === "admin" ? "Créé par l'admin" : `Via ${(family as any).authProvider}`}</div></div>
                         </div>
                         {/* Compte client */}
                         {(() => {
@@ -601,15 +601,15 @@ export default function CavaliersPage() {
                             <div className="mt-3 space-y-2">
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                 <div className="bg-sand rounded-xl p-3 text-center">
-                                  <div className="font-body text-[10px] text-gray-500 uppercase">Facturé</div>
+                                  <div className="font-body text-[10px] text-slate-600 uppercase">Facturé</div>
                                   <div className="font-body text-lg font-bold text-blue-500">{totalFacture.toFixed(2)}€</div>
                                 </div>
                                 <div className="bg-green-50 rounded-xl p-3 text-center">
-                                  <div className="font-body text-[10px] text-gray-500 uppercase">Payé</div>
+                                  <div className="font-body text-[10px] text-slate-600 uppercase">Payé</div>
                                   <div className="font-body text-lg font-bold text-green-600">{totalPaye.toFixed(2)}€</div>
                                 </div>
                                 <div className={`rounded-xl p-3 text-center ${resteDu > 0 ? "bg-red-50" : "bg-green-50"}`}>
-                                  <div className="font-body text-[10px] text-gray-500 uppercase">Reste dû</div>
+                                  <div className="font-body text-[10px] text-slate-600 uppercase">Reste dû</div>
                                   <div className={`font-body text-lg font-bold ${resteDu > 0 ? "text-red-500" : "text-green-600"}`}>{resteDu.toFixed(2)}€</div>
                                 </div>
                                 {totalAvoir > 0 && (
@@ -620,7 +620,7 @@ export default function CavaliersPage() {
                                 )}
                               </div>
                               {soldeReel > 0 && totalAvoir > 0 && (
-                                <div className="font-body text-xs text-center text-gray-500">Solde réel après avoir : <span className="font-semibold text-red-500">{soldeReel.toFixed(2)}€</span></div>
+                                <div className="font-body text-xs text-center text-slate-600">Solde réel après avoir : <span className="font-semibold text-red-500">{soldeReel.toFixed(2)}€</span></div>
                               )}
                             </div>
                           );
@@ -629,9 +629,9 @@ export default function CavaliersPage() {
                     )}
 
                     {/* Cavaliers */}
-                    <div className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Cavaliers ({children.length})</div>
+                    <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Cavaliers ({children.length})</div>
                     {children.length === 0 ? (
-                      <p className="font-body text-sm text-gray-500 italic mb-3">Aucun cavalier. Ajoutez un enfant ci-dessous.</p>
+                      <p className="font-body text-sm text-slate-600 italic mb-3">Aucun cavalier. Ajoutez un enfant ci-dessous.</p>
                     ) : (
                       <div className="flex flex-col gap-2 mb-3">
                         {children.map((child: any) => (
@@ -658,7 +658,7 @@ export default function CavaliersPage() {
                                     {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer
                                   </button>
                                   <button onClick={() => setEditingChild(null)}
-                                    className="font-body text-xs text-gray-500 bg-white px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                                    className="font-body text-xs text-slate-600 bg-white px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
                                 </div>
                               </div>
                             ) : editingSanitary?.familyId === family.firestoreId && editingSanitary?.childId === child.id ? (
@@ -667,22 +667,22 @@ export default function CavaliersPage() {
                                 <div className="font-body text-xs font-semibold text-green-600 uppercase">Fiche sanitaire — {child.firstName}</div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                   <div>
-                                    <label className="font-body text-[10px] text-gray-500 block mb-0.5">Allergies / Régime</label>
+                                    <label className="font-body text-[10px] text-slate-600 block mb-0.5">Allergies / Régime</label>
                                     <input value={sanitaryForm.allergies} onChange={e => setSanitaryForm({ ...sanitaryForm, allergies: e.target.value })}
                                       className={inputStyle} placeholder="Aucune" />
                                   </div>
                                   <div>
-                                    <label className="font-body text-[10px] text-gray-500 block mb-0.5">Notes médicales</label>
+                                    <label className="font-body text-[10px] text-slate-600 block mb-0.5">Notes médicales</label>
                                     <input value={sanitaryForm.medicalNotes} onChange={e => setSanitaryForm({ ...sanitaryForm, medicalNotes: e.target.value })}
                                       className={inputStyle} placeholder="Asthme, lunettes..." />
                                   </div>
                                   <div>
-                                    <label className="font-body text-[10px] text-gray-500 block mb-0.5">Contact urgence (nom)</label>
+                                    <label className="font-body text-[10px] text-slate-600 block mb-0.5">Contact urgence (nom)</label>
                                     <input value={sanitaryForm.emergencyContactName} onChange={e => setSanitaryForm({ ...sanitaryForm, emergencyContactName: e.target.value })}
                                       className={inputStyle} placeholder="Maman, Papa, Grand-mère..." />
                                   </div>
                                   <div>
-                                    <label className="font-body text-[10px] text-gray-500 block mb-0.5">Téléphone urgence</label>
+                                    <label className="font-body text-[10px] text-slate-600 block mb-0.5">Téléphone urgence</label>
                                     <input type="tel" value={sanitaryForm.emergencyContactPhone} onChange={e => setSanitaryForm({ ...sanitaryForm, emergencyContactPhone: e.target.value })}
                                       className={inputStyle} placeholder="06 00 00 00 00" />
                                   </div>
@@ -698,7 +698,7 @@ export default function CavaliersPage() {
                                     {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer la fiche
                                   </button>
                                   <button onClick={() => setEditingSanitary(null)}
-                                    className="font-body text-xs text-gray-500 bg-white px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                                    className="font-body text-xs text-slate-600 bg-white px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
                                 </div>
                               </div>
                             ) : (
@@ -710,7 +710,7 @@ export default function CavaliersPage() {
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <div className="font-body text-sm font-semibold text-blue-800">{child.firstName}{child.lastName ? ` ${child.lastName}` : ""}</div>
-                                    <div className="font-body text-xs text-gray-500">
+                                    <div className="font-body text-xs text-slate-600">
                                       {child.birthDate ? `Né(e) le ${new Date(typeof child.birthDate === "string" ? child.birthDate : child.birthDate?.seconds ? child.birthDate.seconds * 1000 : child.birthDate).toLocaleDateString("fr-FR")}` : ""}
                                     </div>
                                   </div>
@@ -744,7 +744,7 @@ export default function CavaliersPage() {
                                     <CalendarDays size={12} /> Inscrire
                                   </button>
                                   <button onClick={() => startEditChild(family.firestoreId, child)}
-                                    className="font-body text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-lg border-none cursor-pointer hover:bg-gray-200 flex items-center gap-1">
+                                    className="font-body text-xs text-slate-600 bg-gray-100 px-2 py-1 rounded-lg border-none cursor-pointer hover:bg-gray-200 flex items-center gap-1">
                                     <Edit3 size={10} /> Modifier
                                   </button>
                                   <button onClick={() => handleDeleteChild(family.firestoreId, child.id, child.firstName)}
@@ -767,7 +767,7 @@ export default function CavaliersPage() {
                                               {new Date(r.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} — {r.activityTitle || "Séance"}
                                             </div>
                                           ))}
-                                          {childReservations.length > 3 && <div className="font-body text-[10px] text-gray-500">+{childReservations.length - 3} autres</div>}
+                                          {childReservations.length > 3 && <div className="font-body text-[10px] text-slate-600">+{childReservations.length - 3} autres</div>}
                                         </div>
                                       )}
                                       {lastNotes.length > 0 && (
@@ -775,7 +775,7 @@ export default function CavaliersPage() {
                                           <div className="font-body text-[10px] font-semibold text-green-600 uppercase mb-1">Dernières notes péda</div>
                                           {lastNotes.map((n: any, ni: number) => (
                                             <div key={ni} className="font-body text-xs text-gray-600 flex gap-2">
-                                              <span className="text-gray-500 flex-shrink-0">{new Date(n.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span>
+                                              <span className="text-slate-600 flex-shrink-0">{new Date(n.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span>
                                               <span className="truncate">{n.text}</span>
                                             </div>
                                           ))}
@@ -814,7 +814,7 @@ export default function CavaliersPage() {
                             className="flex items-center gap-2 font-body text-xs font-semibold text-white bg-blue-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-600 disabled:opacity-50">
                             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Ajouter
                           </button>
-                          <button onClick={() => setAddChildTo(null)} className="font-body text-xs text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                          <button onClick={() => setAddChildTo(null)} className="font-body text-xs text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
                         </div>
                       </div>
                     ) : (
@@ -827,9 +827,9 @@ export default function CavaliersPage() {
                     {/* Fiches sanitaires */}
                     {children.some((c: any) => c.sanitaryForm) && (
                       <div className="mt-4 pt-3 border-t border-blue-500/8">
-                        <div className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Fiches sanitaires</div>
+                        <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Fiches sanitaires</div>
                         {children.filter((c: any) => c.sanitaryForm).map((child: any) => (
-                          <div key={child.id} className="flex gap-6 text-xs font-body text-gray-500 mb-2">
+                          <div key={child.id} className="flex gap-6 text-xs font-body text-slate-600 mb-2">
                             <span className="font-semibold text-blue-800 min-w-[60px]">{child.firstName}{child.lastName ? ` ${child.lastName}` : ""}</span>
                             <span>Allergies : {child.sanitaryForm.allergies || "Aucune"}</span>
                             <span>Urgence : {child.sanitaryForm.emergencyContactName} ({child.sanitaryForm.emergencyContactPhone})</span>
@@ -846,11 +846,11 @@ export default function CavaliersPage() {
                       const past = reservations.filter(r => r.date < today).slice(0, 5);
                       return (reservations.length > 0 || true) ? (
                         <div className="mt-4 pt-3 border-t border-blue-500/8">
-                          <div className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                          <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                             <CalendarDays size={12} /> Réservations ({reservations.length})
                           </div>
                           {reservations.length === 0 ? (
-                            <p className="font-body text-xs text-gray-500 italic">Aucune réservation.</p>
+                            <p className="font-body text-xs text-slate-600 italic">Aucune réservation.</p>
                           ) : (
                             <div className="flex flex-col gap-1">
                               {upcoming.length > 0 && (
@@ -860,9 +860,9 @@ export default function CavaliersPage() {
                                     <div key={r.id} className="flex items-center justify-between font-body text-xs py-1.5 px-3 bg-green-50 rounded-lg">
                                       <div className="flex items-center gap-2">
                                         <span className="text-green-700 font-semibold">{new Date(r.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</span>
-                                        <span className="text-gray-500">{r.startTime}–{r.endTime}</span>
+                                        <span className="text-slate-600">{r.startTime}–{r.endTime}</span>
                                         <span className="text-blue-800 font-semibold">{r.activityTitle}</span>
-                                        <span className="text-gray-500">({r.childName})</span>
+                                        <span className="text-slate-600">({r.childName})</span>
                                       </div>
                                       <Badge color={r.status === "confirmed" ? "green" : r.status === "cancelled" ? "red" : "gray"}>
                                         {r.status === "confirmed" ? "Confirmée" : r.status === "cancelled" ? "Annulée" : r.status}
@@ -873,9 +873,9 @@ export default function CavaliersPage() {
                               )}
                               {past.length > 0 && (
                                 <>
-                                  <div className="font-body text-[10px] text-gray-500 font-semibold mt-2 mb-0.5">Passées (dernières {past.length})</div>
+                                  <div className="font-body text-[10px] text-slate-600 font-semibold mt-2 mb-0.5">Passées (dernières {past.length})</div>
                                   {past.map((r: any) => (
-                                    <div key={r.id} className="flex items-center justify-between font-body text-xs py-1 px-3 text-gray-500">
+                                    <div key={r.id} className="flex items-center justify-between font-body text-xs py-1 px-3 text-slate-600">
                                       <div className="flex items-center gap-2">
                                         <span>{new Date(r.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span>
                                         <span>{r.activityTitle}</span>
@@ -900,17 +900,17 @@ export default function CavaliersPage() {
                       const modeLabels: Record<string,string> = { cb_terminal: "CB", cb_online: "Stripe", cheque: "Chèque", especes: "Espèces", cheque_vacances: "Chq. Vac.", pass_sport: "Pass'Sport", ancv: "ANCV", virement: "Virement", avoir: "Avoir", carte: "Carte" };
                       return (
                         <div className="mt-4 pt-3 border-t border-blue-500/8">
-                          <div className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                          <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                             <Receipt size={12} /> Paiements ({payments.length})
                             {totalDue > 0 && <Badge color="red">{totalDue.toFixed(2)}€ dû</Badge>}
                           </div>
                           {payments.length === 0 ? (
-                            <p className="font-body text-xs text-gray-500 italic">Aucun paiement enregistré.</p>
+                            <p className="font-body text-xs text-slate-600 italic">Aucun paiement enregistré.</p>
                           ) : (
                             <>
                               <div className="flex gap-4 mb-2">
-                                <div className="font-body text-xs"><span className="text-gray-500">Total payé :</span> <span className="font-semibold text-green-600">{totalPaid.toFixed(2)}€</span></div>
-                                {totalDue > 0 && <div className="font-body text-xs"><span className="text-gray-500">Reste dû :</span> <span className="font-semibold text-red-500">{totalDue.toFixed(2)}€</span></div>}
+                                <div className="font-body text-xs"><span className="text-slate-600">Total payé :</span> <span className="font-semibold text-green-600">{totalPaid.toFixed(2)}€</span></div>
+                                {totalDue > 0 && <div className="font-body text-xs"><span className="text-slate-600">Reste dû :</span> <span className="font-semibold text-red-500">{totalDue.toFixed(2)}€</span></div>}
                               </div>
                               <div className="flex flex-col gap-1">
                                 {payments.slice(0, 8).map((p: any) => {
@@ -918,7 +918,7 @@ export default function CavaliersPage() {
                                   return (
                                     <div key={p.id} className="flex items-center justify-between font-body text-xs py-1.5 px-3 bg-sand rounded-lg">
                                       <div className="flex items-center gap-2">
-                                        <span className="text-gray-500 min-w-[65px]">{d ? d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "—"}</span>
+                                        <span className="text-slate-600 min-w-[65px]">{d ? d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "—"}</span>
                                         <span className="text-blue-800 font-semibold">{(p.items || []).map((i: any) => i.activityTitle).join(", ") || "Paiement"}</span>
                                         <Badge color="gray">{modeLabels[p.paymentMode] || p.paymentMode}</Badge>
                                       </div>
@@ -931,7 +931,7 @@ export default function CavaliersPage() {
                                     </div>
                                   );
                                 })}
-                                {payments.length > 8 && <p className="font-body text-[10px] text-gray-500 text-center mt-1">+ {payments.length - 8} paiement(s) antérieur(s)</p>}
+                                {payments.length > 8 && <p className="font-body text-[10px] text-slate-600 text-center mt-1">+ {payments.length - 8} paiement(s) antérieur(s)</p>}
                               </div>
                             </>
                           )}
@@ -948,12 +948,12 @@ export default function CavaliersPage() {
                       const totalRemaining = activeAvoirs.reduce((s, a) => s + (a.remainingAmount || 0), 0);
                       return (
                         <div className="mt-4 pt-3 border-t border-blue-500/8">
-                          <div className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                          <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                             <Wallet size={12} /> Avoirs & avances ({avoirs.length})
                             {totalRemaining > 0 && <Badge color="blue">{totalRemaining.toFixed(2)}€ dispo</Badge>}
                           </div>
                           {avoirs.length === 0 ? (
-                            <p className="font-body text-xs text-gray-500 italic">Aucun avoir ni avance.</p>
+                            <p className="font-body text-xs text-slate-600 italic">Aucun avoir ni avance.</p>
                           ) : (
                             <div className="flex flex-col gap-1.5">
                               {avoirs.map((a: any) => {
@@ -963,14 +963,14 @@ export default function CavaliersPage() {
                                     <div className="flex items-center gap-2 flex-1">
                                       <Badge color={a.type === "avoir" ? "orange" : "green"}>{a.type === "avoir" ? "Avoir" : "Avance"}</Badge>
                                       <span className="text-blue-800 font-semibold">{a.reference}</span>
-                                      <span className="text-gray-500">{a.reason || "—"}</span>
+                                      <span className="text-slate-600">{a.reason || "—"}</span>
                                       <div className="flex-1 max-w-[100px] h-1.5 bg-gray-100 rounded-full overflow-hidden">
                                         <div className={`h-full rounded-full ${pctUsed > 80 ? "bg-gray-300" : "bg-blue-300"}`} style={{ width: `${pctUsed}%` }} />
                                       </div>
-                                      <span className="text-gray-500">{a.usedAmount?.toFixed(2) || "0"}€/{a.amount?.toFixed(2)}€</span>
+                                      <span className="text-slate-600">{a.usedAmount?.toFixed(2) || "0"}€/{a.amount?.toFixed(2)}€</span>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                      <span className={`font-semibold ${a.remainingAmount > 0 ? "text-blue-500" : "text-gray-300"}`}>{a.remainingAmount?.toFixed(2)}€</span>
+                                      <span className={`font-semibold ${a.remainingAmount > 0 ? "text-blue-500" : "text-slate-400"}`}>{a.remainingAmount?.toFixed(2)}€</span>
                                       <Badge color={a.status === "actif" ? "green" : a.status === "utilise" ? "gray" : "orange"}>{a.status}</Badge>
                                     </div>
                                   </div>
@@ -989,7 +989,7 @@ export default function CavaliersPage() {
                       if (famCartes.length === 0) return null;
                       return (
                         <div className="mt-4 pt-3 border-t border-blue-500/8">
-                          <div className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                          <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                             🎟️ Cartes de séances ({famCartes.length})
                             {activeCartes.length > 0 && <Badge color="green">{activeCartes.length} active{activeCartes.length > 1 ? "s" : ""}</Badge>}
                           </div>
@@ -1003,7 +1003,7 @@ export default function CavaliersPage() {
                                   <div className="flex items-center justify-between mb-1.5">
                                     <div>
                                       <span className="font-semibold text-blue-800">{carte.childName}</span>
-                                      <span className="text-gray-500 ml-1">· {carte.activityType === "balade" ? "Balades" : "Cours"}</span>
+                                      <span className="text-slate-600 ml-1">· {carte.activityType === "balade" ? "Balades" : "Cours"}</span>
                                     </div>
                                     <Badge color={used || expired ? "gray" : carte.remainingSessions > 2 ? "green" : "orange"}>
                                       {carte.remainingSessions}/{carte.totalSessions}
@@ -1013,7 +1013,7 @@ export default function CavaliersPage() {
                                   <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden mb-1.5">
                                     <div className="h-full rounded-full bg-gold-400 transition-all" style={{ width: `${pct}%` }} />
                                   </div>
-                                  <div className="flex justify-between text-[10px] text-gray-500">
+                                  <div className="flex justify-between text-[10px] text-slate-600">
                                     <span>
                                       {carte.dateDebut && carte.dateFin
                                         ? `${new Date(carte.dateDebut).toLocaleDateString("fr-FR", { day:"numeric", month:"short" })} → ${new Date(carte.dateFin).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}`
@@ -1032,7 +1032,7 @@ export default function CavaliersPage() {
 
                     {/* ═══ NOTES INTERNES (suite) ═══ */}
                     <div className="mt-4 pt-3 border-t border-blue-500/8">
-                      <div className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Notes internes</div>
+                      <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Notes internes</div>
                       <textarea
                         defaultValue={(family as any).notes || ""}
                         onBlur={async (e) => {
@@ -1044,7 +1044,7 @@ export default function CavaliersPage() {
                         placeholder="Notes visibles uniquement par l'admin (allergies, remarques, historique...)"
                         className="w-full font-body text-xs border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 min-h-[60px] resize-y"
                       />
-                      <p className="font-body text-[10px] text-gray-500 mt-1">Sauvegarde automatique quand vous cliquez en dehors.</p>
+                      <p className="font-body text-[10px] text-slate-600 mt-1">Sauvegarde automatique quand vous cliquez en dehors.</p>
                     </div>
                   </div>
                 )}
@@ -1124,7 +1124,7 @@ export default function CavaliersPage() {
               </div>
             </div>
             <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
-              <button onClick={() => setShowCreateFamily(false)} className="font-body text-sm text-gray-500 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+              <button onClick={() => setShowCreateFamily(false)} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
               <button onClick={handleCreateFamily} disabled={saving || !newFamily.parentName.trim()}
                 className={`flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600 ${saving || !newFamily.parentName.trim() ? "opacity-50 cursor-not-allowed" : ""}`}>
                 {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Créer la famille
@@ -1141,18 +1141,18 @@ export default function CavaliersPage() {
             <div className="flex justify-between items-center p-5 border-b border-gray-100">
               <div>
                 <h2 className="font-display text-lg font-bold text-blue-800">Inscrire {showEnroll.childName}</h2>
-                <p className="font-body text-xs text-gray-500">Sélectionnez un créneau à venir</p>
+                <p className="font-body text-xs text-slate-600">Sélectionnez un créneau à venir</p>
               </div>
               <button onClick={() => setShowEnroll(null)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none hover:bg-gray-200"><X size={16} /></button>
             </div>
             <div className="p-5">
               <div className="relative mb-4">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input placeholder="Filtrer par activité..." value={enrollSearch} onChange={e => setEnrollSearch(e.target.value)}
                   className={`${inputStyle} !pl-9 !text-xs`} />
               </div>
               {creneaux.length === 0 ? (
-                <p className="font-body text-sm text-gray-500 text-center py-6">Aucun créneau à venir.</p>
+                <p className="font-body text-sm text-slate-600 text-center py-6">Aucun créneau à venir.</p>
               ) : (
                 <div className="flex flex-col gap-2 max-h-[50vh] overflow-y-auto">
                   {creneaux
@@ -1166,7 +1166,7 @@ export default function CavaliersPage() {
                         <div key={c.id} className={`flex items-center justify-between px-4 py-3 rounded-lg border ${alreadyIn ? "border-green-200 bg-green-50/30" : "border-gray-200 bg-white hover:border-blue-200"}`}>
                           <div>
                             <div className="font-body text-sm font-semibold text-blue-800">{c.activityTitle}</div>
-                            <div className="font-body text-xs text-gray-500">
+                            <div className="font-body text-xs text-slate-600">
                               {d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} · {c.startTime}–{c.endTime} · {c.monitor} · {spots} place{spots > 1 ? "s" : ""}
                             </div>
                           </div>
@@ -1197,7 +1197,7 @@ export default function CavaliersPage() {
             <div className="flex justify-between items-center p-5 border-b border-gray-100">
               <div>
                 <h2 className="font-display text-lg font-bold text-blue-800">Fusionner des familles</h2>
-                <p className="font-body text-xs text-gray-500">Les cavaliers seront regroupés dans la famille cible</p>
+                <p className="font-body text-xs text-slate-600">Les cavaliers seront regroupés dans la famille cible</p>
               </div>
               <button onClick={() => setShowMerge(null)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none hover:bg-gray-200"><X size={16} /></button>
             </div>
@@ -1208,7 +1208,7 @@ export default function CavaliersPage() {
                   {families.find(f => f.firestoreId === showMerge)?.parentName || "?"} — {(families.find(f => f.firestoreId === showMerge)?.children || []).length} cavalier(s)
                 </div>
               </div>
-              <div className="text-center font-body text-xs text-gray-500">↓ ses cavaliers seront ajoutés à ↓</div>
+              <div className="text-center font-body text-xs text-slate-600">↓ ses cavaliers seront ajoutés à ↓</div>
               <div>
                 <label className={labelStyle}>Famille à conserver (cible)</label>
                 <select className={inputStyle} value={mergeTarget} onChange={e => setMergeTarget(e.target.value)}>
@@ -1238,7 +1238,7 @@ export default function CavaliersPage() {
               )}
             </div>
             <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
-              <button onClick={() => setShowMerge(null)} className="font-body text-sm text-gray-500 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+              <button onClick={() => setShowMerge(null)} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
               <button onClick={handleMerge} disabled={saving || !mergeTarget}
                 className={`flex items-center gap-2 font-body text-sm font-semibold text-white bg-purple-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-purple-600 ${saving || !mergeTarget ? "opacity-50 cursor-not-allowed" : ""}`}>
                 {saving ? <Loader2 size={16} className="animate-spin" /> : <GitMerge size={16} />} Fusionner

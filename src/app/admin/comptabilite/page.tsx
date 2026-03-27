@@ -443,7 +443,7 @@ export default function ComptabilitePage() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="font-display text-2xl font-bold text-blue-800">Comptabilité</h1>
         <div className="flex gap-2 items-center">
-          <label className="font-body text-xs text-gray-400">Période :</label>
+          <label className="font-body text-xs text-slate-500">Période :</label>
           <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)}
             className="px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
         </div>
@@ -465,11 +465,11 @@ export default function ComptabilitePage() {
               { label: "TVA collectée", value: `${totalTVA.toFixed(0)}€`, color: "text-orange-500" },
               { label: "CA TTC (facturé)", value: `${totalTTC.toFixed(0)}€`, color: "text-blue-800" },
               { label: "Total encaissé", value: `${totalEncaisse.toFixed(0)}€`, color: "text-green-600" },
-              { label: "Paiements", value: filteredPayments.length.toString(), color: "text-gray-500" },
+              { label: "Paiements", value: filteredPayments.length.toString(), color: "text-slate-600" },
             ].map((k, i) => (
               <Card key={i} padding="sm">
                 <div className={`font-body text-xl font-bold ${k.color}`}>{k.value}</div>
-                <div className="font-body text-[10px] text-gray-400 uppercase">{k.label}</div>
+                <div className="font-body text-[10px] text-slate-500 uppercase">{k.label}</div>
               </Card>
             ))}
           </div>
@@ -481,7 +481,7 @@ export default function ComptabilitePage() {
         {tabs.map(({ id, label, icon: Icon }) => (
           <button key={id} onClick={() => setTab(id)}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all
-              ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
+              ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
             <Icon size={16} /> {label}
           </button>
         ))}
@@ -492,7 +492,7 @@ export default function ComptabilitePage() {
       {/* ─── Journal des ventes ─── */}
       {!loading && tab === "journal" && (
         <Card className="!p-0 overflow-hidden">
-          <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+          <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
             <span className="w-20">Date</span>
             <span className="flex-1">Client</span>
             <span className="w-40">Prestation</span>
@@ -502,7 +502,7 @@ export default function ComptabilitePage() {
             <span className="w-16 text-right">TTC</span>
           </div>
           {filteredPayments.length === 0 ? (
-            <div className="p-8 text-center font-body text-sm text-gray-400">Aucun paiement sur cette période.</div>
+            <div className="p-8 text-center font-body text-sm text-slate-500">Aucun paiement sur cette période.</div>
           ) : (
             <>
               {filteredPayments.map((p) => {
@@ -511,11 +511,11 @@ export default function ComptabilitePage() {
                 const tva = (p.totalTTC || 0) - ht;
                 return (
                   <div key={p.id} className="px-5 py-3 border-b border-blue-500/8 last:border-b-0 flex items-center hover:bg-blue-50/30">
-                    <span className="w-20 font-body text-xs text-gray-400">{d.toLocaleDateString("fr-FR")}</span>
+                    <span className="w-20 font-body text-xs text-slate-500">{d.toLocaleDateString("fr-FR")}</span>
                     <span className="flex-1 font-body text-sm font-semibold text-blue-800">{p.familyName}</span>
-                    <span className="w-40 font-body text-xs text-gray-500 truncate">{(p.items || []).map((i) => i.activityTitle).join(", ")}</span>
+                    <span className="w-40 font-body text-xs text-slate-600 truncate">{(p.items || []).map((i) => i.activityTitle).join(", ")}</span>
                     <span className="w-20 text-center"><Badge color="blue">{modeLabels[p.paymentMode] || p.paymentMode}</Badge></span>
-                    <span className="w-16 text-right font-body text-xs text-gray-500">{ht.toFixed(2)}€</span>
+                    <span className="w-16 text-right font-body text-xs text-slate-600">{ht.toFixed(2)}€</span>
                     <span className="w-16 text-right font-body text-xs text-orange-500">{tva.toFixed(2)}€</span>
                     <span className="w-16 text-right font-body text-sm font-semibold text-blue-500">{(p.totalTTC || 0).toFixed(2)}€</span>
                   </div>
@@ -537,7 +537,7 @@ export default function ComptabilitePage() {
       {!loading && tab === "tva" && (
         <div className="flex flex-col gap-5">
           <Card className="!p-0 overflow-hidden">
-            <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+            <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
               <span className="flex-1">Taux TVA</span>
               <span className="w-24 text-right">Base HT</span>
               <span className="w-24 text-right">TVA</span>
@@ -546,7 +546,7 @@ export default function ComptabilitePage() {
             {tvaByRate.map(([rate, data]) => (
               <div key={rate} className="px-5 py-3 border-b border-blue-500/8 flex items-center">
                 <span className="flex-1 font-body text-sm font-semibold text-blue-800">{rate}%</span>
-                <span className="w-24 text-right font-body text-sm text-gray-500">{data.ht.toFixed(2)}€</span>
+                <span className="w-24 text-right font-body text-sm text-slate-600">{data.ht.toFixed(2)}€</span>
                 <span className="w-24 text-right font-body text-sm font-semibold text-orange-500">{data.tva.toFixed(2)}€</span>
                 <span className="w-24 text-right font-body text-sm font-semibold text-blue-500">{data.ttc.toFixed(2)}€</span>
               </div>
@@ -564,7 +564,7 @@ export default function ComptabilitePage() {
             <div className="flex flex-col gap-2">
               {byMode.map(([mode, amount]) => (
                 <div key={mode} className="flex items-center justify-between py-2 border-b border-blue-500/8 last:border-b-0">
-                  <span className="font-body text-sm text-gray-500">{modeLabels[mode] || mode}</span>
+                  <span className="font-body text-sm text-slate-600">{modeLabels[mode] || mode}</span>
                   <span className="font-body text-sm font-semibold text-blue-500">{amount.toFixed(2)}€</span>
                 </div>
               ))}
@@ -606,7 +606,7 @@ export default function ComptabilitePage() {
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="font-body text-base font-semibold text-blue-800">Encaissements à remettre</h3>
-                <p className="font-body text-xs text-gray-400">{nonRemis.length} paiement{nonRemis.length > 1 ? "s" : ""} non encore inclus dans une remise</p>
+                <p className="font-body text-xs text-slate-500">{nonRemis.length} paiement{nonRemis.length > 1 ? "s" : ""} non encore inclus dans une remise</p>
               </div>
               {nonRemis.length > 0 && <span className="font-body text-xl font-bold text-orange-500">{totalNonRemis.toFixed(2)}€</span>}
             </div>
@@ -619,7 +619,7 @@ export default function ComptabilitePage() {
                     const mTotal = ps.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
                     return (
                       <div key={mode} className="font-body text-xs bg-white rounded-lg px-3 py-1.5 border border-gray-100">
-                        <span className="text-gray-500">{modeLabels[mode] || mode} :</span>{" "}
+                        <span className="text-slate-600">{modeLabels[mode] || mode} :</span>{" "}
                         <span className="font-semibold text-blue-800">{mTotal.toFixed(2)}€ ({ps.length})</span>
                       </div>
                     );
@@ -631,10 +631,10 @@ export default function ComptabilitePage() {
                     return (
                       <div key={p.id} className="flex items-center justify-between font-body text-xs py-1.5 px-3 bg-white rounded-lg">
                         <div className="flex items-center gap-2">
-                          <span className="text-gray-400 min-w-[65px]">{d ? d.toLocaleDateString("fr-FR") : "—"}</span>
+                          <span className="text-slate-500 min-w-[65px]">{d ? d.toLocaleDateString("fr-FR") : "—"}</span>
                           <Badge color="gray">{modeLabels[p.paymentMode] || p.paymentMode}</Badge>
                           <span className="text-blue-800 font-semibold">{p.familyName}</span>
-                          <span className="text-gray-400">{(p.items || []).map((i: any) => i.activityTitle).join(", ").slice(0, 40)}</span>
+                          <span className="text-slate-500">{(p.items || []).map((i: any) => i.activityTitle).join(", ").slice(0, 40)}</span>
                         </div>
                         <span className="font-semibold text-blue-500">{(p.paidAmount || p.totalTTC || 0).toFixed(2)}€</span>
                       </div>
@@ -683,12 +683,12 @@ export default function ComptabilitePage() {
                 {/* ── Filtres ── */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className="flex items-center gap-1">
-                    <span className="font-body text-xs text-gray-400">Du</span>
+                    <span className="font-body text-xs text-slate-500">Du</span>
                     <input type="date" value={remiseDateFrom} onChange={e => setRemiseDateFrom(e.target.value)}
                       className="font-body text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-blue-400" />
                   </div>
                   <div className="flex items-center gap-1">
-                    <span className="font-body text-xs text-gray-400">au</span>
+                    <span className="font-body text-xs text-slate-500">au</span>
                     <input type="date" value={remiseDateTo} onChange={e => setRemiseDateTo(e.target.value)}
                       className="font-body text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-blue-400" />
                   </div>
@@ -703,7 +703,7 @@ export default function ComptabilitePage() {
                   </select>
                   {(remiseDateFrom || remiseDateTo || remiseModeFilter) && (
                     <button onClick={() => { setRemiseDateFrom(""); setRemiseDateTo(""); setRemiseModeFilter(""); }}
-                      className="font-body text-xs text-gray-400 bg-transparent border-none cursor-pointer hover:text-red-500">✕ Effacer</button>
+                      className="font-body text-xs text-slate-500 bg-transparent border-none cursor-pointer hover:text-red-500">✕ Effacer</button>
                   )}
                 </div>
               </div>
@@ -737,13 +737,13 @@ export default function ComptabilitePage() {
                             {r.pointee
                               ? <Badge color="green">✓ Pointée</Badge>
                               : <Badge color="orange">Non pointée</Badge>}
-                            <span className="font-body text-xs text-gray-400">{rPayments.length} paiement{rPayments.length > 1 ? "s" : ""} · {modeLabels[r.paymentMode] || r.paymentMode || "Mixte"}</span>
+                            <span className="font-body text-xs text-slate-500">{rPayments.length} paiement{rPayments.length > 1 ? "s" : ""} · {modeLabels[r.paymentMode] || r.paymentMode || "Mixte"}</span>
                           </div>
-                          {r.pointeeNote && <div className="font-body text-[10px] text-gray-400 mt-0.5 italic truncate">{r.pointeeNote}</div>}
+                          {r.pointeeNote && <div className="font-body text-[10px] text-slate-500 mt-0.5 italic truncate">{r.pointeeNote}</div>}
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                           <span className="font-body text-base font-bold text-blue-500">{(r.total || 0).toFixed(2)}€</span>
-                          <span className="font-body text-xs text-gray-400 w-4">{openRemiseId === r.id ? "▲" : "▼"}</span>
+                          <span className="font-body text-xs text-slate-500 w-4">{openRemiseId === r.id ? "▲" : "▼"}</span>
                         </div>
                       </div>
 
@@ -774,13 +774,13 @@ export default function ComptabilitePage() {
                           <div className="font-body text-sm font-semibold text-blue-800">
                             {r.pointee ? "Dépointer la remise" : "Pointer la remise manuellement"}
                           </div>
-                          <p className="font-body text-xs text-gray-500">
+                          <p className="font-body text-xs text-slate-600">
                             {r.pointee
                               ? "Cette remise sera marquée comme non vérifiée."
                               : "Confirmez que vous avez vérifié cette remise avec votre relevé bancaire."}
                           </p>
                           <div>
-                            <label className="font-body text-xs text-gray-500 block mb-1">Note de rapprochement (optionnel)</label>
+                            <label className="font-body text-xs text-slate-600 block mb-1">Note de rapprochement (optionnel)</label>
                             <input value={pointageNote} onChange={e => setPointageNote(e.target.value)}
                               placeholder="Ex: Vérifiée relevé BNP 15/03/2026, réf. VIR-12345..."
                               className="w-full font-body text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-blue-400" />
@@ -799,7 +799,7 @@ export default function ComptabilitePage() {
                               {r.pointee ? "Confirmer le dépointage" : "✓ Confirmer le pointage"}
                             </button>
                             <button onClick={() => setPointageRemiseId(null)}
-                              className="font-body text-xs text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                              className="font-body text-xs text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
                           </div>
                         </div>
                       )}
@@ -812,14 +812,14 @@ export default function ComptabilitePage() {
                           {/* Retirer des paiements */}
                           {rPayments.length > 0 && (
                             <div className="mb-3">
-                              <div className="font-body text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Paiements inclus — cliquer pour retirer</div>
+                              <div className="font-body text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Paiements inclus — cliquer pour retirer</div>
                               <div className="flex flex-col gap-1">
                                 {rPayments.map(p => (
                                   <div key={p.id} className="flex items-center justify-between px-3 py-1.5 bg-sand rounded-lg">
                                     <div className="flex items-center gap-2 font-body text-xs">
                                       <Badge color="gray">{modeLabels[p.paymentMode] || p.paymentMode}</Badge>
                                       <span className="text-blue-800 font-semibold">{p.familyName}</span>
-                                      <span className="text-gray-400">{(p.items||[]).map((i:any)=>i.activityTitle).join(", ").slice(0,35)}</span>
+                                      <span className="text-slate-500">{(p.items||[]).map((i:any)=>i.activityTitle).join(", ").slice(0,35)}</span>
                                     </div>
                                     <div className="flex items-center gap-2">
                                       <span className="font-body text-xs font-semibold text-blue-500">{(p.paidAmount||p.totalTTC||0).toFixed(2)}€</span>
@@ -843,7 +843,7 @@ export default function ComptabilitePage() {
                           {/* Ajouter des paiements */}
                           {nonRemis.length > 0 && (
                             <div>
-                              <div className="font-body text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Ajouter un encaissement non remis</div>
+                              <div className="font-body text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Ajouter un encaissement non remis</div>
                               <input value={editingRemiseSearch} onChange={e => setEditingRemiseSearch(e.target.value)}
                                 placeholder="Rechercher une famille ou activité..."
                                 className="w-full font-body text-xs border border-gray-200 rounded-lg px-3 py-2 mb-2 bg-white focus:outline-none focus:border-blue-400" />
@@ -853,7 +853,7 @@ export default function ComptabilitePage() {
                                     <div className="flex items-center gap-2 font-body text-xs">
                                       <Badge color="gray">{modeLabels[p.paymentMode] || p.paymentMode}</Badge>
                                       <span className="text-blue-800 font-semibold">{p.familyName}</span>
-                                      <span className="text-gray-400">{(p.items||[]).map((i:any)=>i.activityTitle).join(", ").slice(0,35)}</span>
+                                      <span className="text-slate-500">{(p.items||[]).map((i:any)=>i.activityTitle).join(", ").slice(0,35)}</span>
                                     </div>
                                     <div className="flex items-center gap-2">
                                       <span className="font-body text-xs font-semibold text-blue-500">{(p.paidAmount||p.totalTTC||0).toFixed(2)}€</span>
@@ -874,7 +874,7 @@ export default function ComptabilitePage() {
                           )}
 
                           <button onClick={() => setEditingRemiseId(null)}
-                            className="mt-3 font-body text-xs text-gray-400 bg-transparent border-none cursor-pointer hover:text-blue-500">
+                            className="mt-3 font-body text-xs text-slate-500 bg-transparent border-none cursor-pointer hover:text-blue-500">
                             ✓ Terminer la modification
                           </button>
                         </div>
@@ -889,7 +889,7 @@ export default function ComptabilitePage() {
                             return (
                               <div key={p.id} className="flex justify-between py-1 font-body text-xs">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-gray-400">{pd ? pd.toLocaleDateString("fr-FR") : "—"}</span>
+                                  <span className="text-slate-500">{pd ? pd.toLocaleDateString("fr-FR") : "—"}</span>
                                   <Badge color="gray">{modeLabels[p.paymentMode] || p.paymentMode}</Badge>
                                   <span className="text-blue-800">{p.familyName}</span>
                                 </div>
@@ -905,7 +905,7 @@ export default function ComptabilitePage() {
                   );
                 })}
                 {remisesFiltrees.length === 0 && (remiseDateFrom || remiseDateTo || remiseModeFilter) && (
-                  <p className="font-body text-sm text-gray-400 text-center py-4">Aucune remise sur cette période.</p>
+                  <p className="font-body text-sm text-slate-500 text-center py-4">Aucune remise sur cette période.</p>
                 )}
               </div>
             </div>
@@ -925,7 +925,7 @@ export default function ComptabilitePage() {
 
           <Card padding="md">
             <h3 className="font-body text-base font-semibold text-blue-800 mb-3">Importer un relevé bancaire</h3>
-            <p className="font-body text-xs text-gray-400 mb-3">Format CSV attendu : Date;Libellé;Montant (séparateur point-virgule)</p>
+            <p className="font-body text-xs text-slate-500 mb-3">Format CSV attendu : Date;Libellé;Montant (séparateur point-virgule)</p>
             <label className="flex items-center gap-2 font-body text-sm font-semibold text-blue-500 bg-white px-5 py-3 rounded-lg border border-blue-200 cursor-pointer hover:bg-blue-50 transition-colors inline-flex">
               <Upload size={16} /> Importer CSV
               <input type="file" accept=".csv" onChange={handleCSVImport} className="hidden" />
@@ -934,7 +934,7 @@ export default function ComptabilitePage() {
 
           {bankLines.length > 0 && (
             <Card className="!p-0 overflow-hidden">
-              <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+              <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                 <span className="w-24">Date</span>
                 <span className="flex-1">Libellé bancaire</span>
                 <span className="w-24 text-right">Montant</span>
@@ -944,7 +944,7 @@ export default function ComptabilitePage() {
               </div>
               {bankLines.map((bl, i) => (
                 <div key={i} className={`px-5 py-3 border-b border-blue-500/8 flex items-center ${bl.matched ? "" : "bg-orange-50"}`}>
-                  <span className="w-24 font-body text-xs text-gray-400">{bl.date}</span>
+                  <span className="w-24 font-body text-xs text-slate-500">{bl.date}</span>
                   <div className="flex-1">
                     <div className="font-body text-sm text-blue-800">{bl.label}</div>
                     {bl.matched && bl.matchDetail && <div className="font-body text-xs text-green-600 mt-0.5">↳ {bl.matchDetail}</div>}
@@ -993,7 +993,7 @@ export default function ComptabilitePage() {
                   ].map(s => (
                     <div key={s.label} className="bg-sand rounded-xl p-3 text-center">
                       <div className={`font-body text-lg font-bold ${s.color}`}>{s.value}</div>
-                      <div className="font-body text-xs text-gray-400">{s.label}</div>
+                      <div className="font-body text-xs text-slate-500">{s.label}</div>
                     </div>
                   ))}
                 </div>
@@ -1025,7 +1025,7 @@ export default function ComptabilitePage() {
             <div className="flex justify-between items-center p-5 border-b border-gray-100">
               <div>
                 <h2 className="font-display text-lg font-bold text-blue-800">Pointer manuellement</h2>
-                <p className="font-body text-xs text-gray-400">
+                <p className="font-body text-xs text-slate-500">
                   Mouvement : {bankLines[showManualMatch]?.label} — {bankLines[showManualMatch]?.amount.toFixed(2)}€
                 </p>
               </div>
@@ -1033,7 +1033,7 @@ export default function ComptabilitePage() {
             </div>
             <div className="p-4">
               <div className="relative mb-3">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input placeholder="Filtrer par client, montant…" value={manualSearch} onChange={e => setManualSearch(e.target.value)}
                   className="w-full font-body text-sm border border-gray-200 rounded-lg pl-9 pr-3 py-2 bg-white focus:outline-none focus:border-blue-400" />
               </div>
@@ -1069,7 +1069,7 @@ export default function ComptabilitePage() {
                         }}>
                         <div>
                           <div className="font-body text-sm font-semibold text-blue-800">{p.familyName || "—"}</div>
-                          <div className="font-body text-xs text-gray-400">
+                          <div className="font-body text-xs text-slate-500">
                             {d?.toLocaleDateString("fr-FR")} · {(p.items || []).map(i => i.activityTitle).join(", ") || "—"} · {modeLabels[p.paymentMode] || p.paymentMode}
                           </div>
                         </div>
@@ -1091,27 +1091,27 @@ export default function ComptabilitePage() {
         <div className="flex flex-col gap-5">
           <Card padding="md">
             <h3 className="font-body text-base font-semibold text-blue-800 mb-3">Exporter le FEC</h3>
-            <p className="font-body text-sm text-gray-500 mb-4">
+            <p className="font-body text-sm text-slate-600 mb-4">
               Génère le Fichier des Écritures Comptables au format réglementaire (Art. L47 A-I du LPF).
               Ce fichier contient toutes les écritures de la période sélectionnée, prêt à envoyer à votre comptable.
             </p>
             <div className="flex gap-4 mb-4">
               <div>
-                <div className="font-body text-xs font-semibold text-gray-400">Période</div>
+                <div className="font-body text-xs font-semibold text-slate-500">Période</div>
                 <div className="font-body text-sm font-semibold text-blue-800">{new Date(period + "-01").toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</div>
               </div>
               <div>
-                <div className="font-body text-xs font-semibold text-gray-400">Écritures</div>
+                <div className="font-body text-xs font-semibold text-slate-500">Écritures</div>
                 <div className="font-body text-sm font-semibold text-blue-800">{filteredPayments.length} paiements → ~{filteredPayments.length * 3} lignes</div>
               </div>
               <div>
-                <div className="font-body text-xs font-semibold text-gray-400">Format</div>
+                <div className="font-body text-xs font-semibold text-slate-500">Format</div>
                 <div className="font-body text-sm font-semibold text-blue-800">TXT (TAB)</div>
               </div>
             </div>
             <button onClick={generateFEC} disabled={filteredPayments.length === 0}
               className={`flex items-center gap-2 px-6 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer transition-all
-                ${filteredPayments.length === 0 ? "bg-gray-200 text-gray-400" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
+                ${filteredPayments.length === 0 ? "bg-gray-200 text-slate-500" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
               <Download size={16} /> Télécharger le FEC — {period}
             </button>
           </Card>
@@ -1134,7 +1134,7 @@ export default function ComptabilitePage() {
         <div className="flex flex-col gap-5">
           <Card padding="md">
             <h3 className="font-body text-base font-semibold text-blue-800 mb-3">Export CSV paramétrable</h3>
-            <p className="font-body text-sm text-gray-500 mb-4">
+            <p className="font-body text-sm text-slate-600 mb-4">
               Exportez vos données comptables au format CSV, compatible avec tous les logiciels comptables
               (Celeris, Sage, Ciel, EBP, QuickBooks, etc.).
             </p>
@@ -1146,7 +1146,7 @@ export default function ComptabilitePage() {
               ].map(exp => (
                 <Card key={exp.id} padding="sm" className="flex flex-col">
                   <div className="font-body text-sm font-semibold text-blue-800 mb-1">{exp.label}</div>
-                  <div className="font-body text-xs text-gray-400 mb-3 flex-1">{exp.desc}</div>
+                  <div className="font-body text-xs text-slate-500 mb-3 flex-1">{exp.desc}</div>
                   <button onClick={() => {
                     let csv = "";
                     const sep = ";";
@@ -1218,7 +1218,7 @@ export default function ComptabilitePage() {
               {/* Suggestions */}
               {!iaAnswer && (
                 <div className="flex flex-col gap-2">
-                  <p className="font-body text-xs text-gray-400 mb-1">Questions fréquentes :</p>
+                  <p className="font-body text-xs text-slate-500 mb-1">Questions fréquentes :</p>
                   {[
                     "Quel est mon taux d'impayés ce mois ?",
                     "Quelles familles doivent le plus ?",
@@ -1246,7 +1246,7 @@ export default function ComptabilitePage() {
               )}
               {iaAnswer && (
                 <button onClick={() => { setIaAnswer(null); setIaQuestion(""); }}
-                  className="font-body text-xs text-gray-400 bg-transparent border-none cursor-pointer hover:text-blue-500 text-left">
+                  className="font-body text-xs text-slate-500 bg-transparent border-none cursor-pointer hover:text-blue-500 text-left">
                   ← Nouvelle question
                 </button>
               )}

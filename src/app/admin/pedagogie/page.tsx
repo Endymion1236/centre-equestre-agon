@@ -164,31 +164,31 @@ export default function PedagogiePage() {
   return (
     <div>
       <h1 className="font-display text-2xl font-bold text-blue-800 mb-1">Suivi pédagogique</h1>
-      <p className="font-body text-xs text-gray-500 mb-6">Objectifs, progression et notes d&apos;instructrice par cavalier</p>
+      <p className="font-body text-xs text-slate-600 mb-6">Objectifs, progression et notes d&apos;instructrice par cavalier</p>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <Card padding="sm" className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><Target size={20} className="text-blue-500" /></div>
-          <div><div className="font-body text-xl font-bold text-blue-500">{allChildren.reduce((s, c) => s + (c.peda?.objectifs?.length || 0), 0)}</div><div className="font-body text-xs text-gray-500">objectifs suivis</div></div>
+          <div><div className="font-body text-xl font-bold text-blue-500">{allChildren.reduce((s, c) => s + (c.peda?.objectifs?.length || 0), 0)}</div><div className="font-body text-xs text-slate-600">objectifs suivis</div></div>
         </Card>
         <Card padding="sm" className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center"><TrendingUp size={20} className="text-green-600" /></div>
-          <div><div className="font-body text-xl font-bold text-green-600">{allChildren.reduce((s, c) => s + (c.peda?.objectifs?.filter((o: PedaObjectif) => o.status === "valide").length || 0), 0)}</div><div className="font-body text-xs text-gray-500">validés</div></div>
+          <div><div className="font-body text-xl font-bold text-green-600">{allChildren.reduce((s, c) => s + (c.peda?.objectifs?.filter((o: PedaObjectif) => o.status === "valide").length || 0), 0)}</div><div className="font-body text-xs text-slate-600">validés</div></div>
         </Card>
         <Card padding="sm" className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gold-50 flex items-center justify-center"><MessageSquare size={20} className="text-gold-400" /></div>
-          <div><div className="font-body text-xl font-bold text-gold-400">{allChildren.reduce((s, c) => s + (c.peda?.notes?.length || 0), 0)}</div><div className="font-body text-xs text-gray-500">notes</div></div>
+          <div><div className="font-body text-xl font-bold text-gold-400">{allChildren.reduce((s, c) => s + (c.peda?.notes?.length || 0), 0)}</div><div className="font-body text-xs text-slate-600">notes</div></div>
         </Card>
       </div>
 
       <div className="relative mb-5">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par prénom, nom ou famille..."
           className="w-full pl-10 pr-4 py-3 rounded-xl border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none" />
       </div>
 
       {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
-      filtered.length === 0 ? <Card padding="lg" className="text-center"><div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><GraduationCap size={28} className="text-blue-300" /></div><p className="font-body text-sm text-gray-500">Aucun cavalier trouvé.</p></Card> :
+      filtered.length === 0 ? <Card padding="lg" className="text-center"><div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><GraduationCap size={28} className="text-blue-300" /></div><p className="font-body text-sm text-slate-600">Aucun cavalier trouvé.</p></Card> :
       <div className="flex flex-col gap-3">
         {filtered.map(child => {
           const uniqueKey = `${child.familyId}_${child.id}`;
@@ -206,16 +206,16 @@ export default function PedagogiePage() {
                   </div>
                   <div className="min-w-0">
                     <div className="font-body text-sm font-semibold text-blue-800">
-                      {child.firstName}{child.lastName ? ` ${child.lastName}` : ""} <span className="text-xs text-gray-500 font-normal">({child.familyName})</span>
+                      {child.firstName}{child.lastName ? ` ${child.lastName}` : ""} <span className="text-xs text-slate-600 font-normal">({child.familyName})</span>
                     </div>
-                    <div className="font-body text-xs text-gray-500">Niveau : {child.galopLevel || "Débutant"} · {objDone}/{objTotal} objectifs validés</div>
+                    <div className="font-body text-xs text-slate-600">Niveau : {child.galopLevel || "Débutant"} · {objDone}/{objTotal} objectifs validés</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                   <Badge color={child.galopLevel && child.galopLevel !== "—" ? "blue" : "gray"}>
                     {child.galopLevel && child.galopLevel !== "—" ? `${child.galopLevel}` : "Débutant"}
                   </Badge>
-                  {isExp ? <ChevronUp size={18} className="text-gray-500" /> : <ChevronDown size={18} className="text-gray-500" />}
+                  {isExp ? <ChevronUp size={18} className="text-slate-600" /> : <ChevronDown size={18} className="text-slate-600" />}
                 </div>
               </div>
 
@@ -241,7 +241,7 @@ export default function PedagogiePage() {
                     )}
 
                     {peda.objectifs.length === 0 ? (
-                      <p className="font-body text-xs text-gray-500 italic">Aucun objectif. Cliquez sur &quot;+ Objectifs type&quot; pour pré-remplir.</p>
+                      <p className="font-body text-xs text-slate-600 italic">Aucun objectif. Cliquez sur &quot;+ Objectifs type&quot; pour pré-remplir.</p>
                     ) : (
                       <div className="flex flex-col gap-1.5">
                         {peda.objectifs.map((obj: PedaObjectif) => (
@@ -289,7 +289,7 @@ export default function PedagogiePage() {
                     )}
 
                     {peda.notes.length === 0 ? (
-                      <p className="font-body text-xs text-gray-500 italic">Aucune note pour l&apos;instant.</p>
+                      <p className="font-body text-xs text-slate-600 italic">Aucune note pour l&apos;instant.</p>
                     ) : (
                       <div className="flex flex-col gap-1.5">
                         {(showAllNotes === uniqueKey ? peda.notes : peda.notes.slice(0, 5)).map((note: PedaNote, i: number) => {
@@ -321,13 +321,13 @@ export default function PedagogiePage() {
                                     <span className="font-body text-[10px] text-blue-500 font-semibold flex-shrink-0 truncate max-w-[100px]">{seanceLabel}</span>
                                   )}
                                   {/* Résumé */}
-                                  <span className="font-body text-xs text-gray-500 truncate">{firstLine}{note.text.length > 60 ? "…" : ""}</span>
+                                  <span className="font-body text-xs text-slate-600 truncate">{firstLine}{note.text.length > 60 ? "…" : ""}</span>
                                 </div>
                                 <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                                  <span className="font-body text-[10px] text-gray-500">
+                                  <span className="font-body text-[10px] text-slate-600">
                                     {new Date(note.date).toLocaleDateString("fr-FR", { day:"numeric", month:"short" })}
                                   </span>
-                                  <span className="font-body text-[10px] text-gray-300">{isOpen ? "▲" : "▼"}</span>
+                                  <span className="font-body text-[10px] text-slate-400">{isOpen ? "▲" : "▼"}</span>
                                 </div>
                               </div>
 
@@ -337,11 +337,11 @@ export default function PedagogiePage() {
                                   {/* Séance d'origine */}
                                   {((note as any).activityTitle || (note as any).creneauId) && (
                                     <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-50">
-                                      <span className="font-body text-[10px] text-gray-500 uppercase tracking-wider">Séance</span>
+                                      <span className="font-body text-[10px] text-slate-600 uppercase tracking-wider">Séance</span>
                                       <span className="font-body text-xs font-semibold text-blue-700">
                                         {(note as any).activityTitle || "—"}
                                       </span>
-                                      <span className="font-body text-[10px] text-gray-500">
+                                      <span className="font-body text-[10px] text-slate-600">
                                         {new Date(note.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long", year:"numeric" })}
                                       </span>
                                     </div>
@@ -354,7 +354,7 @@ export default function PedagogiePage() {
                                         className="w-full px-2 py-1.5 rounded-lg border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none resize-vertical" />
                                       <div className="flex gap-2 mt-2">
                                         <button onClick={() => saveEditNote(child)} className="font-body text-[10px] text-white bg-blue-500 px-3 py-1.5 rounded border-none cursor-pointer">Enregistrer</button>
-                                        <button onClick={() => setEditingNote(null)} className="font-body text-[10px] text-gray-500 bg-gray-100 px-3 py-1.5 rounded border-none cursor-pointer">Annuler</button>
+                                        <button onClick={() => setEditingNote(null)} className="font-body text-[10px] text-slate-600 bg-gray-100 px-3 py-1.5 rounded border-none cursor-pointer">Annuler</button>
                                       </div>
                                     </div>
                                   ) : (
@@ -363,8 +363,8 @@ export default function PedagogiePage() {
                                       {/* Transcript Whisper */}
                                       {isBilanIA && (note as any).rawTranscript && (
                                         <details className="mt-3">
-                                          <summary className="font-body text-[10px] text-gray-500 cursor-pointer hover:text-purple-500">🎙️ Transcript original</summary>
-                                          <p className="font-body text-xs text-gray-500 italic mt-1.5 bg-gray-50 rounded-lg px-3 py-2">{(note as any).rawTranscript}</p>
+                                          <summary className="font-body text-[10px] text-slate-600 cursor-pointer hover:text-purple-500">🎙️ Transcript original</summary>
+                                          <p className="font-body text-xs text-slate-600 italic mt-1.5 bg-gray-50 rounded-lg px-3 py-2">{(note as any).rawTranscript}</p>
                                         </details>
                                       )}
                                       {/* Actions */}
@@ -391,7 +391,7 @@ export default function PedagogiePage() {
                           </button>
                         )}
                         {showAllNotes === uniqueKey && peda.notes.length > 5 && (
-                          <button onClick={() => setShowAllNotes(null)} className="font-body text-xs text-gray-500 bg-sand py-1.5 rounded-lg border-none cursor-pointer text-center">
+                          <button onClick={() => setShowAllNotes(null)} className="font-body text-xs text-slate-600 bg-sand py-1.5 rounded-lg border-none cursor-pointer text-center">
                             ▲ Réduire
                           </button>
                         )}

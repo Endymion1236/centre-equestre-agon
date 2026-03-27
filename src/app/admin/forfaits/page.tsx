@@ -125,7 +125,7 @@ export default function ForfaitsPage() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="font-display text-2xl font-bold text-blue-800">Forfaits annuels</h1>
-          <p className="font-body text-xs text-gray-400">Suivi des abonnements — les forfaits se créent depuis le planning</p>
+          <p className="font-body text-xs text-slate-500">Suivi des abonnements — les forfaits se créent depuis le planning</p>
         </div>
       </div>
 
@@ -133,21 +133,21 @@ export default function ForfaitsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
         <Card padding="sm" className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center"><Users size={18} className="text-green-600" /></div>
-          <div><div className="font-body text-xl font-bold text-green-600">{activeCount}</div><div className="font-body text-xs text-gray-400">forfaits actifs</div></div>
+          <div><div className="font-body text-xl font-bold text-green-600">{activeCount}</div><div className="font-body text-xs text-slate-500">forfaits actifs</div></div>
         </Card>
         <Card padding="sm" className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><TrendingUp size={18} className="text-blue-500" /></div>
-          <div><div className="font-body text-xl font-bold text-blue-500">{totalCA.toFixed(0)}€</div><div className="font-body text-xs text-gray-400">CA forfaits</div></div>
+          <div><div className="font-body text-xl font-bold text-blue-500">{totalCA.toFixed(0)}€</div><div className="font-body text-xs text-slate-500">CA forfaits</div></div>
         </Card>
         <Card padding="sm" className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center"><CreditCard size={18} className="text-green-600" /></div>
-          <div><div className="font-body text-xl font-bold text-green-600">{totalPaid.toFixed(0)}€</div><div className="font-body text-xs text-gray-400">encaissé</div></div>
+          <div><div className="font-body text-xl font-bold text-green-600">{totalPaid.toFixed(0)}€</div><div className="font-body text-xs text-slate-500">encaissé</div></div>
         </Card>
         <Card padding="sm" className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-xl ${totalDue > 0 ? "bg-red-50" : "bg-gray-50"} flex items-center justify-center`}>
-            <CreditCard size={18} className={totalDue > 0 ? "text-red-500" : "text-gray-400"} />
+            <CreditCard size={18} className={totalDue > 0 ? "text-red-500" : "text-slate-500"} />
           </div>
-          <div><div className={`font-body text-xl font-bold ${totalDue > 0 ? "text-red-500" : "text-gray-400"}`}>{totalDue.toFixed(0)}€</div><div className="font-body text-xs text-gray-400">reste à encaisser</div></div>
+          <div><div className={`font-body text-xl font-bold ${totalDue > 0 ? "text-red-500" : "text-slate-500"}`}>{totalDue.toFixed(0)}€</div><div className="font-body text-xs text-slate-500">reste à encaisser</div></div>
         </Card>
       </div>
 
@@ -163,14 +163,14 @@ export default function ForfaitsPage() {
           ].map(f => (
             <button key={f.id} onClick={() => setFilterStatus(f.id)}
               className={`font-body text-xs px-3 py-1.5 rounded-lg border-none cursor-pointer transition-all ${
-                filterStatus === f.id ? "bg-blue-500 text-white" : "bg-white text-gray-500 border border-gray-200"
+                filterStatus === f.id ? "bg-blue-500 text-white" : "bg-white text-slate-600 border border-gray-200"
               }`}>
               {f.label}
             </button>
           ))}
         </div>
         <div className="relative flex-1 min-w-[200px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input placeholder="Rechercher : prénom + nom cavalier, famille, activité..." value={search} onChange={e => setSearch(e.target.value)}
             className="w-full font-body text-xs border border-gray-200 rounded-lg pl-9 pr-3 py-2 bg-white focus:outline-none focus:border-blue-400" />
         </div>
@@ -180,7 +180,7 @@ export default function ForfaitsPage() {
       {filtered.length === 0 ? (
         <Card padding="lg" className="text-center">
           <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><Calendar size={28} className="text-blue-300" /></div>
-          <p className="font-body text-sm text-gray-500">
+          <p className="font-body text-sm text-slate-600">
             {forfaits.length === 0
               ? "Aucun forfait. Pour inscrire un cavalier à l'année, allez dans le Planning, cliquez sur un créneau et choisissez « Forfait à l'année »."
               : "Aucun forfait correspondant aux filtres."
@@ -202,13 +202,13 @@ export default function ForfaitsPage() {
                 <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpanded(isExp ? null : f.id)}>
                   <div className="flex items-center gap-4">
                     <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${f.status === "active" ? "bg-green-50" : f.status === "suspended" ? "bg-orange-50" : "bg-gray-50"}`}>
-                      <Calendar size={18} className={f.status === "active" ? "text-green-600" : f.status === "suspended" ? "text-orange-500" : "text-gray-400"} />
+                      <Calendar size={18} className={f.status === "active" ? "text-green-600" : f.status === "suspended" ? "text-orange-500" : "text-slate-500"} />
                     </div>
                     <div>
                       <div className="font-body text-sm font-semibold text-blue-800">
-                        {f.childName} <span className="text-gray-400 font-normal">— {f.familyName}</span>
+                        {f.childName} <span className="text-slate-500 font-normal">— {f.familyName}</span>
                       </div>
-                      <div className="font-body text-xs text-gray-400">
+                      <div className="font-body text-xs text-slate-500">
                         {f.slotKey || f.activityTitle || "—"} · Créé le {formatDate(f.createdAt)}
                       </div>
                     </div>
@@ -216,38 +216,38 @@ export default function ForfaitsPage() {
                   <div className="flex items-center gap-3">
                     <div className="text-right">
                       <div className="font-body text-base font-bold text-blue-500">{(f.forfaitPriceTTC || 0).toFixed(0)}€</div>
-                      <div className="font-body text-[10px] text-gray-400">{f.paymentPlan || "1x"}</div>
+                      <div className="font-body text-[10px] text-slate-500">{f.paymentPlan || "1x"}</div>
                     </div>
                     <Badge color={sc.color}>{sc.label}</Badge>
-                    {isExp ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                    {isExp ? <ChevronUp size={16} className="text-slate-500" /> : <ChevronDown size={16} className="text-slate-500" />}
                   </div>
                 </div>
 
                 {isExp && (
                   <div className="mt-4 pt-4 border-t border-blue-500/8 space-y-4">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div><div className="font-body text-[10px] text-gray-400 uppercase">Activité</div><div className="font-body text-sm text-blue-800">{f.activityTitle || "—"}</div></div>
-                      <div><div className="font-body text-[10px] text-gray-400 uppercase">Créneau</div><div className="font-body text-sm text-blue-800">{f.dayLabel || "—"} {f.startTime}–{f.endTime}</div></div>
-                      <div><div className="font-body text-[10px] text-gray-400 uppercase">Adhésion</div><div className="font-body text-sm text-blue-800">{f.adhesion ? "Oui" : "Non"}</div></div>
-                      <div><div className="font-body text-[10px] text-gray-400 uppercase">Licence FFE</div><div className="font-body text-sm text-blue-800">{f.licenceFFE ? `Oui (${f.licenceType === "moins18" ? "-18" : "+18"})` : "Non"}</div></div>
+                      <div><div className="font-body text-[10px] text-slate-500 uppercase">Activité</div><div className="font-body text-sm text-blue-800">{f.activityTitle || "—"}</div></div>
+                      <div><div className="font-body text-[10px] text-slate-500 uppercase">Créneau</div><div className="font-body text-sm text-blue-800">{f.dayLabel || "—"} {f.startTime}–{f.endTime}</div></div>
+                      <div><div className="font-body text-[10px] text-slate-500 uppercase">Adhésion</div><div className="font-body text-sm text-blue-800">{f.adhesion ? "Oui" : "Non"}</div></div>
+                      <div><div className="font-body text-[10px] text-slate-500 uppercase">Licence FFE</div><div className="font-body text-sm text-blue-800">{f.licenceFFE ? `Oui (${f.licenceType === "moins18" ? "-18" : "+18"})` : "Non"}</div></div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <div className="flex justify-between mb-1">
-                          <span className="font-body text-[10px] text-gray-400 uppercase">Paiement</span>
+                          <span className="font-body text-[10px] text-slate-500 uppercase">Paiement</span>
                           <span className="font-body text-xs font-semibold text-blue-500">{paid.toFixed(0)}€ / {(f.forfaitPriceTTC || 0).toFixed(0)}€</span>
                         </div>
                         <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
                           <div className={`h-full rounded-full ${pctPaid >= 100 ? "bg-green-500" : pctPaid > 50 ? "bg-blue-400" : "bg-orange-400"}`} style={{ width: `${pctPaid}%` }} />
                         </div>
-                        <div className="font-body text-[10px] text-gray-400 mt-0.5">
+                        <div className="font-body text-[10px] text-slate-500 mt-0.5">
                           {f.paymentPlan === "1x" ? "Paiement unique" : `${f.paymentPlan} · ${installment.toFixed(0)}€/échéance`}
                         </div>
                       </div>
                       <div>
                         <div className="flex justify-between mb-1">
-                          <span className="font-body text-[10px] text-gray-400 uppercase">Séances</span>
+                          <span className="font-body text-[10px] text-slate-500 uppercase">Séances</span>
                           <span className="font-body text-xs font-semibold text-blue-500">{f.attendedSessions || 0} / {f.totalSessions || 35}</span>
                         </div>
                         <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
