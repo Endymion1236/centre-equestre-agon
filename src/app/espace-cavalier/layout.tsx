@@ -2,9 +2,10 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import VoiceAssistant from "@/components/VoiceAssistant";
 import {
   Home,
   Calendar,
@@ -190,6 +191,7 @@ export default function EspaceCavalierLayout({
   const { user, loading, signOut, isAdmin } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const [showVoice, setShowVoice] = useState(false);
 
   // Redirection admin → back-office
   useEffect(() => {
@@ -271,6 +273,31 @@ export default function EspaceCavalierLayout({
         <div className="p-4 md:p-8 max-w-[900px] pb-24 md:pb-8">
           {children}
         </div>
+      </div>
+
+      {/* ─── Assistant vocal famille ─── */}
+      <div className="fixed bottom-20 right-4 z-[100] flex flex-col items-end gap-3 md:bottom-6">
+        {showVoice && (
+          <div className="w-[320px] sm:w-[380px]">
+            <VoiceAssistant
+              mode="famille"
+              voiceName="nova"
+              placeholder="Votre question..."
+              onClose={() => setShowVoice(false)}
+              context={{
+                centre: "Centre Équestre d'Agon-Coutainville",
+                note: "Répondre aux questions des familles sur les cours, tarifs et inscriptions.",
+              }}
+            />
+          </div>
+        )}
+        <button
+          onClick={() => setShowVoice(!showVoice)}
+          className="w-12 h-12 rounded-full flex items-center justify-center text-white shadow-lg border-none cursor-pointer hover:scale-105 transition-transform"
+          style={{ background: "linear-gradient(135deg,#1a6b3c,#0C1A2E)" }}
+          title="Assistant vocal">
+          {showVoice ? <span className="text-lg">✕</span> : <span className="text-xl">🎙️</span>}
+        </button>
       </div>
 
       {/* ─── Bottom Navigation Mobile ─── */}

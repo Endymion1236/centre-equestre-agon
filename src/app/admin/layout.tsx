@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { ToastProvider } from "@/components/ui/Toast";
+import VoiceAssistant from "@/components/VoiceAssistant";
 import {
   BarChart3,
   CalendarDays,
@@ -131,6 +132,7 @@ function AdminSidebar() {
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, isAdmin, signOut: authSignOut } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showVoice, setShowVoice] = useState(false);
   const pathname = usePathname();
 
   // Fermer le menu mobile quand on change de page
@@ -244,6 +246,28 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         <div className="p-4 md:p-8 max-w-[960px]">
           {children}
+        </div>
+
+        {/* ── Assistant vocal admin flottant ── */}
+        <div className="fixed bottom-6 left-6 z-[100] flex flex-col items-start gap-3">
+          {showVoice && (
+            <div className="w-[360px] sm:w-[420px]" style={{ maxHeight: "70vh" }}>
+              <VoiceAssistant
+                mode="admin"
+                voiceName="onyx"
+                placeholder="Posez votre question..."
+                onClose={() => setShowVoice(false)}
+                context={{ note: "Assistant admin du Centre Équestre d'Agon-Coutainville" }}
+              />
+            </div>
+          )}
+          <button
+            onClick={() => setShowVoice(!showVoice)}
+            className="w-14 h-14 rounded-full flex items-center justify-center text-white shadow-lg border-none cursor-pointer hover:scale-105 transition-transform"
+            style={{ background: "linear-gradient(135deg,#0C1A2E,#122A5A)" }}
+            title="Assistant vocal admin">
+            {showVoice ? <span className="text-xl">✕</span> : <span className="text-2xl">🎙️</span>}
+          </button>
         </div>
       </div>
     </div>

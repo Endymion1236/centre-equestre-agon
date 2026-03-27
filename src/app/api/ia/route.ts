@@ -28,6 +28,8 @@ interface AssistantRequest {
     periode?: string;
     encaissementsParMode?: Record<string, number>;
     remises?: { date: string; total: number; pointee: boolean }[];
+    _systemOverride?: string; // prompt système personnalisé (VoiceAssistant)
+    [key: string]: any; // autres données contextuelles libres
   };
 }
 
@@ -163,7 +165,10 @@ Sois concis, pratique, en français. Pas de markdown complexe, juste des titres 
     if (body.type === "assistant") {
       const ctx = body.context;
 
-      const prompt = `Tu es l'assistant comptable du Centre Équestre d'Agon-Coutainville.
+      // Si le VoiceAssistant passe un prompt système personnalisé, l'utiliser
+      const systemOverride = ctx._systemOverride;
+
+      const prompt = systemOverride || `Tu es l'assistant comptable du Centre Équestre d'Agon-Coutainville.
 Réponds à cette question en français, de façon concise et pratique.
 Tu as accès aux données suivantes :
 
@@ -180,14 +185,17 @@ QUESTION : ${body.question}
 
 Réponds directement à la question. Sois précis, chiffré si possible, et suggère une action concrète si pertinent.`;
 
+      const messages: any[] = systemOverride
+        ? [{ role: "user", content: `${systemOverride}\n\nQUESTION : ${body.question}` }]
+        : [{ role: "user", content: prompt }];
+
       const message = await client.messages.create({
         model: "claude-sonnet-4-5",
         max_tokens: 512,
-        messages: [{ role: "user", content: prompt }],
+        messages,
       });
 
       const text = message.content[0].type === "text" ? message.content[0].text : "";
-
       return NextResponse.json({ success: true, answer: text });
     }
 
