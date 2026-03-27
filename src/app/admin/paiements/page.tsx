@@ -68,13 +68,14 @@ const paymentModes: { id: PaymentMode; label: string }[] = [
 
 export default function PaiementsPage() {
   const { toast } = useToast();
-  const [tab, setTab] = useState<"encaisser" | "journal" | "historique" | "echeances" | "impayes">("encaisser");
+  const [tab, setTab] = useState<"encaisser" | "journal" | "historique" | "echeances" | "impayes" | "declarations">("encaisser");
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const [activities, setActivities] = useState<(Activity & { firestoreId: string })[]>([]);
   const [payments, setPayments] = useState<(Payment & { id: string })[]>([]);
   const [encaissements, setEncaissements] = useState<any[]>([]);
   const [avoirs, setAvoirs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [declarations, setDeclarations] = useState<any[]>([]);
 
   // Historique filters
   const [histModeFilter, setHistModeFilter] = useState<string>("all");
@@ -126,16 +127,17 @@ export default function PaiementsPage() {
       getDocs(query(collection(db, "encaissements"), orderBy("date", "desc"), limit(500))),
       getDocs(collection(db, "avoirs")),
       getDoc(doc(db, "settings", "promos")),
-    ]).then(([famSnap, actSnap, paySnap, encSnap, avoirsSnap, promoSnap]) => {
+      getDocs(query(collection(db, "payment_declarations"), where("status", "==", "pending_confirmation"))),
+    ]).then(([famSnap, actSnap, paySnap, encSnap, avoirsSnap, promoSnap, declSnap]) => {
       setFamilies(famSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as any);
       setActivities(actSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as any);
-      // Trier côté client — évite d'exclure les docs sans champ date
       const pays = loadPayments(paySnap.docs) as any[];
       pays.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
       setPayments(pays as any);
       setEncaissements(encSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
       setAvoirs(avoirsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
       if (promoSnap.exists() && promoSnap.data().items) setPromos(promoSnap.data().items);
+      setDeclarations(declSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -694,13 +696,16 @@ export default function PaiementsPage() {
       <h1 className="font-display text-2xl font-bold text-blue-800 mb-6">Paiements & facturation</h1>
 
       <div className="flex gap-1.5 mb-6 overflow-x-auto pb-1 -mx-1 px-1 hide-scrollbar">
-        {([["encaisser", "Encaisser", ShoppingCart], ["journal", "Journal", Receipt], ["historique", "Historique", Receipt], ["echeances", "Échéances", Receipt], ["impayes", "Impayés", Receipt]] as const).map(([id, label, Icon]) => (
+        {([["encaisser", "Encaisser", ShoppingCart], ["journal", "Journal", Receipt], ["historique", "Historique", Receipt], ["echeances", "Échéances", Receipt], ["impayes", "Impayés", Receipt], ["declarations", "Déclarations", Receipt]] as const).map(([id, label, Icon]) => (
           <button key={id} onClick={() => setTab(id as any)}
             className={`flex items-center gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg border font-body text-xs sm:text-sm font-medium cursor-pointer transition-all whitespace-nowrap flex-shrink-0
               ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
             <Icon size={14} /> {label}
             {id === "impayes" && payments.filter(p => p.status !== "cancelled" && !(p as any).echeancesTotal && (p.status === "partial" || (p.paidAmount || 0) < (p.totalTTC || 0))).length > 0 && (
               <span className="bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{payments.filter(p => p.status !== "cancelled" && !(p as any).echeancesTotal && (p.status === "partial" || ((p.paidAmount || 0) < (p.totalTTC || 0) && p.status !== "paid"))).length}</span>
+            )}
+            {id === "declarations" && declarations.length > 0 && (
+              <span className="bg-orange-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{declarations.length}</span>
             )}
           </button>
         ))}
@@ -1741,6 +1746,120 @@ export default function PaiementsPage() {
           })()}
         </div>
       )}
+
+      {/* ─── Onglet Déclarations ─── */}
+      {tab === "declarations" && (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-lg font-bold text-blue-800">Déclarations de paiement</h2>
+            <span className="font-body text-xs text-slate-500">{declarations.length} en attente de confirmation</span>
+          </div>
+
+          {declarations.length === 0 ? (
+            <Card padding="lg" className="text-center">
+              <p className="font-body text-sm text-slate-500">Aucune déclaration en attente.</p>
+              <p className="font-body text-xs text-slate-400 mt-1">Les familles peuvent déclarer un paiement chèque ou espèces depuis leur espace.</p>
+            </Card>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {declarations.map((decl: any) => {
+                const date = decl.createdAt?.seconds ? new Date(decl.createdAt.seconds * 1000) : new Date();
+                return (
+                  <Card key={decl.id} padding="md">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-body text-base font-bold text-blue-800">{decl.familyName}</span>
+                          <span className={`font-body text-xs font-semibold px-2 py-0.5 rounded-full ${decl.mode === "cheque" ? "bg-blue-50 text-blue-700" : "bg-green-50 text-green-700"}`}>
+                            {decl.mode === "cheque" ? "📝 Chèque" : "💵 Espèces"}
+                          </span>
+                        </div>
+                        <div className="font-body text-sm text-slate-600">{decl.activityTitle}</div>
+                        {decl.note && <div className="font-body text-xs text-slate-400 mt-1 italic">"{decl.note}"</div>}
+                        <div className="font-body text-xs text-slate-400 mt-1">{date.toLocaleDateString("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}</div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <div className="font-body text-xl font-bold text-blue-500 mb-2">{(decl.montant || 0).toFixed(2)}€</div>
+                        <div className="flex flex-col gap-1.5">
+                          <button onClick={async () => {
+                            if (!confirm(`Confirmer réception de ${decl.montant.toFixed(2)}€ en ${decl.mode === "cheque" ? "chèque" : "espèces"} de ${decl.familyName} ?`)) return;
+                            try {
+                              // Mettre à jour le paiement
+                              if (decl.paymentId) {
+                                const paySnap = await getDoc(doc(db, "payments", decl.paymentId));
+                                if (paySnap.exists()) {
+                                  const pData = paySnap.data();
+                                  const newPaid = Math.round(((pData.paidAmount || 0) + decl.montant) * 100) / 100;
+                                  const newStatus = newPaid >= (pData.totalTTC || 0) ? "paid" : "partial";
+                                  await updateDoc(doc(db, "payments", decl.paymentId), {
+                                    paidAmount: newPaid, status: newStatus,
+                                    paymentMode: decl.mode,
+                                    paymentRef: decl.note || "",
+                                    updatedAt: serverTimestamp(),
+                                  });
+                                  // Créer un encaissement
+                                  await addDoc(collection(db, "encaissements"), {
+                                    paymentId: decl.paymentId,
+                                    familyId: decl.familyId,
+                                    familyName: decl.familyName,
+                                    montant: decl.montant,
+                                    mode: decl.mode,
+                                    modeLabel: decl.mode === "cheque" ? "Chèque" : "Espèces",
+                                    ref: decl.note || "",
+                                    activityTitle: decl.activityTitle,
+                                    date: serverTimestamp(),
+                                  });
+                                }
+                              }
+                              // Marquer la déclaration comme confirmée
+                              await updateDoc(doc(db, "payment_declarations", decl.id), {
+                                status: "confirmed", confirmedAt: serverTimestamp(),
+                              });
+                              // Email confirmation à la famille
+                              if (decl.familyEmail) {
+                                fetch("/api/send-email", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    to: decl.familyEmail,
+                                    subject: `✅ Paiement confirmé — ${decl.montant.toFixed(2)}€`,
+                                    html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+                                      <p>Bonjour <strong>${decl.familyName}</strong>,</p>
+                                      <p>Nous avons bien reçu votre règlement :</p>
+                                      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
+                                        <p style="margin:0;color:#166534;font-weight:600;">✅ ${decl.montant.toFixed(2)}€ — ${decl.mode === "cheque" ? "Chèque" : "Espèces"}</p>
+                                        <p style="margin:8px 0 0;color:#555;font-size:13px;">${decl.activityTitle}</p>
+                                      </div>
+                                      <p>À bientôt au centre équestre !</p>
+                                    </div>`,
+                                  }),
+                                }).catch(() => {});
+                              }
+                              setDeclarations(prev => prev.filter(d => d.id !== decl.id));
+                              toast(`✅ Paiement de ${decl.familyName} confirmé`, "success");
+                            } catch (e) { console.error(e); toast("Erreur", "error"); }
+                          }}
+                            className="font-body text-xs font-semibold text-white bg-green-500 hover:bg-green-600 px-4 py-2 rounded-lg border-none cursor-pointer">
+                            ✓ Confirmer réception
+                          </button>
+                          <button onClick={async () => {
+                            await updateDoc(doc(db, "payment_declarations", decl.id), { status: "rejected", rejectedAt: serverTimestamp() });
+                            setDeclarations(prev => prev.filter(d => d.id !== decl.id));
+                          }}
+                            className="font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer">
+                            Rejeter
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ─── Modale duplication 3 modes ─── */}
       {duplicateTarget && (() => {
         const p = duplicateTarget.payment;
@@ -2059,6 +2178,108 @@ export default function PaiementsPage() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ─── Onglet Déclarations ─── */}
+      {tab === "declarations" && (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-lg font-bold text-blue-800">Déclarations de paiement</h2>
+            <span className="font-body text-xs text-slate-500">{declarations.length} en attente de confirmation</span>
+          </div>
+
+          {declarations.length === 0 ? (
+            <div className="text-center py-16">
+              <div className="text-4xl mb-3">✅</div>
+              <p className="font-body text-sm text-slate-500">Aucune déclaration en attente.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {declarations.map((d: any) => (
+                <div key={d.id} className="bg-white border border-orange-200 rounded-xl p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-body text-base font-bold text-blue-800">{d.familyName}</span>
+                        <span className={`font-body text-xs px-2 py-0.5 rounded-full ${d.mode === "cheque" ? "bg-blue-50 text-blue-700" : "bg-green-50 text-green-700"}`}>
+                          {d.mode === "cheque" ? "📝 Chèque" : "💵 Espèces"}
+                        </span>
+                      </div>
+                      <div className="font-body text-sm text-slate-600 mb-0.5">{d.activityTitle}</div>
+                      {d.note && <div className="font-body text-xs text-slate-400 italic">"{d.note}"</div>}
+                      <div className="font-body text-xs text-slate-400 mt-1">
+                        {d.createdAt?.seconds ? new Date(d.createdAt.seconds * 1000).toLocaleDateString("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }) : ""}
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="font-body text-xl font-bold text-blue-500">{(d.montant || 0).toFixed(2)}€</div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 mt-3 pt-3 border-t border-orange-100">
+                    {/* Confirmer réception */}
+                    <button onClick={async () => {
+                      if (!confirm(`Confirmer réception de ${(d.montant || 0).toFixed(2)}€ en ${d.mode === "cheque" ? "chèque" : "espèces"} de ${d.familyName} ?`)) return;
+                      try {
+                        // Marquer la déclaration comme confirmée
+                        await updateDoc(doc(db, "payment_declarations", d.id), {
+                          status: "confirmed", confirmedAt: serverTimestamp(),
+                        });
+                        // Mettre à jour le paiement lié
+                        if (d.paymentId) {
+                          const payRef = doc(db, "payments", d.paymentId);
+                          const paySnap = await getDoc(payRef);
+                          if (paySnap.exists()) {
+                            const pdata = paySnap.data();
+                            const newPaid = Math.round(((pdata.paidAmount || 0) + (d.montant || 0)) * 100) / 100;
+                            const isComplete = newPaid >= (pdata.totalTTC || 0);
+                            await updateDoc(payRef, {
+                              paidAmount: newPaid,
+                              paymentMode: d.mode,
+                              status: isComplete ? "paid" : "partial",
+                              updatedAt: serverTimestamp(),
+                            });
+                            // Créer un encaissement
+                            await addDoc(collection(db, "encaissements"), {
+                              paymentId: d.paymentId,
+                              familyId: d.familyId,
+                              familyName: d.familyName,
+                              montant: d.montant,
+                              mode: d.mode,
+                              modeLabel: d.mode === "cheque" ? "Chèque (déclaré famille)" : "Espèces (déclaré famille)",
+                              ref: d.note || "",
+                              activityTitle: d.activityTitle,
+                              date: serverTimestamp(),
+                            });
+                          }
+                        }
+                        // Retirer de la liste locale
+                        setDeclarations(prev => prev.filter(x => x.id !== d.id));
+                        toast(`✅ Paiement de ${d.familyName} confirmé`, "success");
+                      } catch (e) { console.error(e); toast("Erreur", "error"); }
+                    }}
+                      className="flex-1 py-2 rounded-lg font-body text-sm font-semibold text-white bg-green-500 hover:bg-green-600 border-none cursor-pointer">
+                      ✓ Confirmer réception
+                    </button>
+
+                    {/* Rejeter */}
+                    <button onClick={async () => {
+                      if (!confirm(`Rejeter cette déclaration de ${d.familyName} ?`)) return;
+                      await updateDoc(doc(db, "payment_declarations", d.id), {
+                        status: "rejected", rejectedAt: serverTimestamp(),
+                      });
+                      setDeclarations(prev => prev.filter(x => x.id !== d.id));
+                      toast(`Déclaration rejetée`, "warning");
+                    }}
+                      className="px-4 py-2 rounded-lg font-body text-sm font-semibold text-red-500 bg-red-50 hover:bg-red-100 border-none cursor-pointer">
+                      ✕ Rejeter
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

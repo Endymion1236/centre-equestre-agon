@@ -61,7 +61,13 @@ export default function FacturesPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [cards, setCards] = useState<Card10[]>([]);
   const [loading, setLoading] = useState(true);
-  const [payingOnline, setPayingOnline] = useState<string | null>(null); // paymentId en cours
+  const [payingOnline, setPayingOnline] = useState<string | null>(null);
+  const [declaringPayment, setDeclaringPayment] = useState<Payment | null>(null); // modal déclaration
+  const [declareMode, setDeclareMode] = useState<"cheque" | "especes">("cheque");
+  const [declareMontant, setDeclareMontant] = useState("");
+  const [declareNote, setDeclareNote] = useState("");
+  const [declareSending, setDeclareSending] = useState(false);
+  const [declareSuccess, setDeclareSuccess] = useState(false); // paymentId en cours
   const [tab, setTab] = useState<"factures" | "reservations" | "cartes" | "fidelite">("factures");
   const [clientAvoirs, setClientAvoirs] = useState<any[]>([]);
   const [openCardId, setOpenCardId] = useState<string | null>(null);
@@ -234,38 +240,50 @@ export default function FacturesPage() {
                             <Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : "gray"}>
                               {p.status === "paid" ? "Payé" : p.status === "partial" ? "Partiel" : "En attente"}
                             </Badge>
-                            {/* Bouton payer en ligne pour les pending */}
                             {(p.status === "pending" || p.status === "partial") && (
-                              <button
-                                disabled={payingOnline === p.id}
-                                onClick={async () => {
-                                  setPayingOnline(p.id!);
-                                  try {
-                                    const restant = (p.totalTTC || 0) - (p.paidAmount || 0);
-                                    const res = await fetch("/api/stripe/checkout", {
-                                      method: "POST",
-                                      headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({
-                                        familyId: user?.uid,
-                                        familyEmail: user?.email,
-                                        familyName: p.familyName,
-                                        paymentId: p.id,
-                                        items: [{
-                                          name: (p.items || []).map((i: any) => i.activityTitle).join(", ") || "Prestation",
-                                          priceInCents: Math.round(restant * 100),
-                                          quantity: 1,
-                                        }],
-                                      }),
-                                    });
-                                    const data = await res.json();
-                                    if (data.url) window.location.href = data.url;
-                                  } catch (e) { console.error(e); }
-                                  setPayingOnline(null);
-                                }}
-                                className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
-                                {payingOnline === p.id ? <Loader2 size={12} className="animate-spin" /> : <CreditCard size={12} />}
-                                Payer
-                              </button>
+                              <>
+                                <button
+                                  disabled={payingOnline === p.id}
+                                  onClick={async () => {
+                                    setPayingOnline(p.id!);
+                                    try {
+                                      const restant = (p.totalTTC || 0) - (p.paidAmount || 0);
+                                      const res = await fetch("/api/stripe/checkout", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                          familyId: user?.uid,
+                                          familyEmail: user?.email,
+                                          familyName: p.familyName,
+                                          paymentId: p.id,
+                                          items: [{
+                                            name: (p.items || []).map((i: any) => i.activityTitle).join(", ") || "Prestation",
+                                            priceInCents: Math.round(restant * 100),
+                                            quantity: 1,
+                                          }],
+                                        }),
+                                      });
+                                      const data = await res.json();
+                                      if (data.url) window.location.href = data.url;
+                                    } catch (e) { console.error(e); }
+                                    setPayingOnline(null);
+                                  }}
+                                  className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                                  {payingOnline === p.id ? <Loader2 size={12} className="animate-spin" /> : <CreditCard size={12} />}
+                                  CB
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setDeclaringPayment(p);
+                                    setDeclareMontant(((p.totalTTC || 0) - (p.paidAmount || 0)).toFixed(2));
+                                    setDeclareMode("cheque");
+                                    setDeclareNote("");
+                                    setDeclareSuccess(false);
+                                  }}
+                                  className="flex items-center gap-1.5 font-body text-xs font-semibold text-slate-600 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg border-none cursor-pointer">
+                                  ✉️ Déclarer
+                                </button>
+                              </>
                             )}
                             <button onClick={async () => {
                               const d2 = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
@@ -581,6 +599,125 @@ export default function FacturesPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* ── Modal déclaration paiement chèque/espèces ── */}
+      {declaringPayment && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
+          onClick={() => !declareSending && setDeclaringPayment(null)}>
+          <div className="bg-white rounded-2xl w-full sm:max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-100">
+              <h2 className="font-display text-lg font-bold text-blue-800">Déclarer un paiement</h2>
+              <p className="font-body text-xs text-slate-500 mt-1">
+                {(declaringPayment.items || []).map((i: any) => i.activityTitle).join(", ")}
+              </p>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              {declareSuccess ? (
+                <div className="text-center py-4">
+                  <div className="text-4xl mb-3">✅</div>
+                  <p className="font-body text-base font-semibold text-green-700">Déclaration envoyée !</p>
+                  <p className="font-body text-xs text-slate-500 mt-1">
+                    Le centre équestre va confirmer réception de votre {declareMode === "cheque" ? "chèque" : "règlement en espèces"}.
+                  </p>
+                  <button onClick={() => setDeclaringPayment(null)}
+                    className="mt-4 font-body text-sm text-blue-500 bg-transparent border-none cursor-pointer underline">
+                    Fermer
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Mode */}
+                  <div>
+                    <label className="font-body text-xs font-semibold text-slate-600 block mb-2">Mode de paiement</label>
+                    <div className="flex gap-2">
+                      {([["cheque", "📝 Chèque"], ["especes", "💵 Espèces"]] as const).map(([mode, label]) => (
+                        <button key={mode} onClick={() => setDeclareMode(mode)}
+                          className={`flex-1 py-2.5 rounded-xl font-body text-sm font-semibold border cursor-pointer transition-all ${declareMode === mode ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-slate-500"}`}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Montant */}
+                  <div>
+                    <label className="font-body text-xs font-semibold text-slate-600 block mb-2">Montant (€)</label>
+                    <input
+                      type="number" step="0.01" min="0"
+                      value={declareMontant}
+                      onChange={e => setDeclareMontant(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-base text-blue-800 font-bold focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Note optionnelle */}
+                  <div>
+                    <label className="font-body text-xs font-semibold text-slate-600 block mb-2">Note (optionnel)</label>
+                    <input
+                      type="text"
+                      value={declareNote}
+                      onChange={e => setDeclareNote(e.target.value)}
+                      placeholder={declareMode === "cheque" ? "Ex: chèque n°1234567" : "Ex: remis en main propre"}
+                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={() => setDeclaringPayment(null)}
+                      className="px-5 py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
+                      Annuler
+                    </button>
+                    <button
+                      disabled={declareSending || !declareMontant || parseFloat(declareMontant) <= 0}
+                      onClick={async () => {
+                        setDeclareSending(true);
+                        try {
+                          const montant = parseFloat(declareMontant);
+                          // Créer une notification dans Firestore
+                          await addDoc(collection(db, "payment_declarations"), {
+                            paymentId: declaringPayment.id,
+                            familyId: user?.uid,
+                            familyName: declaringPayment.familyName,
+                            familyEmail: user?.email || "",
+                            montant,
+                            mode: declareMode,
+                            note: declareNote || "",
+                            activityTitle: (declaringPayment.items || []).map((i: any) => i.activityTitle).join(", "),
+                            status: "pending_confirmation", // admin doit confirmer
+                            createdAt: serverTimestamp(),
+                          });
+                          // Notifier l'admin par email
+                          fetch("/api/send-email", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              to: process.env.NEXT_PUBLIC_OWNER_EMAIL || "nicolasrichard16@hotmail.com",
+                              subject: `💰 Déclaration paiement — ${declaringPayment.familyName}`,
+                              html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+                                <p><strong>${declaringPayment.familyName}</strong> déclare un paiement :</p>
+                                <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
+                                  <p style="margin:0;font-weight:600;color:#166534;">💰 ${montant.toFixed(2)}€ en ${declareMode === "cheque" ? "chèque" : "espèces"}</p>
+                                  <p style="margin:8px 0 0;color:#555;font-size:13px;">📋 ${(declaringPayment.items || []).map((i: any) => i.activityTitle).join(", ")}</p>
+                                  ${declareNote ? `<p style="margin:4px 0 0;color:#555;font-size:13px;">📝 ${declareNote}</p>` : ""}
+                                </div>
+                                <p style="font-size:13px;color:#555;">Confirmez la réception dans l'admin → Paiements.</p>
+                              </div>`,
+                            }),
+                          }).catch(() => {});
+                          setDeclareSuccess(true);
+                        } catch (e) { console.error(e); alert("Erreur. Réessayez."); }
+                        setDeclareSending(false);
+                      }}
+                      className={`flex-1 py-2.5 rounded-xl font-body text-sm font-semibold border-none cursor-pointer flex items-center justify-center gap-2 ${declareSending || !declareMontant ? "bg-gray-200 text-slate-400" : "bg-blue-500 text-white hover:bg-blue-600"}`}>
+                      {declareSending ? <Loader2 size={14} className="animate-spin" /> : "Envoyer la déclaration"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
