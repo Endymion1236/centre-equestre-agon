@@ -302,17 +302,39 @@ Pas de markdown ni de listes — texte simple uniquement.`;
             </div>
           </div>
         )}
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div className={`max-w-[85%] px-4 py-2.5 rounded-2xl font-body text-sm leading-relaxed ${
-              m.role === "user"
-                ? "text-white rounded-br-sm"
-                : "bg-gray-50 text-gray-700 rounded-bl-sm border border-gray-100"
-            }`} style={m.role === "user" ? { background: gradientBg } : {}}>
-              {m.text}
+        {messages.map((m, i) => {
+          const isLastAssistant = m.role === "assistant" && i === messages.length - 1;
+          const needsConfirm = isLastAssistant && (
+            m.text.toLowerCase().includes("tu confirmes") ||
+            m.text.toLowerCase().includes("tu confirms")
+          );
+          return (
+            <div key={i} className="flex flex-col gap-2">
+              <div className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[85%] px-4 py-2.5 rounded-2xl font-body text-sm leading-relaxed ${
+                  m.role === "user"
+                    ? "text-white rounded-br-sm"
+                    : "bg-gray-50 text-gray-700 rounded-bl-sm border border-gray-100"
+                }`} style={m.role === "user" ? { background: gradientBg } : {}}>
+                  {m.text}
+                </div>
+              </div>
+              {/* Boutons confirmation directement sous le message */}
+              {needsConfirm && !loading && mode === "admin" && (
+                <div className="flex gap-2">
+                  <button onClick={() => askClaude("Oui, confirme.", true)}
+                    className="flex-1 py-2.5 rounded-xl font-body text-sm font-bold text-white bg-green-500 hover:bg-green-600 border-none cursor-pointer">
+                    ✓ Confirmer
+                  </button>
+                  <button onClick={() => { setPendingAction(null); addMessage("assistant", "Action annulée."); }}
+                    className="flex-1 py-2.5 rounded-xl font-body text-sm font-bold text-slate-700 bg-gray-200 hover:bg-gray-300 border-none cursor-pointer">
+                    ✕ Annuler
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
         {loading && (
           <div className="flex justify-start">
             <div className="bg-gray-50 border border-gray-100 px-4 py-2.5 rounded-2xl rounded-bl-sm flex items-center gap-2">
