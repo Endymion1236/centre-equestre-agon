@@ -834,7 +834,7 @@ export default function ParametresPage() {
             </p>
             <button onClick={async () => {
               if (!confirm("Supprimer toutes les données de test (SEED_2026) ?\n\nLes vraies données restent intactes.")) return;
-              const collections = ["families","creneaux","payments","encaissements","forfaits","avoirs","cartes","reservations","equides","passages","fidelite","bonsRecup"];
+              const collections = ["families","creneaux","payments","encaissements","forfaits","avoirs","cartes","reservations","equides","passages","fidelite","bonsRecup","payment_declarations","waitlist","activities"];
               let total = 0;
               for (const colName of collections) {
                 try {

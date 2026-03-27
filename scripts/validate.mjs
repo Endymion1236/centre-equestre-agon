@@ -67,6 +67,14 @@ async function cleanAll() {
   for (const { col, id } of toClean) {
     try { await deleteDoc(doc(db, col, id)); n++; } catch (_) {}
   }
+  // Nettoyage complémentaire par _seed pour les nouvelles collections
+  const seedCols = ["waitlist","payment_declarations","activities"];
+  for (const colName of seedCols) {
+    try {
+      const snap = await getDocs(query(collection(db, colName), where("_seed","==","SEED_2026")));
+      for (const d of snap.docs) { await deleteDoc(d.ref); n++; }
+    } catch (_) {}
+  }
   console.log(`\n${Y} Nettoyage : ${n} documents supprimés${Z}`);
 }
 
