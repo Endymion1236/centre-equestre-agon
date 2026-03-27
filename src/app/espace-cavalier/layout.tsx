@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import VoiceAssistant from "@/components/VoiceAssistant";
+import { db } from "@/lib/firebase";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import {
   Home,
   Calendar,
@@ -192,6 +194,73 @@ export default function EspaceCavalierLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [showVoice, setShowVoice] = useState(false);
+  const [voiceContext, setVoiceContext] = useState<Record<string, any>>({});
+
+  // Charger le planning réel pour le chatbot famille
+  useEffect(() => {
+    if (!showVoice) return;
+    const loadContext = async () => {
+      try {
+        const now = new Date();
+        // Prochains 30 jours
+        const todayStr = now.toISOString().split("T")[0];
+        const in30 = new Date(now); in30.setDate(in30.getDate() + 30);
+        const in30Str = in30.toISOString().split("T")[0];
+
+        const snap = await getDocs(query(
+          collection(db, "creneaux"),
+          where("date", ">=", todayStr),
+          where("date", "<=", in30Str),
+        ));
+
+        const creneaux = snap.docs.map(d => d.data())
+          .filter(c => c.status !== "closed")
+          .sort((a, b) => a.date.localeCompare(b.date));
+
+        // Grouper par type
+        const balades = creneaux.filter(c => c.activityType === "balade");
+        const cours   = creneaux.filter(c => c.activityType === "cours");
+        const stages  = creneaux.filter(c => c.activityType === "stage");
+        const ponyride= creneaux.filter(c => c.activityType === "ponyride");
+        const anniv   = creneaux.filter(c => c.activityType === "anniversaire");
+
+        const fmt = (c: any) => {
+          const d = new Date(c.date);
+          const dLabel = d.toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" });
+          const places = c.maxPlaces - (c.enrolled?.length || 0);
+          return `${dLabel} à ${c.startTime} — ${c.activityTitle} — ${places} place${places>1?"s":""} disponible${places>1?"s":""}`;
+        };
+
+        setVoiceContext({
+          centre: "Centre Équestre d'Agon-Coutainville",
+          localisation: "Agon-Coutainville, Normandie (Manche)",
+          date_aujourdhui: now.toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long", year:"numeric" }),
+          prochaines_balades: balades.slice(0,8).map(fmt),
+          prochains_cours: cours.slice(0,8).map(fmt),
+          prochains_stages: stages.slice(0,5).map(fmt),
+          prochains_ponyrides: ponyride.slice(0,5).map(fmt),
+          prochains_anniversaires: anniv.slice(0,3).map(fmt),
+          total_balades_dispo: balades.filter(c => c.maxPlaces - (c.enrolled?.length||0) > 0).length,
+          total_cours_dispo: cours.filter(c => c.maxPlaces - (c.enrolled?.length||0) > 0).length,
+          // Tarifs indicatifs (à adapter si tu as une collection tarifs)
+          tarifs: {
+            cours_collectif: "à partir de 22€/séance",
+            balade_decouverte: "30€/heure",
+            grande_balade: "40€/2 heures",
+            pony_ride: "10€",
+            stage_vacances: "à partir de 175€/semaine",
+            anniversaire_poney: "~180€",
+          },
+          infos_pratiques: {
+            inscription: "Via l'espace cavalier en ligne ou en contactant le centre",
+            equipement: "Casque obligatoire, fourni si besoin. Tenue adaptée recommandée.",
+            age_minimum_cours: "4 ans pour le pony ride, 6 ans pour les cours",
+          },
+        });
+      } catch(e) { console.error("voiceContext famille error", e); }
+    };
+    loadContext();
+  }, [showVoice]);
 
   // Redirection admin → back-office
   useEffect(() => {
@@ -284,10 +353,7 @@ export default function EspaceCavalierLayout({
               voiceId="XB0fDUnXU5powFXDhCwa"
               placeholder="Votre question..."
               onClose={() => setShowVoice(false)}
-              context={{
-                centre: "Centre Équestre d'Agon-Coutainville",
-                note: "Répondre aux questions des familles sur les cours, tarifs et inscriptions.",
-              }}
+              context={voiceContext}
             />
           </div>
         )}
