@@ -69,9 +69,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
     if (!creneau.id) return;
     setPlanUploading(true);
     try {
-      // Vérifier type et taille
-      const allowed = ["image/jpeg","image/png","image/webp","image/heic","application/pdf"];
-      if (!allowed.includes(file.type)) throw new Error("Format non supporté (JPG, PNG, WEBP, PDF)");
+      // Accepter tous les formats image (HEIC iPhone inclus)
+      const allowed = ["image/jpeg","image/png","image/webp","image/heic","image/heif","image/gif","application/pdf"];
+      const isImage = file.type.startsWith("image/") || file.type === "";
+      if (!isImage && !allowed.includes(file.type)) throw new Error("Format non supporté (JPG, PNG, HEIC, PDF)");
       if (file.size > 10 * 1024 * 1024) throw new Error("Fichier trop volumineux (max 10 Mo)");
 
       const ext = file.name.split(".").pop() || "jpg";
@@ -519,11 +520,20 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
             <div className="flex items-center justify-between mb-2">
               <span className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider">Plan de séance</span>
               {!planUploading && (
-                <label className="flex items-center gap-1.5 font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-blue-100">
-                  {planUrl ? <><FileImage size={12} /> Remplacer</> : <><Camera size={12} /> Ajouter photo / PDF</>}
-                  <input ref={planInputRef} type="file" accept="image/*,.pdf" capture="environment" className="hidden"
-                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadPlan(f); e.target.value = ""; }} />
-                </label>
+                <div className="flex gap-1.5">
+                  {/* Bouton appareil photo */}
+                  <label className="flex items-center gap-1 font-body text-xs text-blue-500 bg-blue-50 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-blue-100">
+                    <Camera size={12} /> Photo
+                    <input type="file" accept="image/*" capture="environment" className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadPlan(f); e.target.value = ""; }} />
+                  </label>
+                  {/* Bouton galerie / fichier */}
+                  <label className="flex items-center gap-1 font-body text-xs text-blue-500 bg-blue-50 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-blue-100">
+                    <FileImage size={12} /> Galerie / PDF
+                    <input ref={planInputRef} type="file" accept="image/*,.pdf,.heic,.heif" className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadPlan(f); e.target.value = ""; }} />
+                  </label>
+                </div>
               )}
               {planUploading && <div className="flex items-center gap-1.5 font-body text-xs text-blue-500"><Loader2 size={12} className="animate-spin" /> Upload...</div>}
             </div>
@@ -554,7 +564,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
                 onClick={() => planInputRef.current?.click()}>
                 <Camera size={20} className="text-gray-300 mx-auto mb-1" />
                 <p className="font-body text-xs text-gray-400">Photo ou PDF du plan de séance</p>
-                <p className="font-body text-[10px] text-gray-300 mt-0.5">JPG · PNG · WEBP · PDF · max 10 Mo</p>
+                <p className="font-body text-[10px] text-gray-300 mt-0.5">Tous formats image · PDF · max 10 Mo</p>
               </div>
             )}
           </div>
