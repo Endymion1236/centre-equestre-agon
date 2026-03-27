@@ -82,7 +82,28 @@ export default function VoiceAssistant({
       const res = await fetch("/api/whisper", { method: "POST", body: fd });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
-      await askClaude(data.text);
+      const text = data.text?.trim() || "";
+
+      // Si une action est en attente et que la réponse est une confirmation vocale
+      if (pendingAction && mode === "admin") {
+        const confirmWords = ["oui", "confirme", "je confirme", "yes", "ok", "c'est bon", "vas-y", "go", "affirmatif"];
+        const cancelWords = ["non", "annule", "annuler", "no", "stop", "laisse tomber"];
+        const lower = text.toLowerCase();
+        if (confirmWords.some(w => lower.includes(w))) {
+          await askClaude("Oui, confirme.", true);
+          setLoading(false);
+          return;
+        }
+        if (cancelWords.some(w => lower.includes(w))) {
+          setPendingAction(null);
+          addMessage("assistant", "Action annulée.");
+          if (!muted) await speakText("Action annulée.");
+          setLoading(false);
+          return;
+        }
+      }
+
+      await askClaude(text);
     } catch (e: any) {
       addMessage("assistant", `Désolé, je n'ai pas pu transcrire votre question. (${e.message})`);
     }
@@ -94,6 +115,23 @@ export default function VoiceAssistant({
     if (!textInput.trim()) return;
     const q = textInput.trim();
     setTextInput("");
+
+    // Même détection pour le texte
+    if (pendingAction && mode === "admin") {
+      const lower = q.toLowerCase();
+      const confirmWords = ["oui", "confirme", "je confirme", "yes", "ok", "c'est bon", "vas-y", "go"];
+      const cancelWords = ["non", "annule", "annuler", "no", "stop"];
+      if (confirmWords.some(w => lower.includes(w))) {
+        await askClaude("Oui, confirme.", true);
+        return;
+      }
+      if (cancelWords.some(w => lower.includes(w))) {
+        setPendingAction(null);
+        addMessage("assistant", "Action annulée.");
+        return;
+      }
+    }
+
     await askClaude(q);
   };
 
