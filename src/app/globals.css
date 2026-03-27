@@ -140,7 +140,24 @@ h1, h2, h3, h4 {
 .animate-delay-500 { animation-delay: 0.5s; }
 
 
-/* Toast animation */
+/* ═══ Overrides contraste admin — grays renforcés sur fond crème ═══ */
+
+/* Sur fond crème/sable, gray-400/500 Tailwind sont illisibles.
+   On les remplace par des valeurs plus sombres globalement. */
+
+.text-gray-300 { color: #94A3B8 !important; }
+.text-gray-400 { color: #64748B !important; }
+.text-gray-500 { color: #475569 !important; }
+.text-gray-600 { color: #334155 !important; }
+
+/* Textes secondaires dans les listes et tableaux */
+.font-body.text-xs { letter-spacing: 0.01em; }
+
+/* Labels de colonnes uppercase */
+.uppercase.tracking-wider { color: #334155 !important; font-weight: 600; }
+
+/* Noms de famille dans les listes */
+span.text-gray-500 { color: #475569 !important; }
 @keyframes slide-up {
   from { transform: translateY(20px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
