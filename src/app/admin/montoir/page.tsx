@@ -84,7 +84,8 @@ export default function MontoirPage() {
   const [transcripts, setTranscripts] = useState<Record<string, string>>({}); // childId → texte dicté
   const [iaLoading, setIaLoading] = useState<Record<string, boolean>>({}); // childId → loading
   const [iaBilans, setIaBilans] = useState<Record<string, any>>({}); // childId → bilan structuré
-  const recognitionRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const closeCreneau = async (cid: string) => {
     const c = creneaux.find(x => x.id === cid);
@@ -222,54 +223,62 @@ export default function MontoirPage() {
   };
 
   // ── Dictée vocale ──────────────────────────────────────────────────────────
-  const startRecording = (childId: string) => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) { alert("La dictée vocale n'est pas supportée sur ce navigateur. Utilisez Chrome ou Safari."); return; }
-    if (recognitionRef.current) { recognitionRef.current.stop(); }
-    const recognition = new SpeechRecognition();
-    recognition.lang = "fr-FR";
-    recognition.continuous = true;
-    recognition.interimResults = true;
+  const startRecording = async (childId: string) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
 
-    // Texte déjà dicté avant ce lancement (si l'user a déjà dicté puis réouvert)
-    const existingText = transcripts[childId] ? transcripts[childId].trim() + " " : "";
-    // Accumulateur LOCAL — ne dépend pas du state React (évite les closures périmées)
-    let finalSegments = existingText;
+      // Choisir le format supporté
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : "audio/mp4";
 
-    recognition.onresult = (e: any) => {
-      // Reconstruire depuis TOUS les résultats finals disponibles
-      // + le dernier résultat intermédiaire en cours
-      let finals = existingText;
-      let interim = "";
-      for (let i = 0; i < e.results.length; i++) {
-        if (e.results[i].isFinal) {
-          finals += e.results[i][0].transcript + " ";
-        } else {
-          interim = e.results[i][0].transcript;
-        }
-      }
-      finalSegments = finals;
-      setTranscripts(prev => ({ ...prev, [childId]: (finals + interim).trim() }));
-    };
-
-    recognition.onend = () => {
-      // Figer le texte final propre sans doublons
-      setTranscripts(prev => ({ ...prev, [childId]: finalSegments.trim() }));
-      setRecording(null);
-    };
-    recognition.onerror = (e: any) => {
-      // Ignorer les erreurs "no-speech" — juste un silence
-      if (e.error !== "no-speech") setRecording(null);
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
-    setRecording(childId);
+      const recorder = new MediaRecorder(stream, { mimeType });
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        // Arrêter toutes les pistes micro
+        stream.getTracks().forEach(t => t.stop());
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        const ext = mimeType.includes("mp4") ? "m4a" : "webm";
+        const audioFile = new File([audioBlob], `bilan_${childId}.${ext}`, { type: mimeType });
+        // Envoyer à Whisper
+        await transcribeWithWhisper(childId, audioFile);
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start(500); // chunks toutes les 500ms
+      setRecording(childId);
+    } catch (e: any) {
+      alert(`Impossible d'accéder au microphone : ${e.message}`);
+    }
   };
 
   const stopRecording = () => {
-    if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null; }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
     setRecording(null);
+  };
+
+  const transcribeWithWhisper = async (childId: string, audioFile: File) => {
+    setIaLoading(prev => ({ ...prev, [childId]: true }));
+    try {
+      const formData = new FormData();
+      formData.append("audio", audioFile);
+      const res = await fetch("/api/whisper", { method: "POST", body: formData });
+      const data = await res.json();
+      if (data.success) {
+        setTranscripts(prev => ({ ...prev, [childId]: data.text }));
+      } else {
+        alert(`Erreur Whisper : ${data.error}`);
+      }
+    } catch (e: any) {
+      alert(`Erreur transcription : ${e.message}`);
+    }
+    setIaLoading(prev => ({ ...prev, [childId]: false }));
   };
 
   const analyserBilanIA = async (child: any, creneauInfo: any) => {
@@ -548,31 +557,48 @@ export default function MontoirPage() {
                     {/* Bouton dictée + transcription */}
                     {!bilan && (
                       <div className="flex flex-col gap-2">
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap">
                           <button
                             onClick={() => isRec ? stopRecording() : startRecording(child.childId)}
-                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-body text-sm font-semibold border-none cursor-pointer transition-all ${isRec ? "bg-red-500 text-white animate-pulse" : "bg-purple-50 text-purple-700 hover:bg-purple-100"}`}>
-                            {isRec ? <><MicOff size={16} /> Arrêter</> : <><Mic size={16} /> Dicter le bilan</>}
+                            disabled={loading}
+                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-body text-sm font-semibold border-none cursor-pointer transition-all disabled:opacity-50 ${isRec ? "bg-red-500 text-white" : "bg-purple-50 text-purple-700 hover:bg-purple-100"}`}>
+                            {isRec ? <><MicOff size={16} /> Arrêter la dictée</> : <><Mic size={16} /> Dicter</>}
                           </button>
-                          {transcript && !loading && (
+                          {loading && !transcript && (
+                            <div className="flex items-center gap-2 px-4 py-2.5 text-purple-600 font-body text-sm">
+                              <Loader2 size={14} className="animate-spin" /> Transcription Whisper...
+                            </div>
+                          )}
+                          {transcript && !loading && !isRec && (
                             <button onClick={() => analyserBilanIA(child, creneau)}
                               className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-white border-none cursor-pointer"
                               style={{ background: "linear-gradient(135deg,#7c3aed,#2050A0)" }}>
-                              <Sparkles size={14} /> Analyser
+                              <Sparkles size={14} /> Analyser avec l'IA
                             </button>
                           )}
-                          {loading && <div className="flex items-center gap-2 px-4 py-2.5 text-purple-600 font-body text-sm"><Loader2 size={14} className="animate-spin" /> Analyse...</div>}
+                          {loading && transcript && (
+                            <div className="flex items-center gap-2 px-4 py-2.5 text-purple-600 font-body text-sm">
+                              <Loader2 size={14} className="animate-spin" /> Analyse IA...
+                            </div>
+                          )}
                         </div>
+
+                        {/* Indicateur enregistrement */}
+                        {isRec && (
+                          <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-100 rounded-xl">
+                            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+                            <span className="font-body text-xs text-red-600">Enregistrement en cours — parlez naturellement, appuyez Arrêter quand terminé</span>
+                          </div>
+                        )}
 
                         {/* Zone transcript */}
                         <textarea
                           value={transcript}
                           onChange={e => setTranscripts(prev => ({ ...prev, [child.childId]: e.target.value }))}
-                          placeholder={isRec ? "🎙️ Dictez votre observation..." : "Ou tapez directement votre observation..."}
+                          placeholder={isRec ? "🎙️ Enregistrement..." : "Le transcript apparaîtra ici après dictée, ou tapez directement..."}
                           rows={3}
-                          className={`w-full px-3 py-2.5 rounded-xl border font-body text-sm bg-white focus:outline-none resize-none transition-all ${isRec ? "border-red-300 bg-red-50/30" : "border-gray-200 focus:border-purple-400"}`}
+                          className={`w-full px-3 py-2.5 rounded-xl border font-body text-sm bg-white focus:outline-none resize-none transition-all ${isRec ? "border-red-200 bg-red-50/20" : "border-gray-200 focus:border-purple-400"}`}
                         />
-                        {isRec && <p className="font-body text-[10px] text-red-500 text-center">● Enregistrement en cours...</p>}
                       </div>
                     )}
 
