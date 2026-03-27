@@ -207,15 +207,28 @@ export default function EspaceCavalierLayout({
         const in30 = new Date(now); in30.setDate(in30.getDate() + 30);
         const in30Str = in30.toISOString().split("T")[0];
 
-        const snap = await getDocs(query(
-          collection(db, "creneaux"),
-          where("date", ">=", todayStr),
-          where("date", "<=", in30Str),
-        ));
+        const [creneauxSnap, activitiesSnap] = await Promise.all([
+          getDocs(query(
+            collection(db, "creneaux"),
+            where("date", ">=", todayStr),
+            where("date", "<=", in30Str),
+          )),
+          getDocs(collection(db, "activities")),
+        ]);
 
-        const creneaux = snap.docs.map(d => d.data())
+        const creneaux = creneauxSnap.docs.map(d => d.data())
           .filter(c => c.status !== "closed")
           .sort((a, b) => a.date.localeCompare(b.date));
+
+        // Tarifs depuis la collection activities (mis à jour en temps réel)
+        const activitiesTarifs: Record<string, string> = {};
+        activitiesSnap.docs.forEach(d => {
+          const a = d.data();
+          if (a.title && a.priceHT) {
+            const ttc = Math.round(a.priceHT * (1 + (a.tvaTaux || 5.5) / 100) * 100) / 100;
+            activitiesTarifs[a.title] = `${ttc}€${a.type === "cours" ? "/séance" : ""}`;
+          }
+        });
 
         // Grouper par type
         const balades = creneaux.filter(c => c.activityType === "balade");
@@ -242,15 +255,9 @@ export default function EspaceCavalierLayout({
           prochains_anniversaires: anniv.slice(0,3).map(fmt),
           total_balades_dispo: balades.filter(c => c.maxPlaces - (c.enrolled?.length||0) > 0).length,
           total_cours_dispo: cours.filter(c => c.maxPlaces - (c.enrolled?.length||0) > 0).length,
-          // Tarifs indicatifs (à adapter si tu as une collection tarifs)
-          tarifs: {
-            cours_collectif: "à partir de 22€/séance",
-            balade_decouverte: "30€/heure",
-            grande_balade: "40€/2 heures",
-            pony_ride: "10€",
-            stage_vacances: "à partir de 175€/semaine",
-            anniversaire_poney: "~180€",
-          },
+          tarifs: Object.keys(activitiesTarifs).length > 0
+            ? activitiesTarifs
+            : { note: "Consulter le centre pour les tarifs" },
           infos_pratiques: {
             inscription: "Via l'espace cavalier en ligne ou en contactant le centre",
             equipement: "Casque obligatoire, fourni si besoin. Tenue adaptée recommandée.",
