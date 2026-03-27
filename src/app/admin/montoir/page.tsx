@@ -442,8 +442,8 @@ export default function MontoirPage() {
         <Card key={c.id} padding="md" className={closed?"opacity-60":""}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-blue-500/8">
             <div className="flex items-center gap-4">
-              <div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px] text-slate-500">{c.endTime}</div></div>
-              <div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs text-slate-600">{c.monitor} · {en.length}/{c.maxPlaces}</div></div>
+              <div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px]" style={{color:"#475569"}}>{c.endTime}</div></div>
+              <div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs" style={{color:"#334155"}}>{c.monitor} · {en.length}/{c.maxPlaces}</div></div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <Badge color={closed?"gray":pres===en.length&&en.length>0?"green":"orange"}>{closed?"Clôturée":`${pres}/${en.length} présents`}</Badge>
@@ -477,14 +477,14 @@ export default function MontoirPage() {
           </div>
           {en.length===0 ? <p className="font-body text-sm text-slate-600 italic">Aucun inscrit</p> :
           <div>
-            <div className="flex items-center px-3 py-2 font-body text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
+            <div className="flex items-center px-3 py-2 font-body text-[11px] font-semibold uppercase tracking-wider" style={{color:"#334155"}}>
               <span className="w-8 hidden sm:block">#</span><span className="flex-1">Cavalier</span><span className="w-32 hidden sm:block">Famille</span><span className="w-28 sm:w-36">Poney</span><span className="w-20 sm:w-24 text-center">Présence</span>
             </div>
             {en.map((e:any, i:number) => (
               <div key={e.childId} className={`flex items-center px-3 py-2.5 rounded-lg ${i%2===0?"bg-sand":""} ${e.presence==="absent"?"opacity-40":""}`}>
-                <span className="w-8 font-body text-xs text-slate-600 hidden sm:block">{i+1}</span>
+                <span className="w-8 font-body text-xs hidden sm:block" style={{color:"#475569"}}>{i+1}</span>
                 <span className="flex-1 font-body text-sm font-semibold text-blue-800">{e.childName}</span>
-                <span className="w-32 font-body text-xs text-slate-600 hidden sm:block">{e.familyName}</span>
+                <span className="w-32 font-body text-xs hidden sm:block" style={{color:"#334155"}}>{e.familyName}</span>
                 <span className="w-28 sm:w-36">{!closed ? (() => {
                   // Filtrer les poneys déjà affectés dans des créneaux qui se chevauchent
                   const usedInOtherCreneaux = new Set<string>();
