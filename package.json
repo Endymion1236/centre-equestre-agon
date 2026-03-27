@@ -13,6 +13,7 @@
     "seed:clean": "node scripts/seed.mjs --clean"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@stripe/stripe-js": "^4.0.0",
     "firebase": "^11.10.0",
     "firebase-admin": "^13.7.0",

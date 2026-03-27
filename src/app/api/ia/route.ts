@@ -1,0 +1,148 @@
+import { NextRequest, NextResponse } from "next/server";
+import Anthropic from "@anthropic-ai/sdk";
+
+export const dynamic = "force-dynamic";
+
+const client = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface RapprochementRequest {
+  type: "rapprochement";
+  bankLines: { date: string; label: string; amount: number; matched: boolean; matchDetail?: string }[];
+  encaissements: { date: string; mode: string; montant: number; familyName: string; activityTitle?: string }[];
+  periode: string;
+}
+
+interface AssistantRequest {
+  type: "assistant";
+  question: string;
+  context: {
+    totalCA?: number;
+    totalEncaisse?: number;
+    nbPaiements?: number;
+    nbImpayés?: number;
+    topFamilles?: { name: string; total: number }[];
+    periode?: string;
+    encaissementsParMode?: Record<string, number>;
+    remises?: { date: string; total: number; pointee: boolean }[];
+  };
+}
+
+type IARequest = RapprochementRequest | AssistantRequest;
+
+// ─── Handler ──────────────────────────────────────────────────────────────────
+
+export async function POST(request: NextRequest) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "ANTHROPIC_API_KEY non configurée dans Vercel." },
+      { status: 500 }
+    );
+  }
+
+  try {
+    const body: IARequest = await request.json();
+
+    // ── Rapprochement bancaire ────────────────────────────────────────────────
+    if (body.type === "rapprochement") {
+      const nonMatched = body.bankLines.filter(l => !l.matched);
+      const matched = body.bankLines.filter(l => l.matched);
+      const totalBanque = body.bankLines.reduce((s, l) => s + l.amount, 0);
+      const totalEnc = body.encaissements.reduce((s, e) => s + e.montant, 0);
+      const ecart = totalBanque - totalEnc;
+
+      const prompt = `Tu es l'assistant comptable du Centre Équestre d'Agon-Coutainville.
+Analyse ce rapprochement bancaire et explique les écarts en français clair et concis.
+
+PÉRIODE : ${body.periode}
+TOTAL RELEVÉ BANCAIRE : ${totalBanque.toFixed(2)}€
+TOTAL ENCAISSEMENTS FIRESTORE : ${totalEnc.toFixed(2)}€
+ÉCART : ${ecart.toFixed(2)}€
+
+LIGNES BANCAIRES RAPPROCHÉES (${matched.length}) :
+${matched.map(l => `- ${l.date} | ${l.label} | ${l.amount.toFixed(2)}€ → ${l.matchDetail}`).join("\n")}
+
+LIGNES NON RAPPROCHÉES (${nonMatched.length}) :
+${nonMatched.length === 0 ? "Aucune ✅" : nonMatched.map(l => `- ${l.date} | ${l.label} | ${l.amount.toFixed(2)}€`).join("\n")}
+
+ENCAISSEMENTS DU MOIS (${body.encaissements.length}) :
+${body.encaissements.slice(0, 30).map(e => `- ${e.date} | ${e.mode} | ${e.montant.toFixed(2)}€ | ${e.familyName}`).join("\n")}
+${body.encaissements.length > 30 ? `... et ${body.encaissements.length - 30} autres` : ""}
+
+Fournis une analyse structurée en 3 parties :
+1. **Résumé** (2-3 phrases sur l'état général du rapprochement)
+2. **Lignes non rapprochées** — pour chaque ligne bancaire non matchée, explique ce que c'est probablement (frais bancaires, remise multi-jours, paiement externe, etc.) et ce qu'il faut faire
+3. **Écart de ${ecart.toFixed(2)}€** — explication et action recommandée
+
+Sois concis, pratique, en français. Pas de markdown complexe, juste des titres en gras et des listes.`;
+
+      const message = await client.messages.create({
+        model: "claude-sonnet-4-5",
+        max_tokens: 1024,
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      const text = message.content[0].type === "text" ? message.content[0].text : "";
+
+      return NextResponse.json({
+        success: true,
+        analysis: text,
+        stats: {
+          totalBanque: totalBanque.toFixed(2),
+          totalEnc: totalEnc.toFixed(2),
+          ecart: ecart.toFixed(2),
+          matched: matched.length,
+          nonMatched: nonMatched.length,
+          tauxRapprochement: body.bankLines.length > 0
+            ? Math.round((matched.length / body.bankLines.length) * 100)
+            : 100,
+        },
+      });
+    }
+
+    // ── Assistant comptable ───────────────────────────────────────────────────
+    if (body.type === "assistant") {
+      const ctx = body.context;
+
+      const prompt = `Tu es l'assistant comptable du Centre Équestre d'Agon-Coutainville.
+Réponds à cette question en français, de façon concise et pratique.
+Tu as accès aux données suivantes :
+
+PÉRIODE : ${ctx.periode || "non précisée"}
+CA TTC FACTURÉ : ${ctx.totalCA?.toFixed(2) || "?"}€
+TOTAL ENCAISSÉ : ${ctx.totalEncaisse?.toFixed(2) || "?"}€
+NB PAIEMENTS : ${ctx.nbPaiements || "?"}
+NB IMPAYÉS : ${ctx.nbImpayés || "?"}
+${ctx.encaissementsParMode ? `ENCAISSEMENTS PAR MODE :\n${Object.entries(ctx.encaissementsParMode).map(([k,v])=>`- ${k}: ${(v as number).toFixed(2)}€`).join("\n")}` : ""}
+${ctx.topFamilles ? `TOP FAMILLES :\n${ctx.topFamilles.slice(0,5).map(f=>`- ${f.name}: ${f.total.toFixed(2)}€`).join("\n")}` : ""}
+${ctx.remises ? `REMISES (${ctx.remises.length}) :\n${ctx.remises.map(r=>`- ${r.date}: ${r.total.toFixed(2)}€ ${r.pointee?"✓ pointée":"⚠ non pointée"}`).join("\n")}` : ""}
+
+QUESTION : ${body.question}
+
+Réponds directement à la question. Sois précis, chiffré si possible, et suggère une action concrète si pertinent.`;
+
+      const message = await client.messages.create({
+        model: "claude-sonnet-4-5",
+        max_tokens: 512,
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      const text = message.content[0].type === "text" ? message.content[0].text : "";
+
+      return NextResponse.json({ success: true, answer: text });
+    }
+
+    return NextResponse.json({ error: "Type de requête inconnu" }, { status: 400 });
+
+  } catch (error: any) {
+    console.error("IA API error:", error);
+    return NextResponse.json(
+      { error: error.message || "Erreur serveur" },
+      { status: 500 }
+    );
+  }
+}

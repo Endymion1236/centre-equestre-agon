@@ -5,7 +5,7 @@ import { collection, getDocs, addDoc, updateDoc, doc, query, orderBy, serverTime
 import { db } from "@/lib/firebase";
 import { safeNumber } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
-import { Loader2, Download, Upload, Check, FileText, Building2, Receipt, Calculator, Search, Printer, Plus } from "lucide-react";
+import { Loader2, Download, Upload, Check, FileText, Building2, Receipt, Calculator, Search, Printer, Plus, Sparkles, Bot } from "lucide-react";
 
 interface Payment {
   id: string;
@@ -61,6 +61,15 @@ export default function ComptabilitePage() {
   const [pointageRemiseId, setPointageRemiseId] = useState<string | null>(null);
   const [pointageNote, setPointageNote] = useState("");
   const [openRemiseId, setOpenRemiseId] = useState<string | null>(null);
+
+  // ── IA ──────────────────────────────────────────────────────────────────────
+  const [iaLoading, setIaLoading] = useState(false);
+  const [iaAnalysis, setIaAnalysis] = useState<string | null>(null);
+  const [iaStats, setIaStats] = useState<any>(null);
+  const [iaQuestion, setIaQuestion] = useState("");
+  const [iaAnswer, setIaAnswer] = useState<string | null>(null);
+  const [iaAnswerLoading, setIaAnswerLoading] = useState(false);
+  const [showAssistant, setShowAssistant] = useState(false);
   const [period, setPeriod] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -316,7 +325,74 @@ export default function ComptabilitePage() {
     reader.readAsText(file);
   };
 
-  // FEC export
+  // ── Analyser avec l'IA ───────────────────────────────────────────────────
+  const analyserRapprochement = async () => {
+    if (bankLines.length === 0) return;
+    setIaLoading(true);
+    setIaAnalysis(null);
+    try {
+      const periodEnc = encaissementsCompta.filter(e => {
+        const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+        if (!d) return false;
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}` === period;
+      });
+      const res = await fetch("/api/ia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "rapprochement",
+          bankLines: bankLines.map(l => ({ date: l.date, label: l.label, amount: l.amount, matched: l.matched, matchDetail: l.matchDetail })),
+          encaissements: periodEnc.map(e => ({
+            date: e.date?.seconds ? new Date(e.date.seconds*1000).toLocaleDateString("fr-FR") : "—",
+            mode: e.mode, montant: e.montant || 0, familyName: e.familyName || "—",
+            activityTitle: e.activityTitle || "",
+          })),
+          periode: period,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) { setIaAnalysis(data.analysis); setIaStats(data.stats); }
+      else setIaAnalysis(`Erreur : ${data.error}`);
+    } catch (e: any) { setIaAnalysis(`Erreur : ${e.message}`); }
+    setIaLoading(false);
+  };
+
+  const poserQuestion = async () => {
+    if (!iaQuestion.trim()) return;
+    setIaAnswerLoading(true);
+    setIaAnswer(null);
+    try {
+      const totalCA = filteredPayments.reduce((s, p) => s + safeNumber(p.totalTTC), 0);
+      const totalEnc = filteredPayments.filter(p => p.status === "paid").reduce((s, p) => s + safeNumber(p.paidAmount), 0);
+      const modeMap: Record<string, number> = {};
+      filteredPayments.filter(p => p.status === "paid").forEach(p => {
+        modeMap[modeLabels[p.paymentMode] || p.paymentMode] = (modeMap[modeLabels[p.paymentMode] || p.paymentMode] || 0) + safeNumber(p.paidAmount);
+      });
+      const topFamilles = Object.entries(
+        filteredPayments.filter(p=>p.status==="paid").reduce((acc: any, p) => {
+          acc[p.familyName] = (acc[p.familyName] || 0) + safeNumber(p.paidAmount); return acc;
+        }, {})
+      ).sort((a: any, b: any) => b[1]-a[1]).slice(0,5).map(([name, total]) => ({ name, total: total as number }));
+      const res = await fetch("/api/ia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "assistant",
+          question: iaQuestion,
+          context: {
+            totalCA, totalEncaisse: totalEnc,
+            nbPaiements: filteredPayments.length,
+            nbImpayés: filteredPayments.filter(p => p.status === "pending" || p.status === "partial").length,
+            topFamilles, periode: period,
+            encaissementsParMode: modeMap,
+          },
+        }),
+      });
+      const data = await res.json();
+      setIaAnswer(data.success ? data.answer : `Erreur : ${data.error}`);
+    } catch (e: any) { setIaAnswer(`Erreur : ${e.message}`); }
+    setIaAnswerLoading(false);
+  };
   const generateFEC = () => {
     const header = "JournalCode\tJournalLib\tEcritureNum\tEcritureDate\tCompteNum\tCompteLib\tCompAuxNum\tCompAuxLib\tPieceRef\tPieceDate\tEcritureLib\tDebit\tCredit\tEcritureLet\tDateLet\tValidDate\tMontantdevise\tIdevise";
     const rows: string[] = [];
@@ -896,6 +972,49 @@ export default function ComptabilitePage() {
               </div>
             </Card>
           )}
+
+          {/* ── Bouton IA + analyse ── */}
+          {bankLines.length > 0 && (
+            <div className="flex flex-col gap-4">
+              <button onClick={analyserRapprochement} disabled={iaLoading}
+                className="flex items-center justify-center gap-2 w-full py-3 rounded-xl font-body text-sm font-semibold text-white border-none cursor-pointer disabled:opacity-50"
+                style={{ background: "linear-gradient(135deg, #7c3aed, #2050A0)" }}>
+                {iaLoading
+                  ? <><Loader2 size={16} className="animate-spin" /> Analyse en cours...</>
+                  : <><Sparkles size={16} /> Analyser avec l'IA</>}
+              </button>
+
+              {iaStats && (
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: "Total relevé", value: `${iaStats.totalBanque}€`, color: "text-blue-800" },
+                    { label: "Total encaissé", value: `${iaStats.totalEnc}€`, color: "text-green-600" },
+                    { label: "Écart", value: `${iaStats.ecart}€`, color: parseFloat(iaStats.ecart) === 0 ? "text-green-600" : "text-orange-500" },
+                  ].map(s => (
+                    <div key={s.label} className="bg-sand rounded-xl p-3 text-center">
+                      <div className={`font-body text-lg font-bold ${s.color}`}>{s.value}</div>
+                      <div className="font-body text-xs text-gray-400">{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {iaAnalysis && (
+                <Card padding="md" className="border-purple-200 bg-purple-50/30">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg,#7c3aed,#2050A0)" }}>
+                      <Sparkles size={14} className="text-white" />
+                    </div>
+                    <span className="font-body text-sm font-semibold text-blue-800">Analyse IA</span>
+                    <Badge color="blue">{iaStats?.tauxRapprochement}% rapproché</Badge>
+                  </div>
+                  <div className="font-body text-sm text-blue-800 whitespace-pre-wrap leading-relaxed">
+                    {iaAnalysis}
+                  </div>
+                </Card>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -1078,6 +1197,84 @@ export default function ComptabilitePage() {
           </Card>
         </div>
       )}
+
+      {/* ── Assistant IA flottant ─────────────────────────────────────────── */}
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+        {/* Panel assistant */}
+        {showAssistant && (
+          <div className="bg-white rounded-2xl shadow-2xl border border-purple-100 w-96 flex flex-col overflow-hidden"
+            style={{ maxHeight: "70vh" }}>
+            <div className="flex items-center justify-between px-4 py-3 text-white"
+              style={{ background: "linear-gradient(135deg,#7c3aed,#2050A0)" }}>
+              <div className="flex items-center gap-2">
+                <Sparkles size={16} />
+                <span className="font-body text-sm font-semibold">Assistant comptable IA</span>
+              </div>
+              <button onClick={() => setShowAssistant(false)}
+                className="text-white/70 hover:text-white bg-transparent border-none cursor-pointer text-lg leading-none">✕</button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3" style={{ minHeight: 200 }}>
+              {/* Suggestions */}
+              {!iaAnswer && (
+                <div className="flex flex-col gap-2">
+                  <p className="font-body text-xs text-gray-400 mb-1">Questions fréquentes :</p>
+                  {[
+                    "Quel est mon taux d'impayés ce mois ?",
+                    "Quelles familles doivent le plus ?",
+                    "Quel mode de paiement est le plus utilisé ?",
+                    "Compare encaissé vs facturé",
+                  ].map(q => (
+                    <button key={q} onClick={() => { setIaQuestion(q); }}
+                      className="text-left font-body text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-100">
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Réponse IA */}
+              {iaAnswerLoading && (
+                <div className="flex items-center gap-2 text-purple-600 font-body text-sm">
+                  <Loader2 size={14} className="animate-spin" /> Analyse en cours...
+                </div>
+              )}
+              {iaAnswer && (
+                <div className="bg-purple-50 rounded-xl p-3 font-body text-sm text-blue-800 whitespace-pre-wrap leading-relaxed">
+                  {iaAnswer}
+                </div>
+              )}
+              {iaAnswer && (
+                <button onClick={() => { setIaAnswer(null); setIaQuestion(""); }}
+                  className="font-body text-xs text-gray-400 bg-transparent border-none cursor-pointer hover:text-blue-500 text-left">
+                  ← Nouvelle question
+                </button>
+              )}
+            </div>
+
+            {/* Input question */}
+            <div className="border-t border-gray-100 p-3 flex gap-2">
+              <input value={iaQuestion} onChange={e => setIaQuestion(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); poserQuestion(); } }}
+                placeholder="Posez votre question..."
+                className="flex-1 font-body text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-200" />
+              <button onClick={poserQuestion} disabled={!iaQuestion.trim() || iaAnswerLoading}
+                className="w-9 h-9 rounded-lg flex items-center justify-center text-white border-none cursor-pointer disabled:opacity-40"
+                style={{ background: "linear-gradient(135deg,#7c3aed,#2050A0)" }}>
+                <Bot size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Bouton flottant */}
+        <button onClick={() => setShowAssistant(!showAssistant)}
+          className="w-14 h-14 rounded-full flex items-center justify-center text-white shadow-lg border-none cursor-pointer hover:scale-105 transition-transform"
+          style={{ background: "linear-gradient(135deg,#7c3aed,#2050A0)" }}
+          title="Assistant comptable IA">
+          {showAssistant ? <span className="text-xl">✕</span> : <Sparkles size={22} />}
+        </button>
+      </div>
     </div>
   );
 }
