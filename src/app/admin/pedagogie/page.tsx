@@ -261,7 +261,14 @@ export default function PedagogiePage() {
                   {/* Notes instructrice */}
                   <div>
                     <div className="flex justify-between items-center mb-3">
-                      <h3 className="font-body text-sm font-semibold text-blue-800 flex items-center gap-2"><MessageSquare size={14} /> Notes d&apos;instructrice</h3>
+                      <h3 className="font-body text-sm font-semibold text-blue-800 flex items-center gap-2">
+                        <MessageSquare size={14} /> Notes d&apos;instructrice
+                        {(peda.notes || []).filter((n: any) => n.type === "bilan_ia").length > 0 && (
+                          <span className="font-body text-[9px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">
+                            ✨ {(peda.notes || []).filter((n: any) => n.type === "bilan_ia").length} bilan{(peda.notes || []).filter((n: any) => n.type === "bilan_ia").length > 1 ? "s" : ""} IA
+                          </span>
+                        )}
+                      </h3>
                       <button onClick={() => setAddingNote(addingNote === uniqueKey ? null : child.id)}
                         className="font-body text-[11px] text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer"><Plus size={12} className="inline" /> Ajouter</button>
                     </div>
@@ -279,11 +286,15 @@ export default function PedagogiePage() {
                       <p className="font-body text-xs text-gray-400 italic">Aucune note pour l&apos;instant.</p>
                     ) : (
                       <div className="flex flex-col gap-2">
-                        {(showAllNotes === uniqueKey ? peda.notes : peda.notes.slice(0, 5)).map((note: PedaNote, i: number) => (
-                          <div key={i} className={`rounded-lg px-4 py-3 group ${(note as any).type === "seance" ? "bg-green-50 border border-green-100" : "bg-sand"}`}>
+                        {(showAllNotes === uniqueKey ? peda.notes : peda.notes.slice(0, 5)).map((note: PedaNote, i: number) => {
+                          const isBilanIA = (note as any).type === "bilan_ia";
+                          const isSeance  = (note as any).type === "seance";
+                          return (
+                          <div key={i} className={`rounded-lg px-4 py-3 group ${isBilanIA ? "bg-purple-50 border border-purple-100" : isSeance ? "bg-green-50 border border-green-100" : "bg-sand"}`}>
                             <div className="flex justify-between items-center mb-1">
                               <div className="flex items-center gap-2">
-                                {(note as any).type === "seance" && <span className="font-body text-[9px] bg-green-200 text-green-800 px-1.5 py-0.5 rounded">Séance</span>}
+                                {isBilanIA && <span className="font-body text-[9px] bg-purple-200 text-purple-800 px-1.5 py-0.5 rounded flex items-center gap-0.5">✨ Bilan IA</span>}
+                                {isSeance  && <span className="font-body text-[9px] bg-green-200 text-green-800 px-1.5 py-0.5 rounded">Séance</span>}
                                 <span className="font-body text-[11px] font-semibold text-blue-500">{note.author}</span>
                               </div>
                               <div className="flex items-center gap-2">
@@ -294,7 +305,7 @@ export default function PedagogiePage() {
                             </div>
                             {editingNote && editingNote.childId === child.id && editingNote.noteIndex === i ? (
                               <div>
-                                <textarea value={editingNote.text} onChange={e => setEditingNote({ ...editingNote, text: e.target.value })} rows={2}
+                                <textarea value={editingNote.text} onChange={e => setEditingNote({ ...editingNote, text: e.target.value })} rows={4}
                                   className="w-full px-2 py-1.5 rounded-lg border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none resize-vertical" />
                                 <div className="flex gap-2 mt-1">
                                   <button onClick={() => saveEditNote(child)} className="font-body text-[10px] text-white bg-blue-500 px-2 py-1 rounded border-none cursor-pointer">Enregistrer</button>
@@ -302,10 +313,20 @@ export default function PedagogiePage() {
                                 </div>
                               </div>
                             ) : (
-                              <p className="font-body text-sm text-gray-600 leading-relaxed">{note.text}</p>
+                              <div>
+                                <p className="font-body text-sm text-gray-600 leading-relaxed whitespace-pre-line">{note.text}</p>
+                                {/* Transcript brut si disponible */}
+                                {isBilanIA && (note as any).rawTranscript && (
+                                  <details className="mt-2">
+                                    <summary className="font-body text-[10px] text-gray-400 cursor-pointer hover:text-purple-500">🎙️ Voir le transcript original</summary>
+                                    <p className="font-body text-xs text-gray-400 italic mt-1 bg-white rounded-lg px-2 py-1.5">{(note as any).rawTranscript}</p>
+                                  </details>
+                                )}
+                              </div>
                             )}
                           </div>
-                        ))}
+                          );
+                        })}
                         {peda.notes.length > 5 && showAllNotes !== uniqueKey && (
                           <button onClick={() => setShowAllNotes(uniqueKey)} className="font-body text-xs text-blue-500 bg-blue-50 py-1.5 rounded-lg border-none cursor-pointer text-center">
                             Voir les {peda.notes.length - 5} notes antérieures
