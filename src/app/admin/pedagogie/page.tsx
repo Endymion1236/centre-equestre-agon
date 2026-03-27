@@ -53,7 +53,13 @@ export default function PedagogiePage() {
     } catch (e) { console.error(e); }
     setLoading(false);
   };
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    fetchData();
+    // Recharger quand la page reprend le focus (ex: retour depuis montoir)
+    const onFocus = () => fetchData();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
 
   const allChildren = families.flatMap(f => (f.children || []).map((c: any) => ({
     ...c, familyId: f.firestoreId, familyName: f.parentName,

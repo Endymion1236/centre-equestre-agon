@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { ToastProvider } from "@/components/ui/Toast";
 import VoiceAssistant from "@/components/VoiceAssistant";
+import { db } from "@/lib/firebase";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import {
   BarChart3,
   CalendarDays,
@@ -133,6 +135,68 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { user, loading, isAdmin, signOut: authSignOut } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showVoice, setShowVoice] = useState(false);
+  const [voiceContext, setVoiceContext] = useState<Record<string, any>>({});
+
+  // Charger le contexte pour l'assistant vocal
+  useEffect(() => {
+    if (!showVoice) return;
+    const loadContext = async () => {
+      try {
+        const now = new Date();
+        const todayStr = now.toISOString().split("T")[0];
+        const mon = new Date(now); mon.setDate(now.getDate() - ((now.getDay()+6)%7));
+        const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+        const monStr = mon.toISOString().split("T")[0];
+        const sunStr = sun.toISOString().split("T")[0];
+        const monthStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+
+        const [creneauxSnap, familiesSnap, paymentsSnap] = await Promise.all([
+          getDocs(query(collection(db,"creneaux"), where("date",">=",monStr), where("date","<=",sunStr))),
+          getDocs(collection(db,"families")),
+          getDocs(collection(db,"payments")),
+        ]);
+
+        const creneaux = creneauxSnap.docs.map(d => d.data());
+        const families = familiesSnap.docs.map(d => d.data());
+        const payments = paymentsSnap.docs.map(d => d.data());
+
+        const totalInscrits = creneaux.reduce((s,c) => s+(c.enrolled?.length||0),0);
+        const totalPlaces   = creneaux.reduce((s,c) => s+(c.maxPlaces||0),0);
+        const parType: Record<string,number> = {};
+        creneaux.forEach(c => { parType[c.activityType] = (parType[c.activityType]||0)+1; });
+        const today = creneaux.filter(c => c.date === todayStr);
+
+        const paysMois = payments.filter(p => {
+          const d = p.date?.seconds ? new Date(p.date.seconds*1000) : null;
+          if (!d) return false;
+          return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}` === monthStr;
+        });
+        const totalEncaisse = paysMois.filter(p=>p.status==="paid").reduce((s,p)=>s+(p.paidAmount||p.totalTTC||0),0);
+        const nbImpayes = paysMois.filter(p=>p.status==="pending"||p.status==="partial").length;
+
+        setVoiceContext({
+          date_aujourdhui: now.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}),
+          semaine: `du ${mon.toLocaleDateString("fr-FR")} au ${sun.toLocaleDateString("fr-FR")}`,
+          inscrits_semaine: totalInscrits,
+          places_semaine: totalPlaces,
+          taux_remplissage: totalPlaces>0 ? `${Math.round(totalInscrits/totalPlaces*100)}%` : "N/A",
+          creneaux_semaine: creneaux.length,
+          creneaux_par_type: parType,
+          balades_semaine: creneaux.filter(c=>c.activityType==="balade").length,
+          stages_semaine: creneaux.filter(c=>c.activityType==="stage").length,
+          cours_aujourdhui: today.map(c=>`${c.activityTitle} à ${c.startTime} (${c.enrolled?.length||0}/${c.maxPlaces} inscrits)`),
+          total_familles: families.length,
+          total_cavaliers: families.reduce((s,f)=>s+(f.children?.length||0),0),
+          encaisse_ce_mois: `${totalEncaisse.toFixed(2)}€`,
+          nb_impayes_ce_mois: nbImpayes,
+          detail_creneaux_semaine: creneaux.slice(0,20).map(c=>
+            `${c.date} ${c.startTime} — ${c.activityTitle} — ${c.monitor} — ${c.enrolled?.length||0}/${c.maxPlaces}${c.status==="closed"?" (clôturé)":""}`
+          ),
+        });
+      } catch(e) { console.error("voiceContext error", e); }
+    };
+    loadContext();
+  }, [showVoice]);
   const pathname = usePathname();
 
   // Fermer le menu mobile quand on change de page
@@ -254,10 +318,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <div className="w-[360px] sm:w-[420px]" style={{ maxHeight: "70vh" }}>
               <VoiceAssistant
                 mode="admin"
-                voiceName="onyx"
+                voiceName="shimmer"
                 placeholder="Posez votre question..."
                 onClose={() => setShowVoice(false)}
-                context={{ note: "Assistant admin du Centre Équestre d'Agon-Coutainville" }}
+                context={voiceContext}
               />
             </div>
           )}
