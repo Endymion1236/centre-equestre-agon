@@ -776,6 +776,9 @@ export default function ParametresPage() {
                 { col: "rdv_pro", label: "RDV professionnels", color: "text-orange-500" },
                 { col: "cartes", label: "Cartes & tickets", color: "text-red-500" },
                 { col: "encaissements", label: "Encaissements (journal)", color: "text-red-500" },
+                { col: "passages", label: "Passages / présences", color: "text-orange-500" },
+                { col: "fidelite", label: "Points fidélité", color: "text-orange-500" },
+                { col: "bonsRecup", label: "Bons récupération", color: "text-orange-500" },
               ].map(item => (
                 <div key={item.col} className="flex items-center justify-between px-3 py-2 bg-sand rounded-lg">
                   <div className="flex items-center gap-2">
@@ -805,7 +808,7 @@ export default function ParametresPage() {
                 if (!confirm("⚠️ NETTOYAGE COMPLET\n\nCeci va supprimer :\n- Paiements, encaissements, réservations\n- Forfaits, avoirs, créneaux, cartes\n- Emails, RDV pro\n\nCONSERVÉ : familles, cavaliers, cavalerie, soins, activités.\n\nContinuer ?")) return;
                 if (!confirm("DERNIÈRE CONFIRMATION\n\nAction IRRÉVERSIBLE.\nConfirmer le nettoyage complet ?")) return;
 
-                const collections = ["payments", "reservations", "forfaits", "avoirs", "creneaux", "emailsReprise", "rdv_pro", "cartes", "encaissements", "remises"];
+                const collections = ["payments", "reservations", "forfaits", "avoirs", "creneaux", "emailsReprise", "rdv_pro", "cartes", "encaissements", "remises", "passages", "fidelite", "bonsRecup"];
                 let total = 0;
                 for (const col of collections) {
                   try {
