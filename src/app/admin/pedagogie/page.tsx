@@ -146,6 +146,8 @@ export default function PedagogiePage() {
   };
 
   const [editingNote, setEditingNote] = useState<{ childId: string; noteIndex: number; text: string } | null>(null);
+  const [showAllNotes, setShowAllNotes] = useState<string | null>(null);
+  const [openNoteKey, setOpenNoteKey] = useState<string | null>(null); // clé "uniqueKey_noteIndex"
   const saveEditNote = async (child: any) => {
     if (!editingNote || !editingNote.text.trim()) return;
     const peda = child.peda || { objectifs: [], notes: [] };
@@ -155,8 +157,6 @@ export default function PedagogiePage() {
     await updatePeda(child.familyId, child.id, { ...peda, notes: newNotes });
     setEditingNote(null);
   };
-
-  const [showAllNotes, setShowAllNotes] = useState<string | null>(null);
 
   const objStatusColors = { en_cours: "blue", valide: "green", a_revoir: "orange" };
   const objStatusLabels = { en_cours: "En cours", valide: "Validé", a_revoir: "À revoir" };
@@ -291,56 +291,108 @@ export default function PedagogiePage() {
                     {peda.notes.length === 0 ? (
                       <p className="font-body text-xs text-gray-400 italic">Aucune note pour l&apos;instant.</p>
                     ) : (
-                      <div className="flex flex-col gap-2">
+                      <div className="flex flex-col gap-1.5">
                         {(showAllNotes === uniqueKey ? peda.notes : peda.notes.slice(0, 5)).map((note: PedaNote, i: number) => {
                           const isBilanIA = (note as any).type === "bilan_ia";
                           const isSeance  = (note as any).type === "seance";
+                          const noteKey   = `${uniqueKey}_${i}`;
+                          const isOpen    = openNoteKey === noteKey;
+
+                          // Résumé 1 ligne pour l'accordéon
+                          const firstLine = note.text.split("\n")[0].replace(/^[✅🔧🎯]\s*/,"").slice(0, 60);
+                          const seanceLabel = (note as any).activityTitle || (note as any).creneauId
+                            ? (note as any).activityTitle || "Séance"
+                            : null;
+
                           return (
-                          <div key={i} className={`rounded-lg px-4 py-3 group ${isBilanIA ? "bg-purple-50 border border-purple-100" : isSeance ? "bg-green-50 border border-green-100" : "bg-sand"}`}>
-                            <div className="flex justify-between items-center mb-1">
-                              <div className="flex items-center gap-2">
-                                {isBilanIA && <span className="font-body text-[9px] bg-purple-200 text-purple-800 px-1.5 py-0.5 rounded flex items-center gap-0.5">✨ Bilan IA</span>}
-                                {isSeance  && <span className="font-body text-[9px] bg-green-200 text-green-800 px-1.5 py-0.5 rounded">Séance</span>}
-                                <span className="font-body text-[11px] font-semibold text-blue-500">{note.author}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-body text-[11px] text-gray-400">{new Date(note.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}</span>
-                                <button onClick={() => setEditingNote({ childId: child.id, noteIndex: i, text: note.text })} className="text-gray-300 hover:text-blue-500 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100"><MessageSquare size={11} /></button>
-                                <button onClick={() => deleteNote(child, i)} className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100"><X size={11} /></button>
-                              </div>
-                            </div>
-                            {editingNote && editingNote.childId === child.id && editingNote.noteIndex === i ? (
-                              <div>
-                                <textarea value={editingNote.text} onChange={e => setEditingNote({ ...editingNote, text: e.target.value })} rows={4}
-                                  className="w-full px-2 py-1.5 rounded-lg border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none resize-vertical" />
-                                <div className="flex gap-2 mt-1">
-                                  <button onClick={() => saveEditNote(child)} className="font-body text-[10px] text-white bg-blue-500 px-2 py-1 rounded border-none cursor-pointer">Enregistrer</button>
-                                  <button onClick={() => setEditingNote(null)} className="font-body text-[10px] text-gray-500 bg-gray-100 px-2 py-1 rounded border-none cursor-pointer">Annuler</button>
+                            <div key={i} className={`rounded-xl border overflow-hidden ${isBilanIA ? "border-purple-100" : isSeance ? "border-green-100" : "border-gray-100"}`}>
+
+                              {/* ── Ligne résumé cliquable ── */}
+                              <div
+                                className={`flex items-center justify-between px-3 py-2.5 cursor-pointer select-none ${isBilanIA ? "bg-purple-50 hover:bg-purple-100/60" : isSeance ? "bg-green-50 hover:bg-green-100/60" : "bg-sand hover:bg-gray-100/60"}`}
+                                onClick={() => setOpenNoteKey(isOpen ? null : noteKey)}>
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  {/* Badge type */}
+                                  {isBilanIA && <span className="font-body text-[9px] bg-purple-200 text-purple-800 px-1.5 py-0.5 rounded flex-shrink-0">✨ IA</span>}
+                                  {isSeance   && <span className="font-body text-[9px] bg-green-200 text-green-800 px-1.5 py-0.5 rounded flex-shrink-0">Séance</span>}
+                                  {!isBilanIA && !isSeance && <span className="font-body text-[9px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded flex-shrink-0">Note</span>}
+                                  {/* Séance correspondante */}
+                                  {seanceLabel && (
+                                    <span className="font-body text-[10px] text-blue-500 font-semibold flex-shrink-0 truncate max-w-[100px]">{seanceLabel}</span>
+                                  )}
+                                  {/* Résumé */}
+                                  <span className="font-body text-xs text-gray-500 truncate">{firstLine}{note.text.length > 60 ? "…" : ""}</span>
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                                  <span className="font-body text-[10px] text-gray-400">
+                                    {new Date(note.date).toLocaleDateString("fr-FR", { day:"numeric", month:"short" })}
+                                  </span>
+                                  <span className="font-body text-[10px] text-gray-300">{isOpen ? "▲" : "▼"}</span>
                                 </div>
                               </div>
-                            ) : (
-                              <div>
-                                <p className="font-body text-sm text-gray-600 leading-relaxed whitespace-pre-line">{note.text}</p>
-                                {/* Transcript brut si disponible */}
-                                {isBilanIA && (note as any).rawTranscript && (
-                                  <details className="mt-2">
-                                    <summary className="font-body text-[10px] text-gray-400 cursor-pointer hover:text-purple-500">🎙️ Voir le transcript original</summary>
-                                    <p className="font-body text-xs text-gray-400 italic mt-1 bg-white rounded-lg px-2 py-1.5">{(note as any).rawTranscript}</p>
-                                  </details>
-                                )}
-                              </div>
-                            )}
-                          </div>
+
+                              {/* ── Contenu déroulant ── */}
+                              {isOpen && (
+                                <div className="px-4 py-3 border-t border-gray-100 bg-white">
+                                  {/* Séance d'origine */}
+                                  {((note as any).activityTitle || (note as any).creneauId) && (
+                                    <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-50">
+                                      <span className="font-body text-[10px] text-gray-400 uppercase tracking-wider">Séance</span>
+                                      <span className="font-body text-xs font-semibold text-blue-700">
+                                        {(note as any).activityTitle || "—"}
+                                      </span>
+                                      <span className="font-body text-[10px] text-gray-400">
+                                        {new Date(note.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long", year:"numeric" })}
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  {/* Contenu note — édition ou lecture */}
+                                  {editingNote && editingNote.childId === child.id && editingNote.noteIndex === i ? (
+                                    <div>
+                                      <textarea value={editingNote.text} onChange={e => setEditingNote({ ...editingNote, text: e.target.value })} rows={5}
+                                        className="w-full px-2 py-1.5 rounded-lg border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none resize-vertical" />
+                                      <div className="flex gap-2 mt-2">
+                                        <button onClick={() => saveEditNote(child)} className="font-body text-[10px] text-white bg-blue-500 px-3 py-1.5 rounded border-none cursor-pointer">Enregistrer</button>
+                                        <button onClick={() => setEditingNote(null)} className="font-body text-[10px] text-gray-500 bg-gray-100 px-3 py-1.5 rounded border-none cursor-pointer">Annuler</button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <p className="font-body text-sm text-gray-700 leading-relaxed whitespace-pre-line">{note.text}</p>
+                                      {/* Transcript Whisper */}
+                                      {isBilanIA && (note as any).rawTranscript && (
+                                        <details className="mt-3">
+                                          <summary className="font-body text-[10px] text-gray-400 cursor-pointer hover:text-purple-500">🎙️ Transcript original</summary>
+                                          <p className="font-body text-xs text-gray-400 italic mt-1.5 bg-gray-50 rounded-lg px-3 py-2">{(note as any).rawTranscript}</p>
+                                        </details>
+                                      )}
+                                      {/* Actions */}
+                                      <div className="flex gap-2 mt-3 pt-2 border-t border-gray-50">
+                                        <button onClick={() => setEditingNote({ childId: child.id, noteIndex: i, text: note.text })}
+                                          className="font-body text-[10px] text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
+                                          ✏️ Modifier
+                                        </button>
+                                        <button onClick={() => { deleteNote(child, i); setOpenNoteKey(null); }}
+                                          className="font-body text-[10px] text-red-400 bg-red-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-100">
+                                          🗑 Supprimer
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           );
                         })}
                         {peda.notes.length > 5 && showAllNotes !== uniqueKey && (
                           <button onClick={() => setShowAllNotes(uniqueKey)} className="font-body text-xs text-blue-500 bg-blue-50 py-1.5 rounded-lg border-none cursor-pointer text-center">
-                            Voir les {peda.notes.length - 5} notes antérieures
+                            ▼ Voir les {peda.notes.length - 5} notes antérieures
                           </button>
                         )}
                         {showAllNotes === uniqueKey && peda.notes.length > 5 && (
                           <button onClick={() => setShowAllNotes(null)} className="font-body text-xs text-gray-400 bg-sand py-1.5 rounded-lg border-none cursor-pointer text-center">
-                            Réduire
+                            ▲ Réduire
                           </button>
                         )}
                       </div>
