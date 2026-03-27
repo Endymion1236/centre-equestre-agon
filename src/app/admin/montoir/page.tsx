@@ -145,8 +145,12 @@ export default function MontoirPage() {
         if (!carteSnap.exists()) continue;
         const carte = carteSnap.data();
         if ((carte.remainingSessions || 0) <= 0) continue;
-        // Anti-doublon : vérifier si ce créneau a déjà été débité
-        if ((carte.history || []).some((h: any) => h.creneauId === cid && !h.credit)) continue;
+        // Anti-doublon : vérifier si ce créneau+enfant a déjà été débité
+        // Pour carte familiale : même créneau mais enfant différent = débit OK
+        const dejaDebite = (carte.history || []).some((h: any) =>
+          h.creneauId === cid && !h.credit && h.childName === child.childName
+        );
+        if (dejaDebite) continue;
         const newHistory = [...(carte.history || []), {
           date: new Date().toISOString(),
           activityTitle: c.activityTitle,
@@ -179,7 +183,7 @@ export default function MontoirPage() {
         if (!carteSnap.exists()) continue;
         const carte = carteSnap.data();
         // Ne pas tracer si déjà tracé pour ce créneau
-        if ((carte.history || []).some((h: any) => h.creneauId === cid && h.presence === "absent")) continue;
+        if ((carte.history || []).some((h: any) => h.creneauId === cid && h.presence === "absent" && h.childName === child.childName)) continue;
         const newHistory = [...(carte.history || []), {
           date: new Date().toISOString(),
           activityTitle: c.activityTitle,

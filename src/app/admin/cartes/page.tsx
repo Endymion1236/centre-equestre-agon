@@ -53,6 +53,7 @@ export default function CartesPage() {
   const [unitPriceHT, setUnitPriceHT] = useState("15");
   const [payMode, setPayMode] = useState("cb_terminal");
   const [selActivityType, setSelActivityType] = useState<"cours" | "balade">("cours");
+  const [carteFamiliale, setCarteFamiliale] = useState(false);
   const [creating, setCreating] = useState(false);
   const [familySearch, setFamilySearch] = useState("");
   // Dates de validité
@@ -97,15 +98,17 @@ export default function CartesPage() {
     : activeCards;
 
   const handleCreate = async () => {
-    if (!selFamily || !selChild || !family) return;
+    if (!selFamily || !family) return;
+    if (!carteFamiliale && !selChild) return; // enfant requis si pas familiale
     setCreating(true);
     const child = children.find((c: any) => c.id === selChild);
 
     const cardRef = await addDoc(collection(db, "cartes"), {
       familyId: selFamily,
       familyName: family.parentName || "—",
-      childId: selChild,
-      childName: (child as any)?.firstName || "—",
+      childId: carteFamiliale ? null : selChild,
+      childName: carteFamiliale ? "Toute la famille" : ((child as any)?.firstName || "—"),
+      familiale: carteFamiliale,
       activityType: selActivityType,
       totalSessions: template.sessions,
       usedSessions: 0,
@@ -225,7 +228,7 @@ export default function CartesPage() {
                         <div className="w-12 h-12 rounded-xl bg-gold-50 flex items-center justify-center text-2xl">🎟️</div>
                         <div>
                           <div className="font-body text-base font-semibold text-blue-800">{card.childName} <span className="font-normal text-gray-400 text-sm">· {card.familyName}</span></div>
-                          <div className="font-body text-xs text-gray-400">{card.familyName} · {card.activityType === "balade" ? "Balades" : "Cours"}</div>
+                          <div className="font-body text-xs text-gray-400">{card.familyName} · {card.activityType === "balade" ? "Balades" : "Cours"}{(card as any).familiale ? " · 👨‍👩‍👧 Familiale" : ""}</div>
                           {(card as any).dateDebut && (card as any).dateFin && (
                             <div className="font-body text-[10px] text-gray-400 mt-0.5">
                               {new Date((card as any).dateDebut).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}
@@ -341,15 +344,38 @@ export default function CartesPage() {
             {/* Child select */}
             {family && (
               <div>
-                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Cavalier</label>
-                <div className="flex flex-wrap gap-2">
-                  {children.map((c: any) => (
-                    <button key={c.id} onClick={() => setSelChild(c.id)}
-                      className={`px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${selChild === c.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
-                      🧒 {c.firstName}
-                    </button>
-                  ))}
+                <label className="font-body text-xs font-semibold text-blue-800 block mb-2">Cavalier(s)</label>
+                {/* Toggle familiale */}
+                <div className="flex items-center justify-between p-3 bg-sand rounded-xl mb-3">
+                  <div>
+                    <div className="font-body text-sm font-semibold text-blue-800">Carte familiale</div>
+                    <div className="font-body text-xs text-gray-400 mt-0.5">Utilisable par tous les enfants de la famille</div>
+                  </div>
+                  <button onClick={() => { setCarteFamiliale(!carteFamiliale); setSelChild(""); }}
+                    className={`w-12 h-6 rounded-full transition-all border-none cursor-pointer flex-shrink-0 ${carteFamiliale ? "bg-blue-500" : "bg-gray-200"}`}>
+                    <div className={`w-5 h-5 rounded-full bg-white shadow transition-all mx-0.5 ${carteFamiliale ? "translate-x-6" : "translate-x-0"}`} />
+                  </button>
                 </div>
+                {/* Sélecteur enfant si pas familiale */}
+                {!carteFamiliale && (
+                  <div className="flex flex-wrap gap-2">
+                    {children.map((c: any) => (
+                      <button key={c.id} onClick={() => setSelChild(c.id)}
+                        className={`px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${selChild === c.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
+                        🧒 {c.firstName}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {carteFamiliale && (
+                  <div className="flex flex-wrap gap-2">
+                    {children.map((c: any) => (
+                      <div key={c.id} className="px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 font-body text-sm text-blue-600">
+                        🧒 {c.firstName}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -429,7 +455,7 @@ export default function CartesPage() {
               </div>
             </div>
 
-            <button onClick={handleCreate} disabled={!selFamily || !selChild || creating}
+            <button onClick={handleCreate} disabled={!selFamily || (!carteFamiliale && !selChild) || creating}
               className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer
                 ${!selFamily || !selChild || creating ? "bg-gray-200 text-gray-400" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
               {creating ? "Création..." : `Créer la carte ${template.sessions} séances + Encaisser ${totalTTC.toFixed(2)}€`}

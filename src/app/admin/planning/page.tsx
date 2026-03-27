@@ -590,13 +590,19 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
               const isCours = creneau.activityType === "cours" || creneau.activityType === "cours_collectif" || creneau.activityType === "cours_particulier";
               const isBalade = ["balade","promenade","ponyride"].includes(creneau.activityType);
               // Détecter une carte active compatible pour cet enfant
-              const carteActive = allCartes.find((c: any) => {
-                if (c.childId !== selChild) return false;
-                if (c.status !== "active" || (c.remainingSessions || 0) <= 0) return false;
-                if (c.dateFin && new Date(c.dateFin) < new Date()) return false;
-                const ct = c.activityType || "cours";
-                return (ct === "cours" && isCours) || (ct === "balade" && isBalade);
-              });
+          const carteActive = allCartes.find((c: any) => {
+            if (c.status !== "active" || (c.remainingSessions || 0) <= 0) return false;
+            if (c.dateFin && new Date(c.dateFin) < new Date()) return false;
+            // Carte familiale : vérifier que c'est la bonne famille
+            if (c.familiale) {
+              if (c.familyId !== fam?.firestoreId) return false;
+            } else {
+              // Carte individuelle : vérifier l'enfant
+              if (c.childId !== selChild) return false;
+            }
+            const ct = c.activityType || "cours";
+            return (ct === "cours" && isCours) || (ct === "balade" && isBalade);
+          });
               return isCours ? (
               <div className="bg-sand rounded-xl p-4 space-y-3">
                 <div className="font-body text-xs font-semibold text-gray-500 uppercase tracking-wider">Type d'inscription</div>
