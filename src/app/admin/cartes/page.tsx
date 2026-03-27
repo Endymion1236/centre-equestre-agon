@@ -89,7 +89,7 @@ export default function CartesPage() {
   const totalTTC = totalHT * 1.055;
 
   const filteredFamilies = familySearch
-    ? families.filter(f => f.parentName?.toLowerCase().includes(familySearch.toLowerCase()) || (f.children || []).some((c: any) => c.firstName?.toLowerCase().includes(familySearch.toLowerCase())))
+    ? families.filter(f => f.parentName?.toLowerCase().includes(familySearch.toLowerCase()) || (f.children || []).some((c: any) => `${c.firstName || ""} ${c.lastName || ""}`.toLowerCase().includes(familySearch.toLowerCase()) || `${c.lastName || ""} ${c.firstName || ""}`.toLowerCase().includes(familySearch.toLowerCase())))
     : families;
 
   const activeCards = cards.filter(c => c.status === "active" && c.remainingSessions > 0);
@@ -206,7 +206,7 @@ export default function CartesPage() {
         <div>
           <div className="relative mb-4">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par nom enfant ou famille..."
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher prénom, nom ou famille..."
               className={`${inp} !pl-9`} />
           </div>
 

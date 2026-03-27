@@ -496,7 +496,7 @@ export default function CavaliersPage() {
       {/* Recherche */}
       <div className="relative mb-5">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher : nom parent, prénom enfant, email..."
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher : prénom + nom enfant, famille, email..."
           className={`${inputStyle} !pl-10`} />
         {search && <div className="font-body text-[10px] text-gray-400 mt-1 ml-1">{filtered.length} famille{filtered.length > 1 ? "s" : ""} trouvée{filtered.length > 1 ? "s" : ""}</div>}
       </div>

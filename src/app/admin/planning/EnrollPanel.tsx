@@ -168,7 +168,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
       const prixReduit = Math.max(0, Math.round((prixEffectif - remiseEffective) * 100) / 100);
       return {
         childId,
-        childName: (child as any)?.firstName || "—",
+        childName: (child as any)?.lastName
+          ? `${(child as any).firstName} ${(child as any).lastName}`
+          : ((child as any)?.firstName || "—"),
         prixBase: prixEffectif,
         remiseEuros: remiseEffective,
         rang: rang + 1,
@@ -355,7 +357,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, onCl
     if (!selChild || !fam) return;
     setEnrolling(true);
     const child = children.find((c: any) => c.id === selChild);
-    const childName = (child as any)?.firstName || "—";
+    const childFirstName = (child as any)?.firstName || "—";
+    const childLastName = (child as any)?.lastName || "";
+    const childName = childLastName ? `${childFirstName} ${childLastName}` : childFirstName;
 
     const createdPaymentIds: string[] = [];
 

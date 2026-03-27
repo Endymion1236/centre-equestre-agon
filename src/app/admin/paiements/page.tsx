@@ -1749,7 +1749,10 @@ export default function PaiementsPage() {
         const filteredFams = families.filter(f =>
           f.firestoreId !== p.familyId &&
           (f.parentName?.toLowerCase().includes(searchLower) ||
-          (f.children || []).some((c: any) => c.firstName?.toLowerCase().includes(searchLower)))
+          (f.children || []).some((c: any) =>
+            `${c.firstName || ""} ${c.lastName || ""}`.toLowerCase().includes(searchLower) ||
+            `${c.lastName || ""} ${c.firstName || ""}`.toLowerCase().includes(searchLower)
+          ))
         ).slice(0, 8);
 
         return (
@@ -1964,7 +1967,10 @@ export default function PaiementsPage() {
                   if (!broadcastSearch) return true;
                   const q = broadcastSearch.toLowerCase();
                   return f.parentName?.toLowerCase().includes(q) ||
-                    (f.children || []).some((c: any) => c.firstName?.toLowerCase().includes(q));
+                    (f.children || []).some((c: any) =>
+                      `${c.firstName || ""} ${c.lastName || ""}`.toLowerCase().includes(q) ||
+                      `${c.lastName || ""} ${c.firstName || ""}`.toLowerCase().includes(q)
+                    );
                 })
                 .map(f => {
                   const row = broadcastRows.find(r => r.familyId === f.firestoreId);

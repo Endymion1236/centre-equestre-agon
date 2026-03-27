@@ -89,11 +89,16 @@ export default function ForfaitsPage() {
     let result = [...forfaits];
     if (filterStatus !== "all") result = result.filter(f => f.status === filterStatus);
     if (search) {
-      const q = search.toLowerCase();
-      result = result.filter(f =>
-        f.familyName?.toLowerCase().includes(q) || f.childName?.toLowerCase().includes(q) ||
-        f.activityTitle?.toLowerCase().includes(q) || f.slotKey?.toLowerCase().includes(q)
-      );
+      const terms = search.toLowerCase().trim().split(/\s+/);
+      result = result.filter(f => {
+        const searchable = [
+          f.familyName || "",
+          f.childName || "",
+          f.activityTitle || "",
+          f.slotKey || "",
+        ].join(" ").toLowerCase();
+        return terms.every(t => searchable.includes(t));
+      });
     }
     return result.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
   }, [forfaits, filterStatus, search]);
@@ -166,7 +171,7 @@ export default function ForfaitsPage() {
         </div>
         <div className="relative flex-1 min-w-[200px]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
-          <input placeholder="Rechercher par famille, cavalier, activité…" value={search} onChange={e => setSearch(e.target.value)}
+          <input placeholder="Rechercher : prénom + nom cavalier, famille, activité..." value={search} onChange={e => setSearch(e.target.value)}
             className="w-full font-body text-xs border border-gray-200 rounded-lg pl-9 pr-3 py-2 bg-white focus:outline-none focus:border-blue-400" />
         </div>
       </div>
