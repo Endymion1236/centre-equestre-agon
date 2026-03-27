@@ -20,8 +20,10 @@ const typeLabels: Record<string, { label: string; color: string }> = {
 export default function ReserverPage() {
   const { user, family } = useAuth();
   const [creneaux, setCreneaux] = useState<Creneau[]>([]);
+  const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
+  const [subfilter, setSubfilter] = useState("all"); // sous-catégorie
   const [weekOffset, setWeekOffset] = useState(0);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showCart, setShowCart] = useState(false);
@@ -41,27 +43,50 @@ export default function ReserverPage() {
   const fmtDate = (d: Date) => d.toISOString().split("T")[0];
 
   useEffect(() => {
-    const fetch = async () => {
+    const load = async () => {
       setLoading(true);
       try {
-        const snap = await getDocs(query(collection(db, "creneaux"), where("date", ">=", fmtDate(startDate)), where("date", "<=", fmtDate(endDate))));
-        setCreneaux(snap.docs.map(d => ({ id: d.id, ...d.data() })) as Creneau[]);
+        const [crSnap, actSnap] = await Promise.all([
+          getDocs(query(collection(db, "creneaux"), where("date", ">=", fmtDate(startDate)), where("date", "<=", fmtDate(endDate)))),
+          getDocs(collection(db, "activities")),
+        ]);
+        setCreneaux(crSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Creneau[]);
+        setActivities(actSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       } catch (e) { console.error(e); }
       setLoading(false);
     };
-    fetch();
+    load();
   }, [weekOffset]);
+
+  // Sous-catégories disponibles pour le filtre courant
+  const availableSubcats = useMemo(() => {
+    if (filter === "all") return [];
+    const typeActivities = activities.filter(a => a.type === filter);
+    const subcats = new Set<string>();
+    typeActivities.forEach(a => (a.subcategories || []).forEach((s: string) => subcats.add(s)));
+    return Array.from(subcats).sort();
+  }, [filter, activities]);
+
+  // Réinitialiser le sous-filtre quand la catégorie change
+  const setFilterAndReset = (f: string) => { setFilter(f); setSubfilter("all"); };
 
   // Créneaux disponibles filtrés
   const available = useMemo(() => {
     const now = new Date(); const todayStr = fmtDate(now);
     let result = creneaux.filter(c => {
       if (c.date < todayStr) return false;
-      return true; // inclure les complets pour afficher la liste d'attente
+      return true;
     });
     if (filter !== "all") result = result.filter(c => c.activityType === filter);
+    // Filtrage par sous-catégorie via l'activité associée
+    if (subfilter !== "all") {
+      result = result.filter(c => {
+        const act = activities.find(a => a.id === c.activityId);
+        return act && (act.subcategories || []).includes(subfilter);
+      });
+    }
     return result.sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
-  }, [creneaux, filter]);
+  }, [creneaux, filter, subfilter, activities]);
 
   // Grouper les stages par titre + semaine
   const stageGroups = useMemo(() => {
@@ -308,12 +333,39 @@ export default function ReserverPage() {
 
       {success && <Card padding="md" className="mb-4 bg-green-50 border-green-200"><p className="font-body text-sm text-green-700"><Check size={16} className="inline mr-1" /> Inscription confirmée ! Rendez-vous au centre équestre.</p></Card>}
 
-      {/* Filtres */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        {[["all", "Tout"], ["stage", "Stages"], ["cours", "Cours"], ["balade", "Balades"]].map(([id, label]) => (
-          <button key={id} onClick={() => setFilter(id)} className={`px-4 py-2 rounded-lg border font-body text-xs font-semibold cursor-pointer ${filter === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>{label}</button>
+      {/* Filtres catégorie */}
+      <div className="flex flex-wrap gap-2 mb-2">
+        {[
+          ["all", "Tout"],
+          ["stage", "Stages semaine"],
+          ["stage_journee", "Stages journée"],
+          ["cours", "Cours"],
+          ["balade", "Promenades"],
+          ["competition", "Compétitions"],
+          ["anniversaire", "Anniversaires"],
+        ].map(([id, label]) => (
+          <button key={id} onClick={() => setFilterAndReset(id)}
+            className={`px-3 py-1.5 rounded-lg border font-body text-xs font-semibold cursor-pointer transition-all ${filter === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
+            {label}
+          </button>
         ))}
       </div>
+
+      {/* Filtres sous-catégorie — apparaissent quand une catégorie est sélectionnée */}
+      {availableSubcats.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-4 pl-1">
+          <button onClick={() => setSubfilter("all")}
+            className={`px-3 py-1 rounded-full border font-body text-xs cursor-pointer transition-all ${subfilter === "all" ? "bg-gold-400 text-blue-800 border-gold-400 font-semibold" : "bg-white text-slate-500 border-gray-200"}`}>
+            Tous niveaux
+          </button>
+          {availableSubcats.map(s => (
+            <button key={s} onClick={() => setSubfilter(s)}
+              className={`px-3 py-1 rounded-full border font-body text-xs cursor-pointer transition-all ${subfilter === s ? "bg-gold-400 text-blue-800 border-gold-400 font-semibold" : "bg-white text-slate-500 border-gray-200"}`}>
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Navigation semaines */}
       <div className="flex items-center justify-between mb-5">

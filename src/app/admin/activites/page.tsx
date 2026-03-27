@@ -1,70 +1,81 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-  collection,
-  getDocs,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  serverTimestamp,
-  query,
-  orderBy,
-} from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge, Button } from "@/components/ui";
-import { Plus, Pencil, Trash2, Copy, X, Check, Loader2, ClipboardList,
-} from "lucide-react";
+import { Plus, Pencil, Trash2, Copy, X, Check, Loader2 } from "lucide-react";
 import type { Activity, ActivityType } from "@/types";
 
-const activityTypes: { id: ActivityType | string; label: string }[] = [
-  { id: "stage", label: "Stage semaine" },
+// ── Définition catégories + sous-catégories ─────────────────────────────────
+
+const NIVEAUX_EQUITATION = [
+  "Baby 3/4 ans", "Baby 4,5/5,5 ans",
+  "Galop Bronze", "Galop Argent", "Galop Or",
+  "Galop 3", "Galop 4", "Galop 5", "Galop 6", "Galop 7",
+];
+
+const SUBCATEGORIES: Record<string, string[]> = {
+  cours:         NIVEAUX_EQUITATION,
+  stage:         NIVEAUX_EQUITATION,
+  stage_journee: NIVEAUX_EQUITATION,
+  balade: [
+    "Promenade journée — Débutant",
+    "Promenade journée — Débrouillé",
+    "Promenade journée — Confirmé",
+    "Coucher de soleil — Débutant",
+    "Coucher de soleil — Débrouillé",
+    "Coucher de soleil — Confirmé",
+  ],
+  competition: ["Pony Games", "CSO", "Équifun", "Endurance", "Hunter"],
+  anniversaire: [],
+};
+
+const activityTypes = [
+  { id: "cours",         label: "Cours régulier" },
+  { id: "stage",         label: "Stage semaine" },
   { id: "stage_journee", label: "Stage journée" },
-  { id: "balade", label: "Balade" },
-  { id: "cours", label: "Cours régulier" },
-  { id: "competition", label: "Compétition" },
-  { id: "anniversaire", label: "Anniversaire" },
-  { id: "ponyride", label: "Pony ride" },
+  { id: "balade",        label: "Promenade" },
+  { id: "competition",   label: "Compétition" },
+  { id: "anniversaire",  label: "Anniversaire" },
 ];
 
 const defaultActivity: Partial<Activity> & { priceTTC?: number } = {
-  type: "stage",
-  title: "",
-  description: "",
-  ageMin: 3,
-  ageMax: null,
-  galopRequired: null,
-  priceHT: 0,
-  tvaTaux: 5.5,
-  maxPlaces: 8,
-  schedule: "",
-  seasonPeriod: "",
-  active: true,
-  articles: [],
-  priceTTC: 0,
+  type: "cours", title: "", description: "",
+  ageMin: 3, ageMax: null, galopRequired: null,
+  priceHT: 0, tvaTaux: 5.5, maxPlaces: 8,
+  schedule: "", seasonPeriod: "", active: true, articles: [], priceTTC: 0,
 };
 
-function ActivityForm({
-  initial,
-  onSave,
-  onCancel,
-}: {
-  initial: Partial<Activity>;
-  onSave: (data: Partial<Activity>) => Promise<void>;
+const inp = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
+
+// ── Formulaire ───────────────────────────────────────────────────────────────
+
+function ActivityForm({ initial, onSave, onCancel }: {
+  initial: Partial<Activity> & { priceTTC?: number; subcategories?: string[] };
+  onSave: (data: any) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [form, setForm] = useState(initial);
+  const [form, setForm] = useState<any>({ subcategories: [], ...initial });
   const [saving, setSaving] = useState(false);
+  const update = (f: string, v: any) => setForm((p: any) => ({ ...p, [f]: v }));
 
-  const update = (field: string, value: any) =>
-    setForm((prev) => ({ ...prev, [field]: value }));
+  const subcats = SUBCATEGORIES[form.type] || [];
+
+  const toggleSubcat = (s: string) => {
+    const curr: string[] = form.subcategories || [];
+    update("subcategories", curr.includes(s) ? curr.filter((x: string) => x !== s) : [...curr, s]);
+  };
+
+  // Réinitialiser les sous-catégories si le type change
+  const changeType = (t: string) => {
+    setForm((p: any) => ({ ...p, type: t, subcategories: [] }));
+  };
 
   const handleSubmit = async () => {
     if (!form.title) return;
     setSaving(true);
-    // Calculate HT from TTC
-    const priceTTC = (form as any).priceTTC || 0;
+    const priceTTC = form.priceTTC || 0;
     const tvaTaux = form.tvaTaux || 5.5;
     const priceHT = priceTTC / (1 + tvaTaux / 100);
     await onSave({ ...form, priceHT: Math.round(priceHT * 100) / 100, priceTTC });
@@ -77,222 +88,132 @@ function ActivityForm({
         <h3 className="font-body text-base font-semibold text-blue-800">
           {initial.title ? "Modifier l'activité" : "Nouvelle activité"}
         </h3>
-        <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer">
-          <X size={20} />
-        </button>
+        <button onClick={onCancel} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20} /></button>
       </div>
 
       <div className="flex flex-col gap-4">
-        {/* Type */}
+        {/* Catégorie */}
         <div>
-          <label className="font-body text-xs font-semibold text-blue-800 block mb-2">Type d&apos;activité</label>
+          <label className="font-body text-xs font-semibold text-blue-800 block mb-2">Catégorie</label>
           <div className="flex flex-wrap gap-2">
-            {activityTypes.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => update("type", t.id)}
-                className={`
-                  flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium cursor-pointer transition-all font-body
-                  ${form.type === t.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200 hover:border-blue-200"}
-                `}
-              >
+            {activityTypes.map(t => (
+              <button key={t.id} onClick={() => changeType(t.id)}
+                className={`px-4 py-2 rounded-lg border text-sm font-medium cursor-pointer transition-all font-body
+                  ${form.type === t.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-500 border-gray-200 hover:border-blue-200"}`}>
                 {t.label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Title + Schedule */}
+        {/* Sous-catégories */}
+        {subcats.length > 0 && (
+          <div>
+            <label className="font-body text-xs font-semibold text-blue-800 block mb-2">
+              Niveaux / Sous-catégories <span className="text-slate-400 font-normal">(plusieurs possibles)</span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {subcats.map(s => {
+                const sel = (form.subcategories || []).includes(s);
+                return (
+                  <button key={s} onClick={() => toggleSubcat(s)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium cursor-pointer transition-all font-body
+                      ${sel ? "bg-gold-400 text-blue-800 border-gold-400" : "bg-white text-slate-500 border-gray-200 hover:border-gold-300"}`}>
+                    {sel && <Check size={11} />}{s}
+                  </button>
+                );
+              })}
+            </div>
+            {(form.subcategories || []).length === 0 && (
+              <p className="font-body text-xs text-orange-500 mt-1.5">⚠️ Sélectionnez au moins une sous-catégorie</p>
+            )}
+          </div>
+        )}
+
+        {/* Titre + Horaires */}
         <div className="flex gap-3">
           <div className="flex-1">
             <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Titre *</label>
-            <input
-              value={form.title || ""}
-              onChange={(e) => update("title", e.target.value)}
-              className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
-              placeholder="Ex: Galop de Bronze"
-            />
+            <input value={form.title || ""} onChange={e => update("title", e.target.value)} className={inp} placeholder="Ex: Galop Argent mercredi" />
           </div>
           <div className="flex-1">
             <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Horaires</label>
-            <input
-              value={form.schedule || ""}
-              onChange={(e) => update("schedule", e.target.value)}
-              className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
-              placeholder="Ex: Lun–Ven · 10h–12h"
-            />
+            <input value={form.schedule || ""} onChange={e => update("schedule", e.target.value)} className={inp} placeholder="Ex: Mer · 14h–16h" />
           </div>
         </div>
 
         {/* Description */}
         <div>
           <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Description</label>
-          <textarea
-            value={form.description || ""}
-            onChange={(e) => update("description", e.target.value)}
-            rows={3}
-            className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none resize-y"
-            placeholder="Description de l'activité..."
-          />
+          <textarea value={form.description || ""} onChange={e => update("description", e.target.value)} rows={2}
+            className={`${inp} resize-y`} placeholder="Description de l'activité..." />
         </div>
 
-        {/* Age + Galop + Places */}
+        {/* Âge + Galop + Places */}
         <div className="flex gap-3 flex-wrap">
-          <div className="flex-1 min-w-[100px]">
+          <div className="flex-1 min-w-[90px]">
             <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Âge min</label>
-            <input
-              type="number"
-              value={form.ageMin || 3}
-              onChange={(e) => update("ageMin", parseInt(e.target.value))}
-              className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
-            />
+            <input type="number" value={form.ageMin || 3} onChange={e => update("ageMin", parseInt(e.target.value))} className={inp} />
           </div>
-          <div className="flex-1 min-w-[100px]">
+          <div className="flex-1 min-w-[90px]">
             <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Âge max</label>
-            <input
-              type="number"
-              value={form.ageMax || ""}
-              onChange={(e) => update("ageMax", e.target.value ? parseInt(e.target.value) : null)}
-              className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
-              placeholder="Illimité"
-            />
+            <input type="number" value={form.ageMax || ""} onChange={e => update("ageMax", e.target.value ? parseInt(e.target.value) : null)} className={inp} placeholder="Illimité" />
           </div>
-          <div className="flex-1 min-w-[100px]">
-            <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Galop requis</label>
-            <select
-              value={form.galopRequired || ""}
-              onChange={(e) => update("galopRequired", e.target.value || null)}
-              className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
-            >
-              <option value="">Aucun</option>
-              <option value="Bronze">Bronze</option>
-              <option value="Argent">Argent</option>
-              <option value="Or">Or</option>
-              <option value="G1">Galop 1</option>
-              <option value="G2">Galop 2</option>
-              <option value="G3">Galop 3</option>
-              <option value="G4">Galop 4</option>
-            </select>
-          </div>
-          <div className="flex-1 min-w-[100px]">
+          <div className="flex-1 min-w-[90px]">
             <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Places max</label>
-            <input
-              type="number"
-              value={form.maxPlaces || 8}
-              onChange={(e) => update("maxPlaces", parseInt(e.target.value))}
-              className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
-            />
+            <input type="number" value={form.maxPlaces || 8} onChange={e => update("maxPlaces", parseInt(e.target.value))} className={inp} />
           </div>
         </div>
 
-        {/* Price + TVA + Season */}
+        {/* Prix + TVA */}
         <div className="flex gap-3 flex-wrap">
           <div className="flex-1 min-w-[120px]">
-            <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Prix TTC (€) — prix annoncé</label>
-            <input
-              type="number"
-              step="0.01"
-              value={form.priceTTC || 0}
-              onChange={(e) => update("priceTTC", parseFloat(e.target.value))}
-              className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
-            />
+            <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Prix TTC (€)</label>
+            <input type="number" step="0.01" value={form.priceTTC || 0} onChange={e => update("priceTTC", parseFloat(e.target.value))} className={inp} />
           </div>
-          <div className="flex-1 min-w-[100px]">
+          <div className="flex-1 min-w-[90px]">
             <label className="font-body text-xs font-semibold text-blue-800 block mb-1">TVA (%)</label>
-            <select
-              value={form.tvaTaux || 5.5}
-              onChange={(e) => update("tvaTaux", parseFloat(e.target.value))}
-              className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
-            >
-              <option value={5.5}>5.5%</option>
+            <select value={form.tvaTaux || 5.5} onChange={e => update("tvaTaux", parseFloat(e.target.value))} className={inp}>
+              <option value={5.5}>5,5%</option>
               <option value={10}>10%</option>
               <option value={20}>20%</option>
-              <option value={0}>0% (exonéré)</option>
+              <option value={0}>0%</option>
             </select>
           </div>
-          <div className="flex-1 min-w-[140px]">
+          <div className="flex-1 min-w-[90px]">
             <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Période</label>
-            <input
-              value={form.seasonPeriod || ""}
-              onChange={(e) => update("seasonPeriod", e.target.value)}
-              className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
-              placeholder="Ex: Toutes vacances"
-            />
+            <input value={form.seasonPeriod || ""} onChange={e => update("seasonPeriod", e.target.value)} className={inp} placeholder="Ex: Juil–Août" />
           </div>
         </div>
 
-        {/* Tarifs multi-jours (stages uniquement) */}
+        {/* Tarifs multi-jours pour stages */}
         {(form.type === "stage" || form.type === "stage_journee") && (
-          <div className="bg-green-50 rounded-lg p-4">
-            <div className="font-body text-xs font-semibold text-green-700 uppercase tracking-wider mb-2">Tarifs par durée (optionnel)</div>
-            <p className="font-body text-[10px] text-gray-500 mb-3">Le prix ci-dessus = semaine complète (5j). Configurez les prix pour des durées plus courtes.</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {[2, 3, 4].map(days => (
-                <div key={days}>
-                  <label className="font-body text-[10px] font-semibold text-green-700 block mb-1">{days} jours (€ TTC)</label>
-                  <input
-                    type="number" step="0.01"
-                    value={(form as any)[`price${days}days`] || ""}
-                    onChange={(e) => update(`price${days}days` as any, parseFloat(e.target.value) || 0)}
-                    placeholder={`${Math.round(((form as any).priceTTC || 0) / 5 * days)}€`}
-                    className="w-full px-3 py-2 rounded-lg border border-green-200 font-body text-sm bg-white focus:border-green-500 focus:outline-none"
-                  />
+          <div>
+            <label className="font-body text-xs font-semibold text-blue-800 block mb-2">Tarifs dégressifs (stages multi-jours)</label>
+            <div className="flex gap-2 flex-wrap">
+              {[["price1day","1 jour"],["price2days","2 jours"],["price3days","3 jours"],["price4days","4 jours"]].map(([field, label]) => (
+                <div key={field} className="flex-1 min-w-[90px]">
+                  <label className="font-body text-[10px] text-slate-500 block mb-1">{label} (€)</label>
+                  <input type="number" step="0.01" value={(form as any)[field] || ""} onChange={e => update(field, parseFloat(e.target.value) || null)} className={inp} placeholder="—" />
                 </div>
               ))}
-              <div>
-                <label className="font-body text-[10px] font-semibold text-green-700 block mb-1">1 jour (€ TTC)</label>
-                <input
-                  type="number" step="0.01"
-                  value={(form as any).price1day || ""}
-                  onChange={(e) => update("price1day" as any, parseFloat(e.target.value) || 0)}
-                  placeholder={`${Math.round(((form as any).priceTTC || 0) / 5)}€`}
-                  className="w-full px-3 py-2 rounded-lg border border-green-200 font-body text-sm bg-white focus:border-green-500 focus:outline-none"
-                />
-              </div>
             </div>
           </div>
         )}
 
-        {/* Prix HT calculé */}
-        <div className="bg-blue-50 rounded-lg p-3">
-          <div className="flex justify-between items-center mb-1">
-            <span className="font-body text-sm text-blue-800">Prix TTC (annoncé) :</span>
-            <span className="font-body text-lg font-bold text-blue-500">
-              {(form.priceTTC || 0).toFixed(2)}€
-            </span>
-          </div>
-          <div className="flex justify-between items-center mb-1">
-            <span className="font-body text-xs text-gray-500">dont TVA {form.tvaTaux || 5.5}% :</span>
-            <span className="font-body text-xs text-orange-500">
-              {((form.priceTTC || 0) - (form.priceTTC || 0) / (1 + (form.tvaTaux || 5.5) / 100)).toFixed(2)}€
-            </span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="font-body text-xs text-gray-500">Prix HT :</span>
-            <span className="font-body text-xs text-gray-700">
-              {((form.priceTTC || 0) / (1 + (form.tvaTaux || 5.5) / 100)).toFixed(2)}€
-            </span>
-          </div>
-        </div>
+        {/* Actif */}
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input type="checkbox" checked={form.active !== false} onChange={e => update("active", e.target.checked)} className="w-4 h-4 accent-blue-500" />
+          <span className="font-body text-sm text-slate-600">Activité active (visible dans le planning)</span>
+        </label>
 
-        {/* Actions */}
-        <div className="flex gap-3 pt-2">
-          <button
-            onClick={handleSubmit}
-            disabled={!form.title || saving}
-            className={`
-              flex items-center gap-2 px-6 py-2.5 rounded-lg font-body text-sm font-semibold border-none cursor-pointer transition-all
-              ${!form.title || saving ? "bg-gray-200 text-gray-400" : "bg-blue-500 text-white hover:bg-blue-400"}
-            `}
-          >
+        <div className="flex gap-3 pt-1">
+          <button onClick={onCancel} className="px-5 py-2.5 rounded-lg font-body text-sm text-slate-500 bg-white border border-gray-200 cursor-pointer">Annuler</button>
+          <button onClick={handleSubmit} disabled={!form.title || saving}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-body text-sm font-semibold border-none cursor-pointer
+              ${!form.title || saving ? "bg-gray-200 text-slate-400" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
             {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-            {saving ? "Enregistrement..." : initial.title ? "Mettre à jour" : "Créer l'activité"}
-          </button>
-          <button
-            onClick={onCancel}
-            className="px-6 py-2.5 rounded-lg font-body text-sm font-medium text-gray-500 bg-white border border-gray-200 cursor-pointer hover:bg-gray-50"
-          >
-            Annuler
+            {initial.title ? "Enregistrer" : "Créer l'activité"}
           </button>
         </div>
       </div>
@@ -300,209 +221,143 @@ function ActivityForm({
   );
 }
 
-export default function AdminActivitesPage() {
-  const [activities, setActivities] = useState<(Activity & { firestoreId: string })[]>([]);
+// ── Page principale ──────────────────────────────────────────────────────────
+
+export default function ActivitesPage() {
+  const [activities, setActivities] = useState<(Activity & { firestoreId: string; priceTTC?: number; subcategories?: string[] })[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
-  const [editingActivity, setEditingActivity] = useState<(Activity & { firestoreId: string }) | null>(null);
+  const [editActivity, setEditActivity] = useState<any | null>(null);
+  const [filterType, setFilterType] = useState<string>("all");
 
   const fetchActivities = async () => {
-    try {
-      const snap = await getDocs(query(collection(db, "activities"), orderBy("createdAt", "desc")));
-      const data = snap.docs.map((d) => ({
-        firestoreId: d.id,
-        ...d.data(),
-      })) as (Activity & { firestoreId: string })[];
-      setActivities(data);
-    } catch (e) {
-      console.error("Erreur chargement activités:", e);
-    }
+    const snap = await getDocs(query(collection(db, "activities"), orderBy("title")));
+    setActivities(snap.docs.map(d => ({ firestoreId: d.id, ...d.data() })) as any);
     setLoading(false);
   };
 
-  useEffect(() => {
-    fetchActivities();
-  }, []);
+  useEffect(() => { fetchActivities(); }, []);
 
-  const handleCreate = async (data: Partial<Activity>) => {
-    await addDoc(collection(db, "activities"), {
-      ...data,
-      createdAt: serverTimestamp(),
-    });
+  const handleSave = async (data: any) => {
+    const { firestoreId, ...rest } = data;
+    const payload = { ...rest, updatedAt: serverTimestamp() };
+    if (firestoreId) {
+      await updateDoc(doc(db, "activities", firestoreId), payload);
+    } else {
+      await addDoc(collection(db, "activities"), { ...payload, createdAt: serverTimestamp() });
+    }
+    await fetchActivities();
     setShowForm(false);
-    fetchActivities();
+    setEditActivity(null);
   };
 
-  const handleUpdate = async (data: Partial<Activity>) => {
-    if (!editingActivity) return;
-    const ref = doc(db, "activities", editingActivity.firestoreId);
-    await updateDoc(ref, { ...data, updatedAt: serverTimestamp() });
-    setEditingActivity(null);
-    fetchActivities();
+  const handleDelete = async (id: string, title: string) => {
+    if (!confirm(`Supprimer "${title}" ?\n\nLes créneaux existants ne seront pas affectés.`)) return;
+    await deleteDoc(doc(db, "activities", id));
+    await fetchActivities();
   };
 
-  const handleToggleActive = async (activity: Activity & { firestoreId: string }) => {
-    const ref = doc(db, "activities", activity.firestoreId);
-    await updateDoc(ref, { active: !activity.active });
-    fetchActivities();
+  const handleDuplicate = async (act: any) => {
+    const { firestoreId, ...rest } = act;
+    await addDoc(collection(db, "activities"), { ...rest, title: `${act.title} (copie)`, createdAt: serverTimestamp() });
+    await fetchActivities();
   };
 
-  const handleDelete = async (activity: Activity & { firestoreId: string }) => {
-    if (!confirm(`Supprimer "${activity.title}" ?`)) return;
-    await deleteDoc(doc(db, "activities", activity.firestoreId));
-    fetchActivities();
-  };
+  const filtered = filterType === "all" ? activities : activities.filter(a => a.type === filterType);
 
-  const handleDuplicate = async (activity: Activity & { firestoreId: string }) => {
-    const { firestoreId, ...data } = activity;
-    await addDoc(collection(db, "activities"), {
-      ...data,
-      title: `${data.title} (copie)`,
-      createdAt: serverTimestamp(),
-    });
-    fetchActivities();
-  };
-
-  const filtered = filter === "all" ? activities : activities.filter((a) => a.type === filter);
-
-  const typeEmoji = (type: string) => "";
+  const typeLabel = (type: string) => activityTypes.find(t => t.id === type)?.label || type;
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="font-display text-2xl font-bold text-blue-800">Gestion des activités</h1>
-        <button
-          onClick={() => { setShowForm(true); setEditingActivity(null); }}
-          className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400 transition-colors"
-        >
-          <Plus size={16} />
-          Nouvelle activité
+      <div className="flex justify-between items-start mb-6">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-blue-800">Gestion des activités</h1>
+          <p className="font-body text-sm text-slate-500 mt-1">Définissez vos activités, catégories et sous-catégories</p>
+        </div>
+        <button onClick={() => { setEditActivity(null); setShowForm(true); }}
+          className="flex items-center gap-2 bg-blue-500 text-white px-4 py-2.5 rounded-xl font-body text-sm font-semibold border-none cursor-pointer hover:bg-blue-400">
+          <Plus size={16} /> Nouvelle activité
         </button>
       </div>
 
-      {/* Create/Edit form */}
-      {(showForm || editingActivity) && (
+      {/* Formulaire */}
+      {(showForm || editActivity) && (
         <ActivityForm
-          initial={editingActivity || defaultActivity}
-          onSave={editingActivity ? handleUpdate : handleCreate}
-          onCancel={() => { setShowForm(false); setEditingActivity(null); }}
+          initial={editActivity || defaultActivity}
+          onSave={handleSave}
+          onCancel={() => { setShowForm(false); setEditActivity(null); }}
         />
       )}
 
-      {/* Filter tabs */}
+      {/* Filtres par catégorie */}
       <div className="flex flex-wrap gap-2 mb-5">
-        {[{ id: "all", label: "Toutes" }, ...activityTypes].map((cat) => (
-          <button
-            key={cat.id}
-            onClick={() => setFilter(cat.id)}
-            className={`
-              font-body text-xs font-medium px-4 py-2 rounded-full border cursor-pointer transition-all
-              ${filter === cat.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200 hover:border-blue-200"}
-            `}
-          >
-            {cat.label}
-            <span className="ml-1 opacity-50">
-              {cat.id === "all" ? activities.length : activities.filter((a) => a.type === cat.id).length}
-            </span>
+        {[{ id: "all", label: `Toutes ${activities.length}` }, ...activityTypes.map(t => ({ id: t.id, label: `${t.label} ${activities.filter(a => a.type === t.id).length}` }))].map(f => (
+          <button key={f.id} onClick={() => setFilterType(f.id)}
+            className={`px-4 py-1.5 rounded-full font-body text-xs font-semibold border cursor-pointer transition-all
+              ${filterType === f.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200 hover:border-blue-200"}`}>
+            {f.label}
           </button>
         ))}
       </div>
 
-      {/* Activities list */}
+      {/* Liste */}
       {loading ? (
-        <div className="text-center py-16">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" />
-        </div>
+        <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div>
       ) : filtered.length === 0 ? (
         <Card padding="lg" className="text-center">
-          <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><ClipboardList size={28} className="text-blue-300" /></div>
-          <p className="font-body text-sm text-gray-500 mb-4">
-            {filter === "all"
-              ? "Aucune activité créée. Commencez par créer votre première activité !"
-              : "Aucune activité dans cette catégorie."}
-          </p>
-          {filter === "all" && (
-            <Button variant="primary" onClick={() => setShowForm(true)}>
-              Créer ma première activité
-            </Button>
-          )}
+          <p className="font-body text-sm text-slate-500">Aucune activité dans cette catégorie.</p>
         </Card>
       ) : (
-        <Card className="!p-0 overflow-hidden">
-          {/* Table header */}
-          <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex items-center font-body text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-            <span className="flex-1 min-w-[180px]">Activité</span>
-            <span className="w-20 text-center hidden sm:block">Âge</span>
-            <span className="w-20 text-center hidden sm:block">Prix TTC</span>
-            <span className="w-16 text-center hidden sm:block">Places</span>
-            <span className="w-20 text-center">Statut</span>
-            <span className="w-24 text-right">Actions</span>
+        <Card padding="sm">
+          <div className="px-5 py-3 border-b border-blue-500/8 grid grid-cols-12 gap-4">
+            <div className="col-span-5 font-body text-xs font-semibold text-slate-500 uppercase tracking-wider">Activité</div>
+            <div className="col-span-3 font-body text-xs font-semibold text-slate-500 uppercase tracking-wider">Sous-catégories</div>
+            <div className="col-span-2 font-body text-xs font-semibold text-slate-500 uppercase tracking-wider">Prix</div>
+            <div className="col-span-2 font-body text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Actions</div>
           </div>
-
-          {/* Rows */}
-          {filtered.map((activity) => {
-            const priceTTC = (activity as any).priceTTC || (activity.priceHT || 0) * (1 + (activity.tvaTaux || 5.5) / 100);
-            return (
-              <div
-                key={activity.firestoreId}
-                className="px-5 py-3.5 border-b border-blue-500/8 last:border-b-0 flex items-center hover:bg-blue-50/30 transition-colors"
-              >
-                <div className="flex-1 min-w-[180px] flex items-center gap-3">
-                  <span className="text-lg">{typeEmoji(activity.type)}</span>
-                  <div>
-                    <div className="font-body text-sm font-semibold text-blue-800">{activity.title}</div>
-                    <div className="font-body text-xs text-gray-400">
-                      {activity.schedule} · {activity.seasonPeriod}
-                    </div>
-                  </div>
+          {filtered.map(act => (
+            <div key={act.firestoreId} className="px-5 py-3.5 border-b border-blue-500/8 last:border-0 grid grid-cols-12 gap-4 items-center hover:bg-blue-50/30">
+              <div className="col-span-5">
+                <div className="font-body text-sm font-semibold text-blue-800">{act.title}</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="font-body text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{typeLabel(act.type)}</span>
+                  <Badge color={act.active !== false ? "green" : "gray"}>{act.active !== false ? "Actif" : "Inactif"}</Badge>
                 </div>
-                <span className="w-20 text-center font-body text-xs text-gray-500 hidden sm:block">
-                  {activity.ageMin}–{activity.ageMax || "∞"} ans
-                </span>
-                <span className="w-20 text-center font-body text-sm font-semibold text-blue-500 hidden sm:block">
-                  {priceTTC > 0 ? `${priceTTC.toFixed(0)}€` : "—"}
-                </span>
-                <span className="w-16 text-center font-body text-sm text-gray-500 hidden sm:block">
-                  {activity.maxPlaces}
-                </span>
-                <span className="w-20 text-center">
-                  <button
-                    onClick={() => handleToggleActive(activity)}
-                    className="bg-transparent border-none cursor-pointer"
-                    title={activity.active ? "Désactiver" : "Activer"}
-                  >
-                    <Badge color={activity.active ? "green" : "gray"}>
-                      {activity.active ? "Actif" : "Inactif"}
-                    </Badge>
-                  </button>
-                </span>
-                <span className="w-24 flex justify-end gap-1">
-                  <button
-                    onClick={() => { setEditingActivity(activity); setShowForm(false); }}
-                    className="p-2 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-500 bg-transparent border-none cursor-pointer transition-colors"
-                    title="Modifier"
-                  >
-                    <Pencil size={15} />
-                  </button>
-                  <button
-                    onClick={() => handleDuplicate(activity)}
-                    className="p-2 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-500 bg-transparent border-none cursor-pointer transition-colors"
-                    title="Dupliquer"
-                  >
-                    <Copy size={15} />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(activity)}
-                    className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 bg-transparent border-none cursor-pointer transition-colors"
-                    title="Supprimer"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </span>
               </div>
-            );
-          })}
+              <div className="col-span-3">
+                {(act.subcategories || []).length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {(act.subcategories || []).slice(0, 3).map((s: string) => (
+                      <span key={s} className="font-body text-[10px] bg-gold-50 text-gold-700 border border-gold-200 px-1.5 py-0.5 rounded">{s}</span>
+                    ))}
+                    {(act.subcategories || []).length > 3 && (
+                      <span className="font-body text-[10px] text-slate-400">+{(act.subcategories || []).length - 3}</span>
+                    )}
+                  </div>
+                ) : (
+                  <span className="font-body text-xs text-slate-300 italic">—</span>
+                )}
+              </div>
+              <div className="col-span-2">
+                <div className="font-body text-sm font-semibold text-blue-500">{(act.priceTTC || 0).toFixed(0)}€</div>
+                {act.ageMin && <div className="font-body text-[10px] text-slate-400">dès {act.ageMin} ans</div>}
+              </div>
+              <div className="col-span-2 flex items-center justify-end gap-1">
+                <button onClick={() => { setEditActivity(act); setShowForm(false); }} title="Modifier"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-blue-500 hover:bg-blue-50 bg-transparent border-none cursor-pointer">
+                  <Pencil size={14} />
+                </button>
+                <button onClick={() => handleDuplicate(act)} title="Dupliquer"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-blue-500 hover:bg-blue-50 bg-transparent border-none cursor-pointer">
+                  <Copy size={14} />
+                </button>
+                <button onClick={() => handleDelete(act.firestoreId, act.title)} title="Supprimer"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 bg-transparent border-none cursor-pointer">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
         </Card>
       )}
     </div>
