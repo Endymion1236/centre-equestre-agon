@@ -7,7 +7,7 @@ import Link from "next/link";
 import { ToastProvider } from "@/components/ui/Toast";
 import VoiceAssistant from "@/components/VoiceAssistant";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, getDoc, doc, query, where } from "firebase/firestore";
 import {
   BarChart3,
   CalendarDays,
@@ -162,10 +162,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         const sunStr = sun.toISOString().split("T")[0];
         const monthStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
 
-        const [creneauxSnap, familiesSnap, paymentsSnap] = await Promise.all([
+        const [creneauxSnap, familiesSnap, paymentsSnap, moniteurSnap, inscSnap, centreSnap] = await Promise.all([
           getDocs(query(collection(db,"creneaux"), where("date",">=",monStr), where("date","<=",sunStr))),
           getDocs(collection(db,"families")),
           getDocs(collection(db,"payments")),
+          getDocs(collection(db,"moniteurs")),
+          getDoc(doc(db,"settings","inscription")),
+          getDoc(doc(db,"settings","centre")),
         ]);
 
         const creneaux = creneauxSnap.docs.map(d => d.data());
@@ -210,6 +213,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             email: f.parentEmail || "",
             cavaliers: (f.children || []).map((c: any) => c.firstName).join(", "),
           })),
+          // Données paramètres — disponibles depuis n'importe quelle page
+          moniteurs: moniteurSnap.docs.map(d => (d.data() as any).name).filter(Boolean).sort(),
+          tarifs_inscription: inscSnap.exists() ? {
+            forfait1x: (inscSnap.data() as any).forfait1x || 650,
+            forfait2x: (inscSnap.data() as any).forfait2x || 1100,
+            forfait3x: (inscSnap.data() as any).forfait3x || 1400,
+            adhesion1: (inscSnap.data() as any).adhesion1 || 60,
+            adhesion2: (inscSnap.data() as any).adhesion2 || 40,
+            adhesion3: (inscSnap.data() as any).adhesion3 || 20,
+            dateFinSaison: (inscSnap.data() as any).dateFinSaison || "2026-06-30",
+          } : null,
+          infos_centre: centreSnap.exists() ? {
+            nom: (centreSnap.data() as any).nom,
+            tel: (centreSnap.data() as any).tel,
+            email: (centreSnap.data() as any).email,
+            siret: (centreSnap.data() as any).siret,
+          } : null,
           ...moduleContext, // Données enrichies par le module actif
         }));
       } catch(e) { console.error("voiceContext error", e); }
