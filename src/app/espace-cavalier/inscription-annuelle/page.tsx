@@ -181,22 +181,8 @@ export default function InscriptionAnnuellePage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-bold text-blue-800 mb-2">Inscription aux cours</h1>
-      <p className="font-body text-sm text-slate-500 mb-6">Cours réguliers à l&apos;année ou séance ponctuelle.</p>
-
-      {/* Mode toggle */}
-      <div className="flex gap-3 mb-6">
-        <button onClick={() => { setMode("annuel"); setStep(1); }}
-          className={`flex-1 py-4 rounded-xl border font-body text-sm font-semibold cursor-pointer transition-all text-center ${mode === "annuel" ? "border-blue-500 bg-blue-50 text-blue-500" : "border-gray-200 bg-white text-slate-500"}`}>
-          <Calendar size={18} className="inline mr-2" />Inscription annuelle
-          <div className="font-body text-xs font-normal text-slate-400 mt-1">Forfait saison, licence + adhésion</div>
-        </button>
-        <button onClick={() => { setMode("ponctuel"); setStep(1); }}
-          className={`flex-1 py-4 rounded-xl border font-body text-sm font-semibold cursor-pointer transition-all text-center ${mode === "ponctuel" ? "border-gold-400 bg-gold-50 text-gold-500" : "border-gray-200 bg-white text-slate-500"}`}>
-          🎟️ Séance ponctuelle
-          <div className="font-body text-xs font-normal text-slate-400 mt-1">Sans engagement</div>
-        </button>
-      </div>
+      <h1 className="font-display text-2xl font-bold text-blue-800 mb-2">Inscription annuelle</h1>
+      <p className="font-body text-sm text-slate-500 mb-6">Forfait saison, licence et adhésion.</p>
 
       {/* Étapes */}
       <div className="flex gap-2 mb-8">
