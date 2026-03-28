@@ -397,9 +397,25 @@ export default function ReserverPage() {
                           <div className="font-body text-base font-semibold text-blue-800">{first.activityTitle}</div>
                           <div className="font-body text-xs text-gray-400 mt-1">
                             <Calendar size={12} className="inline mr-1" />{jours}
-                            <span className="ml-3"><Clock size={12} className="inline mr-1" />{first.startTime}–{first.endTime}</span>
                             <span className="ml-3"><Users size={12} className="inline mr-1" />{first.monitor}</span>
                           </div>
+                          {/* Horaires : grouper matin / après-midi si différents */}
+                          {(() => {
+                            const horaires = [...new Set(stageCreneaux.map(c => `${c.startTime}–${c.endTime}`))];
+                            if (horaires.length === 1) return (
+                              <div className="font-body text-xs text-gray-400 mt-0.5">
+                                <Clock size={12} className="inline mr-1" />{horaires[0]}
+                              </div>
+                            );
+                            const matin = stageCreneaux.filter(c => parseInt(c.startTime) < 13);
+                            const aprem = stageCreneaux.filter(c => parseInt(c.startTime) >= 13);
+                            return (
+                              <div className="font-body text-xs text-gray-400 mt-0.5 flex gap-3">
+                                {matin.length > 0 && <span><Clock size={12} className="inline mr-1" />Matin {matin[0].startTime}–{matin[0].endTime}</span>}
+                                {aprem.length > 0 && <span><Clock size={12} className="inline mr-1" />Après-midi {aprem[0].startTime}–{aprem[0].endTime}</span>}
+                              </div>
+                            );
+                          })()}
                         </div>
                         <div className="text-right">
                           <div className="font-body text-lg font-bold text-green-600">{prix.toFixed(0)}€</div>

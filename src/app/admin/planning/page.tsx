@@ -180,35 +180,67 @@ export default function PlanningPage() {
   };
   const [deleteCreneau, setDeleteCreneau] = useState<(Creneau & { id: string }) | null>(null);
   const [deleteDeleting, setDeleteDeleting] = useState(false);
+  const [deleteCount, setDeleteCount] = useState(0);
+  const [deleteWeekCount, setDeleteWeekCount] = useState(0); // créneaux du même stage cette semaine
 
   const handleDelete = (id: string) => {
     const c = creneaux.find(x => x.id === id);
-    if (c) setDeleteCreneau(c);
+    if (c) openDelete(c);
   };
 
-  const [deleteCount, setDeleteCount] = useState(0);
+  const isStageType = (c: any) => c.activityType === "stage" || c.activityType === "stage_journee";
 
   const openDelete = async (c: Creneau & { id: string }) => {
     setDeleteCreneau(c);
     setDeleteDeleting(false);
-    // Compter les similaires dans toute la base Firestore
+    setDeleteWeekCount(0);
     try {
+      // Similaires sur toute l'année (même titre + même heure + même jour semaine)
       const dow = new Date(c.date).getDay();
       const snap = await getDocs(query(
         collection(db, "creneaux"),
         where("activityTitle", "==", c.activityTitle),
         where("startTime", "==", c.startTime),
       ));
-      const similaires = snap.docs.filter(d => new Date((d.data() as any).date).getDay() === dow);
-      setDeleteCount(similaires.length);
+      setDeleteCount(snap.docs.filter(d => new Date((d.data() as any).date).getDay() === dow).length);
+
+      // Pour les stages : compter les créneaux du même stage cette semaine
+      if (isStageType(c)) {
+        const cDate = new Date(c.date);
+        const dow0 = (cDate.getDay() + 6) % 7; // lundi = 0
+        const mon = new Date(cDate); mon.setDate(cDate.getDate() - dow0);
+        const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+        const monStr = fmtDate(mon); const sunStr = fmtDate(sun);
+        const snapWeek = await getDocs(query(
+          collection(db, "creneaux"),
+          where("activityTitle", "==", c.activityTitle),
+          where("date", ">=", monStr),
+          where("date", "<=", sunStr),
+        ));
+        setDeleteWeekCount(snapWeek.docs.length);
+      }
     } catch { setDeleteCount(1); }
   };
 
-  const confirmDelete = async (all: boolean) => {
+  const confirmDelete = async (mode: "single" | "similar" | "week") => {
     if (!deleteCreneau) return;
     setDeleteDeleting(true);
     try {
-      if (all) {
+      if (mode === "week") {
+        // Supprimer tous les créneaux du même stage cette semaine
+        const cDate = new Date(deleteCreneau.date);
+        const dow0 = (cDate.getDay() + 6) % 7;
+        const mon = new Date(cDate); mon.setDate(cDate.getDate() - dow0);
+        const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+        const snap = await getDocs(query(
+          collection(db, "creneaux"),
+          where("activityTitle", "==", deleteCreneau.activityTitle),
+          where("date", ">=", fmtDate(mon)),
+          where("date", "<=", fmtDate(sun)),
+        ));
+        for (const t of snap.docs) await deleteDoc(doc(db, "creneaux", t.id));
+        toast(`🗑️ Stage supprimé (${snap.docs.length} créneaux)`, "success");
+      } else if (mode === "similar") {
         const dow = new Date(deleteCreneau.date).getDay();
         const snap = await getDocs(query(
           collection(db, "creneaux"),
@@ -792,14 +824,27 @@ export default function PlanningPage() {
             dc.forEach(c=>{const key=`${c.startTime}-${c.endTime}`;const g=grouped.find(x=>x.key===key);if(g)g.items.push(c);else grouped.push({key,items:[c]});});
             return(
             <div key={`c${i}`} className="min-h-[140px] flex flex-col gap-1">
-              {/* Compteur stages cliquable */}
-              {stages.length>0&&(
-                <button onClick={()=>{setViewMode("day");setDayOffset(Math.round((d.getTime()-new Date().getTime())/86400000));}}
-                  className="w-full flex items-center gap-1 px-2 py-1 rounded-lg bg-green-50 border border-green-200 border-dashed font-body text-[10px] font-semibold text-green-700 hover:bg-green-100 cursor-pointer border-solid-none">
-                  <span className="w-4 h-4 rounded-full bg-green-500 text-white text-[9px] flex items-center justify-center flex-shrink-0">{stages.length}</span>
-                  <span className="truncate">{stages.length===1?stages[0].activityTitle:`${stages.length} stages`}</span>
-                </button>
-              )}
+              {/* Stages : matin en haut, après-midi en bas */}
+              {(() => {
+                const matin = stages.filter(c => parseInt(c.startTime) < 13);
+                const aprem = stages.filter(c => parseInt(c.startTime) >= 13);
+                return <>
+                  {matin.length > 0 && (
+                    <button onClick={()=>{setViewMode("day");setDayOffset(Math.round((d.getTime()-new Date().getTime())/86400000));}}
+                      className="w-full flex items-center gap-1 px-1.5 py-1 rounded-lg bg-green-50 border border-green-200 font-body text-[10px] font-semibold text-green-700 hover:bg-green-100 cursor-pointer text-left">
+                      <span className="w-3.5 h-3.5 rounded-full bg-green-500 text-white text-[8px] flex items-center justify-center flex-shrink-0">{matin.length}</span>
+                      <span className="truncate">{matin.length===1?matin[0].startTime+" "+matin[0].activityTitle.slice(0,12):`${matin.length} stages matin`}</span>
+                    </button>
+                  )}
+                  {aprem.length > 0 && (
+                    <button onClick={()=>{setViewMode("day");setDayOffset(Math.round((d.getTime()-new Date().getTime())/86400000));}}
+                      className="w-full flex items-center gap-1 px-1.5 py-1 rounded-lg bg-teal-50 border border-teal-200 font-body text-[10px] font-semibold text-teal-700 hover:bg-teal-100 cursor-pointer text-left">
+                      <span className="w-3.5 h-3.5 rounded-full bg-teal-500 text-white text-[8px] flex items-center justify-center flex-shrink-0">{aprem.length}</span>
+                      <span className="truncate">{aprem.length===1?aprem[0].startTime+" "+aprem[0].activityTitle.slice(0,12):`${aprem.length} stages a-m`}</span>
+                    </button>
+                  )}
+                </>;
+              })()}
               {grouped.map(g=>{
                 // Plusieurs créneaux même horaire → côte à côte
                 if(g.items.length>1) return(
@@ -1032,32 +1077,47 @@ export default function PlanningPage() {
               <p className="font-body text-sm text-slate-600 text-center mb-1">
                 <strong>{deleteCreneau.activityTitle}</strong>
               </p>
-              <p className="font-body text-xs text-slate-400 text-center mb-5">
+              <p className="font-body text-xs text-slate-400 text-center mb-4">
                 {new Date(deleteCreneau.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} · {deleteCreneau.startTime}–{deleteCreneau.endTime}
               </p>
 
-              {/* Similaires — chargés depuis Firestore via openDelete */}
-              {deleteCount > 1 ? (
-                <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 mb-4 text-center">
+              {/* Option semaine de stage */}
+              {isStageType(deleteCreneau) && deleteWeekCount > 1 && (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-3 text-center">
+                  <p className="font-body text-xs text-green-700">
+                    <strong>{deleteWeekCount} créneaux</strong> pour ce stage cette semaine
+                  </p>
+                </div>
+              )}
+
+              {/* Similaires toute l'année */}
+              {!isStageType(deleteCreneau) && deleteCount > 1 && (
+                <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 mb-3 text-center">
                   <p className="font-body text-xs text-orange-700">
-                    <strong>{deleteCount} créneaux similaires</strong> trouvés dans toute l'année<br/>
+                    <strong>{deleteCount} créneaux similaires</strong> dans toute l'année<br/>
                     (même titre · même jour · même heure)
                   </p>
                 </div>
-              ) : null}
+              )}
 
               <div className="flex flex-col gap-2">
-                <button onClick={() => confirmDelete(false)} disabled={deleteDeleting}
+                <button onClick={() => confirmDelete("single")} disabled={deleteDeleting}
                   className="w-full py-3 rounded-xl font-body text-sm font-semibold text-white bg-red-500 hover:bg-red-600 border-none cursor-pointer disabled:opacity-50">
                   {deleteDeleting ? <Loader2 size={16} className="animate-spin inline mr-2"/> : null}
                   Supprimer ce créneau uniquement
                 </button>
-                {deleteCount > 1 ? (
-                  <button onClick={() => confirmDelete(true)} disabled={deleteDeleting}
+                {isStageType(deleteCreneau) && deleteWeekCount > 1 && (
+                  <button onClick={() => confirmDelete("week")} disabled={deleteDeleting}
+                    className="w-full py-3 rounded-xl font-body text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 border-none cursor-pointer disabled:opacity-50">
+                    🗓️ Supprimer toute la semaine de stage ({deleteWeekCount} créneaux)
+                  </button>
+                )}
+                {!isStageType(deleteCreneau) && deleteCount > 1 && (
+                  <button onClick={() => confirmDelete("similar")} disabled={deleteDeleting}
                     className="w-full py-3 rounded-xl font-body text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 border-none cursor-pointer disabled:opacity-50">
                     Supprimer les {deleteCount} créneaux similaires
                   </button>
-                ) : null}
+                )}
                 <button onClick={() => setDeleteCreneau(null)} disabled={deleteDeleting}
                   className="w-full py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
                   Annuler
