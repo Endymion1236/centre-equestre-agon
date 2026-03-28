@@ -808,7 +808,19 @@ export default function PlanningPage() {
       {viewMode==="week"&&<>
         <div className="flex items-center justify-between mb-5">
           <button onClick={()=>setWeekOffset(w=>w-1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16}/>Préc.</button>
-          <div className="text-center"><div className="font-display text-lg font-bold text-blue-800 capitalize">{fmtMonthFR(weekDates[0])}</div><div className="font-body text-xs text-slate-600">Du {weekDates[0].toLocaleDateString("fr-FR",{day:"numeric",month:"short"})} au {weekDates[6].toLocaleDateString("fr-FR",{day:"numeric",month:"short"})}</div></div>
+          <div className="flex flex-col items-center gap-1">
+            <div className="font-display text-lg font-bold text-blue-800 capitalize">{fmtMonthFR(weekDates[0])}</div>
+            <div className="font-body text-xs text-slate-600">Du {weekDates[0].toLocaleDateString("fr-FR",{day:"numeric",month:"short"})} au {weekDates[6].toLocaleDateString("fr-FR",{day:"numeric",month:"short"})}</div>
+            <input type="date" className="font-body text-xs px-2 py-1 rounded-lg border border-gray-200 bg-white cursor-pointer focus:border-blue-400 focus:outline-none"
+              onChange={e => {
+                if (!e.target.value) return;
+                const picked = new Date(e.target.value);
+                const today = new Date(); today.setHours(0,0,0,0);
+                const diffDays = Math.round((picked.getTime() - today.getTime()) / 86400000);
+                const diffWeeks = Math.floor(diffDays / 7);
+                setWeekOffset(diffWeeks);
+              }}/>
+          </div>
           <div className="flex gap-2"><button onClick={()=>setWeekOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setWeekOffset(w=>w+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Suiv.<ChevronRight size={16}/></button></div>
         </div>
         {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:
@@ -863,9 +875,9 @@ export default function PlanningPage() {
                   <div key={g.key} className="flex gap-0.5">
                     {g.items.map(c=>{const en=c.enrolled||[];const fill=c.maxPlaces>0?en.length/c.maxPlaces:0;const col=(c as any).color||typeColors[c.activityType]||"#666";return(
                       <div key={c.id} onClick={()=>setSelectedCreneau(c)} className="flex-1 min-w-0 bg-white rounded-lg p-1.5 border border-blue-500/8 group relative hover:shadow-md cursor-pointer" style={{borderLeftWidth:3,borderLeftColor:col}}>
-                        <div className="font-body text-[10px] font-semibold truncate" style={{color:col}}>{c.startTime}</div>
-                        <div className="font-body text-[10px] font-semibold text-blue-800 leading-tight mt-0.5 truncate">{c.activityTitle}</div>
-                        <div className="font-body text-[9px] text-slate-500 truncate">{c.monitor}</div>
+                        <div className="font-body text-[10px] font-semibold" style={{color:col}}>{c.startTime}</div>
+                        <div className="font-body text-[10px] font-semibold text-blue-800 leading-tight mt-0.5" style={{overflowWrap:"break-word",wordBreak:"break-word"}}>{c.activityTitle}</div>
+                        <div className="font-body text-[9px] text-slate-500 mt-0.5 truncate">{c.monitor}</div>
                         <div className={`font-body text-[9px] font-semibold mt-0.5 ${fill>=1?"text-red-500":fill>=0.7?"text-orange-500":"text-green-600"}`}>{en.length}/{c.maxPlaces}</div>
                         <button onClick={e=>{e.stopPropagation();openDelete(c);}} className="absolute top-0.5 right-0.5 w-4 h-4 rounded bg-red-50 text-red-400 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Trash2 size={8}/></button>
                         <button onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0,color:(c as any).color||""});setEditApplyAll(false);}} className="absolute top-0.5 right-5 w-4 h-4 rounded bg-blue-50 text-blue-400 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Settings size={8}/></button>
@@ -896,7 +908,17 @@ export default function PlanningPage() {
       {viewMode==="day"&&<>
         <div className="flex items-center justify-between mb-5">
           <button onClick={()=>setDayOffset(d=>d-1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16}/>Veille</button>
-          <div className="text-center"><div className="font-display text-lg font-bold text-blue-800 capitalize">{currentDay.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div><div className="font-body text-xs text-slate-600">{dayCreneaux.length} créneau{dayCreneaux.length>1?"x":""}</div></div>
+          <div className="flex flex-col items-center gap-1">
+            <div className="font-display text-lg font-bold text-blue-800 capitalize">{currentDay.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
+            <div className="font-body text-xs text-slate-600">{dayCreneaux.length} créneau{dayCreneaux.length>1?"x":""}</div>
+            <input type="date" className="font-body text-xs px-2 py-1 rounded-lg border border-gray-200 bg-white cursor-pointer focus:border-blue-400 focus:outline-none"
+              onChange={e => {
+                if (!e.target.value) return;
+                const picked = new Date(e.target.value);
+                const today = new Date(); today.setHours(0,0,0,0);
+                setDayOffset(Math.round((picked.getTime() - today.getTime()) / 86400000));
+              }}/>
+          </div>
           <div className="flex gap-2"><button onClick={()=>setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setDayOffset(d=>d+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain<ChevronRight size={16}/></button></div>
         </div>
         {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:
