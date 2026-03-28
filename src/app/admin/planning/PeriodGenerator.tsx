@@ -1,5 +1,7 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { Card } from "@/components/ui";
 import { Loader2, Plus, X, Trash2, Calendar } from "lucide-react";
 import type { Activity } from "@/types";
@@ -13,13 +15,23 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
     { startDate: "2026-03-03", endDate: "2026-04-11" },
     { startDate: "2026-04-28", endDate: "2026-06-28" },
   ]);
-  const [slots, setSlots] = useState<SlotDef[]>([{ activityId: "", day: 2, startTime: "10:00", endTime: "11:00", monitor: "Emmeline", maxPlaces: 8 }]);
+  const [slots, setSlots] = useState<SlotDef[]>([{ activityId: "", day: 2, startTime: "10:00", endTime: "11:00", monitor: "", maxPlaces: 8 }]);
   const [saving, setSaving] = useState(false);
+  const [moniteurs, setMoniteurs] = useState<string[]>([]);
+
+  useEffect(() => {
+    getDocs(collection(db, "moniteurs")).then(snap => {
+      const noms = snap.docs.map(d => (d.data() as any).name).filter(Boolean).sort();
+      setMoniteurs(noms);
+      // Initialiser le premier slot avec le premier moniteur
+      if (noms.length > 0) setSlots(s => s.map(slot => slot.monitor ? slot : { ...slot, monitor: noms[0] }));
+    });
+  }, []);
 
   const addPeriod = () => setPeriods([...periods, { startDate: "", endDate: "" }]);
   const removePeriod = (i: number) => setPeriods(periods.filter((_, j) => j !== i));
   const updatePeriod = (i: number, field: string, val: string) => setPeriods(periods.map((p, j) => j === i ? { ...p, [field]: val } : p));
-  const addSlot = () => setSlots([...slots, { activityId: "", day: 2, startTime: "10:00", endTime: "11:00", monitor: "Emmeline", maxPlaces: 8 }]);
+  const addSlot = () => setSlots([...slots, { activityId: "", day: 2, startTime: "10:00", endTime: "11:00", monitor: moniteurs[0] || "", maxPlaces: 8 }]);
   const removeSlot = (i: number) => setSlots(slots.filter((_, j) => j !== i));
   const updateSlot = (i: number, field: string, val: any) => setSlots(slots.map((s, j) => j === i ? { ...s, [field]: val } : s));
 
@@ -104,7 +116,8 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
                 <input type="time" value={s.startTime} onChange={e => updateSlot(i, "startTime", e.target.value)} className={`${inp} w-24`}/>
                 <input type="time" value={s.endTime} onChange={e => updateSlot(i, "endTime", e.target.value)} className={`${inp} w-24`}/>
                 <select value={s.monitor} onChange={e => updateSlot(i, "monitor", e.target.value)} className={`${inp} w-28`}>
-                  <option>Emmeline</option><option>Nicolas</option>
+                  <option value="">— Moniteur —</option>
+                  {moniteurs.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
                 <input type="number" value={s.maxPlaces} onChange={e => updateSlot(i, "maxPlaces", parseInt(e.target.value))} className={`${inp} w-16`} title="Places"/>
               </div>

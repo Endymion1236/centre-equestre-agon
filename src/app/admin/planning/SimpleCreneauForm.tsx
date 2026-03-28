@@ -1,5 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { Card } from "@/components/ui";
 import { Check, Loader2, X } from "lucide-react";
 import type { Activity } from "@/types";
@@ -14,7 +16,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
   const [actId, setActId] = useState("");
   const [st, setSt] = useState("10:00");
   const [et, setEt] = useState("12:00");
-  const [mon, setMon] = useState("Emmeline");
+  const [mon, setMon] = useState("");
   const [mp, setMp] = useState(8);
   const [date, setDate] = useState(defaultDate || fmtDate(new Date()));
   const [saving, setSaving] = useState(false);
@@ -22,6 +24,15 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
   const [nbDays, setNbDays] = useState(5);
   const [skipWeekend, setSkipWeekend] = useState(true);
   const [customHours, setCustomHours] = useState<Record<string, { st: string; et: string }>>({});
+  const [moniteurs, setMoniteurs] = useState<string[]>([]);
+
+  useEffect(() => {
+    getDocs(collection(db, "moniteurs")).then(snap => {
+      const noms = snap.docs.map(d => (d.data() as any).name).filter(Boolean).sort();
+      setMoniteurs(noms);
+      if (noms.length > 0 && !mon) setMon(noms[0]);
+    });
+  }, []);
 
   const act = activities.find(a => a.id === actId);
   useEffect(() => { if (act) setMp(act.maxPlaces || 8); }, [actId]);
@@ -143,7 +154,8 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
 
         <div className="flex gap-2">
           <select value={mon} onChange={e => setMon(e.target.value)} className={`${inp} flex-1`}>
-            <option>Emmeline</option><option>Nicolas</option><option>Sophie</option><option>Julien</option>
+            <option value="">— Moniteur —</option>
+            {moniteurs.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
           <input type="number" value={mp} onChange={e => setMp(parseInt(e.target.value))} className={`${inp} w-20`} placeholder="Places"/>
         </div>
