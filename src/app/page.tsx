@@ -54,7 +54,7 @@ export default function HomePage() {
           </p>
 
           <div className="flex gap-4 flex-wrap animate-fade-in-up animate-delay-300">
-            <Link href="/espace-cavalier/reserver"><Button variant="primary" size="lg">Réserver un stage</Button></Link>
+            <Link href="/espace-cavalier/reserver"><Button variant="primary" size="lg">Réserver une activité</Button></Link>
             <Link href="/activites"><button className="glass px-10 py-4 rounded-xl font-body text-base font-medium text-white hover:bg-white/18 transition-all cursor-pointer border-none">Découvrir nos activités</button></Link>
           </div>
 
