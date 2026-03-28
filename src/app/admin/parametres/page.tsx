@@ -1263,6 +1263,65 @@ export default function ParametresPage() {
             </button>
           </Card>
 
+          <Card padding="md" className="border-orange-200">
+            <h3 className="font-body text-base font-semibold text-blue-800 mb-2">🐴 Réinitialiser l'historique cavaliers</h3>
+            <p className="font-body text-xs text-slate-500 mb-4">
+              Efface les notes pédagogiques et l'historique des poneys montés sur tous les cavaliers.
+              Utile en phase de test avant le démarrage en production.
+            </p>
+            <div className="flex flex-col gap-2">
+              <button onClick={async () => {
+                if (!confirm("Effacer les notes pédagogiques de TOUS les cavaliers ?\n\nAction irréversible.")) return;
+                const snap = await getDocs(collection(db, "families"));
+                let total = 0;
+                for (const fam of snap.docs) {
+                  const data = fam.data() as any;
+                  const children = (data.children || []).map((ch: any) => ({
+                    ...ch,
+                    peda: { ...((ch.peda || {})), notes: [], lastNote: null },
+                  }));
+                  await updateDoc(doc(db, "families", fam.id), { children });
+                  total += (data.children || []).length;
+                }
+                alert(`✅ Notes pédagogiques effacées pour ${total} cavaliers.`);
+              }} className="flex items-center gap-2 font-body text-sm font-semibold text-orange-700 bg-orange-50 px-4 py-2.5 rounded-lg border border-orange-200 cursor-pointer hover:bg-orange-100 border-solid">
+                <Trash2 size={14}/> Effacer les notes pédagogiques
+              </button>
+              <button onClick={async () => {
+                if (!confirm("Effacer l'historique des poneys montés de TOUS les cavaliers ?\n\nAction irréversible.")) return;
+                const snap = await getDocs(collection(db, "families"));
+                let total = 0;
+                for (const fam of snap.docs) {
+                  const data = fam.data() as any;
+                  const children = (data.children || []).map((ch: any) => ({
+                    ...ch,
+                    peda: { ...((ch.peda || {})), notes: ((ch.peda?.notes || []) as any[]).map((n: any) => ({ ...n, horseName: null })) },
+                  }));
+                  await updateDoc(doc(db, "families", fam.id), { children });
+                  total += (data.children || []).length;
+                }
+                alert(`✅ Historique poneys réinitialisé pour ${total} cavaliers.`);
+              }} className="flex items-center gap-2 font-body text-sm font-semibold text-orange-700 bg-orange-50 px-4 py-2.5 rounded-lg border border-orange-200 cursor-pointer hover:bg-orange-100 border-solid">
+                <Trash2 size={14}/> Effacer l'historique des poneys
+              </button>
+              <button onClick={async () => {
+                if (!confirm("⚠️ Effacer TOUTES les notes péda ET l'historique poneys ?\n\nAction irréversible.")) return;
+                if (!confirm("DERNIÈRE CONFIRMATION — effacer tout l'historique cavaliers ?")) return;
+                const snap = await getDocs(collection(db, "families"));
+                let total = 0;
+                for (const fam of snap.docs) {
+                  const data = fam.data() as any;
+                  const children = (data.children || []).map((ch: any) => ({ ...ch, peda: { notes: [], lastNote: null } }));
+                  await updateDoc(doc(db, "families", fam.id), { children });
+                  total += (data.children || []).length;
+                }
+                alert(`✅ Historique complet effacé pour ${total} cavaliers.`);
+              }} className="flex items-center gap-2 font-body text-sm font-semibold text-red-600 bg-red-50 px-4 py-2.5 rounded-lg border border-red-200 cursor-pointer hover:bg-red-100 border-solid">
+                <Trash2 size={14}/> Tout effacer (notes + poneys)
+              </button>
+            </div>
+          </Card>
+
           <Card padding="md">
             <h3 className="font-body text-base font-semibold text-blue-800 mb-2">Données préservées</h3>
             <p className="font-body text-xs text-gray-400 mb-3">Ces collections ne sont jamais supprimées par le nettoyage :</p>

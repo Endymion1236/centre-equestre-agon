@@ -33,7 +33,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
   // Plan de séance
   const [planUploading, setPlanUploading] = useState(false);
-  const [planUrl, setPlanUrl] = useState<string | null>((creneau as any).planSeanceUrl || null);
+  const [lightbox, setLightbox] = useState(false);
   const [planType, setPlanType] = useState<string | null>((creneau as any).planSeanceType || null);
   const planInputRef = useRef<HTMLInputElement>(null);
   // Liste d'attente
@@ -675,9 +675,12 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     </div>
                   </a>
                 ) : (
-                  <a href={planUrl} target="_blank" rel="noopener noreferrer">
-                    <img src={planUrl} alt="Plan de séance" className="w-full rounded-xl object-cover max-h-48 cursor-zoom-in hover:opacity-90 transition-opacity" />
-                  </a>
+                  <button onClick={() => setLightbox(true)} className="w-full border-none p-0 bg-transparent cursor-zoom-in block">
+                    <img src={planUrl} alt="Plan de séance" className="w-full rounded-xl object-cover max-h-48 hover:opacity-90 transition-opacity" />
+                    <div className="absolute inset-0 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/20 transition-opacity">
+                      <span className="font-body text-xs text-white bg-black/50 px-2 py-1 rounded-lg">🔍 Agrandir</span>
+                    </div>
+                  </button>
                 )}
                 <button onClick={deletePlan}
                   className="absolute top-2 right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity text-xs">
@@ -1151,6 +1154,24 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           )}
         </div>
       </div>
+
+      {/* ── Lightbox photo plan de séance ── */}
+      {lightbox && planUrl && (
+        <div className="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-4"
+          onClick={() => setLightbox(false)}>
+          <div className="relative max-w-4xl max-h-full w-full" onClick={e => e.stopPropagation()}>
+            <img src={planUrl} alt="Plan de séance" className="w-full max-h-[85vh] object-contain rounded-xl shadow-2xl" />
+            <button onClick={() => setLightbox(false)}
+              className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/60 text-white flex items-center justify-center border-none cursor-pointer hover:bg-black/80 text-lg">
+              ✕
+            </button>
+            <a href={planUrl} download target="_blank" rel="noopener noreferrer"
+              className="absolute bottom-3 right-3 flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-black/60 hover:bg-black/80 px-3 py-2 rounded-lg no-underline">
+              ⬇ Télécharger
+            </a>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
