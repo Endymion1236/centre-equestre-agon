@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/rappels-j1",
       "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/charge-stage-balances",
+      "schedule": "0 8 * * *"
     }
   ]
 }
