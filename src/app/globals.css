@@ -35,6 +35,12 @@
   --color-gray-500: #475569;
   --color-gray-600: #334155;
 
+  /* Slate renforcés — text-slate-400 et 500 trop clairs par défaut */
+  --color-slate-300: #94A3B8;
+  --color-slate-400: #475569;  /* forcé = slate-500 standard */
+  --color-slate-500: #334155;  /* forcé = slate-600 standard */
+  --color-slate-600: #1e293b;
+
   --font-display: "Libre Baskerville", Georgia, serif;
   --font-body: "Outfit", system-ui, sans-serif;
 }
