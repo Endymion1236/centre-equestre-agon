@@ -387,7 +387,8 @@ export default function ReserverPage() {
                   const first = stageCreneaux[0];
                   const prix = (first as any).priceTTC || first.priceHT * (1 + (first.tvaTaux || 5.5) / 100);
                   const spots = Math.min(...stageCreneaux.map(spotsLeft));
-                  const jours = stageCreneaux.map(c => new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })).join(", ");
+                  const joursUniques = [...new Map(stageCreneaux.map(c => [c.date, c])).values()];
+                  const jours = joursUniques.map(c => new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })).join(", ");
                   const isSelected = selectedCreneau?.id === first.id;
 
                   return (
@@ -399,27 +400,44 @@ export default function ReserverPage() {
                             <Calendar size={12} className="inline mr-1" />{jours}
                             <span className="ml-3"><Users size={12} className="inline mr-1" />{first.monitor}</span>
                           </div>
-                          {/* Horaires : grouper matin / après-midi si différents */}
+                          {/* Horaires — par jour si les horaires varient */}
                           {(() => {
-                            const horaires = [...new Set(stageCreneaux.map(c => `${c.startTime}–${c.endTime}`))];
-                            if (horaires.length === 1) return (
-                              <div className="font-body text-xs text-gray-400 mt-0.5">
-                                <Clock size={12} className="inline mr-1" />{horaires[0]}
-                              </div>
-                            );
-                            const matin = stageCreneaux.filter(c => parseInt(c.startTime) < 13);
-                            const aprem = stageCreneaux.filter(c => parseInt(c.startTime) >= 13);
+                            const horairesUniques = [...new Set(stageCreneaux.map(c => `${c.startTime}–${c.endTime}`))];
+                            if (horairesUniques.length === 1) {
+                              // Tous les jours au même horaire → une seule ligne
+                              return (
+                                <div className="font-body text-xs text-gray-400 mt-0.5">
+                                  <Clock size={12} className="inline mr-1" />{horairesUniques[0]}
+                                </div>
+                              );
+                            }
+                            // Horaires variés → grouper par date et afficher proprement
+                            // Regrouper les créneaux par date
+                            const parDate: Record<string, Creneau[]> = {};
+                            stageCreneaux.forEach(c => {
+                              if (!parDate[c.date]) parDate[c.date] = [];
+                              parDate[c.date].push(c);
+                            });
                             return (
-                              <div className="font-body text-xs text-gray-400 mt-0.5 flex gap-3">
-                                {matin.length > 0 && <span><Clock size={12} className="inline mr-1" />Matin {matin[0].startTime}–{matin[0].endTime}</span>}
-                                {aprem.length > 0 && <span><Clock size={12} className="inline mr-1" />Après-midi {aprem[0].startTime}–{aprem[0].endTime}</span>}
+                              <div className="mt-1.5 flex flex-col gap-0.5">
+                                {Object.entries(parDate).sort(([a],[b])=>a.localeCompare(b)).map(([date, cs]) => {
+                                  const jourLabel = new Date(date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" });
+                                  const horaires = cs.map(c => `${c.startTime}–${c.endTime}`).join(" + ");
+                                  return (
+                                    <div key={date} className="font-body text-xs text-gray-400 flex items-center gap-1.5">
+                                      <span className="font-semibold text-slate-500 w-16 flex-shrink-0">{jourLabel}</span>
+                                      <Clock size={10} className="text-gray-300 flex-shrink-0"/>
+                                      <span>{horaires}</span>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             );
                           })()}
                         </div>
                         <div className="text-right">
                           <div className="font-body text-lg font-bold text-green-600">{prix.toFixed(0)}€</div>
-                          <div className="font-body text-[10px] text-gray-400">{stageCreneaux.length} jours</div>
+                          <div className="font-body text-[10px] text-gray-400">{joursUniques.length} jour{joursUniques.length > 1 ? "s" : ""}</div>
                           <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>{spots} place{spots > 1 ? "s" : ""}</Badge>
                         </div>
                       </div>
