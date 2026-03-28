@@ -186,17 +186,36 @@ export default function PlanningPage() {
     if (c) setDeleteCreneau(c);
   };
 
+  const [deleteCount, setDeleteCount] = useState(0);
+
+  const openDelete = async (c: Creneau & { id: string }) => {
+    setDeleteCreneau(c);
+    setDeleteDeleting(false);
+    // Compter les similaires dans toute la base Firestore
+    try {
+      const dow = new Date(c.date).getDay();
+      const snap = await getDocs(query(
+        collection(db, "creneaux"),
+        where("activityTitle", "==", c.activityTitle),
+        where("startTime", "==", c.startTime),
+      ));
+      const similaires = snap.docs.filter(d => new Date((d.data() as any).date).getDay() === dow);
+      setDeleteCount(similaires.length);
+    } catch { setDeleteCount(1); }
+  };
+
   const confirmDelete = async (all: boolean) => {
     if (!deleteCreneau) return;
     setDeleteDeleting(true);
     try {
       if (all) {
         const dow = new Date(deleteCreneau.date).getDay();
-        const targets = creneaux.filter(c =>
-          c.activityTitle === deleteCreneau.activityTitle &&
-          new Date(c.date).getDay() === dow &&
-          c.startTime === deleteCreneau.startTime
-        );
+        const snap = await getDocs(query(
+          collection(db, "creneaux"),
+          where("activityTitle", "==", deleteCreneau.activityTitle),
+          where("startTime", "==", deleteCreneau.startTime),
+        ));
+        const targets = snap.docs.filter(d => new Date((d.data() as any).date).getDay() === dow);
         for (const t of targets) await deleteDoc(doc(db, "creneaux", t.id));
         toast(`🗑️ ${targets.length} créneaux supprimés`, "success");
       } else {
@@ -779,7 +798,7 @@ export default function PlanningPage() {
                         <div className="font-body text-[10px] font-semibold text-blue-800 leading-tight mt-0.5 truncate">{c.activityTitle}</div>
                         <div className="font-body text-[9px] text-slate-500 truncate">{c.monitor}</div>
                         <div className={`font-body text-[9px] font-semibold mt-0.5 ${fill>=1?"text-red-500":fill>=0.7?"text-orange-500":"text-green-600"}`}>{en.length}/{c.maxPlaces}</div>
-                        <button onClick={e=>{e.stopPropagation();handleDelete(c.id!);}} className="absolute top-0.5 right-0.5 w-4 h-4 rounded bg-red-50 text-red-400 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Trash2 size={8}/></button>
+                        <button onClick={e=>{e.stopPropagation();openDelete(c);}} className="absolute top-0.5 right-0.5 w-4 h-4 rounded bg-red-50 text-red-400 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Trash2 size={8}/></button>
                         <button onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0,color:(c as any).color||""});setEditApplyAll(false);}} className="absolute top-0.5 right-5 w-4 h-4 rounded bg-blue-50 text-blue-400 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Settings size={8}/></button>
                       </div>);})}
                   </div>
@@ -797,7 +816,7 @@ export default function PlanningPage() {
                     const hasPending=!hasPaid&&!isCard&&payments.some((p:any)=>p.familyId===e.familyId&&(p.status==="pending"||p.status==="partial"));
                     return <span key={e.childId} title={`${e.childName}`} className={`w-2 h-2 rounded-full flex-shrink-0 ${isCard?"bg-blue-500":hasPaid?"bg-green-500":hasPending?"bg-orange-400":"bg-gray-300"}`}/>;
                   })}{en.length>4&&<span className="font-body text-[9px] text-slate-600">+{en.length-4}</span>}</div>}
-                  <button onClick={e=>{e.stopPropagation();handleDelete(c.id!);}} className="absolute top-1 right-1 w-5 h-5 rounded bg-red-50 text-red-400 hover:bg-red-100 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Trash2 size={10}/></button>
+                  <button onClick={e=>{e.stopPropagation();openDelete(c);}} className="absolute top-1 right-1 w-5 h-5 rounded bg-red-50 text-red-400 hover:bg-red-100 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Trash2 size={10}/></button>
                   <button onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0,color:(c as any).color||""});setEditApplyAll(false);}} className="absolute top-1 right-7 w-5 h-5 rounded bg-blue-50 text-blue-400 hover:bg-blue-100 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Settings size={10}/></button>
                 </div>);})}
               <button onClick={()=>{setSelectedDate(ds);setShowSimple(true);setShowGenerator(false);}} className="mt-auto py-2 rounded-lg border border-dashed border-gray-200 text-slate-400 hover:border-blue-300 hover:text-blue-400 bg-transparent cursor-pointer font-body text-lg">+</button>
@@ -816,7 +835,7 @@ export default function PlanningPage() {
         <div className="flex flex-col gap-3">{dayCreneaux.map(c=>{const en=c.enrolled||[];const fill=c.maxPlaces>0?en.length/c.maxPlaces:0;const col=(c as any).color||typeColors[c.activityType]||"#666";const ttc=(c as any).priceTTC||(c.priceHT||0)*(1+(c.tvaTaux||5.5)/100);return(
           <Card key={c.id} padding="md" className="cursor-pointer hover:shadow-lg" hover>
             <div onClick={()=>setSelectedCreneau(c)}>
-              <div className="flex items-start justify-between mb-3"><div className="flex items-center gap-4"><div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px] text-slate-600">{c.endTime}</div></div><div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs text-slate-600">{c.monitor} · {c.maxPlaces} pl.{ttc>0?` · ${ttc.toFixed(0)}€`:""}</div></div></div><div className="flex items-center gap-2"><Badge color={fill>=1?"red":fill>=0.7?"orange":"green"}>{en.length}/{c.maxPlaces}</Badge><button onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0,color:(c as any).color||""});setEditApplyAll(false);}} className="text-blue-400 hover:text-blue-600 bg-blue-50 hover:bg-blue-100 w-8 h-8 rounded-lg border-none cursor-pointer flex items-center justify-center"><Settings size={15}/></button><button onClick={e=>{e.stopPropagation();handleDelete(c.id!);}} className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={16}/></button></div></div>
+              <div className="flex items-start justify-between mb-3"><div className="flex items-center gap-4"><div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px] text-slate-600">{c.endTime}</div></div><div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs text-slate-600">{c.monitor} · {c.maxPlaces} pl.{ttc>0?` · ${ttc.toFixed(0)}€`:""}</div></div></div><div className="flex items-center gap-2"><Badge color={fill>=1?"red":fill>=0.7?"orange":"green"}>{en.length}/{c.maxPlaces}</Badge><button onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0,color:(c as any).color||""});setEditApplyAll(false);}} className="text-blue-400 hover:text-blue-600 bg-blue-50 hover:bg-blue-100 w-8 h-8 rounded-lg border-none cursor-pointer flex items-center justify-center"><Settings size={15}/></button><button onClick={e=>{e.stopPropagation();openDelete(c);}} className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={16}/></button></div></div>
               {en.length>0&&<div className="ml-[68px] flex flex-wrap gap-2">{en.map((e:any)=>{
                 const isCard = e.paymentSource === "card";
                 const hasPaid = isCard || payments.some((p: any) => p.familyId === e.familyId && p.status === "paid" && (p.items||[]).some((i:any) => i.childId === e.childId && (i.creneauId === c.id || i.activityTitle === c.activityTitle)));
@@ -1005,23 +1024,15 @@ export default function PlanningPage() {
                 {new Date(deleteCreneau.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} · {deleteCreneau.startTime}–{deleteCreneau.endTime}
               </p>
 
-              {/* Compter les similaires */}
-              {(() => {
-                const dow = new Date(deleteCreneau.date).getDay();
-                const similaires = creneaux.filter(c =>
-                  c.activityTitle === deleteCreneau.activityTitle &&
-                  new Date(c.date).getDay() === dow &&
-                  c.startTime === deleteCreneau.startTime
-                );
-                return similaires.length > 1 ? (
-                  <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 mb-4 text-center">
-                    <p className="font-body text-xs text-orange-700">
-                      <strong>{similaires.length} créneaux similaires</strong> trouvés<br/>
-                      (même titre · même jour · même heure)
-                    </p>
-                  </div>
-                ) : null;
-              })()}
+              {/* Similaires — chargés depuis Firestore via openDelete */}
+              {deleteCount > 1 ? (
+                <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 mb-4 text-center">
+                  <p className="font-body text-xs text-orange-700">
+                    <strong>{deleteCount} créneaux similaires</strong> trouvés dans toute l'année<br/>
+                    (même titre · même jour · même heure)
+                  </p>
+                </div>
+              ) : null}
 
               <div className="flex flex-col gap-2">
                 <button onClick={() => confirmDelete(false)} disabled={deleteDeleting}
@@ -1029,20 +1040,12 @@ export default function PlanningPage() {
                   {deleteDeleting ? <Loader2 size={16} className="animate-spin inline mr-2"/> : null}
                   Supprimer ce créneau uniquement
                 </button>
-                {(() => {
-                  const dow = new Date(deleteCreneau.date).getDay();
-                  const similaires = creneaux.filter(c =>
-                    c.activityTitle === deleteCreneau.activityTitle &&
-                    new Date(c.date).getDay() === dow &&
-                    c.startTime === deleteCreneau.startTime
-                  );
-                  return similaires.length > 1 ? (
-                    <button onClick={() => confirmDelete(true)} disabled={deleteDeleting}
-                      className="w-full py-3 rounded-xl font-body text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 border-none cursor-pointer disabled:opacity-50">
-                      Supprimer les {similaires.length} créneaux similaires
-                    </button>
-                  ) : null;
-                })()}
+                {deleteCount > 1 ? (
+                  <button onClick={() => confirmDelete(true)} disabled={deleteDeleting}
+                    className="w-full py-3 rounded-xl font-body text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 border-none cursor-pointer disabled:opacity-50">
+                    Supprimer les {deleteCount} créneaux similaires
+                  </button>
+                ) : null}
                 <button onClick={() => setDeleteCreneau(null)} disabled={deleteDeleting}
                   className="w-full py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
                   Annuler
