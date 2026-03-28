@@ -178,7 +178,36 @@ export default function PlanningPage() {
     toast(`${created} créneau${created > 1 ? "x" : ""} créé${created > 1 ? "s" : ""}${skipped > 0 ? ` (${skipped} doublon${skipped > 1 ? "s" : ""})` : ""}`, "success");
     fetchData();
   };
-  const handleDelete = async (id: string) => { if (!confirm("Supprimer ?")) return; await deleteDoc(doc(db, "creneaux", id)); fetchData(); };
+  const [deleteCreneau, setDeleteCreneau] = useState<(Creneau & { id: string }) | null>(null);
+  const [deleteDeleting, setDeleteDeleting] = useState(false);
+
+  const handleDelete = (id: string) => {
+    const c = creneaux.find(x => x.id === id);
+    if (c) setDeleteCreneau(c);
+  };
+
+  const confirmDelete = async (all: boolean) => {
+    if (!deleteCreneau) return;
+    setDeleteDeleting(true);
+    try {
+      if (all) {
+        const dow = new Date(deleteCreneau.date).getDay();
+        const targets = creneaux.filter(c =>
+          c.activityTitle === deleteCreneau.activityTitle &&
+          new Date(c.date).getDay() === dow &&
+          c.startTime === deleteCreneau.startTime
+        );
+        for (const t of targets) await deleteDoc(doc(db, "creneaux", t.id));
+        toast(`🗑️ ${targets.length} créneaux supprimés`, "success");
+      } else {
+        await deleteDoc(doc(db, "creneaux", deleteCreneau.id));
+        toast("🗑️ Créneau supprimé", "success");
+      }
+      setDeleteCreneau(null);
+      fetchData();
+    } catch (e) { console.error(e); }
+    setDeleteDeleting(false);
+  };
   const handleDuplicateWeek = async () => { if (creneaux.length===0) return; setDuplicating(true); const { count, skipped } = await duplicateWeekCreneaux(creneaux, dupWeeks); setDuplicating(false);setShowDuplicate(false);toast(`${count} créneau${count>1?"x":""} créé${count>1?"s":""}${skipped > 0 ? ` (${skipped} doublon${skipped>1?"s":""})` : ""}`, "success");fetchData(); };
 
 
@@ -939,6 +968,70 @@ export default function PlanningPage() {
       )}
 
       {selectedCreneau&&<EnrollPanel creneau={selectedCreneau as any} families={families} allCreneaux={creneaux} payments={payments} allCartes={allCartes} allForfaits={allForfaits} onClose={()=>{setSelectedCreneau(null);fetchData();}} onEnroll={handleEnroll} onUnenroll={handleUnenroll}/>}
+
+      {/* ── Modal suppression créneau ── */}
+      {deleteCreneau && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !deleteDeleting && setDeleteCreneau(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="p-5">
+              <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-4">
+                <Trash2 size={22} className="text-red-500"/>
+              </div>
+              <h2 className="font-display text-lg font-bold text-blue-800 text-center mb-1">Supprimer ce créneau ?</h2>
+              <p className="font-body text-sm text-slate-600 text-center mb-1">
+                <strong>{deleteCreneau.activityTitle}</strong>
+              </p>
+              <p className="font-body text-xs text-slate-400 text-center mb-5">
+                {new Date(deleteCreneau.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} · {deleteCreneau.startTime}–{deleteCreneau.endTime}
+              </p>
+
+              {/* Compter les similaires */}
+              {(() => {
+                const dow = new Date(deleteCreneau.date).getDay();
+                const similaires = creneaux.filter(c =>
+                  c.activityTitle === deleteCreneau.activityTitle &&
+                  new Date(c.date).getDay() === dow &&
+                  c.startTime === deleteCreneau.startTime
+                );
+                return similaires.length > 1 ? (
+                  <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 mb-4 text-center">
+                    <p className="font-body text-xs text-orange-700">
+                      <strong>{similaires.length} créneaux similaires</strong> trouvés<br/>
+                      (même titre · même jour · même heure)
+                    </p>
+                  </div>
+                ) : null;
+              })()}
+
+              <div className="flex flex-col gap-2">
+                <button onClick={() => confirmDelete(false)} disabled={deleteDeleting}
+                  className="w-full py-3 rounded-xl font-body text-sm font-semibold text-white bg-red-500 hover:bg-red-600 border-none cursor-pointer disabled:opacity-50">
+                  {deleteDeleting ? <Loader2 size={16} className="animate-spin inline mr-2"/> : null}
+                  Supprimer ce créneau uniquement
+                </button>
+                {(() => {
+                  const dow = new Date(deleteCreneau.date).getDay();
+                  const similaires = creneaux.filter(c =>
+                    c.activityTitle === deleteCreneau.activityTitle &&
+                    new Date(c.date).getDay() === dow &&
+                    c.startTime === deleteCreneau.startTime
+                  );
+                  return similaires.length > 1 ? (
+                    <button onClick={() => confirmDelete(true)} disabled={deleteDeleting}
+                      className="w-full py-3 rounded-xl font-body text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 border-none cursor-pointer disabled:opacity-50">
+                      Supprimer les {similaires.length} créneaux similaires
+                    </button>
+                  ) : null;
+                })()}
+                <button onClick={() => setDeleteCreneau(null)} disabled={deleteDeleting}
+                  className="w-full py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
+                  Annuler
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal édition créneau ── */}
       {editCreneau && (
