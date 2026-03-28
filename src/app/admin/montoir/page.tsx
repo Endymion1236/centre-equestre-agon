@@ -3,6 +3,16 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { collection, getDocs, getDoc, updateDoc, addDoc, doc, query, where, serverTimestamp, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { validateChildrenUpdate } from "@/lib/utils";
+
+const calcAge = (birthDate: any): string => {
+  if (!birthDate) return "";
+  const bd = new Date(typeof birthDate === "string" ? birthDate : birthDate?.seconds ? birthDate.seconds * 1000 : birthDate);
+  if (isNaN(bd.getTime())) return "";
+  const now = new Date();
+  let age = now.getFullYear() - bd.getFullYear();
+  if (now.getMonth() < bd.getMonth() || (now.getMonth() === bd.getMonth() && now.getDate() < bd.getDate())) age--;
+  return `${age} ans`;
+};
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { useAgentContext } from "@/hooks/useAgentContext";
@@ -604,7 +614,10 @@ export default function MontoirPage() {
             {en.map((e:any, i:number) => (
               <div key={e.childId} className={`flex items-center px-3 py-2.5 rounded-lg ${i%2===0?"bg-sand":""} ${e.presence==="absent"?"opacity-40":""}`}>
                 <span className="w-8 font-body text-xs hidden sm:block" style={{color:"#475569"}}>{i+1}</span>
-                <span className="flex-1 font-body text-sm font-semibold text-blue-800">{e.childName}</span>
+                <span className="flex-1 font-body text-sm font-semibold text-blue-800">
+                  {e.childName}
+                  {(() => { const fam = families.find((f:any) => (f.children||[]).some((c:any)=>c.id===e.childId)); const child = (fam?.children||[]).find((c:any)=>c.id===e.childId); const age = calcAge(child?.birthDate); return age ? <span className="ml-1.5 font-body text-[10px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">{age}</span> : null; })()}
+                </span>
                 <span className="w-32 font-body text-xs hidden sm:block" style={{color:"#334155"}}>{e.familyName}</span>
                 <span className="w-28 sm:w-36">{!closed ? (() => {
                   // Filtrer les poneys déjà affectés dans des créneaux qui se chevauchent

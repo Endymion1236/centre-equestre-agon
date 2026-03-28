@@ -16,6 +16,19 @@ import type { Family } from "@/types";
 
 const galopLevels = ["—", "Bronze", "Argent", "Or", "G1", "G2", "G3", "G4", "G5", "G6", "G7"];
 
+const calcAge = (birthDate: any): string => {
+  if (!birthDate) return "";
+  const bd = new Date(
+    typeof birthDate === "string" ? birthDate :
+    birthDate?.seconds ? birthDate.seconds * 1000 : birthDate
+  );
+  if (isNaN(bd.getTime())) return "";
+  const now = new Date();
+  let age = now.getFullYear() - bd.getFullYear();
+  if (now.getMonth() < bd.getMonth() || (now.getMonth() === bd.getMonth() && now.getDate() < bd.getDate())) age--;
+  return `${age} ans`;
+};
+
 export default function CavaliersPage() {
     const { setAgentContext } = useAgentContext("cavaliers");
 
@@ -745,7 +758,12 @@ export default function CavaliersPage() {
                                   <div className="flex-1 min-w-0">
                                     <div className="font-body text-sm font-semibold text-blue-800">{child.firstName}{child.lastName ? ` ${child.lastName}` : ""}</div>
                                     <div className="font-body text-xs text-slate-600">
-                                      {child.birthDate ? `Né(e) le ${new Date(typeof child.birthDate === "string" ? child.birthDate : child.birthDate?.seconds ? child.birthDate.seconds * 1000 : child.birthDate).toLocaleDateString("fr-FR")}` : ""}
+                                      {child.birthDate ? (
+                                        <>
+                                          {`Né(e) le ${new Date(typeof child.birthDate === "string" ? child.birthDate : child.birthDate?.seconds ? child.birthDate.seconds * 1000 : child.birthDate).toLocaleDateString("fr-FR")}`}
+                                          <span className="ml-2 font-semibold text-blue-500">{calcAge(child.birthDate)}</span>
+                                        </>
+                                      ) : ""}
                                     </div>
                                   </div>
                                 </div>
