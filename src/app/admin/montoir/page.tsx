@@ -5,6 +5,7 @@ import { db } from "@/lib/firebase";
 import { validateChildrenUpdate } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
+import { useAgentContext } from "@/hooks/useAgentContext";
 import { emailTemplates } from "@/lib/email-templates";
 import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Printer, ClipboardList, Mic, MicOff, Sparkles,
 } from "lucide-react";
@@ -14,6 +15,7 @@ const typeColors: Record<string,string> = {stage:"#27ae60",balade:"#e67e22",cour
 
 export default function MontoirPage() {
   const { toast } = useToast();
+  const { setAgentContext } = useAgentContext("montoir");
   const [dayOffset, setDayOffset] = useState(0);
   const [creneaux, setCreneaux] = useState<Creneau[]>([]);
   const [equides, setEquides] = useState<any[]>([]);
@@ -33,11 +35,27 @@ export default function MontoirPage() {
         getDocs(collection(db,"cartes")),
         getDocs(collection(db,"families")),
       ]);
-      setCreneaux(cSnap.docs.map(d=>({id:d.id,...d.data()})).sort((a:any,b:any)=>a.startTime.localeCompare(b.startTime)) as Creneau[]);
+      const creneauxData = cSnap.docs.map(d=>({id:d.id,...d.data()})).sort((a:any,b:any)=>a.startTime.localeCompare(b.startTime)) as Creneau[];
+      setCreneaux(creneauxData);
       setEquides(eSnap.docs.map(d=>({id:d.id,...d.data()})));
       setIndisponibilites(iSnap.docs.map(d=>({id:d.id,...d.data()})));
       setCartes(cartSnap.docs.map(d=>({id:d.id,...d.data()})));
       setFamilies(famSnap.docs.map(d=>({id:d.id,...d.data()})));
+
+      // Contexte agent — données montoir du jour
+      setAgentContext({
+        creneaux_du_jour: creneauxData.map((c: any) => ({
+          id: c.id,
+          titre: c.activityTitle,
+          heure: `${c.startTime}-${c.endTime}`,
+          inscrits: (c.enrolled||[]).length,
+          presents: (c.enrolled||[]).filter((e:any) => e.presence === "present").length,
+          absents: (c.enrolled||[]).filter((e:any) => e.presence === "absent").length,
+          non_pointes: (c.enrolled||[]).filter((e:any) => !e.presence).length,
+          statut: c.status || "planned",
+        })),
+        a_cloturer: creneauxData.filter((c: any) => c.status !== "closed").length,
+      });
     } catch(e){console.error(e);}
     setLoading(false);
   };

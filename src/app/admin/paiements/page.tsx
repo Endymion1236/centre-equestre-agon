@@ -7,6 +7,7 @@ import { emailTemplates } from "@/lib/email-templates";
 import { safeNumber, round2, generateOrderId } from "@/lib/utils";
 import { Card, Badge, Button } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
+import { useAgentContext } from "@/hooks/useAgentContext";
 import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle, Copy } from "lucide-react";
 import type { Family, Activity } from "@/types";
 
@@ -189,8 +190,24 @@ export default function PaiementsPage() {
       setEncaissements(encSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
       setAvoirs(avoirsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
       if (promoSnap.exists() && promoSnap.data().items) setPromos(promoSnap.data().items);
-      setDeclarations(declSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
+      const decls = declSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setDeclarations(decls);
       setLoading(false);
+
+      // Contexte agent — données paiements
+      const impayes = (pays as any[]).filter(p => p.status === "pending" || p.status === "partial");
+      const totalImpaye = impayes.reduce((s: number, p: any) => s + ((p.totalTTC||0) - (p.paidAmount||0)), 0);
+      window.dispatchEvent(new CustomEvent("agent:setContext", { detail: {
+        module_actif: "paiements",
+        impayes_count: impayes.length,
+        impayes_total: `${totalImpaye.toFixed(2)}€`,
+        declarations_en_attente: decls.length,
+        impayes_details: impayes.slice(0, 10).map((p: any) => ({
+          famille: p.familyName,
+          montant: `${((p.totalTTC||0)-(p.paidAmount||0)).toFixed(2)}€`,
+          prestations: (p.items||[]).map((i: any) => i.activityTitle).join(", "),
+        })),
+      }}));
     }).catch(() => setLoading(false));
   }, []);
 

@@ -137,6 +137,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showVoice, setShowVoice] = useState(false);
   const [voiceContext, setVoiceContext] = useState<Record<string, any>>({});
+  const [moduleContext, setModuleContext] = useState<Record<string, any>>({});
+
+  // Écouter les événements des modules pour enrichir le contexte agent
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setModuleContext(prev => ({ ...prev, ...detail }));
+    };
+    window.addEventListener("agent:setContext", handler);
+    return () => window.removeEventListener("agent:setContext", handler);
+  }, []);
 
   // Charger le contexte pour l'assistant vocal
   useEffect(() => {
@@ -175,7 +186,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         const totalEncaisse = paysMois.filter(p=>p.status==="paid").reduce((s,p)=>s+(p.paidAmount||p.totalTTC||0),0);
         const nbImpayes = paysMois.filter(p=>p.status==="pending"||p.status==="partial").length;
 
-        setVoiceContext({
+        setVoiceContext(prev => ({
           date_aujourdhui: now.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}),
           semaine: `du ${mon.toLocaleDateString("fr-FR")} au ${sun.toLocaleDateString("fr-FR")}`,
           inscrits_semaine: totalInscrits,
@@ -199,7 +210,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             email: f.parentEmail || "",
             cavaliers: (f.children || []).map((c: any) => c.firstName).join(", "),
           })),
-        });
+          ...moduleContext, // Données enrichies par le module actif
+        }));
       } catch(e) { console.error("voiceContext error", e); }
     };
     loadContext();

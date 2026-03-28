@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useAgentContext } from "@/hooks/useAgentContext";
 import {
   findStageCreneaux, countExistingStageInscriptions, computeStageReductions,
   enrollChildInCreneau, createReservation, removeChildFromCreneau, deleteReservations,
@@ -20,6 +21,7 @@ import SimpleCreneauForm from "./SimpleCreneauForm";
 
 export default function PlanningPage() {
   const { toast } = useToast();
+  const { setAgentContext } = useAgentContext("planning");
   const [weekOffset, setWeekOffset] = useState(0); const [dayOffset, setDayOffset] = useState(0);
   const [monthOffset, setMonthOffset] = useState(0);
   const [viewMode, setViewMode] = useState<"week"|"day"|"month">("week");
@@ -86,7 +88,28 @@ export default function PlanningPage() {
       } else { s = fmtDate(weekDates[0]); e = fmtDate(weekDates[6]); }
 
       const cS = await getDocs(query(collection(db, "creneaux"), where("date", ">=", s), where("date", "<=", e)));
-      setCreneaux(cS.docs.map(d => ({ id: d.id, ...d.data() })) as any);
+      const creneauxData = cS.docs.map(d => ({ id: d.id, ...d.data() })) as any;
+      setCreneaux(creneauxData);
+
+      // Enrichir le contexte de l'agent avec les données du planning
+      const todayStr = fmtDate(new Date());
+      setAgentContext({
+        vue_planning: viewMode,
+        creneaux_visibles: creneauxData.slice(0, 30).map((c: any) => ({
+          id: c.id,
+          titre: c.activityTitle,
+          type: c.activityType,
+          date: c.date,
+          heure: `${c.startTime}-${c.endTime}`,
+          inscrits: c.enrolledCount || 0,
+          places: c.maxPlaces || 0,
+          statut: c.status || "planned",
+        })),
+        creneaux_aujourd_hui: creneauxData
+          .filter((c: any) => c.date === todayStr)
+          .map((c: any) => `${c.activityTitle} ${c.startTime} (${c.enrolledCount||0}/${c.maxPlaces})`),
+        activites_disponibles: aS.docs.map(d => ({ id: d.id, titre: (d.data() as any).title, type: (d.data() as any).type, prix: (d.data() as any).priceTTC })).slice(0, 20),
+      });
 
       // RDV Pro
       try {

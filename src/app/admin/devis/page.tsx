@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
+import { useAgentContext } from "@/hooks/useAgentContext";
 import { Plus, Trash2, Send, Check, Loader2, X, Copy, FileText, ChevronDown, ChevronUp } from "lucide-react";
 import type { Family } from "@/types";
 
@@ -73,14 +74,31 @@ export default function DevisPage() {
   });
   const [showQuick, setShowQuick] = useState(false);
 
+  const { setAgentContext } = useAgentContext("devis");
+
   const fetchData = async () => {
     const [devSnap, famSnap] = await Promise.all([
       getDocs(query(collection(db, "devis"), orderBy("createdAt", "desc"))),
       getDocs(collection(db, "families")),
     ]);
-    setDevisList(devSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Devis[]);
+    const devData = devSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Devis[];
+    setDevisList(devData);
     setFamilies(famSnap.docs.map(d => ({ firestoreId: d.id, ...d.data() })) as any);
     setLoading(false);
+
+    // Contexte agent
+    setAgentContext({
+      devis_en_cours: devData.filter(d => d.status === "draft" || d.status === "sent").map(d => ({
+        numero: d.numero,
+        famille: d.familyName,
+        total: `${d.totalTTC.toFixed(2)}€`,
+        statut: d.status,
+        valide_jusqu: d.validUntil,
+      })),
+      devis_count: devData.length,
+      devis_draft: devData.filter(d => d.status === "draft").length,
+      devis_envoyes: devData.filter(d => d.status === "sent").length,
+    });
   };
   useEffect(() => { fetchData(); }, []);
 

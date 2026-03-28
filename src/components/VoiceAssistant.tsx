@@ -258,6 +258,14 @@ Pas de markdown ni de listes — texte simple uniquement.`;
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Bouton Stop — visible uniquement quand l'IA parle */}
+          {speaking && (
+            <button onClick={stopSpeaking}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-400 border-none cursor-pointer transition-all animate-pulse">
+              <span className="w-2 h-2 rounded-sm bg-white" />
+              <span className="font-body text-[11px] font-semibold text-white">Stop</span>
+            </button>
+          )}
           <button onClick={() => { setMuted(!muted); if (speaking) stopSpeaking(); }}
             className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center border-none cursor-pointer hover:bg-white/20">
             {muted ? <VolumeX size={14} className="text-white/50" /> : <Volume2 size={14} className="text-white" />}
