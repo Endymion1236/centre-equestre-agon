@@ -173,6 +173,10 @@ Pas de markdown ni de listes — texte simple uniquement.`;
           setLoading(false);
           return;
         }
+        // Si c'est le résultat d'une confirmation, ajouter "Confirmé" dans l'historique
+        if (isConfirmation) {
+          addMessage("user", "✓ Confirmé");
+        }
         setPendingAction(null);
         const answer = data.message || data.answer || data.error || "Je n'ai pas pu répondre.";
         addMessage("assistant", answer);

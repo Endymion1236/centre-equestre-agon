@@ -410,7 +410,8 @@ RÈGLES IMPORTANTES :
 4. Pour un devis : identifie la famille dans les données contexte (familyId requis). Si tu ne trouves pas la famille, demande le nom exact.
 5. Pour un devis multi-enfants : calcule adhésion dégressive automatiquement (60/40/20/0€ selon le rang).
 6. Sois précis : "Je vais créer un devis pour Duhem — 3× Forfait 3×/sem (4200€) + adhésions (120€) = 4320€. Tu confirmes ?"
-7. Texte simple, max 3 phrases, pas de markdown.`;
+7. Dans l'historique, les messages commençant par ✅ indiquent des actions DÉJÀ EXÉCUTÉES — ne les répète pas.
+8. Texte simple, max 3 phrases, pas de markdown.`;
 
     // Construire l'historique de conversation
     const messages: Anthropic.MessageParam[] = [];
