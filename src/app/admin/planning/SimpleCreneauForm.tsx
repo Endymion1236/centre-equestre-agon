@@ -17,6 +17,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
   const [st, setSt] = useState("10:00");
   const [et, setEt] = useState("12:00");
   const [mon, setMon] = useState("");
+  const [color, setColor] = useState("");
   const [mp, setMp] = useState(8);
   const [date, setDate] = useState(defaultDate || fmtDate(new Date()));
   const [saving, setSaving] = useState(false);
@@ -87,6 +88,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
         startTime: hours.st, endTime: hours.et,
         monitor: mon, maxPlaces: mp, enrolledCount: 0, enrolled: [],
         status: "planned",
+        ...(color ? { color } : {}),
         priceHT: ttc / (1 + (act.tvaTaux || 5.5) / 100),
         priceTTC: ttc, tvaTaux: act.tvaTaux || 5.5,
         ...((act as any).price1day  ? { price1day:  (act as any).price1day  } : {}),
@@ -158,6 +160,20 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
             {moniteurs.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
           <input type="number" value={mp} onChange={e => setMp(parseInt(e.target.value))} className={`${inp} w-20`} placeholder="Places"/>
+        </div>
+
+        <div>
+          <label className="font-body text-[10px] text-slate-500 block mb-1.5">Couleur (optionnel)</label>
+          <div className="flex items-center gap-2 flex-wrap">
+            <input type="color" value={color || "#2050A0"} onChange={e => setColor(e.target.value)}
+              className="w-9 h-9 rounded-lg border border-gray-200 cursor-pointer p-0.5"/>
+            {["","#2050A0","#27ae60","#e67e22","#7c3aed","#D63031","#F0A010","#0ea5e9","#db2777","#64748b"].map(c => (
+              <button key={c||"default"} onClick={() => setColor(c)}
+                className={`w-6 h-6 rounded-full border-2 cursor-pointer flex-shrink-0 ${color===c?"border-blue-500 scale-125":"border-white shadow-sm"}`}
+                style={{background: c || "#e2e8f0"}}
+                title={c ? c : "Couleur par défaut"}/>
+            ))}
+          </div>
         </div>
 
         {multiDay && previewDates.length > 0 && (

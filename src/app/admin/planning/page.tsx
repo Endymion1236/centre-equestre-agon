@@ -215,7 +215,7 @@ export default function PlanningPage() {
     if (!editCreneau) return;
     setEditSaving(true);
     try {
-      const update = {
+      const update: any = {
         activityTitle: editForm.activityTitle,
         monitor: editForm.monitor,
         startTime: editForm.startTime,
@@ -224,6 +224,7 @@ export default function PlanningPage() {
         priceTTC: parseFloat(editForm.priceTTC) || 0,
         updatedAt: serverTimestamp(),
       };
+      if (editForm.color) update.color = editForm.color;
 
       if (editApplyAll) {
         // Appliquer à tous les créneaux du même titre + même jour de semaine
@@ -762,9 +763,29 @@ export default function PlanningPage() {
         {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:
         <div className="grid grid-cols-7 gap-1.5 overflow-x-auto" style={{ minWidth: "640px" }}>
           {weekDates.map((d,i)=><div key={i} onClick={()=>{setViewMode("day");setDayOffset(Math.round((d.getTime()-new Date().getTime())/86400000));}} className={`text-center py-2 rounded-lg font-body text-xs font-semibold cursor-pointer hover:ring-2 hover:ring-blue-300 ${isToday(d)?"bg-blue-500 text-white":"bg-sand text-slate-600"}`}>{fmtDateFR(d)}</div>)}
-          {weekDates.map((d,i)=>{const ds=fmtDate(d);const dc=creneaux.filter(c=>c.date===ds).sort((a,b)=>a.startTime.localeCompare(b.startTime));return(
+          {weekDates.map((d,i)=>{const ds=fmtDate(d);const dc=creneaux.filter(c=>c.date===ds).sort((a,b)=>a.startTime.localeCompare(b.startTime));
+            // Grouper créneaux au même horaire sur la même ligne
+            const grouped:Array<{key:string;items:typeof dc}>=[];
+            dc.forEach(c=>{const key=`${c.startTime}-${c.endTime}`;const g=grouped.find(x=>x.key===key);if(g)g.items.push(c);else grouped.push({key,items:[c]});});
+            return(
             <div key={`c${i}`} className="min-h-[140px] flex flex-col gap-1">
-              {dc.map(c=>{const en=c.enrolled||[];const fill=c.maxPlaces>0?en.length/c.maxPlaces:0;const col=typeColors[c.activityType]||"#666";return(
+              {grouped.map(g=>{
+                // Plusieurs créneaux même horaire → côte à côte
+                if(g.items.length>1) return(
+                  <div key={g.key} className="flex gap-0.5">
+                    {g.items.map(c=>{const en=c.enrolled||[];const fill=c.maxPlaces>0?en.length/c.maxPlaces:0;const col=(c as any).color||typeColors[c.activityType]||"#666";return(
+                      <div key={c.id} onClick={()=>setSelectedCreneau(c)} className="flex-1 min-w-0 bg-white rounded-lg p-1.5 border border-blue-500/8 group relative hover:shadow-md cursor-pointer" style={{borderLeftWidth:3,borderLeftColor:col}}>
+                        <div className="font-body text-[10px] font-semibold truncate" style={{color:col}}>{c.startTime}</div>
+                        <div className="font-body text-[10px] font-semibold text-blue-800 leading-tight mt-0.5 truncate">{c.activityTitle}</div>
+                        <div className="font-body text-[9px] text-slate-500 truncate">{c.monitor}</div>
+                        <div className={`font-body text-[9px] font-semibold mt-0.5 ${fill>=1?"text-red-500":fill>=0.7?"text-orange-500":"text-green-600"}`}>{en.length}/{c.maxPlaces}</div>
+                        <button onClick={e=>{e.stopPropagation();handleDelete(c.id!);}} className="absolute top-0.5 right-0.5 w-4 h-4 rounded bg-red-50 text-red-400 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Trash2 size={8}/></button>
+                        <button onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0,color:(c as any).color||""});setEditApplyAll(false);}} className="absolute top-0.5 right-5 w-4 h-4 rounded bg-blue-50 text-blue-400 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Settings size={8}/></button>
+                      </div>);})}
+                  </div>
+                );
+                // Créneau seul — affichage normal
+                const c=g.items[0];const en=c.enrolled||[];const fill=c.maxPlaces>0?en.length/c.maxPlaces:0;const col=(c as any).color||typeColors[c.activityType]||"#666";return(
                 <div key={c.id} onClick={()=>setSelectedCreneau(c)} className="bg-white rounded-lg p-2 border border-blue-500/8 group relative hover:shadow-md cursor-pointer" style={{borderLeftWidth:3,borderLeftColor:col}}>
                   <div className="font-body text-[11px] font-semibold" style={{color:col}}>{c.startTime}–{c.endTime}</div>
                   <div className="font-body text-xs font-semibold text-blue-800 leading-tight mt-0.5">{c.activityTitle}</div>
@@ -774,11 +795,10 @@ export default function PlanningPage() {
                     const isCard=e.paymentSource==="card";
                     const hasPaid=isCard||payments.some((p:any)=>p.familyId===e.familyId&&p.status==="paid");
                     const hasPending=!hasPaid&&!isCard&&payments.some((p:any)=>p.familyId===e.familyId&&(p.status==="pending"||p.status==="partial"));
-                    return <span key={e.childId} title={`${e.childName} — ${isCard?"carte":hasPaid?"réglé":hasPending?"en attente":"non réglé"}`}
-                      className={`w-2 h-2 rounded-full flex-shrink-0 ${isCard?"bg-blue-500":hasPaid?"bg-green-500":hasPending?"bg-orange-400":"bg-gray-300"}`}/>;
+                    return <span key={e.childId} title={`${e.childName}`} className={`w-2 h-2 rounded-full flex-shrink-0 ${isCard?"bg-blue-500":hasPaid?"bg-green-500":hasPending?"bg-orange-400":"bg-gray-300"}`}/>;
                   })}{en.length>4&&<span className="font-body text-[9px] text-slate-600">+{en.length-4}</span>}</div>}
                   <button onClick={e=>{e.stopPropagation();handleDelete(c.id!);}} className="absolute top-1 right-1 w-5 h-5 rounded bg-red-50 text-red-400 hover:bg-red-100 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Trash2 size={10}/></button>
-                  <button onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0});setEditApplyAll(false);}} className="absolute top-1 right-7 w-5 h-5 rounded bg-blue-50 text-blue-400 hover:bg-blue-100 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Settings size={10}/></button>
+                  <button onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0,color:(c as any).color||""});setEditApplyAll(false);}} className="absolute top-1 right-7 w-5 h-5 rounded bg-blue-50 text-blue-400 hover:bg-blue-100 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Settings size={10}/></button>
                 </div>);})}
               <button onClick={()=>{setSelectedDate(ds);setShowSimple(true);setShowGenerator(false);}} className="mt-auto py-2 rounded-lg border border-dashed border-gray-200 text-slate-400 hover:border-blue-300 hover:text-blue-400 bg-transparent cursor-pointer font-body text-lg">+</button>
             </div>);})}
@@ -793,10 +813,10 @@ export default function PlanningPage() {
         </div>
         {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:
         dayCreneaux.length===0?<Card padding="lg" className="text-center"><div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><CalendarDays size={28} className="text-blue-300" /></div><p className="font-body text-sm text-slate-600">Aucun créneau.</p></Card>:
-        <div className="flex flex-col gap-3">{dayCreneaux.map(c=>{const en=c.enrolled||[];const fill=c.maxPlaces>0?en.length/c.maxPlaces:0;const col=typeColors[c.activityType]||"#666";const ttc=(c as any).priceTTC||(c.priceHT||0)*(1+(c.tvaTaux||5.5)/100);return(
+        <div className="flex flex-col gap-3">{dayCreneaux.map(c=>{const en=c.enrolled||[];const fill=c.maxPlaces>0?en.length/c.maxPlaces:0;const col=(c as any).color||typeColors[c.activityType]||"#666";const ttc=(c as any).priceTTC||(c.priceHT||0)*(1+(c.tvaTaux||5.5)/100);return(
           <Card key={c.id} padding="md" className="cursor-pointer hover:shadow-lg" hover>
             <div onClick={()=>setSelectedCreneau(c)}>
-              <div className="flex items-start justify-between mb-3"><div className="flex items-center gap-4"><div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px] text-slate-600">{c.endTime}</div></div><div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs text-slate-600">{c.monitor} · {c.maxPlaces} pl.{ttc>0?` · ${ttc.toFixed(0)}€`:""}</div></div></div><div className="flex items-center gap-2"><Badge color={fill>=1?"red":fill>=0.7?"orange":"green"}>{en.length}/{c.maxPlaces}</Badge><button onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0});setEditApplyAll(false);}} className="text-blue-400 hover:text-blue-600 bg-blue-50 hover:bg-blue-100 w-8 h-8 rounded-lg border-none cursor-pointer flex items-center justify-center"><Settings size={15}/></button><button onClick={e=>{e.stopPropagation();handleDelete(c.id!);}} className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={16}/></button></div></div>
+              <div className="flex items-start justify-between mb-3"><div className="flex items-center gap-4"><div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px] text-slate-600">{c.endTime}</div></div><div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs text-slate-600">{c.monitor} · {c.maxPlaces} pl.{ttc>0?` · ${ttc.toFixed(0)}€`:""}</div></div></div><div className="flex items-center gap-2"><Badge color={fill>=1?"red":fill>=0.7?"orange":"green"}>{en.length}/{c.maxPlaces}</Badge><button onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0,color:(c as any).color||""});setEditApplyAll(false);}} className="text-blue-400 hover:text-blue-600 bg-blue-50 hover:bg-blue-100 w-8 h-8 rounded-lg border-none cursor-pointer flex items-center justify-center"><Settings size={15}/></button><button onClick={e=>{e.stopPropagation();handleDelete(c.id!);}} className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={16}/></button></div></div>
               {en.length>0&&<div className="ml-[68px] flex flex-wrap gap-2">{en.map((e:any)=>{
                 const isCard = e.paymentSource === "card";
                 const hasPaid = isCard || payments.some((p: any) => p.familyId === e.familyId && p.status === "paid" && (p.items||[]).some((i:any) => i.childId === e.childId && (i.creneauId === c.id || i.activityTitle === c.activityTitle)));
@@ -1049,6 +1069,21 @@ export default function PlanningPage() {
                 <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Titre</label>
                 <input value={editForm.activityTitle} onChange={e => setEditForm((f: any) => ({...f, activityTitle: e.target.value}))}
                   className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
+              </div>
+              <div>
+                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Couleur du créneau</label>
+                <div className="flex items-center gap-3">
+                  <input type="color" value={editForm.color || "#2050A0"}
+                    onChange={e => setEditForm((f: any) => ({...f, color: e.target.value}))}
+                    className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5"/>
+                  <div className="flex flex-wrap gap-1.5">
+                    {["#2050A0","#27ae60","#e67e22","#7c3aed","#D63031","#16a085","#F0A010","#0ea5e9","#db2777","#64748b"].map(color => (
+                      <button key={color} onClick={() => setEditForm((f: any) => ({...f, color}))}
+                        className={`w-6 h-6 rounded-full border-2 cursor-pointer ${editForm.color === color ? "border-blue-500 scale-125" : "border-white"}`}
+                        style={{background: color}}/>
+                    ))}
+                  </div>
+                </div>
               </div>
               <div>
                 <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Moniteur</label>
