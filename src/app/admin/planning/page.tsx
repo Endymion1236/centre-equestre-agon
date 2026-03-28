@@ -780,14 +780,26 @@ export default function PlanningPage() {
           <div className="flex gap-2"><button onClick={()=>setWeekOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setWeekOffset(w=>w+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Suiv.<ChevronRight size={16}/></button></div>
         </div>
         {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:
-        <div className="grid grid-cols-7 gap-1.5 overflow-x-auto" style={{ minWidth: "640px" }}>
+        <div className="grid grid-cols-7 gap-2 w-full">
           {weekDates.map((d,i)=><div key={i} onClick={()=>{setViewMode("day");setDayOffset(Math.round((d.getTime()-new Date().getTime())/86400000));}} className={`text-center py-2 rounded-lg font-body text-xs font-semibold cursor-pointer hover:ring-2 hover:ring-blue-300 ${isToday(d)?"bg-blue-500 text-white":"bg-sand text-slate-600"}`}>{fmtDateFR(d)}</div>)}
-          {weekDates.map((d,i)=>{const ds=fmtDate(d);const dc=creneaux.filter(c=>c.date===ds).sort((a,b)=>a.startTime.localeCompare(b.startTime));
-            // Grouper créneaux au même horaire sur la même ligne
+          {weekDates.map((d,i)=>{const ds=fmtDate(d);const allDc=creneaux.filter(c=>c.date===ds).sort((a,b)=>a.startTime.localeCompare(b.startTime));
+            // Séparer cours et stages
+            const isStageType=(c:any)=>c.activityType==="stage"||c.activityType==="stage_journee";
+            const dc=allDc.filter(c=>!isStageType(c));
+            const stages=allDc.filter(c=>isStageType(c));
+            // Grouper créneaux cours au même horaire sur la même ligne
             const grouped:Array<{key:string;items:typeof dc}>=[];
             dc.forEach(c=>{const key=`${c.startTime}-${c.endTime}`;const g=grouped.find(x=>x.key===key);if(g)g.items.push(c);else grouped.push({key,items:[c]});});
             return(
             <div key={`c${i}`} className="min-h-[140px] flex flex-col gap-1">
+              {/* Compteur stages cliquable */}
+              {stages.length>0&&(
+                <button onClick={()=>{setViewMode("day");setDayOffset(Math.round((d.getTime()-new Date().getTime())/86400000));}}
+                  className="w-full flex items-center gap-1 px-2 py-1 rounded-lg bg-green-50 border border-green-200 border-dashed font-body text-[10px] font-semibold text-green-700 hover:bg-green-100 cursor-pointer border-solid-none">
+                  <span className="w-4 h-4 rounded-full bg-green-500 text-white text-[9px] flex items-center justify-center flex-shrink-0">{stages.length}</span>
+                  <span className="truncate">{stages.length===1?stages[0].activityTitle:`${stages.length} stages`}</span>
+                </button>
+              )}
               {grouped.map(g=>{
                 // Plusieurs créneaux même horaire → côte à côte
                 if(g.items.length>1) return(

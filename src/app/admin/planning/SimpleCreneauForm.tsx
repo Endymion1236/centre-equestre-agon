@@ -24,8 +24,9 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
   const [multiDay, setMultiDay] = useState(false);
   const [nbDays, setNbDays] = useState(5);
   const [skipWeekend, setSkipWeekend] = useState(true);
-  const [customHours, setCustomHours] = useState<Record<string, { st: string; et: string }>>({});
-  const [customMonitors, setCustomMonitors] = useState<Record<string, string>>({});
+  // Clé = index du jour (pas la date) pour gérer 2 demi-journées le même jour
+  const [customHours, setCustomHours] = useState<Record<number, { st: string; et: string }>>({});
+  const [customMonitors, setCustomMonitors] = useState<Record<number, string>>({});
   const [moniteurs, setMoniteurs] = useState<string[]>([]);
 
   useEffect(() => {
@@ -64,8 +65,8 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
     if (!multiDay) return;
     const dates = getEffectiveDates();
     setCustomHours(prev => {
-      const next: Record<string, { st: string; et: string }> = {};
-      dates.forEach(d => { next[d] = prev[d] || { st, et }; });
+      const next: Record<number, { st: string; et: string }> = {};
+      dates.forEach((_, idx) => { next[idx] = prev[idx] || { st, et }; });
       return next;
     });
   }, [date, nbDays, skipWeekend, multiDay, customDates]);
@@ -75,9 +76,9 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
     if (multiDay) {
       setCustomHours(prev => {
         const next = { ...prev };
-        generateDates().forEach(d => {
-          if (!prev[d] || (prev[d].st === st && prev[d].et === et)) {
-            next[d] = { st: newSt, et: newEt };
+        getEffectiveDates().forEach((_, idx) => {
+          if (!prev[idx] || (prev[idx].st === st && prev[idx].et === et)) {
+            next[idx] = { st: newSt, et: newEt };
           }
         });
         return next;
@@ -90,12 +91,12 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
     setSaving(true);
     const ttc = (act as any).priceTTC || (act.priceHT || 0) * (1 + (act.tvaTaux || 5.5) / 100);
     const dates = multiDay ? getEffectiveDates() : [date];
-    const creneaux = dates.map(d => {
-      const hours = (multiDay && customHours[d]) ? customHours[d] : { st, et };
+    const creneaux = dates.map((d, idx) => {
+      const hours = (multiDay && customHours[idx]) ? customHours[idx] : { st, et };
       return {
         activityId: actId, activityTitle: act.title, activityType: act.type, date: d,
         startTime: hours.st, endTime: hours.et,
-        monitor: (multiDay && customMonitors[d]) ? customMonitors[d] : mon, maxPlaces: mp, enrolledCount: 0, enrolled: [],
+        monitor: (multiDay && customMonitors[idx] !== undefined) ? customMonitors[idx] : mon, maxPlaces: mp, enrolledCount: 0, enrolled: [],
         status: "planned",
         ...(color ? { color } : {}),
         priceHT: ttc / (1 + (act.tvaTaux || 5.5) / 100),
@@ -193,9 +194,9 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
             {previewDates.map((d, idx) => {
               const generatedDate = generateDates()[idx];
               const isDateCustom = customDates[idx] !== undefined;
-              const isMonitorCustom = customMonitors[d] !== undefined && customMonitors[d] !== mon;
+              const isMonitorCustom = customMonitors[idx] !== undefined && customMonitors[idx] !== mon;
               const dayLabel = new Date(d + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "short" });
-              const hours = customHours[d] || { st, et };
+              const hours = customHours[idx] || { st, et };
               const isHoursCustom = hours.st !== st || hours.et !== et;
               const isCustom = isDateCustom || isHoursCustom || isMonitorCustom;
               return (
@@ -207,30 +208,24 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
                         const newDate = e.target.value;
                         setCustomDates(prev => ({ ...prev, [idx]: newDate }));
                         // Migrer les customHours si la date change
-                        setCustomHours(prev => {
-                          const oldHours = prev[d] || { st, et };
-                          const next = { ...prev };
-                          delete next[d];
-                          next[newDate] = oldHours;
-                          return next;
-                        });
+                        // Les horaires sont indexés par idx, pas par date — rien à migrer
                       }}
                       className={`flex-1 px-2 py-1 rounded-lg border font-body text-xs bg-white focus:outline-none focus:border-blue-500 ${isDateCustom ? "border-orange-300 font-semibold text-orange-700" : "border-blue-200 text-blue-700"}`}/>
                     {isCustom && (
                       <button onClick={() => {
                         setCustomDates(prev => { const n = {...prev}; delete n[idx]; return n; });
-                        setCustomHours(prev => ({ ...prev, [d]: { st, et } }));
-                        setCustomMonitors(prev => { const n = {...prev}; delete n[d]; return n; });
+                        setCustomHours(prev => ({ ...prev, [idx]: { st, et } }));
+                        setCustomMonitors(prev => { const n = {...prev}; delete n[idx]; return n; });
                       }} title="Réinitialiser ce jour" className="text-slate-400 hover:text-red-400 bg-transparent border-none cursor-pointer text-sm">↺</button>
                     )}
                   </div>
                   <div className="flex items-center gap-2 pl-7">
                     <input type="time" value={hours.st}
-                      onChange={e => setCustomHours(prev => ({ ...prev, [d]: { ...(prev[d]||{st,et}), st: e.target.value } }))}
+                      onChange={e => setCustomHours(prev => ({ ...prev, [idx]: { ...(prev[idx]||{st,et}), st: e.target.value } }))}
                       className="w-20 px-2 py-1 rounded-lg border border-blue-200 font-body text-xs bg-white focus:outline-none focus:border-blue-500" />
                     <span className="font-body text-xs text-slate-400">→</span>
                     <input type="time" value={hours.et}
-                      onChange={e => setCustomHours(prev => ({ ...prev, [d]: { ...(prev[d]||{st,et}), et: e.target.value } }))}
+                      onChange={e => setCustomHours(prev => ({ ...prev, [idx]: { ...(prev[idx]||{st,et}), et: e.target.value } }))}
                       className="w-20 px-2 py-1 rounded-lg border border-blue-200 font-body text-xs bg-white focus:outline-none focus:border-blue-500" />
                     <span className={`font-body text-[10px] capitalize flex-1 ${isDateCustom ? "text-orange-600 font-semibold" : "text-slate-400"}`}>
                       {dayLabel}
@@ -240,13 +235,13 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
                   {/* Moniteur par jour */}
                   <div className="flex items-center gap-2 pl-7">
                     <span className="font-body text-[10px] text-slate-400 w-16 flex-shrink-0">Moniteur</span>
-                    <select value={customMonitors[d] ?? mon}
-                      onChange={e => setCustomMonitors(prev => ({ ...prev, [d]: e.target.value }))}
+                    <select value={customMonitors[idx] ?? mon}
+                      onChange={e => setCustomMonitors(prev => ({ ...prev, [idx]: e.target.value }))}
                       className={`flex-1 px-2 py-1 rounded-lg border font-body text-xs bg-white focus:outline-none focus:border-blue-500 ${isMonitorCustom ? "border-orange-300 text-orange-700 font-semibold" : "border-blue-200 text-blue-700"}`}>
                       {moniteurs.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
                     {isMonitorCustom && (
-                      <button onClick={() => setCustomMonitors(prev => { const n = {...prev}; delete n[d]; return n; })}
+                      <button onClick={() => setCustomMonitors(prev => { const n = {...prev}; delete n[idx]; return n; })}
                         title="Réinitialiser" className="text-slate-400 hover:text-red-400 bg-transparent border-none cursor-pointer text-sm flex-shrink-0">↺</button>
                     )}
                   </div>
