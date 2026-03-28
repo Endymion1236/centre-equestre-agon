@@ -35,7 +35,11 @@ export default function CavaliersPage() {
 
   // ─── Création famille ───
   const [showCreateFamily, setShowCreateFamily] = useState(false);
-  const [newFamily, setNewFamily] = useState({ parentName: "", parentEmail: "", parentPhone: "" });
+  const [newFamily, setNewFamily] = useState({
+    parentName: "", parentEmail: "", parentPhone: "",
+    accountType: "particulier" as "particulier" | "asso" | "collectivite",
+    raisonSociale: "", structureParente: "", siret: "",
+  });
   const [newChildren, setNewChildren] = useState<{ firstName: string; birthDate: string; galopLevel: string }[]>([
     { firstName: "", birthDate: "", galopLevel: "—" },
   ]);
@@ -120,24 +124,37 @@ export default function CavaliersPage() {
           sanitaryForm: null,
         }));
 
+      // Calculer le parentName automatiquement selon le type
+      const computedName = newFamily.accountType === "particulier"
+        ? newFamily.parentName.trim()
+        : newFamily.accountType === "collectivite" && newFamily.structureParente && newFamily.raisonSociale
+          ? `${newFamily.structureParente.trim()} — ${newFamily.raisonSociale.trim()}`
+          : newFamily.raisonSociale.trim() || newFamily.parentName.trim();
+
       await addDoc(collection(db, "families"), {
-        parentName: newFamily.parentName.trim(),
+        parentName: computedName,
         parentEmail: newFamily.parentEmail.trim(),
         parentPhone: newFamily.parentPhone.trim(),
-        authProvider: "admin", // Créé par l'admin, pas via Google/Facebook
-        authUid: "", // Pas de compte auth associé
+        accountType: newFamily.accountType,
+        ...(newFamily.accountType !== "particulier" && {
+          raisonSociale: newFamily.raisonSociale.trim(),
+          structureParente: newFamily.structureParente.trim(),
+          siret: newFamily.siret.trim(),
+        }),
+        authProvider: "admin",
+        authUid: "",
         children,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
 
       setShowCreateFamily(false);
-      setNewFamily({ parentName: "", parentEmail: "", parentPhone: "" });
+      setNewFamily({ parentName: "", parentEmail: "", parentPhone: "", accountType: "particulier", raisonSociale: "", structureParente: "", siret: "" });
       setNewChildren([{ firstName: "", birthDate: "", galopLevel: "—" }]);
       // Email bienvenue
       if (newFamily.parentEmail.trim()) {
         try {
-          const emailData = emailTemplates.bienvenueNouvelleFamille({ parentName: newFamily.parentName.trim() });
+          const emailData = emailTemplates.bienvenueNouvelleFamille({ parentName: computedName });
           fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: newFamily.parentEmail.trim(), ...emailData }) }).catch(e => console.warn("Email:", e));
         } catch (e) { console.error("Email bienvenue:", e); }
       }
@@ -518,11 +535,15 @@ export default function CavaliersPage() {
               <Card key={family.firestoreId} padding="md">
                 <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpandedFamily(isExp ? null : family.firestoreId)}>
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl bg-blue-500 flex items-center justify-center font-body text-sm font-bold text-white">
+                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-body text-sm font-bold text-white ${(family as any).accountType === "asso" ? "bg-purple-500" : (family as any).accountType === "collectivite" ? "bg-teal-500" : "bg-blue-500"}`}>
                       {family.parentName?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
                     </div>
                     <div>
-                      <div className="font-body text-base font-semibold text-blue-800">{family.parentName || "Sans nom"}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="font-body text-base font-semibold text-blue-800">{family.parentName || "Sans nom"}</div>
+                        {(family as any).accountType === "asso" && <span className="font-body text-[10px] font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">ASSO</span>}
+                        {(family as any).accountType === "collectivite" && <span className="font-body text-[10px] font-semibold text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded">COLLECTIVITÉ</span>}
+                      </div>
                       <div className="font-body text-xs text-slate-600">
                         {family.parentEmail && <><Mail size={10} className="inline mr-1" />{family.parentEmail} · </>}
                         {family.parentPhone && <><Phone size={10} className="inline mr-1" />{family.parentPhone} · </>}
@@ -1063,14 +1084,63 @@ export default function CavaliersPage() {
               <button onClick={() => setShowCreateFamily(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none hover:bg-gray-200"><X size={16} /></button>
             </div>
             <div className="p-5 space-y-5">
-              {/* Parent */}
+              {/* Type de compte */}
               <div>
-                <div className="font-body text-xs font-semibold text-blue-500 uppercase tracking-wider mb-3">Parent / responsable</div>
+                <div className="font-body text-xs font-semibold text-blue-500 uppercase tracking-wider mb-3">Type de compte</div>
+                <div className="flex gap-2">
+                  {([["particulier","👤 Particulier"],["asso","🤝 Association"],["collectivite","🏛️ Collectivité"]] as const).map(([val, label]) => (
+                    <button key={val} onClick={() => setNewFamily(f => ({ ...f, accountType: val }))}
+                      className={`flex-1 py-2 px-3 rounded-lg border font-body text-xs font-semibold cursor-pointer transition-all ${newFamily.accountType === val ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-slate-500"}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Parent / responsable */}
+              <div>
+                <div className="font-body text-xs font-semibold text-blue-500 uppercase tracking-wider mb-3">
+                  {newFamily.accountType === "particulier" ? "Parent / responsable" : "Structure"}
+                </div>
                 <div className="grid grid-cols-1 gap-3">
-                  <div>
-                    <label className={labelStyle}>Nom complet *</label>
-                    <input className={inputStyle} value={newFamily.parentName} onChange={e => setNewFamily({ ...newFamily, parentName: e.target.value })} placeholder="Ex: Dupont Marie" />
-                  </div>
+
+                  {newFamily.accountType === "particulier" ? (
+                    <div>
+                      <label className={labelStyle}>Nom complet *</label>
+                      <input className={inputStyle} value={newFamily.parentName} onChange={e => setNewFamily({ ...newFamily, parentName: e.target.value })} placeholder="Ex: Dupont Marie" />
+                    </div>
+                  ) : (
+                    <>
+                      {newFamily.accountType === "collectivite" && (
+                        <div>
+                          <label className={labelStyle}>Communauté / Structure parente *</label>
+                          <input className={inputStyle} value={newFamily.structureParente}
+                            onChange={e => setNewFamily({ ...newFamily, structureParente: e.target.value })}
+                            placeholder="Ex: Coutances Mer et Bocage" />
+                          <div className="font-body text-[10px] text-slate-400 mt-1">Sera préfixé automatiquement dans le nom</div>
+                        </div>
+                      )}
+                      <div>
+                        <label className={labelStyle}>
+                          {newFamily.accountType === "collectivite" ? "Nom du centre / service *" : "Nom de l'association *"}
+                        </label>
+                        <input className={inputStyle} value={newFamily.raisonSociale}
+                          onChange={e => setNewFamily({ ...newFamily, raisonSociale: e.target.value })}
+                          placeholder={newFamily.accountType === "collectivite" ? "Ex: Centre de loisirs de Coutances" : "Ex: Club équestre..."} />
+                        {newFamily.accountType === "collectivite" && newFamily.structureParente && newFamily.raisonSociale && (
+                          <div className="font-body text-[10px] text-green-600 mt-1">
+                            → Intitulé : <strong>{newFamily.structureParente} — {newFamily.raisonSociale}</strong>
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <label className={labelStyle}>SIRET (optionnel)</label>
+                        <input className={inputStyle} value={newFamily.siret}
+                          onChange={e => setNewFamily({ ...newFamily, siret: e.target.value })}
+                          placeholder="Ex: 123 456 789 00012" />
+                      </div>
+                    </>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className={labelStyle}>Email</label>
@@ -1125,7 +1195,7 @@ export default function CavaliersPage() {
             </div>
             <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
               <button onClick={() => setShowCreateFamily(false)} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-              <button onClick={handleCreateFamily} disabled={saving || !newFamily.parentName.trim()}
+              <button onClick={handleCreateFamily} disabled={saving || !(newFamily.accountType === "particulier" ? newFamily.parentName.trim() : newFamily.raisonSociale.trim())}
                 className={`flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600 ${saving || !newFamily.parentName.trim() ? "opacity-50 cursor-not-allowed" : ""}`}>
                 {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Créer la famille
               </button>
