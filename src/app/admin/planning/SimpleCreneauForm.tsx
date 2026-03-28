@@ -49,17 +49,25 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
     return dates;
   };
 
-  const previewDates = multiDay ? generateDates() : [];
+  // customDates permet de remplacer une date générée par une date manuelle
+  const [customDates, setCustomDates] = useState<Record<number, string>>({});
+
+  const getEffectiveDates = (): string[] => {
+    const generated = generateDates();
+    return generated.map((d, i) => customDates[i] || d);
+  };
+
+  const previewDates = multiDay ? getEffectiveDates() : [];
 
   useEffect(() => {
     if (!multiDay) return;
-    const dates = generateDates();
+    const dates = getEffectiveDates();
     setCustomHours(prev => {
       const next: Record<string, { st: string; et: string }> = {};
       dates.forEach(d => { next[d] = prev[d] || { st, et }; });
       return next;
     });
-  }, [date, nbDays, skipWeekend, multiDay]);
+  }, [date, nbDays, skipWeekend, multiDay, customDates]);
 
   const updateGlobalHours = (newSt: string, newEt: string) => {
     setSt(newSt); setEt(newEt);
@@ -80,7 +88,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
     if (!actId || !act) return;
     setSaving(true);
     const ttc = (act as any).priceTTC || (act.priceHT || 0) * (1 + (act.tvaTaux || 5.5) / 100);
-    const dates = multiDay ? generateDates() : [date];
+    const dates = multiDay ? getEffectiveDates() : [date];
     const creneaux = dates.map(d => {
       const hours = (multiDay && customHours[d]) ? customHours[d] : { st, et };
       return {
@@ -179,29 +187,53 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
         {multiDay && previewDates.length > 0 && (
           <div className="bg-blue-50 rounded-xl p-3 flex flex-col gap-2">
             <div className="font-body text-xs font-semibold text-blue-800 mb-0.5">
-              Horaires par jour — modifiez si besoin :
+              Jours du stage — modifiez date et horaires si besoin :
             </div>
-            {previewDates.map(d => {
-              const dayLabel = new Date(d).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "short" });
+            {previewDates.map((d, idx) => {
+              const generatedDate = generateDates()[idx];
+              const isDateCustom = customDates[idx] !== undefined;
+              const dayLabel = new Date(d + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "short" });
               const hours = customHours[d] || { st, et };
-              const isCustom = hours.st !== st || hours.et !== et;
+              const isHoursCustom = hours.st !== st || hours.et !== et;
+              const isCustom = isDateCustom || isHoursCustom;
               return (
-                <div key={d} className={`flex items-center gap-2 px-3 py-2 rounded-lg ${isCustom ? "bg-orange-50 border border-orange-100" : "bg-white border border-blue-100"}`}>
-                  <span className={`font-body text-xs flex-1 capitalize ${isCustom ? "font-semibold text-orange-700" : "text-blue-700"}`}>
-                    {dayLabel}
-                    {isCustom && <span className="ml-1.5 text-[9px] bg-orange-200 text-orange-700 px-1.5 py-0.5 rounded">perso</span>}
-                  </span>
-                  <input type="time" value={hours.st}
-                    onChange={e => setCustomHours(prev => ({ ...prev, [d]: { ...(prev[d]||{st,et}), st: e.target.value } }))}
-                    className="w-20 px-2 py-1 rounded-lg border border-blue-200 font-body text-xs bg-white focus:outline-none focus:border-blue-500" />
-                  <span className="font-body text-xs text-slate-400">→</span>
-                  <input type="time" value={hours.et}
-                    onChange={e => setCustomHours(prev => ({ ...prev, [d]: { ...(prev[d]||{st,et}), et: e.target.value } }))}
-                    className="w-20 px-2 py-1 rounded-lg border border-blue-200 font-body text-xs bg-white focus:outline-none focus:border-blue-500" />
-                  {isCustom && (
-                    <button onClick={() => setCustomHours(prev => ({ ...prev, [d]: { st, et } }))}
-                      title="Réinitialiser" className="text-slate-400 hover:text-red-400 bg-transparent border-none cursor-pointer text-sm">↺</button>
-                  )}
+                <div key={`${idx}-${d}`} className={`flex flex-col gap-1.5 px-3 py-2 rounded-lg ${isCustom ? "bg-orange-50 border border-orange-100" : "bg-white border border-blue-100"}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="font-body text-[10px] font-bold text-slate-400 w-5 text-center">J{idx + 1}</span>
+                    <input type="date" value={d}
+                      onChange={e => {
+                        const newDate = e.target.value;
+                        setCustomDates(prev => ({ ...prev, [idx]: newDate }));
+                        // Migrer les customHours si la date change
+                        setCustomHours(prev => {
+                          const oldHours = prev[d] || { st, et };
+                          const next = { ...prev };
+                          delete next[d];
+                          next[newDate] = oldHours;
+                          return next;
+                        });
+                      }}
+                      className={`flex-1 px-2 py-1 rounded-lg border font-body text-xs bg-white focus:outline-none focus:border-blue-500 ${isDateCustom ? "border-orange-300 font-semibold text-orange-700" : "border-blue-200 text-blue-700"}`}/>
+                    {isCustom && (
+                      <button onClick={() => {
+                        setCustomDates(prev => { const n = {...prev}; delete n[idx]; return n; });
+                        setCustomHours(prev => ({ ...prev, [d]: { st, et } }));
+                      }} title="Réinitialiser ce jour" className="text-slate-400 hover:text-red-400 bg-transparent border-none cursor-pointer text-sm">↺</button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 pl-7">
+                    <input type="time" value={hours.st}
+                      onChange={e => setCustomHours(prev => ({ ...prev, [d]: { ...(prev[d]||{st,et}), st: e.target.value } }))}
+                      className="w-20 px-2 py-1 rounded-lg border border-blue-200 font-body text-xs bg-white focus:outline-none focus:border-blue-500" />
+                    <span className="font-body text-xs text-slate-400">→</span>
+                    <input type="time" value={hours.et}
+                      onChange={e => setCustomHours(prev => ({ ...prev, [d]: { ...(prev[d]||{st,et}), et: e.target.value } }))}
+                      className="w-20 px-2 py-1 rounded-lg border border-blue-200 font-body text-xs bg-white focus:outline-none focus:border-blue-500" />
+                    <span className={`font-body text-[10px] capitalize flex-1 ${isDateCustom ? "text-orange-600 font-semibold" : "text-slate-400"}`}>
+                      {dayLabel}
+                      {isDateCustom && <span className="ml-1.5 bg-orange-200 text-orange-700 px-1.5 py-0.5 rounded text-[9px]">modifié</span>}
+                    </span>
+                  </div>
                 </div>
               );
             })}
