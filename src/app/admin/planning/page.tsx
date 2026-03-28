@@ -554,6 +554,48 @@ export default function PlanningPage() {
       toast(`${child.childName} désinscrit(e) — erreur ajustement paiement`, "warning");
     }
 
+    // ── Waitlist automatique : notifier le premier en attente si place libérée ──
+    try {
+      const freshCSnap = await getDoc(doc(db, "creneaux", cid));
+      if (freshCSnap.exists()) {
+        const freshC = freshCSnap.data() as any;
+        const placesLibres = (freshC.maxPlaces || 0) - (freshC.enrolledCount || (freshC.enrolled || []).length);
+        if (placesLibres > 0) {
+          const waitSnap = await getDocs(query(
+            collection(db, "waitlist"),
+            where("creneauId", "==", cid),
+            where("status", "==", "waiting"),
+          ));
+          const waiting = waitSnap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+          if (waiting.length > 0) {
+            const first = waiting[0] as any;
+            fetch("/api/send-email", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                to: first.familyEmail,
+                subject: `🎉 Une place s'est libérée — ${c.activityTitle}`,
+                html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+                  <p>Bonjour <strong>${first.familyName}</strong>,</p>
+                  <p>Une place s'est libérée pour <strong>${first.childName}</strong> dans :</p>
+                  <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
+                    <p style="margin:0;color:#166534;font-weight:600;">${c.activityTitle}</p>
+                    <p style="margin:8px 0 0;color:#555;font-size:13px;">📅 ${new Date(c.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} — ${c.startTime}–${c.endTime}</p>
+                  </div>
+                  <p>Connectez-vous à votre espace famille pour confirmer sous <strong>24h</strong>.</p>
+                  <p style="color:#666;font-size:12px;">À bientôt au centre équestre !</p>
+                </div>`,
+              }),
+            }).catch(() => {});
+            await updateDoc(doc(db, "waitlist", first.id), { status: "notified", notifiedAt: new Date().toISOString() });
+            toast(`🔔 ${first.childName} (liste d'attente) notifié(e) — place libérée`, "success");
+          }
+        }
+      }
+    } catch (e) { console.error("Erreur waitlist auto:", e); }
+
     const fresh = await refreshCreneaux();
     const upd = fresh.find(x => x.id === cid);
     if (upd) setSelectedCreneau(upd);
