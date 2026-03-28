@@ -61,7 +61,7 @@ export default function DashboardPage() {
       <h1 className="font-display text-2xl font-bold text-blue-800 mb-1">
         Bonjour {firstName} 👋
       </h1>
-      <p className="font-body text-sm text-gray-500 mb-8">
+      <p className="font-body text-sm text-gray-600 mb-8">
         Voici un résumé de l&apos;activité de votre famille.
       </p>
 
@@ -118,7 +118,7 @@ export default function DashboardPage() {
             <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><Calendar size={20} className="text-blue-500" /></div>
             <div>
               <div className="font-body text-xl font-bold text-blue-500">{stats.reservations}</div>
-              <div className="font-body text-xs text-gray-500">Réservations</div>
+              <div className="font-body text-xs text-gray-600">Réservations</div>
             </div>
           </div>
         </Card>
@@ -127,7 +127,7 @@ export default function DashboardPage() {
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${stats.resteDu > 0 ? "bg-red-100" : "bg-green-100"}`}><CreditCard size={20} className={stats.resteDu > 0 ? "text-red-500" : "text-green-600"} /></div>
             <div>
               <div className={`font-body text-xl font-bold ${stats.resteDu > 0 ? "text-red-500" : "text-green-600"}`}>{stats.resteDu.toFixed(0)}€</div>
-              <div className="font-body text-xs text-gray-500">{stats.resteDu > 0 ? "Reste dû" : "À jour"}</div>
+              <div className="font-body text-xs text-gray-600">{stats.resteDu > 0 ? "Reste dû" : "À jour"}</div>
             </div>
           </div>
         </Card>
@@ -136,7 +136,7 @@ export default function DashboardPage() {
             <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center"><Receipt size={20} className="text-green-600" /></div>
             <div>
               <div className="font-body text-xl font-bold text-green-600">{stats.totalPaye.toFixed(0)}€</div>
-              <div className="font-body text-xs text-gray-500">Payé</div>
+              <div className="font-body text-xs text-gray-600">Payé</div>
             </div>
           </div>
         </Card>
@@ -146,7 +146,7 @@ export default function DashboardPage() {
               <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center"><Wallet size={20} className="text-purple-600" /></div>
               <div>
                 <div className="font-body text-xl font-bold text-purple-600">{stats.avoir.toFixed(0)}€</div>
-                <div className="font-body text-xs text-gray-500">Avoir</div>
+                <div className="font-body text-xs text-gray-600">Avoir</div>
               </div>
             </div>
           </Card>
@@ -198,7 +198,7 @@ export default function DashboardPage() {
                       <div className="font-body text-sm font-semibold text-blue-800">
                         {child.firstName}
                       </div>
-                      <div className="font-body text-xs text-gray-500">
+                      <div className="font-body text-xs text-gray-600">
                         Niveau : {child.galopLevel || "—"}
                       </div>
                     </div>

@@ -182,14 +182,14 @@ export default function InscriptionAnnuellePage() {
   return (
     <div>
       <h1 className="font-display text-2xl font-bold text-blue-800 mb-2">Inscription annuelle</h1>
-      <p className="font-body text-sm text-slate-500 mb-6">Forfait saison, licence et adhésion.</p>
+      <p className="font-body text-sm text-slate-600 mb-6">Forfait saison, licence et adhésion.</p>
 
       {/* Étapes */}
       <div className="flex gap-2 mb-8">
         {steps.map(s => (
           <div key={s.num} className="flex-1">
             <div className={`h-1.5 rounded-full mb-2 ${step >= s.num ? "bg-blue-500" : "bg-gray-300"}`} />
-            <span className={`font-body text-xs ${step >= s.num ? "text-blue-500 font-semibold" : "text-slate-500"}`}>{s.num}. {s.label}</span>
+            <span className={`font-body text-xs ${step >= s.num ? "text-blue-500 font-semibold" : "text-slate-600"}`}>{s.num}. {s.label}</span>
           </div>
         ))}
       </div>
@@ -203,7 +203,7 @@ export default function InscriptionAnnuellePage() {
             {children.length === 0 ? (
               <div className="text-center py-8">
                 <AlertTriangle className="w-8 h-8 text-orange-400 mx-auto mb-3" />
-                <p className="font-body text-sm text-slate-500 mb-3">Ajoutez d&apos;abord vos enfants dans votre profil.</p>
+                <p className="font-body text-sm text-slate-600 mb-3">Ajoutez d&apos;abord vos enfants dans votre profil.</p>
                 <a href="/espace-cavalier/profil" className="font-body text-sm font-semibold text-blue-500 no-underline">Compléter le profil →</a>
               </div>
             ) : (
@@ -215,7 +215,7 @@ export default function InscriptionAnnuellePage() {
                       <span className="text-2xl">🧒</span>
                       <div>
                         <div className="font-body text-base font-semibold text-blue-800">{c.firstName}</div>
-                        <div className="font-body text-xs text-slate-500">{c.galopLevel && c.galopLevel !== "—" ? `Galop ${c.galopLevel}` : "Débutant"}</div>
+                        <div className="font-body text-xs text-slate-600">{c.galopLevel && c.galopLevel !== "—" ? `Galop ${c.galopLevel}` : "Débutant"}</div>
                       </div>
                     </div>
                     {selectedChild === c.id && <Check size={20} className="text-blue-500" />}
@@ -234,7 +234,7 @@ export default function InscriptionAnnuellePage() {
         {step === 2 && (
           <Card padding="md">
             <h2 className="font-body text-base font-semibold text-blue-800 mb-1">Prérequis obligatoires</h2>
-            <p className="font-body text-xs text-slate-500 mb-4">Cochez ce que vous avez déjà. Sinon, nous les ajoutons à votre inscription.</p>
+            <p className="font-body text-xs text-slate-600 mb-4">Cochez ce que vous avez déjà. Sinon, nous les ajoutons à votre inscription.</p>
             <div className="flex flex-col gap-3 mb-5">
               {[
                 { id: "licence", label: LICENCE_FFE.label, desc: LICENCE_FFE.description, price: LICENCE_FFE.price, checked: licenceOK, set: setLicenceOK },
@@ -247,16 +247,16 @@ export default function InscriptionAnnuellePage() {
                   </div>
                   <div className="flex-1">
                     <div className="font-body text-sm font-semibold text-blue-800">{item.label}</div>
-                    <div className="font-body text-xs text-slate-500">{item.desc}</div>
+                    <div className="font-body text-xs text-slate-600">{item.desc}</div>
                   </div>
-                  <div className={`font-body text-sm font-bold ${item.checked ? "text-slate-500 line-through" : "text-blue-500"}`}>
+                  <div className={`font-body text-sm font-bold ${item.checked ? "text-slate-600 line-through" : "text-blue-500"}`}>
                     {item.checked ? "Déjà ✓" : `+${item.price}€`}
                   </div>
                 </div>
               ))}
             </div>
             <div className="flex gap-3">
-              <button onClick={() => setStep(1)} className="px-6 py-3 rounded-xl font-body text-sm text-slate-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
+              <button onClick={() => setStep(1)} className="px-6 py-3 rounded-xl font-body text-sm text-slate-600 bg-white border border-gray-200 cursor-pointer">Retour</button>
               <button onClick={() => setStep(3)} className="flex-1 py-3 rounded-xl font-body text-sm font-semibold bg-blue-500 text-white border-none cursor-pointer">
                 Continuer <ChevronRight size={16} className="inline ml-1" />
               </button>
@@ -269,7 +269,7 @@ export default function InscriptionAnnuellePage() {
           <Card padding="md">
             <h2 className="font-body text-base font-semibold text-blue-800 mb-4">Choisir un créneau</h2>
             {weeklySlots.length === 0 ? (
-              <p className="font-body text-sm text-slate-500 text-center py-8">Aucun créneau disponible pour le moment.</p>
+              <p className="font-body text-sm text-slate-600 text-center py-8">Aucun créneau disponible pour le moment.</p>
             ) : (
               <div className="flex flex-col gap-2 mb-5">
                 {weeklySlots.map(slot => {
@@ -281,8 +281,8 @@ export default function InscriptionAnnuellePage() {
                       className={`flex items-center justify-between px-4 py-3.5 rounded-xl border text-left cursor-pointer transition-all ${selectedSlot === slot.key ? "border-blue-500 bg-blue-50" : spots > 0 ? "border-gray-200 bg-white hover:border-blue-200" : "border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed"}`}>
                       <div>
                         <div className="font-body text-sm font-semibold text-blue-800">{slot.activityTitle}</div>
-                        <div className="font-body text-xs text-slate-500">{slot.dayLabel} · {slot.startTime}–{slot.endTime} · {slot.monitor}</div>
-                        <div className="font-body text-xs text-slate-500">{slot.totalSessions} séances dans l&apos;année</div>
+                        <div className="font-body text-xs text-slate-600">{slot.dayLabel} · {slot.startTime}–{slot.endTime} · {slot.monitor}</div>
+                        <div className="font-body text-xs text-slate-600">{slot.totalSessions} séances dans l&apos;année</div>
                       </div>
                       <div className="text-right ml-3 flex-shrink-0">
                         <div className="font-body text-base font-bold text-blue-500">{mode === "annuel" ? `${annualPrice.toFixed(0)}€` : `${priceTTC.toFixed(0)}€`}</div>
@@ -294,7 +294,7 @@ export default function InscriptionAnnuellePage() {
               </div>
             )}
             <div className="flex gap-3">
-              <button onClick={() => setStep(2)} className="px-6 py-3 rounded-xl font-body text-sm text-slate-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
+              <button onClick={() => setStep(2)} className="px-6 py-3 rounded-xl font-body text-sm text-slate-600 bg-white border border-gray-200 cursor-pointer">Retour</button>
               <button onClick={() => setStep(4)} disabled={!selectedSlot}
                 className={`flex-1 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${selectedSlot ? "bg-blue-500 text-white" : "bg-gray-200 text-slate-600"}`}>
                 Continuer <ChevronRight size={16} className="inline ml-1" />
@@ -309,25 +309,25 @@ export default function InscriptionAnnuellePage() {
             <h2 className="font-body text-base font-semibold text-blue-800 mb-4">Récapitulatif & paiement</h2>
             <div className="flex flex-col gap-2 mb-5">
               <div className="flex justify-between py-2 border-b border-blue-500/8">
-                <span className="font-body text-sm text-slate-500">Cavalier</span>
+                <span className="font-body text-sm text-slate-600">Cavalier</span>
                 <span className="font-body text-sm font-semibold text-blue-800">🧒 {(child as any)?.firstName}</span>
               </div>
               {!licenceOK && (
                 <div className="flex justify-between py-2 border-b border-blue-500/8">
-                  <span className="font-body text-sm text-slate-500">{LICENCE_FFE.label}</span>
+                  <span className="font-body text-sm text-slate-600">{LICENCE_FFE.label}</span>
                   <span className="font-body text-sm font-semibold text-blue-500">{LICENCE_FFE.price}€</span>
                 </div>
               )}
               {!adhesionOK && (
                 <div className="flex justify-between py-2 border-b border-blue-500/8">
-                  <span className="font-body text-sm text-slate-500">{ADHESION.label}</span>
+                  <span className="font-body text-sm text-slate-600">{ADHESION.label}</span>
                   <span className="font-body text-sm font-semibold text-blue-500">{ADHESION.price}€</span>
                 </div>
               )}
               <div className="flex justify-between py-2 border-b border-blue-500/8">
                 <div>
-                  <span className="font-body text-sm text-slate-500">{mode === "annuel" ? "Forfait annuel" : "Séance ponctuelle"}</span>
-                  <div className="font-body text-xs text-slate-500">{selectedSlotData.activityTitle} — {selectedSlotData.dayLabel} {selectedSlotData.startTime}–{selectedSlotData.endTime}</div>
+                  <span className="font-body text-sm text-slate-600">{mode === "annuel" ? "Forfait annuel" : "Séance ponctuelle"}</span>
+                  <div className="font-body text-xs text-slate-600">{selectedSlotData.activityTitle} — {selectedSlotData.dayLabel} {selectedSlotData.startTime}–{selectedSlotData.endTime}</div>
                   {mode === "annuel" && <div className="font-body text-xs text-blue-500">{selectedSlotData.totalSessions} séances</div>}
                 </div>
                 <span className="font-body text-sm font-semibold text-blue-500">{(mode === "annuel" ? forfaitPrice : perSessionTTC).toFixed(2)}€</span>
@@ -373,21 +373,21 @@ export default function InscriptionAnnuellePage() {
                         );
                       })}
                     </div>
-                    <p className="font-body text-[10px] text-slate-500 mt-2">Les prochaines échéances seront prélevées automatiquement par email de paiement.</p>
+                    <p className="font-body text-[10px] text-slate-600 mt-2">Les prochaines échéances seront prélevées automatiquement par email de paiement.</p>
                   </div>
                 )}
               </div>
             )}
 
             <div className="flex gap-3">
-              <button onClick={() => setStep(3)} className="px-6 py-3 rounded-xl font-body text-sm text-slate-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
+              <button onClick={() => setStep(3)} className="px-6 py-3 rounded-xl font-body text-sm text-slate-600 bg-white border border-gray-200 cursor-pointer">Retour</button>
               <button onClick={handlePay} disabled={paying}
                 className={`flex-1 py-4 rounded-xl font-body text-base font-semibold border-none cursor-pointer flex items-center justify-center gap-2 ${paying ? "bg-gray-200 text-slate-600" : "bg-gold-400 text-blue-800 hover:bg-gold-300"}`}>
                 {paying ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
                 {paying ? "Redirection..." : paymentPlan === "1x" ? `Payer ${grandTotal.toFixed(2)}€` : `Payer 1ère échéance ${montantEcheance.toFixed(2)}€`}
               </button>
             </div>
-            <p className="font-body text-[10px] text-slate-500 text-center mt-2">Paiement sécurisé par Stripe</p>
+            <p className="font-body text-[10px] text-slate-600 text-center mt-2">Paiement sécurisé par Stripe</p>
           </Card>
         )}
       </>}

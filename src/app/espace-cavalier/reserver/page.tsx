@@ -345,7 +345,7 @@ export default function ReserverPage() {
 
   if (!user || !family) return (
     <div className="text-center py-20">
-      <Card padding="lg"><p className="font-body text-sm text-gray-500">Connectez-vous et complétez votre profil pour réserver.</p></Card>
+      <Card padding="lg"><p className="font-body text-sm text-gray-600">Connectez-vous et complétez votre profil pour réserver.</p></Card>
     </div>
   );
 
@@ -356,7 +356,7 @@ export default function ReserverPage() {
           <h1 className="font-display text-2xl font-bold text-blue-800">
             {initialFilter === "balade" ? "Promenades" : "Réserver"}
           </h1>
-          <p className="font-body text-xs text-gray-500">
+          <p className="font-body text-xs text-gray-600">
             {initialFilter === "balade" ? "Balades et promenades à cheval" : "Stages, cours ponctuels et activités"}
           </p>
         </div>
@@ -391,12 +391,12 @@ export default function ReserverPage() {
       {availableSubcats.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-4 pl-1">
           <button onClick={() => setSubfilter("all")}
-            className={`px-3 py-1 rounded-full border font-body text-xs cursor-pointer transition-all ${subfilter === "all" ? "bg-gold-400 text-blue-800 border-gold-400 font-semibold" : "bg-white text-slate-500 border-gray-200"}`}>
+            className={`px-3 py-1 rounded-full border font-body text-xs cursor-pointer transition-all ${subfilter === "all" ? "bg-gold-400 text-blue-800 border-gold-400 font-semibold" : "bg-white text-slate-600 border-gray-200"}`}>
             {initialFilter === "balade" ? "Toutes les promenades" : "Tous niveaux"}
           </button>
           {availableSubcats.map(s => (
             <button key={s} onClick={() => setSubfilter(s)}
-              className={`px-3 py-1 rounded-full border font-body text-xs cursor-pointer transition-all ${subfilter === s ? "bg-gold-400 text-blue-800 border-gold-400 font-semibold" : "bg-white text-slate-500 border-gray-200"}`}>
+              className={`px-3 py-1 rounded-full border font-body text-xs cursor-pointer transition-all ${subfilter === s ? "bg-gold-400 text-blue-800 border-gold-400 font-semibold" : "bg-white text-slate-600 border-gray-200"}`}>
               {s}
             </button>
           ))}
@@ -407,12 +407,12 @@ export default function ReserverPage() {
       <div className="flex flex-col gap-2 mb-5">
         <div className="flex items-center justify-between">
           <button onClick={() => setMonthOffset(m => Math.max(0, m - 1))}
-            className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-3 py-2 rounded-lg border border-gray-200 cursor-pointer">
+            className="flex items-center gap-1 font-body text-sm text-gray-600 bg-white px-3 py-2 rounded-lg border border-gray-200 cursor-pointer">
             <ChevronLeft size={16}/>
           </button>
           <div className="font-body text-base font-semibold text-blue-800 capitalize">{monthLabel}</div>
           <button onClick={() => setMonthOffset(m => m + 1)}
-            className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-3 py-2 rounded-lg border border-gray-200 cursor-pointer">
+            className="flex items-center gap-1 font-body text-sm text-gray-600 bg-white px-3 py-2 rounded-lg border border-gray-200 cursor-pointer">
             <ChevronRight size={16}/>
           </button>
         </div>
@@ -424,7 +424,7 @@ export default function ReserverPage() {
             return (
               <button key={offset} onClick={() => setMonthOffset(offset)}
                 className={`font-body text-xs px-3 py-1.5 rounded-full border cursor-pointer capitalize transition-all
-                  ${monthOffset === offset ? "bg-blue-500 text-white border-blue-500 font-semibold" : "bg-white text-gray-500 border-gray-200 hover:border-blue-300"}`}>
+                  ${monthOffset === offset ? "bg-blue-500 text-white border-blue-500 font-semibold" : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"}`}>
                 {label}
               </button>
             );
@@ -452,7 +452,7 @@ export default function ReserverPage() {
                       <div className="flex justify-between items-start cursor-pointer" onClick={() => { setSelectedCreneau(isSelected ? null : first); setSelectedChildren([]); }}>
                         <div>
                           <div className="font-body text-base font-semibold text-blue-800">{first.activityTitle}</div>
-                          <div className="font-body text-xs text-gray-500 mt-1">
+                          <div className="font-body text-xs text-gray-600 mt-1">
                             <Calendar size={12} className="inline mr-1" />{jours}
                             <span className="ml-3"><Users size={12} className="inline mr-1" />{first.monitor}</span>
                           </div>
@@ -462,7 +462,7 @@ export default function ReserverPage() {
                             if (horairesUniques.length === 1) {
                               // Tous les jours au même horaire → une seule ligne
                               return (
-                                <div className="font-body text-xs text-gray-500 mt-0.5">
+                                <div className="font-body text-xs text-gray-600 mt-0.5">
                                   <Clock size={12} className="inline mr-1" />{horairesUniques[0]}
                                 </div>
                               );
@@ -480,9 +480,9 @@ export default function ReserverPage() {
                                   const jourLabel = new Date(date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" });
                                   const horaires = cs.map(c => `${c.startTime}–${c.endTime}`).join(" + ");
                                   return (
-                                    <div key={date} className="font-body text-xs text-gray-500 flex items-center gap-1.5">
-                                      <span className="font-semibold text-slate-500 w-16 flex-shrink-0">{jourLabel}</span>
-                                      <Clock size={10} className="text-gray-500 flex-shrink-0"/>
+                                    <div key={date} className="font-body text-xs text-gray-600 flex items-center gap-1.5">
+                                      <span className="font-semibold text-slate-600 w-16 flex-shrink-0">{jourLabel}</span>
+                                      <Clock size={10} className="text-gray-600 flex-shrink-0"/>
                                       <span>{horaires}</span>
                                     </div>
                                   );
@@ -493,7 +493,7 @@ export default function ReserverPage() {
                         </div>
                         <div className="text-right">
                           <div className="font-body text-lg font-bold text-green-600">{prix.toFixed(0)}€</div>
-                          <div className="font-body text-[10px] text-gray-500">{joursUniques.length} jour{joursUniques.length > 1 ? "s" : ""}</div>
+                          <div className="font-body text-[10px] text-gray-600">{joursUniques.length} jour{joursUniques.length > 1 ? "s" : ""}</div>
                           <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>{spots} place{spots > 1 ? "s" : ""}</Badge>
                         </div>
                       </div>
@@ -507,7 +507,7 @@ export default function ReserverPage() {
                               const sel = selectedChildren.includes(c.id);
                               return (
                                 <button key={c.id} onClick={(e) => { e.stopPropagation(); setSelectedChildren(sel ? selectedChildren.filter(x => x !== c.id) : [...selectedChildren, c.id]); }}
-                                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${sel ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-500 border-gray-200"}`}>
+                                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${sel ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200"}`}>
                                   {sel ? <Check size={14} /> : <Users size={14} />} {c.firstName}
                                 </button>
                               );
@@ -528,7 +528,7 @@ export default function ReserverPage() {
                                       <span className="text-green-600 text-xs">-{remise}€</span>
                                     </div>
                                     <div>
-                                      <span className="text-gray-500 line-through text-xs mr-1">{prix.toFixed(0)}€</span>
+                                      <span className="text-gray-600 line-through text-xs mr-1">{prix.toFixed(0)}€</span>
                                       <span className="font-bold text-green-600">{prixFinal.toFixed(0)}€</span>
                                     </div>
                                   </div>
@@ -557,7 +557,7 @@ export default function ReserverPage() {
               <h2 className="font-display text-lg font-bold text-blue-800 mb-3">Cours & activités</h2>
               {Object.entries(coursByDate).sort(([a], [b]) => a.localeCompare(b)).map(([date, cs]) => (
                 <div key={date} className="mb-4">
-                  <div className="font-body text-xs font-semibold text-gray-500 uppercase mb-2">{new Date(date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</div>
+                  <div className="font-body text-xs font-semibold text-gray-600 uppercase mb-2">{new Date(date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</div>
                   <div className="flex flex-col gap-2">
                     {cs.map(c => {
                       const prix = (c as any).priceTTC || c.priceHT * (1 + (c.tvaTaux || 5.5) / 100);
@@ -571,7 +571,7 @@ export default function ReserverPage() {
                               <div className="w-1 h-10 rounded-full" style={{ backgroundColor: tl.color }} />
                               <div>
                                 <div className="font-body text-sm font-semibold text-blue-800">{c.activityTitle}</div>
-                                <div className="font-body text-xs text-slate-500">{c.startTime}–{c.endTime} · {c.monitor}</div>
+                                <div className="font-body text-xs text-slate-600">{c.startTime}–{c.endTime} · {c.monitor}</div>
                               </div>
                             </div>
                             <div className="text-right">
@@ -585,7 +585,7 @@ export default function ReserverPage() {
                           {/* Créneau disponible — sélection enfant */}
                           {isSelected && spots > 0 && (
                             <div className="mt-3 pt-3 border-t border-blue-100">
-                              <div className="font-body text-xs text-slate-500 mb-2">Pour quel enfant ?</div>
+                              <div className="font-body text-xs text-slate-600 mb-2">Pour quel enfant ?</div>
                               <div className="flex flex-wrap gap-2">
                                 {children.filter((ch: any) => !(c.enrolled || []).some((e: any) => e.childId === ch.id)).map((ch: any) => (
                                   <button key={ch.id} onClick={(e) => { e.stopPropagation(); addCoursToCart(c, ch.id); }}
@@ -632,7 +632,7 @@ export default function ReserverPage() {
             </div>
           )}
 
-          {available.length === 0 && <Card padding="lg" className="text-center"><p className="font-body text-sm text-gray-500">Aucune activité disponible sur cette période.</p></Card>}
+          {available.length === 0 && <Card padding="lg" className="text-center"><p className="font-body text-sm text-gray-600">Aucune activité disponible sur cette période.</p></Card>}
         </div>
       )}
 
@@ -642,11 +642,11 @@ export default function ReserverPage() {
           <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[85vh] overflow-auto shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="p-5 border-b border-gray-100 flex justify-between items-center">
               <h2 className="font-display text-lg font-bold text-blue-800"><ShoppingCart size={18} className="inline mr-2" />Mon panier</h2>
-              <button onClick={() => setShowCart(false)} className="text-gray-500 bg-transparent border-none cursor-pointer"><X size={20} /></button>
+              <button onClick={() => setShowCart(false)} className="text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button>
             </div>
             <div className="p-5">
               {cart.length === 0 ? (
-                <p className="font-body text-sm text-gray-500 text-center py-8">Votre panier est vide.</p>
+                <p className="font-body text-sm text-gray-600 text-center py-8">Votre panier est vide.</p>
               ) : (
                 <>
                   <div className="flex flex-col gap-2 mb-4">
@@ -654,12 +654,12 @@ export default function ReserverPage() {
                       <div key={idx} className="flex items-center justify-between bg-sand rounded-lg px-3 py-2.5">
                         <div className="flex-1">
                           <div className="font-body text-sm font-semibold text-blue-800">{item.activityTitle}</div>
-                          <div className="font-body text-xs text-gray-500">{item.childName} · {item.dates}</div>
+                          <div className="font-body text-xs text-gray-600">{item.childName} · {item.dates}</div>
                           {item.remiseEuros > 0 && <div className="font-body text-[10px] text-green-600">Reduction : -{item.remiseEuros}€</div>}
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="text-right">
-                            {item.remiseEuros > 0 && <div className="font-body text-[10px] text-gray-500 line-through">{item.prixBase.toFixed(0)}€</div>}
+                            {item.remiseEuros > 0 && <div className="font-body text-[10px] text-gray-600 line-through">{item.prixBase.toFixed(0)}€</div>}
                             <div className="font-body text-sm font-bold text-blue-500">{item.prixFinal.toFixed(2)}€</div>
                           </div>
                           <button onClick={() => removeFromCart(idx)} className="text-red-400 bg-transparent border-none cursor-pointer p-1 hover:text-red-600"><X size={14} /></button>
@@ -684,11 +684,11 @@ export default function ReserverPage() {
                       <div className="font-body text-xs font-semibold text-blue-800 mb-2">Mode de paiement</div>
                       <div className="flex gap-2">
                         <button onClick={() => setDepositMode("full")}
-                          className={`flex-1 py-2 px-3 rounded-lg font-body text-xs font-semibold border cursor-pointer ${depositMode === "full" ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-500 border-gray-200"}`}>
+                          className={`flex-1 py-2 px-3 rounded-lg font-body text-xs font-semibold border cursor-pointer ${depositMode === "full" ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200"}`}>
                           Payer tout ({cartTotal.toFixed(0)}€)
                         </button>
                         <button onClick={() => setDepositMode("deposit")}
-                          className={`flex-1 py-2 px-3 rounded-lg font-body text-xs font-semibold border cursor-pointer ${depositMode === "deposit" ? "bg-orange-500 text-white border-orange-500" : "bg-white text-gray-500 border-gray-200"}`}>
+                          className={`flex-1 py-2 px-3 rounded-lg font-body text-xs font-semibold border cursor-pointer ${depositMode === "deposit" ? "bg-orange-500 text-white border-orange-500" : "bg-white text-gray-600 border-gray-200"}`}>
                           Acompte 30% ({(cartTotal * 0.3).toFixed(0)}€)
                         </button>
                       </div>
@@ -701,11 +701,11 @@ export default function ReserverPage() {
                   )}
 
                   <button onClick={handlePay} disabled={paying}
-                    className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying ? "bg-gray-200 text-gray-500" : depositMode === "deposit" ? "bg-orange-500 text-white hover:bg-orange-400" : "bg-green-600 text-white hover:bg-green-500"}`}>
+                    className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying ? "bg-gray-200 text-gray-600" : depositMode === "deposit" ? "bg-orange-500 text-white hover:bg-orange-400" : "bg-green-600 text-white hover:bg-green-500"}`}>
                     {paying ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
                     {paying ? "Paiement en cours..." : depositMode === "deposit" ? `Payer l'acompte ${(cartTotal * 0.3).toFixed(2)}€` : `Payer ${cartTotal.toFixed(2)}€`}
                   </button>
-                  <p className="font-body text-[10px] text-gray-500 text-center mt-2">Paiement securise par Stripe</p>
+                  <p className="font-body text-[10px] text-gray-600 text-center mt-2">Paiement securise par Stripe</p>
                 </>
               )}
             </div>

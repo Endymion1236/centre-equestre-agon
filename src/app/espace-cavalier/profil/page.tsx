@@ -95,7 +95,7 @@ function AddChildForm({ onAdd }: { onAdd: () => void }) {
           </div>
           <div className="flex flex-col gap-3">
             <div>
-              <label className="font-body text-xs font-semibold text-gray-500 block mb-1">
+              <label className="font-body text-xs font-semibold text-gray-600 block mb-1">
                 Allergies connues
               </label>
               <input
@@ -107,7 +107,7 @@ function AddChildForm({ onAdd }: { onAdd: () => void }) {
             </div>
             <div className="flex gap-3">
               <div className="flex-1">
-                <label className="font-body text-xs font-semibold text-gray-500 block mb-1">
+                <label className="font-body text-xs font-semibold text-gray-600 block mb-1">
                   Contact urgence — Nom
                 </label>
                 <input
@@ -118,7 +118,7 @@ function AddChildForm({ onAdd }: { onAdd: () => void }) {
                 />
               </div>
               <div className="flex-1">
-                <label className="font-body text-xs font-semibold text-gray-500 block mb-1">
+                <label className="font-body text-xs font-semibold text-gray-600 block mb-1">
                   Téléphone urgence
                 </label>
                 <input
@@ -129,7 +129,7 @@ function AddChildForm({ onAdd }: { onAdd: () => void }) {
                 />
               </div>
             </div>
-            <label className="flex items-center gap-2 font-body text-xs text-gray-500 cursor-pointer">
+            <label className="flex items-center gap-2 font-body text-xs text-gray-600 cursor-pointer">
               <input
                 type="checkbox"
                 checked={authorization}
@@ -265,24 +265,24 @@ export default function ProfilPage() {
           <div className="flex flex-col gap-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="font-body text-xs font-semibold text-gray-400 mb-1 block">Nom</label>
+                <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">Nom</label>
                 <input value={editForm.parentName} onChange={e => setEditForm({ ...editForm, parentName: e.target.value })}
                   className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400" />
               </div>
               <div>
-                <label className="font-body text-xs font-semibold text-gray-400 mb-1 block">Téléphone</label>
+                <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">Téléphone</label>
                 <input type="tel" value={editForm.parentPhone} onChange={e => setEditForm({ ...editForm, parentPhone: e.target.value })}
                   className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400" placeholder="06 00 00 00 00" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="font-body text-xs font-semibold text-gray-400 mb-1 block">Email</label>
-                <div className="font-body text-sm text-gray-400 py-2.5">{family?.parentEmail || "—"} (non modifiable)</div>
+                <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">Email</label>
+                <div className="font-body text-sm text-gray-600 py-2.5">{family?.parentEmail || "—"} (non modifiable)</div>
               </div>
               <div>
-                <label className="font-body text-xs font-semibold text-gray-400 mb-1 block">Connexion</label>
-                <div className="font-body text-sm text-gray-400 py-2.5">{family?.authProvider === "google" ? "Google" : "Facebook"}</div>
+                <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">Connexion</label>
+                <div className="font-body text-sm text-gray-600 py-2.5">{family?.authProvider === "google" ? "Google" : "Facebook"}</div>
               </div>
             </div>
             <div className="flex gap-2">
@@ -291,7 +291,7 @@ export default function ProfilPage() {
                 {savingProfile ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer
               </button>
               <button onClick={() => setEditingProfile(false)}
-                className="font-body text-xs text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                className="font-body text-xs text-gray-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
             </div>
           </div>
         ) : (
@@ -303,7 +303,7 @@ export default function ProfilPage() {
               { label: "Connexion", value: `${family?.authProvider === "google" ? "Google" : "Facebook"}` },
             ].map((field, i) => (
               <div key={i}>
-                <div className="font-body text-xs font-semibold text-gray-400 mb-0.5">
+                <div className="font-body text-xs font-semibold text-gray-600 mb-0.5">
                   {field.label}
                 </div>
                 <div className="font-body text-sm text-blue-800">{field.value}</div>
@@ -341,7 +341,7 @@ export default function ProfilPage() {
                     <div className="font-body text-base font-semibold text-blue-800">
                       {child.firstName} {(child as any).lastName || ""}
                     </div>
-                    <div className="font-body text-xs text-gray-400">Niveau : {child.galopLevel || "—"}</div>
+                    <div className="font-body text-xs text-gray-600">Niveau : {child.galopLevel || "—"}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -363,17 +363,17 @@ export default function ProfilPage() {
                   <div className="font-body text-xs font-semibold text-blue-800 mb-1">Modifier le cavalier</div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="font-body text-xs text-gray-400 block mb-1">Prénom</label>
+                      <label className="font-body text-xs text-gray-600 block mb-1">Prénom</label>
                       <input value={editingChildForm.firstName} onChange={e => setEditingChildForm({ ...editingChildForm, firstName: e.target.value })}
                         className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400" />
                     </div>
                     <div>
-                      <label className="font-body text-xs text-gray-400 block mb-1">Nom</label>
+                      <label className="font-body text-xs text-gray-600 block mb-1">Nom</label>
                       <input value={editingChildForm.lastName} onChange={e => setEditingChildForm({ ...editingChildForm, lastName: e.target.value })}
                         className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400" />
                     </div>
                     <div>
-                      <label className="font-body text-xs text-gray-400 block mb-1">Date de naissance</label>
+                      <label className="font-body text-xs text-gray-600 block mb-1">Date de naissance</label>
                       <input type="date" value={editingChildForm.birthDate} onChange={e => setEditingChildForm({ ...editingChildForm, birthDate: e.target.value })}
                         className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400" />
                     </div>
@@ -384,7 +384,7 @@ export default function ProfilPage() {
                       {savingChild ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer
                     </button>
                     <button onClick={() => setEditingChild(null)}
-                      className="font-body text-xs text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                      className="font-body text-xs text-gray-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
                   </div>
                 </div>
               )}
@@ -396,19 +396,19 @@ export default function ProfilPage() {
                     <div className="flex flex-col gap-3">
                       <div className="font-body text-xs font-semibold text-blue-800">📋 Fiche sanitaire</div>
                       <div>
-                        <label className="font-body text-xs text-gray-400 block mb-1">Allergies connues</label>
+                        <label className="font-body text-xs text-gray-600 block mb-1">Allergies connues</label>
                         <input value={sanitaryForm.allergies} onChange={e => setSanitaryForm({ ...sanitaryForm, allergies: e.target.value })}
                           placeholder="Ex: arachides, pollen... (ou Aucune)"
                           className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400" />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="font-body text-xs text-gray-400 block mb-1">Contact urgence — Nom</label>
+                          <label className="font-body text-xs text-gray-600 block mb-1">Contact urgence — Nom</label>
                           <input value={sanitaryForm.emergencyContactName} onChange={e => setSanitaryForm({ ...sanitaryForm, emergencyContactName: e.target.value })}
                             className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400" />
                         </div>
                         <div>
-                          <label className="font-body text-xs text-gray-400 block mb-1">Téléphone urgence</label>
+                          <label className="font-body text-xs text-gray-600 block mb-1">Téléphone urgence</label>
                           <input value={sanitaryForm.emergencyContactPhone} onChange={e => setSanitaryForm({ ...sanitaryForm, emergencyContactPhone: e.target.value })}
                             className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400" placeholder="06..." />
                         </div>
@@ -424,7 +424,7 @@ export default function ProfilPage() {
                           {savingChild ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer la fiche
                         </button>
                         <button onClick={() => setEditingSanitary(null)}
-                          className="font-body text-xs text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                          className="font-body text-xs text-gray-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
                       </div>
                     </div>
                   ) : (
@@ -438,21 +438,21 @@ export default function ProfilPage() {
                           {expandedChild === child.id && (
                             <div className="mt-3 grid grid-cols-2 gap-3">
                               <div>
-                                <div className="font-body text-xs font-semibold text-gray-400">Allergies</div>
+                                <div className="font-body text-xs font-semibold text-gray-600">Allergies</div>
                                 <div className="font-body text-sm text-blue-800">{child.sanitaryForm.allergies || "Aucune"}</div>
                               </div>
                               <div>
-                                <div className="font-body text-xs font-semibold text-gray-400">Contact urgence</div>
+                                <div className="font-body text-xs font-semibold text-gray-600">Contact urgence</div>
                                 <div className="font-body text-sm text-blue-800">{child.sanitaryForm.emergencyContactName} — {child.sanitaryForm.emergencyContactPhone}</div>
                               </div>
                               <div>
-                                <div className="font-body text-xs font-semibold text-gray-400">Autorisation parentale</div>
+                                <div className="font-body text-xs font-semibold text-gray-600">Autorisation parentale</div>
                                 <div className="font-body text-sm text-green-600">✓ Accordée</div>
                               </div>
                             </div>
                           )}
                           <button onClick={() => startEditSanitary(child)}
-                            className="mt-2 font-body text-xs text-gray-400 bg-transparent border-none cursor-pointer hover:text-blue-500 flex items-center gap-1">
+                            className="mt-2 font-body text-xs text-gray-600 bg-transparent border-none cursor-pointer hover:text-blue-500 flex items-center gap-1">
                             <Edit3 size={11} /> Modifier la fiche sanitaire
                           </button>
                         </>
@@ -473,7 +473,7 @@ export default function ProfilPage() {
         !showAddChild && (
           <Card padding="lg" className="text-center mt-4">
             <span className="text-4xl block mb-3">👶</span>
-            <p className="font-body text-sm text-gray-500 mb-4">
+            <p className="font-body text-sm text-gray-600 mb-4">
               Aucun cavalier enregistré. Ajoutez vos enfants pour pouvoir
               réserver des activités.
             </p>

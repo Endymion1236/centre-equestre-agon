@@ -71,7 +71,7 @@ export default function ReservationsPage() {
   return (
     <div>
       <h1 className="font-display text-2xl font-bold text-blue-800 mb-2">Mes réservations</h1>
-      <p className="font-body text-sm text-gray-500 mb-6">Retrouvez ici toutes vos réservations passées et à venir.</p>
+      <p className="font-body text-sm text-gray-600 mb-6">Retrouvez ici toutes vos réservations passées et à venir.</p>
 
       {/* Success message */}
       {success === "true" && (
@@ -91,7 +91,7 @@ export default function ReservationsPage() {
         <Card padding="lg" className="text-center">
           <span className="text-5xl block mb-4">📋</span>
           <h2 className="font-display text-lg font-bold text-blue-800 mb-2">Aucune réservation</h2>
-          <p className="font-body text-sm text-gray-500 mb-4">Vous n&apos;avez pas encore de réservation.</p>
+          <p className="font-body text-sm text-gray-600 mb-4">Vous n&apos;avez pas encore de réservation.</p>
           <a href="/espace-cavalier/reserver" className="font-body text-sm font-semibold text-blue-500 no-underline">
             Réserver une activité →
           </a>
@@ -122,10 +122,10 @@ export default function ReservationsPage() {
                           </div>
                           <div>
                             <div className="font-body text-base font-semibold text-blue-800">{r.activityTitle}</div>
-                            <div className="font-body text-xs text-gray-500">
+                            <div className="font-body text-xs text-gray-600">
                               🧒 {r.childName} · {r.startTime || ""}–{r.endTime || ""}
                             </div>
-                            <div className="font-body text-xs text-gray-500">
+                            <div className="font-body text-xs text-gray-600">
                               {(() => { try { const d = (r as any).date?.seconds ? new Date((r as any).date.seconds * 1000) : new Date(r.date); return isNaN(d.getTime()) ? (typeof r.date === "string" ? r.date : "Date non disponible") : d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }); } catch { return typeof r.date === "string" ? r.date : "—"; }})()}
                             </div>
                           </div>
@@ -145,7 +145,7 @@ export default function ReservationsPage() {
           {/* Past */}
           {past.length > 0 && (
             <div>
-              <h2 className="font-body text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">
+              <h2 className="font-body text-sm font-bold text-gray-600 uppercase tracking-wider mb-3">
                 Passées ({past.length})
               </h2>
               <div className="flex flex-col gap-2">
@@ -153,13 +153,13 @@ export default function ReservationsPage() {
                   <Card key={r.id} padding="sm" className="opacity-60">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <span className="font-body text-xs text-gray-500">
+                        <span className="font-body text-xs text-gray-600">
                           {(() => { try { const d = (r as any).date?.seconds ? new Date((r as any).date.seconds * 1000) : new Date(r.date); return isNaN(d.getTime()) ? (typeof r.date === "string" ? r.date : "—") : d.toLocaleDateString("fr-FR"); } catch { return "—"; }})()}
                         </span>
-                        <span className="font-body text-sm text-gray-500">{r.activityTitle}</span>
-                        <span className="font-body text-xs text-gray-500">🧒 {r.childName}</span>
+                        <span className="font-body text-sm text-gray-600">{r.activityTitle}</span>
+                        <span className="font-body text-xs text-gray-600">🧒 {r.childName}</span>
                       </div>
-                      <span className="font-body text-sm text-gray-500">{r.priceTTC?.toFixed(2)}€</span>
+                      <span className="font-body text-sm text-gray-600">{r.priceTTC?.toFixed(2)}€</span>
                     </div>
                   </Card>
                 ))}
