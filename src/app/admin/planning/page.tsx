@@ -832,8 +832,7 @@ export default function PlanningPage() {
           <div className="flex gap-2"><button onClick={()=>setWeekOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setWeekOffset(w=>w+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Suiv.<ChevronRight size={16}/></button></div>
         </div>
         {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:
-        <div className="overflow-x-auto -mx-4 px-4">
-        <div className="grid grid-cols-7 gap-1.5" style={{ minWidth: "700px" }}>
+        <div className="overflow-x-auto -mx-4 px-4"><div className="grid grid-cols-7 gap-1.5" style={{ minWidth: "700px" }}>
           {weekDates.map((d,i)=><div key={i} onClick={()=>{setViewMode("day");setDayOffset(Math.round((d.getTime()-new Date().getTime())/86400000));}} className={`text-center py-2 rounded-lg font-body text-xs font-semibold cursor-pointer hover:ring-2 hover:ring-blue-300 ${isToday(d)?"bg-blue-500 text-white":"bg-sand text-slate-600"}`}>{fmtDateFR(d)}</div>)}
           {weekDates.map((d,i)=>{const ds=fmtDate(d);const allDc=creneaux.filter(c=>c.date===ds).sort((a,b)=>a.startTime.localeCompare(b.startTime));
             // Séparer cours et stages
@@ -911,8 +910,7 @@ export default function PlanningPage() {
                 </div>);})}
               <button onClick={()=>{setSelectedDate(ds);setShowSimple(true);setShowGenerator(false);}} className="mt-auto py-2 rounded-lg border border-dashed border-gray-200 text-slate-400 hover:border-blue-300 hover:text-blue-400 bg-transparent cursor-pointer font-body text-lg">+</button>
             </div>);})}
-        </div>}
-        </div>
+        </div></div>}
       </>}
 
       {viewMode==="day"&&<>
