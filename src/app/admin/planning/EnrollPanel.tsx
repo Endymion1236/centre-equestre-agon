@@ -34,6 +34,28 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // Plan de séance
   const [planUploading, setPlanUploading] = useState(false);
   const [lightbox, setLightbox] = useState(false);
+  const [lightboxBlobUrl, setLightboxBlobUrl] = useState<string | null>(null);
+
+  const openLightbox = async () => {
+    setLightbox(true);
+    if (!planUrl) return;
+    try {
+      const resp = await fetch(planUrl);
+      const blob = await resp.blob();
+      setLightboxBlobUrl(URL.createObjectURL(blob));
+    } catch {
+      // Si fetch échoue (ex: CORS), utiliser l'URL directe
+      setLightboxBlobUrl(planUrl);
+    }
+  };
+
+  const closeLightbox = () => {
+    setLightbox(false);
+    if (lightboxBlobUrl && lightboxBlobUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(lightboxBlobUrl);
+    }
+    setLightboxBlobUrl(null);
+  };
   const [planUrl, setPlanUrl] = useState<string | null>((creneau as any).planSeanceUrl || null);
   const [planType, setPlanType] = useState<string | null>((creneau as any).planSeanceType || null);
   const planInputRef = useRef<HTMLInputElement>(null);
@@ -676,7 +698,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     </div>
                   </a>
                 ) : (
-                  <button onClick={() => setLightbox(true)} className="w-full border-none p-0 bg-transparent cursor-zoom-in block">
+                  <button onClick={() => openLightbox()} className="w-full border-none p-0 bg-transparent cursor-zoom-in block">
                     <img src={planUrl} alt="Plan de séance" className="w-full rounded-xl object-cover max-h-48 hover:opacity-90 transition-opacity" />
                     <div className="absolute inset-0 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/20 transition-opacity">
                       <span className="font-body text-xs text-white bg-black/50 px-2 py-1 rounded-lg">🔍 Agrandir</span>
@@ -1157,19 +1179,28 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       </div>
 
       {/* ── Lightbox photo plan de séance ── */}
-      {lightbox && planUrl && (
+      {lightbox && (
         <div className="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-4"
-          onClick={() => setLightbox(false)}>
+          onClick={closeLightbox}>
           <div className="relative max-w-4xl max-h-full w-full" onClick={e => e.stopPropagation()}>
-            <img src={planUrl} alt="Plan de séance" className="w-full max-h-[85vh] object-contain rounded-xl shadow-2xl" />
-            <button onClick={() => setLightbox(false)}
+            {lightboxBlobUrl ? (
+              <img src={lightboxBlobUrl} alt="Plan de séance"
+                className="w-full max-h-[85vh] object-contain rounded-xl shadow-2xl" />
+            ) : (
+              <div className="flex items-center justify-center h-64 text-white">
+                <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
+              </div>
+            )}
+            <button onClick={closeLightbox}
               className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/60 text-white flex items-center justify-center border-none cursor-pointer hover:bg-black/80 text-lg">
               ✕
             </button>
-            <a href={planUrl} download target="_blank" rel="noopener noreferrer"
-              className="absolute bottom-3 right-3 flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-black/60 hover:bg-black/80 px-3 py-2 rounded-lg no-underline">
-              ⬇ Télécharger
-            </a>
+            {lightboxBlobUrl && (
+              <a href={lightboxBlobUrl} download="plan-seance" target="_blank" rel="noopener noreferrer"
+                className="absolute bottom-3 right-3 flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-black/60 hover:bg-black/80 px-3 py-2 rounded-lg no-underline">
+                ⬇ Télécharger
+              </a>
+            )}
           </div>
         </div>
       )}
