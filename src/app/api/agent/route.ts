@@ -148,6 +148,11 @@ const tools: Anthropic.Tool[] = [
 // ── Exécution des outils ──────────────────────────────────────────────────────
 
 async function executeTool(name: string, input: any): Promise<string> {
+  // Vérification rapide que Firebase Admin est initialisé
+  if (!adminDb) {
+    console.error("[Agent] adminDb non initialisé — vérifier FIREBASE_CLIENT_EMAIL et FIREBASE_PRIVATE_KEY sur Vercel");
+    return "❌ Base de données non configurée. Vérifie les variables FIREBASE_CLIENT_EMAIL et FIREBASE_PRIVATE_KEY sur Vercel.";
+  }
   try {
     switch (name) {
 
@@ -364,7 +369,9 @@ async function executeTool(name: string, input: any): Promise<string> {
         return `❌ Outil inconnu : ${name}`;
     }
   } catch (e: any) {
-    return `❌ Erreur : ${e.message}`;
+    console.error(`[Agent] Erreur outil "${name}":`, e?.message || e);
+    console.error(`[Agent] Input:`, JSON.stringify(input));
+    return `❌ Erreur technique (${name}): ${e?.message || "inconnue"}`;
   }
 }
 
@@ -484,7 +491,10 @@ RÈGLES IMPORTANTES :
     return NextResponse.json({ type: "answer", message: text?.text || "Je n'ai pas pu répondre." });
 
   } catch (error: any) {
-    console.error("Agent error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[Agent] Erreur route:", error?.message || error);
+    return NextResponse.json({
+      type: "answer",
+      message: `❌ Erreur technique : ${error?.message || "inconnue"}. Vérifie les logs Vercel.`,
+    });
   }
 }
