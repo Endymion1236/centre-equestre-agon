@@ -24,7 +24,6 @@ export default function ReserverPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
   const [subfilter, setSubfilter] = useState("all"); // sous-catégorie
-  const [weekOffset, setWeekOffset] = useState(0);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showCart, setShowCart] = useState(false);
   const [selectedCreneau, setSelectedCreneau] = useState<Creneau | null>(null);
@@ -38,9 +37,37 @@ export default function ReserverPage() {
   const children = family?.children || [];
   const familyId = user?.uid || "";
 
-  const startDate = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + weekOffset * 7); return d; }, [weekOffset]);
-  const endDate = useMemo(() => { const d = new Date(startDate); d.setDate(d.getDate() + 27); return d; }, [startDate]); // 4 semaines
-  const fmtDate = (d: Date) => d.toISOString().split("T")[0];
+  const [monthOffset, setMonthOffset] = useState(0);
+
+  // Mois courant affiché
+  const currentMonth = useMemo(() => {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + monthOffset);
+    return d;
+  }, [monthOffset]);
+
+  const startDate = useMemo(() => {
+    const d = new Date(currentMonth);
+    d.setDate(1);
+    return d;
+  }, [currentMonth]);
+
+  const endDate = useMemo(() => {
+    const d = new Date(currentMonth);
+    d.setMonth(d.getMonth() + 1);
+    d.setDate(0); // dernier jour du mois
+    return d;
+  }, [currentMonth]);
+
+  const fmtDate = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  const monthLabel = currentMonth.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
 
   useEffect(() => {
     const load = async () => {
@@ -56,7 +83,7 @@ export default function ReserverPage() {
       setLoading(false);
     };
     load();
-  }, [weekOffset]);
+  }, [monthOffset]);
 
   // Sous-catégories disponibles pour le filtre courant
   const availableSubcats = useMemo(() => {
@@ -367,13 +394,33 @@ export default function ReserverPage() {
         </div>
       )}
 
-      {/* Navigation semaines */}
-      <div className="flex items-center justify-between mb-5">
-        <button onClick={() => setWeekOffset(w => w - 1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-3 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16} /></button>
-        <div className="text-center">
-          <div className="font-body text-sm font-semibold text-blue-800">{startDate.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} — {endDate.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}</div>
+      {/* Navigation par mois */}
+      <div className="flex flex-col gap-2 mb-5">
+        <div className="flex items-center justify-between">
+          <button onClick={() => setMonthOffset(m => Math.max(0, m - 1))}
+            className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-3 py-2 rounded-lg border border-gray-200 cursor-pointer">
+            <ChevronLeft size={16}/>
+          </button>
+          <div className="font-body text-base font-semibold text-blue-800 capitalize">{monthLabel}</div>
+          <button onClick={() => setMonthOffset(m => m + 1)}
+            className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-3 py-2 rounded-lg border border-gray-200 cursor-pointer">
+            <ChevronRight size={16}/>
+          </button>
         </div>
-        <button onClick={() => setWeekOffset(w => w + 1)} className="flex items-center gap-1 font-body text-sm text-gray-500 bg-white px-3 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronRight size={16} /></button>
+        {/* Raccourcis mois rapides */}
+        <div className="flex gap-1.5 flex-wrap">
+          {[0, 1, 2, 3, 4, 5].map(offset => {
+            const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + offset);
+            const label = d.toLocaleDateString("fr-FR", { month: "short" });
+            return (
+              <button key={offset} onClick={() => setMonthOffset(offset)}
+                className={`font-body text-xs px-3 py-1.5 rounded-full border cursor-pointer capitalize transition-all
+                  ${monthOffset === offset ? "bg-blue-500 text-white border-blue-500 font-semibold" : "bg-white text-gray-500 border-gray-200 hover:border-blue-300"}`}>
+                {label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> : (
