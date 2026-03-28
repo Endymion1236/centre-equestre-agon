@@ -48,6 +48,10 @@ export default function ParametresPage() {
     iban: "FR76 1660 6100 6400 1353 9343 253",
     bic: "AGRIFRPP866",
     website: "https://centreequestreagon.com",
+    // Seuils poneys
+    seuilPoneyOrange: 3,   // nb séances → alerte orange
+    seuilPoneyRouge: 4,    // nb séances → alerte rouge
+    seuilPoneyHeures: 4,   // nb heures max/jour
   });
   const [centreSaved, setCentreSaved] = useState(false);
 
@@ -313,6 +317,28 @@ export default function ParametresPage() {
               ))}
             </div>
             <p className="font-body text-[10px] text-slate-400 mt-3">Ces informations apparaissent sur les factures, bons cadeaux et emails officiels.</p>
+          </Card>
+
+          <Card padding="md">
+            <h3 className="font-body text-base font-semibold text-blue-800 mb-4">🐴 Seuils d'alerte poneys</h3>
+            <p className="font-body text-xs text-slate-500 mb-3">Charge journalière au-delà de laquelle une alerte s'affiche dans le Montoir</p>
+            <div className="flex flex-col gap-3">
+              {[
+                { key: "seuilPoneyOrange", label: "Alerte orange (nb séances)", unit: "séances" },
+                { key: "seuilPoneyRouge",  label: "Alerte rouge (nb séances)",  unit: "séances" },
+                { key: "seuilPoneyHeures", label: "Maximum heures/jour",         unit: "heures" },
+              ].map(({ key, label, unit }) => (
+                <div key={key} className="flex items-center justify-between gap-4">
+                  <span className="font-body text-sm text-blue-800">{label}</span>
+                  <div className="flex items-center gap-2">
+                    <input type="number" min="1" max="10" value={(centreParams as any)[key]}
+                      onChange={e => setCentreParams(prev => ({ ...prev, [key]: parseInt(e.target.value) || 1 }))}
+                      className="w-20 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm text-right bg-cream focus:border-blue-500 focus:outline-none" />
+                    <span className="font-body text-xs text-slate-400">{unit}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </Card>
 
           <button onClick={saveCentre}

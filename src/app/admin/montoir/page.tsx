@@ -19,6 +19,7 @@ export default function MontoirPage() {
   const [dayOffset, setDayOffset] = useState(0);
   const [creneaux, setCreneaux] = useState<Creneau[]>([]);
   const [equides, setEquides] = useState<any[]>([]);
+  const [seuilPoney, setSeuilPoney] = useState({ orange: 3, rouge: 4, heures: 4 });
   const [indisponibilites, setIndisponibilites] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [cartes, setCartes] = useState<any[]>([]);
@@ -28,13 +29,22 @@ export default function MontoirPage() {
 
   const fetchData = async () => {
     try {
-      const [cSnap, eSnap, iSnap, cartSnap, famSnap] = await Promise.all([
+      const [cSnap, eSnap, iSnap, cartSnap, famSnap, centreSnap] = await Promise.all([
         getDocs(query(collection(db,"creneaux"),where("date","==",dateStr))),
         getDocs(collection(db,"equides")),
         getDocs(collection(db,"indisponibilites")),
         getDocs(collection(db,"cartes")),
         getDocs(collection(db,"families")),
+        getDoc(doc(db,"settings","centre")),
       ]);
+      if (centreSnap.exists()) {
+        const d = centreSnap.data() as any;
+        setSeuilPoney({
+          orange: d.seuilPoneyOrange || 3,
+          rouge: d.seuilPoneyRouge || 4,
+          heures: d.seuilPoneyHeures || 4,
+        });
+      }
       const creneauxData = cSnap.docs.map(d=>({id:d.id,...d.data()})).sort((a:any,b:any)=>a.startTime.localeCompare(b.startTime)) as Creneau[];
       setCreneaux(creneauxData);
       setEquides(eSnap.docs.map(d=>({id:d.id,...d.data()})));
@@ -524,8 +534,9 @@ export default function MontoirPage() {
             {availableHorses.map(h => {
               const ch = poneyCharge[h.name];
               if (!ch) return <span key={h.id} className="font-body text-[10px] px-2 py-1 rounded-lg bg-green-50 text-green-700">{h.name} 0s</span>;
-              const color = ch.seances >= 4 ? "bg-red-50 text-red-600" : ch.seances >= 3 ? "bg-orange-50 text-orange-600" : ch.seances >= 2 ? "bg-yellow-50 text-yellow-700" : "bg-green-50 text-green-700";
-              return <span key={h.id} className={`font-body text-[10px] px-2 py-1 rounded-lg font-semibold ${color}`}>{h.name} {ch.seances}s·{ch.heures}h</span>;
+              const color = ch.seances >= seuilPoney.rouge ? "bg-red-50 text-red-600" : ch.seances >= seuilPoney.orange ? "bg-orange-50 text-orange-600" : ch.seances >= 2 ? "bg-yellow-50 text-yellow-700" : "bg-green-50 text-green-700";
+              const heuresAlert = ch.heures >= seuilPoney.heures;
+              return <span key={h.id} className={`font-body text-[10px] px-2 py-1 rounded-lg font-semibold ${color}`}>{h.name} {ch.seances}s·{ch.heures}h{heuresAlert ? " ⚠️" : ""}</span>;
             })}
             {unavailableHorses.map((h, i) => (
               <span key={i} className="font-body text-[10px] px-2 py-1 rounded-lg bg-gray-100 text-gray-400 line-through">{h.name}</span>
@@ -619,7 +630,7 @@ export default function MontoirPage() {
                           const charge = poneyCharge[h.name];
                           const chargeStr = charge ? ` (${charge.seances}s·${charge.heures}h)` : "";
                           return <option key={h.id} value={h.name} disabled={usedOther || usedHere}
-                            style={usedOther || usedHere ? {color:"#ccc"} : charge?.seances >= 3 ? {color:"#f59e0b"} : {}}>
+                            style={usedOther || usedHere ? {color:"#ccc"} : charge?.seances >= seuilPoney.orange ? {color:"#f59e0b"} : {}}>
                             {h.name}{chargeStr}{usedOther ? " ⚠" : usedHere ? " ✗" : ""}
                           </option>;
                         })}

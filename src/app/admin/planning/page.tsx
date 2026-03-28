@@ -12,7 +12,7 @@ import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { emailTemplates } from "@/lib/email-templates";
 import { generateOrderId } from "@/lib/utils";
-import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Loader2, Trash2, Users, CalendarDays, Briefcase, Bell, Mail, Sparkles } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Loader2, Trash2, Users, CalendarDays, Briefcase, Bell, Mail, Sparkles, Printer } from "lucide-react";
 import type { Activity, Family } from "@/types";
 import { Creneau, EnrolledChild, typeColors, dayNames, dayNamesFull, payModes, getWeekDates, fmtDate, fmtDateFR, fmtMonthFR } from "./types";
 import EnrollPanel from "./EnrollPanel";
@@ -177,6 +177,38 @@ export default function PlanningPage() {
   const handleDelete = async (id: string) => { if (!confirm("Supprimer ?")) return; await deleteDoc(doc(db, "creneaux", id)); fetchData(); };
   const handleDuplicateWeek = async () => { if (creneaux.length===0) return; setDuplicating(true); const { count, skipped } = await duplicateWeekCreneaux(creneaux, dupWeeks); setDuplicating(false);setShowDuplicate(false);toast(`${count} créneau${count>1?"x":""} créé${count>1?"s":""}${skipped > 0 ? ` (${skipped} doublon${skipped>1?"s":""})` : ""}`, "success");fetchData(); };
 
+
+  const exportPDF = () => {
+    const visibleCreneaux = viewMode === "day" ? dayCreneaux : creneaux;
+    const titre = viewMode === "day"
+      ? `Planning du ${currentDay.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}`
+      : viewMode === "week"
+      ? `Planning semaine du ${weekDates[0].toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} au ${weekDates[6].toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`
+      : `Planning ${currentDay.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}`;
+    const lignes = [...visibleCreneaux]
+      .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
+      .map(c => `<tr>
+        <td>${new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</td>
+        <td>${c.startTime}–${c.endTime}</td>
+        <td><strong>${c.activityTitle}</strong></td>
+        <td>${c.monitor || "—"}</td>
+        <td style="text-align:center">${c.enrolledCount||0}/${c.maxPlaces||0}</td>
+        <td style="text-align:center;color:${c.status==="closed"?"#16a34a":"#94a3b8"}">${c.status==="closed"?"✓ Clôturé":"—"}</td>
+      </tr>`).join("");
+    const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>${titre}</title>
+      <style>body{font-family:Arial,sans-serif;font-size:12px;margin:20px;color:#1e3a5f;}
+      h1{font-size:16px;color:#0C1A2E;margin-bottom:4px;}p{color:#666;font-size:11px;margin-bottom:16px;}
+      table{width:100%;border-collapse:collapse;}th{background:#0C1A2E;color:white;padding:8px 10px;text-align:left;font-size:11px;}
+      td{padding:7px 10px;border-bottom:1px solid #e2e8f0;}tr:nth-child(even) td{background:#f8fafc;}
+      @media print{body{margin:10px;}}</style></head><body>
+      <h1>🐴 ${titre}</h1>
+      <p>Centre Équestre d'Agon-Coutainville — Imprimé le ${new Date().toLocaleDateString("fr-FR")}</p>
+      <table><thead><tr><th>Date</th><th>Horaire</th><th>Activité</th><th>Moniteur</th><th>Inscrits</th><th>Statut</th></tr></thead>
+      <tbody>${lignes||"<tr><td colspan='6' style='text-align:center;color:#999'>Aucun créneau</td></tr>"}</tbody></table>
+      </body></html>`;
+    const w = window.open("","_blank");
+    if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 300); }
+  };
 
   const analyserPlanning = async () => {
     const visibleCreneaux = viewMode === "day" ? dayCreneaux : creneaux;
@@ -540,6 +572,10 @@ export default function PlanningPage() {
           <button onClick={()=>setShowRdvForm(true)} className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-orange-700 bg-orange-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-orange-100"><Briefcase size={14}/>RDV Pro</button>
           <button onClick={()=>{setShowGenerator(true);setShowSimple(false);}} className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-blue-800 bg-gold-400 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-gold-300"><Calendar size={14}/>Périodes</button>
           {viewMode==="week"&&creneaux.length>0&&<button onClick={()=>setShowDuplicate(!showDuplicate)} className="font-body text-xs sm:text-sm font-semibold text-blue-500 bg-blue-50 px-3 py-2 rounded-lg border-none cursor-pointer">Dupliquer</button>}
+          <button onClick={exportPDF} disabled={(viewMode==="day"?dayCreneaux:creneaux).length===0}
+            className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-slate-600 bg-gray-100 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-gray-200 disabled:opacity-40">
+            <Printer size={14}/> PDF
+          </button>
           <button onClick={analyserPlanning} disabled={iaLoading || (viewMode==="day"?dayCreneaux:creneaux).length===0}
             className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-white px-3 py-2 rounded-lg border-none cursor-pointer disabled:opacity-40"
             style={{ background: "linear-gradient(135deg,#7c3aed,#2050A0)" }}>
