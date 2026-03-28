@@ -94,6 +94,44 @@ export default function MontoirPage() {
 
   const updateEnrolled = async (cid: string, enrolled: any[]) => { await updateDoc(doc(db,"creneaux",cid),{enrolled}); fetchData(); };
   const togglePresence = (c: Creneau, childId: string, val: string) => { updateEnrolled(c.id, (c.enrolled||[]).map(e => e.childId===childId ? {...e, presence: val} : e)); };
+  // ── Charge journalière des poneys (nb séances + nb heures aujourd'hui) ──────
+  const poneyCharge = useMemo(() => {
+    const charge: Record<string, { seances: number; heures: number }> = {};
+    creneaux.forEach(c => {
+      if (c.status === "closed") return; // compter aussi les clôturées
+      const dur = (() => {
+        const [sh, sm] = (c.startTime || "00:00").split(":").map(Number);
+        const [eh, em] = (c.endTime || "00:00").split(":").map(Number);
+        return ((eh * 60 + em) - (sh * 60 + sm)) / 60;
+      })();
+      (c.enrolled || []).forEach((e: any) => {
+        if (!e.horseName) return;
+        if (!charge[e.horseName]) charge[e.horseName] = { seances: 0, heures: 0 };
+        charge[e.horseName].seances++;
+        charge[e.horseName].heures += dur;
+      });
+    });
+    return charge;
+  }, [creneaux]);
+
+  // ── Historique des 4 derniers poneys par cavalier (depuis les notes péda) ───
+  const childHorseHistory = useMemo(() => {
+    const hist: Record<string, string[]> = {};
+    families.forEach((f: any) => {
+      (f.children || []).forEach((ch: any) => {
+        const notes = (ch.peda?.notes || [])
+          .filter((n: any) => n.horseName)
+          .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+          .slice(0, 4)
+          .map((n: any) => n.horseName as string);
+        // Dédupliquer en gardant l'ordre
+        const seen = new Set<string>();
+        hist[ch.id] = notes.filter((h: string) => { if (seen.has(h)) return false; seen.add(h); return true; });
+      });
+    });
+    return hist;
+  }, [families]);
+
   const assignHorse = (c: Creneau, childId: string, h: string) => { updateEnrolled(c.id, (c.enrolled||[]).map(e => e.childId===childId ? {...e, horseName: h} : e)); };
   const [quickNoteChild, setQuickNoteChild] = useState<{ cid: string; children: any[] } | null>(null);
   const [quickNotes, setQuickNotes] = useState<Record<string, string>>({});
@@ -478,6 +516,24 @@ export default function MontoirPage() {
       </div>
       {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
       <>
+      {/* Charge journalière poneys */}
+      {equides.length > 0 && Object.keys(poneyCharge).length > 0 && (
+        <Card padding="sm" className="mb-3">
+          <div className="font-body text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Charge poneys aujourd'hui</div>
+          <div className="flex flex-wrap gap-1.5">
+            {availableHorses.map(h => {
+              const ch = poneyCharge[h.name];
+              if (!ch) return <span key={h.id} className="font-body text-[10px] px-2 py-1 rounded-lg bg-green-50 text-green-700">{h.name} 0s</span>;
+              const color = ch.seances >= 4 ? "bg-red-50 text-red-600" : ch.seances >= 3 ? "bg-orange-50 text-orange-600" : ch.seances >= 2 ? "bg-yellow-50 text-yellow-700" : "bg-green-50 text-green-700";
+              return <span key={h.id} className={`font-body text-[10px] px-2 py-1 rounded-lg font-semibold ${color}`}>{h.name} {ch.seances}s·{ch.heures}h</span>;
+            })}
+            {unavailableHorses.map((h, i) => (
+              <span key={i} className="font-body text-[10px] px-2 py-1 rounded-lg bg-gray-100 text-gray-400 line-through">{h.name}</span>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {/* Équidés disponibles / indisponibles */}
       {equides.length > 0 && (
         <div className="flex flex-wrap gap-3 mb-4">
@@ -553,14 +609,29 @@ export default function MontoirPage() {
                   const usedInThis = new Set<string>();
                   en.forEach((oe: any) => { if (oe.childId !== e.childId && oe.horseName) usedInThis.add(oe.horseName); });
 
-                  return <select value={e.horseName||""} onChange={ev=>assignHorse(c,e.childId,ev.target.value)} className="px-2 py-1.5 rounded-lg border border-blue-500/8 font-body text-xs bg-white w-full">
-                    <option value="">Affecter...</option>
-                    {availableHorses.map(h => {
-                      const usedOther = usedInOtherCreneaux.has(h.name);
-                      const usedHere = usedInThis.has(h.name);
-                      return <option key={h.id} value={h.name} disabled={usedOther || usedHere} style={usedOther || usedHere ? {color:"#ccc"} : {}}>{h.name}{usedOther ? " (autre reprise)" : usedHere ? " (déjà affecté)" : ""}</option>;
-                    })}
-                  </select>;
+                  return (
+                    <div className="w-28 sm:w-36 flex flex-col gap-1">
+                      <select value={e.horseName||""} onChange={ev=>assignHorse(c,e.childId,ev.target.value)} className="px-2 py-1.5 rounded-lg border border-blue-500/8 font-body text-xs bg-white w-full">
+                        <option value="">Affecter...</option>
+                        {availableHorses.map(h => {
+                          const usedOther = usedInOtherCreneaux.has(h.name);
+                          const usedHere = usedInThis.has(h.name);
+                          const charge = poneyCharge[h.name];
+                          const chargeStr = charge ? ` (${charge.seances}s·${charge.heures}h)` : "";
+                          return <option key={h.id} value={h.name} disabled={usedOther || usedHere}
+                            style={usedOther || usedHere ? {color:"#ccc"} : charge?.seances >= 3 ? {color:"#f59e0b"} : {}}>
+                            {h.name}{chargeStr}{usedOther ? " ⚠" : usedHere ? " ✗" : ""}
+                          </option>;
+                        })}
+                      </select>
+                      {/* Historique 4 derniers poneys du cavalier */}
+                      {(childHorseHistory[e.childId] || []).length > 0 && (
+                        <div className="font-body text-[9px] text-slate-400 truncate" title={`Historique : ${childHorseHistory[e.childId].join(" → ")}`}>
+                          ↺ {childHorseHistory[e.childId].join(" · ")}
+                        </div>
+                      )}
+                    </div>
+                  );
                 })() : <span className="font-body text-xs font-semibold text-blue-800">{e.horseName||"—"}</span>}</span>
                 <span className="w-20 sm:w-24 flex justify-center gap-1 sm:gap-2">{!closed ? <>
                   <button onClick={()=>togglePresence(c,e.childId,"present")} className={`w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="present"?"bg-green-500 text-white":"bg-gray-100 text-slate-600 hover:bg-green-100"}`}><CheckCircle2 size={18}/></button>
