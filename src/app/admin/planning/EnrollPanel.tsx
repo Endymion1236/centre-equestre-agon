@@ -34,6 +34,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // Plan de séance
   const [planUploading, setPlanUploading] = useState(false);
   const [lightbox, setLightbox] = useState(false);
+  const [planUrl, setPlanUrl] = useState<string | null>((creneau as any).planSeanceUrl || null);
   const [planType, setPlanType] = useState<string | null>((creneau as any).planSeanceType || null);
   const planInputRef = useRef<HTMLInputElement>(null);
   // Liste d'attente
