@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { collection, getDocs, addDoc, deleteDoc, updateDoc, setDoc, doc, getDoc, serverTimestamp, query, where, orderBy, limit, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { emailTemplates } from "@/lib/email-templates";
@@ -8,7 +8,7 @@ import { safeNumber, round2, generateOrderId } from "@/lib/utils";
 import { Card, Badge, Button } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { useAgentContext } from "@/hooks/useAgentContext";
-import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle, Copy } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle, Copy, ChevronDown } from "lucide-react";
 import type { Family, Activity } from "@/types";
 
 /** Normalise un payment chargé depuis Firestore — tue les NaN à la source */
@@ -1693,11 +1693,31 @@ export default function PaiementsPage() {
             const unpaid = payments.filter(p => {
               if (p.status === "cancelled" || p.status === "paid") return false;
               if ((p.paidAmount || 0) >= (p.totalTTC || 0)) return false;
-              // Exclure les échéances individuelles (elles sont dans l'onglet Échéances)
               if ((p as any).echeancesTotal > 1) return false;
               return true;
             });
             const totalDue = unpaid.reduce((s, p) => s + ((p.totalTTC || 0) - (p.paidAmount || 0)), 0);
+
+            // ── Recherche ──
+            const [search, setSearch] = React.useState("");
+            const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
+
+            const filtered = search.trim()
+              ? unpaid.filter(p => {
+                  const q = search.toLowerCase();
+                  const inName = (p.familyName || "").toLowerCase().includes(q);
+                  const inItems = (p.items || []).some((i: any) => (i.activityTitle || "").toLowerCase().includes(q) || (i.childName || "").toLowerCase().includes(q));
+                  const inDate = p.date?.seconds ? new Date(p.date.seconds * 1000).toLocaleDateString("fr-FR").includes(q) : false;
+                  return inName || inItems || inDate;
+                })
+              : unpaid;
+
+            const toggle = (id: string) => setExpanded(prev => {
+              const next = new Set(prev);
+              next.has(id) ? next.delete(id) : next.add(id);
+              return next;
+            });
+
             return unpaid.length === 0 ? (
               <Card padding="lg" className="text-center"><div className="w-14 h-14 rounded-2xl bg-green-50 flex items-center justify-center mx-auto mb-3"><Check size={28} className="text-green-400" /></div><p className="font-body text-sm text-slate-600">Aucun impayé ! Toutes les factures sont réglées.</p></Card>
             ) : (
@@ -1706,119 +1726,93 @@ export default function PaiementsPage() {
                   <span className="font-body text-2xl font-bold text-red-500">{totalDue.toFixed(2)}€</span>
                   <span className="font-body text-xs text-slate-600">total impayé sur {unpaid.length} facture{unpaid.length > 1 ? "s" : ""}</span>
                 </Card>
-                <div className="flex flex-col gap-3">
-                  {unpaid.map(p => {
+
+                {/* Barre de recherche */}
+                <div className="relative mb-4">
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                  <input value={search} onChange={e => setSearch(e.target.value)}
+                    placeholder="Rechercher par nom, activité, date..."
+                    className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-blue-500/8 font-body text-sm bg-white focus:border-blue-400 focus:outline-none"/>
+                  {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer"><X size={14}/></button>}
+                </div>
+
+                {filtered.length === 0 && <p className="font-body text-sm text-slate-500 text-center py-8">Aucun résultat pour "{search}"</p>}
+
+                <div className="flex flex-col gap-2">
+                  {filtered.map(p => {
                     const date = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
                     const due = (p.totalTTC || 0) - (p.paidAmount || 0);
                     const daysLate = Math.floor((Date.now() - date.getTime()) / 86400000);
+                    const isOpen = expanded.has(p.id);
                     return (
-                      <Card key={p.id} padding="md">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="font-body text-sm font-semibold text-blue-800">{p.familyName}</div>
-                            <div className="font-body text-xs text-slate-600 truncate">{(p.items||[]).map((i:any)=>i.activityTitle).join(", ")} · {date.toLocaleDateString("fr-FR")}</div>
-                            {daysLate > 30 && <div className="font-body text-xs text-red-500 mt-1">{daysLate} jours de retard</div>}
-                          </div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <div>
-                              <div className="font-body text-lg font-bold text-red-500">{due.toFixed(2)}€</div>
-                              <div className="font-body text-[10px] text-slate-600">dû sur {(p.totalTTC || 0).toFixed(2)}€</div>
+                      <Card key={p.id} padding="md" className="overflow-hidden">
+                        {/* ── En-tête accordéon (toujours visible) ── */}
+                        <button onClick={() => toggle(p.id)} className="w-full flex items-center justify-between gap-3 bg-transparent border-none cursor-pointer text-left p-0">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-body text-sm font-semibold text-blue-800">{p.familyName}</span>
+                              <Badge color={daysLate > 60 ? "red" : daysLate > 30 ? "orange" : "gray"}>
+                                {daysLate > 60 ? "Urgent" : daysLate > 30 ? "Relance" : "Récent"}
+                              </Badge>
                             </div>
-                            <Badge color={daysLate > 60 ? "red" : daysLate > 30 ? "orange" : "gray"}>
-                              {daysLate > 60 ? "Urgent" : daysLate > 30 ? "Relance" : "Récent"}
-                            </Badge>
-                            <button onClick={async () => {
-                              const fam = families.find(f => f.firestoreId === p.familyId);
-                              const email = fam?.parentEmail || "";
-                              if (!email) { toast("Pas d'email pour cette famille.", "warning"); return; }
-                              const emailData = emailTemplates.rappelImpaye({
-                                parentName: p.familyName || "",
-                                montant: due,
-                                prestations: (p.items||[]).map((i:any) => i.activityTitle).join(", "),
-                              });
-                              try {
+                            <div className="font-body text-xs text-slate-500 truncate mt-0.5">
+                              {(p.items||[]).map((i:any)=>i.activityTitle).join(", ")} · {date.toLocaleDateString("fr-FR")}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 flex-shrink-0">
+                            <div className="text-right">
+                              <div className="font-body text-lg font-bold text-red-500">{due.toFixed(2)}€</div>
+                              <div className="font-body text-[10px] text-slate-400">/{(p.totalTTC||0).toFixed(0)}€</div>
+                            </div>
+                            <ChevronDown size={16} className={`text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`}/>
+                          </div>
+                        </button>
+
+                        {/* ── Détail déplié ── */}
+                        {isOpen && (
+                          <div className="mt-3 pt-3 border-t border-gray-100">
+                            <div className="flex flex-wrap gap-2 mb-3">
+                              <button onClick={async () => {
+                                const fam = families.find(f => f.firestoreId === p.familyId);
+                                const email = fam?.parentEmail || "";
+                                if (!email) { toast("Pas d'email pour cette famille.", "warning"); return; }
+                                const emailData = emailTemplates.rappelImpaye({ parentName: p.familyName || "", montant: due, prestations: (p.items||[]).map((i:any) => i.activityTitle).join(", ") });
                                 fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: email, ...emailData }) }).catch(e => console.warn("Email:", e));
                                 toast(`Relance envoyée à ${email}`);
-                              } catch (e) { console.error(e); toast("Erreur envoi.", "error"); }
-                            }}
-                              className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 whitespace-nowrap">
-                              Relancer
-                            </button>
-                            <button onClick={() => {
-                              setEditPayment(p);
-                              setEditItems((p.items || []).map((i: any) => ({ ...i })));
-                              setEditRemisePct("");
-                              setEditRemiseEuros("");
-                            }}
-                              className="font-body text-xs text-slate-600 bg-gray-100 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200 whitespace-nowrap">
-                              ✏️ Modifier
-                            </button>
-                          </div>
-                        </div>
-                        {/* Détail des lignes avec bouton retirer */}
-                        {(p.items || []).length > 1 && (
-                          <div className="mt-2 pt-2 border-t border-gray-100">
+                              }} className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">Relancer</button>
+                              <button onClick={() => { setEditPayment(p); setEditItems((p.items || []).map((i: any) => ({ ...i }))); setEditRemisePct(""); setEditRemiseEuros(""); }}
+                                className="font-body text-xs text-slate-600 bg-gray-100 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">✏️ Modifier</button>
+                            </div>
                             {(p.items || []).map((item: any, idx: number) => (
-                              <div key={idx} className="flex items-center justify-between py-1 font-body text-xs">
-                                <span className="text-slate-600 flex-1 min-w-0 truncate">{item.childName ? `${item.childName} — ` : ""}{item.activityTitle}{item.date ? ` · ${new Date(item.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}` : ""}{item.startTime ? ` ${item.startTime}` : ""}</span>
+                              <div key={idx} className="flex items-center justify-between py-1.5 font-body text-xs border-b border-gray-50 last:border-0">
+                                <span className="text-slate-600 flex-1 min-w-0 truncate">{item.childName ? `${item.childName} — ` : ""}{item.activityTitle}{item.startTime ? ` ${item.startTime}` : ""}</span>
                                 <div className="flex items-center gap-2 flex-shrink-0">
                                   <span className="text-blue-500 font-semibold">{(item.priceTTC || 0).toFixed(2)}€</span>
-                                  <button onClick={() => {
-                                    if (!confirm(`Retirer "${item.childName || ""} — ${item.activityTitle}" (${(item.priceTTC||0).toFixed(2)}€) ?\n\nL'enfant sera désinscrit du créneau.`)) return;
-                                    removePaymentItem(p, idx);
-                                  }} title="Désinscrire et retirer cette prestation"
-                                    className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-0.5"><X size={12} /></button>
+                                  <button onClick={() => { if (!confirm(`Retirer "${item.activityTitle}" ?\n\nL'enfant sera désinscrit.`)) return; removePaymentItem(p, idx); }} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-0.5"><X size={12}/></button>
                                 </div>
                               </div>
                             ))}
+                            <div className="mt-2">
+                              <NoteField paymentId={p.id} initialNote={(p as any).note || ""} onSave={(note) => setPayments(prev => prev.map(x => x.id === p.id ? { ...x, note } : x))} />
+                            </div>
+                            <div className="mt-2 pt-2 border-t border-gray-100 flex flex-wrap gap-1.5 justify-between">
+                              <div className="flex gap-1.5">
+                                <button onClick={async () => {
+                                  const items = p.items || [];
+                                  const totalHT = items.reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
+                                  const totalTTC = p.totalTTC || 0;
+                                  const invDate = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
+                                  const invoiceNumber = (p as any).orderId || `F-${invDate.getFullYear()}${String(invDate.getMonth()+1).padStart(2,"0")}-${(p.id || "").slice(-4).toUpperCase()}`;
+                                  const res = await fetch("/api/invoice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invoiceNumber, date: invDate.toLocaleDateString("fr-FR"), familyName: p.familyName, familyEmail: families.find(f => f.firestoreId === p.familyId)?.parentEmail || "", items, totalHT, totalTVA: totalTTC - totalHT, totalTTC, paidAmount: p.paidAmount || 0, paymentMode: p.paymentMode ? (paymentModes.find(m => m.id === p.paymentMode)?.label || p.paymentMode) : "", paymentDate: p.paidAmount > 0 ? invDate.toLocaleDateString("fr-FR") : "" }) });
+                                  const data = await res.json();
+                                  if (data.html) { const w = window.open("","_blank"); if(w){w.document.write(data.html);w.document.close();w.print();} }
+                                }} className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1"><Receipt size={10}/> Facture</button>
+                                <button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1"><Plus size={10}/> Dupliquer</button>
+                              </div>
+                              <button onClick={() => deletePaymentCommand(p)} className="font-body text-[10px] text-red-500 bg-red-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-red-100 flex items-center gap-1"><Trash2 size={10}/> Annuler</button>
+                            </div>
                           </div>
                         )}
-                        {/* Commentaire libre */}
-                        <div className="mt-2 pt-2 border-t border-gray-100">
-                          <NoteField paymentId={p.id} initialNote={(p as any).note || ""} onSave={(note) => setPayments(prev => prev.map(x => x.id === p.id ? { ...x, note } : x))} />
-                        </div>
-                        {/* Boutons actions commande */}
-                        <div className="mt-2 pt-2 border-t border-gray-100 flex flex-wrap gap-1.5 justify-between">
-                          <div className="flex gap-1.5">
-                            <button onClick={async () => {
-                              const items = p.items || [];
-                              const totalHT = items.reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
-                              const totalTTC = p.totalTTC || 0;
-                              const totalTVA = totalTTC - totalHT;
-                              const invDate = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
-                              const invoiceNumber = (p as any).orderId || `F-${invDate.getFullYear()}${String(invDate.getMonth()+1).padStart(2,"0")}-${(p.id || "").slice(-4).toUpperCase()}`;
-                              try {
-                                const res = await fetch("/api/invoice", {
-                                  method: "POST", headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({
-                                    invoiceNumber, date: invDate.toLocaleDateString("fr-FR"),
-                                    familyName: p.familyName, familyEmail: families.find(f => f.firestoreId === p.familyId)?.parentEmail || "",
-                                    items, totalHT, totalTVA, totalTTC,
-                                    paidAmount: p.paidAmount || 0,
-                                    paymentMode: p.paymentMode ? (paymentModes.find(m => m.id === p.paymentMode)?.label || p.paymentMode) : "",
-                                    paymentDate: p.paidAmount > 0 ? invDate.toLocaleDateString("fr-FR") : "",
-                                  }),
-                                });
-                                const data = await res.json();
-                                if (data.html) {
-                                  const w = window.open("", "_blank");
-                                  if (w) { w.document.write(data.html); w.document.close(); w.print(); }
-                                }
-                              } catch (e) { console.error(e); toast("Erreur génération facture", "error"); }
-                            }}
-                              className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1">
-                              <Receipt size={10} /> Facture
-                            </button>
-                            <button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })}
-                              className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
-                              <Plus size={10} /> Dupliquer
-                            </button>
-                          </div>
-                          <button onClick={() => deletePaymentCommand(p)}
-                            className="font-body text-[10px] text-red-500 bg-red-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-red-100 flex items-center gap-1">
-                            <Trash2 size={10} /> Annuler
-                          </button>
-                        </div>
                       </Card>
                     );
                   })}
