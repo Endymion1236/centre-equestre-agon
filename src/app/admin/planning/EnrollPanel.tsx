@@ -246,6 +246,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const prixLicence = licenceType === "moins18" ? inscParams.licenceMoins18 : inscParams.licencePlus18;
   // Forfait selon fréquence (sélectionnable)
   const [frequenceCours, setFrequenceCours] = useState<1 | 2 | 3>(1);
+  const [secondSlotKey, setSecondSlotKey] = useState<string>(""); // 2ème créneau pour 2×/3×/sem
   const prixForfaitAnnuel = frequenceCours === 3 ? inscParams.forfait3x : frequenceCours === 2 ? inscParams.forfait2x : inscParams.forfait1x;
   const totalSessionsSaison = inscParams.totalSessionsSaison * frequenceCours;
   const dateFinSaison = inscParams.dateFinSaison;
@@ -638,7 +639,41 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     // Dans les 2 cas : inscrire dans le créneau
     // Pour les forfaits annuels : skipPayment car les échéances sont déjà créées
     const enrollOptions = inscriptionMode === "annuel" ? { skipPayment: true, skipEmail: true } : undefined;
-    await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, inscriptionMode === "ponctuel" && showPay ? payMode : undefined, enrollOptions);
+
+    if (inscriptionMode === "annuel") {
+      // Inscrire dans TOUS les créneaux futurs du même slot (même activité + même jour + même heure)
+      const today = new Date().toISOString().split("T")[0];
+      const dow = new Date(creneau.date + "T12:00:00").getDay();
+      const slotsToEnroll = allCreneaux.filter(c =>
+        c.activityTitle === creneau.activityTitle &&
+        c.activityType === "cours" &&
+        c.date >= today &&
+        new Date(c.date + "T12:00:00").getDay() === dow &&
+        c.startTime === creneau.startTime
+      );
+
+      for (const slot of slotsToEnroll) {
+        await onEnroll(slot.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, undefined, { skipPayment: true, skipEmail: true });
+      }
+
+      // Inscrire dans le 2ème créneau si sélectionné (2×/sem ou 3×/sem)
+      if (secondSlotKey && frequenceCours >= 2) {
+        const [dowStr, startTime] = secondSlotKey.split("-");
+        const secondDow = parseInt(dowStr);
+        const secondSlots = allCreneaux.filter(c =>
+          c.activityTitle === creneau.activityTitle &&
+          c.activityType === "cours" &&
+          c.date >= today &&
+          new Date(c.date + "T12:00:00").getDay() === secondDow &&
+          c.startTime === startTime
+        );
+        for (const slot of secondSlots) {
+          await onEnroll(slot.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, undefined, { skipPayment: true, skipEmail: true });
+        }
+      }
+    } else {
+      await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, inscriptionMode === "ponctuel" && showPay ? payMode : undefined, enrollOptions);
+    }
 
     if (inscriptionMode === "annuel") {
       setJustEnrolled(`${childName} inscrit(e) en forfait annuel — ${sessionsRestantes} séances — ${totalAnnuel.toFixed(2)}€ en ${payPlan}`);
@@ -995,7 +1030,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       <div className="font-body text-xs text-slate-500 mb-2">Fréquence hebdomadaire</div>
                       <div className="flex gap-2">
                         {([1, 2, 3] as const).map(f => (
-                          <button key={f} onClick={() => setFrequenceCours(f)}
+                          <button key={f} onClick={() => { setFrequenceCours(f); if (f === 1) setSecondSlotKey(""); }}
                             className={`flex-1 py-2 rounded-lg border font-body text-sm font-semibold cursor-pointer transition-all ${frequenceCours === f ? "border-green-500 bg-green-50 text-green-700" : "border-gray-200 bg-white text-slate-500"}`}>
                             {f}×/sem
                             <div className="font-body text-[10px] font-normal mt-0.5">
@@ -1005,6 +1040,40 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         ))}
                       </div>
                     </div>
+
+                    {/* 2ème créneau si 2×/sem ou 3×/sem */}
+                    {frequenceCours >= 2 && (() => {
+                      const autresSlots = allCreneaux.filter(c =>
+                        c.activityTitle === creneau.activityTitle &&
+                        c.activityType === "cours" &&
+                        c.id !== creneau.id &&
+                        (() => {
+                          const d1 = new Date(creneau.date + "T12:00:00").getDay();
+                          const d2 = new Date(c.date + "T12:00:00").getDay();
+                          return d1 !== d2 || c.startTime !== creneau.startTime;
+                        })()
+                      );
+                      const uniqueSlots = [...new Map(autresSlots.map(c => {
+                        const dow = new Date(c.date + "T12:00:00").getDay();
+                        const key = `${dow}-${c.startTime}`;
+                        return [key, { key, dow, startTime: c.startTime, endTime: c.endTime, label: `${["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"][dow]} ${c.startTime}` }];
+                      })).values()];
+                      if (uniqueSlots.length === 0) return null;
+                      return (
+                        <div>
+                          <div className="font-body text-xs text-slate-500 mb-2">2ème créneau hebdomadaire <span className="text-red-500">*</span></div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {uniqueSlots.map(s => (
+                              <button key={s.key} onClick={() => setSecondSlotKey(secondSlotKey === s.key ? "" : s.key)}
+                                className={`px-3 py-1.5 rounded-lg border font-body text-xs font-semibold cursor-pointer transition-all ${secondSlotKey === s.key ? "border-green-500 bg-green-50 text-green-700" : "border-gray-200 bg-white text-slate-600"}`}>
+                                {s.label}
+                              </button>
+                            ))}
+                          </div>
+                          {frequenceCours >= 2 && !secondSlotKey && <p className="font-body text-[10px] text-red-500 mt-1">Sélectionnez un 2ème créneau</p>}
+                        </div>
+                      );
+                    })()}
 
                     {/* Adhésion dégressive */}
                     <label className="flex items-center justify-between cursor-pointer">
@@ -1106,7 +1175,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
             {/* Bouton Cours / Activité ponctuelle */}
             {!isStage && selChild && (
-              <button onClick={handleEnroll} disabled={!selChild||enrolling} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${!selChild||enrolling?"bg-gray-200 text-slate-500":inscriptionMode==="annuel"?"bg-green-600 text-white hover:bg-green-500":"bg-blue-500 text-white hover:bg-blue-400"}`}>
+              <button onClick={handleEnroll} disabled={!selChild||enrolling||(inscriptionMode==="annuel"&&frequenceCours>=2&&!secondSlotKey)} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${(!selChild||enrolling||(inscriptionMode==="annuel"&&frequenceCours>=2&&!secondSlotKey))?"bg-gray-200 text-slate-500":inscriptionMode==="annuel"?"bg-green-600 text-white hover:bg-green-500":"bg-blue-500 text-white hover:bg-blue-400"}`}>
                 {enrolling ? "..." : inscriptionMode === "annuel" ? `Inscrire à l'année (${totalAnnuel.toFixed(2)}€)` : showPay ? `Inscrire + Encaisser (${priceTTC.toFixed(2)}€)` : priceTTC > 0 ? `Inscrire — paiement en attente (${priceTTC.toFixed(2)}€)` : "Inscrire"}
               </button>
             )}
