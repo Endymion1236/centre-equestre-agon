@@ -7,9 +7,14 @@ let app: App;
 if (getApps().length === 0) {
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  // Remplacer les \\n échappés par de vrais sauts de ligne (problème fréquent sur Vercel)
-  const privateKey = (process.env.FIREBASE_PRIVATE_KEY || "").split(String.raw`
-`).join("\n");
+
+  // Vercel échappe les \n en \\n — on force le remplacement quel que soit le format
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY || "";
+  // Remplace les séquences littérales \n (backslash + n) par de vrais sauts de ligne
+  if (privateKey.includes("\\n")) {
+    privateKey = privateKey.replace(/\\n/g, "\n");
+  }
+
   const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || `${projectId}.appspot.com`;
 
   if (clientEmail && privateKey) {

@@ -6,14 +6,12 @@ export const maxDuration = 30;
 
 const DEFAULT_VOICE_ID = "XB0fDUnXU5powFXDhCwa"; // Charlotte
 
-const client = new ElevenLabsClient({
-  apiKey: process.env.ELEVENLABS_API_KEY,
-});
-
 export async function POST(request: NextRequest) {
   if (!process.env.ELEVENLABS_API_KEY) {
     return NextResponse.json({ error: "ELEVENLABS_API_KEY non configurée" }, { status: 500 });
   }
+  // Initialisation lazy — évite l'erreur au build si la variable est absente
+  const client = new ElevenLabsClient({ apiKey: process.env.ELEVENLABS_API_KEY });
   try {
     const { text, voiceId = DEFAULT_VOICE_ID } = await request.json();
     if (!text?.trim()) return NextResponse.json({ error: "Texte requis" }, { status: 400 });

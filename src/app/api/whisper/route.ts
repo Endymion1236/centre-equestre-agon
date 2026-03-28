@@ -5,10 +5,6 @@ export const dynamic = "force-dynamic";
 // Augmenter la limite de taille pour les fichiers audio
 export const maxDuration = 60;
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 export async function POST(request: NextRequest) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -17,6 +13,7 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+  const openai = new OpenAI({ apiKey });
 
   try {
     const formData = await request.formData();
