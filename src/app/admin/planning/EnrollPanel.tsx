@@ -40,12 +40,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     setLightbox(true);
     if (!planUrl) return;
     try {
-      const resp = await fetch(planUrl);
+      const resp = await fetch(planUrl, { mode: "cors" });
+      if (!resp.ok) throw new Error("fetch failed");
       const blob = await resp.blob();
+      // Convertir HEIC en affichable si besoin
       setLightboxBlobUrl(URL.createObjectURL(blob));
     } catch {
-      // Si fetch échoue (ex: CORS), utiliser l'URL directe
-      setLightboxBlobUrl(planUrl);
+      // CORS bloqué → fallback sur URL directe dans un nouvel onglet
+      setLightboxBlobUrl("cors_error:" + planUrl);
     }
   };
 
@@ -1183,13 +1185,23 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         <div className="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-4"
           onClick={closeLightbox}>
           <div className="relative max-w-4xl max-h-full w-full" onClick={e => e.stopPropagation()}>
-            {lightboxBlobUrl ? (
-              <img src={lightboxBlobUrl} alt="Plan de séance"
-                className="w-full max-h-[85vh] object-contain rounded-xl shadow-2xl" />
-            ) : (
+            {!lightboxBlobUrl ? (
               <div className="flex items-center justify-center h-64 text-white">
                 <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
               </div>
+            ) : lightboxBlobUrl.startsWith("cors_error:") ? (
+              <div className="flex flex-col items-center justify-center h-64 gap-4 text-white text-center p-6">
+                <div className="text-4xl">🔒</div>
+                <p className="font-body text-sm">Aperçu bloqué par la politique CORS de Firebase Storage.</p>
+                <a href={lightboxBlobUrl.replace("cors_error:", "")} target="_blank" rel="noopener noreferrer"
+                  className="font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-400 px-4 py-2.5 rounded-xl no-underline">
+                  Ouvrir dans un nouvel onglet →
+                </a>
+                <p className="font-body text-[10px] text-white/50">Solution définitive : configurer les règles CORS dans Firebase Storage</p>
+              </div>
+            ) : (
+              <img src={lightboxBlobUrl} alt="Plan de séance"
+                className="w-full max-h-[85vh] object-contain rounded-xl shadow-2xl" />
             )}
             <button onClick={closeLightbox}
               className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/60 text-white flex items-center justify-center border-none cursor-pointer hover:bg-black/80 text-lg">
