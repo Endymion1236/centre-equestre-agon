@@ -824,25 +824,37 @@ export default function PlanningPage() {
             dc.forEach(c=>{const key=`${c.startTime}-${c.endTime}`;const g=grouped.find(x=>x.key===key);if(g)g.items.push(c);else grouped.push({key,items:[c]});});
             return(
             <div key={`c${i}`} className="min-h-[140px] flex flex-col gap-1">
-              {/* Stages : matin en haut, après-midi en bas */}
+              {/* Stages : 3 badges selon l'heure */}
               {(() => {
+                const goToDay = () => { setViewMode("day"); setDayOffset(Math.round((d.getTime()-new Date().getTime())/86400000)); };
                 const matin = stages.filter(c => parseInt(c.startTime) < 13);
-                const aprem = stages.filter(c => parseInt(c.startTime) >= 13);
+                const aprem = stages.filter(c => parseInt(c.startTime) >= 13 && parseInt(c.startTime) < 16);
+                const soir  = stages.filter(c => parseInt(c.startTime) >= 16);
+
+                const badge = (list: typeof stages, bg: string, border: string, dot: string, text: string) => {
+                  if (list.length === 0) return null;
+                  // Construire le label : horaire + titre tronqué
+                  const label = list.length === 1
+                    ? `${list[0].startTime} ${list[0].activityTitle.slice(0, 10)}`
+                    : `${list.length} stages`;
+                  // Horaires uniques pour afficher sous le titre
+                  const horaires = [...new Set(list.map(c => c.startTime))].join(", ");
+                  return (
+                    <button onClick={goToDay}
+                      className={`w-full flex flex-col px-1.5 py-1 rounded-lg border font-body cursor-pointer text-left hover:opacity-80 ${bg} ${border}`}>
+                      <div className={`flex items-center gap-1 text-[10px] font-semibold ${text}`}>
+                        <span className={`w-3.5 h-3.5 rounded-full ${dot} text-white text-[8px] flex items-center justify-center flex-shrink-0`}>{list.length}</span>
+                        <span className="truncate">{label}</span>
+                      </div>
+                      <div className={`text-[9px] pl-4 ${text} opacity-70`}>{horaires}</div>
+                    </button>
+                  );
+                };
+
                 return <>
-                  {matin.length > 0 && (
-                    <button onClick={()=>{setViewMode("day");setDayOffset(Math.round((d.getTime()-new Date().getTime())/86400000));}}
-                      className="w-full flex items-center gap-1 px-1.5 py-1 rounded-lg bg-green-50 border border-green-200 font-body text-[10px] font-semibold text-green-700 hover:bg-green-100 cursor-pointer text-left">
-                      <span className="w-3.5 h-3.5 rounded-full bg-green-500 text-white text-[8px] flex items-center justify-center flex-shrink-0">{matin.length}</span>
-                      <span className="truncate">{matin.length===1?matin[0].startTime+" "+matin[0].activityTitle.slice(0,12):`${matin.length} stages matin`}</span>
-                    </button>
-                  )}
-                  {aprem.length > 0 && (
-                    <button onClick={()=>{setViewMode("day");setDayOffset(Math.round((d.getTime()-new Date().getTime())/86400000));}}
-                      className="w-full flex items-center gap-1 px-1.5 py-1 rounded-lg bg-teal-50 border border-teal-200 font-body text-[10px] font-semibold text-teal-700 hover:bg-teal-100 cursor-pointer text-left">
-                      <span className="w-3.5 h-3.5 rounded-full bg-teal-500 text-white text-[8px] flex items-center justify-center flex-shrink-0">{aprem.length}</span>
-                      <span className="truncate">{aprem.length===1?aprem[0].startTime+" "+aprem[0].activityTitle.slice(0,12):`${aprem.length} stages a-m`}</span>
-                    </button>
-                  )}
+                  {badge(matin, "bg-green-50", "border-green-200", "bg-green-500", "text-green-700")}
+                  {badge(aprem, "bg-teal-50",  "border-teal-200",  "bg-teal-500",  "text-teal-700")}
+                  {badge(soir,  "bg-indigo-50","border-indigo-200","bg-indigo-500","text-indigo-700")}
                 </>;
               })()}
               {grouped.map(g=>{
