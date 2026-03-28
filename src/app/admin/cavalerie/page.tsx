@@ -1,4 +1,5 @@
 "use client";
+import { useAgentContext } from "@/hooks/useAgentContext";
 
 const fmtDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 
@@ -227,6 +228,12 @@ const daysUntil = (d: any): number => {
 export default function CavaleriePage() {
   // ─── State ───
   const [tab, setTab] = useState<"fiches" | "registre" | "soins" | "documents" | "charge" | "indispos">("fiches");
+    const { setAgentContext } = useAgentContext("cavalerie");
+
+  useEffect(() => {
+    setAgentContext({ module_actif: "cavalerie", description: "équidés, soins, disponibilités" });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [equides, setEquides] = useState<Equide[]>([]);
   const [soins, setSoins] = useState<SoinRecord[]>([]);
   const [mouvements, setMouvements] = useState<MouvementRegistre[]>([]);

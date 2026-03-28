@@ -1,4 +1,5 @@
 "use client";
+import { useAgentContext } from "@/hooks/useAgentContext";
 
 import { useState, useEffect } from "react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy } from "firebase/firestore";
@@ -224,6 +225,12 @@ function ActivityForm({ initial, onSave, onCancel }: {
 // ── Page principale ──────────────────────────────────────────────────────────
 
 export default function ActivitesPage() {
+    const { setAgentContext } = useAgentContext("activites");
+
+  useEffect(() => {
+    setAgentContext({ module_actif: "activites", description: "activités créées, types, tarifs" });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [activities, setActivities] = useState<(Activity & { firestoreId: string; priceTTC?: number; subcategories?: string[] })[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);

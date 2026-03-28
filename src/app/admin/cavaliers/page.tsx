@@ -1,4 +1,5 @@
 "use client";
+import { useAgentContext } from "@/hooks/useAgentContext";
 
 import { useState, useEffect } from "react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, Timestamp, query, where } from "firebase/firestore";
@@ -16,6 +17,12 @@ import type { Family } from "@/types";
 const galopLevels = ["—", "Bronze", "Argent", "Or", "G1", "G2", "G3", "G4", "G5", "G6", "G7"];
 
 export default function CavaliersPage() {
+    const { setAgentContext } = useAgentContext("cavaliers");
+
+  useEffect(() => {
+    setAgentContext({ module_actif: "cavaliers", description: "familles, cavaliers, inscriptions" });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const { toast } = useToast();
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const [loading, setLoading] = useState(true);

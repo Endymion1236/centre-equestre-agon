@@ -1,4 +1,5 @@
 "use client";
+import { useAgentContext } from "@/hooks/useAgentContext";
 
 import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, updateDoc, doc, serverTimestamp } from "firebase/firestore";
@@ -49,6 +50,12 @@ const statusConfig: Record<string, { label: string; color: "green" | "orange" | 
 };
 
 export default function ForfaitsPage() {
+    const { setAgentContext } = useAgentContext("forfaits");
+
+  useEffect(() => {
+    setAgentContext({ module_actif: "forfaits", description: "forfaits annuels actifs" });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [forfaits, setForfaits] = useState<Forfait[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);

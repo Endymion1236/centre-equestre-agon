@@ -1,4 +1,5 @@
 "use client";
+import { useAgentContext } from "@/hooks/useAgentContext";
 
 import { useEffect, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
@@ -12,6 +13,12 @@ import {
 import type { LucideIcon } from "lucide-react";
 
 export default function AdminDashboard() {
+  const { setAgentContext } = useAgentContext("dashboard");
+
+  useEffect(() => {
+    setAgentContext({ module_actif: "dashboard", description: "tableau de bord, stats globales" });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [familyCount, setFamilyCount] = useState(0);
   const [activityCount, setActivityCount] = useState(0);
 

@@ -1,4 +1,5 @@
 "use client";
+import { useAgentContext } from "@/hooks/useAgentContext";
 
 import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc, collection, getDocs, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp } from "firebase/firestore";
@@ -27,6 +28,12 @@ const defaultAccounts = [
 ];
 
 export default function ParametresPage() {
+    const { setAgentContext } = useAgentContext("parametres");
+
+  useEffect(() => {
+    setAgentContext({ module_actif: "parametres", description: "moniteurs, tarifs, infos centre" });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [section, setSection] = useState<"centre" | "tarifs" | "reductions" | "degressivite" | "annulation" | "comptable" | "horaires" | "moniteurs" | "fidelite" | "inscription" | "maintenance">("centre");
 
   // ─── Infos Centre ───

@@ -1,4 +1,5 @@
 "use client";
+import { useAgentContext } from "@/hooks/useAgentContext";
 
 import { useState, useEffect } from "react";
 import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
@@ -39,6 +40,12 @@ const payModes = [
 ];
 
 export default function CartesPage() {
+  const { setAgentContext } = useAgentContext("cartes");
+
+  useEffect(() => {
+    setAgentContext({ module_actif: "cartes", description: "cartes de séances actives et historique" });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [tab, setTab] = useState<"active" | "create" | "history">("active");
   const [cards, setCards] = useState<Card10[]>([]);
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);

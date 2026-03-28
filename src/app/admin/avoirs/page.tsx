@@ -1,4 +1,5 @@
 "use client";
+import { useAgentContext } from "@/hooks/useAgentContext";
 
 import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, Timestamp } from "firebase/firestore";
@@ -36,6 +37,12 @@ const statusColors: Record<AvoirStatus, "green" | "blue" | "orange" | "gray" | "
 
 export default function AvoirsPage() {
   const [tab, setTab] = useState<"actifs" | "creer" | "historique">("actifs");
+    const { setAgentContext } = useAgentContext("avoirs");
+
+  useEffect(() => {
+    setAgentContext({ module_actif: "avoirs", description: "avoirs disponibles par famille" });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [avoirs, setAvoirs] = useState<Avoir[]>([]);
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const [loading, setLoading] = useState(true);
