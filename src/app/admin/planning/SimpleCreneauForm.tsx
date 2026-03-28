@@ -6,6 +6,7 @@ import { Card } from "@/components/ui";
 import { Check, Loader2, X } from "lucide-react";
 import type { Activity } from "@/types";
 import { Creneau, fmtDate } from "./types";
+import ActivityPicker from "./ActivityPicker";
 
 function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
   activities: Activity[];
@@ -120,12 +121,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
         <button onClick={onCancel} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
       </div>
       <div className="flex flex-col gap-3">
-        <select value={actId} onChange={e => setActId(e.target.value)} className={inp}>
-          <option value="">Activité...</option>
-          {activities.filter(a => a.active !== false).map((a, i) => (
-            <option key={`${a.id}-${i}`} value={a.id}>{a.title}</option>
-          ))}
-        </select>
+        <ActivityPicker activities={activities} value={actId} onChange={setActId}/>
 
         <div className="flex items-center gap-3 flex-wrap">
           <label className="flex items-center gap-2 cursor-pointer">

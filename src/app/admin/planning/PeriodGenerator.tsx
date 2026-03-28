@@ -6,6 +6,7 @@ import { Card } from "@/components/ui";
 import { Loader2, Plus, X, Trash2, Calendar } from "lucide-react";
 import type { Activity } from "@/types";
 import { Creneau, Period, SlotDef, dayNames, dayNamesFull, fmtDate } from "./types";
+import ActivityPicker from "./ActivityPicker";
 
 function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Activity[]; onGenerate: (creneaux: Partial<Creneau>[]) => Promise<void>; onCancel: () => void; }) {
   const [periods, setPeriods] = useState<Period[]>([
@@ -106,10 +107,10 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
                 {slots.length > 1 && <button onClick={() => removeSlot(i)} className="ml-auto text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer"><Trash2 size={12}/></button>}
               </div>
               <div className="flex flex-wrap gap-2">
-                <select value={s.activityId} onChange={e => updateSlot(i, "activityId", e.target.value)} className={`${inp} flex-1 min-w-[160px]`}>
-                  <option value="">Activité...</option>
-                  {activities.filter(a => a.active !== false).map((a, idx) => <option key={`${a.id}-${idx}`} value={a.id}>{a.title}</option>)}
-                </select>
+                <div className="flex-1 min-w-[200px]">
+                  <ActivityPicker activities={activities} value={s.activityId}
+                    onChange={v => updateSlot(i, "activityId", v)}/>
+                </div>
                 <select value={s.day} onChange={e => updateSlot(i, "day", parseInt(e.target.value))} className={`${inp} w-28`}>
                   {dayNamesFull.map((d, j) => <option key={j} value={j}>{d}</option>)}
                 </select>
