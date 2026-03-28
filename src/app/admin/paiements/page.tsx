@@ -117,7 +117,13 @@ function NoteField({ paymentId, initialNote, onSave }: { paymentId: string; init
 export default function PaiementsPage() {
   const { toast } = useToast();
   const [tab, setTab] = useState<"encaisser" | "journal" | "historique" | "echeances" | "impayes" | "declarations">("encaisser");
-  const [editPayment, setEditPayment] = useState<any | null>(null); // modal édition commande
+  const [editPayment, setEditPayment] = useState<any | null>(null);
+  const [quickEncaisser, setQuickEncaisser] = useState<{ payment: any } | null>(null);
+  const [quickMode, setQuickMode] = useState("cheque");
+  const [quickMontant, setQuickMontant] = useState("");
+  const [quickDate, setQuickDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [quickRef, setQuickRef] = useState("");
+  const [quickSaving, setQuickSaving] = useState(false); // modal édition commande
   const [editItems, setEditItems] = useState<any[]>([]);
   const [editRemisePct, setEditRemisePct] = useState("");
   const [editRemiseEuros, setEditRemiseEuros] = useState("");
@@ -210,6 +216,47 @@ export default function PaiementsPage() {
       }}));
     }).catch(() => setLoading(false));
   }, []);
+
+  // ═══ ENCAISSEMENT RAPIDE DEPUIS L'ONGLET IMPAYÉS ═══
+  const handleQuickEncaisser = async () => {
+    if (!quickEncaisser) return;
+    const p = quickEncaisser.payment;
+    const montant = parseFloat(quickMontant) || ((p.totalTTC || 0) - (p.paidAmount || 0));
+    if (montant <= 0) return;
+    setQuickSaving(true);
+    try {
+      // Créer l'encaissement avec la date choisie (pas serverTimestamp)
+      const encDate = quickDate ? new Date(quickDate + "T12:00:00") : new Date();
+      await addDoc(collection(db, "encaissements"), {
+        paymentId: p.id,
+        familyId: p.familyId,
+        familyName: p.familyName,
+        montant: Math.round(montant * 100) / 100,
+        mode: quickMode,
+        modeLabel: paymentModes.find(m => m.id === quickMode)?.label || quickMode,
+        ref: quickRef,
+        activityTitle: (p.items || []).map((i: any) => i.activityTitle).join(", "),
+        date: encDate,
+      });
+      // Recalculer depuis tous les encaissements
+      const encSnap = await getDocs(query(collection(db, "encaissements"), where("paymentId", "==", p.id)));
+      const totalEncaisse = Math.round(encSnap.docs.reduce((s, d) => s + safeNumber(d.data().montant), 0) * 100) / 100;
+      const totalTTC = safeNumber(p.totalTTC);
+      const newStatus = totalEncaisse >= totalTTC ? "paid" : totalEncaisse > 0 ? "partial" : "pending";
+      await updateDoc(doc(db, "payments", p.id), {
+        paidAmount: totalEncaisse,
+        status: newStatus,
+        paymentMode: quickMode,
+        updatedAt: serverTimestamp(),
+      });
+      toast(`✅ ${montant.toFixed(2)}€ encaissé (${paymentModes.find(m => m.id === quickMode)?.label}) pour ${p.familyName}${totalEncaisse >= totalTTC ? " — Tout réglé !" : ` — Reste : ${(totalTTC - totalEncaisse).toFixed(2)}€`}`, "success");
+      setQuickEncaisser(null);
+      setQuickMontant(""); setQuickRef("");
+      setQuickDate(new Date().toISOString().split("T")[0]);
+      await refreshAll();
+    } catch (e) { console.error(e); toast("Erreur encaissement", "error"); }
+    setQuickSaving(false);
+  };
 
   const family = families.find((f) => f.firestoreId === selectedFamily);
   const children = family?.children || [];
@@ -1772,6 +1819,8 @@ export default function PaiementsPage() {
                         {isOpen && (
                           <div className="mt-3 pt-3 border-t border-gray-100">
                             <div className="flex flex-wrap gap-2 mb-3">
+                              <button onClick={() => { setQuickEncaisser({ payment: p }); setQuickMontant(due.toFixed(2)); setQuickDate(new Date().toISOString().split("T")[0]); setQuickRef(""); setQuickMode("cheque"); }}
+                                className="font-body text-xs text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-lg border-none cursor-pointer font-semibold">💶 Encaisser</button>
                               <button onClick={async () => {
                                 const fam = families.find(f => f.firestoreId === p.familyId);
                                 const email = fam?.parentEmail || "";
@@ -2260,6 +2309,70 @@ export default function PaiementsPage() {
       {/* ─── Onglet Déclarations ─── */}
 
       {/* ── Modal édition commande ── */}
+      {/* ── Modal encaissement rapide ── */}
+      {quickEncaisser && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setQuickEncaisser(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h2 className="font-display text-lg font-bold text-blue-800">Encaisser</h2>
+                <p className="font-body text-xs text-slate-500 mt-0.5">{quickEncaisser.payment.familyName}</p>
+              </div>
+              <button onClick={() => setQuickEncaisser(null)} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              {/* Montant */}
+              <div>
+                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Montant (€)</label>
+                <input type="number" min="0" step="0.01" value={quickMontant}
+                  onChange={e => setQuickMontant(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none text-right text-lg font-semibold"/>
+                <p className="font-body text-[10px] text-slate-400 mt-1">Dû : {((quickEncaisser.payment.totalTTC||0)-(quickEncaisser.payment.paidAmount||0)).toFixed(2)}€</p>
+              </div>
+              {/* Mode */}
+              <div>
+                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Mode de paiement</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: "cheque", label: "Chèque", icon: "📝" },
+                    { id: "especes", label: "Espèces", icon: "💵" },
+                    { id: "virement", label: "Virement", icon: "🏦" },
+                    { id: "cb_terminal", label: "CB", icon: "💳" },
+                  ].map(m => (
+                    <button key={m.id} onClick={() => setQuickMode(m.id)}
+                      className={`py-2.5 rounded-xl font-body text-sm font-semibold border cursor-pointer transition-all ${quickMode === m.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200 hover:border-blue-300"}`}>
+                      {m.icon} {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Date */}
+              <div>
+                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Date d'encaissement</label>
+                <input type="date" value={quickDate} onChange={e => setQuickDate(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
+                <p className="font-body text-[10px] text-slate-400 mt-1">Modifiable si encaissement différé</p>
+              </div>
+              {/* Référence */}
+              <div>
+                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Référence (optionnel)</label>
+                <input value={quickRef} onChange={e => setQuickRef(e.target.value)}
+                  placeholder="N° chèque, virement..."
+                  className="w-full px-3 py-2.5 rounded-xl border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button onClick={() => setQuickEncaisser(null)} className="px-5 py-3 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">Annuler</button>
+                <button onClick={handleQuickEncaisser} disabled={quickSaving || !quickMontant}
+                  className="flex-1 py-3 rounded-xl font-body text-sm font-semibold text-white bg-green-600 hover:bg-green-700 border-none cursor-pointer disabled:opacity-50">
+                  {quickSaving ? <Loader2 size={16} className="animate-spin inline mr-2"/> : "💶 "}
+                  Confirmer {quickMontant ? `${parseFloat(quickMontant).toFixed(2)}€` : ""}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editPayment && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
           onClick={() => !editSaving && setEditPayment(null)}>
