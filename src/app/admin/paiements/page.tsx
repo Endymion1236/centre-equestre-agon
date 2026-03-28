@@ -123,7 +123,9 @@ export default function PaiementsPage() {
   const [quickMontant, setQuickMontant] = useState("");
   const [quickDate, setQuickDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [quickRef, setQuickRef] = useState("");
-  const [quickSaving, setQuickSaving] = useState(false); // modal édition commande
+  const [quickSaving, setQuickSaving] = useState(false);
+  const [impayesSearch, setImpayesSearch] = useState("");
+  const [impayesExpanded, setImpayesExpanded] = useState<Set<string>>(new Set());
   const [editItems, setEditItems] = useState<any[]>([]);
   const [editRemisePct, setEditRemisePct] = useState("");
   const [editRemiseEuros, setEditRemiseEuros] = useState("");
@@ -1746,8 +1748,9 @@ export default function PaiementsPage() {
             const totalDue = unpaid.reduce((s, p) => s + ((p.totalTTC || 0) - (p.paidAmount || 0)), 0);
 
             // ── Recherche ──
-            const [search, setSearch] = React.useState("");
-            const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
+            const search = impayesSearch;
+            const setSearch = setImpayesSearch;
+            const expanded = impayesExpanded;
 
             const filtered = search.trim()
               ? unpaid.filter(p => {
@@ -1759,7 +1762,7 @@ export default function PaiementsPage() {
                 })
               : unpaid;
 
-            const toggle = (id: string) => setExpanded(prev => {
+            const toggle = (id: string) => setImpayesExpanded(prev => {
               const next = new Set(prev);
               next.has(id) ? next.delete(id) : next.add(id);
               return next;
