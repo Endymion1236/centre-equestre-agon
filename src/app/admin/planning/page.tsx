@@ -12,7 +12,7 @@ import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { emailTemplates } from "@/lib/email-templates";
 import { generateOrderId } from "@/lib/utils";
-import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Loader2, Trash2, Users, CalendarDays, Briefcase, Bell, Mail, Sparkles, Printer } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Loader2, Trash2, Users, CalendarDays, Briefcase, Bell, Mail, Sparkles, Printer, Settings } from "lucide-react";
 import type { Activity, Family } from "@/types";
 import { Creneau, EnrolledChild, typeColors, dayNames, dayNamesFull, payModes, getWeekDates, fmtDate, fmtDateFR, fmtMonthFR } from "./types";
 import EnrollPanel from "./EnrollPanel";
@@ -41,6 +41,10 @@ export default function PlanningPage() {
   const [showSimple, setShowSimple] = useState(false); const [showGenerator, setShowGenerator] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string|undefined>();
   const [selectedCreneau, setSelectedCreneau] = useState<(Creneau & { id: string })|null>(null);
+  const [editCreneau, setEditCreneau] = useState<(Creneau & { id: string })|null>(null);
+  const [editForm, setEditForm] = useState<any>({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [editApplyAll, setEditApplyAll] = useState(false);
   const [showDuplicate, setShowDuplicate] = useState(false); const [dupWeeks, setDupWeeks] = useState(1); const [duplicating, setDuplicating] = useState(false);
 
   // ─── RDV Pro ───
@@ -177,6 +181,42 @@ export default function PlanningPage() {
   const handleDelete = async (id: string) => { if (!confirm("Supprimer ?")) return; await deleteDoc(doc(db, "creneaux", id)); fetchData(); };
   const handleDuplicateWeek = async () => { if (creneaux.length===0) return; setDuplicating(true); const { count, skipped } = await duplicateWeekCreneaux(creneaux, dupWeeks); setDuplicating(false);setShowDuplicate(false);toast(`${count} créneau${count>1?"x":""} créé${count>1?"s":""}${skipped > 0 ? ` (${skipped} doublon${skipped>1?"s":""})` : ""}`, "success");fetchData(); };
 
+
+  const handleEditSave = async () => {
+    if (!editCreneau) return;
+    setEditSaving(true);
+    try {
+      const update = {
+        activityTitle: editForm.activityTitle,
+        monitor: editForm.monitor,
+        startTime: editForm.startTime,
+        endTime: editForm.endTime,
+        maxPlaces: parseInt(editForm.maxPlaces) || editCreneau.maxPlaces,
+        priceTTC: parseFloat(editForm.priceTTC) || 0,
+        updatedAt: serverTimestamp(),
+      };
+
+      if (editApplyAll) {
+        // Appliquer à tous les créneaux du même titre + même jour de semaine
+        const dow = new Date(editCreneau.date).getDay();
+        const targets = creneaux.filter(c =>
+          c.activityTitle === editCreneau.activityTitle &&
+          new Date(c.date).getDay() === dow &&
+          c.startTime === editCreneau.startTime
+        );
+        for (const t of targets) {
+          await updateDoc(doc(db, "creneaux", t.id), update);
+        }
+        toast(`✅ ${targets.length} créneaux mis à jour`, "success");
+      } else {
+        await updateDoc(doc(db, "creneaux", editCreneau.id), update);
+        toast("✅ Créneau mis à jour", "success");
+      }
+      setEditCreneau(null);
+      await fetchData();
+    } catch (e) { console.error(e); toast("Erreur", "error"); }
+    setEditSaving(false);
+  };
 
   const exportPDF = () => {
     const visibleCreneaux = viewMode === "day" ? dayCreneaux : creneaux;
@@ -709,6 +749,7 @@ export default function PlanningPage() {
                       className={`w-2 h-2 rounded-full flex-shrink-0 ${isCard?"bg-blue-500":hasPaid?"bg-green-500":hasPending?"bg-orange-400":"bg-gray-300"}`}/>;
                   })}{en.length>4&&<span className="font-body text-[9px] text-slate-600">+{en.length-4}</span>}</div>}
                   <button onClick={e=>{e.stopPropagation();handleDelete(c.id!);}} className="absolute top-1 right-1 w-5 h-5 rounded bg-red-50 text-red-400 hover:bg-red-100 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Trash2 size={10}/></button>
+                  <button onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0});setEditApplyAll(false);}} className="absolute top-1 right-7 w-5 h-5 rounded bg-blue-50 text-blue-400 hover:bg-blue-100 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Settings size={10}/></button>
                 </div>);})}
               <button onClick={()=>{setSelectedDate(ds);setShowSimple(true);setShowGenerator(false);}} className="mt-auto py-2 rounded-lg border border-dashed border-gray-200 text-slate-400 hover:border-blue-300 hover:text-blue-400 bg-transparent cursor-pointer font-body text-lg">+</button>
             </div>);})}
@@ -726,7 +767,7 @@ export default function PlanningPage() {
         <div className="flex flex-col gap-3">{dayCreneaux.map(c=>{const en=c.enrolled||[];const fill=c.maxPlaces>0?en.length/c.maxPlaces:0;const col=typeColors[c.activityType]||"#666";const ttc=(c as any).priceTTC||(c.priceHT||0)*(1+(c.tvaTaux||5.5)/100);return(
           <Card key={c.id} padding="md" className="cursor-pointer hover:shadow-lg" hover>
             <div onClick={()=>setSelectedCreneau(c)}>
-              <div className="flex items-start justify-between mb-3"><div className="flex items-center gap-4"><div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px] text-slate-600">{c.endTime}</div></div><div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs text-slate-600">{c.monitor} · {c.maxPlaces} pl.{ttc>0?` · ${ttc.toFixed(0)}€`:""}</div></div></div><div className="flex items-center gap-3"><Badge color={fill>=1?"red":fill>=0.7?"orange":"green"}>{en.length}/{c.maxPlaces}</Badge><button onClick={e=>{e.stopPropagation();handleDelete(c.id!);}} className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={16}/></button></div></div>
+              <div className="flex items-start justify-between mb-3"><div className="flex items-center gap-4"><div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px] text-slate-600">{c.endTime}</div></div><div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs text-slate-600">{c.monitor} · {c.maxPlaces} pl.{ttc>0?` · ${ttc.toFixed(0)}€`:""}</div></div></div><div className="flex items-center gap-2"><Badge color={fill>=1?"red":fill>=0.7?"orange":"green"}>{en.length}/{c.maxPlaces}</Badge><button onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0});setEditApplyAll(false);}} className="text-blue-400 hover:text-blue-600 bg-blue-50 hover:bg-blue-100 w-8 h-8 rounded-lg border-none cursor-pointer flex items-center justify-center"><Settings size={15}/></button><button onClick={e=>{e.stopPropagation();handleDelete(c.id!);}} className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={16}/></button></div></div>
               {en.length>0&&<div className="ml-[68px] flex flex-wrap gap-2">{en.map((e:any)=>{
                 const isCard = e.paymentSource === "card";
                 const hasPaid = isCard || payments.some((p: any) => p.familyId === e.familyId && p.status === "paid" && (p.items||[]).some((i:any) => i.childId === e.childId && (i.creneauId === c.id || i.activityTitle === c.activityTitle)));
@@ -898,6 +939,75 @@ export default function PlanningPage() {
       )}
 
       {selectedCreneau&&<EnrollPanel creneau={selectedCreneau as any} families={families} allCreneaux={creneaux} payments={payments} allCartes={allCartes} allForfaits={allForfaits} onClose={()=>{setSelectedCreneau(null);fetchData();}} onEnroll={handleEnroll} onUnenroll={handleUnenroll}/>}
+
+      {/* ── Modal édition créneau ── */}
+      {editCreneau && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setEditCreneau(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h2 className="font-display text-lg font-bold text-blue-800">Modifier le créneau</h2>
+                <p className="font-body text-xs text-slate-500 mt-0.5">{editCreneau.date} · {editCreneau.activityTitle}</p>
+              </div>
+              <button onClick={() => setEditCreneau(null)} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              <div>
+                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Titre</label>
+                <input value={editForm.activityTitle} onChange={e => setEditForm((f: any) => ({...f, activityTitle: e.target.value}))}
+                  className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
+              </div>
+              <div>
+                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Moniteur</label>
+                <input value={editForm.monitor} onChange={e => setEditForm((f: any) => ({...f, monitor: e.target.value}))}
+                  className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Heure début</label>
+                  <input type="time" value={editForm.startTime} onChange={e => setEditForm((f: any) => ({...f, startTime: e.target.value}))}
+                    className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
+                </div>
+                <div>
+                  <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Heure fin</label>
+                  <input type="time" value={editForm.endTime} onChange={e => setEditForm((f: any) => ({...f, endTime: e.target.value}))}
+                    className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Places max</label>
+                  <input type="number" min="1" value={editForm.maxPlaces} onChange={e => setEditForm((f: any) => ({...f, maxPlaces: e.target.value}))}
+                    className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
+                </div>
+                <div>
+                  <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Prix TTC (€)</label>
+                  <input type="number" min="0" step="0.5" value={editForm.priceTTC} onChange={e => setEditForm((f: any) => ({...f, priceTTC: e.target.value}))}
+                    className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
+                </div>
+              </div>
+
+              {/* Option appliquer à tous */}
+              <label className="flex items-start gap-3 bg-blue-50 rounded-xl p-3 cursor-pointer">
+                <input type="checkbox" checked={editApplyAll} onChange={e => setEditApplyAll(e.target.checked)} className="accent-blue-500 w-4 h-4 mt-0.5"/>
+                <div>
+                  <div className="font-body text-sm font-semibold text-blue-800">Appliquer à tous les créneaux similaires</div>
+                  <div className="font-body text-xs text-slate-500 mt-0.5">Même titre · même jour de la semaine · même heure de départ</div>
+                </div>
+              </label>
+
+              <div className="flex gap-3">
+                <button onClick={() => setEditCreneau(null)} className="px-5 py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">Annuler</button>
+                <button onClick={handleEditSave} disabled={editSaving}
+                  className="flex-1 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-400 border-none cursor-pointer disabled:opacity-50">
+                  {editSaving ? <Loader2 size={16} className="animate-spin inline mr-2"/> : null}
+                  Enregistrer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
