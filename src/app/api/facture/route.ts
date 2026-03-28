@@ -1,3 +1,4 @@
+import { getClubInfo } from "@/lib/club-info";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {

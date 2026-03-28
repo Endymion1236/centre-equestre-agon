@@ -1,6 +1,8 @@
+import { getClubInfo } from "@/lib/club-info";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
+  const CLUB = await getClubInfo();
   try {
     const body = await req.json();
     const { recipientName, offerDescription, amount, validUntil, code, buyerName } = body;
@@ -37,9 +39,9 @@ export async function POST(req: NextRequest) {
     <div class="details">
       <div class="detail">Offert par<strong>${buyerName}</strong></div>
       <div class="detail">Valable jusqu'au<strong>${validUntil}</strong></div>
-      <div class="detail">Réservation<strong>02 44 84 99 96</strong></div>
+      <div class="detail">Réservation<strong>${CLUB.tel}</strong></div>
     </div>
-    <div class="footer">Centre Équestre Poney Club d'Agon-Coutainville · 56 Charrière du Commerce · 50230 Agon-Coutainville · ceagon@orange.fr</div>
+    <div class="footer">Centre Équestre Poney Club d'Agon-Coutainville · 56 Charrière du Commerce · 50230 Agon-Coutainville · ${CLUB.email}</div>
   </div>
 </body>
 </html>`;

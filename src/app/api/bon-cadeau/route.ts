@@ -1,7 +1,9 @@
+import { getClubInfo } from "@/lib/club-info";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
   try {
+    const CLUB = await getClubInfo();
     const { recipientName, activity, amount, fromName, message, validUntil } = await req.json();
 
     // Generate a unique voucher code
@@ -50,7 +52,7 @@ export async function POST(req: NextRequest) {
         ${message ? `<div class="message">"${message}"</div>` : ""}
       </div>
       <div class="footer">
-        56 Charrière du Commerce · 50230 Agon-Coutainville · 02 44 84 99 96 · ceagon@orange.fr
+        56 Charrière du Commerce · 50230 Agon-Coutainville · ${CLUB.tel} · ${CLUB.email}
       </div>
     </div>
     <div class="right">

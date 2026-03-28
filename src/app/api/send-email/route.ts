@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
             <strong>⚠️ MODE TEST</strong> — Cet email aurait été envoyé à : <strong>${validRecipients.join(", ")}</strong>
           </div>${html}`
         : html,
-      replyTo: replyTo || "ceagon@orange.fr",
+      replyTo: replyTo || process.env.RESEND_OWNER_EMAIL || "ceagon@orange.fr",
     });
 
     if (error) {

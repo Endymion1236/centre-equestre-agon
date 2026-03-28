@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { getClubInfo } from "@/lib/club-info";
 
 export const dynamic = "force-dynamic";
 
@@ -14,20 +15,11 @@ try {
   console.warn("Logo non trouvé, facture sans logo");
 }
 
-const CLUB = {
-  name: "Centre Equestre d'Agon-Coutainville",
-  legalName: "E.A.R.L. Centre Equestre Poney Club d'Agon-Coutainville",
-  address: "Route de la Plage, 50230 Agon-Coutainville",
-  tel: "02 44 84 99 96",
-  email: "ceagon@orange.fr",
-  siret: "50756918400017",
-  tvaIntra: "",
-  iban: "FR76 1660 6100 6400 1353 9343 253",
-  bic: "AGRIFRPP866",
-};
+
 
 export async function POST(request: NextRequest) {
   try {
+    const CLUB = await getClubInfo();
     const body = await request.json();
     const { invoiceNumber, date, familyName, familyEmail, items, totalHT, totalTVA, totalTTC, paidAmount, paymentMode, paymentDate } = body;
 
@@ -72,7 +64,7 @@ export async function POST(request: NextRequest) {
   <div class="logo-block">
     <img src="${logoBase64}" class="logo-img" alt="Logo"/>
     <div>
-      <div class="logo">${CLUB.name}</div>
+      <div class="logo">${CLUB.nom}</div>
       <div class="logo-sub">${CLUB.address}</div>
       <div class="logo-sub">${CLUB.tel} · ${CLUB.email}</div>
       <div class="logo-sub">SIRET : ${CLUB.siret}</div>
@@ -88,7 +80,7 @@ export async function POST(request: NextRequest) {
 <div class="parties">
   <div class="party">
     <div class="party-label">Émetteur</div>
-    <div class="party-name">${CLUB.name}</div>
+    <div class="party-name">${CLUB.nom}</div>
     <div class="party-detail">${CLUB.legalName}<br/>${CLUB.address}<br/>${CLUB.tel}<br/>${CLUB.email}</div>
   </div>
   <div class="party">
@@ -137,7 +129,7 @@ export async function POST(request: NextRequest) {
     <strong>Règlement par virement :</strong><br/>
     IBAN : ${CLUB.iban}<br/>
     BIC : ${CLUB.bic}<br/>
-    Titulaire : ${CLUB.name}
+    Titulaire : ${CLUB.nom}
   </div>` : ""}
 </div>
 
@@ -147,7 +139,7 @@ export async function POST(request: NextRequest) {
 </div>
 
 <div class="footer">
-  ${CLUB.name} · ${CLUB.address}<br/>
+  ${CLUB.nom} · ${CLUB.address}<br/>
   ${CLUB.tel} · ${CLUB.email} · SIRET ${CLUB.siret}
 </div>
 

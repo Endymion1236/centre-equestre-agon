@@ -27,7 +27,22 @@ const defaultAccounts = [
 ];
 
 export default function ParametresPage() {
-  const [section, setSection] = useState<"tarifs" | "reductions" | "degressivite" | "annulation" | "comptable" | "horaires" | "moniteurs" | "fidelite" | "inscription" | "maintenance">("tarifs");
+  const [section, setSection] = useState<"centre" | "tarifs" | "reductions" | "degressivite" | "annulation" | "comptable" | "horaires" | "moniteurs" | "fidelite" | "inscription" | "maintenance">("centre");
+
+  // ─── Infos Centre ───
+  const [centreParams, setCentreParams] = useState({
+    nom: "Centre Equestre d'Agon-Coutainville",
+    legalName: "E.A.R.L. Centre Equestre Poney Club d'Agon-Coutainville",
+    address: "56 Charrière du Commerce, 50230 Agon-Coutainville",
+    tel: "02 44 84 99 96",
+    email: "ceagon@orange.fr",
+    siret: "50756918400017",
+    tvaIntra: "",
+    iban: "FR76 1660 6100 6400 1353 9343 253",
+    bic: "AGRIFRPP866",
+    website: "https://centreequestreagon.com",
+  });
+  const [centreSaved, setCentreSaved] = useState(false);
 
   // ─── Paramètres inscription annuelle ───
   const [inscriptionParams, setInscriptionParams] = useState({
@@ -138,17 +153,27 @@ export default function ParametresPage() {
   useEffect(() => {
     const loadTarifs = async () => {
       try {
-        const [tarifSnap, inscSnap] = await Promise.all([
+        const [tarifSnap, inscSnap, centreSnap] = await Promise.all([
           getDoc(doc(db, "settings", "tarifs")),
           getDoc(doc(db, "settings", "inscription")),
+          getDoc(doc(db, "settings", "centre")),
         ]);
         if (tarifSnap.exists() && tarifSnap.data().items) setTarifs(tarifSnap.data().items);
         if (inscSnap.exists()) setInscriptionParams(prev => ({ ...prev, ...inscSnap.data() }));
+        if (centreSnap.exists()) setCentreParams(prev => ({ ...prev, ...centreSnap.data() }));
       } catch (e) { console.error("Erreur chargement tarifs:", e); }
       setLoadingTarifs(false);
     };
     loadTarifs();
   }, []);
+
+  const saveCentre = async () => {
+    try {
+      await setDoc(doc(db, "settings", "centre"), { ...centreParams, updatedAt: new Date() });
+      setCentreSaved(true);
+      setTimeout(() => setCentreSaved(false), 2000);
+    } catch (e) { console.error(e); alert("Erreur sauvegarde"); }
+  };
 
   const saveInscription = async () => {
     try {
@@ -210,6 +235,7 @@ export default function ParametresPage() {
       {/* Section tabs */}
       <div className="flex flex-wrap gap-2 mb-6">
         {([
+          ["centre", "🏠 Centre"],
           ["tarifs", "Tarifs annuels"],
           ["inscription", "📋 Inscription annuelle"],
           ["reductions", "Réductions & promos"],
@@ -237,6 +263,58 @@ export default function ParametresPage() {
       )}
 
       {/* ─── Tarifs annuels ─── */}
+      {/* ─── Centre ─── */}
+      {section === "centre" && (
+        <div className="flex flex-col gap-5">
+          <Card padding="md">
+            <h3 className="font-body text-base font-semibold text-blue-800 mb-4">🏠 Identité du centre</h3>
+            <div className="flex flex-col gap-3">
+              {[
+                { key: "nom", label: "Nom commercial" },
+                { key: "legalName", label: "Raison sociale (factures)" },
+                { key: "address", label: "Adresse complète" },
+                { key: "tel", label: "Téléphone" },
+                { key: "email", label: "Email de contact" },
+                { key: "website", label: "Site web" },
+              ].map(({ key, label }) => (
+                <div key={key}>
+                  <label className="font-body text-xs font-semibold text-blue-800 block mb-1">{label}</label>
+                  <input value={(centreParams as any)[key]}
+                    onChange={e => setCentreParams(prev => ({ ...prev, [key]: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card padding="md">
+            <h3 className="font-body text-base font-semibold text-blue-800 mb-4">🧾 Informations légales & bancaires</h3>
+            <div className="flex flex-col gap-3">
+              {[
+                { key: "siret", label: "SIRET" },
+                { key: "tvaIntra", label: "N° TVA intracommunautaire (si applicable)" },
+                { key: "iban", label: "IBAN" },
+                { key: "bic", label: "BIC" },
+              ].map(({ key, label }) => (
+                <div key={key}>
+                  <label className="font-body text-xs font-semibold text-blue-800 block mb-1">{label}</label>
+                  <input value={(centreParams as any)[key]}
+                    onChange={e => setCentreParams(prev => ({ ...prev, [key]: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
+                    placeholder={key === "tvaIntra" ? "FR00 000000000 (optionnel)" : ""} />
+                </div>
+              ))}
+            </div>
+            <p className="font-body text-[10px] text-slate-400 mt-3">Ces informations apparaissent sur les factures, bons cadeaux et emails officiels.</p>
+          </Card>
+
+          <button onClick={saveCentre}
+            className="flex items-center justify-center gap-2 py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none cursor-pointer">
+            {centreSaved ? "✅ Sauvegardé !" : "Sauvegarder les infos du centre"}
+          </button>
+        </div>
+      )}
+
       {section === "tarifs" && (
         <div className="flex flex-col gap-5">
           <Card padding="md">

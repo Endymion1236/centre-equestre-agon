@@ -25,7 +25,7 @@ interface Modele {
 }
 
 const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
-const MONITORS = ["Emmeline", "Nicolas"];
+// Moniteurs chargés depuis Firestore dans useEffect
 
 export default function ModelesPage() {
   const [modeles, setModeles] = useState<Modele[]>([]);
@@ -34,6 +34,14 @@ export default function ModelesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [moniteurs, setMoniteurs] = useState<string[]>([]);
+
+  useEffect(() => {
+    getDocs(collection(db, "moniteurs")).then(snap => {
+      const noms = snap.docs.map(d => (d.data() as any).name).filter(Boolean).sort();
+      setMoniteurs(noms);
+    });
+  }, []);
 
   // Form state
   const [formName, setFormName] = useState("");
@@ -61,7 +69,7 @@ export default function ModelesPage() {
   useEffect(() => { fetchData(); }, []);
 
   const addCreneau = () => {
-    setFormCreneaux([...formCreneaux, { dayOfWeek: 2, startTime: "10:00", endTime: "11:00", activityId: "", activityTitle: "", monitor: "Emmeline", maxPlaces: 8 }]);
+    setFormCreneaux([...formCreneaux, { dayOfWeek: 2, startTime: "10:00", endTime: "11:00", activityId: "", activityTitle: "", monitor: moniteurs[0] || "", maxPlaces: 8 }]);
   };
 
   const updateCreneau = (idx: number, field: string, value: any) => {
@@ -219,7 +227,7 @@ export default function ModelesPage() {
                 </select>
                 <select value={c.monitor} onChange={e => updateCreneau(i, "monitor", e.target.value)}
                   className="px-2 py-1.5 rounded border border-blue-500/8 font-body text-xs bg-white w-28">
-                  {MONITORS.map(m => <option key={m} value={m}>{m}</option>)}
+                  {moniteurs.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
                 <input type="number" value={c.maxPlaces} onChange={e => updateCreneau(i, "maxPlaces", Number(e.target.value))}
                   className="px-2 py-1.5 rounded border border-blue-500/8 font-body text-xs bg-white w-16 text-center" min={1} max={20} />
