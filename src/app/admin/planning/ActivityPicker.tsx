@@ -76,7 +76,7 @@ export default function ActivityPicker({ activities, value, onChange, className 
                 className={`w-full text-left px-3 py-2.5 font-body text-sm border-none cursor-pointer flex items-center gap-2
                   ${a.id === value ? "bg-blue-50 text-blue-700 font-semibold" : "text-blue-800 hover:bg-sand bg-white"}
                   ${i > 0 ? "border-t border-gray-50" : ""}`}>
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: a.color || "#2050A0" }}/>
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: (a as any).color || "#2050A0" }}/>
                 {a.title}
               </button>
             ))
