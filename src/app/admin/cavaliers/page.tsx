@@ -38,7 +38,7 @@ export default function CavaliersPage() {
   const [newFamily, setNewFamily] = useState({
     parentName: "", parentEmail: "", parentPhone: "",
     accountType: "particulier" as "particulier" | "asso" | "collectivite",
-    raisonSociale: "", structureParente: "", siret: "",
+    raisonSociale: "", structureParente: "", siret: "", referent: "",
   });
   const [newChildren, setNewChildren] = useState<{ firstName: string; birthDate: string; galopLevel: string }[]>([
     { firstName: "", birthDate: "", galopLevel: "—" },
@@ -111,9 +111,14 @@ export default function CavaliersPage() {
 
   // ─── Créer une nouvelle famille ───
   const handleCreateFamily = async () => {
-    if (!newFamily.parentName.trim()) return;
+    // Validation selon le type
+    const isValid = newFamily.accountType === "particulier"
+      ? newFamily.parentName.trim()
+      : newFamily.raisonSociale.trim();
+    if (!isValid) return;
     setSaving(true);
     try {
+      // Pour asso/collectivité, les cavaliers sont optionnels
       const children = newChildren
         .filter(c => c.firstName.trim())
         .map(c => ({
@@ -140,6 +145,7 @@ export default function CavaliersPage() {
           raisonSociale: newFamily.raisonSociale.trim(),
           structureParente: newFamily.structureParente.trim(),
           siret: newFamily.siret.trim(),
+          referent: newFamily.referent.trim(),
         }),
         authProvider: "admin",
         authUid: "",
@@ -149,7 +155,7 @@ export default function CavaliersPage() {
       });
 
       setShowCreateFamily(false);
-      setNewFamily({ parentName: "", parentEmail: "", parentPhone: "", accountType: "particulier", raisonSociale: "", structureParente: "", siret: "" });
+      setNewFamily({ parentName: "", parentEmail: "", parentPhone: "", accountType: "particulier", raisonSociale: "", structureParente: "", siret: "", referent: "" });
       setNewChildren([{ firstName: "", birthDate: "", galopLevel: "—" }]);
       // Email bienvenue
       if (newFamily.parentEmail.trim()) {
@@ -1139,6 +1145,12 @@ export default function CavaliersPage() {
                           onChange={e => setNewFamily({ ...newFamily, siret: e.target.value })}
                           placeholder="Ex: 123 456 789 00012" />
                       </div>
+                      <div>
+                        <label className={labelStyle}>Référent (nom du contact)</label>
+                        <input className={inputStyle} value={newFamily.referent}
+                          onChange={e => setNewFamily({ ...newFamily, referent: e.target.value })}
+                          placeholder="Ex: Marie Dupont" />
+                      </div>
                     </>
                   )}
                   <div className="grid grid-cols-2 gap-3">
@@ -1154,9 +1166,14 @@ export default function CavaliersPage() {
                 </div>
               </div>
 
-              {/* Enfants */}
+              {/* Cavaliers — optionnels pour asso/collectivité */}
               <div>
-                <div className="font-body text-xs font-semibold text-blue-500 uppercase tracking-wider mb-3">Cavaliers</div>
+                <div className="font-body text-xs font-semibold text-blue-500 uppercase tracking-wider mb-1">
+                  Cavaliers {newFamily.accountType !== "particulier" && <span className="text-slate-400 font-normal normal-case">(optionnel)</span>}
+                </div>
+                {newFamily.accountType !== "particulier" && newChildren.every(c => !c.firstName.trim()) && (
+                  <p className="font-body text-[10px] text-slate-400 mb-2">Laissez vide si les cavaliers sont à ajouter ultérieurement.</p>
+                )}
                 {newChildren.map((child, i) => (
                   <div key={i} className="flex gap-2 mb-2 items-end">
                     <div className="flex-1">
