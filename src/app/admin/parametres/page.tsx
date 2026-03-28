@@ -27,7 +27,29 @@ const defaultAccounts = [
 ];
 
 export default function ParametresPage() {
-  const [section, setSection] = useState<"tarifs" | "reductions" | "degressivite" | "annulation" | "comptable" | "horaires" | "moniteurs" | "fidelite" | "maintenance">("tarifs");
+  const [section, setSection] = useState<"tarifs" | "reductions" | "degressivite" | "annulation" | "comptable" | "horaires" | "moniteurs" | "fidelite" | "inscription" | "maintenance">("tarifs");
+
+  // ─── Paramètres inscription annuelle ───
+  const [inscriptionParams, setInscriptionParams] = useState({
+    // Forfaits par fréquence
+    forfait1x: 650,
+    forfait2x: 1100,
+    forfait3x: 1400,
+    // Adhésion dégressive
+    adhesion1: 60,
+    adhesion2: 40,
+    adhesion3: 20,
+    adhesion4plus: 0,
+    // Licence FFE
+    licenceMoins18: 25,
+    licencePlus18: 36,
+    // Saison
+    totalSessionsSaison: 35,
+    dateFinSaison: "2026-06-30",
+    // Stages
+    assuranceOccasionnelle: 10,
+  });
+  const [inscriptionSaved, setInscriptionSaved] = useState(false);
 
   // ─── Fidélité ───
   const [fideliteEnabled, setFideliteEnabled] = useState(false);
@@ -103,15 +125,25 @@ export default function ParametresPage() {
   useEffect(() => {
     const loadTarifs = async () => {
       try {
-        const snap = await getDoc(doc(db, "settings", "tarifs"));
-        if (snap.exists() && snap.data().items) {
-          setTarifs(snap.data().items);
-        }
+        const [tarifSnap, inscSnap] = await Promise.all([
+          getDoc(doc(db, "settings", "tarifs")),
+          getDoc(doc(db, "settings", "inscription")),
+        ]);
+        if (tarifSnap.exists() && tarifSnap.data().items) setTarifs(tarifSnap.data().items);
+        if (inscSnap.exists()) setInscriptionParams(prev => ({ ...prev, ...inscSnap.data() }));
       } catch (e) { console.error("Erreur chargement tarifs:", e); }
       setLoadingTarifs(false);
     };
     loadTarifs();
   }, []);
+
+  const saveInscription = async () => {
+    try {
+      await setDoc(doc(db, "settings", "inscription"), { ...inscriptionParams, updatedAt: new Date() });
+      setInscriptionSaved(true);
+      setTimeout(() => setInscriptionSaved(false), 2000);
+    } catch (e) { console.error(e); alert("Erreur sauvegarde"); }
+  };
 
   // Charger paramètres fidélité
   useEffect(() => {
@@ -166,6 +198,7 @@ export default function ParametresPage() {
       <div className="flex flex-wrap gap-2 mb-6">
         {([
           ["tarifs", "Tarifs annuels"],
+          ["inscription", "📋 Inscription annuelle"],
           ["reductions", "Réductions & promos"],
           ["degressivite", "Dégressivité"],
           ["annulation", "Annulation"],
@@ -674,6 +707,111 @@ export default function ParametresPage() {
             <Plus size={14} /> Ajouter un moniteur
           </button>
         </Card>
+      )}
+
+      {/* ─── Inscription annuelle ─── */}
+      {section === "inscription" && (
+        <div className="flex flex-col gap-5">
+          {/* Forfaits par fréquence */}
+          <Card padding="md">
+            <h3 className="font-body text-base font-semibold text-blue-800 mb-1">📋 Forfaits annuels</h3>
+            <p className="font-body text-xs text-slate-500 mb-4">Prix plein tarif — le prorata est calculé automatiquement selon la date d'inscription</p>
+            <div className="flex flex-col gap-3">
+              {[
+                { key: "forfait1x", label: "1 cours / semaine", icon: "1×" },
+                { key: "forfait2x", label: "2 cours / semaine", icon: "2×" },
+                { key: "forfait3x", label: "3 cours / semaine", icon: "3×" },
+              ].map(({ key, label, icon }) => (
+                <div key={key} className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center font-body text-sm font-bold text-blue-600">{icon}</span>
+                    <span className="font-body text-sm text-blue-800">{label}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input type="number" value={(inscriptionParams as any)[key]}
+                      onChange={e => setInscriptionParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))}
+                      className="w-24 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm text-right bg-cream focus:border-blue-500 focus:outline-none" />
+                    <span className="font-body text-sm text-slate-400">€/an</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {/* Adhésion dégressive */}
+          <Card padding="md">
+            <h3 className="font-body text-base font-semibold text-blue-800 mb-1">👨‍👩‍👧‍👦 Adhésion dégressive par famille</h3>
+            <p className="font-body text-xs text-slate-500 mb-4">Le rang est calculé automatiquement selon le nombre d'enfants déjà inscrits en forfait annuel cette saison</p>
+            <div className="flex flex-col gap-3">
+              {[
+                { key: "adhesion1", label: "1er enfant" },
+                { key: "adhesion2", label: "2ème enfant" },
+                { key: "adhesion3", label: "3ème enfant" },
+                { key: "adhesion4plus", label: "4ème enfant et +" },
+              ].map(({ key, label }) => (
+                <div key={key} className="flex items-center justify-between gap-4">
+                  <span className="font-body text-sm text-blue-800">{label}</span>
+                  <div className="flex items-center gap-2">
+                    <input type="number" value={(inscriptionParams as any)[key]}
+                      onChange={e => setInscriptionParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))}
+                      className="w-24 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm text-right bg-cream focus:border-blue-500 focus:outline-none" />
+                    <span className="font-body text-sm text-slate-400">€</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {/* Licence FFE + Saison */}
+          <Card padding="md">
+            <h3 className="font-body text-base font-semibold text-blue-800 mb-4">📄 Licence FFE & Saison</h3>
+            <div className="flex flex-col gap-3">
+              {[
+                { key: "licenceMoins18", label: "Licence FFE -18 ans" },
+                { key: "licencePlus18", label: "Licence FFE +18 ans" },
+                { key: "totalSessionsSaison", label: "Nombre de séances / saison" },
+              ].map(({ key, label }) => (
+                <div key={key} className="flex items-center justify-between gap-4">
+                  <span className="font-body text-sm text-blue-800">{label}</span>
+                  <div className="flex items-center gap-2">
+                    <input type="number" value={(inscriptionParams as any)[key]}
+                      onChange={e => setInscriptionParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))}
+                      className="w-24 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm text-right bg-cream focus:border-blue-500 focus:outline-none" />
+                    <span className="font-body text-sm text-slate-400">{key === "totalSessionsSaison" ? "séances" : "€"}</span>
+                  </div>
+                </div>
+              ))}
+              <div className="flex items-center justify-between gap-4">
+                <span className="font-body text-sm text-blue-800">Fin de saison</span>
+                <input type="date" value={inscriptionParams.dateFinSaison}
+                  onChange={e => setInscriptionParams(prev => ({ ...prev, dateFinSaison: e.target.value }))}
+                  className="px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
+              </div>
+            </div>
+          </Card>
+
+          {/* Stages */}
+          <Card padding="md">
+            <h3 className="font-body text-base font-semibold text-blue-800 mb-4">🏕️ Stages — Assurance occasionnelle</h3>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <span className="font-body text-sm text-blue-800">Assurance occasionnelle 1 mois</span>
+                <div className="font-body text-xs text-slate-400 mt-0.5">Proposée aux cavaliers non licenciés lors des stages</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="number" value={inscriptionParams.assuranceOccasionnelle}
+                  onChange={e => setInscriptionParams(prev => ({ ...prev, assuranceOccasionnelle: parseFloat(e.target.value) || 0 }))}
+                  className="w-24 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm text-right bg-cream focus:border-blue-500 focus:outline-none" />
+                <span className="font-body text-sm text-slate-400">€</span>
+              </div>
+            </div>
+          </Card>
+
+          <button onClick={saveInscription}
+            className="flex items-center justify-center gap-2 py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none cursor-pointer">
+            {inscriptionSaved ? "✅ Sauvegardé !" : "Sauvegarder les paramètres"}
+          </button>
+        </div>
       )}
 
       {/* ─── Fidélité ─── */}

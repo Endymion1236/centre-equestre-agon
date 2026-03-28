@@ -28,6 +28,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [licenceType, setLicenceType] = useState<"moins18" | "plus18">("moins18");
   const [adhesion, setAdhesion] = useState(true);
   const [licence, setLicence] = useState(true);
+  const [assuranceOccasionnelle, setAssuranceOccasionnelle] = useState(false);
   const [payPlan, setPayPlan] = useState<"1x" | "3x" | "10x">("1x");
 
   // Plan de séance
@@ -187,12 +188,29 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     return !conflict;
   });
 
+  // ─── Paramètres inscription depuis Firestore ──────────────────────────────
+  const [inscParams, setInscParams] = useState({
+    forfait1x: 650, forfait2x: 1100, forfait3x: 1400,
+    adhesion1: 60, adhesion2: 40, adhesion3: 20, adhesion4plus: 0,
+    licenceMoins18: 25, licencePlus18: 36,
+    totalSessionsSaison: 35, dateFinSaison: "2026-06-30",
+    assuranceOccasionnelle: 10,
+  });
+
+  useEffect(() => {
+    getDocs(collection(db, "settings")).then(snap => {
+      const inscDoc = snap.docs.find(d => d.id === "inscription");
+      if (inscDoc) setInscParams(prev => ({ ...prev, ...inscDoc.data() }));
+    }).catch(() => {});
+  }, []);
+
   // Calcul forfait annuel avec prorata
-  const prixAdhesion = 60;
-  const prixLicence = licenceType === "moins18" ? 25 : 36;
-  const prixForfaitAnnuel = 650; // Prix plein tarif (35 séances)
-  const totalSessionsSaison = 35;
-  const dateFinSaison = "2026-06-30"; // TODO: configurable dans paramètres
+  const prixLicence = licenceType === "moins18" ? inscParams.licenceMoins18 : inscParams.licencePlus18;
+  // Forfait selon fréquence (sélectionnable)
+  const [frequenceCours, setFrequenceCours] = useState<1 | 2 | 3>(1);
+  const prixForfaitAnnuel = frequenceCours === 3 ? inscParams.forfait3x : frequenceCours === 2 ? inscParams.forfait2x : inscParams.forfait1x;
+  const totalSessionsSaison = inscParams.totalSessionsSaison * frequenceCours;
+  const dateFinSaison = inscParams.dateFinSaison;
 
   // Calculer les séances restantes entre aujourd'hui et le 30 juin
   // pour le jour de la semaine du créneau
@@ -213,9 +231,27 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     return count;
   }, [creneau.date]);
 
-  const prorata = sessionsRestantes / totalSessionsSaison;
+  const prorata = sessionsRestantes / (inscParams.totalSessionsSaison || 35);
   const prixForfait = Math.round(prixForfaitAnnuel * prorata);
-  const totalAnnuel = (adhesion ? prixAdhesion : 0) + (licence ? prixLicence : 0) + prixForfait;
+
+  // Adhésion dégressive : compter enfants déjà inscrits en forfait annuel cette saison
+  const rangEnfantFamille = useMemo(() => {
+    if (!fam) return 1;
+    const enfantsInscrits = new Set<string>();
+    // Chercher dans les forfaits actifs de cette famille
+    allForfaits.filter((f: any) => f.familyId === fam.firestoreId).forEach((f: any) => {
+      if (f.childId && f.childId !== selChild) enfantsInscrits.add(f.childId);
+    });
+    return enfantsInscrits.size + 1; // rang = nb déjà inscrits + 1
+  }, [fam, allForfaits, selChild]);
+
+  const prixAdhesionDegressif =
+    rangEnfantFamille === 1 ? inscParams.adhesion1 :
+    rangEnfantFamille === 2 ? inscParams.adhesion2 :
+    rangEnfantFamille === 3 ? inscParams.adhesion3 :
+    inscParams.adhesion4plus;
+
+  const totalAnnuel = (adhesion ? prixAdhesionDegressif : 0) + (licence ? prixLicence : 0) + prixForfait;
 
   // Calcul stage : réductions cumulées famille (-10€, -20€, -30€...)
   // Compter les inscriptions stage EXISTANTES pour cette famille
@@ -350,14 +386,25 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         // Ajouter les lignes au panier de la famille (1 seul paiement pending)
         const newItems = stageLines.map(l => ({
           activityTitle: `${creneau.activityTitle} (${creneauxAInscrire.length}j) — ${l.childName} (-${l.remiseEuros}€ réd. ${l.rang}${l.rang === 1 ? "ère" : "ème"})`,
-          childId: l.childId,
-          childName: l.childName,
+          childId: l.childId, childName: l.childName,
           stageKey: `${creneau.activityTitle}_${creneau.date}`,
           activityType: creneau.activityType,
-          priceHT: l.prixReduit / 1.055,
-          tva: 5.5,
-          priceTTC: l.prixReduit,
+          priceHT: l.prixReduit / 1.055, tva: 5.5, priceTTC: l.prixReduit,
         }));
+
+        // Assurance occasionnelle si cochée
+        if (assuranceOccasionnelle) {
+          for (const line of stageLines) {
+            newItems.push({
+              activityTitle: `Assurance occasionnelle 1 mois — ${line.childName}`,
+              childId: line.childId, childName: line.childName,
+              stageKey: `${creneau.activityTitle}_${creneau.date}`,
+              activityType: "option",
+              priceHT: inscParams.assuranceOccasionnelle / 1.2, tva: 20,
+              priceTTC: inscParams.assuranceOccasionnelle,
+            });
+          }
+        }
 
         // Chercher un paiement pending existant pour cette famille (PANIER UNIQUE)
         const existingSnap = await getDocs(query(
@@ -504,7 +551,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         });
         // Créer les paiements en attente selon le plan
         const items: any[] = [];
-        if (adhesion) items.push({ activityTitle: "Adhésion annuelle", childId: selChild, childName, priceHT: prixAdhesion / 1.055, tva: 5.5, priceTTC: prixAdhesion });
+        if (adhesion) items.push({ activityTitle: `Adhésion annuelle (enfant ${rangEnfantFamille})`, childId: selChild, childName, priceHT: prixAdhesionDegressif / 1.055, tva: 5.5, priceTTC: prixAdhesionDegressif });
         if (licence) items.push({ activityTitle: `Licence FFE ${licenceType === "moins18" ? "-18ans" : "+18ans"}`, childId: selChild, childName, priceHT: prixLicence, tva: 0, priceTTC: prixLicence });
         items.push({ activityTitle: `Forfait ${creneau.activityTitle} (${slotKey})`, childId: selChild, childName, creneauId: creneau.id, activityType: creneau.activityType, priceHT: prixForfait / 1.055, tva: 5.5, priceTTC: prixForfait });
 
@@ -857,7 +904,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   <button onClick={() => setInscriptionMode("annuel")}
                     className={`p-3 rounded-lg border-2 text-left cursor-pointer transition-all ${inscriptionMode === "annuel" ? "border-green-500 bg-green-50" : "border-gray-200 bg-white"}`}>
                     <div className="font-body text-sm font-semibold text-green-700">Forfait à l'année</div>
-                    <div className="font-body text-xs text-slate-500 mt-0.5">{sessionsRestantes} séances restantes sur {totalSessionsSaison}</div>
+                    <div className="font-body text-xs text-slate-500 mt-0.5">{sessionsRestantes} séances restantes × {frequenceCours}× ({sessionsRestantes * frequenceCours} total)</div>
                     <div className="font-body text-lg font-bold text-green-600 mt-1">{totalAnnuel.toFixed(2)}€</div>
                     {prorata < 1 && <div className="font-body text-[10px] text-orange-500 mt-0.5">Prorata : {Math.round(prorata * 100)}% du tarif annuel</div>}
                   </button>
@@ -889,13 +936,33 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 {inscriptionMode === "annuel" && (
                   <div className="bg-white rounded-lg p-3 space-y-3">
                     <div className="font-body text-xs font-semibold text-green-600 uppercase tracking-wider">Détail du forfait</div>
-                    {/* Adhésion */}
+
+                    {/* Fréquence hebdomadaire */}
+                    <div>
+                      <div className="font-body text-xs text-slate-500 mb-2">Fréquence hebdomadaire</div>
+                      <div className="flex gap-2">
+                        {([1, 2, 3] as const).map(f => (
+                          <button key={f} onClick={() => setFrequenceCours(f)}
+                            className={`flex-1 py-2 rounded-lg border font-body text-sm font-semibold cursor-pointer transition-all ${frequenceCours === f ? "border-green-500 bg-green-50 text-green-700" : "border-gray-200 bg-white text-slate-500"}`}>
+                            {f}×/sem
+                            <div className="font-body text-[10px] font-normal mt-0.5">
+                              {f === 1 ? inscParams.forfait1x : f === 2 ? inscParams.forfait2x : inscParams.forfait3x}€/an
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Adhésion dégressive */}
                     <label className="flex items-center justify-between cursor-pointer">
                       <div className="flex items-center gap-2">
                         <input type="checkbox" checked={adhesion} onChange={e => setAdhesion(e.target.checked)} className="accent-green-500 w-4 h-4"/>
-                        <span className="font-body text-sm text-blue-800">Adhésion annuelle</span>
+                        <div>
+                          <span className="font-body text-sm text-blue-800">Adhésion annuelle</span>
+                          {rangEnfantFamille > 1 && <span className="font-body text-[10px] text-orange-500 ml-2">{rangEnfantFamille === 2 ? "2ème" : rangEnfantFamille === 3 ? "3ème" : "4ème+"} enfant</span>}
+                        </div>
                       </div>
-                      <span className="font-body text-sm font-semibold text-blue-500">{prixAdhesion}€</span>
+                      <span className="font-body text-sm font-semibold text-blue-500">{prixAdhesionDegressif}€</span>
                     </label>
                     {/* Licence FFE */}
                     <div>
@@ -920,8 +987,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         <span className="font-body text-sm font-semibold text-blue-500">{prixForfait}€</span>
                       </div>
                       <div className="font-body text-[10px] text-slate-500 mt-0.5">
-                        {sessionsRestantes} séances restantes jusqu'au 30 juin
-                        {prorata < 1 && <> · {prixForfaitAnnuel}€ × {sessionsRestantes}/{totalSessionsSaison} = {prixForfait}€</>}
+                        {sessionsRestantes * frequenceCours} séances restantes ({frequenceCours}×/sem) — prorata {Math.round(prorata*100)}%
+                        {prorata < 1 && <> · {prixForfaitAnnuel}€ × {Math.round(prorata*100)}% = {prixForfait}€</>}
                         {prorata >= 1 && <> · Tarif plein (début de saison)</>}
                       </div>
                     </div>
@@ -966,9 +1033,22 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
             {/* Bouton Stage */}
             {isStage && selectedChildren.length > 0 && (
-              <button onClick={handleEnroll} disabled={enrolling} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${enrolling ? "bg-gray-200 text-slate-500" : "bg-green-600 text-white hover:bg-green-500"}`}>
-                {enrolling ? "..." : `Inscrire ${selectedChildren.length} enfant${selectedChildren.length > 1 ? "s" : ""} — ${stageTotalTTC.toFixed(2)}€`}
-              </button>
+              <div className="flex flex-col gap-2">
+                {/* Option assurance occasionnelle */}
+                <label className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-orange-200 bg-orange-50 cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" checked={assuranceOccasionnelle} onChange={e => setAssuranceOccasionnelle(e.target.checked)} className="accent-orange-500 w-4 h-4"/>
+                    <div>
+                      <div className="font-body text-sm font-semibold text-orange-800">🛡️ Assurance occasionnelle 1 mois</div>
+                      <div className="font-body text-[10px] text-orange-600">Pour cavaliers non licenciés FFE — {inscParams.assuranceOccasionnelle}€/enfant</div>
+                    </div>
+                  </div>
+                  {assuranceOccasionnelle && <span className="font-body text-sm font-bold text-orange-700">+{inscParams.assuranceOccasionnelle * selectedChildren.length}€</span>}
+                </label>
+                <button onClick={handleEnroll} disabled={enrolling} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${enrolling ? "bg-gray-200 text-slate-500" : "bg-green-600 text-white hover:bg-green-500"}`}>
+                  {enrolling ? "..." : `Inscrire ${selectedChildren.length} enfant${selectedChildren.length > 1 ? "s" : ""} — ${(stageTotalTTC + (assuranceOccasionnelle ? inscParams.assuranceOccasionnelle * selectedChildren.length : 0)).toFixed(2)}€`}
+                </button>
+              </div>
             )}
 
             {/* Bouton Cours / Activité ponctuelle */}
