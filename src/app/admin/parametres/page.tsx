@@ -34,7 +34,7 @@ export default function ParametresPage() {
     setAgentContext({ module_actif: "parametres", description: "moniteurs, tarifs, infos centre" });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [section, setSection] = useState<"centre" | "tarifs" | "reductions" | "degressivite" | "annulation" | "comptable" | "horaires" | "moniteurs" | "fidelite" | "inscription" | "maintenance">("centre");
+  const [section, setSection] = useState<"centre" | "tarifs" | "reductions" | "degressivite" | "annulation" | "comptable" | "horaires" | "moniteurs" | "fidelite" | "inscription" | "epreuves" | "maintenance">("centre");
 
   // ─── Infos Centre ───
   const [centreParams, setCentreParams] = useState({
@@ -77,7 +77,34 @@ export default function ParametresPage() {
   });
   const [inscriptionSaved, setInscriptionSaved] = useState(false);
 
-  // ─── Moniteurs ───
+  // ─── Épreuves compétition ───
+  const DISCIPLINES = [
+    { key: "pony_games", label: "Pony Games", default: ["Trot en ligne","Slalom","Tonneau","Cavaletti","Portique","Barre de vitesse","Étoile","Flag race"] },
+    { key: "cso", label: "CSO", default: ["Parcours A","Barrage","Maniabilité","Chrono"] },
+    { key: "equifun", label: "Équifun", default: ["Parcours thématique","Épreuve de précision","Course d'obstacles","Épreuve d'adresse"] },
+    { key: "endurance", label: "Endurance", default: ["Boucle 1","Boucle 2","Boucle 3","Phase vétérinaire"] },
+  ];
+  const [epreuves, setEpreuves] = useState<Record<string, string[]>>({
+    pony_games: ["Trot en ligne","Slalom","Tonneau","Cavaletti","Portique","Barre de vitesse","Étoile","Flag race"],
+    cso: ["Parcours A","Barrage","Maniabilité","Chrono"],
+    equifun: ["Parcours thématique","Épreuve de précision","Course d'obstacles","Épreuve d'adresse"],
+    endurance: ["Boucle 1","Boucle 2","Boucle 3","Phase vétérinaire"],
+  });
+  const [epreuvesSaved, setEpreuvesSaved] = useState(false);
+  const [newEpreuve, setNewEpreuve] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (section !== "epreuves") return;
+    getDoc(doc(db, "settings", "competitions")).then(snap => {
+      if (snap.exists()) setEpreuves(prev => ({ ...prev, ...snap.data() }));
+    });
+  }, [section]);
+
+  const saveEpreuves = async () => {
+    await setDoc(doc(db, "settings", "competitions"), { ...epreuves, updatedAt: new Date() });
+    setEpreuvesSaved(true);
+    setTimeout(() => setEpreuvesSaved(false), 2000);
+  };
   const [moniteurs, setMoniteurs] = useState<any[]>([]);
   const [showAddMoniteur, setShowAddMoniteur] = useState(false);
   const [moniteurForm, setMoniteurForm] = useState({ name: "", role: "", email: "", phone: "", status: "active" });
@@ -255,6 +282,7 @@ export default function ParametresPage() {
           ["comptable", "Plan comptable"],
           ["horaires", "Horaires"],
           ["moniteurs", "Moniteurs"],
+          ["epreuves", "🏆 Épreuves"],
           ["fidelite", "🏆 Fidélité"],
           ["maintenance", "Maintenance"],
         ] as const).map(([id, label]) => (
@@ -1003,6 +1031,62 @@ export default function ParametresPage() {
           <button onClick={saveInscription}
             className="flex items-center justify-center gap-2 py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none cursor-pointer">
             {inscriptionSaved ? "✅ Sauvegardé !" : "Sauvegarder les paramètres"}
+          </button>
+        </div>
+      )}
+
+      {/* ─── Épreuves compétition ─── */}
+      {section === "epreuves" && (
+        <div className="flex flex-col gap-5">
+          {DISCIPLINES.map(disc => (
+            <Card key={disc.key} padding="md">
+              <h3 className="font-body text-base font-semibold text-blue-800 mb-4">🏆 {disc.label}</h3>
+              <div className="flex flex-col gap-2 mb-3">
+                {(epreuves[disc.key] || []).map((ep, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input value={ep}
+                      onChange={e => setEpreuves(prev => ({
+                        ...prev,
+                        [disc.key]: prev[disc.key].map((x, j) => j === i ? e.target.value : x)
+                      }))}
+                      className="flex-1 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
+                    <button onClick={() => setEpreuves(prev => ({
+                      ...prev,
+                      [disc.key]: prev[disc.key].filter((_, j) => j !== i)
+                    }))} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1">
+                      <Trash2 size={14}/>
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input value={newEpreuve[disc.key] || ""}
+                  onChange={e => setNewEpreuve(prev => ({ ...prev, [disc.key]: e.target.value }))}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && (newEpreuve[disc.key] || "").trim()) {
+                      setEpreuves(prev => ({ ...prev, [disc.key]: [...(prev[disc.key] || []), newEpreuve[disc.key].trim()] }));
+                      setNewEpreuve(prev => ({ ...prev, [disc.key]: "" }));
+                    }
+                  }}
+                  placeholder="Nouvelle épreuve..."
+                  className="flex-1 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
+                <button onClick={() => {
+                  if (!(newEpreuve[disc.key] || "").trim()) return;
+                  setEpreuves(prev => ({ ...prev, [disc.key]: [...(prev[disc.key] || []), newEpreuve[disc.key].trim()] }));
+                  setNewEpreuve(prev => ({ ...prev, [disc.key]: "" }));
+                }} className="px-4 py-2 rounded-lg font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-400 border-none cursor-pointer">
+                  + Ajouter
+                </button>
+              </div>
+              <button onClick={() => setEpreuves(prev => ({ ...prev, [disc.key]: disc.default }))}
+                className="mt-2 font-body text-[10px] text-slate-400 bg-transparent border-none cursor-pointer hover:text-blue-500">
+                Réinitialiser aux épreuves par défaut
+              </button>
+            </Card>
+          ))}
+          <button onClick={saveEpreuves}
+            className="flex items-center justify-center gap-2 py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none cursor-pointer">
+            {epreuvesSaved ? "✅ Sauvegardé !" : "Sauvegarder les épreuves"}
           </button>
         </div>
       )}
