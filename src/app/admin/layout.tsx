@@ -158,7 +158,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         ]);
 
         const creneaux = creneauxSnap.docs.map(d => d.data());
-        const families = familiesSnap.docs.map(d => d.data());
+        const families = familiesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         const payments = paymentsSnap.docs.map(d => d.data());
 
         const totalInscrits = creneaux.reduce((s,c) => s+(c.enrolled?.length||0),0);
@@ -187,12 +187,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           stages_semaine: creneaux.filter(c=>c.activityType==="stage").length,
           cours_aujourdhui: today.map(c=>`${c.activityTitle} à ${c.startTime} (${c.enrolled?.length||0}/${c.maxPlaces} inscrits)`),
           total_familles: families.length,
-          total_cavaliers: families.reduce((s,f)=>s+(f.children?.length||0),0),
+          total_cavaliers: families.reduce((s: number,f: any)=>s+(f.children?.length||0),0),
           encaisse_ce_mois: `${totalEncaisse.toFixed(2)}€`,
           nb_impayes_ce_mois: nbImpayes,
           detail_creneaux_semaine: creneaux.slice(0,20).map(c=>
             `${c.date} ${c.startTime} — ${c.activityTitle} — ${c.monitor} — ${c.enrolled?.length||0}/${c.maxPlaces}${c.status==="closed"?" (clôturé)":""}`
           ),
+          familles: families.slice(0, 50).map((f: any) => ({
+            id: f.id,
+            nom: f.parentName,
+            email: f.parentEmail || "",
+            cavaliers: (f.children || []).map((c: any) => c.firstName).join(", "),
+          })),
         });
       } catch(e) { console.error("voiceContext error", e); }
     };

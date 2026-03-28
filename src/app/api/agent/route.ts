@@ -114,6 +114,35 @@ const tools: Anthropic.Tool[] = [
       required: ["to","subject","message"],
     },
   },
+  {
+    name: "creer_devis",
+    description: "Crée un devis pour une famille. Utilise cet outil quand l'utilisateur demande de faire un devis, une proposition tarifaire ou un chiffrage pour une famille.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        familyId: { type: "string", description: "ID Firestore de la famille" },
+        familyName: { type: "string", description: "Nom de la famille" },
+        familyEmail: { type: "string", description: "Email de la famille" },
+        items: {
+          type: "array",
+          description: "Lignes du devis",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "Libellé de la prestation" },
+              qty: { type: "number", description: "Quantité (défaut 1)" },
+              priceTTC: { type: "number", description: "Prix unitaire TTC en euros" },
+              tva: { type: "number", description: "Taux TVA : 0, 5.5, 10 ou 20" },
+            },
+            required: ["label","priceTTC"],
+          },
+        },
+        note: { type: "string", description: "Note ou commentaire optionnel" },
+        validUntil: { type: "string", description: "Date de validité YYYY-MM-DD (défaut : 30 jours)" },
+      },
+      required: ["familyId","familyName","items"],
+    },
+  },
 ];
 
 // ── Exécution des outils ──────────────────────────────────────────────────────
@@ -287,6 +316,50 @@ async function executeTool(name: string, input: any): Promise<string> {
         return `✅ Email envoyé à ${input.to} — Objet : "${input.subject}"`;
       }
 
+      case "creer_devis": {
+        // Générer un numéro de devis
+        const existingSnap = await adminDb.collection("devis").get();
+        const num = String(existingSnap.size + 1).padStart(3, "0");
+        const d = new Date();
+        const numero = `DEV-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}-${num}`;
+
+        // Date de validité par défaut : 30 jours
+        const validUntil = input.validUntil || (() => {
+          const v = new Date(); v.setDate(v.getDate() + 30);
+          return v.toISOString().split("T")[0];
+        })();
+
+        // Calculer le total
+        const items = (input.items || []).map((i: any) => ({
+          label: i.label,
+          qty: i.qty || 1,
+          priceTTC: i.priceTTC,
+          tva: i.tva ?? 5.5,
+        }));
+        const totalTTC = Math.round(items.reduce((s: number, i: any) => s + (i.qty || 1) * i.priceTTC, 0) * 100) / 100;
+
+        const ref = await adminDb.collection("devis").add({
+          numero,
+          familyId: input.familyId,
+          familyName: input.familyName,
+          familyEmail: input.familyEmail || "",
+          items,
+          totalTTC,
+          status: "draft",
+          note: input.note || "",
+          validUntil,
+          createdByAgent: true,
+          createdAt: FieldValue.serverTimestamp(),
+        });
+
+        // Résumé des lignes
+        const resume = items.map((i: any) =>
+          `${i.qty > 1 ? `${i.qty}× ` : ""}${i.label} (${((i.qty || 1) * i.priceTTC).toFixed(2)}€)`
+        ).join(", ");
+
+        return `✅ Devis ${numero} créé pour ${input.familyName} — Total : ${totalTTC.toFixed(2)}€ — ${resume}. Visible dans Admin → Devis. Pour l'envoyer par email, va dans le module Devis.`;
+      }
+
       default:
         return `❌ Outil inconnu : ${name}`;
     }
@@ -314,13 +387,23 @@ Réponds en français, de façon concise — la réponse sera lue à voix haute.
 DONNÉES ACTUELLES :
 ${JSON.stringify(context, null, 2)}
 
+TARIFS STANDARDS (pour les devis) :
+- Forfait annuel 1×/semaine : 650€ TTC (TVA 5.5%)
+- Forfait annuel 2×/semaine : 1100€ TTC (TVA 5.5%)
+- Forfait annuel 3×/semaine : 1400€ TTC (TVA 5.5%)
+- Adhésion 1er enfant : 60€ | 2ème : 40€ | 3ème : 20€ | 4ème+ : 0€
+- Licence FFE -18 ans : 25€ | +18 ans : 36€
+- Stage semaine : 175€ | Stage journée : 45€
+- Assurance occasionnelle 1 mois : 10€
+
 RÈGLES IMPORTANTES :
-1. Pour toute action d'écriture (créer créneaux, inscrire, clôturer, modifier tarif, envoyer email), DEMANDE TOUJOURS CONFIRMATION. Résume en 1 phrase et termine par "Tu confirmes ?"
+1. Pour toute action d'écriture (créer créneaux, inscrire, clôturer, modifier tarif, créer devis, envoyer email), DEMANDE TOUJOURS CONFIRMATION. Résume en 1 phrase et termine par "Tu confirmes ?"
 2. Pour les consultations (impayés, disponibilités), réponds directement sans confirmation.
-3. Pour créer des créneaux récurrents, tu dois connaître la FRÉQUENCE exacte. Si la fréquence n'est pas précisée dans la demande (ex: "en juillet" sans préciser quel jour de la semaine), DEMANDE TOUJOURS avant de créer : "Quels jours de la semaine ?" Ne suppose jamais que c'est tous les jours.
-4. Exemples de fréquences valides : "tous les mercredis", "les samedis et dimanches", "tous les jours en semaine". Si non précisé → demande.
-5. Sois précis : "Je vais créer 4 créneaux Balade les mercredis de juillet, 14h-16h. Tu confirmes ?"
-6. Texte simple, max 3 phrases, pas de markdown.`;
+3. Pour créer des créneaux récurrents, tu dois connaître la FRÉQUENCE exacte. Si non précisée → demande.
+4. Pour un devis : identifie la famille dans les données contexte (familyId requis). Si tu ne trouves pas la famille, demande le nom exact.
+5. Pour un devis multi-enfants : calcule adhésion dégressive automatiquement (60/40/20/0€ selon le rang).
+6. Sois précis : "Je vais créer un devis pour Duhem — 3× Forfait 3×/sem (4200€) + adhésions (120€) = 4320€. Tu confirmes ?"
+7. Texte simple, max 3 phrases, pas de markdown.`;
 
     const messages: Anthropic.MessageParam[] = [
       { role: "user", content: question },
