@@ -21,7 +21,7 @@ export default function ProgressionPage() {
   return (
     <div>
       <h1 className="font-display text-2xl font-bold text-blue-800 mb-2">Progression</h1>
-      <p className="font-body text-sm text-gray-400 mb-8">Suivez la progression équestre de vos cavaliers à travers les galops FFE.</p>
+      <p className="font-body text-sm text-gray-600 mb-8">Suivez la progression équestre de vos cavaliers à travers les galops FFE.</p>
 
       {children.length === 0 ? (
         <Card padding="lg" className="text-center">
@@ -45,7 +45,7 @@ export default function ProgressionPage() {
                     <div className="flex items-center gap-2 mt-1">
                       <Badge color={level !== "—" ? "blue" : "gray"}>{prog.label}</Badge>
                       {child.birthDate && (
-                        <span className="font-body text-xs text-gray-400">
+                        <span className="font-body text-xs text-gray-600">
                           {Math.floor((Date.now() - new Date(typeof child.birthDate === "string" ? child.birthDate : child.birthDate?.seconds ? child.birthDate.seconds * 1000 : 0).getTime()) / (365.25 * 24 * 60 * 60 * 1000))} ans
                         </span>
                       )}
@@ -55,12 +55,12 @@ export default function ProgressionPage() {
 
                 {/* Progress bar */}
                 <Card padding="md" className="mb-4">
-                  <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Progression</div>
+                  <div className="font-body text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">Progression</div>
                   <div className="flex gap-1 mb-3">
                     {allLevels.map(([key, val], i) => (
                       <div key={key} className="flex-1">
                         <div className={`h-2 rounded-full transition-all ${i <= currentIdx ? "bg-blue-500" : "bg-gray-100"}`} />
-                        <div className={`font-body text-[10px] mt-1 text-center ${i <= currentIdx ? "text-blue-500 font-semibold" : "text-gray-300"}`}>
+                        <div className={`font-body text-[10px] mt-1 text-center ${i <= currentIdx ? "text-blue-500 font-semibold" : "text-gray-600"}`}>
                           {key === "—" ? "🌱" : key}
                         </div>
                       </div>
@@ -76,7 +76,7 @@ export default function ProgressionPage() {
                     </span>
                     <div>
                       <div className="font-body text-sm font-semibold text-blue-800">{prog.label}</div>
-                      <div className="font-body text-xs text-gray-400">Compétences à acquérir</div>
+                      <div className="font-body text-xs text-gray-600">Compétences à acquérir</div>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -94,7 +94,7 @@ export default function ProgressionPage() {
                     <div className="font-body text-xs font-semibold text-blue-800">
                       Prochaine étape : {allLevels[currentIdx + 1][1].label}
                     </div>
-                    <div className="font-body text-xs text-gray-400 mt-1">
+                    <div className="font-body text-xs text-gray-600 mt-1">
                       {allLevels[currentIdx + 1][1].skills.length} compétences à débloquer
                     </div>
                   </div>

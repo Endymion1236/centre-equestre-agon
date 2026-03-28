@@ -27,7 +27,7 @@ export default function SatisfactionPage() {
   return (
     <div>
       <h1 className="font-display text-2xl font-bold text-blue-800 mb-2">Progression & satisfaction</h1>
-      <p className="font-body text-sm text-gray-400 mb-6">Suivez la progression équestre de vos enfants et donnez votre avis.</p>
+      <p className="font-body text-sm text-gray-600 mb-6">Suivez la progression équestre de vos enfants et donnez votre avis.</p>
 
       <div className="flex gap-2 mb-6">
         {([["progression", "Progression galops", TrendingUp], ["satisfaction", "Avis & satisfaction", Star]] as const).map(([id, label, Icon]) => (
@@ -66,7 +66,7 @@ export default function SatisfactionPage() {
                           <Badge color={currentLevel !== "—" ? "blue" : "gray"}>
                             {currentLevel !== "—" ? `Galop ${currentLevel}` : "Débutant"}
                           </Badge>
-                          {currentInfo && <span className="font-body text-xs text-gray-400">{currentInfo.description}</span>}
+                          {currentInfo && <span className="font-body text-xs text-gray-600">{currentInfo.description}</span>}
                         </div>
                       </div>
                     </div>
@@ -74,15 +74,15 @@ export default function SatisfactionPage() {
                     {/* Progress bar */}
                     <div className="mb-5">
                       <div className="flex justify-between mb-2">
-                        <span className="font-body text-xs font-semibold text-gray-400">Progression</span>
+                        <span className="font-body text-xs font-semibold text-gray-600">Progression</span>
                         <span className="font-body text-xs font-semibold text-blue-500">{Math.round(progressPercent)}%</span>
                       </div>
                       <div className="h-3 rounded-full bg-gray-100 overflow-hidden">
                         <div className="h-3 rounded-full bg-gradient-to-r from-blue-400 to-gold-400 transition-all duration-1000" style={{ width: `${progressPercent}%` }} />
                       </div>
                       <div className="flex justify-between mt-1">
-                        <span className="font-body text-[10px] text-gray-400">Débutant</span>
-                        <span className="font-body text-[10px] text-gray-400">Galop 7</span>
+                        <span className="font-body text-[10px] text-gray-600">Débutant</span>
+                        <span className="font-body text-[10px] text-gray-600">Galop 7</span>
                       </div>
                     </div>
 
@@ -94,7 +94,7 @@ export default function SatisfactionPage() {
                         return (
                           <div key={g.level}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs transition-all
-                              ${isCurrent ? "bg-blue-500 text-white font-semibold shadow-md" : isPast ? "bg-blue-50 text-blue-500 font-medium" : "bg-gray-50 text-gray-400"}`}>
+                              ${isCurrent ? "bg-blue-500 text-white font-semibold shadow-md" : isPast ? "bg-blue-50 text-blue-500 font-medium" : "bg-gray-50 text-gray-600"}`}>
                             {isPast && !isCurrent && <Award size={12} />}
                             {isCurrent && <Star size={12} />}
                             {g.level}
@@ -139,7 +139,7 @@ export default function SatisfactionPage() {
             Après chaque activité, vous recevrez un email vous invitant à noter votre expérience.
             Vos avis nous aident à nous améliorer !
           </p>
-          <p className="font-body text-xs text-gray-400">
+          <p className="font-body text-xs text-gray-600">
             Les enquêtes de satisfaction seront envoyées automatiquement après vos prochaines activités.
           </p>
         </Card>

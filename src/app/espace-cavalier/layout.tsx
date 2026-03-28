@@ -76,7 +76,7 @@ function LoginScreen() {
           </div>
 
           <div className="mt-6 pt-5 border-t border-blue-500/8 text-center">
-            <p className="font-body text-xs text-gray-400 leading-relaxed">
+            <p className="font-body text-xs text-gray-600 leading-relaxed">
               En vous connectant, vous acceptez nos{" "}
               <a href="#" className="text-blue-500 no-underline">CGV</a> et notre{" "}
               <a href="#" className="text-blue-500 no-underline">politique de confidentialité</a>.
@@ -87,7 +87,7 @@ function LoginScreen() {
         <div className="text-center mt-6">
           <Link
             href="/"
-            className="font-body text-sm text-gray-400 hover:text-blue-500 transition-colors no-underline"
+            className="font-body text-sm text-gray-600 hover:text-blue-500 transition-colors no-underline"
           >
             ← Retour au site
           </Link>
@@ -282,7 +282,7 @@ export default function EspaceCavalierLayout({
       <div className="min-h-screen bg-cream flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-3" />
-          <p className="font-body text-sm text-gray-400">Chargement...</p>
+          <p className="font-body text-sm text-gray-600">Chargement...</p>
         </div>
       </div>
     );
@@ -294,7 +294,7 @@ export default function EspaceCavalierLayout({
       <div className="min-h-screen bg-cream flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-3" />
-          <p className="font-body text-sm text-gray-400">Redirection vers l&apos;administration...</p>
+          <p className="font-body text-sm text-gray-600">Redirection vers l&apos;administration...</p>
         </div>
       </div>
     );
@@ -328,10 +328,10 @@ export default function EspaceCavalierLayout({
               </div>
             </Link>
             <span className="font-display text-sm font-bold text-blue-800">Centre Equestre</span>
-            <span className="font-body text-xs text-gray-400 ml-1 hidden sm:inline">Espace cavalier</span>
+            <span className="font-body text-xs text-gray-600 ml-1 hidden sm:inline">Espace cavalier</span>
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/" className="md:hidden font-body text-xs text-gray-400 no-underline flex items-center gap-1">
+            <Link href="/" className="md:hidden font-body text-xs text-gray-600 no-underline flex items-center gap-1">
               <ExternalLink size={14} /> Site
             </Link>
             <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center font-body text-xs font-bold text-blue-500">
@@ -381,7 +381,7 @@ export default function EspaceCavalierLayout({
           return (
             <Link key={item.href} href={item.href}
               className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg no-underline transition-all min-w-[56px]
-                ${active ? "text-blue-500" : "text-gray-400"}`}>
+                ${active ? "text-blue-500" : "text-gray-600"}`}>
               <Icon size={20} strokeWidth={active ? 2 : 1.5} />
               <span className={`font-body text-[10px] ${active ? "font-semibold" : "font-normal"}`}>{item.label}</span>
             </Link>

@@ -145,7 +145,7 @@ export default function FacturesPage() {
   return (
     <div>
       <h1 className="font-display text-2xl font-bold text-blue-800 mb-2">Mes factures & paiements</h1>
-      <p className="font-body text-sm text-gray-400 mb-6">Retrouvez l&apos;historique de tous vos paiements et réservations.</p>
+      <p className="font-body text-sm text-gray-600 mb-6">Retrouvez l&apos;historique de tous vos paiements et réservations.</p>
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
@@ -189,15 +189,15 @@ export default function FacturesPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                     <Card padding="sm" className="text-center">
                       <div className="font-body text-xl font-bold text-blue-500">{totalFacture.toFixed(2)}€</div>
-                      <div className="font-body text-[10px] text-gray-400 uppercase">Total facturé</div>
+                      <div className="font-body text-[10px] text-gray-600 uppercase">Total facturé</div>
                     </Card>
                     <Card padding="sm" className="text-center bg-green-50">
                       <div className="font-body text-xl font-bold text-green-600">{totalPaye.toFixed(2)}€</div>
-                      <div className="font-body text-[10px] text-gray-400 uppercase">Payé</div>
+                      <div className="font-body text-[10px] text-gray-600 uppercase">Payé</div>
                     </Card>
                     <Card padding="sm" className={`text-center ${resteDu > 0 ? "bg-red-50" : "bg-green-50"}`}>
                       <div className={`font-body text-xl font-bold ${resteDu > 0 ? "text-red-500" : "text-green-600"}`}>{resteDu.toFixed(2)}€</div>
-                      <div className="font-body text-[10px] text-gray-400 uppercase">Reste dû</div>
+                      <div className="font-body text-[10px] text-gray-600 uppercase">Reste dû</div>
                     </Card>
                     {totalAvoir > 0 && (
                       <Card padding="sm" className="text-center bg-purple-50">
@@ -230,7 +230,7 @@ export default function FacturesPage() {
                               <div className="font-body text-sm font-semibold text-blue-800">
                                 {(p.items || []).map(i => i.activityTitle).join(", ") || "Paiement"}
                               </div>
-                              <div className="font-body text-xs text-gray-400">
+                              <div className="font-body text-xs text-gray-600">
                                 {d.toLocaleDateString("fr-FR")} · {modeLabels[p.paymentMode] || p.paymentMode}
                               </div>
                             </div>
@@ -315,7 +315,7 @@ export default function FacturesPage() {
                                 }
                               } catch (e) { console.error(e); }
                             }}
-                              className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 hover:text-blue-500 hover:bg-blue-50 cursor-pointer border-none"
+                              className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-600 hover:text-blue-500 hover:bg-blue-50 cursor-pointer border-none"
                               title="Télécharger le reçu">
                               <Download size={14} />
                             </button>
@@ -365,7 +365,7 @@ export default function FacturesPage() {
                           </div>
                           <div>
                             <div className="font-body text-sm font-semibold text-blue-800">{r.activityTitle}</div>
-                            <div className="font-body text-xs text-gray-400">
+                            <div className="font-body text-xs text-gray-600">
                               🧒 {r.childName} · {r.startTime}–{r.endTime} · {r.date ? new Date(r.date).toLocaleDateString("fr-FR") : ""}
                             </div>
                           </div>
@@ -418,10 +418,10 @@ export default function FacturesPage() {
                                   👨‍👩‍👧 Carte familiale — valable pour tous vos cavaliers
                                 </div>
                               ) : (
-                                <div className="font-body text-xs text-gray-400">🧒 {card.childName}</div>
+                                <div className="font-body text-xs text-gray-600">🧒 {card.childName}</div>
                               )}
                               {(card as any).dateDebut && (card as any).dateFin && (
-                                <div className="font-body text-[10px] text-gray-400 mt-0.5">
+                                <div className="font-body text-[10px] text-gray-600 mt-0.5">
                                   {new Date((card as any).dateDebut).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}
                                   {" → "}
                                   {new Date((card as any).dateFin).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}
@@ -441,7 +441,7 @@ export default function FacturesPage() {
                             <div className="h-3 rounded-full bg-gradient-to-r from-gold-400 to-gold-300 transition-all" style={{ width: `${pct}%` }} />
                           </div>
                           <div className="flex justify-between mt-1">
-                            <span className="font-body text-xs text-gray-400">{card.usedSessions} utilisée{card.usedSessions > 1 ? "s" : ""}</span>
+                            <span className="font-body text-xs text-gray-600">{card.usedSessions} utilisée{card.usedSessions > 1 ? "s" : ""}</span>
                             <span className="font-body text-xs font-semibold text-gold-500">{card.remainingSessions} restante{card.remainingSessions > 1 ? "s" : ""}</span>
                           </div>
                         </div>
@@ -451,7 +451,7 @@ export default function FacturesPage() {
                           <div className="pt-2 border-t border-gray-100">
                             <button
                               onClick={() => setOpenCardId(isOpen ? null : card.id)}
-                              className="w-full flex items-center justify-between font-body text-xs text-gray-400 bg-transparent border-none cursor-pointer py-1 hover:text-blue-500">
+                              className="w-full flex items-center justify-between font-body text-xs text-gray-600 bg-transparent border-none cursor-pointer py-1 hover:text-blue-500">
                               <span>Historique ({seancesUtilisees.length} séance{seancesUtilisees.length > 1 ? "s" : ""})</span>
                               <span>{isOpen ? "▲ Masquer" : "▼ Voir le détail"}</span>
                             </button>
@@ -463,7 +463,7 @@ export default function FacturesPage() {
                                       <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${h.credit ? "bg-green-400" : h.presence === "absent" ? "bg-red-400" : "bg-gold-400"}`} />
                                       <div className="min-w-0">
                                         <div className="text-blue-800 font-semibold truncate">{h.activityTitle || "Séance"}</div>
-                                        <div className="text-gray-400 text-[10px]">
+                                        <div className="text-gray-600 text-[10px]">
                                           {h.date ? new Date(h.date).toLocaleDateString("fr-FR", { weekday:"short", day:"numeric", month:"short" }) : ""}
                                           {h.horseName ? ` · ${h.horseName}` : ""}
                                           {h.credit ? " · Recrédit" : ""}
@@ -567,7 +567,7 @@ export default function FacturesPage() {
                     <div className="h-full rounded-full bg-yellow-400 transition-all"
                       style={{ width: `${Math.min(100, ((fidelite?.points || 0) / fideliteSettings.minPoints) * 100)}%` }} />
                   </div>
-                  <div className="flex justify-between font-body text-[10px] text-gray-400 mt-1">
+                  <div className="flex justify-between font-body text-[10px] text-gray-600 mt-1">
                     <span>{fidelite?.points || 0} pts</span>
                     <span>{fideliteSettings.minPoints} pts requis</span>
                   </div>
@@ -577,18 +577,18 @@ export default function FacturesPage() {
               {/* Historique des points */}
               {(fidelite?.history || []).length > 0 && (
                 <Card padding="md">
-                  <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Historique des points</div>
+                  <div className="font-body text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">Historique des points</div>
                   <div className="flex flex-col gap-2">
                     {[...(fidelite.history || [])].reverse().slice(0, 20).map((h: any, i: number) => (
                       <div key={i} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
                         <div>
                           <div className="font-body text-xs font-semibold text-blue-800">{h.label}</div>
-                          <div className="font-body text-[10px] text-gray-400">
+                          <div className="font-body text-[10px] text-gray-600">
                             {h.date ? new Date(h.date).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" }) : ""}
                             {h.expiry && h.type === "gain" ? ` · expire le ${new Date(h.expiry).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}` : ""}
                           </div>
                         </div>
-                        <span className={`font-body text-sm font-bold ${h.points > 0 ? "text-yellow-500" : "text-gray-400"}`}>
+                        <span className={`font-body text-sm font-bold ${h.points > 0 ? "text-yellow-500" : "text-gray-600"}`}>
                           {h.points > 0 ? "+" : ""}{h.points} pts
                         </span>
                       </div>
@@ -709,7 +709,7 @@ export default function FacturesPage() {
                         } catch (e) { console.error(e); alert("Erreur. Réessayez."); }
                         setDeclareSending(false);
                       }}
-                      className={`flex-1 py-2.5 rounded-xl font-body text-sm font-semibold border-none cursor-pointer flex items-center justify-center gap-2 ${declareSending || !declareMontant ? "bg-gray-200 text-slate-400" : "bg-blue-500 text-white hover:bg-blue-600"}`}>
+                      className={`flex-1 py-2.5 rounded-xl font-body text-sm font-semibold border-none cursor-pointer flex items-center justify-center gap-2 ${declareSending || !declareMontant ? "bg-gray-200 text-slate-600" : "bg-blue-500 text-white hover:bg-blue-600"}`}>
                       {declareSending ? <Loader2 size={14} className="animate-spin" /> : "Envoyer la déclaration"}
                     </button>
                   </div>

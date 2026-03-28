@@ -203,3 +203,9 @@ span.text-gray-500 { color: #475569 !important; }
 /* Hide scrollbar for horizontal scroll */
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ═══ Forcer lisibilité textes secondaires espace famille ═══ */
+.text-slate-400, .text-slate-500, .text-slate-600,
+.text-gray-400, .text-gray-500, .text-gray-600 {
+  color: #334155 !important;
+}
