@@ -158,6 +158,11 @@ Pas de markdown ni de listes — texte simple uniquement.`;
             context,
             confirmed: isConfirmation,
             pendingAction: isConfirmation ? pendingAction : null,
+            // Historique des 10 derniers messages pour la mémoire conversationnelle
+            history: messages.slice(-10).map(m => ({
+              role: m.role,
+              content: m.text,
+            })),
           }),
         });
         const data = await res.json();

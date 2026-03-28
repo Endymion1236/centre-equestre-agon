@@ -372,7 +372,7 @@ async function executeTool(name: string, input: any): Promise<string> {
 
 export async function POST(req: NextRequest) {
   try {
-    const { question, context, confirmed, pendingAction } = await req.json();
+    const { question, context, confirmed, pendingAction, history = [] } = await req.json();
 
     // Si l'utilisateur doit confirmer une action, on l'exécute
     if (confirmed && pendingAction) {
@@ -405,9 +405,27 @@ RÈGLES IMPORTANTES :
 6. Sois précis : "Je vais créer un devis pour Duhem — 3× Forfait 3×/sem (4200€) + adhésions (120€) = 4320€. Tu confirmes ?"
 7. Texte simple, max 3 phrases, pas de markdown.`;
 
-    const messages: Anthropic.MessageParam[] = [
-      { role: "user", content: question },
-    ];
+    // Construire l'historique de conversation
+    const messages: Anthropic.MessageParam[] = [];
+
+    // Ajouter l'historique passé (alternance user/assistant obligatoire pour Anthropic)
+    for (let i = 0; i < history.length; i++) {
+      const h = history[i];
+      if (h.role === "user" || h.role === "assistant") {
+        // Éviter deux messages consécutifs du même rôle
+        if (messages.length === 0 || messages[messages.length - 1].role !== h.role) {
+          messages.push({ role: h.role, content: h.content });
+        }
+      }
+    }
+
+    // Ajouter la question actuelle
+    if (messages.length === 0 || messages[messages.length - 1].role !== "user") {
+      messages.push({ role: "user", content: question });
+    } else {
+      // Si dernier message est déjà user, fusionner
+      messages[messages.length - 1] = { role: "user", content: question };
+    }
 
     let response = await anthropic.messages.create({
       model: "claude-opus-4-5",
