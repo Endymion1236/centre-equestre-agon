@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ date: targetStr, charged: results.length, errors: errors.length, results, errors });
+    return NextResponse.json({ date: targetStr, charged: results.length, errorCount: errors.length, results, errors });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
