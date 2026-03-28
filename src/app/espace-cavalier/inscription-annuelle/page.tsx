@@ -189,7 +189,7 @@ export default function InscriptionAnnuellePage() {
         {steps.map(s => (
           <div key={s.num} className="flex-1">
             <div className={`h-1.5 rounded-full mb-2 ${step >= s.num ? "bg-blue-500" : "bg-gray-300"}`} />
-            <span className="font-body text-xs" style={{color: step >= s.num ? "#2563eb" : "#475569", fontWeight: step >= s.num ? 600 : 400}}>{s.num}. {s.label}</span>
+            <span className="font-body text-xs" style={{color: step >= s.num ? "#2050A0" : "#1C2A3E", fontWeight: step >= s.num ? 600 : 400}}>{s.num}. {s.label}</span>
           </div>
         ))}
       </div>
@@ -215,7 +215,7 @@ export default function InscriptionAnnuellePage() {
                       <span className="text-2xl">🧒</span>
                       <div>
                         <div className="font-body text-base font-semibold text-blue-800">{c.firstName}</div>
-                        <div className="font-body text-xs" style={{color:"#475569"}}>{c.galopLevel && c.galopLevel !== "—" ? `Galop ${c.galopLevel}` : "Débutant"}</div>
+                        <div className="font-body text-xs" style={{color:"#1C2A3E"}}>{c.galopLevel && c.galopLevel !== "—" ? `Galop ${c.galopLevel}` : "Débutant"}</div>
                       </div>
                     </div>
                     {selectedChild === c.id && <Check size={20} className="text-blue-500" />}
@@ -234,7 +234,7 @@ export default function InscriptionAnnuellePage() {
         {step === 2 && (
           <Card padding="md">
             <h2 className="font-body text-base font-semibold text-blue-800 mb-1">Prérequis obligatoires</h2>
-            <p className="font-body text-xs mb-4" style={{color:"#475569"}}>Cochez ce que vous avez déjà. Sinon, nous les ajoutons à votre inscription.</p>
+            <p className="font-body text-xs mb-4" style={{color:"#1C2A3E"}}>Cochez ce que vous avez déjà. Sinon, nous les ajoutons à votre inscription.</p>
             <div className="flex flex-col gap-3 mb-5">
               {[
                 { id: "licence", label: LICENCE_FFE.label, desc: LICENCE_FFE.description, price: LICENCE_FFE.price, checked: licenceOK, set: setLicenceOK },
@@ -247,7 +247,7 @@ export default function InscriptionAnnuellePage() {
                   </div>
                   <div className="flex-1">
                     <div className="font-body text-sm font-semibold text-blue-800">{item.label}</div>
-                    <div className="font-body text-xs" style={{color:"#475569"}}>{item.desc}</div>
+                    <div className="font-body text-xs" style={{color:"#1C2A3E"}}>{item.desc}</div>
                   </div>
                   <div className={`font-body text-sm font-bold ${item.checked ? "text-slate-600 line-through" : "text-blue-500"}`}>
                     {item.checked ? "Déjà ✓" : `+${item.price}€`}
@@ -282,7 +282,7 @@ export default function InscriptionAnnuellePage() {
                       <div>
                         <div className="font-body text-sm font-semibold text-blue-800">{slot.activityTitle}</div>
                         <div className="font-body text-xs text-slate-600">{slot.dayLabel} · {slot.startTime}–{slot.endTime} · {slot.monitor}</div>
-                        <div className="font-body text-xs" style={{color:"#475569"}}>{slot.totalSessions} séances dans l&apos;année</div>
+                        <div className="font-body text-xs" style={{color:"#1C2A3E"}}>{slot.totalSessions} séances dans l&apos;année</div>
                       </div>
                       <div className="text-right ml-3 flex-shrink-0">
                         <div className="font-body text-base font-bold text-blue-500">{mode === "annuel" ? `${annualPrice.toFixed(0)}€` : `${priceTTC.toFixed(0)}€`}</div>
