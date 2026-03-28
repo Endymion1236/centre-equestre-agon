@@ -160,7 +160,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { href: "/espace-cavalier/reserver", icon: "📅", label: "Réserver une activité" },
-          { href: "/espace-cavalier/reserver", icon: "🌅", label: "Réserver une balade" },
+          { href: "/espace-cavalier/reserver?filter=balade", icon: "🌅", label: "Réserver une balade" },
           { href: "/espace-cavalier/inscription-annuelle", icon: "📋", label: "Inscription annuelle" },
           { href: "/espace-cavalier/factures", icon: "🧾", label: "Mes factures" },
           { href: "/espace-cavalier/profil", icon: "👨‍👩‍👧‍👦", label: "Ma famille" },

@@ -6,6 +6,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
 import { Calendar, Clock, Users, Loader2, ShoppingCart, ChevronLeft, ChevronRight, X, Check, CreditCard } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 
 interface Creneau { id: string; activityId: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolled: any[]; enrolledCount: number; priceHT: number; priceTTC?: number; tvaTaux: number; }
 
@@ -19,10 +20,13 @@ const typeLabels: Record<string, { label: string; color: string }> = {
 
 export default function ReserverPage() {
   const { user, family } = useAuth();
+  const searchParams = useSearchParams();
+  const initialFilter = searchParams.get("filter") || "all";
+
   const [creneaux, setCreneaux] = useState<Creneau[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState(initialFilter);
   const [subfilter, setSubfilter] = useState("all"); // sous-catégorie
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showCart, setShowCart] = useState(false);
@@ -349,8 +353,12 @@ export default function ReserverPage() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="font-display text-2xl font-bold text-blue-800">Réserver</h1>
-          <p className="font-body text-xs text-gray-400">Stages, cours ponctuels et activités</p>
+          <h1 className="font-display text-2xl font-bold text-blue-800">
+            {initialFilter === "balade" ? "Promenades" : "Réserver"}
+          </h1>
+          <p className="font-body text-xs text-gray-400">
+            {initialFilter === "balade" ? "Balades et promenades à cheval" : "Stages, cours ponctuels et activités"}
+          </p>
         </div>
         <button onClick={() => setShowCart(true)} className="relative flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600">
           <ShoppingCart size={16} /> Panier
@@ -360,30 +368,32 @@ export default function ReserverPage() {
 
       {success && <Card padding="md" className="mb-4 bg-green-50 border-green-200"><p className="font-body text-sm text-green-700"><Check size={16} className="inline mr-1" /> Inscription confirmée ! Rendez-vous au centre équestre.</p></Card>}
 
-      {/* Filtres catégorie */}
-      <div className="flex flex-wrap gap-2 mb-2">
-        {[
-          ["all", "Tout"],
-          ["stage", "Stages semaine"],
-          ["stage_journee", "Stages journée"],
-          ["cours", "Cours"],
-          ["balade", "Promenades"],
-          ["competition", "Compétitions"],
-          ["anniversaire", "Anniversaires"],
-        ].map(([id, label]) => (
-          <button key={id} onClick={() => setFilterAndReset(id)}
-            className={`px-3 py-1.5 rounded-lg border font-body text-xs font-semibold cursor-pointer transition-all ${filter === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* Filtres catégorie — masqués si filtre imposé par l'URL */}
+      {initialFilter === "all" && (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {[
+            ["all", "Tout"],
+            ["stage", "Stages semaine"],
+            ["stage_journee", "Stages journée"],
+            ["cours", "Cours"],
+            ["balade", "Promenades"],
+            ["competition", "Compétitions"],
+            ["anniversaire", "Anniversaires"],
+          ].map(([id, label]) => (
+            <button key={id} onClick={() => setFilterAndReset(id)}
+              className={`px-3 py-1.5 rounded-lg border font-body text-xs font-semibold cursor-pointer transition-all ${filter === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {/* Filtres sous-catégorie — apparaissent quand une catégorie est sélectionnée */}
+      {/* Filtres sous-catégorie */}
       {availableSubcats.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-4 pl-1">
           <button onClick={() => setSubfilter("all")}
             className={`px-3 py-1 rounded-full border font-body text-xs cursor-pointer transition-all ${subfilter === "all" ? "bg-gold-400 text-blue-800 border-gold-400 font-semibold" : "bg-white text-slate-500 border-gray-200"}`}>
-            Tous niveaux
+            {initialFilter === "balade" ? "Toutes les promenades" : "Tous niveaux"}
           </button>
           {availableSubcats.map(s => (
             <button key={s} onClick={() => setSubfilter(s)}
