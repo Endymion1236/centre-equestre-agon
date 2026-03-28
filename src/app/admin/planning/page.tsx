@@ -811,21 +811,22 @@ export default function PlanningPage() {
           <div className="flex flex-col items-center gap-1">
             <div className="font-display text-lg font-bold text-blue-800 capitalize">{fmtMonthFR(weekDates[0])}</div>
             <div className="font-body text-xs text-slate-600">Du {weekDates[0].toLocaleDateString("fr-FR",{day:"numeric",month:"short"})} au {weekDates[6].toLocaleDateString("fr-FR",{day:"numeric",month:"short"})}</div>
-            <input type="date" className="font-body text-xs px-2 py-1 rounded-lg border border-gray-200 bg-white cursor-pointer focus:border-blue-400 focus:outline-none"
+            <input type="date" 
+              title="Aller à cette date"
+              className="font-body text-xs px-2 py-1 rounded-lg border border-gray-200 bg-white cursor-pointer focus:border-blue-400 focus:outline-none text-slate-500"
               onChange={e => {
                 if (!e.target.value) return;
-                // Parser en local pour éviter le décalage UTC
                 const [py, pm, pd] = e.target.value.split("-").map(Number);
                 const picked = new Date(py, pm - 1, pd);
                 const today = new Date(); today.setHours(0,0,0,0);
-                const diffDays = Math.round((picked.getTime() - today.getTime()) / 86400000);
-                // Calculer l'offset de semaine basé sur le lundi de la semaine choisie
-                const pickedDow = (picked.getDay() + 6) % 7; // lundi = 0
+                const pickedDow = (picked.getDay() + 6) % 7;
                 const pickedMon = new Date(picked); pickedMon.setDate(picked.getDate() - pickedDow);
                 const todayDow = (today.getDay() + 6) % 7;
                 const todayMon = new Date(today); todayMon.setDate(today.getDate() - todayDow);
                 const diffWeeks = Math.round((pickedMon.getTime() - todayMon.getTime()) / (7 * 86400000));
                 setWeekOffset(diffWeeks);
+                // Réinitialiser la valeur pour permettre de re-sélectionner la même date
+                e.target.value = "";
               }}/>
           </div>
           <div className="flex gap-2"><button onClick={()=>setWeekOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setWeekOffset(w=>w+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Suiv.<ChevronRight size={16}/></button></div>
@@ -918,13 +919,15 @@ export default function PlanningPage() {
           <div className="flex flex-col items-center gap-1">
             <div className="font-display text-lg font-bold text-blue-800 capitalize">{currentDay.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
             <div className="font-body text-xs text-slate-600">{dayCreneaux.length} créneau{dayCreneaux.length>1?"x":""}</div>
-            <input type="date" className="font-body text-xs px-2 py-1 rounded-lg border border-gray-200 bg-white cursor-pointer focus:border-blue-400 focus:outline-none"
+            <input type="date" title="Aller à cette date"
+              className="font-body text-xs px-2 py-1 rounded-lg border border-gray-200 bg-white cursor-pointer focus:border-blue-400 focus:outline-none text-slate-500"
               onChange={e => {
                 if (!e.target.value) return;
                 const [py2, pm2, pd2] = e.target.value.split("-").map(Number);
                 const picked = new Date(py2, pm2 - 1, pd2);
                 const today = new Date(); today.setHours(0,0,0,0);
                 setDayOffset(Math.round((picked.getTime() - today.getTime()) / 86400000));
+                e.target.value = "";
               }}/>
           </div>
           <div className="flex gap-2"><button onClick={()=>setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setDayOffset(d=>d+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain<ChevronRight size={16}/></button></div>
