@@ -4,14 +4,16 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge, Button } from "@/components/ui";
 import Link from "next/link";
-import { Calendar, Receipt, Users, Star, CreditCard, Wallet } from "lucide-react";
+import { Calendar, Receipt, Users, Star, CreditCard, Wallet, Bell, BellOff } from "lucide-react";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 export default function DashboardPage() {
   const { user, family } = useAuth();
   const firstName = user?.displayName?.split(" ")[0] || "Bonjour";
   const [stats, setStats] = useState({ reservations: 0, resteDu: 0, avoir: 0, totalPaye: 0 });
+  const { permission, loading, requestPermission } = usePushNotifications(user?.uid || null);
 
   useEffect(() => {
     if (!user) return;
@@ -62,6 +64,33 @@ export default function DashboardPage() {
       <p className="font-body text-sm text-gray-400 mb-8">
         Voici un résumé de l&apos;activité de votre famille.
       </p>
+
+      {/* Bannière activation notifications push */}
+      {permission === "default" && (
+        <Card className="!bg-blue-50 !border-blue-200 mb-5" padding="sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+              <Bell size={20} className="text-blue-500"/>
+            </div>
+            <div className="flex-1">
+              <div className="font-body text-sm font-semibold text-blue-800">Activez les notifications</div>
+              <div className="font-body text-xs text-blue-600">Rappels de cours, confirmations d'inscription, alertes de place disponible.</div>
+            </div>
+            <button onClick={requestPermission} disabled={loading}
+              className="font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 px-3 py-2 rounded-lg border-none cursor-pointer flex-shrink-0 disabled:opacity-50">
+              {loading ? "..." : "Activer"}
+            </button>
+          </div>
+        </Card>
+      )}
+      {permission === "granted" && (
+        <Card className="!bg-green-50 !border-green-200 mb-5" padding="sm">
+          <div className="flex items-center gap-2">
+            <Bell size={14} className="text-green-600"/>
+            <span className="font-body text-xs text-green-700 font-semibold">Notifications activées ✓</span>
+          </div>
+        </Card>
+      )}
 
       {/* Alert: incomplete profile */}
       {family && family.children.length === 0 && (

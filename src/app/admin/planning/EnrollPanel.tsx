@@ -509,6 +509,18 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ to: fam.parentEmail, ...confirmEmail }),
             }).catch(e => console.warn("Email stage:", e));
+
+            // Notification push
+            fetch("/api/push", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                familyId: fam.firestoreId,
+                title: `✅ Inscription confirmée`,
+                body: `${noms} inscrit(s) au stage ${creneau.activityTitle}`,
+                url: "/espace-cavalier/reservations",
+              }),
+            }).catch(() => {});
           } catch (e) { console.error("Email confirmation stage:", e); }
         }
 
