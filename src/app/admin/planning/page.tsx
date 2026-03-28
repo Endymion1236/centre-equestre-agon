@@ -814,10 +814,17 @@ export default function PlanningPage() {
             <input type="date" className="font-body text-xs px-2 py-1 rounded-lg border border-gray-200 bg-white cursor-pointer focus:border-blue-400 focus:outline-none"
               onChange={e => {
                 if (!e.target.value) return;
-                const picked = new Date(e.target.value);
+                // Parser en local pour éviter le décalage UTC
+                const [py, pm, pd] = e.target.value.split("-").map(Number);
+                const picked = new Date(py, pm - 1, pd);
                 const today = new Date(); today.setHours(0,0,0,0);
                 const diffDays = Math.round((picked.getTime() - today.getTime()) / 86400000);
-                const diffWeeks = Math.floor(diffDays / 7);
+                // Calculer l'offset de semaine basé sur le lundi de la semaine choisie
+                const pickedDow = (picked.getDay() + 6) % 7; // lundi = 0
+                const pickedMon = new Date(picked); pickedMon.setDate(picked.getDate() - pickedDow);
+                const todayDow = (today.getDay() + 6) % 7;
+                const todayMon = new Date(today); todayMon.setDate(today.getDate() - todayDow);
+                const diffWeeks = Math.round((pickedMon.getTime() - todayMon.getTime()) / (7 * 86400000));
                 setWeekOffset(diffWeeks);
               }}/>
           </div>
@@ -914,7 +921,8 @@ export default function PlanningPage() {
             <input type="date" className="font-body text-xs px-2 py-1 rounded-lg border border-gray-200 bg-white cursor-pointer focus:border-blue-400 focus:outline-none"
               onChange={e => {
                 if (!e.target.value) return;
-                const picked = new Date(e.target.value);
+                const [py2, pm2, pd2] = e.target.value.split("-").map(Number);
+                const picked = new Date(py2, pm2 - 1, pd2);
                 const today = new Date(); today.setHours(0,0,0,0);
                 setDayOffset(Math.round((picked.getTime() - today.getTime()) / 86400000));
               }}/>
