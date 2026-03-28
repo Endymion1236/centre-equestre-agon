@@ -376,7 +376,6 @@ export default function ReserverPage() {
             ["stage", "Stages semaine"],
             ["stage_journee", "Stages journée"],
             ["cours", "Cours"],
-            ["balade", "Promenades"],
             ["competition", "Compétitions"],
             ["anniversaire", "Anniversaires"],
           ].map(([id, label]) => (
