@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { doc, getDoc, setDoc, collection, getDocs, deleteDoc, query, where } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, getDocs, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { Save, Plus, Trash2, Loader2, AlertTriangle } from "lucide-react";
@@ -50,6 +50,19 @@ export default function ParametresPage() {
     assuranceOccasionnelle: 10,
   });
   const [inscriptionSaved, setInscriptionSaved] = useState(false);
+
+  // ─── Moniteurs ───
+  const [moniteurs, setMoniteurs] = useState<any[]>([]);
+  const [showAddMoniteur, setShowAddMoniteur] = useState(false);
+  const [moniteurForm, setMoniteurForm] = useState({ name: "", role: "", email: "", phone: "", status: "active" });
+  const [moniteurSaving, setMoniteurSaving] = useState(false);
+
+  useEffect(() => {
+    if (section !== "moniteurs") return;
+    getDocs(collection(db, "moniteurs")).then(snap => {
+      setMoniteurs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+  }, [section]);
 
   // ─── Fidélité ───
   const [fideliteEnabled, setFideliteEnabled] = useState(false);
@@ -682,31 +695,100 @@ export default function ParametresPage() {
 
       {/* ─── Moniteurs ─── */}
       {section === "moniteurs" && (
-        <Card padding="md">
-          <h3 className="font-body text-base font-semibold text-blue-800 mb-4">Moniteurs & instructeurs</h3>
-          <div className="flex flex-col gap-3">
-            {[
-              { name: "Emmeline", role: "Instructrice BPJEPS", email: "", status: "active" },
-              { name: "Nicolas", role: "Gérant / Accompagnateur", email: "ceagon@orange.fr", status: "active" },
-            ].map((m, i) => (
-              <div key={i} className="flex items-center justify-between bg-sand rounded-lg px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center font-body text-sm font-bold text-blue-500">
-                    {m.name[0]}
+        <div className="flex flex-col gap-4">
+          <Card padding="md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-body text-base font-semibold text-blue-800">Moniteurs & instructeurs</h3>
+              <button onClick={() => { setShowAddMoniteur(true); setMoniteurForm({ name: "", role: "", email: "", phone: "", status: "active" }); }}
+                className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-400">
+                <Plus size={14} /> Ajouter
+              </button>
+            </div>
+
+            {moniteurs.length === 0 ? (
+              <p className="font-body text-sm text-slate-400 text-center py-4">Aucun moniteur enregistré.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {moniteurs.map((m: any) => (
+                  <div key={m.id} className="flex items-center justify-between bg-sand rounded-lg px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center font-body text-sm font-bold text-blue-500">
+                        {(m.name || "?")[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="font-body text-sm font-semibold text-blue-800">{m.name}</div>
+                        <div className="font-body text-xs text-slate-400">{m.role}{m.email ? ` · ${m.email}` : ""}{m.phone ? ` · ${m.phone}` : ""}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge color={m.status === "active" ? "green" : "gray"}>{m.status === "active" ? "Actif" : "Inactif"}</Badge>
+                      <button onClick={async () => {
+                        if (!confirm(`Supprimer ${m.name} ?`)) return;
+                        await deleteDoc(doc(db, "moniteurs", m.id));
+                        setMoniteurs(prev => prev.filter(x => x.id !== m.id));
+                      }} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1">
+                        <Trash2 size={14}/>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* Formulaire ajout */}
+          {showAddMoniteur && (
+            <Card padding="md" className="border-blue-200">
+              <h4 className="font-body text-sm font-semibold text-blue-800 mb-3">Nouveau moniteur</h4>
+              <div className="flex flex-col gap-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Nom *</label>
+                    <input value={moniteurForm.name} onChange={e => setMoniteurForm(f => ({ ...f, name: e.target.value }))}
+                      placeholder="Ex: Emmeline" className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-500" />
                   </div>
                   <div>
-                    <div className="font-body text-sm font-semibold text-blue-800">{m.name}</div>
-                    <div className="font-body text-xs text-gray-400">{m.role}</div>
+                    <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Rôle</label>
+                    <input value={moniteurForm.role} onChange={e => setMoniteurForm(f => ({ ...f, role: e.target.value }))}
+                      placeholder="Ex: BPJEPS Équitation" className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-500" />
                   </div>
                 </div>
-                <Badge color="green">Actif</Badge>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Email</label>
+                    <input type="email" value={moniteurForm.email} onChange={e => setMoniteurForm(f => ({ ...f, email: e.target.value }))}
+                      placeholder="email@exemple.fr" className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-500" />
+                  </div>
+                  <div>
+                    <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Téléphone</label>
+                    <input type="tel" value={moniteurForm.phone} onChange={e => setMoniteurForm(f => ({ ...f, phone: e.target.value }))}
+                      placeholder="06 00 00 00 00" className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-500" />
+                  </div>
+                </div>
+                <div className="flex gap-3 pt-1">
+                  <button onClick={() => setShowAddMoniteur(false)}
+                    className="px-4 py-2 rounded-lg font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
+                    Annuler
+                  </button>
+                  <button disabled={!moniteurForm.name.trim() || moniteurSaving}
+                    onClick={async () => {
+                      setMoniteurSaving(true);
+                      const ref = await addDoc(collection(db, "moniteurs"), {
+                        ...moniteurForm,
+                        createdAt: serverTimestamp(),
+                      });
+                      setMoniteurs(prev => [...prev, { id: ref.id, ...moniteurForm }]);
+                      setShowAddMoniteur(false);
+                      setMoniteurSaving(false);
+                    }}
+                    className="flex-1 py-2 rounded-lg font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-400 border-none cursor-pointer disabled:opacity-50">
+                    {moniteurSaving ? "Sauvegarde..." : "Ajouter le moniteur"}
+                  </button>
+                </div>
               </div>
-            ))}
-          </div>
-          <button className="mt-4 flex items-center gap-2 font-body text-xs font-semibold text-blue-500 bg-transparent border-none cursor-pointer">
-            <Plus size={14} /> Ajouter un moniteur
-          </button>
-        </Card>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* ─── Inscription annuelle ─── */}
