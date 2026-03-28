@@ -25,6 +25,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
   const [nbDays, setNbDays] = useState(5);
   const [skipWeekend, setSkipWeekend] = useState(true);
   const [customHours, setCustomHours] = useState<Record<string, { st: string; et: string }>>({});
+  const [customMonitors, setCustomMonitors] = useState<Record<string, string>>({});
   const [moniteurs, setMoniteurs] = useState<string[]>([]);
 
   useEffect(() => {
@@ -94,7 +95,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
       return {
         activityId: actId, activityTitle: act.title, activityType: act.type, date: d,
         startTime: hours.st, endTime: hours.et,
-        monitor: mon, maxPlaces: mp, enrolledCount: 0, enrolled: [],
+        monitor: (multiDay && customMonitors[d]) ? customMonitors[d] : mon, maxPlaces: mp, enrolledCount: 0, enrolled: [],
         status: "planned",
         ...(color ? { color } : {}),
         priceHT: ttc / (1 + (act.tvaTaux || 5.5) / 100),
@@ -192,10 +193,11 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
             {previewDates.map((d, idx) => {
               const generatedDate = generateDates()[idx];
               const isDateCustom = customDates[idx] !== undefined;
+              const isMonitorCustom = customMonitors[d] !== undefined && customMonitors[d] !== mon;
               const dayLabel = new Date(d + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "short" });
               const hours = customHours[d] || { st, et };
               const isHoursCustom = hours.st !== st || hours.et !== et;
-              const isCustom = isDateCustom || isHoursCustom;
+              const isCustom = isDateCustom || isHoursCustom || isMonitorCustom;
               return (
                 <div key={`${idx}-${d}`} className={`flex flex-col gap-1.5 px-3 py-2 rounded-lg ${isCustom ? "bg-orange-50 border border-orange-100" : "bg-white border border-blue-100"}`}>
                   <div className="flex items-center gap-2">
@@ -218,6 +220,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
                       <button onClick={() => {
                         setCustomDates(prev => { const n = {...prev}; delete n[idx]; return n; });
                         setCustomHours(prev => ({ ...prev, [d]: { st, et } }));
+                        setCustomMonitors(prev => { const n = {...prev}; delete n[d]; return n; });
                       }} title="Réinitialiser ce jour" className="text-slate-400 hover:text-red-400 bg-transparent border-none cursor-pointer text-sm">↺</button>
                     )}
                   </div>
@@ -233,6 +236,19 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
                       {dayLabel}
                       {isDateCustom && <span className="ml-1.5 bg-orange-200 text-orange-700 px-1.5 py-0.5 rounded text-[9px]">modifié</span>}
                     </span>
+                  </div>
+                  {/* Moniteur par jour */}
+                  <div className="flex items-center gap-2 pl-7">
+                    <span className="font-body text-[10px] text-slate-400 w-16 flex-shrink-0">Moniteur</span>
+                    <select value={customMonitors[d] ?? mon}
+                      onChange={e => setCustomMonitors(prev => ({ ...prev, [d]: e.target.value }))}
+                      className={`flex-1 px-2 py-1 rounded-lg border font-body text-xs bg-white focus:outline-none focus:border-blue-500 ${isMonitorCustom ? "border-orange-300 text-orange-700 font-semibold" : "border-blue-200 text-blue-700"}`}>
+                      {moniteurs.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    {isMonitorCustom && (
+                      <button onClick={() => setCustomMonitors(prev => { const n = {...prev}; delete n[d]; return n; })}
+                        title="Réinitialiser" className="text-slate-400 hover:text-red-400 bg-transparent border-none cursor-pointer text-sm flex-shrink-0">↺</button>
+                    )}
                   </div>
                 </div>
               );
