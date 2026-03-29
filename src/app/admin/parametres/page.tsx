@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc, collection, getDocs, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { Save, Plus, Trash2, Loader2, AlertTriangle } from "lucide-react";
+import { Save, Plus, Trash2, Loader2, AlertTriangle, Users } from "lucide-react";
 
 const defaultAccounts = [
   { code: "70641000", label: "Animations collectivité", tva: "5.50%", affectation: "Animations CE, collectivités" },
@@ -1216,6 +1216,28 @@ export default function ParametresPage() {
                   </button>
                 </div>
               ))}
+            </div>
+
+            {/* Nettoyer les inscriptions sans supprimer les créneaux */}
+            <div className="border-t border-gray-200 pt-4 mb-4">
+              <button onClick={async () => {
+                if (!confirm("Retirer TOUS les cavaliers inscrits de tous les créneaux ?\n\nLes créneaux restent intacts, seuls les tableaux 'enrolled' sont vidés.\n\nAction irréversible.")) return;
+                try {
+                  const snap = await getDocs(collection(db, "creneaux"));
+                  let count = 0;
+                  for (const d of snap.docs) {
+                    const data = d.data();
+                    if ((data.enrolled || []).length > 0) {
+                      await updateDoc(doc(db, "creneaux", d.id), { enrolled: [], enrolledCount: 0 });
+                      count++;
+                    }
+                  }
+                  alert(`✅ Inscriptions nettoyées sur ${count} créneaux.\nLes créneaux sont conservés.`);
+                } catch (e) { console.error(e); alert("Erreur."); }
+              }} className="flex items-center gap-2 font-body text-sm font-semibold text-orange-700 bg-orange-50 px-5 py-2.5 rounded-lg border border-orange-200 cursor-pointer hover:bg-orange-100 border-solid">
+                <Users size={16} /> Vider toutes les inscriptions (conserver les créneaux)
+              </button>
+              <p className="font-body text-[10px] text-gray-400 mt-1">Retire tous les cavaliers des créneaux sans supprimer les créneaux eux-mêmes.</p>
             </div>
 
             <div className="border-t border-gray-200 pt-4">
