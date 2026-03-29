@@ -6,7 +6,7 @@ import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimest
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import {
-  Loader2, Search, Users, Calendar, ChevronDown, ChevronUp, Pause, Play, XCircle, CreditCard, TrendingUp, UserMinus, Plus, X, Check, AlertTriangle,
+  Loader2, Search, Users, Calendar, ChevronDown, ChevronUp, Pause, Play, XCircle, CreditCard, TrendingUp, UserMinus, Plus, X, Check, AlertTriangle, RefreshCw,
 } from "lucide-react";
 import type { Family } from "@/types";
 
@@ -121,6 +121,8 @@ export default function ForfaitsPage() {
   const [adhesion, setAdhesion] = useState(true);
   const [payPlan, setPayPlan] = useState<"1x" | "3x" | "10x">("1x");
   const [creating, setCreating] = useState(false);
+  const [slotChange, setSlotChange] = useState<{ forfait: Forfait; newSlotSearch: string } | null>(null);
+  const [slotChanging, setSlotChanging] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -398,6 +400,71 @@ export default function ForfaitsPage() {
     setUnenrolling(null);
   };
 
+  const handleSlotChange = async (forfait: Forfait, newSlot: WeeklySlot) => {
+    if (!confirm(`Changer le créneau de ${forfait.childName} ?\n\n❌ Ancien : ${forfait.slotKey}\n✅ Nouveau : ${newSlot.activityTitle} — ${newSlot.dayLabel} ${newSlot.startTime}\n\nLes paiements ne sont PAS modifiés.`)) return;
+    setSlotChanging(true);
+    try {
+      // 1. Désinscrire de TOUS les créneaux futurs
+      const today = new Date().toISOString().split("T")[0];
+      const futureSnap = await getDocs(query(collection(db, "creneaux"), where("date", ">=", today)));
+      let removed = 0;
+      for (const d of futureSnap.docs) {
+        const data = d.data();
+        const enrolled = data.enrolled || [];
+        const hasChild = enrolled.some((e: any) => e.childId === forfait.childId);
+        if (hasChild && data.activityType !== "stage" && data.activityType !== "stage_journee") {
+          const newEnrolled = enrolled.filter((e: any) => e.childId !== forfait.childId);
+          await updateDoc(doc(db, "creneaux", d.id), { enrolled: newEnrolled, enrolledCount: newEnrolled.length });
+          removed++;
+        }
+      }
+      console.log(`📋 Désinscrit de ${removed} créneaux`);
+
+      // 2. Inscrire dans les nouveaux créneaux (tous les futurs du même jour+heure+activité)
+      let added = 0;
+      for (const d of futureSnap.docs) {
+        const data = d.data();
+        if (
+          data.activityTitle === newSlot.activityTitle &&
+          data.startTime === newSlot.startTime &&
+          new Date(data.date + "T12:00:00").getDay() === newSlot.dayOfWeek &&
+          data.date >= today
+        ) {
+          const enrolled = data.enrolled || [];
+          if (!enrolled.some((e: any) => e.childId === forfait.childId)) {
+            enrolled.push({
+              childId: forfait.childId, childName: forfait.childName,
+              familyId: forfait.familyId, familyName: forfait.familyName,
+              enrolledAt: new Date().toISOString(),
+            });
+            await updateDoc(doc(db, "creneaux", d.id), { enrolled, enrolledCount: enrolled.length });
+            added++;
+          }
+        }
+      }
+      console.log(`📋 Inscrit dans ${added} nouveaux créneaux`);
+
+      // 3. Mettre à jour le forfait
+      const newSlotKey = `${newSlot.activityTitle} — ${newSlot.dayLabel} ${newSlot.startTime}`;
+      await updateDoc(doc(db, "forfaits", forfait.id), {
+        slotKey: newSlotKey,
+        activityTitle: newSlot.activityTitle,
+        dayLabel: newSlot.dayLabel,
+        startTime: newSlot.startTime,
+        endTime: newSlot.endTime,
+        updatedAt: serverTimestamp(),
+      });
+
+      alert(`✅ Créneau modifié !\n\n${forfait.childName} est maintenant inscrit(e) en ${newSlot.activityTitle} — ${newSlot.dayLabel} ${newSlot.startTime}\n\n${removed} ancien(s) créneau(x) retiré(s)\n${added} nouveau(x) créneau(x) ajouté(s)\n\nPaiements inchangés.`);
+      setSlotChange(null);
+      fetchData();
+    } catch (e: any) {
+      console.error(e);
+      alert("Erreur : " + e.message);
+    }
+    setSlotChanging(false);
+  };
+
   const formatDate = (d: any) => {
     if (!d) return "—";
     const date = d.toDate ? d.toDate() : new Date(d.seconds ? d.seconds * 1000 : d);
@@ -409,6 +476,7 @@ export default function ForfaitsPage() {
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>;
 
   return (
+    <>
     <div>
       <div className="flex justify-between items-center mb-6">
         <div>
@@ -753,6 +821,12 @@ export default function ForfaitsPage() {
                         </button>
                       )}
                       {(f.status === "active" || f.status === "suspended") && (
+                        <button onClick={() => setSlotChange({ forfait: f, newSlotSearch: "" })} disabled={saving}
+                          className="flex items-center gap-1.5 font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
+                          <RefreshCw size={12} /> Changer de créneau
+                        </button>
+                      )}
+                      {(f.status === "active" || f.status === "suspended") && (
                         <button onClick={() => handleUnenrollAll(f)} disabled={unenrolling === f.id || saving}
                           className="flex items-center gap-1.5 font-body text-xs text-white bg-red-500 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-600 disabled:opacity-50">
                           {unenrolling === f.id ? <Loader2 size={12} className="animate-spin" /> : <UserMinus size={12} />}
@@ -768,5 +842,84 @@ export default function ForfaitsPage() {
         </div>
       )}
     </div>
+
+      {/* ── Modal changement de créneau ── */}
+      {slotChange && (() => {
+        const f = slotChange.forfait;
+        const today = new Date().toISOString().split("T")[0];
+        // Construire les slots uniques depuis les créneaux futurs
+        const futureCreneaux = creneaux.filter(c => c.date >= today && c.activityType !== "stage" && c.activityType !== "stage_journee");
+        const slotsMap = new Map<string, WeeklySlot>();
+        for (const c of futureCreneaux) {
+          const dow = new Date(c.date + "T12:00:00").getDay();
+          const key = `${dow}-${c.startTime}-${c.activityTitle}`;
+          if (!slotsMap.has(key)) {
+            slotsMap.set(key, {
+              key, activityId: c.activityId, activityTitle: c.activityTitle,
+              dayOfWeek: dow, dayLabel: dayLabels[(dow + 6) % 7],
+              startTime: c.startTime, endTime: c.endTime, monitor: c.monitor,
+              maxPlaces: c.maxPlaces, totalSessions: 1, avgEnrolled: (c.enrolled || []).length,
+              spotsAvailable: c.maxPlaces - (c.enrolled || []).length,
+              creneauIds: [c.id], priceTTC: c.priceTTC || 0,
+            });
+          } else {
+            const s = slotsMap.get(key)!;
+            s.totalSessions++;
+            s.creneauIds.push(c.id);
+          }
+        }
+        // Exclure le créneau actuel du forfait
+        const currentDow = dayLabels.indexOf(f.dayLabel);
+        const currentKey = `${(currentDow + 1) % 7}-${f.startTime}-${f.activityTitle}`;
+        const availableSlots = [...slotsMap.values()].filter(s => {
+          const isCurrent = s.activityTitle === f.activityTitle && s.dayLabel === f.dayLabel && s.startTime === f.startTime;
+          if (isCurrent) return false;
+          if (!slotChange.newSlotSearch.trim()) return true;
+          const q = slotChange.newSlotSearch.toLowerCase();
+          return s.activityTitle.toLowerCase().includes(q) || s.dayLabel.toLowerCase().includes(q) || s.startTime.includes(q) || s.monitor.toLowerCase().includes(q);
+        }).sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.startTime.localeCompare(b.startTime));
+
+        return (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4" onClick={() => !slotChanging && setSlotChange(null)}>
+            <div className="bg-white rounded-2xl w-full sm:max-w-lg max-h-[85vh] overflow-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <h2 className="font-display text-lg font-bold text-blue-800">Changer de créneau</h2>
+                  <p className="font-body text-xs text-slate-500">{f.childName} — actuellement : {f.slotKey}</p>
+                </div>
+                <button onClick={() => setSlotChange(null)} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
+              </div>
+              <div className="p-5">
+                <div className="mb-3">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input value={slotChange.newSlotSearch} onChange={e => setSlotChange({ ...slotChange, newSlotSearch: e.target.value })}
+                      placeholder="Rechercher cours, jour, horaire..."
+                      className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 max-h-[50vh] overflow-auto">
+                  {availableSlots.length === 0 && <p className="font-body text-sm text-slate-500 text-center py-4">Aucun créneau disponible</p>}
+                  {availableSlots.map(s => (
+                    <button key={s.key} onClick={() => handleSlotChange(f, s)} disabled={slotChanging}
+                      className="flex items-center justify-between p-3 rounded-xl border border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-300 cursor-pointer text-left disabled:opacity-50">
+                      <div>
+                        <div className="font-body text-sm font-semibold text-blue-800">{s.activityTitle}</div>
+                        <div className="font-body text-xs text-slate-500">{s.dayLabel} {s.startTime}–{s.endTime} · {s.monitor}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-body text-xs font-semibold text-green-600">{s.totalSessions} séances</div>
+                        <div className="font-body text-[10px] text-slate-400">{s.spotsAvailable > 0 ? `${s.spotsAvailable} place${s.spotsAvailable > 1 ? "s" : ""}` : "Complet"}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                {slotChanging && <div className="flex items-center justify-center py-4"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /><span className="font-body text-sm text-slate-500 ml-2">Changement en cours...</span></div>}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+    </>
   );
 }
