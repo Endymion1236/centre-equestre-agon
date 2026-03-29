@@ -29,7 +29,7 @@ interface Forfait {
   forfaitPriceTTC: number;
   totalPaidTTC: number;
   paymentPlan: string;
-  status: "active" | "suspended" | "completed" | "cancelled";
+  status: "active" | "actif" | "suspended" | "completed" | "cancelled";
   createdAt: any;
 }
 
@@ -80,6 +80,7 @@ const dayLabels = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", 
 
 const statusConfig: Record<string, { label: string; color: "green" | "orange" | "gray" | "red" }> = {
   active: { label: "Actif", color: "green" },
+  actif: { label: "Actif", color: "green" },
   suspended: { label: "Suspendu", color: "orange" },
   completed: { label: "Terminé", color: "gray" },
   cancelled: { label: "Résilié", color: "red" },
@@ -340,7 +341,7 @@ export default function ForfaitsPage() {
   };
 
   // ── Existing logic ──
-  const activeCount = forfaits.filter(f => f.status === "active").length;
+  const activeCount = forfaits.filter(f => f.status === "active" || f.status === "actif").length;
   const suspendedCount = forfaits.filter(f => f.status === "suspended").length;
   const totalCA = forfaits.filter(f => f.status !== "cancelled").reduce((s, f) => s + (f.forfaitPriceTTC || 0), 0);
   const totalPaid = forfaits.reduce((s, f) => s + (f.totalPaidTTC || 0), 0);
@@ -356,7 +357,7 @@ export default function ForfaitsPage() {
 
   const filtered = useMemo(() => {
     let result = [...forfaits];
-    if (filterStatus !== "all") result = result.filter(f => f.status === filterStatus);
+    if (filterStatus !== "all") result = result.filter(f => f.status === filterStatus || (filterStatus === "active" && f.status === "actif"));
     if (search) {
       const terms = search.toLowerCase().trim().split(/\s+/);
       result = result.filter(f => {
@@ -802,7 +803,7 @@ export default function ForfaitsPage() {
                     </div>
 
                     <div className="flex flex-wrap gap-2 pt-2">
-                      {f.status === "active" && (
+                      {(f.status === "active" || f.status === "actif") && (
                         <button onClick={() => handleStatusChange(f.id, "suspended")} disabled={saving}
                           className="flex items-center gap-1.5 font-body text-xs text-orange-500 bg-orange-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-orange-100">
                           <Pause size={12} /> Suspendre
@@ -814,19 +815,19 @@ export default function ForfaitsPage() {
                           <Play size={12} /> Réactiver
                         </button>
                       )}
-                      {(f.status === "active" || f.status === "suspended") && (
+                      {(f.status === "active" || f.status === "actif" || f.status === "suspended") && (
                         <button onClick={() => { if (confirm(`Résilier le forfait de ${f.childName} ?`)) handleStatusChange(f.id, "cancelled"); }} disabled={saving}
                           className="flex items-center gap-1.5 font-body text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-100">
                           <XCircle size={12} /> Résilier
                         </button>
                       )}
-                      {(f.status === "active" || f.status === "suspended") && (
+                      {(f.status === "active" || f.status === "actif" || f.status === "suspended") && (
                         <button onClick={() => setSlotChange({ forfait: f, newSlotSearch: "" })} disabled={saving}
                           className="flex items-center gap-1.5 font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
                           <RefreshCw size={12} /> Changer de créneau
                         </button>
                       )}
-                      {(f.status === "active" || f.status === "suspended") && (
+                      {(f.status === "active" || f.status === "actif" || f.status === "suspended") && (
                         <button onClick={() => handleUnenrollAll(f)} disabled={unenrolling === f.id || saving}
                           className="flex items-center gap-1.5 font-body text-xs text-white bg-red-500 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-600 disabled:opacity-50">
                           {unenrolling === f.id ? <Loader2 size={12} className="animate-spin" /> : <UserMinus size={12} />}
