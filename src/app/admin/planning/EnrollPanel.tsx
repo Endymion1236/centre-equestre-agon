@@ -650,38 +650,47 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       );
       const allFutureCreneaux = allFutureSnap.docs.map(d => ({ id: d.id, ...d.data() })) as (Creneau & { id: string })[];
 
-      // Créneau principal : filtrer par jour + heure + activityTitle
+      // Créneau principal : filtrer par jour + heure + activityTitle + moniteur
       const dow = new Date(creneau.date + "T12:00:00").getDay();
       const slotsToEnroll = allFutureCreneaux.filter(c =>
         c.date >= today &&
         new Date(c.date + "T12:00:00").getDay() === dow &&
         c.startTime === creneau.startTime &&
-        c.activityTitle === creneau.activityTitle
+        c.activityTitle === creneau.activityTitle &&
+        (c.monitor || "") === (creneau.monitor || "")
       );
 
-      console.log(`📋 Inscription annuelle : ${slotsToEnroll.length} séances pour "${creneau.activityTitle}" (jour ${dow}, ${creneau.startTime})`);
+      console.log(`📋 Inscription annuelle : ${slotsToEnroll.length} séances pour "${creneau.activityTitle}" (${creneau.monitor}) (jour ${dow}, ${creneau.startTime})`);
 
       for (const slot of slotsToEnroll) {
         await onEnroll(slot.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, undefined, { skipPayment: true, skipEmail: true });
       }
 
       // Inscrire dans les créneaux supplémentaires (2ème, 3ème)
-      // La clé contient maintenant : "dow-startTime-activityTitle"
+      // La clé = "dow-startTime-activityTitle-monitor"
+      // Au lieu de parser la clé (fragile), on retrouve le slot dans allCreneaux
       for (const slotKey of extraSlots) {
-        // Parse la clé : "3-17:00-Pony games enfants"
-        const firstDash = slotKey.indexOf("-");
-        const secondDash = slotKey.indexOf("-", firstDash + 1);
-        const extraDow = parseInt(slotKey.substring(0, firstDash));
-        const startTime = slotKey.substring(firstDash + 1, secondDash);
-        const activityTitle = slotKey.substring(secondDash + 1);
+        // Chercher un créneau de la semaine qui correspond à cette clé
+        const refCreneau = allCreneaux.find(c => {
+          const cdow = new Date(c.date + "T12:00:00").getDay();
+          return `${cdow}-${c.startTime}-${c.activityTitle}-${c.monitor || ""}` === slotKey;
+        });
 
+        if (!refCreneau) {
+          console.warn(`⚠️ Aucun créneau trouvé pour la clé : ${slotKey}`);
+          continue;
+        }
+
+        const extraDow = new Date(refCreneau.date + "T12:00:00").getDay();
         const extraCreneaux = allFutureCreneaux.filter(c =>
           c.date >= today &&
           new Date(c.date + "T12:00:00").getDay() === extraDow &&
-          c.startTime === startTime &&
-          c.activityTitle === activityTitle
+          c.startTime === refCreneau.startTime &&
+          c.activityTitle === refCreneau.activityTitle &&
+          (c.monitor || "") === (refCreneau.monitor || "")
         );
-        console.log(`📋 Créneau supplémentaire : ${extraCreneaux.length} séances pour "${activityTitle}" (jour ${extraDow}, ${startTime})`);
+
+        console.log(`📋 Créneau supplémentaire : ${extraCreneaux.length} séances pour "${refCreneau.activityTitle}" (${refCreneau.monitor}) (jour ${extraDow}, ${refCreneau.startTime})`);
         for (const slot of extraCreneaux) {
           await onEnroll(slot.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, undefined, { skipPayment: true, skipEmail: true });
         }
@@ -1059,7 +1068,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     {/* Créneaux supplémentaires si 2×/sem ou 3×/sem */}
                     {frequenceCours >= 2 && (() => {
                       const creneauDow = new Date(creneau.date + "T12:00:00").getDay();
-                      const creneauKey = `${creneauDow}-${creneau.startTime}-${creneau.activityTitle}`;
+                      const creneauKey = `${creneauDow}-${creneau.startTime}-${creneau.activityTitle}-${creneau.monitor || ""}`;
                       // Tous les créneaux sauf stages et le créneau principal
                       const autresSlots = allCreneaux.filter(c =>
                         c.activityType !== "stage" &&
@@ -1068,8 +1077,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       );
                       const uniqueSlots = [...new Map(autresSlots.map(c => {
                         const dow = new Date(c.date + "T12:00:00").getDay();
-                        const key = `${dow}-${c.startTime}-${c.activityTitle}`;
-                        return [key, { key, dow, startTime: c.startTime, endTime: c.endTime, activityTitle: c.activityTitle, activityId: c.activityId, label: `${["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"][dow]} ${c.startTime}` }];
+                        const key = `${dow}-${c.startTime}-${c.activityTitle}-${c.monitor || ""}`;
+                        return [key, { key, dow, startTime: c.startTime, endTime: c.endTime, activityTitle: c.activityTitle, activityId: c.activityId, monitor: c.monitor || "", label: `${["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"][dow]} ${c.startTime}` }];
                       })).values()].filter(s => s.key !== creneauKey); // Exclure le créneau principal
 
                       // Filtrer par recherche
@@ -1112,7 +1121,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                                 const s = uniqueSlots.find(us => us.key === key);
                                 return s ? (
                                   <span key={key} className="inline-flex items-center gap-1 bg-green-50 border border-green-200 text-green-700 px-2 py-0.5 rounded font-body text-[10px] font-semibold">
-                                    {s.activityTitle} — {s.label}
+                                    {s.activityTitle} — {s.label}{s.monitor ? ` (${s.monitor})` : ""}
                                     <button onClick={() => setExtraSlots(prev => prev.filter(k => k !== key))} className="text-green-400 hover:text-red-500 bg-transparent border-none cursor-pointer"><X size={10} /></button>
                                   </span>
                                 ) : null;
@@ -1136,9 +1145,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                                     isSelected ? "border-green-500 bg-green-50 text-green-700 font-semibold" :
                                     isDisabled ? "border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed" :
                                     "border-gray-200 bg-white text-slate-600 hover:border-green-300"
-                                  }`} title={s.activityTitle}>
-                                  {s.activityTitle !== creneau.activityTitle && <span className="text-[10px] opacity-60 mr-1">{s.activityTitle}</span>}
+                                  }`} title={`${s.activityTitle} — ${s.monitor || "?"}`}>
+                                  <span className="text-[10px] opacity-60 mr-1">{s.activityTitle}</span>
                                   {s.label}
+                                  {s.monitor && <span className="text-[9px] opacity-50 ml-1">({s.monitor})</span>}
                                   {isSelected && <Check size={10} className="inline ml-1" />}
                                 </button>
                               );
