@@ -310,21 +310,29 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const totalAnnuel = (adhesion ? prixAdhesionDegressif : 0) + (licence ? prixLicence : 0) + prixForfait;
 
   // Calcul stage : réductions cumulées famille (-10€, -20€, -30€...)
-  // Compter les inscriptions stage EXISTANTES pour cette famille
-  const existingStageCount = useMemo(() => {
-    if (!isStage || !fam) return 0;
-    // Compter les inscriptions UNIQUES (enfant + titre stage) pour cette famille
-    const uniqueInscriptions = new Set<string>();
-    const stageCreneaux = allCreneaux.filter(c => c.activityType === "stage" || c.activityType === "stage_journee");
-    for (const sc of stageCreneaux) {
-      if (sc.activityTitle === creneau.activityTitle) continue; // pas le stage actuel
-      const enrolled = sc.enrolled || [];
-      enrolled.filter((e: any) => e.familyId === fam.firestoreId).forEach((e: any) => {
-        uniqueInscriptions.add(`${e.childId}_${sc.activityTitle}`);
-      });
-    }
-    return uniqueInscriptions.size;
-  }, [isStage, fam, allCreneaux, creneau.activityTitle]);
+  // Compter les inscriptions stage EXISTANTES pour cette famille depuis Firestore
+  const [existingStageCount, setExistingStageCount] = useState(0);
+  useEffect(() => {
+    if (!isStage || !fam) { setExistingStageCount(0); return; }
+    // Charger TOUS les créneaux stages futurs pour compter les inscriptions de cette famille
+    const today = new Date().toISOString().split("T")[0];
+    getDocs(query(collection(db, "creneaux"), where("date", ">=", today)))
+      .then(snap => {
+        const uniqueInscriptions = new Set();
+        for (const doc of snap.docs) {
+          const data = doc.data();
+          if (data.activityType !== "stage" && data.activityType !== "stage_journee") continue;
+          if (data.activityTitle === creneau.activityTitle) continue; // pas le stage actuel
+          for (const e of (data.enrolled || [])) {
+            if (e.familyId === fam.firestoreId) {
+              uniqueInscriptions.add(`${e.childId}_${data.activityTitle}`);
+            }
+          }
+        }
+        setExistingStageCount(uniqueInscriptions.size);
+      })
+      .catch(() => setExistingStageCount(0));
+  }, [isStage, fam?.firestoreId, creneau.activityTitle]);
 
   const stageLines = useMemo(() => {
     if (!isStage) return [];
