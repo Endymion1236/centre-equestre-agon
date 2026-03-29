@@ -246,7 +246,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const prixLicence = licenceType === "moins18" ? inscParams.licenceMoins18 : inscParams.licencePlus18;
   // Forfait selon fréquence (sélectionnable)
   const [frequenceCours, setFrequenceCours] = useState<1 | 2 | 3>(1);
-  const [secondSlotKey, setSecondSlotKey] = useState<string>(""); // 2ème créneau pour 2×/3×/sem
+  const [extraSlots, setExtraSlots] = useState<string[]>([]); // 2ème + 3ème créneaux pour 2×/3×/sem
+  const [extraSlotSearch, setExtraSlotSearch] = useState("");
   const prixForfaitAnnuel = frequenceCours === 3 ? inscParams.forfait3x : frequenceCours === 2 ? inscParams.forfait2x : inscParams.forfait1x;
   const totalSessionsSaison = inscParams.totalSessionsSaison * frequenceCours;
   const dateFinSaison = inscParams.dateFinSaison;
@@ -641,11 +642,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     const enrollOptions = inscriptionMode === "annuel" ? { skipPayment: true, skipEmail: true } : undefined;
 
     if (inscriptionMode === "annuel") {
-      // Inscrire dans TOUS les créneaux futurs du même slot (même activité + même jour + même heure)
+      // Inscrire dans TOUS les créneaux futurs du même slot (même jour + même heure)
       const today = new Date().toISOString().split("T")[0];
       const dow = new Date(creneau.date + "T12:00:00").getDay();
       const slotsToEnroll = allCreneaux.filter(c =>
-        c.activityTitle === creneau.activityTitle &&
         c.activityType === "cours" &&
         c.date >= today &&
         new Date(c.date + "T12:00:00").getDay() === dow &&
@@ -656,18 +656,17 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         await onEnroll(slot.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, undefined, { skipPayment: true, skipEmail: true });
       }
 
-      // Inscrire dans le 2ème créneau si sélectionné (2×/sem ou 3×/sem)
-      if (secondSlotKey && frequenceCours >= 2) {
-        const [dowStr, startTime] = secondSlotKey.split("-");
-        const secondDow = parseInt(dowStr);
-        const secondSlots = allCreneaux.filter(c =>
-          c.activityTitle === creneau.activityTitle &&
+      // Inscrire dans les créneaux supplémentaires (2ème, 3ème)
+      for (const slotKey of extraSlots) {
+        const [dowStr, startTime] = slotKey.split("-");
+        const extraDow = parseInt(dowStr);
+        const extraCreneaux = allCreneaux.filter(c =>
           c.activityType === "cours" &&
           c.date >= today &&
-          new Date(c.date + "T12:00:00").getDay() === secondDow &&
+          new Date(c.date + "T12:00:00").getDay() === extraDow &&
           c.startTime === startTime
         );
-        for (const slot of secondSlots) {
+        for (const slot of extraCreneaux) {
           await onEnroll(slot.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, undefined, { skipPayment: true, skipEmail: true });
         }
       }
@@ -682,7 +681,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       const payInfo = showPay ? " — encaissé ✅" : priceTTC > 0 ? " — paiement en attente" : "";
       setJustEnrolled(`${childName}${payInfo}`);
     }
-    setSelChild(""); setSelFam(""); setSearch(""); setEnrolling(false); setShowPay(false); setInscriptionMode("ponctuel");
+    setSelChild(""); setSelFam(""); setSearch(""); setEnrolling(false); setShowPay(false); setInscriptionMode("ponctuel"); setExtraSlots([]); setExtraSlotSearch("");
     setTimeout(() => setJustEnrolled(""), 5000);
   };
 
@@ -1030,7 +1029,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       <div className="font-body text-xs text-slate-500 mb-2">Fréquence hebdomadaire</div>
                       <div className="flex gap-2">
                         {([1, 2, 3] as const).map(f => (
-                          <button key={f} onClick={() => { setFrequenceCours(f); if (f === 1) setSecondSlotKey(""); }}
+                          <button key={f} onClick={() => { setFrequenceCours(f); setExtraSlots([]); setExtraSlotSearch(""); }}
                             className={`flex-1 py-2 rounded-lg border font-body text-sm font-semibold cursor-pointer transition-all ${frequenceCours === f ? "border-green-500 bg-green-50 text-green-700" : "border-gray-200 bg-white text-slate-500"}`}>
                             {f}×/sem
                             <div className="font-body text-[10px] font-normal mt-0.5">
@@ -1041,36 +1040,101 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       </div>
                     </div>
 
-                    {/* 2ème créneau si 2×/sem ou 3×/sem */}
+                    {/* Créneaux supplémentaires si 2×/sem ou 3×/sem */}
                     {frequenceCours >= 2 && (() => {
+                      const creneauDow = new Date(creneau.date + "T12:00:00").getDay();
+                      const creneauKey = `${creneauDow}-${creneau.startTime}`;
+                      // Tous les créneaux "cours" sauf le créneau principal
                       const autresSlots = allCreneaux.filter(c =>
-                        c.activityTitle === creneau.activityTitle &&
                         c.activityType === "cours" &&
-                        c.id !== creneau.id &&
-                        (() => {
-                          const d1 = new Date(creneau.date + "T12:00:00").getDay();
-                          const d2 = new Date(c.date + "T12:00:00").getDay();
-                          return d1 !== d2 || c.startTime !== creneau.startTime;
-                        })()
+                        c.id !== creneau.id
                       );
                       const uniqueSlots = [...new Map(autresSlots.map(c => {
                         const dow = new Date(c.date + "T12:00:00").getDay();
                         const key = `${dow}-${c.startTime}`;
-                        return [key, { key, dow, startTime: c.startTime, endTime: c.endTime, label: `${["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"][dow]} ${c.startTime}` }];
-                      })).values()];
-                      if (uniqueSlots.length === 0) return null;
+                        return [key, { key, dow, startTime: c.startTime, endTime: c.endTime, activityTitle: c.activityTitle, label: `${["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"][dow]} ${c.startTime}` }];
+                      })).values()].filter(s => s.key !== creneauKey); // Exclure le créneau principal
+
+                      // Filtrer par recherche
+                      const searchFiltered = extraSlotSearch.trim()
+                        ? uniqueSlots.filter(s =>
+                            s.activityTitle.toLowerCase().includes(extraSlotSearch.toLowerCase()) ||
+                            s.label.toLowerCase().includes(extraSlotSearch.toLowerCase())
+                          )
+                        : uniqueSlots;
+
+                      const maxExtra = frequenceCours - 1; // 1 extra pour 2×, 2 extras pour 3×
+
+                      const toggleExtraSlot = (key: string) => {
+                        setExtraSlots(prev => {
+                          if (prev.includes(key)) return prev.filter(k => k !== key);
+                          if (prev.length >= maxExtra) return prev;
+                          // Bloquer même jour que principal ou qu'un autre slot sélectionné
+                          const newSlot = uniqueSlots.find(s => s.key === key);
+                          if (!newSlot) return prev;
+                          const usedDows = [creneauDow, ...prev.map(k => uniqueSlots.find(s => s.key === k)?.dow).filter(Boolean) as number[]];
+                          if (usedDows.includes(newSlot.dow)) return prev;
+                          return [...prev, key];
+                        });
+                      };
+
                       return (
                         <div>
-                          <div className="font-body text-xs text-slate-500 mb-2">2ème créneau hebdomadaire <span className="text-red-500">*</span></div>
-                          <div className="flex flex-wrap gap-1.5">
-                            {uniqueSlots.map(s => (
-                              <button key={s.key} onClick={() => setSecondSlotKey(secondSlotKey === s.key ? "" : s.key)}
-                                className={`px-3 py-1.5 rounded-lg border font-body text-xs font-semibold cursor-pointer transition-all ${secondSlotKey === s.key ? "border-green-500 bg-green-50 text-green-700" : "border-gray-200 bg-white text-slate-600"}`}>
-                                {s.label}
-                              </button>
-                            ))}
+                          <div className="font-body text-xs text-slate-500 mb-2">
+                            {frequenceCours === 2 ? "2ème" : "2ème et 3ème"} créneau hebdomadaire <span className="text-red-500">*</span>
+                            {extraSlots.length > 0 && <span className="text-green-600 ml-1">({extraSlots.length}/{maxExtra})</span>}
                           </div>
-                          {frequenceCours >= 2 && !secondSlotKey && <p className="font-body text-[10px] text-red-500 mt-1">Sélectionnez un 2ème créneau</p>}
+
+                          {/* Barre de recherche */}
+                          <div className="relative mb-2">
+                            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300" />
+                            <input value={extraSlotSearch} onChange={e => setExtraSlotSearch(e.target.value)}
+                              placeholder="Rechercher cours, jour, horaire..."
+                              className="w-full pl-7 pr-3 py-1.5 rounded-lg border border-gray-200 font-body text-xs bg-white focus:border-blue-400 focus:outline-none" />
+                          </div>
+
+                          {/* Badges des créneaux sélectionnés */}
+                          {extraSlots.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mb-2">
+                              {extraSlots.map((key, i) => {
+                                const s = uniqueSlots.find(us => us.key === key);
+                                return s ? (
+                                  <span key={key} className="inline-flex items-center gap-1 bg-green-50 border border-green-200 text-green-700 px-2 py-0.5 rounded font-body text-[10px] font-semibold">
+                                    {s.activityTitle} — {s.label}
+                                    <button onClick={() => setExtraSlots(prev => prev.filter(k => k !== key))} className="text-green-400 hover:text-red-500 bg-transparent border-none cursor-pointer"><X size={10} /></button>
+                                  </span>
+                                ) : null;
+                              })}
+                            </div>
+                          )}
+
+                          {/* Liste des slots */}
+                          <div className="max-h-36 overflow-auto flex flex-wrap gap-1.5">
+                            {searchFiltered.length === 0 ? (
+                              <p className="font-body text-[10px] text-gray-400 py-2">
+                                {extraSlotSearch ? `Aucun créneau pour « ${extraSlotSearch} »` : "Aucun autre créneau cours disponible"}
+                              </p>
+                            ) : searchFiltered.map(s => {
+                              const isSelected = extraSlots.includes(s.key);
+                              const usedDows = [creneauDow, ...extraSlots.map(k => uniqueSlots.find(us => us.key === k)?.dow).filter(Boolean) as number[]];
+                              const sameDayBlocked = !isSelected && usedDows.includes(s.dow);
+                              const maxReached = !isSelected && extraSlots.length >= maxExtra;
+                              const isDisabled = sameDayBlocked || maxReached;
+                              return (
+                                <button key={s.key} onClick={() => !isDisabled && toggleExtraSlot(s.key)}
+                                  className={`px-3 py-1.5 rounded-lg border font-body text-xs cursor-pointer transition-all ${
+                                    isSelected ? "border-green-500 bg-green-50 text-green-700 font-semibold" :
+                                    isDisabled ? "border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed" :
+                                    "border-gray-200 bg-white text-slate-600 hover:border-green-300"
+                                  }`} title={sameDayBlocked ? "Même jour qu'un créneau déjà choisi" : s.activityTitle}>
+                                  {s.activityTitle !== creneau.activityTitle && <span className="text-[10px] opacity-60 mr-1">{s.activityTitle}</span>}
+                                  {s.label}
+                                  {isSelected && <Check size={10} className="inline ml-1" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {extraSlots.length < maxExtra && <p className="font-body text-[10px] text-red-500 mt-1">Sélectionnez {maxExtra - extraSlots.length} créneau(x) supplémentaire(s)</p>}
                         </div>
                       );
                     })()}
