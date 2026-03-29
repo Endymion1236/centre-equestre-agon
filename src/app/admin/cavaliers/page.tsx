@@ -979,6 +979,21 @@ export default function CavaliersPage() {
                                         <Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : "red"}>
                                           {p.status === "paid" ? "Réglé" : p.status === "partial" ? "Partiel" : "À régler"}
                                         </Badge>
+                                        <button onClick={async (e) => {
+                                          e.stopPropagation();
+                                          const invDate = d || new Date();
+                                          const invoiceNumber = (p as any).orderId || `F-${invDate.getFullYear()}${String(invDate.getMonth()+1).padStart(2,"0")}-${(p.id || "").slice(-4).toUpperCase()}`;
+                                          const items = (p.items || []).map((i: any) => ({ label: i.activityTitle || i.label || "Prestation", priceHT: i.priceHT || Math.round((i.priceTTC || 0) / 1.055 * 100) / 100, tva: i.tva || 5.5, priceTTC: i.priceTTC || 0, quantity: 1 }));
+                                          const totalHT = items.reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
+                                          const res = await fetch("/api/invoice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invoiceNumber, date: invDate.toLocaleDateString("fr-FR"), familyName: family.parentName || p.familyName, items, totalHT, totalTVA: (p.totalTTC || 0) - totalHT, totalTTC: p.totalTTC || 0, paidAmount: p.paidAmount || p.totalTTC || 0, paymentMode: modeLabels[p.paymentMode] || p.paymentMode || "", paymentDate: p.status === "paid" ? invDate.toLocaleDateString("fr-FR") : "" }) });
+                                          if (res.ok) {
+                                            const blob = await res.blob();
+                                            const url = URL.createObjectURL(blob);
+                                            window.open(url, "_blank");
+                                          }
+                                        }} className="font-body text-xs text-blue-500 bg-blue-50 px-1.5 py-1 rounded cursor-pointer border-none hover:bg-blue-100" title="Facture PDF">
+                                          📄
+                                        </button>
                                       </div>
                                     </div>
                                   );

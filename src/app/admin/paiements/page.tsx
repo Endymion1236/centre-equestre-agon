@@ -1557,6 +1557,8 @@ export default function PaiementsPage() {
                   </Card>
                 ) : (
                   <Card className="!p-0 overflow-hidden">
+                    <div className="overflow-x-auto">
+                    <div className="min-w-[700px]">
                     <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
                       <span className="w-20">Date</span>
                       <span className="w-20">N° Facture</span>
@@ -1603,6 +1605,8 @@ export default function PaiementsPage() {
                         </div>
                       );
                     })}
+                    </div>
+                    </div>
                   </Card>
                 )}
               </>
