@@ -149,7 +149,7 @@ export default function FacturesPage() {
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
-        {([["factures", "Paiements", Receipt], ["reservations", "Réservations", CreditCard], ["cartes", "Cartes", Ticket]] as const).map(([id, label, Icon]) => (
+        {([["factures", "Paiements", Receipt], ["reservations", "Réservations", CreditCard]] as const).map(([id, label, Icon]) => (
           <button key={id} onClick={() => setTab(id as any)}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all whitespace-nowrap
               ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
@@ -157,18 +157,6 @@ export default function FacturesPage() {
             {id === "factures" && payments.length > 0 && <span className="bg-white/20 text-[10px] px-1.5 py-0.5 rounded-full">{payments.length}</span>}
           </button>
         ))}
-        {fideliteSettings?.enabled && (
-          <button onClick={() => setTab("fidelite")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all whitespace-nowrap
-              ${tab === "fidelite" ? "bg-yellow-500 text-white border-yellow-500" : "bg-white text-gray-500 border-gray-200"}`}>
-            🏆 Fidélité
-            {fidelite && fidelite.points > 0 && (
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${tab === "fidelite" ? "bg-white/20 text-white" : "bg-yellow-100 text-yellow-700"}`}>
-                {fidelite.points} pts
-              </span>
-            )}
-          </button>
-        )}
       </div>
 
       {loading ? (
