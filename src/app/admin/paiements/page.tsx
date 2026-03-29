@@ -432,13 +432,48 @@ export default function PaiementsPage() {
   const deletePaymentCommand = async (payment: any) => {
     const totalEnc = getTotalEncaisse(payment);
     const hasInscriptions = (payment.items || []).some((i: any) => i.childId && (i.creneauId || i.activityType));
-    const inscriptionMsg = hasInscriptions ? "\n\n⚠️ Les cavaliers seront aussi désinscrits des créneaux associés." : "";
+    const isForfait = (payment as any).forfaitType || (payment.items || []).some((i: any) => i.activityTitle?.includes("Forfait"));
+    const inscriptionMsg = hasInscriptions || isForfait ? "\n\n⚠️ Les cavaliers seront aussi désinscrits des créneaux associés." : "";
 
     if (totalEnc === 0) {
       if (!confirm(`Annuler l'inscription de ${payment.familyName} ?\n\n${(payment.items || []).map((i: any) => `• ${i.childName || ""} — ${i.activityTitle}`).join("\n")}\n\nTotal : ${(payment.totalTTC || 0).toFixed(2)}€ (non encaissé)${inscriptionMsg}`)) return;
-      // Désinscrire avant suppression
-      for (const item of payment.items || []) await unenrollPaymentItem(payment, item);
+
+      // Pour les forfaits annuels : désinscription en masse via API
+      if (isForfait) {
+        const childIds = [...new Set((payment.items || []).filter((i: any) => i.childId).map((i: any) => i.childId))];
+        for (const childId of childIds) {
+          const childName = (payment.items || []).find((i: any) => i.childId === childId)?.childName || "";
+          try {
+            await fetch("/api/admin/unenroll-annual", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ childId, childName, familyId: payment.familyId }),
+            });
+          } catch (e) { console.error("Erreur désinscription annuelle:", e); }
+        }
+      } else {
+        // Désinscrire avant suppression (ponctuel/stage)
+        for (const item of payment.items || []) await unenrollPaymentItem(payment, item);
+      }
+
       await deleteDoc(doc(db, "payments", payment.id));
+
+      // Annuler les autres échéances liées si c'est un paiement échelonné
+      if ((payment as any).echeancesTotal > 1) {
+        try {
+          const echeancesSnap = await getDocs(query(
+            collection(db, "payments"),
+            where("familyId", "==", payment.familyId),
+            where("forfaitRef", "==", (payment as any).forfaitRef)
+          ));
+          for (const d of echeancesSnap.docs) {
+            if (d.id !== payment.id && d.data().status !== "paid") {
+              await deleteDoc(doc(db, "payments", d.id));
+            }
+          }
+        } catch (e) { console.error("Erreur suppression échéances:", e); }
+      }
+
       toast(`${payment.familyName} — inscription annulée et cavaliers désinscrits`, "success");
     } else {
       // Encaissé → avoir automatique
@@ -454,9 +489,24 @@ export default function PaiementsPage() {
 
       // Désinscrire chaque cavalier (erreurs silencieuses pour ne pas bloquer l'avoir)
       let unenrollErrors = 0;
-      for (const item of payment.items || []) {
-        try { await unenrollPaymentItem(payment, item); }
-        catch (e) { console.error("Erreur désinscription item:", item.activityTitle, e); unenrollErrors++; }
+      if (isForfait) {
+        // Forfait annuel : désinscription en masse
+        const childIds = [...new Set((payment.items || []).filter((i: any) => i.childId).map((i: any) => i.childId))];
+        for (const childId of childIds) {
+          const childName = (payment.items || []).find((i: any) => i.childId === childId)?.childName || "";
+          try {
+            await fetch("/api/admin/unenroll-annual", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ childId, childName, familyId: payment.familyId }),
+            });
+          } catch (e) { console.error("Erreur désinscription annuelle:", e); unenrollErrors++; }
+        }
+      } else {
+        for (const item of payment.items || []) {
+          try { await unenrollPaymentItem(payment, item); }
+          catch (e) { console.error("Erreur désinscription item:", item.activityTitle, e); unenrollErrors++; }
+        }
       }
 
       const ref = `AV-${Date.now().toString(36).toUpperCase()}`;
