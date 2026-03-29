@@ -5,7 +5,7 @@ import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimest
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
-import { Check, ChevronRight, AlertTriangle, Calculator, CreditCard, Loader2, Calendar, Plus } from "lucide-react";
+import { Check, ChevronRight, AlertTriangle, Calculator, CreditCard, Loader2, Calendar, Plus, Search } from "lucide-react";
 
 interface Creneau {
   id: string;
@@ -59,6 +59,7 @@ export default function InscriptionAnnuellePage() {
   const [forfaitType, setForfaitType] = useState<"1x" | "2x">("1x");
   const [paymentPlan, setPaymentPlan] = useState<"1x" | "3x" | "10x">("1x");
   const [mode, setMode] = useState<"annuel" | "ponctuel">("annuel");
+  const [slotSearch, setSlotSearch] = useState("");
 
   const children = family?.children || [];
   const child = children.find((c: any) => c.id === selectedChild);
@@ -117,6 +118,18 @@ export default function InscriptionAnnuellePage() {
 
   // Selected slots data
   const selectedSlotsData = weeklySlots.filter(s => selectedSlots.includes(s.key));
+
+  // Filtered slots for search
+  const filteredSlots = useMemo(() => {
+    if (!slotSearch.trim()) return weeklySlots;
+    const q = slotSearch.toLowerCase();
+    return weeklySlots.filter(s =>
+      s.activityTitle.toLowerCase().includes(q) ||
+      s.dayLabel.toLowerCase().includes(q) ||
+      s.startTime.includes(q) ||
+      s.monitor.toLowerCase().includes(q)
+    );
+  }, [weeklySlots, slotSearch]);
 
   // How many slots required
   const requiredSlots = forfaitType === "2x" ? 2 : 1;
@@ -433,6 +446,18 @@ export default function InscriptionAnnuellePage() {
                 </div>
               )}
 
+              {/* Search bar */}
+              <div className="relative mb-4">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={slotSearch}
+                  onChange={e => setSlotSearch(e.target.value)}
+                  placeholder="Rechercher un cours, un jour, un horaire..."
+                  className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 font-body text-sm bg-white focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+
               {weeklySlots.length === 0 ? (
                 <div className="text-center py-8">
                   <span className="text-4xl block mb-3">📅</span>
@@ -441,7 +466,10 @@ export default function InscriptionAnnuellePage() {
                 </div>
               ) : (
                 <div className="flex flex-col gap-2 mb-5">
-                  {weeklySlots.map(slot => {
+                  {filteredSlots.length === 0 && slotSearch && (
+                    <p className="font-body text-sm text-gray-400 text-center py-4">Aucun créneau ne correspond à « {slotSearch} »</p>
+                  )}
+                  {filteredSlots.map(slot => {
                     const isSelected = selectedSlots.includes(slot.key);
                     // For 2x: disable same-day slots if one is already selected
                     const sameDaySelected = forfaitType === "2x" && !isSelected &&

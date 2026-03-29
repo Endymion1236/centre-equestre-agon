@@ -6,7 +6,7 @@ import { collection, getDocs, updateDoc, doc, serverTimestamp } from "firebase/f
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import {
-  Loader2, Search, Users, Calendar, ChevronDown, ChevronUp, Pause, Play, XCircle, CreditCard, TrendingUp,
+  Loader2, Search, Users, Calendar, ChevronDown, ChevronUp, Pause, Play, XCircle, CreditCard, TrendingUp, UserMinus,
 } from "lucide-react";
 
 interface Forfait {
@@ -63,6 +63,7 @@ export default function ForfaitsPage() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [unenrolling, setUnenrolling] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
@@ -117,6 +118,31 @@ export default function ForfaitsPage() {
       fetchData();
     } catch (e) { console.error(e); }
     setSaving(false);
+  };
+
+  const handleUnenrollAll = async (f: Forfait) => {
+    if (!confirm(`Désinscrire ${f.childName} de TOUS les cours annuels futurs ?\n\nCela le retirera de toutes les séances à venir.`)) return;
+    setUnenrolling(f.id);
+    try {
+      const res = await fetch("/api/admin/unenroll-annual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ childId: f.childId, childName: f.childName, familyId: f.familyId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`✅ ${data.message}`);
+        // Also cancel the forfait
+        await updateDoc(doc(db, "forfaits", f.id), { status: "cancelled", updatedAt: serverTimestamp() });
+        fetchData();
+      } else {
+        alert(`❌ Erreur : ${data.error}`);
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert("Erreur lors de la désinscription.");
+    }
+    setUnenrolling(null);
   };
 
   const formatDate = (d: any) => {
@@ -280,6 +306,13 @@ export default function ForfaitsPage() {
                         <button onClick={() => { if (confirm(`Résilier le forfait de ${f.childName} ?`)) handleStatusChange(f.id, "cancelled"); }} disabled={saving}
                           className="flex items-center gap-1.5 font-body text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-100">
                           <XCircle size={12} /> Résilier
+                        </button>
+                      )}
+                      {(f.status === "active" || f.status === "suspended") && (
+                        <button onClick={() => handleUnenrollAll(f)} disabled={unenrolling === f.id || saving}
+                          className="flex items-center gap-1.5 font-body text-xs text-white bg-red-500 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-600 disabled:opacity-50">
+                          {unenrolling === f.id ? <Loader2 size={12} className="animate-spin" /> : <UserMinus size={12} />}
+                          {unenrolling === f.id ? "Désinscription..." : "Désinscrire de tous les cours"}
                         </button>
                       )}
                     </div>
