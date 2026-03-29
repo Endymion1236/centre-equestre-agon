@@ -601,7 +601,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           status: "actif",
           createdAt: serverTimestamp(),
         });
-        // Créer les paiements en attente selon le plan
+        // Créer les items pour cet enfant
         const items: any[] = [];
         if (adhesion) items.push({ activityTitle: `Adhésion annuelle (enfant ${rangEnfantFamille})`, childId: selChild, childName, priceHT: prixAdhesionDegressif / 1.055, tva: 5.5, priceTTC: prixAdhesionDegressif });
         if (licence) items.push({ activityTitle: `Licence FFE ${licenceType === "moins18" ? "-18ans" : "+18ans"}`, childId: selChild, childName, priceHT: prixLicence, tva: 0, priceTTC: prixLicence });
@@ -619,32 +619,60 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           items.push({ activityTitle: `Forfait ${esTitle} (${esSlotLabel})`, childId: selChild, childName, activityType: creneau.activityType, priceHT: 0, tva: 5.5, priceTTC: 0 });
         }
 
-        const nbEcheances = payPlan === "10x" ? 10 : payPlan === "3x" ? 3 : 1;
-        const montantEcheance = Math.round((totalAnnuel / nbEcheances) * 100) / 100;
-        // Ajuster la dernière échéance pour couvrir l'arrondi
-        const montantDerniereEcheance = Math.round((totalAnnuel - montantEcheance * (nbEcheances - 1)) * 100) / 100;
+        // Chercher un paiement annuel pending existant pour cette famille (pour regrouper la fratrie)
+        const existingPaySnap = await getDocs(query(
+          collection(db, "payments"),
+          where("familyId", "==", fam.firestoreId),
+          where("status", "==", "pending"),
+        ));
+        // Trouver un paiement forfait annuel non échelonné (écheance 1 ou pas d'écheance)
+        const existingForfaitPay = existingPaySnap.docs.find(d => {
+          const data = d.data();
+          return (data.items || []).some((i: any) => i.activityTitle?.includes("Forfait")) &&
+            (!data.echeancesTotal || data.echeancesTotal <= 1) &&
+            (!data.echeance || data.echeance <= 1);
+        });
 
-        for (let i = 0; i < nbEcheances; i++) {
-          const echeanceDate = new Date();
-          echeanceDate.setMonth(echeanceDate.getMonth() + i);
-          const montant = i === nbEcheances - 1 ? montantDerniereEcheance : montantEcheance;
-
-          const docRef = await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
-            familyId: fam.firestoreId,
-            familyName: fam.parentName || "",
-            items: i === 0 ? items : [{ activityTitle: `Échéance ${i + 1}/${nbEcheances} — ${childName}`, childId: selChild, childName, priceHT: montant / 1.055, tva: 5.5, priceTTC: montant }],
-            totalTTC: montant,
-            paymentMode: "",
-            paymentRef: "",
-            status: "pending",
-            paidAmount: 0,
-            echeance: i + 1,
-            echeancesTotal: nbEcheances,
-            echeanceDate: fmtDate(echeanceDate),
-            forfaitRef: slotKey,
-            date: serverTimestamp(),
+        if (existingForfaitPay && payPlan === "1x") {
+          // Ajouter les items à la commande existante
+          const existingData = existingForfaitPay.data();
+          const mergedItems = [...(existingData.items || []), ...items];
+          const newTotal = mergedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
+          await updateDoc(doc(db, "payments", existingForfaitPay.id), {
+            items: mergedItems,
+            totalTTC: Math.round(newTotal * 100) / 100,
+            updatedAt: serverTimestamp(),
           });
-          createdPaymentIds.push(docRef.id);
+          createdPaymentIds.push(existingForfaitPay.id);
+          console.log(`📋 Items ajoutés à la commande existante ${existingForfaitPay.id} (${newTotal.toFixed(2)}€)`);
+        } else {
+          // Créer une nouvelle commande (ou paiement échelonné)
+          const nbEcheances = payPlan === "10x" ? 10 : payPlan === "3x" ? 3 : 1;
+          const montantEcheance = Math.round((totalAnnuel / nbEcheances) * 100) / 100;
+          const montantDerniereEcheance = Math.round((totalAnnuel - montantEcheance * (nbEcheances - 1)) * 100) / 100;
+
+          for (let i = 0; i < nbEcheances; i++) {
+            const echeanceDate = new Date();
+            echeanceDate.setMonth(echeanceDate.getMonth() + i);
+            const montant = i === nbEcheances - 1 ? montantDerniereEcheance : montantEcheance;
+
+            const docRef = await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
+              familyId: fam.firestoreId,
+              familyName: fam.parentName || "",
+              items: i === 0 ? items : [{ activityTitle: `Échéance ${i + 1}/${nbEcheances} — ${childName}`, childId: selChild, childName, priceHT: montant / 1.055, tva: 5.5, priceTTC: montant }],
+              totalTTC: montant,
+              paymentMode: "",
+              paymentRef: "",
+              status: "pending",
+              paidAmount: 0,
+              echeance: i + 1,
+              echeancesTotal: nbEcheances,
+              echeanceDate: fmtDate(echeanceDate),
+              forfaitRef: slotKey,
+              date: serverTimestamp(),
+            });
+            createdPaymentIds.push(docRef.id);
+          }
         }
       } catch (e) { console.error(e); }
     }
