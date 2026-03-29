@@ -309,30 +309,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
   const totalAnnuel = (adhesion ? prixAdhesionDegressif : 0) + (licence ? prixLicence : 0) + prixForfait;
 
-  // Calcul stage : réductions cumulées famille (-10€, -20€, -30€...)
-  // Compter les inscriptions stage EXISTANTES pour cette famille depuis Firestore
-  const [existingStageCount, setExistingStageCount] = useState(0);
-  useEffect(() => {
-    if (!isStage || !fam) { setExistingStageCount(0); return; }
-    // Charger TOUS les créneaux stages futurs pour compter les inscriptions de cette famille
-    const today = new Date().toISOString().split("T")[0];
-    getDocs(query(collection(db, "creneaux"), where("date", ">=", today)))
-      .then(snap => {
-        const uniqueInscriptions = new Set();
-        for (const doc of snap.docs) {
-          const data = doc.data();
-          if (data.activityType !== "stage" && data.activityType !== "stage_journee") continue;
-          if (data.activityTitle === creneau.activityTitle) continue; // pas le stage actuel
-          for (const e of (data.enrolled || [])) {
-            if (e.familyId === fam.firestoreId) {
-              uniqueInscriptions.add(`${e.childId}_${data.activityTitle}`);
-            }
-          }
-        }
-        setExistingStageCount(uniqueInscriptions.size);
-      })
-      .catch(() => setExistingStageCount(0));
-  }, [isStage, fam?.firestoreId, creneau.activityTitle]);
+  // Calcul stage : réductions fratrie uniquement sur les enfants inscrits EN MÊME TEMPS
+  // Pas de cumul avec les inscriptions passées — une fois encaissé, compteur reset
+  const existingStageCount = 0;
 
   const stageLines = useMemo(() => {
     if (!isStage) return [];
