@@ -1,20 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
+import { sendPush } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-// Moniteurs connus et leurs emails
 const STAFF_EMAILS: Record<string, string[]> = {
   "Emmeline": ["emmelinelagy@gmail.com"],
   "Nicolas": ["ceagon@orange.fr", "ceagon50@gmail.com"],
 };
-
-// ════════════════════════════════════════════
-// Ce cron fait 2 jobs en 1 :
-//   1. Récap quotidien moniteurs (planning du jour)
-//   2. Rappels J-1 familles (séances de demain)
-// ════════════════════════════════════════════
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -24,12 +18,12 @@ export async function GET(req: NextRequest) {
 
   const results = {
     monitorRecap: { pushSent: 0, emailsSent: 0, monitors: [] as string[] },
-    familyReminders: { sent: 0, errors: 0, families: 0 },
+    familyReminders: { pushSent: 0, emailsSent: 0, errors: 0, families: 0 },
   };
 
-  const fcmKey = process.env.FIREBASE_SERVER_KEY;
   const resendKey = process.env.RESEND_API_KEY;
   const fromEmail = process.env.RESEND_FROM_EMAIL || "Centre Equestre <onboarding@resend.dev>";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
 
   try {
     // ══════════════════════════════════════
@@ -41,14 +35,10 @@ export async function GET(req: NextRequest) {
 
     console.log(`\n📋 [JOB 1] Récap moniteurs — ${todayStr}`);
 
-    const todaySnap = await adminDb.collection("creneaux")
-      .where("date", "==", todayStr)
-      .get();
-
+    const todaySnap = await adminDb.collection("creneaux").where("date", "==", todayStr).get();
     const todayCreneaux = todaySnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
 
     if (todayCreneaux.length > 0) {
-      // Grouper par moniteur
       const byMonitor: Record<string, any[]> = {};
       for (const c of todayCreneaux) {
         const monitor = c.monitor || "Non assigné";
@@ -60,7 +50,6 @@ export async function GET(req: NextRequest) {
       // Chercher les tokens push des staff
       const staffTokens: { name: string; token: string; role: string; email: string }[] = [];
 
-      // Via collection "staff"
       try {
         const staffSnap = await adminDb.collection("staff").get();
         for (const doc of staffSnap.docs) {
@@ -69,9 +58,8 @@ export async function GET(req: NextRequest) {
             staffTokens.push({ name: data.name || "Staff", token: data.pushToken, role: data.role, email: data.email || "" });
           }
         }
-      } catch { /* collection n'existe pas encore */ }
+      } catch {}
 
-      // Fallback : push_tokens des comptes admin connus
       if (staffTokens.length === 0) {
         for (const [monitorName, emails] of Object.entries(STAFF_EMAILS)) {
           for (const email of emails) {
@@ -87,45 +75,29 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      // Envoyer push notifications aux moniteurs
-      if (fcmKey) {
-        for (const staff of staffTokens) {
-          const monitorCreneaux = byMonitor[staff.name] || [];
-          const totalInscrits = todayCreneaux.reduce((s, c) => s + (c.enrolled || []).length, 0);
+      // Push aux moniteurs
+      for (const staff of staffTokens) {
+        const monitorCreneaux = byMonitor[staff.name] || [];
+        const totalInscrits = todayCreneaux.reduce((s, c) => s + (c.enrolled || []).length, 0);
 
-          let body: string;
-          if (monitorCreneaux.length > 0) {
-            const details = monitorCreneaux
-              .sort((a: any, b: any) => a.startTime.localeCompare(b.startTime))
-              .map((c: any) => `${c.startTime} ${c.activityTitle} (${(c.enrolled || []).length}/${c.maxPlaces})`)
-              .join(" · ");
-            body = `Tes ${monitorCreneaux.length} cours : ${details}`;
-          } else if (staff.role === "admin") {
-            body = `${todayCreneaux.length} cours · ${totalInscrits} cavaliers inscrits`;
-          } else {
-            continue;
-          }
-
-          try {
-            const res = await fetch("https://fcm.googleapis.com/fcm/send", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "Authorization": `key=${fcmKey}` },
-              body: JSON.stringify({
-                to: staff.token,
-                notification: { title: `📋 Planning du ${todayLabel}`, body, icon: "/icons/icon-192x192.png" },
-                webpush: {
-                  notification: { title: `📋 Planning du ${todayLabel}`, body, icon: "/icons/icon-192x192.png" },
-                  fcm_options: { link: `${process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app"}/admin/planning` },
-                },
-              }),
-            });
-            const data = await res.json();
-            if (data.success) { results.monitorRecap.pushSent++; console.log(`  ✅ Push → ${staff.name}`); }
-          } catch (e) { console.error(`  ❌ Push ${staff.name}:`, e); }
+        let body: string;
+        if (monitorCreneaux.length > 0) {
+          const details = monitorCreneaux
+            .sort((a: any, b: any) => a.startTime.localeCompare(b.startTime))
+            .map((c: any) => `${c.startTime} ${c.activityTitle} (${(c.enrolled || []).length}/${c.maxPlaces})`)
+            .join(" · ");
+          body = `Tes ${monitorCreneaux.length} cours : ${details}`;
+        } else if (staff.role === "admin") {
+          body = `${todayCreneaux.length} cours · ${totalInscrits} cavaliers inscrits`;
+        } else {
+          continue;
         }
+
+        const ok = await sendPush({ token: staff.token, title: `📋 Planning du ${todayLabel}`, body, url: `${appUrl}/admin/planning` });
+        if (ok) { results.monitorRecap.pushSent++; console.log(`  ✅ Push → ${staff.name}`); }
       }
 
-      // Envoyer email récap aux moniteurs
+      // Email récap moniteurs
       if (resendKey) {
         for (const [monitorName, emails] of Object.entries(STAFF_EMAILS)) {
           const monitorCreneaux = byMonitor[monitorName] || [];
@@ -174,14 +146,10 @@ export async function GET(req: NextRequest) {
               await fetch("https://api.resend.com/emails", {
                 method: "POST",
                 headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  from: fromEmail, to: email,
-                  subject: `📋 Planning ${todayLabel} — ${isPersonal ? `${monitorCreneaux.length} cours` : `${coursToShow.length} cours`}`,
-                  html,
-                }),
+                body: JSON.stringify({ from: fromEmail, to: email, subject: `📋 Planning ${todayLabel} — ${isPersonal ? `${monitorCreneaux.length} cours` : `${coursToShow.length} cours`}`, html }),
               });
               results.monitorRecap.emailsSent++;
-              console.log(`  📧 Email récap → ${email}`);
+              console.log(`  📧 Email → ${email}`);
             } catch (e) { console.error(`  ❌ Email ${email}:`, e); }
           }
         }
@@ -200,141 +168,82 @@ export async function GET(req: NextRequest) {
 
     console.log(`\n🔔 [JOB 2] Rappels J-1 pour le ${tomorrowStr}`);
 
-    const tomorrowSnap = await adminDb.collection("creneaux")
-      .where("date", "==", tomorrowStr)
-      .get();
-
-    // Filtrer les créneaux non clôturés côté client
-    const tomorrowCreneaux = tomorrowSnap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .filter((c: any) => c.status !== "closed") as any[];
+    const tomorrowSnap = await adminDb.collection("creneaux").where("date", "==", tomorrowStr).get();
+    const tomorrowCreneaux = tomorrowSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((c: any) => c.status !== "closed") as any[];
 
     if (tomorrowCreneaux.length > 0) {
-      // Collecter les familles à notifier
-      const recipients = new Map<string, {
-        parentName: string;
-        familyId: string;
-        items: { childName: string; coursTitle: string; horaire: string; moniteur: string; isStage: boolean }[];
-      }>();
+      const recipients = new Map<string, { parentName: string; familyId: string; items: { childName: string; coursTitle: string; horaire: string; moniteur: string; isStage: boolean }[] }>();
 
       for (const c of tomorrowCreneaux) {
-        const enrolled = c.enrolled || [];
         const isStage = c.activityType === "stage" || c.activityType === "stage_journee";
-
-        for (const e of enrolled) {
+        for (const e of (c.enrolled || [])) {
           if (!e.familyId) continue;
-
           let familyEmail = e.familyEmail || "";
           let parentName = e.familyName || "";
-
           if (!familyEmail) {
             try {
               const famSnap = await adminDb.collection("families").doc(e.familyId).get();
-              if (famSnap.exists) {
-                const famData = famSnap.data()!;
-                familyEmail = famData.parentEmail || "";
-                parentName = parentName || famData.parentName || "";
-              }
+              if (famSnap.exists) { familyEmail = famSnap.data()!.parentEmail || ""; parentName = parentName || famSnap.data()!.parentName || ""; }
             } catch {}
           }
-
           if (!familyEmail) continue;
-
-          if (!recipients.has(familyEmail)) {
-            recipients.set(familyEmail, { parentName, familyId: e.familyId, items: [] });
-          }
-
-          recipients.get(familyEmail)!.items.push({
-            childName: e.childName || "",
-            coursTitle: c.activityTitle,
-            horaire: `${c.startTime}–${c.endTime}`,
-            moniteur: c.monitor || "",
-            isStage,
-          });
+          if (!recipients.has(familyEmail)) recipients.set(familyEmail, { parentName, familyId: e.familyId, items: [] });
+          recipients.get(familyEmail)!.items.push({ childName: e.childName || "", coursTitle: c.activityTitle, horaire: `${c.startTime}–${c.endTime}`, moniteur: c.monitor || "", isStage });
         }
       }
 
       results.familyReminders.families = recipients.size;
 
-      // Envoyer push notifications aux familles
-      if (fcmKey) {
-        for (const [, { familyId, parentName, items }] of recipients) {
-          try {
-            const tokenSnap = await adminDb.collection("push_tokens").doc(familyId).get();
-            if (tokenSnap.exists && tokenSnap.data()?.token) {
-              const token = tokenSnap.data()!.token;
-              const childrenStr = [...new Set(items.map(i => i.childName))].filter(Boolean).join(", ");
-              const body = items.length === 1
-                ? `${items[0].coursTitle} · ${items[0].horaire}${childrenStr ? ` — ${childrenStr}` : ""}`
-                : `${items.length} séances demain${childrenStr ? ` — ${childrenStr}` : ""}`;
-
-              await fetch("https://fcm.googleapis.com/fcm/send", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `key=${fcmKey}` },
-                body: JSON.stringify({
-                  to: token,
-                  notification: { title: `🐴 Rappel — demain ${tomorrowLabel}`, body, icon: "/icons/icon-192x192.png" },
-                  webpush: {
-                    notification: { title: `🐴 Rappel — demain`, body, icon: "/icons/icon-192x192.png" },
-                    fcm_options: { link: `${process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app"}/espace-cavalier/reservations` },
-                  },
-                }),
-              });
-            }
-          } catch { /* token invalide ou absent, pas grave */ }
-        }
+      // Push J-1 aux familles
+      for (const [, { familyId, items }] of recipients) {
+        try {
+          const tokenSnap = await adminDb.collection("push_tokens").doc(familyId).get();
+          if (tokenSnap.exists && tokenSnap.data()?.token) {
+            const childrenStr = [...new Set(items.map(i => i.childName))].filter(Boolean).join(", ");
+            const body = items.length === 1
+              ? `${items[0].coursTitle} · ${items[0].horaire}${childrenStr ? ` — ${childrenStr}` : ""}`
+              : `${items.length} séances demain${childrenStr ? ` — ${childrenStr}` : ""}`;
+            const ok = await sendPush({ token: tokenSnap.data()!.token, title: `🐴 Rappel — demain ${tomorrowLabel}`, body, url: `${appUrl}/espace-cavalier/reservations` });
+            if (ok) results.familyReminders.pushSent++;
+          }
+        } catch {}
       }
 
-      // Envoyer emails J-1
+      // Email J-1
       if (resendKey) {
         for (const [email, { parentName, items }] of recipients) {
           try {
             const lignes = items.map(item => `
               <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;margin:8px 0;">
-                <p style="margin:0;color:#1e40af;font-weight:600;font-size:14px;">
-                  ${item.isStage ? "🏕️" : "🐴"} ${item.coursTitle}
-                  ${items.length > 1 ? `<span style="color:#64748b;font-size:12px;"> — ${item.childName}</span>` : ""}
-                </p>
+                <p style="margin:0;color:#1e40af;font-weight:600;font-size:14px;">${item.isStage ? "🏕️" : "🐴"} ${item.coursTitle}${items.length > 1 ? ` <span style="color:#64748b;font-size:12px;">— ${item.childName}</span>` : ""}</p>
                 <p style="margin:6px 0 0;color:#555;font-size:13px;">📅 ${tomorrowLabel}</p>
                 <p style="margin:4px 0 0;color:#555;font-size:13px;">🕐 ${item.horaire}</p>
                 ${item.moniteur ? `<p style="margin:4px 0 0;color:#555;font-size:13px;">👤 ${item.moniteur}</p>` : ""}
-              </div>
-            `).join("");
+              </div>`).join("");
 
             const childrenStr = [...new Set(items.map(i => i.childName))].filter(Boolean).join(", ");
-            const subject = items.length === 1
-              ? `Rappel — ${items[0].coursTitle} demain`
-              : `Rappel — ${items.length} séances demain`;
+            const subject = items.length === 1 ? `Rappel — ${items[0].coursTitle} demain` : `Rappel — ${items.length} séances demain`;
 
             const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-              <div style="background:#0C1A2E;padding:16px 24px;border-radius:12px 12px 0 0;text-align:center;">
-                <p style="color:#F0A010;font-size:18px;font-weight:bold;margin:0;">🐴 Centre Équestre d'Agon-Coutainville</p>
-              </div>
+              <div style="background:#0C1A2E;padding:16px 24px;border-radius:12px 12px 0 0;text-align:center;"><p style="color:#F0A010;font-size:18px;font-weight:bold;margin:0;">🐴 Centre Équestre d'Agon-Coutainville</p></div>
               <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-radius:0 0 12px 12px;">
                 <p style="color:#1e3a5f;font-size:15px;">Bonjour <strong>${parentName || "cher parent"}</strong>,</p>
                 <p style="color:#555;">Petit rappel pour demain${childrenStr ? ` — <strong>${childrenStr}</strong>` : ""} :</p>
                 ${lignes}
-                <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:12px;margin:16px 0;">
-                  <p style="margin:0;color:#854d0e;font-size:13px;">💡 N'oubliez pas : casque obligatoire, tenue adaptée recommandée.</p>
-                </div>
+                <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:12px;margin:16px 0;"><p style="margin:0;color:#854d0e;font-size:13px;">💡 N'oubliez pas : casque obligatoire, tenue adaptée recommandée.</p></div>
                 <p style="color:#555;font-size:13px;">À demain au centre équestre !</p>
                 <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0;">
-                <p style="color:#94a3b8;font-size:11px;text-align:center;">Centre Équestre d'Agon-Coutainville — Agon-Coutainville, Normandie</p>
-              </div>
-            </div>`;
+                <p style="color:#94a3b8;font-size:11px;text-align:center;">Centre Équestre d'Agon-Coutainville</p>
+              </div></div>`;
 
             await fetch("https://api.resend.com/emails", {
               method: "POST",
               headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
               body: JSON.stringify({ from: fromEmail, to: email, subject, html }),
             });
-
-            results.familyReminders.sent++;
-            console.log(`  ✅ Rappel J-1 → ${email} (${items.length} séance${items.length > 1 ? "s" : ""})`);
-          } catch (e) {
-            results.familyReminders.errors++;
-            console.error(`  ❌ Erreur ${email}:`, e);
-          }
+            results.familyReminders.emailsSent++;
+            console.log(`  ✅ Rappel J-1 → ${email}`);
+          } catch { results.familyReminders.errors++; }
         }
       }
     } else {
@@ -343,7 +252,6 @@ export async function GET(req: NextRequest) {
 
     console.log("\n✅ Cron daily-notifications terminé");
     return NextResponse.json({ success: true, ...results });
-
   } catch (error: any) {
     console.error("Cron daily-notifications error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
