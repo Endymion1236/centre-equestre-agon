@@ -85,8 +85,32 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   }, [creneau.id]);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [stageMode, setStageMode] = useState<"semaine" | "jour">("semaine");
+  const [stageDaysCount, setStageDaysCount] = useState<number>(0);
   const [showAddDays, setShowAddDays] = useState<{ familyId: string; enfants: { childId: string; childName: string }[]; joursRestants: { id: string; date: string; label: string }[]; totalJoursStage: number; joursInscrits: number; stageTitle: string; creneauRef: any } | null>(null);
   const isStage = creneau.activityType === "stage" || creneau.activityType === "stage_journee";
+
+  // Charger le nombre réel de jours du stage depuis Firestore (pas allCreneaux qui est limité à la vue)
+  useEffect(() => {
+    if (!isStage) return;
+    const creneauDate = new Date(creneau.date);
+    const dow = creneauDate.getDay();
+    const mon = new Date(creneauDate); mon.setDate(mon.getDate() - ((dow + 6) % 7));
+    const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+    const monStr = mon.toISOString().split("T")[0];
+    const sunStr = sun.toISOString().split("T")[0];
+
+    getDocs(query(collection(db, "creneaux"), where("date", ">=", monStr), where("date", "<=", sunStr)))
+      .then(snap => {
+        const days = snap.docs.filter(d => {
+          const data = d.data();
+          return data.activityTitle === creneau.activityTitle &&
+            (data.activityType === "stage" || data.activityType === "stage_journee");
+        }).length;
+        setStageDaysCount(days || 1);
+        console.log(`📋 Stage "${creneau.activityTitle}" : ${days} jour(s) cette semaine`);
+      })
+      .catch(() => setStageDaysCount(1));
+  }, [isStage, creneau.date, creneau.activityTitle]);
 
   const enrolled = creneau.enrolled || []; const enrolledIds = enrolled.map((e: any) => e.childId);
   const spots = creneau.maxPlaces - enrolled.length; const color = typeColors[creneau.activityType] || "#666";
@@ -94,15 +118,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // Prix affiché dans l'en-tête : pour les stages, utiliser le tarif configuré si dispo
   const displayPrice = useMemo(() => {
     if (!isStage) return priceTTC;
-    const creneauDate = new Date(creneau.date);
-    const dow = creneauDate.getDay();
-    const mon = new Date(creneauDate); mon.setDate(mon.getDate() - ((dow + 6) % 7));
-    const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
-    const nbJours = allCreneaux.filter(c =>
-      c.activityTitle === creneau.activityTitle &&
-      (c.activityType === "stage" || c.activityType === "stage_journee") &&
-      new Date(c.date) >= mon && new Date(c.date) <= sun
-    ).length || 1;
+    const nbJours = stageDaysCount || 1;
     const cr = creneau as any;
     const prices: Record<number, number> = {};
     if (cr.price1day) prices[1] = cr.price1day;
@@ -110,7 +126,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     if (cr.price3days) prices[3] = cr.price3days;
     if (cr.price4days) prices[4] = cr.price4days;
     return prices[nbJours] || priceTTC;
-  }, [isStage, priceTTC, creneau, allCreneaux]);
+  }, [isStage, priceTTC, creneau, stageDaysCount]);
   const filteredFamilies = useMemo(() => { if (!search) return families; const terms = search.toLowerCase().trim().split(/\s+/); return families.filter(f => { const childText = (f.children || []).map((c: any) => `${c.firstName || ""} ${c.lastName || ""}`).join(" "); const searchable = `${f.parentName || ""} ${f.parentEmail || ""} ${childText}`.toLowerCase(); return terms.every(t => searchable.includes(t)); }); }, [families, search]);
 
   const acceptWaitlist = async (entry: any) => {
@@ -313,16 +329,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const stageLines = useMemo(() => {
     if (!isStage) return [];
 
-    // Compter les jours du stage cette semaine pour le prorata
-    const creneauDate = new Date(creneau.date);
-    const dow = creneauDate.getDay();
-    const mon = new Date(creneauDate); mon.setDate(mon.getDate() - ((dow + 6) % 7));
-    const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
-    const nbJoursStage = allCreneaux.filter(c =>
-      c.activityTitle === creneau.activityTitle &&
-      (c.activityType === "stage" || c.activityType === "stage_journee") &&
-      new Date(c.date) >= mon && new Date(c.date) <= sun
-    ).length || 1;
+    // Nombre de jours réel du stage (chargé depuis Firestore via useEffect)
+    const nbJoursStage = stageDaysCount || 1;
 
     // Prix du stage selon le nombre de jours
     // Chercher un tarif configuré pour ce nombre de jours (stocké sur le créneau)
@@ -364,7 +372,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         prixReduit,
       };
     });
-  }, [isStage, selectedChildren, children, priceTTC, existingStageCount, stageMode, allCreneaux, creneau]);
+  }, [isStage, selectedChildren, children, priceTTC, existingStageCount, stageMode, stageDaysCount, creneau]);
 
   const stageTotalTTC = stageLines.reduce((s, l) => s + l.prixReduit, 0);
   const stageAcompte = Math.round(stageTotalTTC * 0.3 * 100) / 100;
@@ -384,12 +392,33 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           monday.setDate(monday.getDate() - ((dayOfWeek + 6) % 7));
           const sunday = new Date(monday);
           sunday.setDate(sunday.getDate() + 6);
+          const monStr = monday.toISOString().split("T")[0];
+          const sunStr = sunday.toISOString().split("T")[0];
 
-          const stageCreneaux = allCreneaux.filter(c =>
+          // IMPORTANT: allCreneaux ne contient que la vue courante du planning.
+          // Pour les stages en mode semaine, charger TOUS les créneaux de la semaine.
+          let stageCreneaux = allCreneaux.filter(c =>
             c.activityTitle === creneau.activityTitle &&
             (c.activityType === "stage" || c.activityType === "stage_journee") &&
-            new Date(c.date) >= monday && new Date(c.date) <= sunday
+            c.date >= monStr && c.date <= sunStr
           ).sort((a, b) => a.date.localeCompare(b.date));
+
+          // Si on n'a trouvé que 1 jour (vue jour), charger depuis Firestore
+          if (stageCreneaux.length <= 1) {
+            try {
+              const weekSnap = await getDocs(query(
+                collection(db, "creneaux"),
+                where("date", ">=", monStr),
+                where("date", "<=", sunStr)
+              ));
+              const weekCreneaux = weekSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+              stageCreneaux = weekCreneaux.filter(c =>
+                c.activityTitle === creneau.activityTitle &&
+                (c.activityType === "stage" || c.activityType === "stage_journee")
+              ).sort((a, b) => a.date.localeCompare(b.date));
+              console.log(`📋 Stage semaine : ${stageCreneaux.length} jours trouvés pour "${creneau.activityTitle}" (${monStr} → ${sunStr})`);
+            } catch (e) { console.error("Erreur chargement stage semaine:", e); }
+          }
 
           creneauxAInscrire = stageCreneaux.length > 0 ? stageCreneaux : [creneau];
         }
