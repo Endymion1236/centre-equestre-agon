@@ -938,16 +938,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
                 {/* Récap stage */}
                 {selectedChildren.length > 0 && (() => {
-                  // Compter les jours du stage cette semaine
-                  const creneauDate = new Date(creneau.date);
-                  const dow = creneauDate.getDay();
-                  const mon = new Date(creneauDate); mon.setDate(mon.getDate() - ((dow + 6) % 7));
-                  const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
-                  const nbJours = allCreneaux.filter(c =>
-                    c.activityTitle === creneau.activityTitle &&
-                    (c.activityType === "stage" || c.activityType === "stage_journee") &&
-                    new Date(c.date) >= mon && new Date(c.date) <= sun
-                  ).length || 1;
+                  // Utiliser stageDaysCount chargé depuis Firestore
+                  const nbJours = stageDaysCount || 1;
 
                   return (
                   <div className="bg-green-50 rounded-xl p-4 space-y-3">
