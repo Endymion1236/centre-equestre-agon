@@ -15,7 +15,6 @@ export async function POST(req: NextRequest) {
     // ── 1. Remove child from all future "cours" creneaux ──
     const creneauxSnap = await adminDb
       .collection("creneaux")
-      .where("activityType", "==", "cours")
       .where("date", ">=", today)
       .get();
 
