@@ -1069,11 +1069,6 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         setExtraSlots(prev => {
                           if (prev.includes(key)) return prev.filter(k => k !== key);
                           if (prev.length >= maxExtra) return prev;
-                          // Bloquer même jour que principal ou qu'un autre slot sélectionné
-                          const newSlot = uniqueSlots.find(s => s.key === key);
-                          if (!newSlot) return prev;
-                          const usedDows = [creneauDow, ...prev.map(k => uniqueSlots.find(s => s.key === k)?.dow).filter(Boolean) as number[]];
-                          if (usedDows.includes(newSlot.dow)) return prev;
                           return [...prev, key];
                         });
                       };
@@ -1116,17 +1111,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                               </p>
                             ) : searchFiltered.map(s => {
                               const isSelected = extraSlots.includes(s.key);
-                              const usedDows = [creneauDow, ...extraSlots.map(k => uniqueSlots.find(us => us.key === k)?.dow).filter(Boolean) as number[]];
-                              const sameDayBlocked = !isSelected && usedDows.includes(s.dow);
                               const maxReached = !isSelected && extraSlots.length >= maxExtra;
-                              const isDisabled = sameDayBlocked || maxReached;
+                              const isDisabled = maxReached;
                               return (
                                 <button key={s.key} onClick={() => !isDisabled && toggleExtraSlot(s.key)}
                                   className={`px-3 py-1.5 rounded-lg border font-body text-xs cursor-pointer transition-all ${
                                     isSelected ? "border-green-500 bg-green-50 text-green-700 font-semibold" :
                                     isDisabled ? "border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed" :
                                     "border-gray-200 bg-white text-slate-600 hover:border-green-300"
-                                  }`} title={sameDayBlocked ? "Même jour qu'un créneau déjà choisi" : s.activityTitle}>
+                                  }`} title={s.activityTitle}>
                                   {s.activityTitle !== creneau.activityTitle && <span className="text-[10px] opacity-60 mr-1">{s.activityTitle}</span>}
                                   {s.label}
                                   {isSelected && <Check size={10} className="inline ml-1" />}

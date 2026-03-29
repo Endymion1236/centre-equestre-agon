@@ -194,10 +194,6 @@ export default function ForfaitsPage() {
       if (prev.includes(key)) return prev.filter(k => k !== key);
       if (frequence === "1x") return [key];
       if (prev.length >= requiredSlots) return prev;
-      // Block same day
-      const newSlot = weeklySlots.find(s => s.key === key);
-      const existingDays = prev.map(k => weeklySlots.find(s => s.key === k)?.dayOfWeek);
-      if (newSlot && existingDays.includes(newSlot.dayOfWeek)) return prev;
       return [...prev, key];
     });
   };
@@ -517,9 +513,8 @@ export default function ForfaitsPage() {
                   </p>
                 ) : filteredSlots.map(slot => {
                   const isSelected = selectedSlots.includes(slot.key);
-                  const sameDaySelected = !isSelected && selectedSlotsData.some(s => s.dayOfWeek === slot.dayOfWeek);
                   const isFull = slot.spotsAvailable <= 0;
-                  const isDisabled = isFull || sameDaySelected || (!isSelected && selectedSlots.length >= requiredSlots);
+                  const isDisabled = isFull || (!isSelected && selectedSlots.length >= requiredSlots);
 
                   return (
                     <button key={slot.key} onClick={() => !isDisabled && toggleSlot(slot.key)}
@@ -531,7 +526,6 @@ export default function ForfaitsPage() {
                       <div>
                         <span className="font-body font-semibold text-blue-800">{slot.activityTitle}</span>
                         <span className="text-gray-400 ml-2">{slot.dayLabel} {slot.startTime}–{slot.endTime} · {slot.monitor}</span>
-                        {sameDaySelected && <span className="text-orange-500 ml-2">⚠ même jour</span>}
                       </div>
                       <div className="flex items-center gap-2">
                         <span className={`font-semibold ${slot.spotsAvailable > 2 ? "text-green-600" : slot.spotsAvailable > 0 ? "text-orange-500" : "text-red-500"}`}>

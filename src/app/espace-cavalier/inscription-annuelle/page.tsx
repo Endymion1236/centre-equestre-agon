@@ -144,12 +144,6 @@ export default function InscriptionAnnuellePage() {
       // For 1x, replace; for 2x, add if under limit
       if (forfaitType === "1x") return [key];
       if (prev.length >= 2) return prev; // Already have 2
-      // Check: don't allow 2 slots on same day
-      const newSlot = weeklySlots.find(s => s.key === key);
-      const existingSlot = prev.length > 0 ? weeklySlots.find(s => s.key === prev[0]) : null;
-      if (newSlot && existingSlot && newSlot.dayOfWeek === existingSlot.dayOfWeek) {
-        return prev; // Same day, block
-      }
       return [...prev, key];
     });
   };
@@ -471,12 +465,8 @@ export default function InscriptionAnnuellePage() {
                   )}
                   {filteredSlots.map(slot => {
                     const isSelected = selectedSlots.includes(slot.key);
-                    // For 2x: disable same-day slots if one is already selected
-                    const sameDaySelected = forfaitType === "2x" && !isSelected &&
-                      selectedSlots.length > 0 &&
-                      selectedSlotsData.some(s => s.dayOfWeek === slot.dayOfWeek);
                     const isFull = slot.spotsAvailable <= 0;
-                    const isDisabled = isFull || (sameDaySelected) || (!isSelected && selectedSlots.length >= requiredSlots && forfaitType === "2x");
+                    const isDisabled = isFull || (!isSelected && selectedSlots.length >= requiredSlots && forfaitType === "2x");
 
                     return (
                       <button key={slot.key} onClick={() => !isDisabled && toggleSlot(slot.key)}
@@ -493,11 +483,6 @@ export default function InscriptionAnnuellePage() {
                             </span>
                             <span className="text-gray-400 ml-2">{slot.totalSessions} séances</span>
                           </div>
-                          {sameDaySelected && (
-                            <div className="font-body text-xs text-orange-500 mt-1 flex items-center gap-1">
-                              <AlertTriangle size={12} /> Même jour qu&apos;un créneau déjà choisi
-                            </div>
-                          )}
                         </div>
                         <div className="flex items-center gap-3">
                           <span className="font-body text-sm font-semibold text-blue-500">
