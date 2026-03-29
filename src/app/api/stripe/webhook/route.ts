@@ -93,10 +93,17 @@ export async function POST(req: NextRequest) {
             const snap = await adminDb.collection("payments")
               .where("familyId", "==", familyId)
               .where("status", "==", "pending")
-              .orderBy("date", "desc")
-              .limit(1)
+              .limit(5)
               .get();
-            if (!snap.empty) payRef = snap.docs[0].ref;
+            // Prendre le plus récent (sans orderBy pour éviter l'index composite)
+            if (!snap.empty) {
+              const sorted = snap.docs.sort((a, b) => {
+                const da = a.data().date?.toMillis?.() || a.data().date?.seconds * 1000 || 0;
+                const db2 = b.data().date?.toMillis?.() || b.data().date?.seconds * 1000 || 0;
+                return db2 - da;
+              });
+              payRef = sorted[0].ref;
+            }
           }
 
           if (payRef) {
