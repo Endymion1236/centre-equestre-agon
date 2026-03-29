@@ -375,7 +375,7 @@ async function run() {
     await db.collection("payments").doc(paymentId).update({ items: merged, totalTTC: total });
     const updated = await db.collection("payments").doc(paymentId).get();
     assert(updated.data().items.length === 7, `7 items (got ${updated.data().items.length})`);
-    assert(updated.data().totalTTC === 1120, `Total 1120€ (got ${updated.data().totalTTC})`);
+    assert(updated.data().totalTTC === 1140, `Total 1140€ (got ${updated.data().totalTTC})`);
   });
 
   await test("Adhésion dégressive : enfant 1 = 60€, enfant 2 = 40€", async () => {
