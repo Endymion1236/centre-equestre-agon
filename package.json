@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "validate": "node scripts/validate.mjs",
+    "validate:all": "node scripts/validate-all.mjs",
     "seed": "node scripts/seed.mjs",
     "seed:clean": "node scripts/seed.mjs --clean"
   },
