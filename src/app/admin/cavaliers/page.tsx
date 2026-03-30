@@ -48,6 +48,7 @@ export default function CavaliersPage() {
   const [allPayments, setAllPayments] = useState<any[]>([]);
   const [allAvoirs, setAllAvoirs] = useState<any[]>([]);
   const [allCartes, setAllCartes] = useState<any[]>([]);
+  const [allCreneaux, setAllCreneaux] = useState<any[]>([]);
 
   // ─── Édition infos famille ───
   const [editingFamily, setEditingFamily] = useState<string | null>(null);
@@ -93,18 +94,21 @@ export default function CavaliersPage() {
 
   const fetchFamilies = async () => {
     try {
-      const [famSnap, resSnap, paySnap, avoirsSnap, cartesSnap] = await Promise.all([
+      const [famSnap, resSnap, paySnap, avoirsSnap, cartesSnap, creneauxSnap] = await Promise.all([
         getDocs(collection(db, "families")),
         getDocs(collection(db, "reservations")),
         getDocs(collection(db, "payments")),
         getDocs(collection(db, "avoirs")),
         getDocs(collection(db, "cartes")),
+        getDocs(collection(db, "creneaux")),
       ]);
       setFamilies(famSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as (Family & { firestoreId: string })[]);
       setAllReservations(resSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setAllPayments(paySnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setAllAvoirs(avoirsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setAllCartes(cartesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const today = new Date().toISOString().split("T")[0];
+      setAllCreneaux(creneauxSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((c: any) => c.date >= today));
     } catch (e) { console.error(e); }
     setLoading(false);
   };
@@ -128,6 +132,34 @@ export default function CavaliersPage() {
     return allAvoirs
       .filter(a => a.familyId === familyId)
       .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+  };
+
+  // ─── Statut inscription d'un enfant ───
+  // Vert = inscrit dans des créneaux futurs ET paiement réglé
+  // Orange = inscrit dans des créneaux futurs MAIS paiement en attente
+  // Gris = pas inscrit dans des créneaux futurs
+  const getEnrollmentStatus = (childId: string, familyId: string): { color: "green" | "orange" | "gray"; label: string; count: number } => {
+    const futureSlots = allCreneaux.filter((c: any) =>
+      (c.enrolled || []).some((e: any) => e.childId === childId)
+    );
+    if (futureSlots.length === 0) return { color: "gray", label: "Non inscrit", count: 0 };
+
+    // Vérifier les paiements
+    const hasCard = allCartes.some((c: any) =>
+      (c.familyId === familyId || (c.childId === childId)) && c.status === "active" && (c.remainingSessions || 0) > 0
+    );
+    const hasPaid = hasCard || allPayments.some((p: any) =>
+      p.familyId === familyId && p.status === "paid" &&
+      (p.items || []).some((i: any) => i.childId === childId)
+    );
+    const hasPending = !hasPaid && allPayments.some((p: any) =>
+      p.familyId === familyId && (p.status === "pending" || p.status === "partial") &&
+      (p.items || []).some((i: any) => i.childId === childId)
+    );
+
+    if (hasPaid) return { color: "green", label: `Inscrit · ${futureSlots.length} séance${futureSlots.length > 1 ? "s" : ""}`, count: futureSlots.length };
+    if (hasPending) return { color: "orange", label: `Inscrit · paiement en attente`, count: futureSlots.length };
+    return { color: "orange", label: `Inscrit · ${futureSlots.length} séance${futureSlots.length > 1 ? "s" : ""}`, count: futureSlots.length };
   };
 
   // ─── Créer une nouvelle famille ───
@@ -827,6 +859,24 @@ export default function CavaliersPage() {
                                       <Badge color="red">Fiche manquante</Badge>
                                     </button>
                                   )}
+                                  {/* Badge inscription */}
+                                  {(() => {
+                                    const status = getEnrollmentStatus(child.id, family.firestoreId);
+                                    return (
+                                      <span className={`inline-flex items-center gap-1 font-body text-[11px] px-2 py-0.5 rounded-full border ${
+                                        status.color === "green" ? "bg-green-50 border-green-200 text-green-700" :
+                                        status.color === "orange" ? "bg-orange-50 border-orange-200 text-orange-700" :
+                                        "bg-gray-50 border-gray-200 text-gray-500"
+                                      }`}>
+                                        <span className={`w-2 h-2 rounded-full ${
+                                          status.color === "green" ? "bg-green-500" :
+                                          status.color === "orange" ? "bg-orange-400" :
+                                          "bg-gray-300"
+                                        }`} />
+                                        {status.label}
+                                      </span>
+                                    );
+                                  })()}
                                   <button onClick={(e) => { e.stopPropagation(); setShowEnroll({ familyId: family.firestoreId, childId: child.id, childName: child.firstName }); loadCreneaux(); }}
                                     className="font-body text-xs text-blue-500 bg-blue-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
                                     <CalendarDays size={12} /> Inscrire
