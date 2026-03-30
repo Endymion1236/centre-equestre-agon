@@ -200,7 +200,7 @@ export default function SplitHomePage() {
         <a href="https://laserbay.net" target="_blank" rel="noopener noreferrer" className="panel panel-lb">
           <div className="panel-bg" style={{
             backgroundImage: "url('/images/hero-laserbay.png')",
-            backgroundPosition: "60% top",
+            backgroundPosition: "center 20%",
             backgroundSize: "cover",
           }} />
           <div className="panel-overlay" />
