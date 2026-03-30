@@ -27,7 +27,7 @@ export function Navbar() {
   }, []);
 
   return (
-    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-400 ${
+    <nav className={`fixed top-0 left-0 right-0 z-[200] transition-all duration-400 ${
       scrolled ? "bg-cream/95 backdrop-blur-xl border-b border-blue-500/8 py-2"
                : "bg-blue-800/30 backdrop-blur-md border-b border-white/6 py-3"}`}>
       <div className="max-w-[1180px] mx-auto px-6 flex items-center justify-between">

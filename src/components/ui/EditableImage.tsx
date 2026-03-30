@@ -98,9 +98,9 @@ export function EditableImage({
         style={{ display: "none" }}
       />
 
-      {/* Zone de détection hover — toujours présente mais transparente */}
+      {/* Zone de détection hover — commence sous la navbar */}
       <div
-        style={{ position: "absolute", inset: 0, zIndex: 98, pointerEvents: "auto" }}
+        style={{ position: "absolute", top: "64px", left: 0, right: 0, bottom: 0, zIndex: 98, pointerEvents: "auto" }}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
       />
