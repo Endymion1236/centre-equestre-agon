@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
               body: JSON.stringify({
                 from: process.env.RESEND_FROM_EMAIL || "Centre Equestre <onboarding@resend.dev>",
                 to: parentEmail,
+                ...(process.env.RESEND_BCC_EMAIL ? { bcc: process.env.RESEND_BCC_EMAIL } : {}),
                 subject: `Inscription confirmée — Paiement mensuel en ${meta.nbEcheances} fois`,
                 html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
                   <p>Bonjour <strong>${meta.familyName}</strong>,</p>
@@ -187,6 +188,7 @@ export async function POST(req: NextRequest) {
                   body: JSON.stringify({
                     from: fromEmail,
                     to: parentEmail,
+                    ...(process.env.RESEND_BCC_EMAIL ? { bcc: process.env.RESEND_BCC_EMAIL } : {}),
                     subject,
                     html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">${html}<hr style="margin:24px 0;border:none;border-top:1px solid #eee;"><p style="color:#999;font-size:11px;text-align:center;">Centre Équestre d'Agon-Coutainville — Paiement sécurisé par Stripe</p></div>`,
                   }),

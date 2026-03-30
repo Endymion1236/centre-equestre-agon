@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
 
     const resend = new Resend(apiKey);
     const body = await request.json();
-    const { to, subject, html, replyTo } = body;
+    const { to, subject, html, replyTo, bcc } = body;
 
     if (!to || !subject || !html) {
       return NextResponse.json(
@@ -44,6 +44,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // BCC : copie cachée configurable (variable d'env ou paramètre)
+    const bccEmail = bcc || process.env.RESEND_BCC_EMAIL || "";
+    const bccList = bccEmail ? (Array.isArray(bccEmail) ? bccEmail : [bccEmail]).filter((e: string) => e.includes("@")) : [];
+
     // En mode test : rediriger vers l'email admin avec le vrai destinataire dans l'objet
     const finalTo = TEST_MODE ? [TEST_EMAIL] : validRecipients;
     const finalSubject = TEST_MODE
@@ -53,6 +57,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: finalTo,
+      ...(bccList.length > 0 && !TEST_MODE ? { bcc: bccList } : {}),
       subject: finalSubject,
       html: TEST_MODE
         ? `<div style="background:#fff3cd;padding:10px;border:1px solid #ffc107;border-radius:6px;margin-bottom:12px;font-family:sans-serif;font-size:12px;color:#856404;">
