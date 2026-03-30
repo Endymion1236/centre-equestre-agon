@@ -37,7 +37,7 @@ export function Navbar() {
     >
       <div className="max-w-[1180px] mx-auto px-6 flex items-center justify-between">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-3 no-underline">
+        <Link href="/accueil" className="flex items-center gap-3 no-underline">
           <img
             src="/images/logo-ce-agon.png"
             alt="Centre Équestre Agon"

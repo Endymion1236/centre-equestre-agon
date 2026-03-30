@@ -170,7 +170,7 @@ export default function SplitHomePage() {
         {/* ═══ GAUCHE — Centre Équestre ═══ */}
         <a href="/accueil" className="panel panel-oe">
           <div className="panel-bg" style={{
-            backgroundImage: "url('/images/hero-equestre.jpg')",
+            backgroundImage: "url('/images/hero-equestre.png')",
             backgroundPosition: "center 25%"
           }} />
           <div className="panel-overlay" />
@@ -198,7 +198,7 @@ export default function SplitHomePage() {
         {/* ═══ DROITE — LaserBay ═══ */}
         <a href="https://laserbay.net" target="_blank" rel="noopener noreferrer" className="panel panel-lb">
           <div className="panel-bg" style={{
-            backgroundImage: "url('/images/hero-laserbay.jpg')",
+            backgroundImage: "url('/images/hero-laserbay.png')",
             backgroundPosition: "center 35%"
           }} />
           <div className="panel-overlay" />
