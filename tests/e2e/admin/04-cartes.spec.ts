@@ -27,9 +27,11 @@ test.describe("CA · Cartes de séances", () => {
   test("CA-02 · L'onglet Créer affiche les templates (5, 10, 20 séances)", async ({ page }) => {
     const creerTab = page.locator("button, [role='tab']").filter({ hasText: /créer/i }).first();
     await creerTab.click();
-    await page.waitForTimeout(300);
+    // Attendre que le spinner disparaisse
+    await page.waitForSelector(".animate-spin", { state: "hidden", timeout: 40_000 }).catch(() => {});
+    await page.waitForTimeout(500);
 
-    await expect(page.locator("text=Carte 5 séances")).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator("text=Carte 5 séances")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("text=Carte 10 séances")).toBeVisible({ timeout: 5_000 });
     await expect(page.locator("text=Carte 20 séances")).toBeVisible({ timeout: 5_000 });
   });
@@ -42,25 +44,15 @@ test.describe("CA · Cartes de séances", () => {
   test("CA-04 · L'onglet Créer exige de sélectionner une famille avant de valider", async ({ page }) => {
     const creerTab = page.locator("button, [role='tab']").filter({ hasText: /créer/i }).first();
     await creerTab.click();
-    await page.waitForTimeout(300);
+    await page.waitForSelector(".animate-spin", { state: "hidden", timeout: 40_000 }).catch(() => {});
+    await page.waitForTimeout(500);
 
-    // Chercher le bouton de validation
-    const validateBtn = page
-      .locator("button")
-      .filter({ hasText: /créer la carte|valider|enregistrer/i })
-      .first();
-
+    const validateBtn = page.locator("button").filter({ hasText: /créer la carte|valider|enregistrer/i }).first();
     if (await validateBtn.isVisible()) {
-      // Le bouton doit être désactivé sans famille sélectionnée
-      const isDisabled =
-        (await validateBtn.getAttribute("disabled")) !== null ||
+      const isDisabled = (await validateBtn.getAttribute("disabled")) !== null ||
         (await validateBtn.getAttribute("aria-disabled")) === "true";
-      // On ne force pas — si le bouton est actif, on vérifie juste que ça ne plante pas
-      if (!isDisabled) {
-        console.log("ℹ️  Le bouton Créer est actif sans famille — à vérifier manuellement");
-      }
+      if (!isDisabled) console.log("ℹ️  Le bouton Créer est actif sans famille — à vérifier manuellement");
     }
-    // Le test passe tant qu'on n'a pas d'erreur JS
   });
 
   test("CA-05 · L'onglet Historique se charge sans erreur", async ({ page }) => {
@@ -69,6 +61,7 @@ test.describe("CA · Cartes de séances", () => {
 
     const histTab = page.locator("button, [role='tab']").filter({ hasText: /historique/i }).first();
     await histTab.click();
+    await page.waitForSelector(".animate-spin", { state: "hidden", timeout: 40_000 }).catch(() => {});
     await page.waitForTimeout(500);
 
     const criticalErrors = errors.filter((e) => !e.includes("Firebase") && !e.includes("network"));

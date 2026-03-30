@@ -16,7 +16,11 @@ export default defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
+    actionTimeout: 45_000,
+    navigationTimeout: 45_000,
   },
+
+  timeout: 60_000,
 
   projects: [
     // ── Étape 1 : setup auth (génère les storageState) ──

@@ -53,13 +53,11 @@ test.describe("FO · Forfaits annuels", () => {
   });
 
   test("FO-04 · L'onglet Échéances ne contient pas de forfaits actifs normaux", async ({ page }) => {
-    // Cliquer sur l'onglet Échéances
     const echeancesTab = page.locator("button, [role='tab']").filter({ hasText: /échéances/i }).first();
     await echeancesTab.click();
+    await page.waitForSelector(".animate-spin", { state: "hidden", timeout: 40_000 }).catch(() => {});
     await page.waitForTimeout(300);
 
-    // Vérifier qu'il n'y a pas de colonne "Payer maintenant" sur les actifs normaux
-    // (les forfaits en échéance ont leur propre affichage)
     const nanCheck = page.locator("text=NaN");
     await expect(nanCheck).toHaveCount(0);
   });

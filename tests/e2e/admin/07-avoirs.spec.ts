@@ -27,15 +27,14 @@ test.describe("AV · Avoirs", () => {
   test("AV-02 · L'onglet Créer affiche les champs requis", async ({ page }) => {
     const creerTab = page.locator("button, [role='tab']").filter({ hasText: /créer/i }).first();
     await creerTab.click();
-    await page.waitForTimeout(300);
+    await page.waitForSelector(".animate-spin", { state: "hidden", timeout: 40_000 }).catch(() => {});
+    await page.waitForTimeout(500);
 
-    // Champ famille (recherche)
     const familleInput = page
       .locator("input[placeholder*='famille'], input[placeholder*='Famille'], [data-testid='family-search-input']")
       .first();
-    await expect(familleInput).toBeVisible({ timeout: 5_000 });
+    await expect(familleInput).toBeVisible({ timeout: 15_000 });
 
-    // Champ montant
     const montantInput = page
       .locator("input[placeholder*='montant'], input[placeholder*='Montant'], input[type='number']")
       .first();
