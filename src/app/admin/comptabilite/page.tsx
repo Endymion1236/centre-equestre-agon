@@ -245,7 +245,7 @@ export default function ComptabilitePage() {
         matched: false,
         matchType: "" as string,
         matchDetail: "" as string,
-      })).filter(r => r.amount !== 0); // Exclure les lignes à 0€
+      })).filter(r => r.amount > 0); // Ne garder que les recettes (encaissements reçus)
 
       // Smart matching amélioré
       const matched = parsed.map((bl) => {
