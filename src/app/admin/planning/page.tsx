@@ -24,7 +24,7 @@ export default function PlanningPage() {
   const { setAgentContext } = useAgentContext("planning");
   const [weekOffset, setWeekOffset] = useState(0); const [dayOffset, setDayOffset] = useState(0);
   const [monthOffset, setMonthOffset] = useState(0);
-  const [viewMode, setViewMode] = useState<"week"|"day"|"month">("week");
+  const [viewMode, setViewMode] = useState<"week"|"day"|"month"|"timeline">("week");
   const [creneaux, setCreneaux] = useState<(Creneau & { id: string })[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
@@ -730,11 +730,11 @@ export default function PlanningPage() {
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <h1 className="font-display text-2xl font-bold text-blue-800">Planning</h1>
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex bg-sand rounded-lg p-0.5">{(["month","week","day"] as const).map(v=><button key={v} onClick={()=>setViewMode(v)} className={`px-3 sm:px-4 py-2 rounded-md font-body text-xs font-semibold cursor-pointer border-none ${viewMode===v?"bg-white text-blue-500 shadow-sm":"text-slate-600 bg-transparent"}`}>{v==="week"?"Semaine":v==="day"?"Jour":"Mois"}</button>)}</div>
+          <div className="flex bg-sand rounded-lg p-0.5">{(["month","week","timeline","day"] as const).map(v=><button key={v} onClick={()=>setViewMode(v)} className={`px-3 sm:px-4 py-2 rounded-md font-body text-xs font-semibold cursor-pointer border-none ${viewMode===v?"bg-white text-blue-500 shadow-sm":"text-slate-600 bg-transparent"}`}>{v==="week"?"Semaine":v==="day"?"Jour":v==="timeline"?"Timeline":"Mois"}</button>)}</div>
           <button onClick={()=>{setShowSimple(true);setShowGenerator(false);setSelectedDate(viewMode==="day"?fmtDate(currentDay):undefined);}} className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-white bg-blue-500 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-400"><Plus size={14}/>Créneau</button>
           <button onClick={()=>setShowRdvForm(true)} className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-orange-700 bg-orange-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-orange-100"><Briefcase size={14}/>RDV Pro</button>
           <button onClick={()=>{setShowGenerator(true);setShowSimple(false);}} className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-blue-800 bg-gold-400 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-gold-300"><Calendar size={14}/>Périodes</button>
-          {viewMode==="week"&&creneaux.length>0&&<button onClick={()=>setShowDuplicate(!showDuplicate)} className="font-body text-xs sm:text-sm font-semibold text-blue-500 bg-blue-50 px-3 py-2 rounded-lg border-none cursor-pointer">Dupliquer</button>}
+          {(viewMode==="week"||viewMode==="timeline")&&creneaux.length>0&&<button onClick={()=>setShowDuplicate(!showDuplicate)} className="font-body text-xs sm:text-sm font-semibold text-blue-500 bg-blue-50 px-3 py-2 rounded-lg border-none cursor-pointer">Dupliquer</button>}
           <button onClick={exportPDF} disabled={(viewMode==="day"?dayCreneaux:creneaux).length===0}
             className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-slate-600 bg-gray-100 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-gray-200 disabled:opacity-40">
             <Printer size={14}/> PDF
@@ -911,6 +911,133 @@ export default function PlanningPage() {
               <button onClick={()=>{setSelectedDate(ds);setShowSimple(true);setShowGenerator(false);}} className="mt-auto py-2 rounded-lg border border-dashed border-gray-200 text-slate-400 hover:border-blue-300 hover:text-blue-400 bg-transparent cursor-pointer font-body text-lg">+</button>
             </div>);})}
         </div></div>}
+      </>}
+
+      {/* ═══ VUE TIMELINE (style Celeris) ═══ */}
+      {viewMode==="timeline"&&<>
+        <div className="flex items-center justify-between mb-5">
+          <button onClick={()=>setWeekOffset(w=>w-1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16}/>Préc.</button>
+          <div className="flex flex-col items-center gap-1">
+            <div className="font-display text-lg font-bold text-blue-800 capitalize">{fmtMonthFR(weekDates[0])}</div>
+            <div className="font-body text-xs text-slate-600">Du {weekDates[0].toLocaleDateString("fr-FR",{day:"numeric",month:"short"})} au {weekDates[6].toLocaleDateString("fr-FR",{day:"numeric",month:"short"})}</div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={()=>setWeekOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button>
+            <button onClick={()=>setWeekOffset(w=>w+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Suiv.<ChevronRight size={16}/></button>
+          </div>
+        </div>
+        {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:
+        (() => {
+          // Calculer les heures min/max pour la grille
+          const allTimes = creneaux.flatMap(c => [c.startTime, c.endTime]).filter(Boolean);
+          const hours = allTimes.map(t => parseInt(t.split(":")[0]));
+          const minHour = Math.max(7, Math.min(...(hours.length ? hours : [8])));
+          const maxHour = Math.min(21, Math.max(...(hours.length ? hours : [18])) + 1);
+          const gridHours = Array.from({length: maxHour - minHour + 1}, (_, i) => minHour + i);
+          const HOUR_HEIGHT = 80; // px par heure
+          const totalHeight = gridHours.length * HOUR_HEIGHT;
+
+          const timeToY = (time: string) => {
+            const [h, m] = time.split(":").map(Number);
+            return ((h - minHour) + m / 60) * HOUR_HEIGHT;
+          };
+
+          return (
+          <div className="overflow-x-auto -mx-4 px-4">
+            <div className="flex" style={{ minWidth: "900px" }}>
+              {/* Colonne heures */}
+              <div className="w-14 flex-shrink-0 relative" style={{ height: totalHeight }}>
+                {gridHours.map(h => (
+                  <div key={h} className="absolute w-full flex items-start" style={{ top: (h - minHour) * HOUR_HEIGHT }}>
+                    <span className="font-body text-[10px] text-slate-400 pr-2 leading-none">{`${h}:00`}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* 7 colonnes jours */}
+              {weekDates.map((d, dayIdx) => {
+                const ds = fmtDate(d);
+                const dc = creneaux.filter(c => c.date === ds).sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+                // Détecter les chevauchements pour la largeur
+                const positioned = dc.map(c => {
+                  const top = timeToY(c.startTime);
+                  const bottom = timeToY(c.endTime);
+                  return { ...c, top, height: Math.max(bottom - top, 30) };
+                });
+
+                // Assigner les colonnes (overlap)
+                const columns: number[] = new Array(positioned.length).fill(0);
+                let maxCol = 0;
+                for (let i = 0; i < positioned.length; i++) {
+                  for (let j = 0; j < i; j++) {
+                    if (positioned[j].top + positioned[j].height > positioned[i].top + 2) {
+                      if (columns[j] === columns[i]) { columns[i]++; }
+                    }
+                  }
+                  maxCol = Math.max(maxCol, columns[i]);
+                }
+                const totalCols = maxCol + 1;
+
+                return (
+                  <div key={dayIdx} className="flex-1 relative border-l border-gray-100" style={{ minWidth: "110px", height: totalHeight }}>
+                    {/* Header jour */}
+                    <div className={`sticky top-0 z-10 text-center py-1.5 font-body text-xs font-semibold border-b border-gray-200 ${isToday(d) ? "bg-blue-500 text-white" : "bg-sand text-slate-600"}`}>
+                      {fmtDateFR(d)}
+                    </div>
+
+                    {/* Lignes horaires */}
+                    {gridHours.map(h => (
+                      <div key={h} className="absolute w-full border-t border-gray-50" style={{ top: (h - minHour) * HOUR_HEIGHT }} />
+                    ))}
+
+                    {/* Créneaux positionnés */}
+                    {positioned.map((c, cIdx) => {
+                      const en = c.enrolled || [];
+                      const fill = c.maxPlaces > 0 ? en.length / c.maxPlaces : 0;
+                      const col = (c as any).color || typeColors[c.activityType] || "#666";
+                      const colWidth = 100 / totalCols;
+                      const left = columns[cIdx] * colWidth;
+
+                      return (
+                        <div key={c.id}
+                          onClick={() => setSelectedCreneau(c)}
+                          className="absolute rounded-lg border cursor-pointer hover:shadow-lg transition-shadow overflow-hidden group"
+                          style={{
+                            top: c.top + 28, // +28 pour le header
+                            height: c.height - 2,
+                            left: `calc(${left}% + 2px)`,
+                            width: `calc(${colWidth}% - 4px)`,
+                            backgroundColor: `${col}15`,
+                            borderColor: `${col}40`,
+                            borderLeftWidth: 3,
+                            borderLeftColor: col,
+                          }}>
+                          <div className="p-1.5 h-full flex flex-col">
+                            <div className="font-body text-[10px] font-bold" style={{ color: col }}>{c.startTime}–{c.endTime}</div>
+                            <div className="font-body text-[10px] font-semibold text-blue-800 leading-tight truncate">{c.activityTitle}</div>
+                            {c.height > 45 && <div className="font-body text-[9px] text-slate-500 truncate">{c.monitor}</div>}
+                            <div className="mt-auto flex items-center gap-1">
+                              <span className={`font-body text-[9px] font-bold ${fill >= 1 ? "text-red-500" : fill >= 0.7 ? "text-orange-500" : "text-green-600"}`}>{en.length}/{c.maxPlaces}</span>
+                              {en.length > 0 && <div className="flex gap-px">{en.slice(0, 5).map((e: any) => {
+                                const hasPaid = payments.some((p: any) => p.familyId === e.familyId && p.status === "paid");
+                                return <span key={e.childId} className={`w-1.5 h-1.5 rounded-full ${hasPaid ? "bg-green-500" : "bg-orange-400"}`} />;
+                              })}</div>}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Bouton ajouter */}
+                    <button onClick={() => { setSelectedDate(ds); setShowSimple(true); setShowGenerator(false); }}
+                      className="absolute bottom-2 left-1/2 -translate-x-1/2 w-7 h-7 rounded-full border border-dashed border-gray-300 text-slate-400 hover:border-blue-400 hover:text-blue-400 bg-white cursor-pointer font-body text-sm flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">+</button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>);
+        })()}
       </>}
 
       {viewMode==="day"&&<>
