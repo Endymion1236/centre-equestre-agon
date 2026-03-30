@@ -307,8 +307,6 @@ export default function PaiementsPage() {
       updatedAt: serverTimestamp(),
     });
 
-    return { paidAmount: totalEncaisse, status: newStatus };
-
     // 5. Attribuer des points de fidélité (1 point par euro encaissé)
     // Ne pas attribuer sur les avoirs ni les remboursements
     if (montant > 0 && mode !== "avoir") {
@@ -355,6 +353,8 @@ export default function PaiementsPage() {
         }
       } catch (e) { console.error("Erreur attribution points fidélité:", e); }
     }
+
+    return { paidAmount: totalEncaisse, status: newStatus };
   };
 
   // Rafraîchir les données
