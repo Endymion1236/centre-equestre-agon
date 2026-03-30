@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, addDoc, updateDoc, doc, query, orderBy, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, doc, getDoc, setDoc, deleteDoc, query, orderBy, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { safeNumber } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
@@ -79,6 +79,26 @@ export default function ComptabilitePage() {
   const [showManualMatch, setShowManualMatch] = useState<number | null>(null); // index de la bankLine
   const [expandedBankLine, setExpandedBankLine] = useState<number | null>(null);
   const [manualSearch, setManualSearch] = useState("");
+
+  // Sauvegarder les bankLines dans Firestore après modification manuelle
+  const updateAndSaveBankLines = async (updated: typeof bankLines) => {
+    setBankLines(updated);
+    try {
+      await setDoc(doc(db, "rapprochements", period), {
+        period,
+        bankLines: updated.map(bl => ({
+          date: bl.date, label: bl.label, amount: bl.amount,
+          matched: bl.matched, matchType: bl.matchType, matchDetail: bl.matchDetail,
+          matchedEncs: bl.matchedEncs || null,
+          manualPaymentId: bl.manualPaymentId || null,
+        })),
+        totalLines: updated.length,
+        totalMatched: updated.filter(b => b.matched).length,
+        totalAmount: Math.round(updated.reduce((s, b) => s + b.amount, 0) * 100) / 100,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) { console.error("Erreur sauvegarde rapprochement:", e); }
+  };
 
   const [encaissementsCompta, setEncaissementsCompta] = useState<any[]>([]);
 
@@ -163,7 +183,7 @@ export default function ComptabilitePage() {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       const raw = ev.target?.result as string;
       
       // ── Parser intelligent pour CSV bancaires (Crédit Agricole, etc.) ──
@@ -467,10 +487,51 @@ export default function ComptabilitePage() {
         return bl;
       });
 
-      setBankLines(matched);
+      setBankLines(matched as any);
+
+      // Sauvegarder dans Firestore
+      try {
+        await setDoc(doc(db, "rapprochements", period), {
+          period,
+          bankLines: matched.map((bl: any) => ({
+            date: bl.date,
+            label: bl.label,
+            amount: bl.amount,
+            matched: bl.matched,
+            matchType: bl.matchType,
+            matchDetail: bl.matchDetail,
+            matchedEncs: bl.matchedEncs || null,
+            manualPaymentId: bl.manualPaymentId || null,
+          })),
+          totalLines: matched.length,
+          totalMatched: matched.filter((b: any) => b.matched).length,
+          totalAmount: Math.round(matched.reduce((s: number, b: any) => s + b.amount, 0) * 100) / 100,
+          updatedAt: serverTimestamp(),
+        });
+        console.log(`✅ Rapprochement ${period} sauvegardé (${matched.length} lignes)`);
+      } catch (e) { console.error("Erreur sauvegarde rapprochement:", e); }
     };
     reader.readAsText(file, "ISO-8859-1"); // Encodage Crédit Agricole = Latin1
   };
+
+  // ── Charger un rapprochement sauvegardé ─────────────────────────────────
+  useEffect(() => {
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "rapprochements", period));
+        if (snap.exists()) {
+          const data = snap.data();
+          setBankLines((data.bankLines || []).map((bl: any) => ({
+            ...bl,
+            matchedEncs: bl.matchedEncs || undefined,
+            manualPaymentId: bl.manualPaymentId || undefined,
+          })));
+        } else {
+          setBankLines([]);
+        }
+      } catch { setBankLines([]); }
+    })();
+  }, [period]);
 
   // ── Analyser avec l'IA ───────────────────────────────────────────────────
   const analyserRapprochement = async () => {
@@ -1126,7 +1187,7 @@ export default function ComptabilitePage() {
                         <button onClick={() => {
                           const updated = [...bankLines];
                           updated[i] = { ...updated[i], matched: true, matchType: "Ignoré", matchDetail: "Ignoré manuellement" };
-                          setBankLines(updated);
+                          updateAndSaveBankLines(updated);
                         }}
                           className="font-body text-[10px] text-slate-400 bg-slate-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-slate-100">
                           Ignorer
@@ -1137,7 +1198,7 @@ export default function ComptabilitePage() {
                       <button onClick={() => {
                         const updated = [...bankLines];
                         updated[i] = { ...updated[i], matched: false, matchType: "", matchDetail: "" };
-                        setBankLines(updated);
+                        updateAndSaveBankLines(updated);
                       }}
                         className="font-body text-[10px] text-orange-500 bg-orange-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-orange-100">
                         Restaurer
@@ -1147,7 +1208,7 @@ export default function ComptabilitePage() {
                       <button onClick={() => {
                         const updated = [...bankLines];
                         updated[i] = { ...updated[i], matched: false, matchType: "", matchDetail: "", manualPaymentId: undefined };
-                        setBankLines(updated);
+                        updateAndSaveBankLines(updated);
                       }}
                         className="font-body text-[10px] text-orange-500 bg-orange-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-orange-100">
                         Dé-pointer
@@ -1282,7 +1343,7 @@ export default function ComptabilitePage() {
                             matchDetail: `${p.familyName} — ${(p.totalTTC || 0).toFixed(2)}€ (${modeLabels[p.paymentMode] || p.paymentMode})`,
                             manualPaymentId: p.id,
                           };
-                          setBankLines(updated);
+                          updateAndSaveBankLines(updated);
                           setShowManualMatch(null);
                         }}>
                         <div>
