@@ -98,18 +98,26 @@ export function EditableImage({
         style={{ display: "none" }}
       />
 
+      {/* Zone de détection hover — toujours présente mais transparente */}
+      <div
+        style={{ position: "absolute", inset: 0, zIndex: 98, pointerEvents: "auto" }}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+      />
+
       {/* Bouton d'édition — visible au hover */}
       <div
         style={{
           position: "absolute",
           inset: 0,
-          zIndex: 50,
+          zIndex: 99,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           background: hover ? "rgba(0,0,0,0.45)" : "transparent",
           transition: "background 0.25s ease",
           cursor: "pointer",
+          pointerEvents: hover ? "auto" : "none",
         }}
         onClick={() => !uploading && inputRef.current?.click()}
         onDragOver={(e) => { e.preventDefault(); setHover(true); }}
@@ -175,14 +183,15 @@ export function EditableImage({
       {/* Badge "Admin — éditable" en coin */}
       {!uploading && !success && (
         <div style={{
-          position: "absolute", top: "0.6rem", right: "0.6rem", zIndex: 51,
+          position: "absolute", top: "0.6rem", right: "0.6rem", zIndex: 100,
           background: "rgba(240,160,16,0.9)", backdropFilter: "blur(4px)",
           borderRadius: "6px", padding: "0.2rem 0.55rem",
           fontFamily: "sans-serif", fontSize: "0.6rem", fontWeight: 700,
           color: "#0C1A2E", letterSpacing: "0.05em", textTransform: "uppercase",
           display: "flex", alignItems: "center", gap: "0.3rem",
-          opacity: hover ? 1 : 0.6,
+          opacity: hover ? 1 : 0.75,
           transition: "opacity 0.2s",
+          pointerEvents: "none",
         }}>
           <Upload size={9} /> Éditable
         </div>
@@ -194,19 +203,25 @@ export function EditableImage({
 
   // ── Mode background ──
   if (mode === "background") {
+    const bgImage = currentUrl
+      ? `url('${currentUrl}')`
+      : (style.backgroundImage || undefined);
+
     return (
       <div
-        className={className}
+        className={`${className} ${!currentUrl ? "bg-hero" : ""}`}
         style={{
           ...style,
           position: "relative",
-          backgroundImage: currentUrl ? `url('${currentUrl}')` : style.backgroundImage,
-          backgroundSize: style.backgroundSize || "cover",
-          backgroundPosition: style.backgroundPosition || "center",
+          ...(bgImage ? { backgroundImage: bgImage } : {}),
+          backgroundSize: "cover",
+          backgroundPosition: style.backgroundPosition || "center 40%",
         }}
       >
-        {adminOverlay}
+        {/* Contenu d'abord */}
         {children}
+        {/* Overlay admin par-dessus tout */}
+        {adminOverlay}
       </div>
     );
   }
