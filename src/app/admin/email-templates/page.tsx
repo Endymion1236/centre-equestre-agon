@@ -229,39 +229,28 @@ export default function EmailTemplatesPage() {
   };
 
   const handleGenerate = async () => {
-    const prompt = aiPrompt.trim() || `Génère un email professionnel et chaleureux pour un centre équestre. Template : ${TEMPLATE_LABELS[selectedKey]}. Variables disponibles : ${current.variables.map(v => `{${v}}`).join(", ")}. Utilise un ton accueillant et convivial, adapté à des familles avec enfants. Inclus des emojis pertinents (🐴, 📅, etc). L'email doit être en HTML inline style. Ne retourne QUE le contenu HTML du body (pas le wrapper, pas le subject).`;
-
     setGenerating(true);
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/ia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1500,
-          messages: [{
-            role: "user",
-            content: `Tu es un expert en email marketing pour un centre équestre familial. ${prompt}
-
-IMPORTANT :
-- Retourne UNIQUEMENT le HTML du body (pas de balises <html>, <body>, <head>)
-- Utilise des styles inline CSS
-- Les variables sont entre accolades : ${current.variables.map(v => `{${v}}`).join(", ")}
-- Ton chaleureux et professionnel, adapté aux familles
-- Maximum 15 lignes de texte
-- Pas de markdown, pas de backticks, juste du HTML pur`,
-          }],
+          type: "generate_email_template",
+          templateKey: selectedKey,
+          templateLabel: TEMPLATE_LABELS[selectedKey] || selectedKey,
+          variables: current.variables,
+          currentBody: current.body,
+          userPrompt: aiPrompt.trim() || "",
         }),
       });
       const data = await res.json();
-      const text = data?.content?.[0]?.text || "";
-      // Clean up potential code blocks
-      const cleaned = text.replace(/```html?\s*/g, "").replace(/```\s*/g, "").trim();
-      if (cleaned) {
+      if (data.success && data.generatedBody) {
         setTemplates(prev => ({
           ...prev,
-          [selectedKey]: { ...prev[selectedKey], body: cleaned },
+          [selectedKey]: { ...prev[selectedKey], body: data.generatedBody },
         }));
+      } else {
+        alert("Erreur : " + (data.error || "Réponse vide"));
       }
     } catch (e: any) {
       alert("Erreur IA : " + e.message);

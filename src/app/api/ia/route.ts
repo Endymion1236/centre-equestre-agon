@@ -88,7 +88,16 @@ interface BilanPedaRequest {
   };
 }
 
-type IARequest = RapprochementRequest | AssistantRequest | SuggestionsRequest | EmailRepriseRequest | BilanPedaRequest;
+interface GenerateEmailTemplateRequest {
+  type: "generate_email_template";
+  templateKey: string;
+  templateLabel: string;
+  variables: string[];
+  currentBody?: string;
+  userPrompt?: string;
+}
+
+type IARequest = RapprochementRequest | AssistantRequest | SuggestionsRequest | EmailRepriseRequest | BilanPedaRequest | GenerateEmailTemplateRequest;
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
@@ -307,6 +316,34 @@ CONSIGNES :
         emailBody: emailMsg.content[0].type === "text" ? emailMsg.content[0].text : "",
         suggestedSubject: subjectMsg.content[0].type === "text" ? subjectMsg.content[0].text.trim() : "",
       });
+    }
+
+    // ── Génération template email IA ─────────────────────────────────────────
+    if (body.type === "generate_email_template") {
+      const { templateKey, templateLabel, variables, currentBody, userPrompt } = body as any;
+      const variablesList = (variables || []).map((v: string) => `{${v}}`).join(", ");
+
+      const prompt = userPrompt?.trim()
+        ? `Tu es un expert en email marketing pour un centre équestre familial. ${userPrompt}
+
+Les variables disponibles sont : ${variablesList}
+Retourne UNIQUEMENT le HTML du body (pas de <html>, <body>, <head>). Styles inline CSS. Ton chaleureux et professionnel. Maximum 15 lignes. Pas de markdown ni backticks.`
+        : `Génère un email professionnel et chaleureux pour un centre équestre familial.
+Template : ${templateLabel}
+Variables disponibles : ${variablesList}
+Ton accueillant et convivial, adapté à des familles avec enfants. Emojis pertinents (🐴, 📅, etc).
+Retourne UNIQUEMENT le HTML du body (pas de <html>, <body>, <head>). Styles inline CSS. Maximum 15 lignes. Pas de markdown ni backticks.`;
+
+      const message = await client.messages.create({
+        model: "claude-sonnet-4-5",
+        max_tokens: 1500,
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      const text = message.content[0].type === "text" ? message.content[0].text : "";
+      const cleaned = text.replace(/```html?\s*/g, "").replace(/```\s*/g, "").trim();
+
+      return NextResponse.json({ success: true, generatedBody: cleaned });
     }
 
     // ── Bilan pédagogique IA ──────────────────────────────────────────────────
