@@ -280,12 +280,55 @@ export default function ComptabilitePage() {
         };
 
         // ── 1. Stripe payout ──────────────────────────────────────────────
+        // Stripe verse les fonds ~7 jours après les paiements, regroupés,
+        // net de commissions (~2.9% + 0.25€). On cherche dans une fenêtre large.
         if (label.includes("STRIPE") || label.includes("STP")) {
-          const stripeTotal = filteredPayments
-            .filter(p => p.paymentMode === "cb_online")
-            .reduce((s, p) => s + (p.totalTTC || 0), 0);
-          if (bl.amount > 0 && stripeTotal > 0) {
-            return { ...bl, matched: true, matchType: "Stripe", matchDetail: `Virement Stripe (${stripeTotal.toFixed(2)}€)` };
+          const stripeEncs = periodEnc.filter(e =>
+            e.mode === "stripe" || e.mode === "cb_online" || e.mode === "stripe_subscription"
+          );
+
+          // a) Match exact (montant identique, rare mais possible)
+          const exactStripe = stripeEncs.find(e => Math.abs((e.montant || 0) - bl.amount) < 0.02);
+          if (exactStripe) {
+            return { ...bl, matched: true, matchType: "Stripe", matchDetail: `Stripe ${exactStripe.familyName} — ${exactStripe.montant?.toFixed(2)}€` };
+          }
+
+          // b) Total Stripe de la période (payout global)
+          const stripeTotal = stripeEncs.reduce((s, e) => s + (e.montant || 0), 0);
+          if (stripeTotal > 0 && Math.abs(stripeTotal - bl.amount) < 0.02) {
+            return { ...bl, matched: true, matchType: "Stripe", matchDetail: `Payout Stripe — ${stripeEncs.length} transaction(s) = ${stripeTotal.toFixed(2)}€` };
+          }
+
+          // c) Total Stripe net de commissions (~2.9% + 0.25€/tx)
+          if (stripeTotal > 0) {
+            const estimatedFees = stripeEncs.reduce((s, e) => s + ((e.montant || 0) * 0.029 + 0.25), 0);
+            const stripeNet = Math.round((stripeTotal - estimatedFees) * 100) / 100;
+            if (Math.abs(stripeNet - bl.amount) < 1.00) { // tolérance 1€ sur les commissions
+              return { ...bl, matched: true, matchType: "Stripe", matchDetail: `Payout Stripe net — ${stripeEncs.length} tx = ${stripeTotal.toFixed(2)}€ brut − ~${estimatedFees.toFixed(2)}€ frais ≈ ${stripeNet.toFixed(2)}€` };
+            }
+          }
+
+          // d) Grouper par semaine et chercher un sous-ensemble
+          if (bankDate && stripeEncs.length > 0) {
+            // Chercher les paiements Stripe des 7-14 jours avant le payout
+            const stripeWindow = stripeEncs.filter(e => {
+              const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+              if (!d) return false;
+              const diff = (bankDate.getTime() - d.getTime()) / (1000 * 60 * 60 * 24);
+              return diff >= 2 && diff <= 14; // payout arrive 2-14 jours après
+            });
+            const windowTotal = stripeWindow.reduce((s, e) => s + (e.montant || 0), 0);
+            if (windowTotal > 0 && Math.abs(windowTotal - bl.amount) < 0.02) {
+              return { ...bl, matched: true, matchType: "Stripe", matchDetail: `Payout Stripe — ${stripeWindow.length} tx (J-2 à J-14) = ${windowTotal.toFixed(2)}€` };
+            }
+            // Net de commissions
+            if (windowTotal > 0) {
+              const wFees = stripeWindow.reduce((s, e) => s + ((e.montant || 0) * 0.029 + 0.25), 0);
+              const wNet = Math.round((windowTotal - wFees) * 100) / 100;
+              if (Math.abs(wNet - bl.amount) < 1.00) {
+                return { ...bl, matched: true, matchType: "Stripe", matchDetail: `Payout Stripe net — ${stripeWindow.length} tx = ${windowTotal.toFixed(2)}€ − ~${wFees.toFixed(2)}€ frais` };
+              }
+            }
           }
         }
 
@@ -1016,7 +1059,7 @@ export default function ComptabilitePage() {
 
           <Card padding="md">
             <h3 className="font-body text-base font-semibold text-blue-800 mb-3">Importer un relevé bancaire</h3>
-            <p className="font-body text-xs text-slate-500 mb-3">Format CSV attendu : Date;Libellé;Montant (séparateur point-virgule)</p>
+            <p className="font-body text-xs text-slate-500 mb-3">Compatible Crédit Agricole, LCL, BNP, Société Générale (CSV avec séparateur point-virgule)</p>
             <label className="flex items-center gap-2 font-body text-sm font-semibold text-blue-500 bg-white px-5 py-3 rounded-lg border border-blue-200 cursor-pointer hover:bg-blue-50 transition-colors inline-flex">
               <Upload size={16} /> Importer CSV
               <input type="file" accept=".csv" onChange={handleCSVImport} className="hidden" />
@@ -1042,16 +1085,46 @@ export default function ComptabilitePage() {
                   </div>
                   <span className="w-24 text-right font-body text-sm font-semibold text-green-600">{bl.amount.toFixed(2)}€</span>
                   <span className="w-28 text-center">
-                    {bl.matched && bl.matchType && <Badge color="blue">{bl.matchType}</Badge>}
+                    {bl.matched && bl.matchType && <Badge color={bl.matchType === "Ignoré" ? "gray" : bl.matchType === "Manuel" ? "orange" : "blue"}>{bl.matchType}</Badge>}
                   </span>
                   <span className="w-20 text-center">
                     <Badge color={bl.matched ? "green" : "orange"}>{bl.matched ? "OK" : "À traiter"}</Badge>
                   </span>
                   <span className="w-20 text-center">
                     {!bl.matched && (
-                      <button onClick={() => { setShowManualMatch(i); setManualSearch(""); }}
-                        className="font-body text-[10px] text-blue-500 bg-blue-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-blue-100">
-                        Pointer
+                      <div className="flex gap-1">
+                        <button onClick={() => { setShowManualMatch(i); setManualSearch(""); }}
+                          className="font-body text-[10px] text-blue-500 bg-blue-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-blue-100">
+                          Pointer
+                        </button>
+                        <button onClick={() => {
+                          const updated = [...bankLines];
+                          updated[i] = { ...updated[i], matched: true, matchType: "Ignoré", matchDetail: "Ignoré manuellement" };
+                          setBankLines(updated);
+                        }}
+                          className="font-body text-[10px] text-slate-400 bg-slate-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-slate-100">
+                          Ignorer
+                        </button>
+                      </div>
+                    )}
+                    {bl.matched && bl.matchType === "Ignoré" && (
+                      <button onClick={() => {
+                        const updated = [...bankLines];
+                        updated[i] = { ...updated[i], matched: false, matchType: "", matchDetail: "" };
+                        setBankLines(updated);
+                      }}
+                        className="font-body text-[10px] text-orange-500 bg-orange-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-orange-100">
+                        Restaurer
+                      </button>
+                    )}
+                    {bl.matched && bl.matchType === "Manuel" && (
+                      <button onClick={() => {
+                        const updated = [...bankLines];
+                        updated[i] = { ...updated[i], matched: false, matchType: "", matchDetail: "", manualPaymentId: undefined };
+                        setBankLines(updated);
+                      }}
+                        className="font-body text-[10px] text-orange-500 bg-orange-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-orange-100">
+                        Dé-pointer
                       </button>
                     )}
                   </span>
