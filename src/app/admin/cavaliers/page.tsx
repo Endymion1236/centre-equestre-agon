@@ -51,12 +51,13 @@ export default function CavaliersPage() {
 
   // ─── Édition infos famille ───
   const [editingFamily, setEditingFamily] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ parentName: "", parentEmail: "", parentPhone: "" });
+  const [editForm, setEditForm] = useState({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
 
   // ─── Création famille ───
   const [showCreateFamily, setShowCreateFamily] = useState(false);
   const [newFamily, setNewFamily] = useState({
     parentName: "", parentEmail: "", parentPhone: "",
+    address: "", zipCode: "", city: "",
     accountType: "particulier" as "particulier" | "asso" | "collectivite",
     raisonSociale: "", structureParente: "", siret: "", referent: "",
   });
@@ -84,7 +85,7 @@ export default function CavaliersPage() {
 
   // ─── Modifier infos parent ───
   const [editingParent, setEditingParent] = useState<string | null>(null);
-  const [editParentForm, setEditParentForm] = useState({ parentName: "", parentEmail: "", parentPhone: "" });
+  const [editParentForm, setEditParentForm] = useState({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
 
   // ─── Fusionner familles ───
   const [showMerge, setShowMerge] = useState<string | null>(null); // ID de la famille source
@@ -160,6 +161,9 @@ export default function CavaliersPage() {
         parentName: computedName,
         parentEmail: newFamily.parentEmail.trim(),
         parentPhone: newFamily.parentPhone.trim(),
+        address: newFamily.address.trim(),
+        zipCode: newFamily.zipCode.trim(),
+        city: newFamily.city.trim(),
         accountType: newFamily.accountType,
         ...(newFamily.accountType !== "particulier" && {
           raisonSociale: newFamily.raisonSociale.trim(),
@@ -175,7 +179,7 @@ export default function CavaliersPage() {
       });
 
       setShowCreateFamily(false);
-      setNewFamily({ parentName: "", parentEmail: "", parentPhone: "", accountType: "particulier", raisonSociale: "", structureParente: "", siret: "", referent: "" });
+      setNewFamily({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "", accountType: "particulier", raisonSociale: "", structureParente: "", siret: "", referent: "" });
       setNewChildren([{ firstName: "", birthDate: "", galopLevel: "—" }]);
       // Email bienvenue
       if (newFamily.parentEmail.trim()) {
@@ -235,6 +239,9 @@ export default function CavaliersPage() {
       parentName: family.parentName || "",
       parentEmail: family.parentEmail || "",
       parentPhone: family.parentPhone || "",
+      address: family.address || "",
+      zipCode: family.zipCode || "",
+      city: family.city || "",
     });
   };
 
@@ -246,6 +253,9 @@ export default function CavaliersPage() {
         parentName: editForm.parentName.trim(),
         parentEmail: editForm.parentEmail.trim(),
         parentPhone: editForm.parentPhone.trim(),
+        address: editForm.address.trim(),
+        zipCode: editForm.zipCode.trim(),
+        city: editForm.city.trim(),
         updatedAt: serverTimestamp(),
       });
       setEditingFamily(null);
@@ -446,6 +456,9 @@ export default function CavaliersPage() {
         parentName: editParentForm.parentName.trim(),
         parentEmail: editParentForm.parentEmail.trim(),
         parentPhone: editParentForm.parentPhone.trim(),
+        address: editParentForm.address.trim(),
+        zipCode: editParentForm.zipCode.trim(),
+        city: editParentForm.city.trim(),
         updatedAt: serverTimestamp(),
       });
       setEditingParent(null);
@@ -605,6 +618,20 @@ export default function CavaliersPage() {
                             <input type="tel" value={editForm.parentPhone} onChange={e => setEditForm({ ...editForm, parentPhone: e.target.value })} className={inputStyle} />
                           </div>
                         </div>
+                        <div className="mb-3">
+                          <label className="font-body text-[10px] font-semibold text-slate-600 uppercase block mb-1">Adresse</label>
+                          <input value={editForm.address} onChange={e => setEditForm({ ...editForm, address: e.target.value })} placeholder="12 rue des Écuries" className={inputStyle} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 mb-3">
+                          <div>
+                            <label className="font-body text-[10px] font-semibold text-slate-600 uppercase block mb-1">Code postal</label>
+                            <input value={editForm.zipCode} onChange={e => setEditForm({ ...editForm, zipCode: e.target.value })} placeholder="50230" className={inputStyle} />
+                          </div>
+                          <div>
+                            <label className="font-body text-[10px] font-semibold text-slate-600 uppercase block mb-1">Ville</label>
+                            <input value={editForm.city} onChange={e => setEditForm({ ...editForm, city: e.target.value })} placeholder="Agon-Coutainville" className={inputStyle} />
+                          </div>
+                        </div>
                         <div className="flex gap-2">
                           <button onClick={handleSaveFamily} disabled={saving}
                             className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-600 disabled:opacity-50">
@@ -635,6 +662,15 @@ export default function CavaliersPage() {
                           <div><div className="font-body text-[11px] font-semibold text-slate-600">Téléphone</div><div className="font-body text-sm text-blue-800">{family.parentPhone || "Non renseigné"}</div></div>
                           <div><div className="font-body text-[11px] font-semibold text-slate-600">Inscription</div><div className="font-body text-sm text-blue-800">{(family as any).authProvider === "admin" ? "Créé par l'admin" : `Via ${(family as any).authProvider}`}</div></div>
                         </div>
+                        {((family as any).address || (family as any).city) && (
+                          <div className="mt-2">
+                            <div className="font-body text-[11px] font-semibold text-slate-600">Adresse</div>
+                            <div className="font-body text-sm text-blue-800">
+                              {(family as any).address}{(family as any).address && ((family as any).zipCode || (family as any).city) ? ", " : ""}
+                              {(family as any).zipCode} {(family as any).city}
+                            </div>
+                          </div>
+                        )}
                         {/* Compte client */}
                         {(() => {
                           const fp = getPaymentsForFamily(family.firestoreId).filter(p => (p as any).status !== "cancelled");
@@ -1244,6 +1280,20 @@ export default function CavaliersPage() {
                     <div>
                       <label className={labelStyle}>Téléphone</label>
                       <input type="tel" className={inputStyle} value={newFamily.parentPhone} onChange={e => setNewFamily({ ...newFamily, parentPhone: e.target.value })} placeholder="06 00 00 00 00" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className={labelStyle}>Adresse</label>
+                    <input className={inputStyle} value={newFamily.address} onChange={e => setNewFamily({ ...newFamily, address: e.target.value })} placeholder="12 rue des Écuries" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelStyle}>Code postal</label>
+                      <input className={inputStyle} value={newFamily.zipCode} onChange={e => setNewFamily({ ...newFamily, zipCode: e.target.value })} placeholder="50230" />
+                    </div>
+                    <div>
+                      <label className={labelStyle}>Ville</label>
+                      <input className={inputStyle} value={newFamily.city} onChange={e => setNewFamily({ ...newFamily, city: e.target.value })} placeholder="Agon-Coutainville" />
                     </div>
                   </div>
                 </div>

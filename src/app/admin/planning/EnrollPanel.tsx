@@ -46,7 +46,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
   // ── Création famille inline ──
   const [showNewFamily, setShowNewFamily] = useState(false);
-  const [newFam, setNewFam] = useState({ parentName: "", parentEmail: "", parentPhone: "" });
+  const [newFam, setNewFam] = useState({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
   const [newChild, setNewChild] = useState({ firstName: "", birthDate: "", galopLevel: "—" });
   const [creatingFamily, setCreatingFamily] = useState(false);
 
@@ -1079,6 +1079,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     <input value={newFam.parentPhone} onChange={e => setNewFam({...newFam, parentPhone: e.target.value})}
                       placeholder="Téléphone" type="tel" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
                   </div>
+                  <input value={newFam.address} onChange={e => setNewFam({...newFam, address: e.target.value})}
+                    placeholder="Adresse" className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+                  <div className="flex gap-2">
+                    <input value={newFam.zipCode} onChange={e => setNewFam({...newFam, zipCode: e.target.value})}
+                      placeholder="Code postal" className="w-28 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+                    <input value={newFam.city} onChange={e => setNewFam({...newFam, city: e.target.value})}
+                      placeholder="Ville" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+                  </div>
                   <div className="border-t border-gray-100 pt-2.5">
                     <div className="font-body text-[10px] text-slate-400 uppercase mb-1.5">Premier cavalier</div>
                     <div className="flex gap-2">
@@ -1107,6 +1115,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         parentName: newFam.parentName.trim(),
                         parentEmail: newFam.parentEmail.trim(),
                         parentPhone: newFam.parentPhone.trim(),
+                        address: newFam.address.trim(),
+                        zipCode: newFam.zipCode.trim(),
+                        city: newFam.city.trim(),
                         accountType: "particulier",
                         authProvider: "admin",
                         authUid: "",
@@ -1125,7 +1136,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       setSelChild(childId);
                       setSearch(newFam.parentName);
                       setShowNewFamily(false);
-                      setNewFam({ parentName: "", parentEmail: "", parentPhone: "" });
+                      setNewFam({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
                       setNewChild({ firstName: "", birthDate: "", galopLevel: "—" });
                       // Rafraîchir les données (le parent va recharger via onClose)
                       onClose();
