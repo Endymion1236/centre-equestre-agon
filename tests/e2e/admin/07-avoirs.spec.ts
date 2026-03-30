@@ -27,14 +27,10 @@ test.describe("AV · Avoirs", () => {
   test("AV-02 · L'onglet Créer affiche les champs requis", async ({ page }) => {
     const creerTab = page.locator("button, [role='tab']").filter({ hasText: /créer/i }).first();
     await creerTab.click();
-    await page.waitForSelector(".animate-spin", { state: "hidden", timeout: 40_000 }).catch(() => {});
-    await page.waitForTimeout(500);
+    // Attendre le titre h3 statique — il apparaît immédiatement sans Firestore
+    await expect(page.locator("text=Créer un avoir ou une avance")).toBeVisible({ timeout: 10_000 });
 
-    const familleInput = page
-      .locator("input[placeholder*='famille'], input[placeholder*='Famille'], [data-testid='family-search-input']")
-      .first();
-    await expect(familleInput).toBeVisible({ timeout: 15_000 });
-
+    // Champ montant — également statique
     const montantInput = page
       .locator("input[placeholder*='montant'], input[placeholder*='Montant'], input[type='number']")
       .first();

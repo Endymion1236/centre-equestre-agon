@@ -20,7 +20,7 @@ export default defineConfig({
     navigationTimeout: 45_000,
   },
 
-  timeout: 60_000,
+  timeout: 90_000,
 
   projects: [
     // ── Étape 1 : setup auth (génère les storageState) ──

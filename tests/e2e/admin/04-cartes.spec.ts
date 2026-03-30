@@ -27,11 +27,10 @@ test.describe("CA · Cartes de séances", () => {
   test("CA-02 · L'onglet Créer affiche les templates (5, 10, 20 séances)", async ({ page }) => {
     const creerTab = page.locator("button, [role='tab']").filter({ hasText: /créer/i }).first();
     await creerTab.click();
-    // Attendre que le spinner disparaisse
-    await page.waitForSelector(".animate-spin", { state: "hidden", timeout: 40_000 }).catch(() => {});
-    await page.waitForTimeout(500);
+    // Attendre le titre h3 de l'onglet créer — il est statique, pas besoin de Firestore
+    await expect(page.locator("text=Créer une carte de séances")).toBeVisible({ timeout: 10_000 });
 
-    await expect(page.locator("text=Carte 5 séances")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("text=Carte 5 séances")).toBeVisible({ timeout: 5_000 });
     await expect(page.locator("text=Carte 10 séances")).toBeVisible({ timeout: 5_000 });
     await expect(page.locator("text=Carte 20 séances")).toBeVisible({ timeout: 5_000 });
   });
@@ -44,11 +43,10 @@ test.describe("CA · Cartes de séances", () => {
   test("CA-04 · L'onglet Créer exige de sélectionner une famille avant de valider", async ({ page }) => {
     const creerTab = page.locator("button, [role='tab']").filter({ hasText: /créer/i }).first();
     await creerTab.click();
-    await page.waitForSelector(".animate-spin", { state: "hidden", timeout: 40_000 }).catch(() => {});
-    await page.waitForTimeout(500);
+    await expect(page.locator("text=Créer une carte de séances")).toBeVisible({ timeout: 10_000 });
 
     const validateBtn = page.locator("button").filter({ hasText: /créer la carte|valider|enregistrer/i }).first();
-    if (await validateBtn.isVisible()) {
+    if (await validateBtn.isVisible({ timeout: 5_000 })) {
       const isDisabled = (await validateBtn.getAttribute("disabled")) !== null ||
         (await validateBtn.getAttribute("aria-disabled")) === "true";
       if (!isDisabled) console.log("ℹ️  Le bouton Créer est actif sans famille — à vérifier manuellement");
@@ -61,8 +59,8 @@ test.describe("CA · Cartes de séances", () => {
 
     const histTab = page.locator("button, [role='tab']").filter({ hasText: /historique/i }).first();
     await histTab.click();
-    await page.waitForSelector(".animate-spin", { state: "hidden", timeout: 40_000 }).catch(() => {});
-    await page.waitForTimeout(500);
+    // Attendre que l'onglet soit actif — chercher un texte statique ou la disparition du spinner
+    await page.waitForTimeout(2000);
 
     const criticalErrors = errors.filter((e) => !e.includes("Firebase") && !e.includes("network"));
     expect(criticalErrors).toHaveLength(0);
