@@ -12,8 +12,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth } from "@/lib/firebase-admin";
 
 export async function POST(req: NextRequest) {
-  // 🔒 Bloquer en production
-  if (process.env.NODE_ENV === "production" && !process.env.PLAYWRIGHT_TEST_MODE) {
+  // 🔒 Bloquer en production SAUF si PLAYWRIGHT_TEST_MODE est activé
+  const isTestMode = process.env.PLAYWRIGHT_TEST_MODE === "true";
+  if (process.env.NODE_ENV === "production" && !isTestMode) {
     return NextResponse.json({ error: "Not available in production" }, { status: 403 });
   }
 
