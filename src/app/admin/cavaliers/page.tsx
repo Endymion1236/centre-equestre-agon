@@ -1038,7 +1038,50 @@ export default function CavaliersPage() {
                                     </div>
                                     <div className="flex items-center gap-2">
                                       <span className={`font-semibold ${a.remainingAmount > 0 ? "text-blue-500" : "text-slate-400"}`}>{a.remainingAmount?.toFixed(2)}€</span>
-                                      <Badge color={a.status === "actif" ? "green" : a.status === "utilise" ? "gray" : "orange"}>{a.status}</Badge>
+                                      <Badge color={a.status === "actif" ? "green" : a.status === "utilise" ? "gray" : a.status === "rembourse" ? "blue" : "orange"}>{a.status === "rembourse" ? "remboursé" : a.status}</Badge>
+                                      {a.status === "actif" && a.remainingAmount > 0 && (
+                                        <button onClick={async () => {
+                                          const modes = ["Espèces", "Virement", "CB terminal", "Chèque"];
+                                          const modeChoice = prompt(`Rembourser ${a.remainingAmount.toFixed(2)}€ à ${family.parentName}\n\nMode de remboursement ?\n1 = Espèces\n2 = Virement\n3 = CB terminal\n4 = Chèque\n\nTapez 1, 2, 3 ou 4 :`);
+                                          if (!modeChoice || !["1","2","3","4"].includes(modeChoice.trim())) return;
+                                          const mode = modes[parseInt(modeChoice.trim()) - 1];
+                                          const montantStr = prompt(`Montant à rembourser (max ${a.remainingAmount.toFixed(2)}€) :`, a.remainingAmount.toFixed(2));
+                                          if (!montantStr) return;
+                                          const montant = Math.min(parseFloat(montantStr), a.remainingAmount);
+                                          if (isNaN(montant) || montant <= 0) return;
+                                          if (!confirm(`Confirmer le remboursement de ${montant.toFixed(2)}€ par ${mode} à ${family.parentName} ?`)) return;
+                                          try {
+                                            const newRemaining = Math.round((a.remainingAmount - montant) * 100) / 100;
+                                            await updateDoc(doc(db, "avoirs", a.id), {
+                                              remainingAmount: newRemaining,
+                                              usedAmount: (a.usedAmount || 0) + montant,
+                                              status: newRemaining <= 0 ? "rembourse" : "actif",
+                                              usageHistory: [...(a.usageHistory || []), {
+                                                date: new Date().toISOString(),
+                                                type: "remboursement",
+                                                montant,
+                                                mode,
+                                                label: `Remboursement ${mode}`,
+                                              }],
+                                              updatedAt: serverTimestamp(),
+                                            });
+                                            await addDoc(collection(db, "encaissements"), {
+                                              familyId: family.firestoreId,
+                                              familyName: family.parentName,
+                                              montant: -montant,
+                                              mode: "remboursement",
+                                              modeLabel: `Remboursement ${mode}`,
+                                              ref: a.reference,
+                                              activityTitle: `Remboursement avoir ${a.reference}`,
+                                              date: serverTimestamp(),
+                                            });
+                                            alert(`✅ Remboursement de ${montant.toFixed(2)}€ par ${mode} enregistré.`);
+                                            fetchFamilies();
+                                          } catch (e) { console.error(e); alert("Erreur lors du remboursement"); }
+                                        }} className="font-body text-[10px] text-orange-500 bg-orange-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-orange-100">
+                                          Rembourser
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
                                 );
