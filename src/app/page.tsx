@@ -156,10 +156,13 @@ export default function SplitHomePage() {
           .split-wrap { flex-direction: column; }
           .panel, .split-wrap:hover .panel, .split-wrap .panel:hover { flex: 1 !important; }
           .panel-bg { filter: brightness(0.65) !important; }
-          .panel-inner { padding: 2rem; opacity: 1 !important; transform: none !important; }
-          .panel-title { font-size: 3rem; }
+          .panel-inner { padding: 1.5rem; padding-bottom: 1.8rem; opacity: 1 !important; transform: none !important; }
+          .panel-logo { display: none; }
+          .panel-title { font-size: 2.6rem; }
+          .panel-desc { font-size: 0.82rem; margin-bottom: 1.2rem; }
+          .panel-cta { font-size: 0.75rem; padding: 0.75em 1.6em; }
+          .tag { font-size: 0.55rem; margin-bottom: 0.7rem; }
           .sep, .puck { display: none; }
-          .panel-lb .panel-logo { right: auto; left: 2.2rem; flex-direction: row; }
           .panel-lb .panel-inner { align-items: flex-start; text-align: left; }
           .panel-lb .panel-desc { margin-left: 0; }
         }
