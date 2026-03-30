@@ -957,9 +957,20 @@ export default function PlanningPage() {
               {/* 7 colonnes jours */}
               {weekDates.map((d, dayIdx) => {
                 const ds = fmtDate(d);
-                const dc = creneaux.filter(c => c.date === ds).sort((a, b) => a.startTime.localeCompare(b.startTime));
+                const allDc = creneaux.filter(c => c.date === ds).sort((a, b) => a.startTime.localeCompare(b.startTime));
 
-                // Détecter les chevauchements pour la largeur
+                // Séparer stages et cours
+                const isStageType = (c: any) => c.activityType === "stage" || c.activityType === "stage_journee";
+                const stages = allDc.filter(c => isStageType(c));
+                const dc = allDc.filter(c => !isStageType(c));
+
+                // Stages groupés par période (badges compacts)
+                const stagesMatin = stages.filter(c => parseInt(c.startTime) < 13);
+                const stagesAprem = stages.filter(c => parseInt(c.startTime) >= 13 && parseInt(c.startTime) < 16);
+                const stagesSoir = stages.filter(c => parseInt(c.startTime) >= 16);
+                const stageBadgeHeight = (stagesMatin.length > 0 ? 24 : 0) + (stagesAprem.length > 0 ? 24 : 0) + (stagesSoir.length > 0 ? 24 : 0) + (stages.length > 0 ? 4 : 0);
+
+                // Positionner les cours sur la timeline
                 const positioned = dc.map(c => {
                   const top = timeToY(c.startTime);
                   const bottom = timeToY(c.endTime);
@@ -979,6 +990,25 @@ export default function PlanningPage() {
                 }
                 const totalCols = maxCol + 1;
 
+                const goToDay = () => { setViewMode("day"); setDayOffset(Math.round((d.getTime()-new Date().getTime())/86400000)); };
+
+                const stageBadge = (list: typeof stages, bg: string, border: string, dot: string, text: string) => {
+                  if (list.length === 0) return null;
+                  const label = list.length === 1
+                    ? `${list[0].startTime} ${list[0].activityTitle.slice(0, 12)}`
+                    : `${list.length} stages`;
+                  const totalEnrolled = list.reduce((s, c) => s + (c.enrolled?.length || 0), 0);
+                  const totalPlaces = list.reduce((s, c) => s + (c.maxPlaces || 0), 0);
+                  return (
+                    <button onClick={goToDay}
+                      className={`w-full flex items-center gap-1 px-1.5 py-0.5 rounded border font-body cursor-pointer text-left hover:opacity-80 ${bg} ${border}`}>
+                      <span className={`w-3 h-3 rounded-full ${dot} text-white text-[7px] flex items-center justify-center flex-shrink-0`}>{list.length}</span>
+                      <span className={`text-[9px] font-semibold ${text} truncate flex-1`}>{label}</span>
+                      <span className={`text-[8px] ${text} opacity-70`}>{totalEnrolled}/{totalPlaces}</span>
+                    </button>
+                  );
+                };
+
                 return (
                   <div key={dayIdx} className="flex-1 relative border-l border-gray-100" style={{ minWidth: "110px", height: totalHeight }}>
                     {/* Header jour */}
@@ -986,12 +1016,21 @@ export default function PlanningPage() {
                       {fmtDateFR(d)}
                     </div>
 
+                    {/* Badges stages (compacts, sous le header) */}
+                    {stages.length > 0 && (
+                      <div className="absolute left-1 right-1 z-[5] flex flex-col gap-0.5" style={{ top: 30 }}>
+                        {stageBadge(stagesMatin, "bg-green-50", "border-green-200", "bg-green-500", "text-green-700")}
+                        {stageBadge(stagesAprem, "bg-teal-50", "border-teal-200", "bg-teal-500", "text-teal-700")}
+                        {stageBadge(stagesSoir, "bg-indigo-50", "border-indigo-200", "bg-indigo-500", "text-indigo-700")}
+                      </div>
+                    )}
+
                     {/* Lignes horaires */}
                     {gridHours.map(h => (
                       <div key={h} className="absolute w-full border-t border-gray-50" style={{ top: (h - minHour) * HOUR_HEIGHT }} />
                     ))}
 
-                    {/* Créneaux positionnés */}
+                    {/* Créneaux cours positionnés sur la timeline */}
                     {positioned.map((c, cIdx) => {
                       const en = c.enrolled || [];
                       const fill = c.maxPlaces > 0 ? en.length / c.maxPlaces : 0;
