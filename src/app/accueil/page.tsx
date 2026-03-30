@@ -20,8 +20,7 @@ export default function HomePage() {
 
       {/* ═══ HERO ═══ */}
       <HeroEditable>
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-800/50 via-blue-500/20 to-blue-600/35" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_80%_20%,rgba(240,160,16,0.1)_0%,transparent_50%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_80%_20%,rgba(240,160,16,0.08)_0%,transparent_50%)] pointer-events-none" style={{ zIndex: 2 }} />
         {/* Animated dots */}
         <div className="absolute inset-0 overflow-hidden opacity-20">
           {[...Array(5)].map((_, i) => (
