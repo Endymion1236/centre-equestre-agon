@@ -1,6 +1,7 @@
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Button, SectionHeader, Card } from "@/components/ui";
+import { HeroEditable } from "@/components/ui/HeroEditable";
 import { SITE_CONFIG } from "@/lib/config";
 import Link from "next/link";
 import {
@@ -18,7 +19,7 @@ export default function HomePage() {
       <Navbar />
 
       {/* ═══ HERO ═══ */}
-      <section className="relative min-h-screen flex items-center bg-hero overflow-hidden">
+      <HeroEditable>
         <div className="absolute inset-0 bg-gradient-to-br from-blue-800/50 via-blue-500/20 to-blue-600/35" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_80%_20%,rgba(240,160,16,0.1)_0%,transparent_50%)]" />
         {/* Animated dots */}
@@ -71,7 +72,7 @@ export default function HomePage() {
             ))}
           </div>
         </div>
-      </section>
+      </HeroEditable>
 
       {/* ═══ POURQUOI NOUS CHOISIR ═══ */}
       <section className="py-20 px-6 bg-cream">

@@ -1,19 +1,21 @@
-import { Metadata } from "next";
+"use client";
+
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { SectionHeader, Card, Badge } from "@/components/ui";
+import { EditableImage } from "@/components/ui/EditableImage";
+import type { VitrineImageKey } from "@/hooks/useVitrineImages";
 import { Users, Heart, GraduationCap, Sparkles } from "lucide-react";
 
-export const metadata: Metadata = {
-  title: "L'équipe & la cavalerie",
-  description: "Découvrez l'équipe du Centre Équestre d'Agon-Coutainville et nos poneys stars.",
-};
 
-const team = [
+
+
+const team: { name: string; role: string; initials: string; imageKey: VitrineImageKey; description: string; specialties: string[] }[] = [
   {
     name: "Nicolas",
     role: "Gérant",
     initials: "N",
+    imageKey: "equipe-nicolas",
     description: "Passionné d'équitation et d'innovation, Nicolas gère le centre depuis plusieurs années. Il conçoit des activités ludiques et immersives pour les cavaliers de tous âges.",
     specialties: ["Gestion", "Pony Games", "Innovation", "LaserBay"],
   },
@@ -21,6 +23,7 @@ const team = [
     name: "Emmeline",
     role: "Instructrice BPJEPS",
     initials: "E",
+    imageKey: "equipe-emmeline",
     description: "Emmeline est notre instructrice diplômée BPJEPS. Pédagogue et bienveillante, elle accompagne chaque cavalier dans sa progression avec passion et exigence.",
     specialties: ["Enseignement", "CSO", "Dressage", "Baby Poney"],
   },
@@ -75,7 +78,19 @@ export default function EquipePage() {
           {team.map((member, i) => (
             <Card key={i} padding="lg" className="flex-1 min-w-[320px] max-w-[420px]">
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 rounded-2xl bg-blue-500 flex items-center justify-center"><span className="font-display text-xl font-bold text-white">{member.initials}</span></div>
+                <EditableImage
+                  imageKey={member.imageKey}
+                  mode="img"
+                  label={`Photo ${member.name}`}
+                  alt={member.name}
+                  className="w-16 h-16 rounded-2xl overflow-hidden flex-shrink-0"
+                  style={{ minHeight: "64px" }}
+                >
+                  {/* Fallback initiale si pas de photo */}
+                  <div className="w-full h-full bg-blue-500 flex items-center justify-center absolute inset-0 -z-10">
+                    <span className="font-display text-xl font-bold text-white">{member.initials}</span>
+                  </div>
+                </EditableImage>
                 <div>
                   <h3 className="font-display text-xl font-bold text-blue-800">{member.name}</h3>
                   <div className="font-body text-sm text-gold-400 font-semibold">{member.role}</div>
