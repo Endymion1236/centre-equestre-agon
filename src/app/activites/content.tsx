@@ -353,14 +353,14 @@ function ActivityCard({ activity }: { activity: Activity }) {
 
   return (
     <div className="card overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/8 hover:-translate-y-1">
-      <div className="flex flex-col md:flex-row">
+      <div className="flex flex-col md:flex-row overflow-hidden">
         {/* Visual */}
         <EditableImage
           imageKey={activity.imageKey}
           mode="img"
           label={`Photo ${activity.title}`}
           alt={activity.title}
-          className={`w-full md:w-48 h-40 md:h-auto flex-shrink-0`}
+          className={`w-full md:w-48 h-44 md:h-auto flex-shrink-0 overflow-hidden`}
         >
           {/* Fallback gradient si pas encore de photo */}
           <div className={`absolute inset-0 bg-gradient-to-br ${activity.gradient} flex items-center justify-center`}>
@@ -369,7 +369,7 @@ function ActivityCard({ activity }: { activity: Activity }) {
         </EditableImage>
 
         {/* Content */}
-        <div className="flex-1 p-6">
+        <div className="flex-1 p-5 md:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
             <div>
               <h3 className="font-display text-xl font-bold text-blue-800 mb-1.5">
