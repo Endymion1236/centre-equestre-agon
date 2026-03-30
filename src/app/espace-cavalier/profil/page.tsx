@@ -483,6 +483,29 @@ export default function ProfilPage() {
           </Card>
         )
       )}
+
+      {/* ── RGPD — Supprimer mon compte ── */}
+      <div className="mt-10 pt-8 border-t border-gray-100">
+        <p className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+          Données personnelles
+        </p>
+        <p className="font-body text-sm text-gray-500 mb-4 leading-relaxed">
+          Conformément au RGPD, vous pouvez demander la suppression de votre compte et de vos données personnelles.
+          Cette action est irréversible. Vos données de facturation sont conservées 10 ans (obligation légale).
+        </p>
+        <a
+          href={`mailto:ceagon@orange.fr?subject=Demande de suppression de compte RGPD&body=Bonjour,%0A%0AJe souhaite exercer mon droit à l'effacement conformément au RGPD.%0A%0ACompte associé à l'adresse : ${user?.email || ""}%0A%0AMerci.`}
+          className="inline-flex items-center gap-2 font-body text-sm text-red-500 hover:text-red-700 no-underline border border-red-200 hover:border-red-400 px-4 py-2 rounded-lg transition-colors"
+        >
+          🗑️ Demander la suppression de mon compte
+        </a>
+        <p className="font-body text-xs text-gray-400 mt-3">
+          Délai de traitement : 30 jours —{" "}
+          <a href="/confidentialite" className="text-blue-500 no-underline hover:underline">
+            Politique de confidentialité
+          </a>
+        </p>
+      </div>
     </div>
   );
 }

@@ -78,14 +78,18 @@ export function Footer() {
           © {new Date().getFullYear()} {SITE_CONFIG.name}
         </span>
         <div className="flex gap-4">
-          {["Mentions légales", "CGV", "Confidentialité"].map((link) => (
-            <a
-              key={link}
-              href="#"
-              className="font-body text-xs text-white/25 no-underline"
+          {[
+            { label: "Mentions légales", href: "/mentions-legales" },
+            { label: "CGV", href: "/cgv" },
+            { label: "Confidentialité", href: "/confidentialite" },
+          ].map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="font-body text-xs text-white/25 hover:text-white/50 no-underline transition-colors"
             >
-              {link}
-            </a>
+              {link.label}
+            </Link>
           ))}
         </div>
       </div>
