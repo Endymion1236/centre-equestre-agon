@@ -5,16 +5,32 @@ export const dynamic = "force-dynamic";
 
 // Images autorisées avec leur chemin Firebase Storage
 const ALLOWED_KEYS = [
-  "hero-plage",       // fond de tous les headers
-  "hero-equestre",    // split-screen gauche
-  "hero-laserbay",    // split-screen droite
-  "equipe-nicolas",   // photo Nicolas
-  "equipe-emmeline",  // photo Emmeline
+  "hero-plage",
+  "hero-equestre",
+  "hero-laserbay",
+  "equipe-nicolas",
+  "equipe-emmeline",
   "galerie-balades",
   "galerie-stages",
   "galerie-competitions",
   "galerie-miniferme",
   "galerie-club",
+  "activite-baby",
+  "activite-bronze",
+  "activite-argent",
+  "activite-or",
+  "activite-galop34",
+  "activite-balade-soleil",
+  "activite-balade-jour",
+  "activite-balade-privee",
+  "activite-randonnee-jeunes",
+  "activite-cours-loisir",
+  "activite-cours-compet",
+  "activite-cso",
+  "activite-ponygames",
+  "activite-equifun",
+  "activite-anniversaire",
+  "activite-ponyride",
 ] as const;
 
 type ImageKey = typeof ALLOWED_KEYS[number];

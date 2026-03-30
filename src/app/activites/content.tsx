@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Badge, Button, Card } from "@/components/ui";
+import { EditableImage } from "@/components/ui/EditableImage";
+import type { VitrineImageKey } from "@/hooks/useVitrineImages";
 import { ChevronDown, ChevronUp, Clock, Users, Calendar, Award, Star } from "lucide-react";
 
 interface Activity {
@@ -14,6 +16,7 @@ interface Activity {
   description: string;
   features: string[];
   gradient: string;
+  imageKey: VitrineImageKey;
   price?: string;
   level?: string;
 }
@@ -36,6 +39,7 @@ const activities: Activity[] = [
       "Découverte de la mini-ferme",
     ],
     gradient: "from-purple-500 to-purple-400",
+    imageKey: "activite-baby" as VitrineImageKey,
     price: "175€ / semaine",
   },
   {
@@ -55,6 +59,7 @@ const activities: Activity[] = [
       "Passage de galops possible",
     ],
     gradient: "from-amber-700 to-amber-600",
+    imageKey: "activite-bronze" as VitrineImageKey,
     price: "175€ / semaine",
   },
   {
@@ -74,6 +79,7 @@ const activities: Activity[] = [
       "Sorties extérieures",
     ],
     gradient: "from-gray-500 to-gray-400",
+    imageKey: "activite-argent" as VitrineImageKey,
     price: "175€ / semaine",
   },
   {
@@ -93,6 +99,7 @@ const activities: Activity[] = [
       "Cross et extérieur",
     ],
     gradient: "from-gold-400 to-gold-500",
+    imageKey: "activite-or" as VitrineImageKey,
     price: "175€ / semaine",
   },
   {
@@ -112,6 +119,7 @@ const activities: Activity[] = [
       "Vidéo et débriefing",
     ],
     gradient: "from-blue-500 to-blue-600",
+    imageKey: "activite-galop34" as VitrineImageKey,
     price: "175€ / semaine",
   },
   {
@@ -131,6 +139,7 @@ const activities: Activity[] = [
       "D'avril à octobre",
     ],
     gradient: "from-orange-500 to-orange-400",
+    imageKey: "activite-balade-soleil" as VitrineImageKey,
     price: "57€",
     level: "3 niveaux disponibles",
   },
@@ -151,6 +160,7 @@ const activities: Activity[] = [
       "Toute l'année (selon météo)",
     ],
     gradient: "from-blue-400 to-blue-300",
+    imageKey: "activite-balade-jour" as VitrineImageKey,
     price: "53€",
   },
   {
@@ -169,6 +179,7 @@ const activities: Activity[] = [
       "Idéal cadeau couple",
     ],
     gradient: "from-pink-500 to-pink-400",
+    imageKey: "activite-balade-privee" as VitrineImageKey,
     price: "250€",
   },
   {
@@ -187,6 +198,7 @@ const activities: Activity[] = [
       "Campagne et plage",
     ],
     gradient: "from-green-500 to-green-400",
+    imageKey: "activite-randonnee-jeunes" as VitrineImageKey,
     price: "Sur demande",
   },
   {
@@ -206,6 +218,7 @@ const activities: Activity[] = [
       "Passage galops FFE",
     ],
     gradient: "from-blue-500 to-blue-400",
+    imageKey: "activite-cours-loisir" as VitrineImageKey,
     price: "Tarif annuel",
   },
   {
@@ -225,6 +238,7 @@ const activities: Activity[] = [
       "Licence FFE facilitée",
     ],
     gradient: "from-gold-400 to-gold-500",
+    imageKey: "activite-cours-compet" as VitrineImageKey,
     price: "Tarif annuel",
   },
   {
@@ -243,6 +257,7 @@ const activities: Activity[] = [
       "Ouvert aux extérieurs",
     ],
     gradient: "from-blue-600 to-blue-500",
+    imageKey: "activite-cso" as VitrineImageKey,
     price: "25€",
   },
   {
@@ -261,6 +276,7 @@ const activities: Activity[] = [
       "Ambiance garantie",
     ],
     gradient: "from-green-500 to-green-400",
+    imageKey: "activite-ponygames" as VitrineImageKey,
     price: "15€",
   },
   {
@@ -279,6 +295,7 @@ const activities: Activity[] = [
       "Podium et récompenses",
     ],
     gradient: "from-purple-500 to-purple-400",
+    imageKey: "activite-equifun" as VitrineImageKey,
     price: "20€",
   },
   {
@@ -298,6 +315,7 @@ const activities: Activity[] = [
       "Personnalisable (thème, nombre...)",
     ],
     gradient: "from-red-400 to-orange-400",
+    imageKey: "activite-anniversaire" as VitrineImageKey,
     price: "Sur demande",
   },
   {
@@ -316,6 +334,7 @@ const activities: Activity[] = [
       "Accessible dès 2 ans",
     ],
     gradient: "from-green-600 to-green-500",
+    imageKey: "activite-ponyride" as VitrineImageKey,
     price: "Tarif sur place",
   },
 ];
@@ -336,11 +355,18 @@ function ActivityCard({ activity }: { activity: Activity }) {
     <div className="card overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/8 hover:-translate-y-1">
       <div className="flex flex-col md:flex-row">
         {/* Visual */}
-        <div
-          className={`w-full md:w-48 h-40 md:h-auto bg-gradient-to-br ${activity.gradient} flex items-center justify-center flex-shrink-0`}
+        <EditableImage
+          imageKey={activity.imageKey}
+          mode="img"
+          label={`Photo ${activity.title}`}
+          alt={activity.title}
+          className={`w-full md:w-48 h-40 md:h-auto flex-shrink-0`}
         >
-          <Star size={64} className="text-white/25" strokeWidth={1} />
-        </div>
+          {/* Fallback gradient si pas encore de photo */}
+          <div className={`absolute inset-0 bg-gradient-to-br ${activity.gradient} flex items-center justify-center`}>
+            <Star size={64} className="text-white/25" strokeWidth={1} />
+          </div>
+        </EditableImage>
 
         {/* Content */}
         <div className="flex-1 p-6">

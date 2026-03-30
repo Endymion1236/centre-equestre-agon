@@ -14,20 +14,52 @@ export type VitrineImageKey =
   | "galerie-stages"
   | "galerie-competitions"
   | "galerie-miniferme"
-  | "galerie-club";
+  | "galerie-club"
+  | "activite-baby"
+  | "activite-bronze"
+  | "activite-argent"
+  | "activite-or"
+  | "activite-galop34"
+  | "activite-balade-soleil"
+  | "activite-balade-jour"
+  | "activite-balade-privee"
+  | "activite-randonnee-jeunes"
+  | "activite-cours-loisir"
+  | "activite-cours-compet"
+  | "activite-cso"
+  | "activite-ponygames"
+  | "activite-equifun"
+  | "activite-anniversaire"
+  | "activite-ponyride";
 
 // Fallbacks locaux si pas encore uploadé dans Firebase
 export const VITRINE_DEFAULTS: Record<VitrineImageKey, string> = {
-  "hero-plage":          "/images/hero-plage.jpg",
-  "hero-equestre":       "/images/hero-equestre.png",
-  "hero-laserbay":       "/images/hero-laserbay.png",
-  "equipe-nicolas":      "",
-  "equipe-emmeline":     "",
-  "galerie-balades":     "",
-  "galerie-stages":      "",
-  "galerie-competitions":"",
-  "galerie-miniferme":   "",
-  "galerie-club":        "",
+  "hero-plage":                "/images/hero-plage.jpg",
+  "hero-equestre":             "/images/hero-equestre.png",
+  "hero-laserbay":             "/images/hero-laserbay.png",
+  "equipe-nicolas":            "",
+  "equipe-emmeline":           "",
+  "galerie-balades":           "",
+  "galerie-stages":            "",
+  "galerie-competitions":      "",
+  "galerie-miniferme":         "",
+  "galerie-club":              "",
+  "activite-baby":             "",
+  "activite-bronze":           "",
+  "activite-argent":           "",
+  "activite-or":               "",
+  "activite-galop34":          "",
+  "activite-balade-soleil":    "",
+  "activite-balade-jour":      "",
+  "activite-balade-privee":    "",
+  "activite-randonnee-jeunes": "",
+  "activite-cours-loisir":     "",
+  "activite-cours-compet":     "",
+  "activite-cso":              "",
+  "activite-ponygames":        "",
+  "activite-equifun":          "",
+  "activite-anniversaire":     "",
+  "activite-ponyride":         "",
 };
 
 // ── Context ────────────────────────────────────────────────────────────────
