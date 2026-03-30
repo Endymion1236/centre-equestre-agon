@@ -24,7 +24,7 @@ import {
   findStageCreneaux, countExistingStageInscriptions, computeStageReductions,
   enrollChildInCreneau, createReservation, removeChildFromCreneau, deleteReservations,
 } from "@/lib/planning-services";
-import { X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera, FileImage } from "lucide-react";
+import { X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera, FileImage, Mail, Sparkles, Send } from "lucide-react";
 import type { Activity, Family } from "@/types";
 import { Creneau, EnrolledChild, payModes, typeColors, fmtDate } from "./types";
 
@@ -88,6 +88,13 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [stageDaysCount, setStageDaysCount] = useState<number>(0);
   const [showAddDays, setShowAddDays] = useState<{ familyId: string; enfants: { childId: string; childName: string }[]; joursRestants: { id: string; date: string; label: string }[]; totalJoursStage: number; joursInscrits: number; stageTitle: string; creneauRef: any } | null>(null);
   const isStage = creneau.activityType === "stage" || creneau.activityType === "stage_journee";
+
+  // ── Email créneau ──
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailGenerating, setEmailGenerating] = useState(false);
 
   // Charger le nombre réel de jours du stage depuis Firestore (pas allCreneaux qui est limité à la vue)
   useEffect(() => {
@@ -794,6 +801,90 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     setUnenrolling("");
   };
 
+  // ── Email créneau : envoi à toutes les familles inscrites ──
+  const getCreneauRecipients = () => {
+    const recipients: { email: string; parentName: string }[] = [];
+    const seen = new Set<string>();
+    for (const e of enrolled) {
+      const fam = families.find(f => f.firestoreId === e.familyId);
+      if (fam?.parentEmail && !seen.has(fam.parentEmail)) {
+        seen.add(fam.parentEmail);
+        recipients.push({ email: fam.parentEmail, parentName: fam.parentName || "" });
+      }
+    }
+    return recipients;
+  };
+
+  const handleEmailGenerate = async () => {
+    setEmailGenerating(true);
+    try {
+      const cavaliers = enrolled.map((e: any) => {
+        const fam = families.find(f => f.firestoreId === e.familyId);
+        const child = (fam?.children || []).find((c: any) => c.id === e.childId);
+        return { firstName: e.childName, galopLevel: child?.galopLevel || "—", parentName: e.familyName };
+      });
+      const res = await fetch("/api/ia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "email_reprise", creneau, cavaliers }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEmailSubject(data.suggestedSubject || `${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}`);
+        setEmailBody(data.emailBody || "");
+      } else { panelToast("Erreur IA : " + (data.error || ""), "error"); }
+    } catch (e: any) { panelToast("Erreur IA : " + e.message, "error"); }
+    setEmailGenerating(false);
+  };
+
+  const handleEmailSend = async () => {
+    const recipients = getCreneauRecipients();
+    if (recipients.length === 0) { panelToast("Aucune famille avec email", "error"); return; }
+    if (!emailSubject || !emailBody) { panelToast("Sujet et message requis", "error"); return; }
+    setEmailSending(true);
+    let sent = 0;
+    for (const r of recipients) {
+      try {
+        await fetch("/api/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: r.email,
+            subject: emailSubject,
+            html: `<div style="font-family:'Segoe UI',Arial,sans-serif;max-width:560px;margin:0 auto;">
+              <div style="background:#1e3a5f;padding:20px 24px;border-radius:12px 12px 0 0;">
+                <h1 style="color:white;margin:0;font-size:18px;font-weight:700;">Centre Équestre d'Agon-Coutainville</h1>
+              </div>
+              <div style="background:white;padding:24px;border:1px solid #e8e0d0;border-top:none;">
+                ${emailBody.replace(/\n/g, "<br/>")}
+              </div>
+              <div style="background:#f8f5f0;padding:16px 24px;border-radius:0 0 12px 12px;border:1px solid #e8e0d0;border-top:none;">
+                <p style="margin:0;color:#999;font-size:11px;text-align:center;">Centre Équestre d'Agon-Coutainville · 02 44 84 99 96</p>
+              </div>
+            </div>`,
+          }),
+        });
+        sent++;
+      } catch {}
+    }
+    // Log dans Firestore
+    await addDoc(collection(db, "emailsReprise"), {
+      creneauId: creneau.id,
+      creneauTitle: creneau.activityTitle,
+      date: creneau.date,
+      subject: emailSubject,
+      message: emailBody,
+      recipients: recipients.map(r => r.email),
+      recipientCount: recipients.length,
+      status: "sent",
+      createdAt: serverTimestamp(),
+    });
+    panelToast(`Email envoyé à ${sent} famille${sent > 1 ? "s" : ""}`, "success");
+    setShowEmailForm(false);
+    setEmailSubject(""); setEmailBody("");
+    setEmailSending(false);
+  };
+
   return (
     <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
@@ -878,7 +969,46 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         )}
         <div className="p-5">
           {justEnrolled && <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg font-body text-sm text-green-700"><Check size={16} className="inline mr-1" /> {justEnrolled} inscrit(e) !</div>}
-          <h3 className="font-body text-sm font-semibold text-blue-800 mb-3"><Users size={16} className="inline mr-1" />Inscrits ({enrolled.length})</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-body text-sm font-semibold text-blue-800"><Users size={16} className="inline mr-1"/>Inscrits ({enrolled.length})</h3>
+            {enrolled.length > 0 && (
+              <button onClick={() => { setShowEmailForm(!showEmailForm); if (!showEmailForm && !emailSubject) setEmailSubject(`${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}`); }}
+                className="flex items-center gap-1 font-body text-xs text-blue-500 bg-blue-50 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
+                <Mail size={12} /> Email
+              </button>
+            )}
+          </div>
+
+          {/* ── Formulaire email créneau ── */}
+          {showEmailForm && (
+            <div className="mb-4 border border-blue-200 rounded-xl overflow-hidden">
+              <div className="bg-blue-50 px-4 py-2.5 flex items-center justify-between">
+                <span className="font-body text-xs font-semibold text-blue-700">📧 Email aux {getCreneauRecipients().length} famille{getCreneauRecipients().length > 1 ? "s" : ""}</span>
+                <button onClick={() => setShowEmailForm(false)} className="text-blue-400 hover:text-blue-600 bg-transparent border-none cursor-pointer"><X size={14} /></button>
+              </div>
+              <div className="p-4 space-y-3">
+                <input value={emailSubject} onChange={e => setEmailSubject(e.target.value)}
+                  placeholder="Objet de l'email"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-500" />
+                <textarea value={emailBody} onChange={e => setEmailBody(e.target.value)}
+                  placeholder="Votre message aux familles..."
+                  rows={6}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm resize-y focus:outline-none focus:border-blue-500" />
+                <div className="flex gap-2">
+                  <button onClick={handleEmailGenerate} disabled={emailGenerating}
+                    className="flex items-center gap-1.5 font-body text-xs font-semibold text-purple-600 bg-purple-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-purple-100 disabled:opacity-50">
+                    {emailGenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                    Générer avec IA
+                  </button>
+                  <button onClick={handleEmailSend} disabled={emailSending || !emailSubject || !emailBody}
+                    className="flex-1 flex items-center justify-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-600 disabled:opacity-50">
+                    {emailSending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                    Envoyer
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           {enrolled.length === 0 ? <p className="font-body text-sm text-slate-500 italic mb-4">Aucun</p> :
           <div className="flex flex-col gap-2 mb-4">{enrolled.map((e: any) => {
             const isCard = e.paymentSource === "card";
