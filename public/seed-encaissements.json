@@ -1,0 +1,3002 @@
+[
+  {
+    "familyId": "test-garcia-01-0",
+    "familyName": "Garcia",
+    "montant": 22,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-01-00",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-01T12:00:00Z"
+  },
+  {
+    "familyId": "test-thomas-01-1",
+    "familyName": "Thomas",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-01-01",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-01T12:00:00Z"
+  },
+  {
+    "familyId": "test-robert-01-2",
+    "familyName": "Robert",
+    "montant": 26,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-01-02",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-01T12:00:00Z"
+  },
+  {
+    "familyId": "test-richard-01-3",
+    "familyName": "Richard",
+    "montant": 60,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-01-03",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-01T12:00:00Z"
+  },
+  {
+    "familyId": "test-petit-01-4",
+    "familyName": "Petit",
+    "montant": 25,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-01-04",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-01T12:00:00Z"
+  },
+  {
+    "familyId": "test-bernard-01-5",
+    "familyName": "Bernard",
+    "montant": 40,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-01-05",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-01T12:00:00Z"
+  },
+  {
+    "familyId": "test-dubois-01-6",
+    "familyName": "Dubois",
+    "montant": 60,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-01-06",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-01T12:00:00Z"
+  },
+  {
+    "familyId": "test-lemoine-01-7",
+    "familyName": "Lemoine",
+    "montant": 120,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-01-07",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-01T12:00:00Z"
+  },
+  {
+    "familyId": "test-roux-01-8",
+    "familyName": "Roux",
+    "montant": 45,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-01-08",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-01T12:00:00Z"
+  },
+  {
+    "familyId": "test-david-01-9",
+    "familyName": "David",
+    "montant": 100,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-01-09",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-01T12:00:00Z"
+  },
+  {
+    "familyId": "test-bertrand-02-0",
+    "familyName": "Bertrand",
+    "montant": 40,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-02-00",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-02T12:00:00Z"
+  },
+  {
+    "familyId": "test-morel-02-1",
+    "familyName": "Morel",
+    "montant": 45,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-02-01",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-02T12:00:00Z"
+  },
+  {
+    "familyId": "test-girard-02-2",
+    "familyName": "Girard",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-02-02",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-02T12:00:00Z"
+  },
+  {
+    "familyId": "test-andre-02-3",
+    "familyName": "Andre",
+    "montant": 26,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-02-03",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-02T12:00:00Z"
+  },
+  {
+    "familyId": "test-mercier-02-4",
+    "familyName": "Mercier",
+    "montant": 35,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-02-04",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-02T12:00:00Z"
+  },
+  {
+    "familyId": "test-blanchard-02-5",
+    "familyName": "Blanchard",
+    "montant": 26,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-02-05",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-02T12:00:00Z"
+  },
+  {
+    "familyId": "test-guerin-02-6",
+    "familyName": "Guerin",
+    "montant": 175,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-02-06",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-02T12:00:00Z"
+  },
+  {
+    "familyId": "test-boyer-02-7",
+    "familyName": "Boyer",
+    "montant": 80,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-02-07",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-02T12:00:00Z"
+  },
+  {
+    "familyId": "test-garnier-02-8",
+    "familyName": "Garnier",
+    "montant": 60,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-02-08",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-02T12:00:00Z"
+  },
+  {
+    "familyId": "test-faure-02-9",
+    "familyName": "Faure",
+    "montant": 150,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-02-09",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-02T12:00:00Z"
+  },
+  {
+    "familyId": "test-dupont-03-0",
+    "familyName": "Dupont",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-03-00",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-03T12:00:00Z"
+  },
+  {
+    "familyId": "test-martin-03-1",
+    "familyName": "Martin",
+    "montant": 45,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-03-01",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-03T12:00:00Z"
+  },
+  {
+    "familyId": "test-lefebvre-03-2",
+    "familyName": "Lefebvre",
+    "montant": 25,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-03-02",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-03T12:00:00Z"
+  },
+  {
+    "familyId": "test-brestaz-03-3",
+    "familyName": "Brestaz",
+    "montant": 25,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-03-03",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-03T12:00:00Z"
+  },
+  {
+    "familyId": "test-durand-03-4",
+    "familyName": "Durand",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-03-04",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-03T12:00:00Z"
+  },
+  {
+    "familyId": "test-leroy-03-5",
+    "familyName": "Leroy",
+    "montant": 35,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-03-05",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-03T12:00:00Z"
+  },
+  {
+    "familyId": "test-moreau-03-6",
+    "familyName": "Moreau",
+    "montant": 120,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-03-06",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-03T12:00:00Z"
+  },
+  {
+    "familyId": "test-simon-03-7",
+    "familyName": "Simon",
+    "montant": 60,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-03-07",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-03T12:00:00Z"
+  },
+  {
+    "familyId": "test-laurent-03-8",
+    "familyName": "Laurent",
+    "montant": 120,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-03-08",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-03T12:00:00Z"
+  },
+  {
+    "familyId": "test-michel-03-9",
+    "familyName": "Michel",
+    "montant": 100,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-03-09",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-03T12:00:00Z"
+  },
+  {
+    "familyId": "test-garcia-04-0",
+    "familyName": "Garcia",
+    "montant": 40,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-04-00",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-04T12:00:00Z"
+  },
+  {
+    "familyId": "test-thomas-04-1",
+    "familyName": "Thomas",
+    "montant": 45,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-04-01",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-04T12:00:00Z"
+  },
+  {
+    "familyId": "test-robert-04-2",
+    "familyName": "Robert",
+    "montant": 26,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-04-02",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-04T12:00:00Z"
+  },
+  {
+    "familyId": "test-richard-04-3",
+    "familyName": "Richard",
+    "montant": 35,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-04-03",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-04T12:00:00Z"
+  },
+  {
+    "familyId": "test-petit-04-4",
+    "familyName": "Petit",
+    "montant": 60,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-04-04",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-04T12:00:00Z"
+  },
+  {
+    "familyId": "test-bernard-04-5",
+    "familyName": "Bernard",
+    "montant": 60,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-04-05",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-04T12:00:00Z"
+  },
+  {
+    "familyId": "test-dubois-04-6",
+    "familyName": "Dubois",
+    "montant": 100,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-04-06",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-04T12:00:00Z"
+  },
+  {
+    "familyId": "test-lemoine-04-7",
+    "familyName": "Lemoine",
+    "montant": 120,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-04-07",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-04T12:00:00Z"
+  },
+  {
+    "familyId": "test-roux-04-8",
+    "familyName": "Roux",
+    "montant": 200,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-04-08",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-04T12:00:00Z"
+  },
+  {
+    "familyId": "test-david-04-9",
+    "familyName": "David",
+    "montant": 120,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-04-09",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-04T12:00:00Z"
+  },
+  {
+    "familyId": "test-bertrand-05-0",
+    "familyName": "Bertrand",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-05-00",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-05T12:00:00Z"
+  },
+  {
+    "familyId": "test-morel-05-1",
+    "familyName": "Morel",
+    "montant": 22,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-05-01",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-05T12:00:00Z"
+  },
+  {
+    "familyId": "test-girard-05-2",
+    "familyName": "Girard",
+    "montant": 22,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-05-02",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-05T12:00:00Z"
+  },
+  {
+    "familyId": "test-andre-05-3",
+    "familyName": "Andre",
+    "montant": 40,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-05-03",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-05T12:00:00Z"
+  },
+  {
+    "familyId": "test-mercier-05-4",
+    "familyName": "Mercier",
+    "montant": 25,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-05-04",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-05T12:00:00Z"
+  },
+  {
+    "familyId": "test-blanchard-05-5",
+    "familyName": "Blanchard",
+    "montant": 55,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-05-05",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-05T12:00:00Z"
+  },
+  {
+    "familyId": "test-guerin-05-6",
+    "familyName": "Guerin",
+    "montant": 120,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-05-06",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-05T12:00:00Z"
+  },
+  {
+    "familyId": "test-boyer-05-7",
+    "familyName": "Boyer",
+    "montant": 200,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-05-07",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-05T12:00:00Z"
+  },
+  {
+    "familyId": "test-garnier-05-8",
+    "familyName": "Garnier",
+    "montant": 80,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-05-08",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-05T12:00:00Z"
+  },
+  {
+    "familyId": "test-faure-05-9",
+    "familyName": "Faure",
+    "montant": 80,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-05-09",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-05T12:00:00Z"
+  },
+  {
+    "familyId": "test-dupont-06-0",
+    "familyName": "Dupont",
+    "montant": 50,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-06-00",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-06T12:00:00Z"
+  },
+  {
+    "familyId": "test-martin-06-1",
+    "familyName": "Martin",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-06-01",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-06T12:00:00Z"
+  },
+  {
+    "familyId": "test-lefebvre-06-2",
+    "familyName": "Lefebvre",
+    "montant": 40,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-06-02",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-06T12:00:00Z"
+  },
+  {
+    "familyId": "test-brestaz-06-3",
+    "familyName": "Brestaz",
+    "montant": 40,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-06-03",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-06T12:00:00Z"
+  },
+  {
+    "familyId": "test-durand-06-4",
+    "familyName": "Durand",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-06-04",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-06T12:00:00Z"
+  },
+  {
+    "familyId": "test-leroy-06-5",
+    "familyName": "Leroy",
+    "montant": 50,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-06-05",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-06T12:00:00Z"
+  },
+  {
+    "familyId": "test-moreau-06-6",
+    "familyName": "Moreau",
+    "montant": 80,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-06-06",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-06T12:00:00Z"
+  },
+  {
+    "familyId": "test-simon-06-7",
+    "familyName": "Simon",
+    "montant": 80,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-06-07",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-06T12:00:00Z"
+  },
+  {
+    "familyId": "test-laurent-06-8",
+    "familyName": "Laurent",
+    "montant": 80,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-06-08",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-06T12:00:00Z"
+  },
+  {
+    "familyId": "test-michel-06-9",
+    "familyName": "Michel",
+    "montant": 60,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-06-09",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-06T12:00:00Z"
+  },
+  {
+    "familyId": "test-garcia-07-0",
+    "familyName": "Garcia",
+    "montant": 40,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-07-00",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-07T12:00:00Z"
+  },
+  {
+    "familyId": "test-thomas-07-1",
+    "familyName": "Thomas",
+    "montant": 45,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-07-01",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-07T12:00:00Z"
+  },
+  {
+    "familyId": "test-robert-07-2",
+    "familyName": "Robert",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-07-02",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-07T12:00:00Z"
+  },
+  {
+    "familyId": "test-richard-07-3",
+    "familyName": "Richard",
+    "montant": 22,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-07-03",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-07T12:00:00Z"
+  },
+  {
+    "familyId": "test-petit-07-4",
+    "familyName": "Petit",
+    "montant": 60,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-07-04",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-07T12:00:00Z"
+  },
+  {
+    "familyId": "test-bernard-07-5",
+    "familyName": "Bernard",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-07-05",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-07T12:00:00Z"
+  },
+  {
+    "familyId": "test-dubois-07-6",
+    "familyName": "Dubois",
+    "montant": 80,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-07-06",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-07T12:00:00Z"
+  },
+  {
+    "familyId": "test-lemoine-07-7",
+    "familyName": "Lemoine",
+    "montant": 200,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-07-07",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-07T12:00:00Z"
+  },
+  {
+    "familyId": "test-roux-07-8",
+    "familyName": "Roux",
+    "montant": 200,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-07-08",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-07T12:00:00Z"
+  },
+  {
+    "familyId": "test-david-07-9",
+    "familyName": "David",
+    "montant": 120,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-07-09",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-07T12:00:00Z"
+  },
+  {
+    "familyId": "test-bertrand-08-0",
+    "familyName": "Bertrand",
+    "montant": 26,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-08-00",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-08T12:00:00Z"
+  },
+  {
+    "familyId": "test-morel-08-1",
+    "familyName": "Morel",
+    "montant": 25,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-08-01",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-08T12:00:00Z"
+  },
+  {
+    "familyId": "test-girard-08-2",
+    "familyName": "Girard",
+    "montant": 60,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-08-02",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-08T12:00:00Z"
+  },
+  {
+    "familyId": "test-andre-08-3",
+    "familyName": "Andre",
+    "montant": 55,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-08-03",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-08T12:00:00Z"
+  },
+  {
+    "familyId": "test-mercier-08-4",
+    "familyName": "Mercier",
+    "montant": 26,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-08-04",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-08T12:00:00Z"
+  },
+  {
+    "familyId": "test-blanchard-08-5",
+    "familyName": "Blanchard",
+    "montant": 26,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-08-05",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-08T12:00:00Z"
+  },
+  {
+    "familyId": "test-guerin-08-6",
+    "familyName": "Guerin",
+    "montant": 60,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-08-06",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-08T12:00:00Z"
+  },
+  {
+    "familyId": "test-boyer-08-7",
+    "familyName": "Boyer",
+    "montant": 175,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-08-07",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-08T12:00:00Z"
+  },
+  {
+    "familyId": "test-garnier-08-8",
+    "familyName": "Garnier",
+    "montant": 45,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-08-08",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-08T12:00:00Z"
+  },
+  {
+    "familyId": "test-faure-08-9",
+    "familyName": "Faure",
+    "montant": 150,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-08-09",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-08T12:00:00Z"
+  },
+  {
+    "familyId": "test-dupont-09-0",
+    "familyName": "Dupont",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-09-00",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-09T12:00:00Z"
+  },
+  {
+    "familyId": "test-martin-09-1",
+    "familyName": "Martin",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-09-01",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-09T12:00:00Z"
+  },
+  {
+    "familyId": "test-lefebvre-09-2",
+    "familyName": "Lefebvre",
+    "montant": 25,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-09-02",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-09T12:00:00Z"
+  },
+  {
+    "familyId": "test-brestaz-09-3",
+    "familyName": "Brestaz",
+    "montant": 45,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-09-03",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-09T12:00:00Z"
+  },
+  {
+    "familyId": "test-durand-09-4",
+    "familyName": "Durand",
+    "montant": 50,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-09-04",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-09T12:00:00Z"
+  },
+  {
+    "familyId": "test-leroy-09-5",
+    "familyName": "Leroy",
+    "montant": 26,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-09-05",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-09T12:00:00Z"
+  },
+  {
+    "familyId": "test-moreau-09-6",
+    "familyName": "Moreau",
+    "montant": 100,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-09-06",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-09T12:00:00Z"
+  },
+  {
+    "familyId": "test-simon-09-7",
+    "familyName": "Simon",
+    "montant": 200,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-09-07",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-09T12:00:00Z"
+  },
+  {
+    "familyId": "test-laurent-09-8",
+    "familyName": "Laurent",
+    "montant": 100,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-09-08",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-09T12:00:00Z"
+  },
+  {
+    "familyId": "test-michel-09-9",
+    "familyName": "Michel",
+    "montant": 175,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-09-09",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-09T12:00:00Z"
+  },
+  {
+    "familyId": "test-garcia-10-0",
+    "familyName": "Garcia",
+    "montant": 45,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-10-00",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-10T12:00:00Z"
+  },
+  {
+    "familyId": "test-thomas-10-1",
+    "familyName": "Thomas",
+    "montant": 45,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-10-01",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-10T12:00:00Z"
+  },
+  {
+    "familyId": "test-robert-10-2",
+    "familyName": "Robert",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-10-02",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-10T12:00:00Z"
+  },
+  {
+    "familyId": "test-richard-10-3",
+    "familyName": "Richard",
+    "montant": 25,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-10-03",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-10T12:00:00Z"
+  },
+  {
+    "familyId": "test-petit-10-4",
+    "familyName": "Petit",
+    "montant": 22,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-10-04",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-10T12:00:00Z"
+  },
+  {
+    "familyId": "test-bernard-10-5",
+    "familyName": "Bernard",
+    "montant": 50,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-10-05",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-10T12:00:00Z"
+  },
+  {
+    "familyId": "test-dubois-10-6",
+    "familyName": "Dubois",
+    "montant": 120,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-10-06",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-10T12:00:00Z"
+  },
+  {
+    "familyId": "test-lemoine-10-7",
+    "familyName": "Lemoine",
+    "montant": 80,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-10-07",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-10T12:00:00Z"
+  },
+  {
+    "familyId": "test-roux-10-8",
+    "familyName": "Roux",
+    "montant": 100,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-10-08",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-10T12:00:00Z"
+  },
+  {
+    "familyId": "test-david-10-9",
+    "familyName": "David",
+    "montant": 45,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-10-09",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-10T12:00:00Z"
+  },
+  {
+    "familyId": "test-bertrand-11-0",
+    "familyName": "Bertrand",
+    "montant": 25,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-11-00",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-11T12:00:00Z"
+  },
+  {
+    "familyId": "test-morel-11-1",
+    "familyName": "Morel",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-11-01",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-11T12:00:00Z"
+  },
+  {
+    "familyId": "test-girard-11-2",
+    "familyName": "Girard",
+    "montant": 60,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-11-02",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-11T12:00:00Z"
+  },
+  {
+    "familyId": "test-andre-11-3",
+    "familyName": "Andre",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-11-03",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-11T12:00:00Z"
+  },
+  {
+    "familyId": "test-mercier-11-4",
+    "familyName": "Mercier",
+    "montant": 26,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-11-04",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-11T12:00:00Z"
+  },
+  {
+    "familyId": "test-blanchard-11-5",
+    "familyName": "Blanchard",
+    "montant": 55,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-11-05",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-11T12:00:00Z"
+  },
+  {
+    "familyId": "test-guerin-11-6",
+    "familyName": "Guerin",
+    "montant": 120,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-11-06",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-11T12:00:00Z"
+  },
+  {
+    "familyId": "test-boyer-11-7",
+    "familyName": "Boyer",
+    "montant": 200,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-11-07",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-11T12:00:00Z"
+  },
+  {
+    "familyId": "test-garnier-11-8",
+    "familyName": "Garnier",
+    "montant": 60,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-11-08",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-11T12:00:00Z"
+  },
+  {
+    "familyId": "test-faure-11-9",
+    "familyName": "Faure",
+    "montant": 175,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-11-09",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-11T12:00:00Z"
+  },
+  {
+    "familyId": "test-dupont-12-0",
+    "familyName": "Dupont",
+    "montant": 40,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-12-00",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-12T12:00:00Z"
+  },
+  {
+    "familyId": "test-martin-12-1",
+    "familyName": "Martin",
+    "montant": 45,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-12-01",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-12T12:00:00Z"
+  },
+  {
+    "familyId": "test-lefebvre-12-2",
+    "familyName": "Lefebvre",
+    "montant": 60,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-12-02",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-12T12:00:00Z"
+  },
+  {
+    "familyId": "test-brestaz-12-3",
+    "familyName": "Brestaz",
+    "montant": 22,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-12-03",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-12T12:00:00Z"
+  },
+  {
+    "familyId": "test-durand-12-4",
+    "familyName": "Durand",
+    "montant": 35,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-12-04",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-12T12:00:00Z"
+  },
+  {
+    "familyId": "test-leroy-12-5",
+    "familyName": "Leroy",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-12-05",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-12T12:00:00Z"
+  },
+  {
+    "familyId": "test-moreau-12-6",
+    "familyName": "Moreau",
+    "montant": 120,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-12-06",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-12T12:00:00Z"
+  },
+  {
+    "familyId": "test-simon-12-7",
+    "familyName": "Simon",
+    "montant": 250,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-12-07",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-12T12:00:00Z"
+  },
+  {
+    "familyId": "test-laurent-12-8",
+    "familyName": "Laurent",
+    "montant": 175,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-12-08",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-12T12:00:00Z"
+  },
+  {
+    "familyId": "test-michel-12-9",
+    "familyName": "Michel",
+    "montant": 120,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-12-09",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-12T12:00:00Z"
+  },
+  {
+    "familyId": "test-garcia-13-0",
+    "familyName": "Garcia",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-13-00",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-13T12:00:00Z"
+  },
+  {
+    "familyId": "test-thomas-13-1",
+    "familyName": "Thomas",
+    "montant": 45,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-13-01",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-13T12:00:00Z"
+  },
+  {
+    "familyId": "test-robert-13-2",
+    "familyName": "Robert",
+    "montant": 25,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-13-02",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-13T12:00:00Z"
+  },
+  {
+    "familyId": "test-richard-13-3",
+    "familyName": "Richard",
+    "montant": 60,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-13-03",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-13T12:00:00Z"
+  },
+  {
+    "familyId": "test-petit-13-4",
+    "familyName": "Petit",
+    "montant": 22,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-13-04",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-13T12:00:00Z"
+  },
+  {
+    "familyId": "test-bernard-13-5",
+    "familyName": "Bernard",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-13-05",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-13T12:00:00Z"
+  },
+  {
+    "familyId": "test-dubois-13-6",
+    "familyName": "Dubois",
+    "montant": 200,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-13-06",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-13T12:00:00Z"
+  },
+  {
+    "familyId": "test-lemoine-13-7",
+    "familyName": "Lemoine",
+    "montant": 250,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-13-07",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-13T12:00:00Z"
+  },
+  {
+    "familyId": "test-roux-13-8",
+    "familyName": "Roux",
+    "montant": 175,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-13-08",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-13T12:00:00Z"
+  },
+  {
+    "familyId": "test-david-13-9",
+    "familyName": "David",
+    "montant": 80,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-13-09",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-13T12:00:00Z"
+  },
+  {
+    "familyId": "test-bertrand-14-0",
+    "familyName": "Bertrand",
+    "montant": 22,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-14-00",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-14T12:00:00Z"
+  },
+  {
+    "familyId": "test-morel-14-1",
+    "familyName": "Morel",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-14-01",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-14T12:00:00Z"
+  },
+  {
+    "familyId": "test-girard-14-2",
+    "familyName": "Girard",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-14-02",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-14T12:00:00Z"
+  },
+  {
+    "familyId": "test-andre-14-3",
+    "familyName": "Andre",
+    "montant": 50,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-14-03",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-14T12:00:00Z"
+  },
+  {
+    "familyId": "test-mercier-14-4",
+    "familyName": "Mercier",
+    "montant": 26,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-14-04",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-14T12:00:00Z"
+  },
+  {
+    "familyId": "test-blanchard-14-5",
+    "familyName": "Blanchard",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-14-05",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-14T12:00:00Z"
+  },
+  {
+    "familyId": "test-guerin-14-6",
+    "familyName": "Guerin",
+    "montant": 60,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-14-06",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-14T12:00:00Z"
+  },
+  {
+    "familyId": "test-boyer-14-7",
+    "familyName": "Boyer",
+    "montant": 60,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-14-07",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-14T12:00:00Z"
+  },
+  {
+    "familyId": "test-garnier-14-8",
+    "familyName": "Garnier",
+    "montant": 45,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-14-08",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-14T12:00:00Z"
+  },
+  {
+    "familyId": "test-faure-14-9",
+    "familyName": "Faure",
+    "montant": 200,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-14-09",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-14T12:00:00Z"
+  },
+  {
+    "familyId": "test-dupont-15-0",
+    "familyName": "Dupont",
+    "montant": 50,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-15-00",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-15T12:00:00Z"
+  },
+  {
+    "familyId": "test-martin-15-1",
+    "familyName": "Martin",
+    "montant": 22,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-15-01",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-15T12:00:00Z"
+  },
+  {
+    "familyId": "test-lefebvre-15-2",
+    "familyName": "Lefebvre",
+    "montant": 25,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-15-02",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-15T12:00:00Z"
+  },
+  {
+    "familyId": "test-brestaz-15-3",
+    "familyName": "Brestaz",
+    "montant": 25,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-15-03",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-15T12:00:00Z"
+  },
+  {
+    "familyId": "test-durand-15-4",
+    "familyName": "Durand",
+    "montant": 25,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-15-04",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-15T12:00:00Z"
+  },
+  {
+    "familyId": "test-leroy-15-5",
+    "familyName": "Leroy",
+    "montant": 40,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-15-05",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-15T12:00:00Z"
+  },
+  {
+    "familyId": "test-moreau-15-6",
+    "familyName": "Moreau",
+    "montant": 120,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-15-06",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-15T12:00:00Z"
+  },
+  {
+    "familyId": "test-simon-15-7",
+    "familyName": "Simon",
+    "montant": 60,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-15-07",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-15T12:00:00Z"
+  },
+  {
+    "familyId": "test-laurent-15-8",
+    "familyName": "Laurent",
+    "montant": 60,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-15-08",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-15T12:00:00Z"
+  },
+  {
+    "familyId": "test-michel-15-9",
+    "familyName": "Michel",
+    "montant": 150,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-15-09",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-15T12:00:00Z"
+  },
+  {
+    "familyId": "test-garcia-16-0",
+    "familyName": "Garcia",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-16-00",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-16T12:00:00Z"
+  },
+  {
+    "familyId": "test-thomas-16-1",
+    "familyName": "Thomas",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-16-01",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-16T12:00:00Z"
+  },
+  {
+    "familyId": "test-robert-16-2",
+    "familyName": "Robert",
+    "montant": 40,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-16-02",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-16T12:00:00Z"
+  },
+  {
+    "familyId": "test-richard-16-3",
+    "familyName": "Richard",
+    "montant": 60,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-16-03",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-16T12:00:00Z"
+  },
+  {
+    "familyId": "test-petit-16-4",
+    "familyName": "Petit",
+    "montant": 45,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-16-04",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-16T12:00:00Z"
+  },
+  {
+    "familyId": "test-bernard-16-5",
+    "familyName": "Bernard",
+    "montant": 25,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-16-05",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-16T12:00:00Z"
+  },
+  {
+    "familyId": "test-dubois-16-6",
+    "familyName": "Dubois",
+    "montant": 250,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-16-06",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-16T12:00:00Z"
+  },
+  {
+    "familyId": "test-lemoine-16-7",
+    "familyName": "Lemoine",
+    "montant": 80,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-16-07",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-16T12:00:00Z"
+  },
+  {
+    "familyId": "test-roux-16-8",
+    "familyName": "Roux",
+    "montant": 100,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-16-08",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-16T12:00:00Z"
+  },
+  {
+    "familyId": "test-david-16-9",
+    "familyName": "David",
+    "montant": 120,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-16-09",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-16T12:00:00Z"
+  },
+  {
+    "familyId": "test-bertrand-17-0",
+    "familyName": "Bertrand",
+    "montant": 35,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-17-00",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-17T12:00:00Z"
+  },
+  {
+    "familyId": "test-morel-17-1",
+    "familyName": "Morel",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-17-01",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-17T12:00:00Z"
+  },
+  {
+    "familyId": "test-girard-17-2",
+    "familyName": "Girard",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-17-02",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-17T12:00:00Z"
+  },
+  {
+    "familyId": "test-andre-17-3",
+    "familyName": "Andre",
+    "montant": 45,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-17-03",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-17T12:00:00Z"
+  },
+  {
+    "familyId": "test-mercier-17-4",
+    "familyName": "Mercier",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-17-04",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-17T12:00:00Z"
+  },
+  {
+    "familyId": "test-blanchard-17-5",
+    "familyName": "Blanchard",
+    "montant": 60,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-17-05",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-17T12:00:00Z"
+  },
+  {
+    "familyId": "test-guerin-17-6",
+    "familyName": "Guerin",
+    "montant": 60,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-17-06",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-17T12:00:00Z"
+  },
+  {
+    "familyId": "test-boyer-17-7",
+    "familyName": "Boyer",
+    "montant": 150,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-17-07",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-17T12:00:00Z"
+  },
+  {
+    "familyId": "test-garnier-17-8",
+    "familyName": "Garnier",
+    "montant": 80,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-17-08",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-17T12:00:00Z"
+  },
+  {
+    "familyId": "test-faure-17-9",
+    "familyName": "Faure",
+    "montant": 60,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-17-09",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-17T12:00:00Z"
+  },
+  {
+    "familyId": "test-dupont-18-0",
+    "familyName": "Dupont",
+    "montant": 50,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-18-00",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-18T12:00:00Z"
+  },
+  {
+    "familyId": "test-martin-18-1",
+    "familyName": "Martin",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-18-01",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-18T12:00:00Z"
+  },
+  {
+    "familyId": "test-lefebvre-18-2",
+    "familyName": "Lefebvre",
+    "montant": 55,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-18-02",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-18T12:00:00Z"
+  },
+  {
+    "familyId": "test-brestaz-18-3",
+    "familyName": "Brestaz",
+    "montant": 35,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-18-03",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-18T12:00:00Z"
+  },
+  {
+    "familyId": "test-durand-18-4",
+    "familyName": "Durand",
+    "montant": 60,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-18-04",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-18T12:00:00Z"
+  },
+  {
+    "familyId": "test-leroy-18-5",
+    "familyName": "Leroy",
+    "montant": 50,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-18-05",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-18T12:00:00Z"
+  },
+  {
+    "familyId": "test-moreau-18-6",
+    "familyName": "Moreau",
+    "montant": 150,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-18-06",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-18T12:00:00Z"
+  },
+  {
+    "familyId": "test-simon-18-7",
+    "familyName": "Simon",
+    "montant": 80,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-18-07",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-18T12:00:00Z"
+  },
+  {
+    "familyId": "test-laurent-18-8",
+    "familyName": "Laurent",
+    "montant": 120,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-18-08",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-18T12:00:00Z"
+  },
+  {
+    "familyId": "test-michel-18-9",
+    "familyName": "Michel",
+    "montant": 45,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-18-09",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-18T12:00:00Z"
+  },
+  {
+    "familyId": "test-garcia-19-0",
+    "familyName": "Garcia",
+    "montant": 26,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-19-00",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-19T12:00:00Z"
+  },
+  {
+    "familyId": "test-thomas-19-1",
+    "familyName": "Thomas",
+    "montant": 26,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-19-01",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-19T12:00:00Z"
+  },
+  {
+    "familyId": "test-robert-19-2",
+    "familyName": "Robert",
+    "montant": 50,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-19-02",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-19T12:00:00Z"
+  },
+  {
+    "familyId": "test-richard-19-3",
+    "familyName": "Richard",
+    "montant": 50,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-19-03",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-19T12:00:00Z"
+  },
+  {
+    "familyId": "test-petit-19-4",
+    "familyName": "Petit",
+    "montant": 25,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-19-04",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-19T12:00:00Z"
+  },
+  {
+    "familyId": "test-bernard-19-5",
+    "familyName": "Bernard",
+    "montant": 26,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-19-05",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-19T12:00:00Z"
+  },
+  {
+    "familyId": "test-dubois-19-6",
+    "familyName": "Dubois",
+    "montant": 60,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-19-06",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-19T12:00:00Z"
+  },
+  {
+    "familyId": "test-lemoine-19-7",
+    "familyName": "Lemoine",
+    "montant": 100,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-19-07",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-19T12:00:00Z"
+  },
+  {
+    "familyId": "test-roux-19-8",
+    "familyName": "Roux",
+    "montant": 80,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-19-08",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-19T12:00:00Z"
+  },
+  {
+    "familyId": "test-david-19-9",
+    "familyName": "David",
+    "montant": 120,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-19-09",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-19T12:00:00Z"
+  },
+  {
+    "familyId": "test-bertrand-20-0",
+    "familyName": "Bertrand",
+    "montant": 22,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-20-00",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-20T12:00:00Z"
+  },
+  {
+    "familyId": "test-morel-20-1",
+    "familyName": "Morel",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-20-01",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-20T12:00:00Z"
+  },
+  {
+    "familyId": "test-girard-20-2",
+    "familyName": "Girard",
+    "montant": 60,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-20-02",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-20T12:00:00Z"
+  },
+  {
+    "familyId": "test-andre-20-3",
+    "familyName": "Andre",
+    "montant": 35,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-20-03",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-20T12:00:00Z"
+  },
+  {
+    "familyId": "test-mercier-20-4",
+    "familyName": "Mercier",
+    "montant": 40,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-20-04",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-20T12:00:00Z"
+  },
+  {
+    "familyId": "test-blanchard-20-5",
+    "familyName": "Blanchard",
+    "montant": 26,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-20-05",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-20T12:00:00Z"
+  },
+  {
+    "familyId": "test-guerin-20-6",
+    "familyName": "Guerin",
+    "montant": 100,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-20-06",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-20T12:00:00Z"
+  },
+  {
+    "familyId": "test-boyer-20-7",
+    "familyName": "Boyer",
+    "montant": 200,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-20-07",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-20T12:00:00Z"
+  },
+  {
+    "familyId": "test-garnier-20-8",
+    "familyName": "Garnier",
+    "montant": 80,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-20-08",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-20T12:00:00Z"
+  },
+  {
+    "familyId": "test-faure-20-9",
+    "familyName": "Faure",
+    "montant": 175,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-20-09",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-20T12:00:00Z"
+  },
+  {
+    "familyId": "test-dupont-21-0",
+    "familyName": "Dupont",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-21-00",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-21T12:00:00Z"
+  },
+  {
+    "familyId": "test-martin-21-1",
+    "familyName": "Martin",
+    "montant": 25,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-21-01",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-21T12:00:00Z"
+  },
+  {
+    "familyId": "test-lefebvre-21-2",
+    "familyName": "Lefebvre",
+    "montant": 22,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-21-02",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-21T12:00:00Z"
+  },
+  {
+    "familyId": "test-brestaz-21-3",
+    "familyName": "Brestaz",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-21-03",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-21T12:00:00Z"
+  },
+  {
+    "familyId": "test-durand-21-4",
+    "familyName": "Durand",
+    "montant": 45,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-21-04",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-21T12:00:00Z"
+  },
+  {
+    "familyId": "test-leroy-21-5",
+    "familyName": "Leroy",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-21-05",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-21T12:00:00Z"
+  },
+  {
+    "familyId": "test-moreau-21-6",
+    "familyName": "Moreau",
+    "montant": 120,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-21-06",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-21T12:00:00Z"
+  },
+  {
+    "familyId": "test-simon-21-7",
+    "familyName": "Simon",
+    "montant": 120,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-21-07",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-21T12:00:00Z"
+  },
+  {
+    "familyId": "test-laurent-21-8",
+    "familyName": "Laurent",
+    "montant": 150,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-21-08",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-21T12:00:00Z"
+  },
+  {
+    "familyId": "test-michel-21-9",
+    "familyName": "Michel",
+    "montant": 60,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-21-09",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-21T12:00:00Z"
+  },
+  {
+    "familyId": "test-garcia-22-0",
+    "familyName": "Garcia",
+    "montant": 35,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-22-00",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-22T12:00:00Z"
+  },
+  {
+    "familyId": "test-thomas-22-1",
+    "familyName": "Thomas",
+    "montant": 40,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-22-01",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-22T12:00:00Z"
+  },
+  {
+    "familyId": "test-robert-22-2",
+    "familyName": "Robert",
+    "montant": 35,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-22-02",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-22T12:00:00Z"
+  },
+  {
+    "familyId": "test-richard-22-3",
+    "familyName": "Richard",
+    "montant": 25,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-22-03",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-22T12:00:00Z"
+  },
+  {
+    "familyId": "test-petit-22-4",
+    "familyName": "Petit",
+    "montant": 26,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-22-04",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-22T12:00:00Z"
+  },
+  {
+    "familyId": "test-bernard-22-5",
+    "familyName": "Bernard",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-22-05",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-22T12:00:00Z"
+  },
+  {
+    "familyId": "test-dubois-22-6",
+    "familyName": "Dubois",
+    "montant": 80,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-22-06",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-22T12:00:00Z"
+  },
+  {
+    "familyId": "test-lemoine-22-7",
+    "familyName": "Lemoine",
+    "montant": 200,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-22-07",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-22T12:00:00Z"
+  },
+  {
+    "familyId": "test-roux-22-8",
+    "familyName": "Roux",
+    "montant": 150,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-22-08",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-22T12:00:00Z"
+  },
+  {
+    "familyId": "test-david-22-9",
+    "familyName": "David",
+    "montant": 60,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-22-09",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-22T12:00:00Z"
+  },
+  {
+    "familyId": "test-bertrand-23-0",
+    "familyName": "Bertrand",
+    "montant": 55,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-23-00",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-23T12:00:00Z"
+  },
+  {
+    "familyId": "test-morel-23-1",
+    "familyName": "Morel",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-23-01",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-23T12:00:00Z"
+  },
+  {
+    "familyId": "test-girard-23-2",
+    "familyName": "Girard",
+    "montant": 40,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-23-02",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-23T12:00:00Z"
+  },
+  {
+    "familyId": "test-andre-23-3",
+    "familyName": "Andre",
+    "montant": 50,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-23-03",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-23T12:00:00Z"
+  },
+  {
+    "familyId": "test-mercier-23-4",
+    "familyName": "Mercier",
+    "montant": 60,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-23-04",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-23T12:00:00Z"
+  },
+  {
+    "familyId": "test-blanchard-23-5",
+    "familyName": "Blanchard",
+    "montant": 35,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-23-05",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-23T12:00:00Z"
+  },
+  {
+    "familyId": "test-guerin-23-6",
+    "familyName": "Guerin",
+    "montant": 80,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-23-06",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-23T12:00:00Z"
+  },
+  {
+    "familyId": "test-boyer-23-7",
+    "familyName": "Boyer",
+    "montant": 175,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-23-07",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-23T12:00:00Z"
+  },
+  {
+    "familyId": "test-garnier-23-8",
+    "familyName": "Garnier",
+    "montant": 120,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-23-08",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-23T12:00:00Z"
+  },
+  {
+    "familyId": "test-faure-23-9",
+    "familyName": "Faure",
+    "montant": 120,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-23-09",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-23T12:00:00Z"
+  },
+  {
+    "familyId": "test-dupont-24-0",
+    "familyName": "Dupont",
+    "montant": 35,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-24-00",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-24T12:00:00Z"
+  },
+  {
+    "familyId": "test-martin-24-1",
+    "familyName": "Martin",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-24-01",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-24T12:00:00Z"
+  },
+  {
+    "familyId": "test-lefebvre-24-2",
+    "familyName": "Lefebvre",
+    "montant": 26,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-24-02",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-24T12:00:00Z"
+  },
+  {
+    "familyId": "test-brestaz-24-3",
+    "familyName": "Brestaz",
+    "montant": 40,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-24-03",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-24T12:00:00Z"
+  },
+  {
+    "familyId": "test-durand-24-4",
+    "familyName": "Durand",
+    "montant": 60,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-24-04",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-24T12:00:00Z"
+  },
+  {
+    "familyId": "test-leroy-24-5",
+    "familyName": "Leroy",
+    "montant": 55,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-24-05",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-24T12:00:00Z"
+  },
+  {
+    "familyId": "test-moreau-24-6",
+    "familyName": "Moreau",
+    "montant": 150,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-24-06",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-24T12:00:00Z"
+  },
+  {
+    "familyId": "test-simon-24-7",
+    "familyName": "Simon",
+    "montant": 60,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-24-07",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-24T12:00:00Z"
+  },
+  {
+    "familyId": "test-laurent-24-8",
+    "familyName": "Laurent",
+    "montant": 120,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-24-08",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-24T12:00:00Z"
+  },
+  {
+    "familyId": "test-michel-24-9",
+    "familyName": "Michel",
+    "montant": 175,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-24-09",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-24T12:00:00Z"
+  },
+  {
+    "familyId": "test-garcia-25-0",
+    "familyName": "Garcia",
+    "montant": 55,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-25-00",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-25T12:00:00Z"
+  },
+  {
+    "familyId": "test-thomas-25-1",
+    "familyName": "Thomas",
+    "montant": 45,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-25-01",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-25T12:00:00Z"
+  },
+  {
+    "familyId": "test-robert-25-2",
+    "familyName": "Robert",
+    "montant": 45,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-25-02",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-25T12:00:00Z"
+  },
+  {
+    "familyId": "test-richard-25-3",
+    "familyName": "Richard",
+    "montant": 50,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-25-03",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-25T12:00:00Z"
+  },
+  {
+    "familyId": "test-petit-25-4",
+    "familyName": "Petit",
+    "montant": 26,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-25-04",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-25T12:00:00Z"
+  },
+  {
+    "familyId": "test-bernard-25-5",
+    "familyName": "Bernard",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-25-05",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-25T12:00:00Z"
+  },
+  {
+    "familyId": "test-dubois-25-6",
+    "familyName": "Dubois",
+    "montant": 175,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-25-06",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-25T12:00:00Z"
+  },
+  {
+    "familyId": "test-lemoine-25-7",
+    "familyName": "Lemoine",
+    "montant": 120,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-25-07",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-25T12:00:00Z"
+  },
+  {
+    "familyId": "test-roux-25-8",
+    "familyName": "Roux",
+    "montant": 100,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-25-08",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-25T12:00:00Z"
+  },
+  {
+    "familyId": "test-david-25-9",
+    "familyName": "David",
+    "montant": 80,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-25-09",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-25T12:00:00Z"
+  },
+  {
+    "familyId": "test-bertrand-26-0",
+    "familyName": "Bertrand",
+    "montant": 22,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-26-00",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-26T12:00:00Z"
+  },
+  {
+    "familyId": "test-morel-26-1",
+    "familyName": "Morel",
+    "montant": 45,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-26-01",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-26T12:00:00Z"
+  },
+  {
+    "familyId": "test-girard-26-2",
+    "familyName": "Girard",
+    "montant": 25,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-26-02",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-26T12:00:00Z"
+  },
+  {
+    "familyId": "test-andre-26-3",
+    "familyName": "Andre",
+    "montant": 40,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-26-03",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-26T12:00:00Z"
+  },
+  {
+    "familyId": "test-mercier-26-4",
+    "familyName": "Mercier",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-26-04",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-26T12:00:00Z"
+  },
+  {
+    "familyId": "test-blanchard-26-5",
+    "familyName": "Blanchard",
+    "montant": 45,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-26-05",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-26T12:00:00Z"
+  },
+  {
+    "familyId": "test-guerin-26-6",
+    "familyName": "Guerin",
+    "montant": 120,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-26-06",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-26T12:00:00Z"
+  },
+  {
+    "familyId": "test-boyer-26-7",
+    "familyName": "Boyer",
+    "montant": 60,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-26-07",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-26T12:00:00Z"
+  },
+  {
+    "familyId": "test-garnier-26-8",
+    "familyName": "Garnier",
+    "montant": 175,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-26-08",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-26T12:00:00Z"
+  },
+  {
+    "familyId": "test-faure-26-9",
+    "familyName": "Faure",
+    "montant": 80,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-26-09",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-26T12:00:00Z"
+  },
+  {
+    "familyId": "test-dupont-27-0",
+    "familyName": "Dupont",
+    "montant": 45,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-27-00",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-27T12:00:00Z"
+  },
+  {
+    "familyId": "test-martin-27-1",
+    "familyName": "Martin",
+    "montant": 50,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-27-01",
+    "activityTitle": "Cours Galop d'Or",
+    "dateISO": "2026-03-27T12:00:00Z"
+  },
+  {
+    "familyId": "test-lefebvre-27-2",
+    "familyName": "Lefebvre",
+    "montant": 25,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-27-02",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-27T12:00:00Z"
+  },
+  {
+    "familyId": "test-brestaz-27-3",
+    "familyName": "Brestaz",
+    "montant": 26,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-27-03",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-27T12:00:00Z"
+  },
+  {
+    "familyId": "test-durand-27-4",
+    "familyName": "Durand",
+    "montant": 60,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-27-04",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-27T12:00:00Z"
+  },
+  {
+    "familyId": "test-leroy-27-5",
+    "familyName": "Leroy",
+    "montant": 50,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-27-05",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-27T12:00:00Z"
+  },
+  {
+    "familyId": "test-moreau-27-6",
+    "familyName": "Moreau",
+    "montant": 175,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-27-06",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-27T12:00:00Z"
+  },
+  {
+    "familyId": "test-simon-27-7",
+    "familyName": "Simon",
+    "montant": 200,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-27-07",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-27T12:00:00Z"
+  },
+  {
+    "familyId": "test-laurent-27-8",
+    "familyName": "Laurent",
+    "montant": 200,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-27-08",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-27T12:00:00Z"
+  },
+  {
+    "familyId": "test-michel-27-9",
+    "familyName": "Michel",
+    "montant": 200,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-27-09",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-27T12:00:00Z"
+  },
+  {
+    "familyId": "test-garcia-28-0",
+    "familyName": "Garcia",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-28-00",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-28T12:00:00Z"
+  },
+  {
+    "familyId": "test-thomas-28-1",
+    "familyName": "Thomas",
+    "montant": 60,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-28-01",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-28T12:00:00Z"
+  },
+  {
+    "familyId": "test-robert-28-2",
+    "familyName": "Robert",
+    "montant": 50,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-28-02",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-28T12:00:00Z"
+  },
+  {
+    "familyId": "test-richard-28-3",
+    "familyName": "Richard",
+    "montant": 60,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-28-03",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-28T12:00:00Z"
+  },
+  {
+    "familyId": "test-petit-28-4",
+    "familyName": "Petit",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-28-04",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-28T12:00:00Z"
+  },
+  {
+    "familyId": "test-bernard-28-5",
+    "familyName": "Bernard",
+    "montant": 25,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-28-05",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-28T12:00:00Z"
+  },
+  {
+    "familyId": "test-dubois-28-6",
+    "familyName": "Dubois",
+    "montant": 120,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-28-06",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-28T12:00:00Z"
+  },
+  {
+    "familyId": "test-lemoine-28-7",
+    "familyName": "Lemoine",
+    "montant": 175,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-28-07",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-28T12:00:00Z"
+  },
+  {
+    "familyId": "test-roux-28-8",
+    "familyName": "Roux",
+    "montant": 60,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-28-08",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-28T12:00:00Z"
+  },
+  {
+    "familyId": "test-david-28-9",
+    "familyName": "David",
+    "montant": 80,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-28-09",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-28T12:00:00Z"
+  },
+  {
+    "familyId": "test-bertrand-29-0",
+    "familyName": "Bertrand",
+    "montant": 40,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-29-00",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-29T12:00:00Z"
+  },
+  {
+    "familyId": "test-morel-29-1",
+    "familyName": "Morel",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-29-01",
+    "activityTitle": "Cours Galop d'Argent",
+    "dateISO": "2026-03-29T12:00:00Z"
+  },
+  {
+    "familyId": "test-girard-29-2",
+    "familyName": "Girard",
+    "montant": 40,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-29-02",
+    "activityTitle": "Cours Baby Poney",
+    "dateISO": "2026-03-29T12:00:00Z"
+  },
+  {
+    "familyId": "test-andre-29-3",
+    "familyName": "Andre",
+    "montant": 35,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-29-03",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-29T12:00:00Z"
+  },
+  {
+    "familyId": "test-mercier-29-4",
+    "familyName": "Mercier",
+    "montant": 45,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-29-04",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-29T12:00:00Z"
+  },
+  {
+    "familyId": "test-blanchard-29-5",
+    "familyName": "Blanchard",
+    "montant": 22,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-29-05",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-29T12:00:00Z"
+  },
+  {
+    "familyId": "test-guerin-29-6",
+    "familyName": "Guerin",
+    "montant": 200,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-29-06",
+    "activityTitle": "Balade forêt",
+    "dateISO": "2026-03-29T12:00:00Z"
+  },
+  {
+    "familyId": "test-boyer-29-7",
+    "familyName": "Boyer",
+    "montant": 60,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-29-07",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-29T12:00:00Z"
+  },
+  {
+    "familyId": "test-garnier-29-8",
+    "familyName": "Garnier",
+    "montant": 175,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-29-08",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-29T12:00:00Z"
+  },
+  {
+    "familyId": "test-faure-29-9",
+    "familyName": "Faure",
+    "montant": 45,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-29-09",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-29T12:00:00Z"
+  },
+  {
+    "familyId": "test-dupont-30-0",
+    "familyName": "Dupont",
+    "montant": 30,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-30-00",
+    "activityTitle": "Stage Pâques",
+    "dateISO": "2026-03-30T12:00:00Z"
+  },
+  {
+    "familyId": "test-martin-30-1",
+    "familyName": "Martin",
+    "montant": 40,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-30-01",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-30T12:00:00Z"
+  },
+  {
+    "familyId": "test-lefebvre-30-2",
+    "familyName": "Lefebvre",
+    "montant": 50,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-30-02",
+    "activityTitle": "Cours particulier",
+    "dateISO": "2026-03-30T12:00:00Z"
+  },
+  {
+    "familyId": "test-brestaz-30-3",
+    "familyName": "Brestaz",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-30-03",
+    "activityTitle": "Voltige",
+    "dateISO": "2026-03-30T12:00:00Z"
+  },
+  {
+    "familyId": "test-durand-30-4",
+    "familyName": "Durand",
+    "montant": 28,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-30-04",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-30T12:00:00Z"
+  },
+  {
+    "familyId": "test-leroy-30-5",
+    "familyName": "Leroy",
+    "montant": 40,
+    "mode": "cb_terminal",
+    "modeLabel": "CB Terminal",
+    "ref": "TEST-2026-03-30-05",
+    "activityTitle": "Balade plage",
+    "dateISO": "2026-03-30T12:00:00Z"
+  },
+  {
+    "familyId": "test-moreau-30-6",
+    "familyName": "Moreau",
+    "montant": 60,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-30-06",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-30T12:00:00Z"
+  },
+  {
+    "familyId": "test-simon-30-7",
+    "familyName": "Simon",
+    "montant": 175,
+    "mode": "virement",
+    "modeLabel": "Virement",
+    "ref": "TEST-2026-03-30-07",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-30T12:00:00Z"
+  },
+  {
+    "familyId": "test-laurent-30-8",
+    "familyName": "Laurent",
+    "montant": 80,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-30-08",
+    "activityTitle": "Stage Bronze",
+    "dateISO": "2026-03-30T12:00:00Z"
+  },
+  {
+    "familyId": "test-michel-30-9",
+    "familyName": "Michel",
+    "montant": 80,
+    "mode": "cheque",
+    "modeLabel": "Chèque",
+    "ref": "TEST-2026-03-30-09",
+    "activityTitle": "Pony Games",
+    "dateISO": "2026-03-30T12:00:00Z"
+  }
+]
