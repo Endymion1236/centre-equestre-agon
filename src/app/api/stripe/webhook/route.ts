@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { loadTemplate } from "@/lib/email-template-loader";
 
 export const dynamic = "force-dynamic";
 
@@ -59,25 +60,24 @@ export async function POST(req: NextRequest) {
           const parentEmail = session.customer_details?.email || "";
           const resendKey = process.env.RESEND_API_KEY;
           if (parentEmail && resendKey) {
-            await fetch("https://api.resend.com/emails", {
-              method: "POST",
-              headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
-              body: JSON.stringify({
-                from: process.env.RESEND_FROM_EMAIL || "Centre Equestre <onboarding@resend.dev>",
-                to: parentEmail,
-                ...(process.env.RESEND_BCC_EMAIL ? { bcc: process.env.RESEND_BCC_EMAIL } : {}),
-                subject: `Inscription confirmée — Paiement mensuel en ${meta.nbEcheances} fois`,
-                html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-                  <p>Bonjour <strong>${meta.familyName}</strong>,</p>
-                  <p>Votre inscription est confirmée avec un paiement en <strong>${meta.nbEcheances} mensualités</strong>.</p>
-                  <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
-                    <p style="margin:0;color:#166534;font-weight:600;">✅ 1ère échéance : ${amountPaid.toFixed(2)}€ reçue</p>
-                    <p style="margin:8px 0 0;color:#555;font-size:13px;">Les ${parseInt(meta.nbEcheances)-1} prochaines mensualités de ${amountPaid.toFixed(2)}€ seront prélevées automatiquement.</p>
-                  </div>
-                  <p>À bientôt au centre équestre !</p>
-                </div>`,
-              }),
-            }).catch(e => console.error("Email error:", e));
+            try {
+              const { subject, html } = await loadTemplate("confirmationAbonnement", {
+                parentName: meta.familyName || "Client",
+                nbEcheances: meta.nbEcheances || "10",
+                montant: amountPaid.toFixed(2),
+                nbRestantes: String(parseInt(meta.nbEcheances || "10") - 1),
+              });
+              await fetch("https://api.resend.com/emails", {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  from: process.env.RESEND_FROM_EMAIL || "Centre Equestre <onboarding@resend.dev>",
+                  to: parentEmail,
+                  ...(process.env.RESEND_BCC_EMAIL ? { bcc: process.env.RESEND_BCC_EMAIL } : {}),
+                  subject, html,
+                }),
+              }).catch(e => console.error("Email error:", e));
+            } catch (e) { console.error("Email template error:", e); }
           }
           break;
         }
@@ -144,43 +144,42 @@ export async function POST(req: NextRequest) {
 
             if (parentEmail && resendKey) {
               try {
-                // Déterminer le type d'email selon le contenu du panier
                 const hasStage  = (pData.items || []).some((i: any) => i.activityType === "stage");
                 const hasForfait = pData.echeancesTotal > 1 || pData.type === "annuel";
 
-                let subject = `Paiement reçu — ${amountPaid.toFixed(2)}€`;
-                let html = "";
+                let templateKey: string;
+                let vars: Record<string, string | number>;
 
                 if (hasForfait) {
-                  subject = `Inscription annuelle confirmée — ${(pData.items?.[0]?.childName) || ""}`;
-                  html = `<p>Bonjour <strong>${parentName}</strong>,</p>
-                  <p>L'inscription annuelle de <strong>${(pData.items?.[0]?.childName) || ""}</strong> est confirmée.</p>
-                  <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:16px 0;">
-                    <p style="margin:0;color:#854d0e;font-weight:600;">${prestations}</p>
-                    <p style="margin:8px 0 0;color:#1e3a5f;font-weight:bold;font-size:16px;">${amountPaid.toFixed(2)}€ reçus${isDeposit ? ` (acompte ${depositPercent}%)` : ""}</p>
-                    ${isDeposit ? `<p style="margin:6px 0 0;color:#92400e;font-size:13px;">Le solde sera prélevé selon votre échéancier.</p>` : ""}
-                  </div>
-                  <p>À bientôt au centre équestre !</p>`;
+                  templateKey = "confirmationForfait";
+                  vars = {
+                    parentName,
+                    childName: (pData.items?.[0]?.childName) || "",
+                    forfaitLabel: prestations,
+                    nbSeances: "",
+                    planPaiement: isDeposit ? `acompte ${depositPercent}%` : "comptant",
+                    totalTTC: amountPaid.toFixed(2),
+                  };
                 } else if (hasStage) {
-                  const dates = (pData.items || []).map((i: any) => i.activityTitle).join(", ");
-                  subject = `Stage confirmé — ${(pData.items?.[0]?.activityTitle) || ""}`;
-                  html = `<p>Bonjour <strong>${parentName}</strong>,</p>
-                  <p>L'inscription au stage est confirmée !</p>
-                  <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
-                    <p style="margin:0;color:#166534;font-weight:600;">${dates}</p>
-                    <p style="margin:8px 0 0;color:#1e3a5f;font-weight:bold;font-size:16px;">${amountPaid.toFixed(2)}€ reçus${isDeposit ? ` (acompte ${depositPercent}%)` : ""}</p>
-                    ${isDeposit ? `<p style="margin:6px 0 0;color:#065f46;font-size:13px;">Le solde de ${(pData.totalTTC * 0.7).toFixed(2)}€ sera prélevé 3 jours avant le stage.</p>` : ""}
-                  </div>
-                  <p>À bientôt pour ce stage !</p>`;
+                  templateKey = "confirmationStage";
+                  vars = {
+                    parentName,
+                    stageTitle: (pData.items?.[0]?.activityTitle) || "Stage",
+                    dates: prestations,
+                    horaires: "",
+                    enfants: (pData.items || []).map((i: any) => i.childName).filter(Boolean).join(", "),
+                    montant: amountPaid.toFixed(2),
+                  };
                 } else {
-                  html = `<p>Bonjour <strong>${parentName}</strong>,</p>
-                  <p>Nous avons bien reçu votre paiement :</p>
-                  <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
-                    <p style="margin:0;color:#166534;font-weight:600;font-size:18px;">✅ ${amountPaid.toFixed(2)}€ reçus</p>
-                    <p style="margin:8px 0 0;color:#555;font-size:13px;">${prestations}</p>
-                  </div>
-                  <p>À bientôt au centre équestre !</p>`;
+                  templateKey = "confirmationPaiement";
+                  vars = {
+                    parentName,
+                    montant: amountPaid.toFixed(2),
+                    prestations,
+                  };
                 }
+
+                const { subject, html } = await loadTemplate(templateKey, vars);
 
                 await fetch("https://api.resend.com/emails", {
                   method: "POST",
@@ -189,8 +188,7 @@ export async function POST(req: NextRequest) {
                     from: fromEmail,
                     to: parentEmail,
                     ...(process.env.RESEND_BCC_EMAIL ? { bcc: process.env.RESEND_BCC_EMAIL } : {}),
-                    subject,
-                    html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">${html}<hr style="margin:24px 0;border:none;border-top:1px solid #eee;"><p style="color:#999;font-size:11px;text-align:center;">Centre Équestre d'Agon-Coutainville — Paiement sécurisé par Stripe</p></div>`,
+                    subject, html,
                   }),
                 });
                 console.log(`  → Email confirmation envoyé à ${parentEmail}`);
