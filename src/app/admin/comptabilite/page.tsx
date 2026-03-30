@@ -289,53 +289,65 @@ export default function ComptabilitePage() {
           }
         }
 
-        // ── 2. CB terminal — matching agrégat ─────────────────────────────
-        // Ta banque remet en 1 virement le total CB de la journée (J, J+1 ou J+2)
-        if (label.includes("REMISE") || label.includes("CB") || label.includes("TPE") || label.includes("CARTE") || label.includes("PAIEMENT")) {
+        // ── 2. CB terminal — matching agrégat par jour ───────────────────
+        // La banque remet en 1 virement le total CB d'une journée (J-1, J-2, etc.)
+        if (label.includes("REMISE") || label.includes("CB") || label.includes("TPE") || label.includes("CARTE")) {
           const cbEncs = periodEnc.filter(e => e.mode === "cb_terminal");
 
-          // a) Essai fenêtre ±3 jours
-          for (let window = 0; window <= 3; window++) {
-            const encsInWindow = cbEncs.filter(e => {
-              if (!bankDate) return true;
-              const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
-              if (!d) return false;
-              const diff = Math.abs(bankDate.getTime() - d.getTime()) / (1000 * 60 * 60 * 24);
-              return diff <= window;
-            });
-            const windowTotal = encsInWindow.reduce((s, e) => s + (e.montant || 0), 0);
-            if (windowTotal > 0 && Math.abs(windowTotal - bl.amount) < 0.02) {
-              const dayLabel = window === 0 ? "même jour" : `J+${window}`;
+          // a) Grouper les encaissements CB par jour
+          const cbByDay: Record<string, { total: number; count: number; encs: any[] }> = {};
+          for (const e of cbEncs) {
+            const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+            if (!d) continue;
+            const dayKey = d.toISOString().split("T")[0];
+            if (!cbByDay[dayKey]) cbByDay[dayKey] = { total: 0, count: 0, encs: [] };
+            cbByDay[dayKey].total += (e.montant || 0);
+            cbByDay[dayKey].count++;
+            cbByDay[dayKey].encs.push(e);
+          }
+
+          // b) Chercher un jour dont le total CB = montant de la remise (dans une fenêtre J-3)
+          for (const [dayKey, dayData] of Object.entries(cbByDay)) {
+            const dayTotal = Math.round(dayData.total * 100) / 100;
+            if (Math.abs(dayTotal - bl.amount) < 0.02) {
+              // Vérifier que ce jour est dans la fenêtre (la remise arrive J+1 ou J+2 après les CB)
+              if (bankDate) {
+                const encDay = new Date(dayKey);
+                const diff = (bankDate.getTime() - encDay.getTime()) / (1000 * 60 * 60 * 24);
+                if (diff < -1 || diff > 5) continue; // la remise doit être APRÈS les CB (J+0 à J+5)
+              }
+              const dayLabel = dayKey.split("-").reverse().join("/");
               return {
                 ...bl, matched: true, matchType: "CB Terminal",
-                matchDetail: `${encsInWindow.length} transaction(s) CB sur ${dayLabel} = ${windowTotal.toFixed(2)}€`,
+                matchDetail: `${dayData.count} transaction(s) CB du ${dayLabel} = ${dayTotal.toFixed(2)}€`,
               };
             }
           }
 
-          // b) Matching agrégat sur toute la période — trouver un sous-ensemble dont la somme = bl.amount
-          // (on ne teste que jusqu'à 15 encaissements pour les perfs)
-          const cbSlice = cbEncs.slice(0, 15);
-          const target = Math.round(bl.amount * 100);
-          // Recherche gloutonne par date proche
-          const sorted = [...cbSlice].sort((a, b) => {
-            if (!bankDate) return 0;
-            const da = a.date?.seconds ? Math.abs(new Date(a.date.seconds*1000).getTime() - bankDate.getTime()) : Infinity;
-            const db2 = b.date?.seconds ? Math.abs(new Date(b.date.seconds*1000).getTime() - bankDate.getTime()) : Infinity;
-            return da - db2;
-          });
-          let running = 0;
-          const matched2: any[] = [];
-          for (const e of sorted) {
-            running += Math.round((e.montant || 0) * 100);
-            matched2.push(e);
-            if (running === target) {
-              return {
-                ...bl, matched: true, matchType: "CB Terminal",
-                matchDetail: `Agrégat ${matched2.length} transaction(s) CB = ${bl.amount.toFixed(2)}€ (${matched2.map(e=>e.familyName).join(", ")})`,
-              };
+          // c) Agrégat multi-jours : somme de 2-3 jours consécutifs
+          const sortedDays = Object.keys(cbByDay).sort();
+          for (let i = 0; i < sortedDays.length; i++) {
+            let runningTotal = 0;
+            let runningCount = 0;
+            const startDay = sortedDays[i];
+            for (let j = i; j < Math.min(i + 3, sortedDays.length); j++) {
+              runningTotal += cbByDay[sortedDays[j]].total;
+              runningCount += cbByDay[sortedDays[j]].count;
+              const roundedTotal = Math.round(runningTotal * 100) / 100;
+              if (Math.abs(roundedTotal - bl.amount) < 0.02) {
+                const days = sortedDays.slice(i, j + 1).map(d => d.split("-")[2] + "/" + d.split("-")[1]).join(", ");
+                return {
+                  ...bl, matched: true, matchType: "CB Terminal",
+                  matchDetail: `Agrégat ${runningCount} CB (${days}) = ${roundedTotal.toFixed(2)}€`,
+                };
+              }
             }
-            if (running > target) break;
+          }
+
+          // d) Dernier recours : match exact montant unitaire
+          const exactCB = cbEncs.filter(inWindow).find(e => Math.abs((e.montant || 0) - bl.amount) < 0.02);
+          if (exactCB) {
+            return { ...bl, matched: true, matchType: "CB Terminal", matchDetail: `CB ${exactCB.familyName} — ${exactCB.activityTitle || ""}` };
           }
         }
 
@@ -349,21 +361,30 @@ export default function ComptabilitePage() {
 
         // ── 4. Chèque ─────────────────────────────────────────────────────
         if (label.includes("CHQ") || label.includes("CHEQUE") || label.includes("REMISE CHQ")) {
-          // Chèque unitaire
-          const match = periodEnc.filter(inWindow).find(e =>
-            e.mode === "cheque" && Math.abs((e.montant || 0) - bl.amount) < 0.02
+          const allChqEncs = periodEnc.filter(e => e.mode === "cheque");
+
+          // a) Chèque unitaire (montant exact)
+          const match = allChqEncs.filter(inWindow).find(e =>
+            Math.abs((e.montant || 0) - bl.amount) < 0.02
           );
           if (match) return { ...bl, matched: true, matchType: "Chèque", matchDetail: `Chèque ${match.familyName}` };
-          // Remise chèques groupée ±3 jours
-          for (let w = 0; w <= 3; w++) {
-            const chqEncs = periodEnc.filter(e => {
-              if (!bankDate) return e.mode === "cheque";
+
+          // b) Remise chèques groupée — total de TOUS les chèques du mois
+          const totalMois = Math.round(allChqEncs.reduce((s, e) => s + (e.montant || 0), 0) * 100) / 100;
+          if (totalMois > 0 && Math.abs(totalMois - bl.amount) < 0.02) {
+            return { ...bl, matched: true, matchType: "Chèques", matchDetail: `Remise ${allChqEncs.length} chèque(s) du mois = ${totalMois.toFixed(2)}€` };
+          }
+
+          // c) Remise partielle (sous-ensemble par semaine ou par fenêtre ±3j)
+          for (let w = 1; w <= 7; w++) {
+            const chqEncs = allChqEncs.filter(e => {
+              if (!bankDate) return true;
               const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
-              return e.mode === "cheque" && d && Math.abs(bankDate.getTime() - d.getTime()) / (1000*60*60*24) <= w;
+              return d && Math.abs(bankDate.getTime() - d.getTime()) / (1000*60*60*24) <= w;
             });
-            const chqTotal = chqEncs.reduce((s, e) => s + (e.montant || 0), 0);
+            const chqTotal = Math.round(chqEncs.reduce((s, e) => s + (e.montant || 0), 0) * 100) / 100;
             if (chqTotal > 0 && Math.abs(chqTotal - bl.amount) < 0.02) {
-              return { ...bl, matched: true, matchType: "Chèques", matchDetail: `Remise ${chqEncs.length} chèque(s) J+${w} = ${chqTotal.toFixed(2)}€` };
+              return { ...bl, matched: true, matchType: "Chèques", matchDetail: `Remise ${chqEncs.length} chèque(s) = ${chqTotal.toFixed(2)}€` };
             }
           }
         }
