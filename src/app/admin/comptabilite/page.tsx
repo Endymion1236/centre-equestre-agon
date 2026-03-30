@@ -74,9 +74,10 @@ export default function ComptabilitePage() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
-  const [bankLines, setBankLines] = useState<{ date: string; label: string; amount: number; matched: boolean; matchType: string; matchDetail: string; manualPaymentId?: string }[]>([]);
+  const [bankLines, setBankLines] = useState<{ date: string; label: string; amount: number; matched: boolean; matchType: string; matchDetail: string; matchedEncs?: { familyName: string; montant: number; date: string; activityTitle: string; mode: string }[]; manualPaymentId?: string }[]>([]);
   // Pointage manuel
   const [showManualMatch, setShowManualMatch] = useState<number | null>(null); // index de la bankLine
+  const [expandedBankLine, setExpandedBankLine] = useState<number | null>(null);
   const [manualSearch, setManualSearch] = useState("");
 
   const [encaissementsCompta, setEncaissementsCompta] = useState<any[]>([]);
@@ -248,6 +249,15 @@ export default function ComptabilitePage() {
       })).filter(r => r.amount > 0); // Ne garder que les recettes (encaissements reçus)
 
       // Smart matching amélioré
+      // Helper pour convertir un encaissement en détail affichable
+      const encToDetail = (e: any) => ({
+        familyName: e.familyName || "",
+        montant: e.montant || 0,
+        date: e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "",
+        activityTitle: e.activityTitle || "",
+        mode: e.modeLabel || e.mode || "",
+      });
+
       const matched = parsed.map((bl) => {
         const label = bl.label.toUpperCase();
 
@@ -363,6 +373,7 @@ export default function ComptabilitePage() {
               return {
                 ...bl, matched: true, matchType: "CB Terminal",
                 matchDetail: `${dayData.count} transaction(s) CB du ${dayLabel} = ${dayTotal.toFixed(2)}€`,
+                matchedEncs: dayData.encs.map(encToDetail),
               };
             }
           }
@@ -379,9 +390,11 @@ export default function ComptabilitePage() {
               const roundedTotal = Math.round(runningTotal * 100) / 100;
               if (Math.abs(roundedTotal - bl.amount) < 0.02) {
                 const days = sortedDays.slice(i, j + 1).map(d => d.split("-")[2] + "/" + d.split("-")[1]).join(", ");
+                const allEncs = sortedDays.slice(i, j + 1).flatMap(d => cbByDay[d].encs);
                 return {
                   ...bl, matched: true, matchType: "CB Terminal",
                   matchDetail: `Agrégat ${runningCount} CB (${days}) = ${roundedTotal.toFixed(2)}€`,
+                  matchedEncs: allEncs.map(encToDetail),
                 };
               }
             }
@@ -415,7 +428,7 @@ export default function ComptabilitePage() {
           // b) Remise chèques groupée — total de TOUS les chèques du mois
           const totalMois = Math.round(allChqEncs.reduce((s, e) => s + (e.montant || 0), 0) * 100) / 100;
           if (totalMois > 0 && Math.abs(totalMois - bl.amount) < 0.02) {
-            return { ...bl, matched: true, matchType: "Chèques", matchDetail: `Remise ${allChqEncs.length} chèque(s) du mois = ${totalMois.toFixed(2)}€` };
+            return { ...bl, matched: true, matchType: "Chèques", matchDetail: `Remise ${allChqEncs.length} chèque(s) du mois = ${totalMois.toFixed(2)}€`, matchedEncs: allChqEncs.map(encToDetail) };
           }
 
           // c) Remise partielle (sous-ensemble par semaine ou par fenêtre ±3j)
@@ -427,7 +440,7 @@ export default function ComptabilitePage() {
             });
             const chqTotal = Math.round(chqEncs.reduce((s, e) => s + (e.montant || 0), 0) * 100) / 100;
             if (chqTotal > 0 && Math.abs(chqTotal - bl.amount) < 0.02) {
-              return { ...bl, matched: true, matchType: "Chèques", matchDetail: `Remise ${chqEncs.length} chèque(s) = ${chqTotal.toFixed(2)}€` };
+              return { ...bl, matched: true, matchType: "Chèques", matchDetail: `Remise ${chqEncs.length} chèque(s) = ${chqTotal.toFixed(2)}€`, matchedEncs: chqEncs.map(encToDetail) };
             }
           }
         }
@@ -1077,11 +1090,24 @@ export default function ComptabilitePage() {
                 <span className="w-20 text-center">Action</span>
               </div>
               {bankLines.map((bl, i) => (
-                <div key={i} className={`px-5 py-3 border-b border-blue-500/8 flex items-center ${bl.matched ? "" : "bg-orange-50"}`}>
+                <div key={i}>
+                <div className={`px-5 py-3 border-b border-blue-500/8 flex items-center ${bl.matched ? "" : "bg-orange-50"}`}>
                   <span className="w-24 font-body text-xs text-slate-500">{bl.date}</span>
                   <div className="flex-1">
                     <div className="font-body text-sm text-blue-800">{bl.label}</div>
-                    {bl.matched && bl.matchDetail && <div className="font-body text-xs text-green-600 mt-0.5">↳ {bl.matchDetail}</div>}
+                    {bl.matched && bl.matchDetail && (
+                      <div className="font-body text-xs text-green-600 mt-0.5 flex items-center gap-1">
+                        {bl.matchedEncs && bl.matchedEncs.length > 1 ? (
+                          <button onClick={() => setExpandedBankLine(expandedBankLine === i ? null : i)}
+                            className="flex items-center gap-1 text-green-600 bg-transparent border-none cursor-pointer p-0 font-body text-xs hover:text-green-800">
+                            <span className={`inline-block transition-transform ${expandedBankLine === i ? "rotate-90" : ""}`}>▶</span>
+                            ↳ {bl.matchDetail}
+                          </button>
+                        ) : (
+                          <span>↳ {bl.matchDetail}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <span className="w-24 text-right font-body text-sm font-semibold text-green-600">{bl.amount.toFixed(2)}€</span>
                   <span className="w-28 text-center">
@@ -1128,6 +1154,34 @@ export default function ComptabilitePage() {
                       </button>
                     )}
                   </span>
+                </div>
+                {/* Accordéon détail des encaissements */}
+                {expandedBankLine === i && bl.matchedEncs && bl.matchedEncs.length > 1 && (
+                  <div className="px-5 py-2 bg-green-50 border-b border-green-200">
+                    <div className="ml-24">
+                      <table className="w-full" style={{ borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr className="font-body text-[10px] text-slate-400 uppercase">
+                            <th className="text-left py-1 pr-3">Date</th>
+                            <th className="text-left py-1 pr-3">Famille</th>
+                            <th className="text-left py-1 pr-3">Activité</th>
+                            <th className="text-right py-1">Montant</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {bl.matchedEncs.map((enc, j) => (
+                            <tr key={j} className="font-body text-xs border-t border-green-100">
+                              <td className="py-1.5 pr-3 text-slate-500">{enc.date}</td>
+                              <td className="py-1.5 pr-3 text-blue-800 font-semibold">{enc.familyName}</td>
+                              <td className="py-1.5 pr-3 text-slate-600">{enc.activityTitle}</td>
+                              <td className="py-1.5 text-right text-green-700 font-semibold">{enc.montant.toFixed(2)}€</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
                 </div>
               ))}
               <div className="px-5 py-3 bg-sand flex justify-between font-body text-sm">
