@@ -44,6 +44,12 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [assuranceOccasionnelle, setAssuranceOccasionnelle] = useState(false);
   const [payPlan, setPayPlan] = useState<"1x" | "3x" | "10x">("1x");
 
+  // ── Création famille inline ──
+  const [showNewFamily, setShowNewFamily] = useState(false);
+  const [newFam, setNewFam] = useState({ parentName: "", parentEmail: "", parentPhone: "" });
+  const [newChild, setNewChild] = useState({ firstName: "", birthDate: "", galopLevel: "—" });
+  const [creatingFamily, setCreatingFamily] = useState(false);
+
   // Plan de séance
   const [planUploading, setPlanUploading] = useState(false);
   const [lightbox, setLightbox] = useState(false);
@@ -1048,6 +1054,93 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             {/* Recherche famille */}
             <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={search} onChange={e=>{setSearch(e.target.value);setSelFam("");setSelChild("");}} placeholder="Nom parent, prénom enfant, email..." className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/></div>
             <select value={selFam} onChange={e=>{setSelFam(e.target.value);setSelChild("");}} className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream"><option value="">Famille ({filteredFamilies.length})</option>{filteredFamilies.map(f=>{const n=(f.children||[]).map((c:any)=>c.firstName).join(", ");return<option key={f.firestoreId} value={f.firestoreId}>{f.parentName} {n?`(${n})`:""}</option>})}</select>
+
+            {/* Bouton nouvelle famille */}
+            {!selFam && !showNewFamily && (
+              <button onClick={() => setShowNewFamily(true)}
+                className="flex items-center gap-1.5 font-body text-xs font-semibold text-green-600 bg-green-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-green-100 self-start">
+                <UserPlus size={12} /> Nouvelle famille
+              </button>
+            )}
+
+            {/* Formulaire création famille inline */}
+            {showNewFamily && (
+              <div className="border border-green-200 rounded-xl overflow-hidden">
+                <div className="bg-green-50 px-4 py-2.5 flex items-center justify-between">
+                  <span className="font-body text-xs font-semibold text-green-700">👨‍👩‍👧 Nouvelle famille</span>
+                  <button onClick={() => setShowNewFamily(false)} className="text-green-400 hover:text-green-600 bg-transparent border-none cursor-pointer"><X size={14} /></button>
+                </div>
+                <div className="p-4 space-y-2.5">
+                  <input value={newFam.parentName} onChange={e => setNewFam({...newFam, parentName: e.target.value})}
+                    placeholder="Nom du parent *" className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+                  <div className="flex gap-2">
+                    <input value={newFam.parentEmail} onChange={e => setNewFam({...newFam, parentEmail: e.target.value})}
+                      placeholder="Email" type="email" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+                    <input value={newFam.parentPhone} onChange={e => setNewFam({...newFam, parentPhone: e.target.value})}
+                      placeholder="Téléphone" type="tel" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+                  </div>
+                  <div className="border-t border-gray-100 pt-2.5">
+                    <div className="font-body text-[10px] text-slate-400 uppercase mb-1.5">Premier cavalier</div>
+                    <div className="flex gap-2">
+                      <input value={newChild.firstName} onChange={e => setNewChild({...newChild, firstName: e.target.value})}
+                        placeholder="Prénom *" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+                      <input value={newChild.birthDate} onChange={e => setNewChild({...newChild, birthDate: e.target.value})}
+                        type="date" className="w-36 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+                    </div>
+                  </div>
+                  <button onClick={async () => {
+                    if (!newFam.parentName.trim() || !newChild.firstName.trim()) {
+                      panelToast("Nom du parent et prénom du cavalier requis", "error");
+                      return;
+                    }
+                    setCreatingFamily(true);
+                    try {
+                      const childId = `child_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+                      const children = [{
+                        id: childId,
+                        firstName: newChild.firstName.trim(),
+                        birthDate: newChild.birthDate ? new Date(newChild.birthDate) : null,
+                        galopLevel: newChild.galopLevel || "—",
+                        sanitaryForm: null,
+                      }];
+                      const famRef = await addDoc(collection(db, "families"), {
+                        parentName: newFam.parentName.trim(),
+                        parentEmail: newFam.parentEmail.trim(),
+                        parentPhone: newFam.parentPhone.trim(),
+                        accountType: "particulier",
+                        authProvider: "admin",
+                        authUid: "",
+                        children,
+                        createdAt: serverTimestamp(),
+                        updatedAt: serverTimestamp(),
+                      });
+                      // Email bienvenue
+                      if (newFam.parentEmail.trim()) {
+                        const emailData = emailTemplates.bienvenueNouvelleFamille({ parentName: newFam.parentName.trim() });
+                        fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: newFam.parentEmail.trim(), ...emailData }) }).catch(() => {});
+                      }
+                      panelToast(`Famille ${newFam.parentName} créée !`, "success");
+                      // Sélectionner la nouvelle famille et le cavalier
+                      setSelFam(famRef.id);
+                      setSelChild(childId);
+                      setSearch(newFam.parentName);
+                      setShowNewFamily(false);
+                      setNewFam({ parentName: "", parentEmail: "", parentPhone: "" });
+                      setNewChild({ firstName: "", birthDate: "", galopLevel: "—" });
+                      // Rafraîchir les données (le parent va recharger via onClose)
+                      onClose();
+                    } catch (e: any) {
+                      panelToast("Erreur : " + e.message, "error");
+                    }
+                    setCreatingFamily(false);
+                  }} disabled={creatingFamily || !newFam.parentName.trim() || !newChild.firstName.trim()}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-body text-sm font-semibold text-white bg-green-600 border-none cursor-pointer hover:bg-green-500 disabled:opacity-50">
+                    {creatingFamily ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                    Créer et inscrire
+                  </button>
+                </div>
+              </div>
+            )}
             {fam && available.length > 0 && !isStage && <div className="flex flex-wrap gap-2">{available.map((c:any)=><button key={c.id} onClick={()=>setSelChild(c.id)} className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${selChild===c.id?"bg-blue-500 text-white border-blue-500":"bg-white text-slate-600 border-gray-200"}`}><Users size={12}/> {c.firstName}</button>)}</div>}
 
             {/* Stage : sélection multiple d'enfants */}
