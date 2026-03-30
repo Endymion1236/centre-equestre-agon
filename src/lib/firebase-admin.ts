@@ -33,3 +33,7 @@ if (getApps().length === 0) {
 export const adminDb = getFirestore(app);
 export const adminStorage = getStorage(app);
 export const adminMessaging = getMessaging(app);
+export const adminAuth = (() => {
+  const { getAuth } = require("firebase-admin/auth");
+  return getAuth(app);
+})();

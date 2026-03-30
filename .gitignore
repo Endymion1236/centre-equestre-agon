@@ -29,3 +29,8 @@ npm-debug.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Playwright
+/playwright-report/
+/test-results/
+tests/e2e/.auth/

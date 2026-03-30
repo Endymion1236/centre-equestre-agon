@@ -720,7 +720,7 @@ export default function ForfaitsPage() {
         </div>
         <div className="relative flex-1 min-w-[200px]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input placeholder="Rechercher cavalier, famille, activité..." value={search} onChange={e => setSearch(e.target.value)}
+          <input data-testid="forfait-search" placeholder="Rechercher cavalier, famille, activité..." value={search} onChange={e => setSearch(e.target.value)}
             className="w-full font-body text-xs border border-gray-200 rounded-lg pl-9 pr-3 py-2 bg-white focus:outline-none focus:border-blue-400" />
         </div>
       </div>

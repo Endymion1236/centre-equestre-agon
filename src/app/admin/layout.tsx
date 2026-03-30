@@ -74,7 +74,7 @@ function AdminSidebar() {
   const pathname = usePathname();
 
   return (
-    <div className="w-[210px] bg-blue-800 p-2 flex flex-col gap-0.5 flex-shrink-0 min-h-screen hidden md:flex">
+    <div data-testid="admin-nav" className="w-[210px] bg-blue-800 p-2 flex flex-col gap-0.5 flex-shrink-0 min-h-screen hidden md:flex">
       <div className="px-3 py-3 pb-5 flex items-center gap-2.5">
         <img src="/images/logo-ce-agon.png" alt="Logo" className="w-9 h-9 rounded-lg object-contain" />
         <div>

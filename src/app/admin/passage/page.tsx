@@ -265,7 +265,7 @@ export default function PassagePage() {
         <div>
           <div className="relative mb-4">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher..."
+            <input data-testid="family-search-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher..."
               className="w-full pl-10 pr-4 py-3 rounded-xl border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none" />
           </div>
           {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :

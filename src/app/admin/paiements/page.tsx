@@ -901,7 +901,7 @@ export default function PaiementsPage() {
               <h3 className="font-body text-sm font-semibold text-blue-800 mb-3">1. Sélectionner la famille</h3>
               <div className="relative mb-2">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={familySearch} onChange={(e) => setFamilySearch(e.target.value)} placeholder="Rechercher..." className={`${inputCls} !pl-9`} />
+                <input data-testid="family-search-input" value={familySearch} onChange={(e) => setFamilySearch(e.target.value)} placeholder="Rechercher..." className={`${inputCls} !pl-9`} />
               </div>
               <select value={selectedFamily} onChange={(e) => { setSelectedFamily(e.target.value); setSelectedChild(""); }} className={inputCls}>
                 <option value="">Choisir une famille...</option>
@@ -1850,7 +1850,7 @@ export default function PaiementsPage() {
                 {/* Barre de recherche */}
                 <div className="relative mb-4">
                   <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
-                  <input value={search} onChange={e => setSearch(e.target.value)}
+                  <input data-testid="impaye-search-input" value={search} onChange={e => setSearch(e.target.value)}
                     placeholder="Rechercher par nom, activité, date..."
                     className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-blue-500/8 font-body text-sm bg-white focus:border-blue-400 focus:outline-none"/>
                   {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer"><X size={14}/></button>}
