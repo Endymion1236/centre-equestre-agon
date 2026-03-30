@@ -236,6 +236,18 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
                       className={`flex-1 px-2 py-1 rounded-lg border font-body text-xs bg-white focus:outline-none focus:border-blue-500 ${isMonitorCustom ? "border-orange-300 text-orange-700 font-semibold" : "border-blue-200 text-blue-700"}`}>
                       {moniteurs.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
+                    <button onClick={() => {
+                      const monValue = customMonitors[idx] ?? mon;
+                      // Appliquer ce moniteur à tous les jours
+                      const newMonitors: Record<number, string> = {};
+                      previewDates.forEach((_, i) => { newMonitors[i] = monValue; });
+                      setCustomMonitors(newMonitors);
+                      // Aussi mettre à jour le moniteur principal
+                      setMon(monValue);
+                    }} title="Appliquer ce moniteur à tous les jours"
+                      className="font-body text-[9px] text-blue-500 bg-blue-50 px-1.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 whitespace-nowrap flex-shrink-0">
+                      ↓ Tous
+                    </button>
                     {isMonitorCustom && (
                       <button onClick={() => setCustomMonitors(prev => { const n = {...prev}; delete n[idx]; return n; })}
                         title="Réinitialiser" className="text-slate-400 hover:text-red-400 bg-transparent border-none cursor-pointer text-sm flex-shrink-0">↺</button>
