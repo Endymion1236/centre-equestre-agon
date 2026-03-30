@@ -32,20 +32,20 @@ export default function SplitHomePage() {
           position: absolute;
           inset: 0;
           background-size: cover;
-          background-position: center;
-          transition: transform 0.75s cubic-bezier(0.77,0,0.18,1), filter 0.6s ease;
-          will-change: transform, filter;
+          background-position: center top;
+          transition: filter 0.6s ease;
+          will-change: filter;
         }
-        .split-wrap:not(:hover) .panel-bg { filter: brightness(0.55); }
-        .panel:hover .panel-bg { transform: scale(1.05); filter: brightness(0.5); }
-        .split-wrap:hover .panel:not(:hover) .panel-bg { filter: blur(3px) brightness(0.28); }
+        .split-wrap:not(:hover) .panel-bg { filter: brightness(0.72); }
+        .panel:hover .panel-bg { filter: brightness(0.65); }
+        .split-wrap:hover .panel:not(:hover) .panel-bg { filter: blur(4px) brightness(0.35); }
 
         .panel-overlay { position: absolute; inset: 0; }
         .panel-oe .panel-overlay {
-          background: linear-gradient(160deg, rgba(12,26,46,0.5) 0%, rgba(32,80,160,0.12) 60%, transparent 100%);
+          background: linear-gradient(160deg, rgba(12,26,46,0.25) 0%, transparent 60%);
         }
         .panel-lb .panel-overlay {
-          background: linear-gradient(200deg, rgba(0,15,10,0.6) 0%, rgba(0,80,40,0.12) 60%, transparent 100%);
+          background: linear-gradient(200deg, rgba(0,15,10,0.3) 0%, transparent 60%);
         }
 
         .panel-logo {
@@ -155,7 +155,7 @@ export default function SplitHomePage() {
         @media (max-width: 700px) {
           .split-wrap { flex-direction: column; }
           .panel, .split-wrap:hover .panel, .split-wrap .panel:hover { flex: 1 !important; }
-          .panel-bg { filter: brightness(0.5) !important; transform: none !important; }
+          .panel-bg { filter: brightness(0.65) !important; }
           .panel-inner { padding: 2rem; opacity: 1 !important; transform: none !important; }
           .panel-title { font-size: 3rem; }
           .sep, .puck { display: none; }
@@ -171,7 +171,8 @@ export default function SplitHomePage() {
         <a href="/accueil" className="panel panel-oe">
           <div className="panel-bg" style={{
             backgroundImage: "url('/images/hero-equestre.png')",
-            backgroundPosition: "center 25%"
+            backgroundPosition: "35% top",
+            backgroundSize: "cover",
           }} />
           <div className="panel-overlay" />
           <div className="panel-logo">
@@ -199,7 +200,8 @@ export default function SplitHomePage() {
         <a href="https://laserbay.net" target="_blank" rel="noopener noreferrer" className="panel panel-lb">
           <div className="panel-bg" style={{
             backgroundImage: "url('/images/hero-laserbay.png')",
-            backgroundPosition: "center 35%"
+            backgroundPosition: "60% top",
+            backgroundSize: "cover",
           }} />
           <div className="panel-overlay" />
           <div className="panel-logo">
