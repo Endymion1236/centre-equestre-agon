@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { collection, getDocs, addDoc, deleteDoc, updateDoc, setDoc, doc, getDoc, serverTimestamp, query, where, orderBy, limit, runTransaction } from "firebase/firestore";
+import { collection, getDocs, addDoc, deleteDoc, updateDoc, setDoc, doc, getDoc, serverTimestamp, Timestamp, query, where, orderBy, limit, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { emailTemplates } from "@/lib/email-templates";
 import { safeNumber, round2, generateOrderId } from "@/lib/utils";
@@ -171,6 +171,7 @@ export default function PaiementsPage() {
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("cb_terminal");
   const [paymentRef, setPaymentRef] = useState("");
   const [paidAmount, setPaidAmount] = useState("");
+  const [encaissementDate, setEncaissementDate] = useState(new Date().toISOString().split("T")[0]);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -272,8 +273,12 @@ export default function PaiementsPage() {
     mode: string,
     ref: string = "",
     activityTitle: string = "",
+    customDate?: string, // format YYYY-MM-DD, si absent → serverTimestamp()
   ) => {
     // 1. Créer le doc encaissement (journal)
+    const dateValue = customDate
+      ? Timestamp.fromDate(new Date(customDate + "T12:00:00"))
+      : serverTimestamp();
     await addDoc(collection(db, "encaissements"), {
       paymentId,
       familyId: paymentData.familyId,
@@ -283,7 +288,7 @@ export default function PaiementsPage() {
       modeLabel: paymentModes.find(m => m.id === mode)?.label || mode,
       ref,
       activityTitle: activityTitle || (paymentData.items || []).map((i: any) => i.activityTitle).join(", "),
-      date: serverTimestamp(),
+      date: dateValue,
     });
 
     // 2. Recalculer paidAmount depuis TOUS les encaissements de ce payment
@@ -835,7 +840,7 @@ export default function PaiementsPage() {
       paymentRef: "",
       status: "pending",
       paidAmount: 0,
-      date: serverTimestamp(),
+      date: encaissementDate ? Timestamp.fromDate(new Date(encaissementDate + "T12:00:00")) : serverTimestamp(),
     });
 
     // Encaisser via la fonction centrale
@@ -845,12 +850,13 @@ export default function PaiementsPage() {
         familyName: family?.parentName || "—",
         items: basket,
         totalTTC: basketTotal,
-      }, paid, paymentMode, paymentRef, basket.map(i => i.activityTitle).join(", "));
+      }, paid, paymentMode, paymentRef, basket.map(i => i.activityTitle).join(", "), encaissementDate);
     }
 
     setBasket([]);
     setPaymentRef("");
     setPaidAmount("");
+    setEncaissementDate(new Date().toISOString().split("T")[0]);
     setSaving(false);
     setSuccess(true);
     setTimeout(() => setSuccess(false), 3000);
@@ -1162,6 +1168,16 @@ export default function PaiementsPage() {
                       className={inputCls} />
                   </div>
                 )}
+
+                {/* Date d'encaissement */}
+                <div className="mb-3">
+                  <label className="font-body text-xs font-semibold text-slate-600 block mb-1">
+                    Date d&apos;encaissement
+                  </label>
+                  <input type="date" value={encaissementDate}
+                    onChange={(e) => setEncaissementDate(e.target.value)}
+                    className={`${inputCls} w-48`} />
+                </div>
 
                 {/* Partial payment */}
                 <div className="mb-3">
