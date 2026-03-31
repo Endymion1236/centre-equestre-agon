@@ -34,6 +34,7 @@ import {
   X,
   Building2,
   FileText,
+  CheckCircle2,
 } from "lucide-react";
 
 const navItems = [
@@ -68,6 +69,7 @@ const navItems = [
   { href: "/admin/documents", icon: FileText, label: "Documents" },
   { href: "/admin/modeles", icon: LayoutTemplate, label: "Modèles" },
   { href: "/admin/parametres", icon: Settings, label: "Paramètres" },
+  { href: "/admin/tests", icon: CheckCircle2, label: "Plan de tests" },
 ] as any[];
 
 function AdminSidebar() {
