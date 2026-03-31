@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge, Button } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
@@ -40,6 +40,9 @@ interface EcheanceSepa {
   status: "pending" | "remis" | "preleve" | "rejete";
   remiseId: string | null;
   paymentId: string | null; // Lien vers le paiement correspondant
+  orderId?: string | null;  // Lien vers le paiement de référence
+  echeance?: number;
+  echeancesTotal?: number;
   createdAt: any;
 }
 
@@ -318,6 +321,50 @@ export default function SepaPage() {
     for (const ech of remiseEcheances) {
       await updateDoc(doc(db, "echeances-sepa", ech.id), { status: "preleve" });
     }
+
+    // ── Mettre à jour les paiements de référence (sepa_scheduled → paid si tout est prélevé) ──
+    const orderIds = [...new Set(remiseEcheances.map(e => e.orderId).filter(Boolean))];
+    for (const orderId of orderIds) {
+      const allForOrder = echeances.filter(e => e.orderId === orderId);
+      const allPreleve = allForOrder.every(e => e.remiseId === remiseId || e.status === "preleve");
+      if (allPreleve) {
+        // Chercher le paiement de référence
+        try {
+          const paySnap = await getDocs(query(
+            collection(db, "payments"),
+            where("orderId", "==", orderId),
+            where("status", "==", "sepa_scheduled")
+          ));
+          const totalPreleve = allForOrder.reduce((s, e) => s + (e.montant || 0), 0);
+          for (const payDoc of paySnap.docs) {
+            await updateDoc(doc(db, "payments", payDoc.id), {
+              status: "paid",
+              paidAmount: Math.round(totalPreleve * 100) / 100,
+              paidAt: serverTimestamp(),
+              paymentRef: `SEPA prélevé — remise ${remiseId.slice(-6)}`,
+            });
+          }
+        } catch (e) { console.error("Mise à jour paiement SEPA:", e); }
+      } else {
+        // Mise à jour partielle : calculer le montant prélevé
+        try {
+          const paySnap = await getDocs(query(
+            collection(db, "payments"),
+            where("orderId", "==", orderId),
+            where("status", "==", "sepa_scheduled")
+          ));
+          const totalPreleve = allForOrder
+            .filter(e => e.remiseId === remiseId || e.status === "preleve")
+            .reduce((s, e) => s + (e.montant || 0), 0);
+          for (const payDoc of paySnap.docs) {
+            await updateDoc(doc(db, "payments", payDoc.id), {
+              paidAmount: Math.round(totalPreleve * 100) / 100,
+            });
+          }
+        } catch (e) { console.error("Mise à jour partielle paiement SEPA:", e); }
+      }
+    }
+
     toast("Remise marquée comme déposée", "success");
     fetchAll();
   };
