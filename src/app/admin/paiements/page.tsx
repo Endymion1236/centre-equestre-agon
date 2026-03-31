@@ -936,9 +936,16 @@ export default function PaiementsPage() {
             className={`flex items-center gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg border font-body text-xs sm:text-sm font-medium cursor-pointer transition-all whitespace-nowrap flex-shrink-0
               ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
             <Icon size={14} /> {label}
-            {id === "impayes" && payments.filter(p => p.status !== "cancelled" && !(p as any).echeancesTotal && (p.status === "partial" || (p.paidAmount || 0) < (p.totalTTC || 0))).length > 0 && (
-              <span className="bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{payments.filter(p => p.status !== "cancelled" && !(p as any).echeancesTotal && (p.status === "partial" || ((p.paidAmount || 0) < (p.totalTTC || 0) && p.status !== "paid"))).length}</span>
-            )}
+            {id === "impayes" && (() => {
+              const todayBadge = new Date().toISOString().split("T")[0];
+              const count = payments.filter(p => {
+                if (p.status === "cancelled" || p.status === "paid") return false;
+                if ((p.paidAmount || 0) >= (p.totalTTC || 0)) return false;
+                if ((p as any).echeancesTotal > 1) return (p as any).echeanceDate && (p as any).echeanceDate < todayBadge;
+                return true;
+              }).length;
+              return count > 0 ? <span className="bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{count}</span> : null;
+            })()}
             {id === "declarations" && declarations.length > 0 && (
               <span className="bg-orange-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{declarations.length}</span>
             )}
@@ -1784,9 +1791,27 @@ export default function PaiementsPage() {
                           <div className="font-body text-sm font-semibold text-blue-800">{first.familyName}</div>
                           <div className="font-body text-xs text-slate-600">{(first as any).forfaitRef || (first.items || []).map((i: any) => i.activityTitle).join(", ")}</div>
                         </div>
-                        <div className="text-right">
-                          <div className="font-body text-base font-bold text-blue-500">{totalForfait.toFixed(2)}€</div>
-                          <div className="font-body text-[10px] text-slate-600">{nbPayes}/{nbTotal} échéances payées</div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-right">
+                            <div className="font-body text-base font-bold text-blue-500">{totalForfait.toFixed(2)}€</div>
+                            <div className="font-body text-[10px] text-slate-600">{nbPayes}/{nbTotal} échéances payées</div>
+                          </div>
+                          {nbPayes < nbTotal && (
+                            <button
+                              onClick={async () => {
+                                if (!confirm(`Annuler l'échéancier de ${first.familyName} ?\n\n${nbPayes} échéance(s) déjà payée(s) sur ${nbTotal}.\nLes échéances non payées seront supprimées.\n\nConfirmer ?`)) return;
+                                const unpaidEchs = echs.filter((e: any) => e.status !== "paid");
+                                for (const e of unpaidEchs) {
+                                  await deleteDoc(doc(db, "payments", e.id));
+                                }
+                                await refreshAll();
+                                toast(`Échéancier annulé — ${unpaidEchs.length} échéance(s) supprimée(s)`, "success");
+                              }}
+                              className="font-body text-[10px] text-red-500 bg-red-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-red-100 flex items-center gap-1"
+                            >
+                              <X size={10}/> Annuler
+                            </button>
+                          )}
                         </div>
                       </div>
                       {/* Détail des items du forfait (depuis la première échéance) */}
@@ -1870,10 +1895,14 @@ export default function PaiementsPage() {
         <div>
           {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
           (() => {
+            const todayStr = new Date().toISOString().split("T")[0];
             const unpaid = payments.filter(p => {
               if (p.status === "cancelled" || p.status === "paid") return false;
               if ((p.paidAmount || 0) >= (p.totalTTC || 0)) return false;
-              if ((p as any).echeancesTotal > 1) return false;
+              // Échéances : inclure uniquement celles en retard (date dépassée)
+              if ((p as any).echeancesTotal > 1) {
+                return (p as any).echeanceDate && (p as any).echeanceDate < todayStr;
+              }
               return true;
             });
             const totalDue = unpaid.reduce((s, p) => s + ((p.totalTTC || 0) - (p.paidAmount || 0)), 0);
@@ -1925,6 +1954,11 @@ export default function PaiementsPage() {
                     const due = (p.totalTTC || 0) - (p.paidAmount || 0);
                     const daysLate = Math.floor((Date.now() - date.getTime()) / 86400000);
                     const isOpen = expanded.has(p.id);
+                    const isEcheance = (p as any).echeancesTotal > 1;
+                    const echeanceDateStr = (p as any).echeanceDate;
+                    const echeanceDaysLate = echeanceDateStr
+                      ? Math.floor((Date.now() - new Date(echeanceDateStr).getTime()) / 86400000)
+                      : daysLate;
                     return (
                       <Card key={p.id} padding="md" className="overflow-hidden">
                         {/* ── En-tête accordéon (toujours visible) ── */}
@@ -1932,12 +1966,24 @@ export default function PaiementsPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="font-body text-sm font-semibold text-blue-800">{p.familyName}</span>
-                              <Badge color={daysLate > 60 ? "red" : daysLate > 30 ? "orange" : "gray"}>
-                                {daysLate > 60 ? "Urgent" : daysLate > 30 ? "Relance" : "Récent"}
-                              </Badge>
+                              {isEcheance ? (
+                                <Badge color="orange">Échéance {(p as any).echeance}/{(p as any).echeancesTotal}</Badge>
+                              ) : (
+                                <Badge color={daysLate > 60 ? "red" : daysLate > 30 ? "orange" : "gray"}>
+                                  {daysLate > 60 ? "Urgent" : daysLate > 30 ? "Relance" : "Récent"}
+                                </Badge>
+                              )}
+                              {isEcheance && echeanceDaysLate > 0 && (
+                                <Badge color={echeanceDaysLate > 30 ? "red" : "orange"}>
+                                  {echeanceDaysLate}j de retard
+                                </Badge>
+                              )}
                             </div>
                             <div className="font-body text-xs text-slate-500 truncate mt-0.5">
-                              {(p.items||[]).map((i:any)=>i.activityTitle).join(", ")} · {date.toLocaleDateString("fr-FR")}
+                              {isEcheance
+                                ? `${(p as any).forfaitRef || (p.items||[]).map((i:any)=>i.activityTitle).join(", ")} · Échéance du ${echeanceDateStr ? new Date(echeanceDateStr).toLocaleDateString("fr-FR") : "—"}`
+                                : `${(p.items||[]).map((i:any)=>i.activityTitle).join(", ")} · ${date.toLocaleDateString("fr-FR")}`
+                              }
                             </div>
                           </div>
                           <div className="flex items-center gap-3 flex-shrink-0">

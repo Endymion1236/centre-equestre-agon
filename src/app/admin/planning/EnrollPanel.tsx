@@ -43,6 +43,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [licence, setLicence] = useState(true);
   const [assuranceOccasionnelle, setAssuranceOccasionnelle] = useState(false);
   const [payPlan, setPayPlan] = useState<"1x" | "3x" | "10x">("1x");
+  const [annualPayMode, setAnnualPayMode] = useState<string>("cb_terminal");
 
   // ── Création famille inline ──
   const [showNewFamily, setShowNewFamily] = useState(false);
@@ -680,27 +681,80 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           const montantEcheance = Math.round((totalAnnuel / nbEcheances) * 100) / 100;
           const montantDerniereEcheance = Math.round((totalAnnuel - montantEcheance * (nbEcheances - 1)) * 100) / 100;
 
-          for (let i = 0; i < nbEcheances; i++) {
-            const echeanceDate = new Date();
-            echeanceDate.setMonth(echeanceDate.getMonth() + i);
-            const montant = i === nbEcheances - 1 ? montantDerniereEcheance : montantEcheance;
-
-            const docRef = await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
+          if (annualPayMode === "prelevement_sepa") {
+            // ── Mode SEPA : chercher le mandat actif, créer dans echeances-sepa ──
+            const mandatSnap = await getDocs(query(
+              collection(db, "mandats-sepa"),
+              where("familyId", "==", fam.firestoreId),
+              where("statut", "==", "actif")
+            ));
+            if (mandatSnap.empty) {
+              panelToast("⚠️ Aucun mandat SEPA actif pour cette famille. Créez-en un dans Prélèvements SEPA.", "error");
+              setEnrolling(false);
+              return;
+            }
+            const mandatData = mandatSnap.docs[0].data();
+            const orderId = generateOrderId();
+            for (let i = 0; i < nbEcheances; i++) {
+              const echeanceDate = new Date();
+              echeanceDate.setMonth(echeanceDate.getMonth() + i);
+              const montant = i === nbEcheances - 1 ? montantDerniereEcheance : montantEcheance;
+              await addDoc(collection(db, "echeances-sepa"), {
+                familyId: fam.firestoreId,
+                familyName: fam.parentName || "",
+                mandatId: mandatData.mandatId,
+                montant,
+                dateEcheance: fmtDate(echeanceDate),
+                statut: "en_attente",
+                description: `Forfait ${creneau.activityTitle} — ${childName} — ${i + 1}/${nbEcheances}`,
+                orderId,
+                echeance: i + 1,
+                echeancesTotal: nbEcheances,
+                forfaitRef: slotKey,
+                createdAt: serverTimestamp(),
+              });
+            }
+            // Créer un paiement de référence en statut sepa_pending
+            const docRef = await addDoc(collection(db, "payments"), {
+              orderId,
               familyId: fam.firestoreId,
               familyName: fam.parentName || "",
-              items: i === 0 ? items : [{ activityTitle: `Échéance ${i + 1}/${nbEcheances} — ${childName}`, childId: selChild, childName, priceHT: montant / 1.055, tva: 5.5, priceTTC: montant }],
-              totalTTC: montant,
-              paymentMode: "",
-              paymentRef: "",
+              items,
+              totalTTC: totalAnnuel,
+              paymentMode: "prelevement_sepa",
+              paymentRef: `${nbEcheances}× SEPA · ${mandatData.mandatId}`,
               status: "pending",
               paidAmount: 0,
-              echeance: i + 1,
+              echeance: 1,
               echeancesTotal: nbEcheances,
-              echeanceDate: fmtDate(echeanceDate),
+              echeanceDate: fmtDate(new Date()),
               forfaitRef: slotKey,
               date: serverTimestamp(),
             });
             createdPaymentIds.push(docRef.id);
+          } else {
+            for (let i = 0; i < nbEcheances; i++) {
+              const echeanceDate = new Date();
+              echeanceDate.setMonth(echeanceDate.getMonth() + i);
+              const montant = i === nbEcheances - 1 ? montantDerniereEcheance : montantEcheance;
+
+              const docRef = await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
+                familyId: fam.firestoreId,
+                familyName: fam.parentName || "",
+                items: i === 0 ? items : [{ activityTitle: `Échéance ${i + 1}/${nbEcheances} — ${childName}`, childId: selChild, childName, priceHT: montant / 1.055, tva: 5.5, priceTTC: montant }],
+                totalTTC: montant,
+                paymentMode: annualPayMode,
+                paymentRef: "",
+                status: "pending",
+                paidAmount: 0,
+                echeance: i + 1,
+                echeancesTotal: nbEcheances,
+                echeanceDate: fmtDate(echeanceDate),
+                forfaitRef: slotKey,
+                date: serverTimestamp(),
+              });
+              createdPaymentIds.push(docRef.id);
+            }
           }
         }
       } catch (e) { console.error(e); }
@@ -775,7 +829,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       const payInfo = showPay ? " — encaissé ✅" : priceTTC > 0 ? " — paiement en attente" : "";
       setJustEnrolled(`${childName}${payInfo}`);
     }
-    setSelChild(""); setSelFam(""); setSearch(""); setEnrolling(false); setShowPay(false); setInscriptionMode("ponctuel"); setExtraSlots([]); setExtraSlotSearch("");
+    setSelChild(""); setSelFam(""); setSearch(""); setEnrolling(false); setShowPay(false); setInscriptionMode("ponctuel"); setExtraSlots([]); setExtraSlotSearch(""); setAnnualPayMode("cb_terminal");
     setTimeout(() => setJustEnrolled(""), 5000);
   };
 
@@ -1496,6 +1550,23 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                           </button>
                         ))}
                       </div>
+                    </div>
+                    {/* Mode de paiement */}
+                    <div>
+                      <div className="font-body text-[10px] text-slate-500 mb-1">Mode de paiement</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {payModes.filter(m => m.id !== "carte").map(m => (
+                          <button key={m.id} onClick={() => setAnnualPayMode(m.id)}
+                            className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${annualPayMode === m.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
+                            {m.icon} {m.label}
+                          </button>
+                        ))}
+                      </div>
+                      {annualPayMode === "prelevement_sepa" && (
+                        <div className="mt-1.5 font-body text-[10px] text-blue-600 bg-blue-50 rounded-lg px-2 py-1">
+                          🏦 Les échéances seront créées dans le module Prélèvements SEPA.
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
