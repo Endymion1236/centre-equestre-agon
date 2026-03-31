@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { collection, getDocs, addDoc, deleteDoc, updateDoc, setDoc, doc, getDoc, serverTimestamp, Timestamp, query, where, orderBy, limit, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { emailTemplates } from "@/lib/email-templates";
@@ -116,7 +117,9 @@ function NoteField({ paymentId, initialNote, onSave }: { paymentId: string; init
 
 export default function PaiementsPage() {
   const { toast } = useToast();
-  const [tab, setTab] = useState<"encaisser" | "journal" | "historique" | "echeances" | "impayes" | "declarations">("encaisser");
+  const searchParams = useSearchParams();
+  const urlSearch = searchParams.get("search") || "";
+  const [tab, setTab] = useState<"encaisser" | "journal" | "historique" | "echeances" | "impayes" | "declarations">(urlSearch ? "impayes" : "encaisser");
   const [editPayment, setEditPayment] = useState<any | null>(null);
   const [quickEncaisser, setQuickEncaisser] = useState<{ payment: any } | null>(null);
   const [quickMode, setQuickMode] = useState("cheque");
@@ -124,7 +127,7 @@ export default function PaiementsPage() {
   const [quickDate, setQuickDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [quickRef, setQuickRef] = useState("");
   const [quickSaving, setQuickSaving] = useState(false);
-  const [impayesSearch, setImpayesSearch] = useState("");
+  const [impayesSearch, setImpayesSearch] = useState(urlSearch);
   const [impayesExpanded, setImpayesExpanded] = useState<Set<string>>(new Set());
   const [editItems, setEditItems] = useState<any[]>([]);
   const [editRemisePct, setEditRemisePct] = useState("");

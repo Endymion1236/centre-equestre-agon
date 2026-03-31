@@ -893,7 +893,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
   return (
     <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex-1 overflow-auto">
         <div className="p-5 border-b border-blue-500/8" style={{ borderLeftWidth: 4, borderLeftColor: color }}>
           <div className="flex justify-between items-start"><div><div className="font-body text-sm font-semibold" style={{ color }}>{creneau.startTime}–{creneau.endTime}</div><h2 className="font-display text-lg font-bold text-blue-800">{creneau.activityTitle}</h2><div className="font-body text-xs text-slate-500 mt-1">{new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · {creneau.monitor}{displayPrice > 0 ? ` · ${displayPrice.toFixed(2)}€${isStage ? "" : "/séance"}` : ""}</div></div><button onClick={onClose} className="text-slate-500 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button></div>
           <div className="flex items-center gap-3 mt-3">
@@ -1638,9 +1639,40 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             </div>
           )}
         </div>
+        </div>
+        {/* ── Bandeau impayés sticky ── */}
+        {(() => {
+          // Collecter les familyIds des inscrits dans ce créneau
+          const enrolledFamilyIds = [...new Set((creneau.enrolled || []).map((e: any) => e.familyId))];
+          const pendingPayments = payments.filter((p: any) =>
+            enrolledFamilyIds.includes(p.familyId) &&
+            (p.status === "pending" || p.status === "partial") &&
+            p.totalTTC > (p.paidAmount || 0)
+          );
+          if (pendingPayments.length === 0) return null;
+          const totalDu = pendingPayments.reduce((s: number, p: any) => s + (p.totalTTC || 0) - (p.paidAmount || 0), 0);
+          const familyNames = [...new Set(pendingPayments.map((p: any) => p.familyName))].join(", ");
+          return (
+            <div className="border-t border-orange-200 bg-gradient-to-r from-amber-50 to-orange-50 px-5 py-3 rounded-b-2xl flex-shrink-0">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-lg flex-shrink-0">💰</span>
+                  <div className="min-w-0">
+                    <div className="font-body text-sm font-semibold text-orange-800 truncate">
+                      {pendingPayments.length} paiement{pendingPayments.length > 1 ? "s" : ""} en attente · {totalDu.toFixed(0)}€
+                    </div>
+                    <div className="font-body text-[10px] text-orange-600 truncate">{familyNames}</div>
+                  </div>
+                </div>
+                <a href={`/admin/paiements?search=${encodeURIComponent(familyNames.split(",")[0].trim())}`}
+                  className="flex-shrink-0 font-body text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 px-3 py-2 rounded-lg no-underline transition-colors">
+                  Encaisser →
+                </a>
+              </div>
+            </div>
+          );
+        })()}
       </div>
-
-      {/* ── Lightbox photo plan de séance ── */}
       {lightbox && (
         <div className="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-4"
           onClick={closeLightbox}>
