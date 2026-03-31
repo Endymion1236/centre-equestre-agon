@@ -686,7 +686,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             const mandatSnap = await getDocs(query(
               collection(db, "mandats-sepa"),
               where("familyId", "==", fam.firestoreId),
-              where("statut", "==", "actif")
+              where("status", "==", "active")
             ));
             if (mandatSnap.empty) {
               panelToast("⚠️ Aucun mandat SEPA actif pour cette famille. Créez-en un dans Prélèvements SEPA.", "error");

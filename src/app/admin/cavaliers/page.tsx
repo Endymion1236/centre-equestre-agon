@@ -140,7 +140,7 @@ export default function CavaliersPage() {
   // ─── Helpers : données par famille ───
   const getReservationsForFamily = (familyId: string) => {
     return allReservations
-      .filter(r => r.familyId === familyId)
+      .filter(r => r.familyId === familyId && r.status !== "cancelled")
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   };
 
