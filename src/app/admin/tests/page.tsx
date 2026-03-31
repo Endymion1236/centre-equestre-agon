@@ -470,6 +470,131 @@ const TESTS: TestCase[] = [
     resultat_attendu: "Graphiques affichés sans erreur",
     priorite: "normale",
   },
+
+  // ══════════════════════════════════════════
+  // FLUX SEPA COMPLET (bout en bout)
+  // ══════════════════════════════════════════
+  {
+    id: "SE-05", module: "SEPA", sous_module: "Flux complet",
+    description: "Inscription annuelle SEPA 10× → 10 échéances créées",
+    etapes: "Planning → EnrollPanel → Forfait annuel → 10× → SEPA → Inscrire → Aller dans Prélèvements SEPA → Onglet Échéancier",
+    resultat_attendu: "10 échéances de montants égaux dans echeances-sepa, 1 paiement sepa_scheduled dans payments, 0 dans onglet Échéances manuel",
+    priorite: "critique",
+  },
+  {
+    id: "SE-06", module: "SEPA", sous_module: "Flux complet",
+    description: "Filtre par mois dans l'échéancier SEPA",
+    etapes: "Prélèvements SEPA → Onglet Échéancier → Sélectionner un mois dans le filtre date",
+    resultat_attendu: "Seules les échéances du mois sélectionné sont affichées",
+    priorite: "haute",
+  },
+  {
+    id: "SE-07", module: "SEPA", sous_module: "Flux complet",
+    description: "Générer une remise XML et vérifier le fichier",
+    etapes: "SEPA → Cocher une ou plusieurs échéances → Créer la remise XML → Télécharger",
+    resultat_attendu: "Fichier XML SEPA téléchargé, échéances passent en statut 'remis'",
+    priorite: "critique",
+  },
+  {
+    id: "SE-08", module: "SEPA", sous_module: "Flux complet",
+    description: "Marquer remise déposée → paiement référence passe à paid",
+    etapes: "SEPA → Remises → Marquer comme déposée",
+    resultat_attendu: "Statut remise=deposited, échéances=prélevé, paiement payments passe à paid (ou paidAmount mis à jour)",
+    priorite: "critique",
+  },
+  {
+    id: "SE-09", module: "SEPA", sous_module: "Flux complet",
+    description: "Forfait SEPA visible dans la progression paiement (Forfaits)",
+    etapes: "Après inscription SEPA → Aller dans Forfaits → Ouvrir le forfait → Barre de progression Paiement",
+    resultat_attendu: "Barre de progression affiche 0% (aucun prélèvement encore effectué)",
+    priorite: "haute",
+  },
+
+  // ══════════════════════════════════════════
+  // DÉSINSCRIPTION FORFAIT ANNUEL
+  // ══════════════════════════════════════════
+  {
+    id: "FO-03", module: "Forfaits", sous_module: "Désinscription complète",
+    description: "Désinscrire un forfait SEPA → tout est nettoyé",
+    etapes: "Inscrire en SEPA 10× → Aller dans Forfaits → Désinscrire → Vérifier fiche famille",
+    resultat_attendu: "0€ dû, 0 réservation à venir, 0 échéance SEPA en attente, créneaux vidés, forfait cancelled",
+    priorite: "critique",
+  },
+  {
+    id: "FO-04", module: "Forfaits", sous_module: "Désinscription complète",
+    description: "Désinscrire un forfait CB/chèque → paiements annulés",
+    etapes: "Inscrire en CB 3× → Désinscrire depuis Forfaits",
+    resultat_attendu: "Échéances non payées annulées (status=cancelled), payées conservées, fiche famille à jour",
+    priorite: "critique",
+  },
+
+  // ══════════════════════════════════════════
+  // ENCAISSEMENT MANUEL ÉCHÉANCES
+  // ══════════════════════════════════════════
+  {
+    id: "PA-11", module: "Paiements", sous_module: "Encaissement échéances",
+    description: "Encaisser une échéance depuis l'onglet Échéances",
+    etapes: "Paiements → Échéances → Cliquer CB/Chq/Esp/Vir sur une échéance due",
+    resultat_attendu: "Échéance passe à paid, barre de progression avance, badge onglet mis à jour",
+    priorite: "critique",
+  },
+  {
+    id: "PA-12", module: "Paiements", sous_module: "Encaissement échéances",
+    description: "Échéances en retard apparaissent dans les impayés",
+    etapes: "Avoir un échéancier avec date d'échéance passée → Onglet Impayés",
+    resultat_attendu: "Badge rouge sur l'onglet, échéance listée avec badge 'Échéance X/Y' et 'Xj de retard'",
+    priorite: "haute",
+  },
+  {
+    id: "PA-13", module: "Paiements", sous_module: "Encaissement échéances",
+    description: "Annuler un échéancier depuis l'onglet Échéances",
+    etapes: "Paiements → Échéances → Bouton Annuler sur un groupe → Confirmer",
+    resultat_attendu: "Échéances non payées supprimées, payées conservées, groupe disparaît si tout annulé",
+    priorite: "haute",
+  },
+
+  // ══════════════════════════════════════════
+  // EMAIL DEPUIS FICHE FAMILLE
+  // ══════════════════════════════════════════
+  {
+    id: "CA-06", module: "Cavaliers", sous_module: "Email",
+    description: "Envoyer un email libre depuis la fiche famille",
+    etapes: "Cavaliers → Ouvrir une famille → Bouton '✉️ Envoyer un email' → Saisir objet + message libre → Envoyer",
+    resultat_attendu: "Email reçu sur l'adresse de la famille, toast de confirmation",
+    priorite: "haute",
+  },
+  {
+    id: "CA-07", module: "Cavaliers", sous_module: "Email",
+    description: "Envoyer un template rappel impayé depuis la fiche",
+    etapes: "Famille avec impayé → '✉️ Envoyer un email' → Template 'Rappel impayé' → Vérifier montant pré-rempli → Envoyer",
+    resultat_attendu: "Email de relance avec le bon montant dû reçu",
+    priorite: "haute",
+  },
+
+  // ══════════════════════════════════════════
+  // FACTURES
+  // ══════════════════════════════════════════
+  {
+    id: "FA-01", module: "Factures", sous_module: "Affichage",
+    description: "Télécharger une facture depuis l'espace cavalier",
+    etapes: "Espace cavalier → Factures → Bouton télécharger sur un paiement",
+    resultat_attendu: "Nouvel onglet avec la facture HTML rendue correctement (pas de texte brut)",
+    priorite: "critique",
+  },
+  {
+    id: "FA-02", module: "Factures", sous_module: "Affichage",
+    description: "Imprimer une facture depuis l'admin (Paiements)",
+    etapes: "Paiements → Journal → Icône facture sur un paiement",
+    resultat_attendu: "Nouvel onglet avec la facture correctement rendue",
+    priorite: "haute",
+  },
+  {
+    id: "FA-03", module: "Factures", sous_module: "Affichage",
+    description: "Facture depuis la fiche cavalier",
+    etapes: "Cavaliers → Fiche famille → Section Paiements → Icône 📄 sur un paiement",
+    resultat_attendu: "Facture correctement rendue dans un nouvel onglet",
+    priorite: "haute",
+  },
 ];
 
 // ─── Config couleurs ──────────────────────────────────────────────────────────
