@@ -31,13 +31,13 @@ interface Props {
 
 export default function RdvModal({ form, onChange, onClose, onSave }: Props) {
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md sm:mx-4 shadow-xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center p-5 border-b border-gray-100">
           <h2 className="font-display text-lg font-bold text-blue-800">Nouveau RDV professionnel</h2>
           <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
         </div>
-        <div className="p-5 space-y-3">
+        <div className="p-5 space-y-3 overflow-y-auto flex-1">
           <div>
             <label className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1 block">Catégorie</label>
             <select className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400"
@@ -98,7 +98,7 @@ export default function RdvModal({ form, onChange, onClose, onSave }: Props) {
             <p className="font-body text-[10px] text-slate-600 mt-1">Laissez l'email vide pour ne pas envoyer de rappel.</p>
           </div>
         </div>
-        <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
+        <div className="flex justify-end gap-3 p-5 border-t border-gray-100 flex-shrink-0">
           <button onClick={onClose} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
           <button onClick={onSave} disabled={!form.title || !form.date}
             className={`flex items-center gap-2 font-body text-sm font-semibold text-white bg-orange-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-orange-600 ${!form.title || !form.date ? "opacity-50" : ""}`}>

@@ -122,11 +122,11 @@ function CreneauCard({ c, payments, onSelect, onDelete, onEdit }: {
         </div>
       )}
       <button onClick={e => { e.stopPropagation(); onDelete(); }}
-        className="absolute top-1 right-1 w-5 h-5 rounded bg-red-50 text-red-400 hover:bg-red-100 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center">
+        className="absolute top-1 right-1 w-5 h-5 rounded bg-red-50 text-red-400 hover:bg-red-100 border-none cursor-pointer sm:opacity-0 sm:group-hover:opacity-100 flex items-center justify-center">
         <Trash2 size={10}/>
       </button>
       <button onClick={e => { e.stopPropagation(); onEdit(); }}
-        className="absolute top-1 right-7 w-5 h-5 rounded bg-blue-50 text-blue-400 hover:bg-blue-100 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center">
+        className="absolute top-1 right-7 w-5 h-5 rounded bg-blue-50 text-blue-400 hover:bg-blue-100 border-none cursor-pointer sm:opacity-0 sm:group-hover:opacity-100 flex items-center justify-center">
         <Settings size={10}/>
       </button>
     </div>
@@ -154,11 +154,11 @@ function CreneauCardCompact({ c, payments, onSelect, onDelete, onEdit }: {
         {en.length}/{c.maxPlaces}
       </div>
       <button onClick={e => { e.stopPropagation(); onDelete(); }}
-        className="absolute top-0.5 right-0.5 w-4 h-4 rounded bg-red-50 text-red-400 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center">
+        className="absolute top-0.5 right-0.5 w-4 h-4 rounded bg-red-50 text-red-400 border-none cursor-pointer sm:opacity-0 sm:group-hover:opacity-100 flex items-center justify-center">
         <Trash2 size={8}/>
       </button>
       <button onClick={e => { e.stopPropagation(); onEdit(); }}
-        className="absolute top-0.5 right-5 w-4 h-4 rounded bg-blue-50 text-blue-400 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center">
+        className="absolute top-0.5 right-5 w-4 h-4 rounded bg-blue-50 text-blue-400 border-none cursor-pointer sm:opacity-0 sm:group-hover:opacity-100 flex items-center justify-center">
         <Settings size={8}/>
       </button>
     </div>

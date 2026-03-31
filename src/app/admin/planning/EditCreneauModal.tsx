@@ -29,16 +29,18 @@ export default function EditCreneauModal({
   creneau, form, saving, applyAll, onFormChange, onApplyAllChange, onClose, onSave
 }: Props) {
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
+        {/* Header fixe */}
+        <div className="p-5 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
           <div>
             <h2 className="font-display text-lg font-bold text-blue-800">Modifier le créneau</h2>
             <p className="font-body text-xs text-slate-500 mt-0.5">{creneau.date} · {creneau.activityTitle}</p>
           </div>
           <button onClick={onClose} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
         </div>
-        <div className="p-5 flex flex-col gap-4">
+        {/* Contenu scrollable */}
+        <div className="p-5 flex flex-col gap-4 overflow-y-auto flex-1">
           <div>
             <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Titre</label>
             <input value={form.activityTitle}
@@ -103,16 +105,16 @@ export default function EditCreneauModal({
               <div className="font-body text-xs text-slate-500 mt-0.5">Même titre · même jour de la semaine · même heure de départ</div>
             </div>
           </label>
-
-          <div className="flex gap-3">
-            <button onClick={onClose}
-              className="px-5 py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">Annuler</button>
-            <button onClick={onSave} disabled={saving}
-              className="flex-1 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-400 border-none cursor-pointer disabled:opacity-50">
-              {saving ? <Loader2 size={16} className="animate-spin inline mr-2"/> : null}
-              Enregistrer
-            </button>
-          </div>
+        </div>
+        {/* Footer fixe avec les boutons */}
+        <div className="flex gap-3 p-5 border-t border-gray-100 flex-shrink-0">
+          <button onClick={onClose}
+            className="px-5 py-3 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">Annuler</button>
+          <button onClick={onSave} disabled={saving}
+            className="flex-1 py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-400 border-none cursor-pointer disabled:opacity-50">
+            {saving ? <Loader2 size={16} className="animate-spin inline mr-2"/> : null}
+            Enregistrer
+          </button>
         </div>
       </div>
     </div>

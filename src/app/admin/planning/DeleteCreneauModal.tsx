@@ -16,9 +16,9 @@ export default function DeleteCreneauModal({
   creneau, deleting, deleteCount, deleteWeekCount, isStageType, onClose, onConfirm
 }: Props) {
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4"
       onClick={() => !deleting && onClose()}>
-      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="p-5">
           <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-4">
             <Trash2 size={22} className="text-red-500"/>
