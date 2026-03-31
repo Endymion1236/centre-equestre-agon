@@ -349,10 +349,11 @@ export default function ForfaitsPage() {
 
   const getPaidForForfait = (f: Forfait) => {
     const related = payments.filter(p =>
-      p.familyId === f.familyId && p.status === "paid" &&
+      p.familyId === f.familyId &&
+      (p.status === "paid" || p.status === "sepa_scheduled") &&
       (p.items || []).some((i: any) => i.activityTitle?.includes("Forfait") && i.activityTitle?.includes(f.activityTitle || ""))
     );
-    return related.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
+    return related.reduce((s, p) => s + (p.paidAmount || (p.status === "paid" ? p.totalTTC : 0) || 0), 0);
   };
 
   const filtered = useMemo(() => {
