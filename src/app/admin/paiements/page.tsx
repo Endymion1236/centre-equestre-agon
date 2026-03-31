@@ -1722,8 +1722,10 @@ export default function PaiementsPage() {
                           }),
                         });
                         const html = await res.text();
-                        const w = window.open("", "_blank");
-                        if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 500); }
+                        const blob = new Blob([html], { type: "text/html; charset=utf-8" });
+                        const url = URL.createObjectURL(blob);
+                        const w = window.open(url, "_blank");
+                        if (w) { setTimeout(() => URL.revokeObjectURL(url), 10000); }
                       };
                       return (
                         <div key={p.id || idx} className="px-5 py-3 border-b border-blue-500/8 last:border-b-0 flex items-center hover:bg-blue-50/30 transition-colors">
@@ -2038,7 +2040,7 @@ export default function PaiementsPage() {
                                   const invoiceNumber = (p as any).orderId || `F-${invDate.getFullYear()}${String(invDate.getMonth()+1).padStart(2,"0")}-${(p.id || "").slice(-4).toUpperCase()}`;
                                   const res = await fetch("/api/invoice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invoiceNumber, date: invDate.toLocaleDateString("fr-FR"), familyName: p.familyName, familyEmail: families.find(f => f.firestoreId === p.familyId)?.parentEmail || "", items, totalHT, totalTVA: totalTTC - totalHT, totalTTC, paidAmount: p.paidAmount || 0, paymentMode: p.paymentMode ? (paymentModes.find(m => m.id === p.paymentMode)?.label || p.paymentMode) : "", paymentDate: p.paidAmount > 0 ? invDate.toLocaleDateString("fr-FR") : "" }) });
                                   const data = await res.json();
-                                  if (data.html) { const w = window.open("","_blank"); if(w){w.document.write(data.html);w.document.close();w.print();} }
+                                  if (data.html) { const blob = new Blob([data.html], { type: "text/html; charset=utf-8" }); const url = URL.createObjectURL(blob); const w = window.open(url, "_blank"); if (w) { setTimeout(() => URL.revokeObjectURL(url), 10000); } }
                                 }} className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1"><Receipt size={10}/> Facture</button>
                                 <button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1"><Plus size={10}/> Dupliquer</button>
                               </div>

@@ -298,8 +298,10 @@ export default function FacturesPage() {
                                 });
                                 const data = await res.json();
                                 if (data.html) {
-                                  const w = window.open("", "_blank");
-                                  if (w) { w.document.write(data.html); w.document.close(); w.print(); }
+                                  const blob = new Blob([data.html], { type: "text/html; charset=utf-8" });
+                                  const url = URL.createObjectURL(blob);
+                                  const w = window.open(url, "_blank");
+                                  if (w) { setTimeout(() => URL.revokeObjectURL(url), 10000); }
                                 }
                               } catch (e) { console.error(e); }
                             }}
