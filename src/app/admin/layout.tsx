@@ -32,7 +32,7 @@ import {
   ExternalLink,
   Menu,
   X,
-
+  Building2,
   FileText,
 } from "lucide-react";
 
@@ -54,6 +54,7 @@ const navItems = [
   { href: "/admin/forfaits", icon: CalendarDays, label: "Forfaits" },
   { href: "/admin/cartes", icon: CreditCard, label: "Cartes" },
   { href: "/admin/avoirs", icon: Wallet, label: "Avoirs" },
+  { href: "/admin/sepa", icon: Building2, label: "Prélèvements SEPA" },
   // ─── Gestion ───
   { separator: true, label: "Gestion" },
   { href: "/admin/comptabilite", icon: BookOpen, label: "Comptabilité" },
