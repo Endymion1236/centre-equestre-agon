@@ -113,6 +113,13 @@ export default function CavaliersPage() {
   const [showMerge, setShowMerge] = useState<string | null>(null); // ID de la famille source
   const [mergeTarget, setMergeTarget] = useState(""); // ID de la famille cible
 
+  // ── Modal email depuis fiche famille ──
+  const [emailModal, setEmailModal] = useState<{ familyId: string; familyName: string; email: string } | null>(null);
+  const [emailTemplate, setEmailTemplate] = useState("libre");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [emailSending, setEmailSending] = useState(false);
+
   const fetchFamilies = async () => {
     try {
       const [famSnap, resSnap, paySnap, avoirsSnap, cartesSnap, creneauxSnap, mandatsSnap] = await Promise.all([
@@ -703,6 +710,17 @@ export default function CavaliersPage() {
                             className="font-body text-xs text-purple-500 bg-purple-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-purple-100 flex items-center gap-1">
                             <GitMerge size={12} /> Fusionner
                           </button>
+                          {family.parentEmail && (
+                            <button onClick={() => {
+                              setEmailModal({ familyId: family.firestoreId, familyName: family.parentName, email: family.parentEmail! });
+                              setEmailTemplate("libre");
+                              setEmailSubject("");
+                              setEmailBody("");
+                            }}
+                              className="font-body text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-green-100 flex items-center gap-1">
+                              <Mail size={12} /> Envoyer un email
+                            </button>
+                          )}
                           <button onClick={() => startEditFamily(family)}
                             className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
                             <Edit3 size={12} /> Modifier
@@ -1650,6 +1668,96 @@ export default function CavaliersPage() {
               <button onClick={handleMerge} disabled={saving || !mergeTarget}
                 className={`flex items-center gap-2 font-body text-sm font-semibold text-white bg-purple-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-purple-600 ${saving || !mergeTarget ? "opacity-50 cursor-not-allowed" : ""}`}>
                 {saving ? <Loader2 size={16} className="animate-spin" /> : <GitMerge size={16} />} Fusionner
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal email depuis fiche famille ── */}
+      {emailModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setEmailModal(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h2 className="font-display text-lg font-bold text-blue-800">Envoyer un email</h2>
+                <p className="font-body text-xs text-slate-500 mt-0.5">{emailModal.email}</p>
+              </div>
+              <button onClick={() => setEmailModal(null)} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
+            </div>
+            <div className="p-5 flex flex-col gap-4">
+              {/* Sélecteur de template */}
+              <div>
+                <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Template</label>
+                <select value={emailTemplate} onChange={e => {
+                  const t = e.target.value;
+                  setEmailTemplate(t);
+                  // Pré-remplir sujet/corps selon le template
+                  if (t === "rappelImpaye") {
+                    const fam = families.find(f => f.firestoreId === emailModal.familyId);
+                    const pays = allPayments.filter((p: any) => p.familyId === emailModal.familyId && p.status !== "cancelled" && p.status !== "paid");
+                    const montant = pays.reduce((s: number, p: any) => s + ((p.totalTTC || 0) - (p.paidAmount || 0)), 0);
+                    const tpl = emailTemplates.rappelImpaye({ parentName: emailModal.familyName, montant, prestations: pays.map((p: any) => (p.items || []).map((i: any) => i.activityTitle).join(", ")).join("; ") || "Prestations en cours" });
+                    setEmailSubject(tpl.subject); setEmailBody(tpl.html);
+                  } else if (t === "bienvenue") {
+                    const tpl = emailTemplates.bienvenueNouvelleFamille({ parentName: emailModal.familyName });
+                    setEmailSubject(tpl.subject); setEmailBody(tpl.html);
+                  } else {
+                    setEmailSubject(""); setEmailBody("");
+                  }
+                }} className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-blue-400 cursor-pointer">
+                  <option value="libre">✏️ Message libre</option>
+                  <option value="rappelImpaye">⚠️ Rappel impayé</option>
+                  <option value="bienvenue">👋 Bienvenue</option>
+                </select>
+              </div>
+
+              {/* Sujet */}
+              <div>
+                <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Objet *</label>
+                <input value={emailSubject} onChange={e => setEmailSubject(e.target.value)}
+                  placeholder="Ex: Votre inscription au Centre Équestre d'Agon"
+                  className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-blue-400"/>
+              </div>
+
+              {/* Corps */}
+              <div>
+                <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Message *</label>
+                <textarea value={emailBody} onChange={e => setEmailBody(e.target.value)}
+                  rows={emailTemplate === "libre" ? 6 : 3}
+                  placeholder={emailTemplate === "libre" ? "Bonjour,\n\nVotre message ici..." : "HTML du template (modifiable)"}
+                  className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-blue-400 resize-none"/>
+                {emailTemplate === "libre" && (
+                  <p className="font-body text-[10px] text-slate-400 mt-1">Le message sera envoyé en texte brut. Pour un rendu HTML, utilisez un template ci-dessus.</p>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
+              <button onClick={() => setEmailModal(null)} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+              <button disabled={!emailSubject.trim() || !emailBody.trim() || emailSending}
+                onClick={async () => {
+                  if (!emailSubject.trim() || !emailBody.trim()) return;
+                  setEmailSending(true);
+                  try {
+                    const htmlContent = emailTemplate === "libre"
+                      ? `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#333;white-space:pre-wrap;">${emailBody.replace(/</g,"&lt;")}</div>`
+                      : emailBody;
+                    await fetch("/api/send-email", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ to: emailModal.email, subject: emailSubject, html: htmlContent }),
+                    });
+                    toast(`✅ Email envoyé à ${emailModal.email}`, "success");
+                    setEmailModal(null);
+                  } catch (e) {
+                    toast("Erreur lors de l'envoi", "error");
+                  } finally {
+                    setEmailSending(false);
+                  }
+                }}
+                className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-green-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-green-600 disabled:opacity-50">
+                {emailSending ? <Loader2 size={14} className="animate-spin"/> : <Mail size={14}/>}
+                Envoyer
               </button>
             </div>
           </div>
