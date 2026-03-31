@@ -29,6 +29,7 @@
     "firebase-admin": "^13.7.0",
     "lucide-react": "^0.460.0",
     "next": "^15.0.0",
+    "onlinepayments-sdk-nodejs": "^7.4.0",
     "openai": "^6.33.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

@@ -272,7 +272,7 @@ export default function ReserverPage() {
       const stageDate = hasStage ? cart.find(i => i.isStage)?.dates || "" : "";
       
       try {
-        const res = await fetch("/api/stripe/checkout", {
+        const res = await fetch("/api/cawl/checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -705,7 +705,7 @@ export default function ReserverPage() {
                     {paying ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
                     {paying ? "Paiement en cours..." : depositMode === "deposit" ? `Payer l'acompte ${(cartTotal * 0.3).toFixed(2)}€` : `Payer ${cartTotal.toFixed(2)}€`}
                   </button>
-                  <p className="font-body text-[10px] text-gray-600 text-center mt-2">Paiement securise par Stripe</p>
+                  <p className="font-body text-[10px] text-gray-600 text-center mt-2">Paiement sécurisé par CAWL / Crédit Agricole</p>
                 </>
               )}
             </div>

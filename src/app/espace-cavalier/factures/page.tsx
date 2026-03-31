@@ -50,7 +50,7 @@ interface Card10 {
 }
 
 const modeLabels: Record<string, string> = {
-  cb_terminal: "CB", cb_online: "Stripe", cheque: "Chèque", especes: "Espèces",
+  cb_terminal: "CB", cb_online: "CB en ligne", cheque: "Chèque", especes: "Espèces",
   cheque_vacances: "Chq. Vac.", pass_sport: "Pass'Sport", ancv: "ANCV",
   virement: "Virement", avoir: "Avoir", carte: "Carte", prelevement_sepa: "🏦 SEPA",
 };
@@ -236,7 +236,7 @@ export default function FacturesPage() {
                                     setPayingOnline(p.id!);
                                     try {
                                       const restant = (p.totalTTC || 0) - (p.paidAmount || 0);
-                                      const res = await fetch("/api/stripe/checkout", {
+                                      const res = await fetch("/api/cawl/checkout", {
                                         method: "POST",
                                         headers: { "Content-Type": "application/json" },
                                         body: JSON.stringify({

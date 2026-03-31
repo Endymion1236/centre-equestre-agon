@@ -116,7 +116,7 @@ export const emailTemplates = {
     parentName: string;
     label: string;
     montant: number;
-    lienStripe: string;
+    lienPaiement: string;
   }) => ({
     subject: `Lien de paiement — ${vars.label}`,
     html: wrap(`
@@ -125,8 +125,8 @@ export const emailTemplates = {
       <div style="background:#f0fdf4;border-radius:8px;padding:16px;margin:16px 0;text-align:center;">
         <p style="margin:0;color:#1e3a5f;font-size:24px;font-weight:bold;">${vars.montant.toFixed(2)}€</p>
       </div>
-      ${button("Payer en ligne", vars.lienStripe)}
-      <p style="color:#999;font-size:11px;text-align:center;">Paiement sécurisé par Stripe.</p>
+      ${button("Payer en ligne", vars.lienPaiement)}
+      <p style="color:#999;font-size:11px;text-align:center;">Paiement sécurisé par CAWL.</p>
     `),
   }),
 
