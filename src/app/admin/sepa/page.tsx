@@ -108,6 +108,7 @@ export default function SepaPage() {
 
   // Search
   const [search, setSearch] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
 
   // Forms
   const [showNewMandat, setShowNewMandat] = useState(false);
@@ -397,6 +398,7 @@ export default function SepaPage() {
     .sort((a, b) => a.dateEcheance.localeCompare(b.dateEcheance));
 
   const filteredEcheances = pendingEcheances.filter(e => {
+    if (dateFilter && !e.dateEcheance.startsWith(dateFilter)) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return e.familyName?.toLowerCase().includes(q) || e.mandatId?.toLowerCase().includes(q);
@@ -477,11 +479,30 @@ export default function SepaPage() {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="relative mb-5">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher une famille, un mandat..."
-          className="w-full pl-10 pr-4 py-3 rounded-xl border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none" />
+      {/* Search + filtre date */}
+      <div className="flex gap-2 mb-5">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher une famille, un mandat..."
+            className="w-full pl-10 pr-4 py-3 rounded-xl border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none" />
+        </div>
+        <div className="relative">
+          <input
+            type="month"
+            value={dateFilter}
+            onChange={e => setDateFilter(e.target.value)}
+            className="h-full pl-3 pr-3 py-3 rounded-xl border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none cursor-pointer text-slate-600"
+            title="Filtrer par mois"
+          />
+        </div>
+        {(search || dateFilter) && (
+          <button
+            onClick={() => { setSearch(""); setDateFilter(""); }}
+            className="flex items-center gap-1.5 font-body text-xs text-slate-500 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-xl border-none cursor-pointer flex-shrink-0"
+          >
+            <X size={13}/> Effacer
+          </button>
+        )}
       </div>
 
       {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> : (
