@@ -63,6 +63,7 @@ export const payModes = [
   { id: "pass_sport", label: "Pass'Sport", icon: "🎽" },
   { id: "ancv", label: "ANCV", icon: "🎫" },
   { id: "carte", label: "Carte", icon: "🎟️" },
+  { id: "prelevement_sepa", label: "SEPA", icon: "🏦" },
 ];
 
 // ─── Helpers dates ───────────────────────────────────────────────────────────

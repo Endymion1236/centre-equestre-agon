@@ -52,7 +52,7 @@ interface Card10 {
 const modeLabels: Record<string, string> = {
   cb_terminal: "CB", cb_online: "Stripe", cheque: "Chèque", especes: "Espèces",
   cheque_vacances: "Chq. Vac.", pass_sport: "Pass'Sport", ancv: "ANCV",
-  virement: "Virement", avoir: "Avoir", carte: "Carte",
+  virement: "Virement", avoir: "Avoir", carte: "Carte", prelevement_sepa: "🏦 SEPA",
 };
 
 export default function FacturesPage() {

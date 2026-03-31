@@ -27,7 +27,7 @@ const normalizePayment = (d: any) => ({
 
 const loadPayments = (docs: any[]) => docs.map(d => normalizePayment({ id: d.id, ...d.data() }));
 
-type PaymentMode = "cb_terminal" | "cb_online" | "cheque" | "especes" | "cheque_vacances" | "pass_sport" | "ancv" | "virement" | "avoir";
+type PaymentMode = "cb_terminal" | "cb_online" | "cheque" | "especes" | "cheque_vacances" | "pass_sport" | "ancv" | "virement" | "avoir" | "prelevement_sepa";
 
 interface BasketItem {
   id: string;
@@ -66,6 +66,7 @@ const paymentModes: { id: PaymentMode; label: string }[] = [
   { id: "ancv", label: "ANCV" },
   { id: "virement", label: "Virement" },
   { id: "avoir", label: "Avoir" },
+  { id: "prelevement_sepa", label: "Prélèvement SEPA" },
 ];
 
 // ─── Composant NoteField — commentaire modifiable sur commande ───────────────
@@ -231,7 +232,64 @@ export default function PaiementsPage() {
     if (montant <= 0) return;
     setQuickSaving(true);
     try {
-      // Créer l'encaissement avec la date choisie (pas serverTimestamp)
+      // ── Mode SEPA : créer les échéances au lieu d'encaisser directement ──
+      if (quickMode === "prelevement_sepa") {
+        const nbEch = parseInt(quickRef || "10");
+        const startDate = new Date(quickDate || new Date().toISOString().split("T")[0]);
+
+        // Trouver le mandat SEPA de cette famille
+        const mandatSnap = await getDocs(collection(db, "mandats-sepa"));
+        const mandat = mandatSnap.docs.find(d => d.data().familyId === p.familyId && d.data().status === "active");
+        if (!mandat) {
+          toast("⚠️ Aucun mandat SEPA actif pour cette famille. Créez-en un dans Prélèvements SEPA.", "error");
+          setQuickSaving(false);
+          return;
+        }
+        const mandatData = mandat.data();
+
+        // Créer les échéances
+        const montantEch = Math.floor(montant / nbEch * 100) / 100;
+        const reste = Math.round((montant - montantEch * nbEch) * 100) / 100;
+        const desc = (p.items || []).map((i: any) => i.activityTitle).join(", ") || "Forfait";
+
+        for (let i = 0; i < nbEch; i++) {
+          const d = new Date(startDate);
+          d.setMonth(d.getMonth() + i);
+          const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          const m = i === nbEch - 1 ? montantEch + reste : montantEch;
+
+          await addDoc(collection(db, "echeances-sepa"), {
+            familyId: p.familyId,
+            familyName: p.familyName,
+            mandatId: mandatData.mandatId,
+            montant: Math.round(m * 100) / 100,
+            dateEcheance: dateStr,
+            reference: `Paiement ${p.id}`,
+            description: `${desc} — ${i + 1}/${nbEch}`,
+            status: "pending",
+            remiseId: null,
+            paymentId: p.id,
+            createdAt: serverTimestamp(),
+          });
+        }
+
+        // Marquer le paiement comme SEPA (mais pas payé — il sera payé quand la remise passera)
+        await updateDoc(doc(db, "payments", p.id), {
+          paymentMode: "prelevement_sepa",
+          paymentRef: `${nbEch}× SEPA · ${mandatData.mandatId}`,
+          updatedAt: serverTimestamp(),
+        });
+
+        toast(`✅ ${nbEch} échéances SEPA créées pour ${p.familyName} (${montant.toFixed(2)}€)`, "success");
+        setQuickEncaisser(null);
+        setQuickMontant(""); setQuickRef("");
+        setQuickDate(new Date().toISOString().split("T")[0]);
+        await refreshAll();
+        setQuickSaving(false);
+        return;
+      }
+
+      // ── Encaissement normal (CB, chèque, espèces, etc.) ──
       const encDate = quickDate ? new Date(quickDate + "T12:00:00") : new Date();
       await addDoc(collection(db, "encaissements"), {
         paymentId: p.id,
@@ -2414,6 +2472,7 @@ export default function PaiementsPage() {
                     { id: "especes", label: "Espèces", icon: "💵" },
                     { id: "virement", label: "Virement", icon: "🏦" },
                     { id: "cb_terminal", label: "CB", icon: "💳" },
+                    { id: "prelevement_sepa", label: "SEPA", icon: "🏦" },
                   ].map(m => (
                     <button key={m.id} onClick={() => setQuickMode(m.id)}
                       className={`py-2.5 rounded-xl font-body text-sm font-semibold border cursor-pointer transition-all ${quickMode === m.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200 hover:border-blue-300"}`}>
@@ -2422,6 +2481,34 @@ export default function PaiementsPage() {
                   ))}
                 </div>
               </div>
+              {/* Échéancier SEPA */}
+              {quickMode === "prelevement_sepa" && (
+                <div className="bg-blue-50 rounded-xl p-4 flex flex-col gap-3">
+                  <div className="font-body text-xs font-semibold text-blue-800">Échéancier SEPA</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-body text-[10px] text-gray-400 block mb-1">Nb échéances</label>
+                      <select value={quickRef || "10"} onChange={e => setQuickRef(e.target.value)}
+                        className="w-full px-2 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white">
+                        {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => <option key={n} value={n}>{n}×</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="font-body text-[10px] text-gray-400 block mb-1">1ère échéance</label>
+                      <input type="date" value={quickDate} onChange={e => setQuickDate(e.target.value)}
+                        className="w-full px-2 py-2 rounded-lg border border-gray-200 font-body text-sm"/>
+                    </div>
+                  </div>
+                  {quickMontant && (
+                    <div className="font-body text-xs text-blue-600">
+                      💡 {quickRef || "10"} × {(parseFloat(quickMontant) / parseInt(quickRef || "10")).toFixed(2)}€ = {parseFloat(quickMontant).toFixed(2)}€
+                    </div>
+                  )}
+                  <div className="font-body text-[10px] text-gray-400">
+                    Un mandat SEPA doit exister pour cette famille. Les échéances seront créées dans le module Prélèvements SEPA.
+                  </div>
+                </div>
+              )}
               {/* Date */}
               <div>
                 <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Date d'encaissement</label>

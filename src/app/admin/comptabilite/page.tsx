@@ -42,7 +42,7 @@ const accounts = [
 const modeLabels: Record<string, string> = {
   cb_terminal: "CB Terminal", cb_online: "Stripe", cheque: "Chèque", especes: "Espèces",
   cheque_vacances: "Chèques Vacances", pass_sport: "Pass'Sport", ancv: "ANCV",
-  virement: "Virement", avoir: "Avoir",
+  virement: "Virement", avoir: "Avoir", prelevement_sepa: "Prélèvement SEPA",
 };
 
 export default function ComptabilitePage() {
@@ -101,6 +101,7 @@ export default function ComptabilitePage() {
   };
 
   const [encaissementsCompta, setEncaissementsCompta] = useState<any[]>([]);
+  const [remisesSepa, setRemisesSepa] = useState<any[]>([]);
 
   const fetchData = () => {
     getDocs(query(collection(db, "payments"), orderBy("date", "desc")))
@@ -113,6 +114,9 @@ export default function ComptabilitePage() {
       .then((snap) => setRemises(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
     getDocs(collection(db, "encaissements"))
       .then((snap) => setEncaissementsCompta(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+    getDocs(collection(db, "remises-sepa"))
+      .then((snap) => setRemisesSepa(snap.docs.map((d) => ({ id: d.id, ...d.data() }))))
+      .catch(() => {});
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -427,12 +431,22 @@ export default function ComptabilitePage() {
           }
         }
 
-        // ── 3. Virement / SEPA ────────────────────────────────────────────
-        if (label.includes("VIR") || label.includes("SEPA")) {
+        // ── 3. Virement / SEPA / Prélèvement ──────────────────────────────
+        if (label.includes("VIR") || label.includes("SEPA") || label.includes("PRLV")) {
+          // a) Match individuel virement/sepa
           const match = periodEnc.filter(inWindow).find(e =>
-            (e.mode === "virement" || e.mode === "sepa") && Math.abs((e.montant || 0) - bl.amount) < 0.02
+            (e.mode === "virement" || e.mode === "sepa" || e.mode === "prelevement_sepa") && Math.abs((e.montant || 0) - bl.amount) < 0.02
           );
           if (match) return { ...bl, matched: true, matchType: "Virement", matchDetail: `Virement ${match.familyName}` };
+
+          // b) Match remise SEPA (somme des prélèvements groupés)
+          if (label.includes("PRLV") || label.includes("SEPA")) {
+            const remiseMatch = remisesSepa.find(r =>
+              Math.abs(r.montantTotal - bl.amount) < 0.02 &&
+              r.datePrelevement?.startsWith(period)
+            );
+            if (remiseMatch) return { ...bl, matched: true, matchType: "Prélèvement SEPA", matchDetail: `Remise SEPA n°${remiseMatch.numero} — ${remiseMatch.nbTransactions} prélèvements` };
+          }
         }
 
         // ── 4. Chèque ─────────────────────────────────────────────────────
