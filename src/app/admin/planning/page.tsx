@@ -21,6 +21,8 @@ import SimpleCreneauForm from "./SimpleCreneauForm";
 import RdvModal, { RDV_CATEGORIES, type RdvForm } from "./RdvModal";
 import DeleteCreneauModal from "./DeleteCreneauModal";
 import EditCreneauModal, { type EditForm } from "./EditCreneauModal";
+import MonthView from "./MonthView";
+import TimelineView from "./TimelineView";
 
 export default function PlanningPage() {
   const { toast } = useToast();
@@ -921,170 +923,20 @@ export default function PlanningPage() {
       </>}
 
       {/* ═══ VUE TIMELINE (style Celeris) ═══ */}
-      {viewMode==="timeline"&&<>
-        <div className="flex items-center justify-between mb-5">
-          <button onClick={()=>setWeekOffset(w=>w-1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16}/>Préc.</button>
-          <div className="flex flex-col items-center gap-1">
-            <div className="font-display text-lg font-bold text-blue-800 capitalize">{fmtMonthFR(weekDates[0])}</div>
-            <div className="font-body text-xs text-slate-600">Du {weekDates[0].toLocaleDateString("fr-FR",{day:"numeric",month:"short"})} au {weekDates[6].toLocaleDateString("fr-FR",{day:"numeric",month:"short"})}</div>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={()=>setWeekOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button>
-            <button onClick={()=>setWeekOffset(w=>w+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Suiv.<ChevronRight size={16}/></button>
-          </div>
-        </div>
-        {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:
-        (() => {
-          // Calculer les heures min/max pour la grille
-          const allTimes = creneaux.flatMap(c => [c.startTime, c.endTime]).filter(Boolean);
-          const hours = allTimes.map(t => parseInt(t.split(":")[0]));
-          const minHour = Math.max(7, Math.min(...(hours.length ? hours : [8])));
-          const maxHour = Math.min(21, Math.max(...(hours.length ? hours : [18])) + 1);
-          const gridHours = Array.from({length: maxHour - minHour + 1}, (_, i) => minHour + i);
-          const HOUR_HEIGHT = 80; // px par heure
-          const totalHeight = gridHours.length * HOUR_HEIGHT;
-
-          const timeToY = (time: string) => {
-            const [h, m] = time.split(":").map(Number);
-            return ((h - minHour) + m / 60) * HOUR_HEIGHT;
-          };
-
-          return (
-          <div className="overflow-x-auto -mx-4 px-4">
-            <div className="flex" style={{ minWidth: "900px" }}>
-              {/* Colonne heures */}
-              <div className="w-14 flex-shrink-0 relative" style={{ height: totalHeight }}>
-                {gridHours.map(h => (
-                  <div key={h} className="absolute w-full flex items-start" style={{ top: (h - minHour) * HOUR_HEIGHT }}>
-                    <span className="font-body text-[10px] text-slate-400 pr-2 leading-none">{`${h}:00`}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* 7 colonnes jours */}
-              {weekDates.map((d, dayIdx) => {
-                const ds = fmtDate(d);
-                const allDc = creneaux.filter(c => c.date === ds).sort((a, b) => a.startTime.localeCompare(b.startTime));
-
-                // Séparer stages et cours
-                const isStageType = (c: any) => c.activityType === "stage" || c.activityType === "stage_journee";
-                const stages = allDc.filter(c => isStageType(c));
-                const dc = allDc.filter(c => !isStageType(c));
-
-                // Stages groupés par période (badges compacts)
-                const stagesMatin = stages.filter(c => parseInt(c.startTime) < 13);
-                const stagesAprem = stages.filter(c => parseInt(c.startTime) >= 13 && parseInt(c.startTime) < 16);
-                const stagesSoir = stages.filter(c => parseInt(c.startTime) >= 16);
-                const stageBadgeHeight = (stagesMatin.length > 0 ? 24 : 0) + (stagesAprem.length > 0 ? 24 : 0) + (stagesSoir.length > 0 ? 24 : 0) + (stages.length > 0 ? 4 : 0);
-
-                // Positionner les cours sur la timeline
-                const positioned = dc.map(c => {
-                  const top = timeToY(c.startTime);
-                  const bottom = timeToY(c.endTime);
-                  return { ...c, top, height: Math.max(bottom - top, 30) };
-                });
-
-                // Assigner les colonnes (overlap)
-                const columns: number[] = new Array(positioned.length).fill(0);
-                let maxCol = 0;
-                for (let i = 0; i < positioned.length; i++) {
-                  for (let j = 0; j < i; j++) {
-                    if (positioned[j].top + positioned[j].height > positioned[i].top + 2) {
-                      if (columns[j] === columns[i]) { columns[i]++; }
-                    }
-                  }
-                  maxCol = Math.max(maxCol, columns[i]);
-                }
-                const totalCols = maxCol + 1;
-
-                const goToDay = () => { setViewMode("day"); setDayOffset(Math.round((d.getTime()-new Date().getTime())/86400000)); };
-
-                const stageBadge = (list: typeof stages, bg: string, border: string, dot: string, text: string) => {
-                  if (list.length === 0) return null;
-                  const label = list.length === 1
-                    ? `${list[0].startTime} ${list[0].activityTitle.slice(0, 12)}`
-                    : `${list.length} stages`;
-                  const totalEnrolled = list.reduce((s, c) => s + (c.enrolled?.length || 0), 0);
-                  const totalPlaces = list.reduce((s, c) => s + (c.maxPlaces || 0), 0);
-                  return (
-                    <button onClick={goToDay}
-                      className={`w-full flex items-center gap-1 px-1.5 py-0.5 rounded border font-body cursor-pointer text-left hover:opacity-80 ${bg} ${border}`}>
-                      <span className={`w-3 h-3 rounded-full ${dot} text-white text-[7px] flex items-center justify-center flex-shrink-0`}>{list.length}</span>
-                      <span className={`text-[9px] font-semibold ${text} truncate flex-1`}>{label}</span>
-                      <span className={`text-[8px] ${text} opacity-70`}>{totalEnrolled}/{totalPlaces}</span>
-                    </button>
-                  );
-                };
-
-                return (
-                  <div key={dayIdx} className="flex-1 relative border-l border-gray-100" style={{ minWidth: "110px", height: totalHeight }}>
-                    {/* Header jour */}
-                    <div className={`sticky top-0 z-10 text-center py-1.5 font-body text-xs font-semibold border-b border-gray-200 ${isToday(d) ? "bg-blue-500 text-white" : "bg-sand text-slate-600"}`}>
-                      {fmtDateFR(d)}
-                    </div>
-
-                    {/* Badges stages (compacts, sous le header) */}
-                    {stages.length > 0 && (
-                      <div className="absolute left-1 right-1 z-[5] flex flex-col gap-0.5" style={{ top: 30 }}>
-                        {stageBadge(stagesMatin, "bg-green-50", "border-green-200", "bg-green-500", "text-green-700")}
-                        {stageBadge(stagesAprem, "bg-teal-50", "border-teal-200", "bg-teal-500", "text-teal-700")}
-                        {stageBadge(stagesSoir, "bg-indigo-50", "border-indigo-200", "bg-indigo-500", "text-indigo-700")}
-                      </div>
-                    )}
-
-                    {/* Lignes horaires */}
-                    {gridHours.map(h => (
-                      <div key={h} className="absolute w-full border-t border-gray-50" style={{ top: (h - minHour) * HOUR_HEIGHT }} />
-                    ))}
-
-                    {/* Créneaux cours positionnés sur la timeline */}
-                    {positioned.map((c, cIdx) => {
-                      const en = c.enrolled || [];
-                      const fill = c.maxPlaces > 0 ? en.length / c.maxPlaces : 0;
-                      const col = (c as any).color || typeColors[c.activityType] || "#666";
-                      const colWidth = 100 / totalCols;
-                      const left = columns[cIdx] * colWidth;
-
-                      return (
-                        <div key={c.id}
-                          onClick={() => setSelectedCreneau(c)}
-                          className="absolute rounded-lg border cursor-pointer hover:shadow-lg transition-shadow overflow-hidden group"
-                          style={{
-                            top: c.top + 28, // +28 pour le header
-                            height: c.height - 2,
-                            left: `calc(${left}% + 2px)`,
-                            width: `calc(${colWidth}% - 4px)`,
-                            backgroundColor: `${col}15`,
-                            borderColor: `${col}40`,
-                            borderLeftWidth: 3,
-                            borderLeftColor: col,
-                          }}>
-                          <div className="p-1.5 h-full flex flex-col">
-                            <div className="font-body text-[10px] font-bold" style={{ color: col }}>{c.startTime}–{c.endTime}</div>
-                            <div className="font-body text-[10px] font-semibold text-blue-800 leading-tight truncate">{c.activityTitle}</div>
-                            {c.height > 45 && <div className="font-body text-[9px] text-slate-500 truncate">{c.monitor}</div>}
-                            <div className="mt-auto flex items-center gap-1">
-                              <span className={`font-body text-[9px] font-bold ${fill >= 1 ? "text-red-500" : fill >= 0.7 ? "text-orange-500" : "text-green-600"}`}>{en.length}/{c.maxPlaces}</span>
-                              {en.length > 0 && <div className="flex gap-px">{en.slice(0, 5).map((e: any) => {
-                                const hasPaid = payments.some((p: any) => p.familyId === e.familyId && p.status === "paid");
-                                return <span key={e.childId} className={`w-1.5 h-1.5 rounded-full ${hasPaid ? "bg-green-500" : "bg-orange-400"}`} />;
-                              })}</div>}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-
-                    {/* Bouton ajouter */}
-                    <button onClick={() => { setSelectedDate(ds); setShowSimple(true); setShowGenerator(false); }}
-                      className="absolute bottom-2 left-1/2 -translate-x-1/2 w-7 h-7 rounded-full border border-dashed border-gray-300 text-slate-400 hover:border-blue-400 hover:text-blue-400 bg-white cursor-pointer font-body text-sm flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">+</button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>);
-        })()}
-      </>}
+      {viewMode === "timeline" && (
+        <TimelineView
+          loading={loading}
+          weekDates={weekDates}
+          creneaux={creneaux}
+          payments={payments}
+          onPrev={() => setWeekOffset(w => w - 1)}
+          onNext={() => setWeekOffset(w => w + 1)}
+          onToday={() => setWeekOffset(0)}
+          onSelectCreneau={setSelectedCreneau}
+          onAddCreneau={ds => { setSelectedDate(ds); setShowSimple(true); setShowGenerator(false); }}
+          onGoToDay={d => { setViewMode("day"); setDayOffset(Math.round((d.getTime() - new Date().getTime()) / 86400000)); }}
+        />
+      )}
 
       {viewMode==="day"&&<>
         <div className="flex items-center justify-between mb-5">
@@ -1131,76 +983,19 @@ export default function PlanningPage() {
       </>}
 
       {/* ═══ VUE MENSUELLE ═══ */}
-      {viewMode==="month"&&<>
-        <div className="flex items-center justify-between mb-5">
-          <button onClick={()=>setMonthOffset(m=>m-1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16}/>Préc.</button>
-          <div className="text-center"><div className="font-display text-lg font-bold text-blue-800 capitalize">{currentMonth.toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}</div><div className="font-body text-xs text-slate-600">{creneaux.length} créneaux · {rdvPros.filter(r => r.date?.startsWith(fmtDate(currentMonth).slice(0,7))).length} RDV pro</div></div>
-          <div className="flex gap-2"><button onClick={()=>setMonthOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setMonthOffset(m=>m+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Suiv.<ChevronRight size={16}/></button></div>
-        </div>
-        {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:
-        <div>
-          <div className="grid grid-cols-7 gap-1 mb-1">
-            {["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"].map(d=><div key={d} className="text-center font-body text-[10px] font-semibold text-slate-600 uppercase py-1">{d}</div>)}
-          </div>
-          <div className="grid grid-cols-7 gap-1">
-            {monthDays.map((d,i) => {
-              if (!d) return <div key={`e${i}`} className="min-h-[90px] bg-gray-50/50 rounded-lg" />;
-              const ds = fmtDate(d);
-              const today = fmtDate(new Date()) === ds;
-              const dc = creneaux.filter(c => c.date === ds);
-              const dr = rdvPros.filter(r => r.date === ds);
-              const totalInscrits = dc.reduce((s,c) => s + (c.enrolled?.length || 0), 0);
-              return (
-                <div key={ds} className={`min-h-[90px] rounded-lg p-1.5 cursor-pointer border transition-all hover:shadow-md ${today ? "bg-blue-50 border-blue-300" : "bg-white border-gray-100"}`}
-                  onClick={() => { setViewMode("day"); setDayOffset(Math.round((d.getTime()-new Date().setHours(0,0,0,0))/86400000)); }}>
-                  <div className={`font-body text-xs font-semibold mb-1 ${today ? "text-blue-500" : d.getDay()===0||d.getDay()===6 ? "text-slate-400" : "text-gray-600"}`}>
-                    {d.getDate()}
-                  </div>
-                  {dc.length > 0 && (
-                    <div className="font-body text-[9px] text-blue-500 bg-blue-50 rounded px-1 py-0.5 mb-0.5">
-                      {dc.length} cours · {totalInscrits} inscr.
-                    </div>
-                  )}
-                  {dr.map(r => (
-                    <div key={r.id} className="font-body text-[9px] rounded px-1 py-0.5 mb-0.5 truncate" style={{ backgroundColor: `${rdvCategories[r.category]?.color || "#95a5a6"}20`, color: rdvCategories[r.category]?.color || "#95a5a6" }}>
-                      {r.startTime} {r.title}
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        </div>}
-      </>}
-
-      {/* RDV Pros du mois (visible en vue mois) */}
-      {viewMode === "month" && rdvPros.filter(r => r.date?.startsWith(fmtDate(currentMonth).slice(0,7))).length > 0 && (
-        <div className="mt-6">
-          <h3 className="font-body text-sm font-semibold text-slate-600 uppercase tracking-wider mb-3">RDV professionnels du mois</h3>
-          <div className="flex flex-col gap-2">
-            {rdvPros.filter(r => r.date?.startsWith(fmtDate(currentMonth).slice(0,7))).sort((a:any,b:any) => a.date.localeCompare(b.date)).map((r: any) => (
-              <Card key={r.id} padding="sm">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: rdvCategories[r.category]?.color || "#95a5a6" }} />
-                    <div>
-                      <div className="font-body text-sm font-semibold text-blue-800">{r.title}</div>
-                      <div className="font-body text-xs text-slate-600">
-                        {new Date(r.date).toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"})} · {r.startTime}–{r.endTime}
-                        {r.notes && ` · ${r.notes}`}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge color="gray">{rdvCategories[r.category]?.label || r.category}</Badge>
-                    {r.reminderEmail && <span title={`Rappel ${r.reminderDays}j avant → ${r.reminderEmail}`}><Bell size={12} className="text-orange-400" /></span>}
-                    <button onClick={() => handleDeleteRdv(r.id)} className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={14}/></button>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
+      {viewMode === "month" && (
+        <MonthView
+          loading={loading}
+          currentMonth={currentMonth}
+          monthDays={monthDays}
+          creneaux={creneaux}
+          rdvPros={rdvPros}
+          onPrev={() => setMonthOffset(m => m - 1)}
+          onNext={() => setMonthOffset(m => m + 1)}
+          onToday={() => setMonthOffset(0)}
+          onGoToDay={d => { setViewMode("day"); setDayOffset(Math.round((d.getTime() - new Date().setHours(0,0,0,0)) / 86400000)); }}
+          onDeleteRdv={handleDeleteRdv}
+        />
       )}
 
       <div className="mt-6 flex gap-4 flex-wrap">
