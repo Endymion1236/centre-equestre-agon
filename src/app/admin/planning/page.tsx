@@ -18,6 +18,9 @@ import { Creneau, EnrolledChild, typeColors, dayNames, dayNamesFull, payModes, g
 import EnrollPanel from "./EnrollPanel";
 import PeriodGenerator from "./PeriodGenerator";
 import SimpleCreneauForm from "./SimpleCreneauForm";
+import RdvModal, { RDV_CATEGORIES, type RdvForm } from "./RdvModal";
+import DeleteCreneauModal from "./DeleteCreneauModal";
+import EditCreneauModal, { type EditForm } from "./EditCreneauModal";
 
 export default function PlanningPage() {
   const { toast } = useToast();
@@ -147,15 +150,8 @@ export default function PlanningPage() {
     fetchData();
   };
 
-  const rdvCategories: Record<string, { label: string; color: string }> = {
-    veterinaire: { label: "Vétérinaire", color: "#e74c3c" },
-    marechal: { label: "Maréchal-ferrant", color: "#e67e22" },
-    dentiste: { label: "Dentiste équin", color: "#9b59b6" },
-    osteopathe: { label: "Ostéopathe", color: "#1abc9c" },
-    reunion: { label: "Réunion / FFE", color: "#3498db" },
-    formation: { label: "Formation", color: "#2ecc71" },
-    autre: { label: "Autre", color: "#95a5a6" },
-  };
+  // rdvCategories importé depuis RdvModal.tsx (RDV_CATEGORIES)
+  const rdvCategories = RDV_CATEGORIES;
 
   const handleCreate = async (nc: Partial<Creneau>[]) => {
     // Anti-doublon : vérifier si des créneaux identiques existent déjà
@@ -1215,223 +1211,41 @@ export default function PlanningPage() {
 
       {/* ═══ MODAL : RDV Pro ═══ */}
       {showRdvForm && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={() => setShowRdvForm(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center p-5 border-b border-gray-100">
-              <h2 className="font-display text-lg font-bold text-blue-800">Nouveau RDV professionnel</h2>
-              <button onClick={() => setShowRdvForm(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
-            </div>
-            <div className="p-5 space-y-3">
-              <div>
-                <label className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1 block">Catégorie</label>
-                <select className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400" value={rdvForm.category} onChange={e => setRdvForm({...rdvForm, category: e.target.value})}>
-                  {Object.entries(rdvCategories).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1 block">Titre *</label>
-                <input className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400" value={rdvForm.title} onChange={e => setRdvForm({...rdvForm, title: e.target.value})}
-                  placeholder="Ex: Vaccins annuels, Parage cavalerie…" />
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1 block">Date *</label>
-                  <input type="date" className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400" value={rdvForm.date} onChange={e => setRdvForm({...rdvForm, date: e.target.value})} />
-                </div>
-                <div>
-                  <label className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1 block">Début</label>
-                  <input type="time" className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400" value={rdvForm.startTime} onChange={e => setRdvForm({...rdvForm, startTime: e.target.value})} />
-                </div>
-                <div>
-                  <label className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1 block">Fin</label>
-                  <input type="time" className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400" value={rdvForm.endTime} onChange={e => setRdvForm({...rdvForm, endTime: e.target.value})} />
-                </div>
-              </div>
-              <div>
-                <label className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1 block">Notes</label>
-                <input className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400" value={rdvForm.notes} onChange={e => setRdvForm({...rdvForm, notes: e.target.value})}
-                  placeholder="Ex: Dr Martin, lot de 12 poneys…" />
-              </div>
-              <div className="border-t border-gray-100 pt-3">
-                <div className="font-body text-xs font-semibold text-orange-500 uppercase tracking-wider mb-2 flex items-center gap-1"><Bell size={12} /> Rappel email</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="font-body text-[10px] text-slate-600 block mb-1">Email de rappel</label>
-                    <input type="email" className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400" value={rdvForm.reminderEmail} onChange={e => setRdvForm({...rdvForm, reminderEmail: e.target.value})}
-                      placeholder="ceagon@orange.fr" />
-                  </div>
-                  <div>
-                    <label className="font-body text-[10px] text-slate-600 block mb-1">Combien de jours avant</label>
-                    <select className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400" value={rdvForm.reminderDays} onChange={e => setRdvForm({...rdvForm, reminderDays: parseInt(e.target.value)})}>
-                      <option value={1}>1 jour avant</option>
-                      <option value={2}>2 jours avant</option>
-                      <option value={3}>3 jours avant</option>
-                      <option value={7}>1 semaine avant</option>
-                      <option value={14}>2 semaines avant</option>
-                    </select>
-                  </div>
-                </div>
-                <p className="font-body text-[10px] text-slate-600 mt-1">Laissez l'email vide pour ne pas envoyer de rappel.</p>
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
-              <button onClick={() => setShowRdvForm(false)} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-              <button onClick={handleCreateRdv} disabled={!rdvForm.title || !rdvForm.date}
-                className={`flex items-center gap-2 font-body text-sm font-semibold text-white bg-orange-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-orange-600 ${!rdvForm.title || !rdvForm.date ? "opacity-50" : ""}`}>
-                <Briefcase size={16} /> Créer le RDV
-              </button>
-            </div>
-          </div>
-        </div>
+        <RdvModal
+          form={rdvForm}
+          onChange={setRdvForm}
+          onClose={() => setShowRdvForm(false)}
+          onSave={handleCreateRdv}
+        />
       )}
 
       {selectedCreneau&&<EnrollPanel creneau={selectedCreneau as any} families={families} allCreneaux={creneaux} payments={payments} allCartes={allCartes} allForfaits={allForfaits} onClose={()=>{setSelectedCreneau(null);fetchData();}} onEnroll={handleEnroll} onUnenroll={handleUnenroll}/>}
 
       {/* ── Modal suppression créneau ── */}
       {deleteCreneau && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !deleteDeleting && setDeleteCreneau(null)}>
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="p-5">
-              <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-4">
-                <Trash2 size={22} className="text-red-500"/>
-              </div>
-              <h2 className="font-display text-lg font-bold text-blue-800 text-center mb-1">Supprimer ce créneau ?</h2>
-              <p className="font-body text-sm text-slate-600 text-center mb-1">
-                <strong>{deleteCreneau.activityTitle}</strong>
-              </p>
-              <p className="font-body text-xs text-slate-400 text-center mb-4">
-                {new Date(deleteCreneau.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} · {deleteCreneau.startTime}–{deleteCreneau.endTime}
-              </p>
-
-              {/* Option semaine de stage */}
-              {isStageType(deleteCreneau) && deleteWeekCount > 1 && (
-                <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-3 text-center">
-                  <p className="font-body text-xs text-green-700">
-                    <strong>{deleteWeekCount} créneaux</strong> pour ce stage cette semaine
-                  </p>
-                </div>
-              )}
-
-              {/* Similaires toute l'année */}
-              {!isStageType(deleteCreneau) && deleteCount > 1 && (
-                <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 mb-3 text-center">
-                  <p className="font-body text-xs text-orange-700">
-                    <strong>{deleteCount} créneaux similaires</strong> dans toute l'année<br/>
-                    (même titre · même jour · même heure)
-                  </p>
-                </div>
-              )}
-
-              <div className="flex flex-col gap-2">
-                <button onClick={() => confirmDelete("single")} disabled={deleteDeleting}
-                  className="w-full py-3 rounded-xl font-body text-sm font-semibold text-white bg-red-500 hover:bg-red-600 border-none cursor-pointer disabled:opacity-50">
-                  {deleteDeleting ? <Loader2 size={16} className="animate-spin inline mr-2"/> : null}
-                  Supprimer ce créneau uniquement
-                </button>
-                {isStageType(deleteCreneau) && deleteWeekCount > 1 && (
-                  <button onClick={() => confirmDelete("week")} disabled={deleteDeleting}
-                    className="w-full py-3 rounded-xl font-body text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 border-none cursor-pointer disabled:opacity-50">
-                    🗓️ Supprimer toute la semaine de stage ({deleteWeekCount} créneaux)
-                  </button>
-                )}
-                {!isStageType(deleteCreneau) && deleteCount > 1 && (
-                  <button onClick={() => confirmDelete("similar")} disabled={deleteDeleting}
-                    className="w-full py-3 rounded-xl font-body text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 border-none cursor-pointer disabled:opacity-50">
-                    Supprimer les {deleteCount} créneaux similaires
-                  </button>
-                )}
-                <button onClick={() => setDeleteCreneau(null)} disabled={deleteDeleting}
-                  className="w-full py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
-                  Annuler
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <DeleteCreneauModal
+          creneau={deleteCreneau}
+          deleting={deleteDeleting}
+          deleteCount={deleteCount}
+          deleteWeekCount={deleteWeekCount}
+          isStageType={isStageType}
+          onClose={() => setDeleteCreneau(null)}
+          onConfirm={confirmDelete}
+        />
       )}
 
       {/* ── Modal édition créneau ── */}
       {editCreneau && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setEditCreneau(null)}>
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-              <div>
-                <h2 className="font-display text-lg font-bold text-blue-800">Modifier le créneau</h2>
-                <p className="font-body text-xs text-slate-500 mt-0.5">{editCreneau.date} · {editCreneau.activityTitle}</p>
-              </div>
-              <button onClick={() => setEditCreneau(null)} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
-            </div>
-            <div className="p-5 flex flex-col gap-4">
-              <div>
-                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Titre</label>
-                <input value={editForm.activityTitle} onChange={e => setEditForm((f: any) => ({...f, activityTitle: e.target.value}))}
-                  className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
-              </div>
-              <div>
-                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Couleur du créneau</label>
-                <div className="flex items-center gap-3">
-                  <input type="color" value={editForm.color || "#2050A0"}
-                    onChange={e => setEditForm((f: any) => ({...f, color: e.target.value}))}
-                    className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5"/>
-                  <div className="flex flex-wrap gap-1.5">
-                    {["#2050A0","#27ae60","#e67e22","#7c3aed","#D63031","#16a085","#F0A010","#0ea5e9","#db2777","#64748b"].map(color => (
-                      <button key={color} onClick={() => setEditForm((f: any) => ({...f, color}))}
-                        className={`w-6 h-6 rounded-full border-2 cursor-pointer ${editForm.color === color ? "border-blue-500 scale-125" : "border-white"}`}
-                        style={{background: color}}/>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div>
-                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Moniteur</label>
-                <input value={editForm.monitor} onChange={e => setEditForm((f: any) => ({...f, monitor: e.target.value}))}
-                  className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Heure début</label>
-                  <input type="time" value={editForm.startTime} onChange={e => setEditForm((f: any) => ({...f, startTime: e.target.value}))}
-                    className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
-                </div>
-                <div>
-                  <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Heure fin</label>
-                  <input type="time" value={editForm.endTime} onChange={e => setEditForm((f: any) => ({...f, endTime: e.target.value}))}
-                    className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Places max</label>
-                  <input type="number" min="1" value={editForm.maxPlaces} onChange={e => setEditForm((f: any) => ({...f, maxPlaces: e.target.value}))}
-                    className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
-                </div>
-                <div>
-                  <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Prix TTC (€)</label>
-                  <input type="number" min="0" step="0.5" value={editForm.priceTTC} onChange={e => setEditForm((f: any) => ({...f, priceTTC: e.target.value}))}
-                    className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
-                </div>
-              </div>
-
-              {/* Option appliquer à tous */}
-              <label className="flex items-start gap-3 bg-blue-50 rounded-xl p-3 cursor-pointer">
-                <input type="checkbox" checked={editApplyAll} onChange={e => setEditApplyAll(e.target.checked)} className="accent-blue-500 w-4 h-4 mt-0.5"/>
-                <div>
-                  <div className="font-body text-sm font-semibold text-blue-800">Appliquer à tous les créneaux similaires</div>
-                  <div className="font-body text-xs text-slate-500 mt-0.5">Même titre · même jour de la semaine · même heure de départ</div>
-                </div>
-              </label>
-
-              <div className="flex gap-3">
-                <button onClick={() => setEditCreneau(null)} className="px-5 py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">Annuler</button>
-                <button onClick={handleEditSave} disabled={editSaving}
-                  className="flex-1 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-400 border-none cursor-pointer disabled:opacity-50">
-                  {editSaving ? <Loader2 size={16} className="animate-spin inline mr-2"/> : null}
-                  Enregistrer
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <EditCreneauModal
+          creneau={editCreneau}
+          form={editForm}
+          saving={editSaving}
+          applyAll={editApplyAll}
+          onFormChange={setEditForm}
+          onApplyAllChange={setEditApplyAll}
+          onClose={() => setEditCreneau(null)}
+          onSave={handleEditSave}
+        />
       )}
     </div>
   );
