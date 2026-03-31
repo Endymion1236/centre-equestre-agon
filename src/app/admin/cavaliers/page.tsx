@@ -10,6 +10,7 @@ import { validateChildrenUpdate } from "@/lib/utils";
 import { emailTemplates } from "@/lib/email-templates";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
+import { openHtmlInTab } from "@/lib/open-html-tab";
 import {
   Search, ChevronDown, ChevronUp, Loader2, Users, UserCheck, AlertTriangle,
   Plus, X, Save, UserPlus, Phone, Mail, Calendar, Edit3, Trash2, CalendarDays, GitMerge, Receipt, Clock, Wallet, Building2, Upload,
@@ -1095,9 +1096,8 @@ export default function CavaliersPage() {
                                           const totalHT = items.reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
                                           const res = await fetch("/api/invoice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invoiceNumber, date: invDate.toLocaleDateString("fr-FR"), familyName: family.parentName || p.familyName, items, totalHT, totalTVA: (p.totalTTC || 0) - totalHT, totalTTC: p.totalTTC || 0, paidAmount: p.paidAmount || p.totalTTC || 0, paymentMode: modeLabels[p.paymentMode] || p.paymentMode || "", paymentDate: p.status === "paid" ? invDate.toLocaleDateString("fr-FR") : "" }) });
                                           if (res.ok) {
-                                            const blob = await res.blob();
-                                            const url = URL.createObjectURL(blob);
-                                            window.open(url, "_blank");
+                                            const data = await res.json();
+                                            if (data.html) openHtmlInTab(data.html);
                                           }
                                         }} className="font-body text-xs text-blue-500 bg-blue-50 px-1.5 py-1 rounded cursor-pointer border-none hover:bg-blue-100" title="Facture PDF">
                                           📄

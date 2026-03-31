@@ -6,6 +6,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Receipt, CreditCard, Ticket, Download } from "lucide-react";
+import { openHtmlInTab } from "@/lib/open-html-tab";
 
 interface Payment {
   id: string;
@@ -297,12 +298,7 @@ export default function FacturesPage() {
                                   }),
                                 });
                                 const data = await res.json();
-                                if (data.html) {
-                                  const blob = new Blob([data.html], { type: "text/html; charset=utf-8" });
-                                  const url = URL.createObjectURL(blob);
-                                  const w = window.open(url, "_blank");
-                                  if (w) { setTimeout(() => URL.revokeObjectURL(url), 10000); }
-                                }
+                                if (data.html) openHtmlInTab(data.html);
                               } catch (e) { console.error(e); }
                             }}
                               className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-600 hover:text-blue-500 hover:bg-blue-50 cursor-pointer border-none"

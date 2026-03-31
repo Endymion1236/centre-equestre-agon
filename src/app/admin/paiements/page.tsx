@@ -10,6 +10,7 @@ import { Card, Badge, Button } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle, Copy, ChevronDown } from "lucide-react";
+import { openHtmlInTab } from "@/lib/open-html-tab";
 import type { Family, Activity } from "@/types";
 
 /** Normalise un payment chargé depuis Firestore — tue les NaN à la source */
@@ -1722,10 +1723,7 @@ export default function PaiementsPage() {
                           }),
                         });
                         const html = await res.text();
-                        const blob = new Blob([html], { type: "text/html; charset=utf-8" });
-                        const url = URL.createObjectURL(blob);
-                        const w = window.open(url, "_blank");
-                        if (w) { setTimeout(() => URL.revokeObjectURL(url), 10000); }
+                        openHtmlInTab(html);
                       };
                       return (
                         <div key={p.id || idx} className="px-5 py-3 border-b border-blue-500/8 last:border-b-0 flex items-center hover:bg-blue-50/30 transition-colors">
@@ -2040,7 +2038,7 @@ export default function PaiementsPage() {
                                   const invoiceNumber = (p as any).orderId || `F-${invDate.getFullYear()}${String(invDate.getMonth()+1).padStart(2,"0")}-${(p.id || "").slice(-4).toUpperCase()}`;
                                   const res = await fetch("/api/invoice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invoiceNumber, date: invDate.toLocaleDateString("fr-FR"), familyName: p.familyName, familyEmail: families.find(f => f.firestoreId === p.familyId)?.parentEmail || "", items, totalHT, totalTVA: totalTTC - totalHT, totalTTC, paidAmount: p.paidAmount || 0, paymentMode: p.paymentMode ? (paymentModes.find(m => m.id === p.paymentMode)?.label || p.paymentMode) : "", paymentDate: p.paidAmount > 0 ? invDate.toLocaleDateString("fr-FR") : "" }) });
                                   const data = await res.json();
-                                  if (data.html) { const blob = new Blob([data.html], { type: "text/html; charset=utf-8" }); const url = URL.createObjectURL(blob); const w = window.open(url, "_blank"); if (w) { setTimeout(() => URL.revokeObjectURL(url), 10000); } }
+                                  if (data.html) openHtmlInTab(data.html);
                                 }} className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1"><Receipt size={10}/> Facture</button>
                                 <button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1"><Plus size={10}/> Dupliquer</button>
                               </div>

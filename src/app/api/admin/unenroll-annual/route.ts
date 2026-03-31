@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
 
     const today = new Date().toISOString().split("T")[0];
 
-    // ── 1. Remove child from all future "cours" creneaux ──
+    // ── 1. Retirer l'enfant de tous les créneaux futurs ──────────────────────
     const creneauxSnap = await adminDb
       .collection("creneaux")
       .where("date", ">=", today)
@@ -31,7 +31,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Commit in batches of 450 (safe margin under 500 limit)
     for (let i = 0; i < creneauxToUpdate.length; i += 450) {
       const batch = adminDb.batch();
       const chunk = creneauxToUpdate.slice(i, i + 450);
@@ -41,25 +40,31 @@ export async function POST(req: NextRequest) {
       await batch.commit();
     }
 
-    // ── 2. Cancel annual reservations ──
+    // ── 2. Annuler les réservations futures (tous types) ─────────────────────
     const reservationsSnap = await adminDb
       .collection("reservations")
       .where("childId", "==", childId)
       .where("familyId", "==", familyId)
-      .where("type", "==", "annual")
-      .where("status", "==", "confirmed")
       .get();
 
+    let cancelledReservations = 0;
     if (!reservationsSnap.empty) {
       const resBatch = adminDb.batch();
       for (const doc of reservationsSnap.docs) {
-        resBatch.update(doc.ref, { status: "cancelled", cancelledAt: new Date().toISOString() });
+        const r = doc.data();
+        // Annuler toutes les réservations futures confirmées (peu importe le type)
+        if (r.status === "confirmed" && r.date >= today) {
+          resBatch.update(doc.ref, { status: "cancelled", cancelledAt: new Date().toISOString() });
+          cancelledReservations++;
+        }
       }
       await resBatch.commit();
     }
 
-    // ── 3. Cancel future installment payments (3x, 10x) ──
+    // ── 3. Annuler les paiements en attente liés à ce forfait ────────────────
+    // Inclut : payments (pending/sepa_scheduled), echeances-sepa (pending non remises)
     let cancelledPayments = 0;
+
     const paymentsSnap = await adminDb
       .collection("payments")
       .where("familyId", "==", familyId)
@@ -67,35 +72,69 @@ export async function POST(req: NextRequest) {
 
     const payBatch = adminDb.batch();
     let payBatchCount = 0;
+
     for (const doc of paymentsSnap.docs) {
       const p = doc.data();
-      const isAnnualPayment =
-        (p.type === "inscription_annuelle" && p.childId === childId) ||
-        (p.paymentRef && (p.paymentRef.includes("3x") || p.paymentRef.includes("10x")) &&
+      if (p.status === "paid" || p.status === "cancelled") continue;
+
+      // Est-ce un paiement lié à un forfait annuel de cet enfant ?
+      const isForfaitOfChild =
+        // Paiement de référence SEPA (sepa_scheduled)
+        p.status === "sepa_scheduled" && (p.items || []).some((i: any) => i.childId === childId) ||
+        // Échéances classiques (pending, 3x/10x)
+        (p.status === "pending" || p.status === "partial") && (
+          // Via items
           (p.items || []).some((i: any) =>
-            i.label?.toLowerCase().includes("forfait") ||
-            i.activityTitle?.toLowerCase().includes("cours")
-          ) && p.childId === childId);
+            i.childId === childId &&
+            (i.activityTitle?.includes("Forfait") || i.activityTitle?.includes("Adhésion") || i.activityTitle?.includes("Licence"))
+          ) ||
+          // Via echeancesTotal (échéance d'un plan 3x/10x)
+          (p.echeancesTotal > 1 && (p.items || []).some((i: any) =>
+            i.childId === childId || (i.childName === childName)
+          )) ||
+          // Paiement dont le forfaitRef existe (créé par EnrollPanel annuel)
+          (p.forfaitRef && (p.items || []).some((i: any) => i.childId === childId))
+        );
 
-      if (!isAnnualPayment) continue;
+      if (!isForfaitOfChild) continue;
 
-      const paid = p.paidAmount || 0;
-      const total = p.totalTTC || 0;
-      if (paid < total && p.status !== "paid" && p.status !== "cancelled") {
-        payBatch.update(doc.ref, {
-          status: "cancelled",
-          cancelledAt: new Date().toISOString(),
-          cancelReason: "Désinscription annuelle en masse",
-        });
-        cancelledPayments++;
-        payBatchCount++;
+      payBatch.update(doc.ref, {
+        status: "cancelled",
+        cancelledAt: new Date().toISOString(),
+        cancelReason: "Désinscription annuelle",
+      });
+      cancelledPayments++;
+      payBatchCount++;
+    }
+    if (payBatchCount > 0) await payBatch.commit();
+
+    // ── 4. Annuler les écheances-sepa non encore remises ────────────────────
+    let cancelledSepa = 0;
+    try {
+      const sepaSnap = await adminDb
+        .collection("echeances-sepa")
+        .where("familyId", "==", familyId)
+        .where("status", "==", "pending")
+        .get();
+
+      if (!sepaSnap.empty) {
+        const sepaBatch = adminDb.batch();
+        for (const doc of sepaSnap.docs) {
+          // Vérifier que c'est bien lié à cet enfant via la description
+          const d = doc.data();
+          const concernsChild = d.description?.includes(childName) || !childName;
+          if (concernsChild) {
+            sepaBatch.delete(doc.ref);
+            cancelledSepa++;
+          }
+        }
+        await sepaBatch.commit();
       }
-    }
-    if (payBatchCount > 0) {
-      await payBatch.commit();
+    } catch (e) {
+      console.error("Erreur annulation SEPA:", e);
     }
 
-    // ── 4. Cancel Stripe subscriptions if any ──
+    // ── 5. Annuler les souscriptions Stripe actives ──────────────────────────
     let cancelledSubscriptions = 0;
     try {
       const familyDoc = await adminDb.collection("families").doc(familyId).get();
@@ -103,13 +142,8 @@ export async function POST(req: NextRequest) {
       if (familyData?.parentEmail) {
         const customers = await stripe.customers.list({ email: familyData.parentEmail, limit: 1 });
         if (customers.data.length > 0) {
-          const customer = customers.data[0];
-          const subscriptions = await stripe.subscriptions.list({
-            customer: customer.id,
-            status: "active",
-            limit: 10,
-          });
-          for (const sub of subscriptions.data) {
+          const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: "active", limit: 10 });
+          for (const sub of subs.data) {
             if (sub.metadata?.familyId === familyId) {
               await stripe.subscriptions.cancel(sub.id);
               cancelledSubscriptions++;
@@ -117,11 +151,9 @@ export async function POST(req: NextRequest) {
           }
         }
       }
-    } catch (stripeErr) {
-      console.error("Stripe cancellation (non-bloquant):", stripeErr);
-    }
+    } catch (e) { console.error("Stripe (non-bloquant):", e); }
 
-    // ── 5. Update forfait status ──
+    // ── 6. Marquer le forfait comme annulé ───────────────────────────────────
     const forfaitsSnap = await adminDb
       .collection("forfaits")
       .where("childId", "==", childId)
@@ -132,7 +164,7 @@ export async function POST(req: NextRequest) {
       const fBatch = adminDb.batch();
       for (const doc of forfaitsSnap.docs) {
         const f = doc.data();
-        if (f.status === "active" || f.status === "suspended") {
+        if (f.status === "active" || f.status === "actif" || f.status === "suspended") {
           fBatch.update(doc.ref, {
             status: "cancelled",
             cancelledAt: new Date().toISOString(),
@@ -146,10 +178,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       unenrolledCount,
-      cancelledReservations: reservationsSnap.size,
+      cancelledReservations,
       cancelledPayments,
+      cancelledSepa,
       cancelledSubscriptions,
-      message: `${childName || childId} désinscrit(e) de ${unenrolledCount} séance(s).${cancelledPayments > 0 ? ` ${cancelledPayments} échéance(s) annulée(s).` : ""}${cancelledSubscriptions > 0 ? ` ${cancelledSubscriptions} prélèvement(s) Stripe annulé(s).` : ""}`,
+      message: [
+        `${childName || childId} désinscrit(e) de ${unenrolledCount} séance(s)`,
+        cancelledReservations > 0 ? `${cancelledReservations} réservation(s) annulée(s)` : "",
+        cancelledPayments > 0 ? `${cancelledPayments} paiement(s) annulé(s)` : "",
+        cancelledSepa > 0 ? `${cancelledSepa} échéance(s) SEPA supprimée(s)` : "",
+      ].filter(Boolean).join(" · "),
     });
   } catch (error: any) {
     console.error("Erreur désinscription en masse:", error);
