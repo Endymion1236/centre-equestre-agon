@@ -705,8 +705,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 mandatId: mandatData.mandatId,
                 montant,
                 dateEcheance: fmtDate(echeanceDate),
-                statut: "en_attente",
+                status: "pending",
+                reference: "",
                 description: `Forfait ${creneau.activityTitle} — ${childName} — ${i + 1}/${nbEcheances}`,
+                remiseId: null,
+                paymentId: null,
                 orderId,
                 echeance: i + 1,
                 echeancesTotal: nbEcheances,
@@ -714,7 +717,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 createdAt: serverTimestamp(),
               });
             }
-            // Créer un paiement de référence en statut sepa_pending
+            // Créer un paiement de référence (informatif uniquement — géré via module SEPA)
             const docRef = await addDoc(collection(db, "payments"), {
               orderId,
               familyId: fam.firestoreId,
@@ -723,7 +726,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               totalTTC: totalAnnuel,
               paymentMode: "prelevement_sepa",
               paymentRef: `${nbEcheances}× SEPA · ${mandatData.mandatId}`,
-              status: "pending",
+              status: "sepa_scheduled",
               paidAmount: 0,
               echeance: 1,
               echeancesTotal: nbEcheances,

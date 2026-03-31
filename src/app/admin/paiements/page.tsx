@@ -51,7 +51,7 @@ interface Payment {
   totalTTC: number;
   paymentMode: PaymentMode;
   paymentRef: string;
-  status: "draft" | "paid" | "pending" | "partial" | "cancelled";
+  status: "draft" | "paid" | "pending" | "partial" | "cancelled" | "sepa_scheduled";
   paidAmount: number;
   date: any;
 }
@@ -939,7 +939,7 @@ export default function PaiementsPage() {
             {id === "impayes" && (() => {
               const todayBadge = new Date().toISOString().split("T")[0];
               const count = payments.filter(p => {
-                if (p.status === "cancelled" || p.status === "paid") return false;
+                if (p.status === "cancelled" || p.status === "paid" || p.status === "sepa_scheduled") return false;
                 if ((p.paidAmount || 0) >= (p.totalTTC || 0)) return false;
                 if ((p as any).echeancesTotal > 1) return (p as any).echeanceDate && (p as any).echeanceDate < todayBadge;
                 return true;
@@ -1614,8 +1614,8 @@ export default function PaiementsPage() {
             const [searchFilter, setSearchFilter] = [histSearch, setHistSearch];
             const [periodFilter, setPeriodFilter] = [histPeriod, setHistPeriod];
 
-            // Filtrage — exclure les annulés par défaut
-            let filtered = payments.filter(p => p.status !== "cancelled");
+            // Filtrage — exclure les annulés et les SEPA programmés par défaut
+            let filtered = payments.filter(p => p.status !== "cancelled" && p.status !== "sepa_scheduled");
             if (modeFilter !== "all") filtered = filtered.filter(p => p.paymentMode === modeFilter);
             if (statusFilter !== "all") filtered = filtered.filter(p => p.status === statusFilter);
             if (searchFilter) {
@@ -1753,8 +1753,12 @@ export default function PaiementsPage() {
         <div>
           {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
           (() => {
-            // Filtrer les paiements qui font partie d'un échéancier
-            const echeances = payments.filter(p => (p as any).echeancesTotal > 1);
+            // Filtrer les paiements qui font partie d'un échéancier (hors SEPA géré séparément)
+            const echeances = payments.filter(p =>
+              (p as any).echeancesTotal > 1 &&
+              p.status !== "sepa_scheduled" &&
+              p.status !== "cancelled"
+            );
             
             // Grouper par famille + forfaitRef
             const groupes: Record<string, typeof echeances> = {};
@@ -1897,7 +1901,7 @@ export default function PaiementsPage() {
           (() => {
             const todayStr = new Date().toISOString().split("T")[0];
             const unpaid = payments.filter(p => {
-              if (p.status === "cancelled" || p.status === "paid") return false;
+              if (p.status === "cancelled" || p.status === "paid" || p.status === "sepa_scheduled") return false;
               if ((p.paidAmount || 0) >= (p.totalTTC || 0)) return false;
               // Échéances : inclure uniquement celles en retard (date dépassée)
               if ((p as any).echeancesTotal > 1) {
