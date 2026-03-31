@@ -4,13 +4,15 @@ import { useAgentContext } from "@/hooks/useAgentContext";
 import { useState, useEffect } from "react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, Timestamp, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { storage } from "@/lib/firebase";
 import { validateChildrenUpdate } from "@/lib/utils";
 import { emailTemplates } from "@/lib/email-templates";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import {
   Search, ChevronDown, ChevronUp, Loader2, Users, UserCheck, AlertTriangle,
-  Plus, X, Save, UserPlus, Phone, Mail, Calendar, Edit3, Trash2, CalendarDays, GitMerge, Receipt, Clock, Wallet,
+  Plus, X, Save, UserPlus, Phone, Mail, Calendar, Edit3, Trash2, CalendarDays, GitMerge, Receipt, Clock, Wallet, Building2, Upload,
 } from "lucide-react";
 import type { Family } from "@/types";
 
@@ -28,6 +30,20 @@ const calcAge = (birthDate: any): string => {
   if (now.getMonth() < bd.getMonth() || (now.getMonth() === bd.getMonth() && now.getDate() < bd.getDate())) age--;
   return `${age} ans`;
 };
+
+const BIC_LOOKUP: Record<string, string> = {
+  "10007": "BDFEFRPP", "10096": "CMCIFRPP", "12506": "AGRIFRPP", "13807": "CCBPFRPP",
+  "14445": "CEPAFRPP", "14518": "CEPAFRPP", "15489": "CMCIFR2A", "16606": "AGRIFRPP866",
+  "16607": "AGRIFRPP866", "20041": "PSSTFRPP", "30002": "BNPAFRPP", "30003": "SOGEFRPP",
+  "30004": "BNPAFRPPXXX", "30006": "AGRIFRPP", "11425": "CEPAFRPP142",
+};
+function lookupBic(iban: string): string {
+  if (!iban || iban.length < 9) return "";
+  return BIC_LOOKUP[iban.substring(4, 9)] || "";
+}
+function formatIban(iban: string): string {
+  return iban.replace(/\s/g, "").replace(/(.{4})/g, "$1 ").trim();
+}
 
 export default function CavaliersPage() {
     const { setAgentContext } = useAgentContext("cavaliers");
@@ -49,6 +65,10 @@ export default function CavaliersPage() {
   const [allAvoirs, setAllAvoirs] = useState<any[]>([]);
   const [allCartes, setAllCartes] = useState<any[]>([]);
   const [allCreneaux, setAllCreneaux] = useState<any[]>([]);
+  const [allMandats, setAllMandats] = useState<any[]>([]);
+  const [editingMandat, setEditingMandat] = useState<string | null>(null); // familyId en cours d'édition
+  const [mandatForm, setMandatForm] = useState({ iban: "", bic: "", titulaire: "", dateSignature: new Date().toISOString().split("T")[0] });
+  const [mandatSaving, setMandatSaving] = useState(false);
 
   // ─── Édition infos famille ───
   const [editingFamily, setEditingFamily] = useState<string | null>(null);
@@ -94,13 +114,14 @@ export default function CavaliersPage() {
 
   const fetchFamilies = async () => {
     try {
-      const [famSnap, resSnap, paySnap, avoirsSnap, cartesSnap, creneauxSnap] = await Promise.all([
+      const [famSnap, resSnap, paySnap, avoirsSnap, cartesSnap, creneauxSnap, mandatsSnap] = await Promise.all([
         getDocs(collection(db, "families")),
         getDocs(collection(db, "reservations")),
         getDocs(collection(db, "payments")),
         getDocs(collection(db, "avoirs")),
         getDocs(collection(db, "cartes")),
         getDocs(collection(db, "creneaux")),
+        getDocs(collection(db, "mandats-sepa")),
       ]);
       setFamilies(famSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as (Family & { firestoreId: string })[]);
       setAllReservations(resSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -109,6 +130,7 @@ export default function CavaliersPage() {
       setAllCartes(cartesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       const today = new Date().toISOString().split("T")[0];
       setAllCreneaux(creneauxSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((c: any) => c.date >= today));
+      setAllMandats(mandatsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (e) { console.error(e); }
     setLoading(false);
   };
@@ -1222,6 +1244,122 @@ export default function CavaliersPage() {
                               );
                             })}
                           </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* ─── Mandat SEPA ─── */}
+                    {(() => {
+                      const mandat = allMandats.find((m: any) => m.familyId === family.firestoreId && m.status === "active");
+                      const isEditing = editingMandat === family.firestoreId;
+
+                      const handleSaveMandat = async () => {
+                        if (!mandatForm.iban || !mandatForm.titulaire) return;
+                        setMandatSaving(true);
+                        try {
+                          const cleanIban = mandatForm.iban.replace(/\s/g, "").toUpperCase();
+                          const bic = mandatForm.bic || lookupBic(cleanIban);
+                          const nextNum = allMandats.length + 1;
+                          const mandatId = `CEDC${nextNum}MD${Math.floor(Math.random() * 9000) + 1000}`;
+
+                          if (mandat) {
+                            await updateDoc(doc(db, "mandats-sepa", mandat.id), {
+                              iban: cleanIban, bic, titulaire: mandatForm.titulaire,
+                              dateSignature: mandatForm.dateSignature,
+                            });
+                          } else {
+                            await addDoc(collection(db, "mandats-sepa"), {
+                              familyId: family.firestoreId, familyName: family.parentName, mandatId,
+                              iban: cleanIban, bic, titulaire: mandatForm.titulaire,
+                              dateSignature: mandatForm.dateSignature, status: "active", createdAt: serverTimestamp(),
+                            });
+                          }
+                          setEditingMandat(null);
+                          fetchFamilies();
+                        } catch (e) { console.error(e); }
+                        setMandatSaving(false);
+                      };
+
+                      const handleUploadMandat = async (file: File) => {
+                        try {
+                          const storageRef = ref(storage, `mandats-sepa/${family.firestoreId}/${file.name}`);
+                          await uploadBytesResumable(storageRef, file);
+                          const url = await getDownloadURL(storageRef);
+                          if (mandat) {
+                            await updateDoc(doc(db, "mandats-sepa", mandat.id), { scanUrl: url, scanName: file.name });
+                          }
+                          fetchFamilies();
+                        } catch (e) { console.error(e); }
+                      };
+
+                      return (
+                        <div className="mt-4 pt-3 border-t border-blue-500/8">
+                          <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                            <Building2 size={12} /> Mandat SEPA
+                            {mandat && <Badge color="green">Actif</Badge>}
+                          </div>
+
+                          {mandat && !isEditing ? (
+                            <div className="bg-sand rounded-lg px-4 py-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="font-body text-sm font-semibold text-blue-800">{mandat.titulaire}</div>
+                                <div className="flex gap-1.5">
+                                  <button onClick={() => { setEditingMandat(family.firestoreId); setMandatForm({ iban: mandat.iban, bic: mandat.bic, titulaire: mandat.titulaire, dateSignature: mandat.dateSignature }); }}
+                                    className="font-body text-[10px] text-blue-500 bg-blue-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-blue-100">Modifier</button>
+                                  <label className="font-body text-[10px] text-slate-600 bg-gray-100 px-2 py-1 rounded cursor-pointer hover:bg-gray-200 flex items-center gap-1">
+                                    <Upload size={10} /> Scan
+                                    <input type="file" accept="image/*,.pdf" className="hidden" onChange={e => { if (e.target.files?.[0]) handleUploadMandat(e.target.files[0]); }} />
+                                  </label>
+                                </div>
+                              </div>
+                              <div className="font-body text-xs text-gray-500 font-mono">{formatIban(mandat.iban)}</div>
+                              <div className="font-body text-[10px] text-gray-400 mt-1">
+                                BIC : {mandat.bic} · Mandat : {mandat.mandatId} · Signé le {new Date(mandat.dateSignature).toLocaleDateString("fr-FR")}
+                              </div>
+                              {mandat.scanUrl && (
+                                <a href={mandat.scanUrl} target="_blank" rel="noopener noreferrer"
+                                  className="font-body text-[10px] text-blue-500 no-underline mt-1 inline-flex items-center gap-1">
+                                  📄 {mandat.scanName || "Voir le mandat signé"}
+                                </a>
+                              )}
+                            </div>
+                          ) : isEditing ? (
+                            <div className="bg-blue-50 rounded-lg p-3 flex flex-col gap-2">
+                              <div className="grid grid-cols-2 gap-2">
+                                <input placeholder="Titulaire du compte *" value={mandatForm.titulaire}
+                                  onChange={e => setMandatForm({ ...mandatForm, titulaire: e.target.value })}
+                                  className="px-3 py-2 rounded-lg border border-gray-200 font-body text-xs" />
+                                <input type="date" value={mandatForm.dateSignature}
+                                  onChange={e => setMandatForm({ ...mandatForm, dateSignature: e.target.value })}
+                                  className="px-3 py-2 rounded-lg border border-gray-200 font-body text-xs" />
+                              </div>
+                              <input placeholder="IBAN *" value={mandatForm.iban}
+                                onChange={e => {
+                                  const v = e.target.value.replace(/\s/g, "").toUpperCase();
+                                  setMandatForm({ ...mandatForm, iban: v, bic: lookupBic(v) || mandatForm.bic });
+                                }}
+                                className="px-3 py-2 rounded-lg border border-gray-200 font-body text-xs font-mono" />
+                              <div className="flex gap-2 items-center">
+                                <input placeholder="BIC" value={mandatForm.bic}
+                                  onChange={e => setMandatForm({ ...mandatForm, bic: e.target.value })}
+                                  className="px-3 py-2 rounded-lg border border-gray-200 font-body text-xs font-mono flex-1" />
+                                {mandatForm.bic && <span className="font-body text-[10px] text-green-500">✓ auto</span>}
+                              </div>
+                              <div className="flex gap-2">
+                                <button onClick={handleSaveMandat} disabled={mandatSaving || !mandatForm.iban || !mandatForm.titulaire}
+                                  className="flex items-center gap-1 font-body text-xs font-semibold text-white bg-blue-500 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                                  {mandatSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer
+                                </button>
+                                <button onClick={() => setEditingMandat(null)}
+                                  className="font-body text-xs text-gray-500 bg-white px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button onClick={() => { setEditingMandat(family.firestoreId); setMandatForm({ iban: "", bic: "", titulaire: family.parentName || "", dateSignature: new Date().toISOString().split("T")[0] }); }}
+                              className="font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1">
+                              <Plus size={14} /> Ajouter un mandat SEPA
+                            </button>
+                          )}
                         </div>
                       );
                     })()}

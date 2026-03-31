@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { doc, updateDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
+import { doc, updateDoc, arrayUnion, serverTimestamp, collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge, Button } from "@/components/ui";
-import { Plus, ChevronDown, ChevronUp, Edit3, Save, Loader2, Users } from "lucide-react";
+import { Plus, ChevronDown, ChevronUp, Edit3, Save, Loader2, Users, Building2, AlertTriangle } from "lucide-react";
 import type { Child, SanitaryForm } from "@/types";
 
 function AddChildForm({ onAdd }: { onAdd: () => void }) {
@@ -165,6 +165,28 @@ export default function ProfilPage() {
   const [editingSanitary, setEditingSanitary] = useState<string | null>(null);
   const [sanitaryForm, setSanitaryForm] = useState({ allergies: "", emergencyContactName: "", emergencyContactPhone: "", parentalAuthorization: false });
   const [savingChild, setSavingChild] = useState(false);
+  const [mandat, setMandat] = useState<any>(null);
+  const [revokingMandat, setRevokingMandat] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    getDocs(query(collection(db, "mandats-sepa"), where("familyId", "==", user.uid)))
+      .then(snap => {
+        const active = snap.docs.find(d => d.data().status === "active");
+        if (active) setMandat({ id: active.id, ...active.data() });
+      })
+      .catch(() => {});
+  }, [user]);
+
+  const handleRevokeMandat = async () => {
+    if (!mandat || !confirm("Êtes-vous sûr de vouloir révoquer votre mandat de prélèvement SEPA ? Les prélèvements en cours seront annulés.")) return;
+    setRevokingMandat(true);
+    try {
+      await updateDoc(doc(db, "mandats-sepa", mandat.id), { status: "revoked", revokedAt: serverTimestamp() });
+      setMandat(null);
+    } catch (e) { console.error(e); }
+    setRevokingMandat(false);
+  };
 
   const startEdit = () => {
     setEditForm({
@@ -482,6 +504,42 @@ export default function ProfilPage() {
             </Button>
           </Card>
         )
+      )}
+
+      {/* ── Mandat SEPA ── */}
+      {mandat && (
+        <div className="mt-8">
+          <h2 className="font-display text-lg font-bold text-blue-800 mb-4">Prélèvement SEPA</h2>
+          <Card padding="md">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                <Building2 size={24} className="text-blue-500" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-body text-sm font-semibold text-blue-800">{mandat.titulaire}</span>
+                  <Badge color="green">Actif</Badge>
+                </div>
+                <div className="font-body text-xs text-gray-500 font-mono mb-1">
+                  IBAN : {mandat.iban?.replace(/\s/g, "").replace(/(.{4})/g, "$1 ").trim()}
+                </div>
+                <div className="font-body text-[10px] text-gray-400">
+                  Mandat {mandat.mandatId} · Signé le {new Date(mandat.dateSignature).toLocaleDateString("fr-FR")}
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-gray-100">
+              <button onClick={handleRevokeMandat} disabled={revokingMandat}
+                className="flex items-center gap-2 font-body text-xs text-red-500 hover:text-red-700 bg-transparent border border-red-200 hover:border-red-400 px-3 py-2 rounded-lg cursor-pointer transition-colors disabled:opacity-50">
+                {revokingMandat ? <Loader2 size={12} className="animate-spin" /> : <AlertTriangle size={12} />}
+                Révoquer mon mandat de prélèvement
+              </button>
+              <p className="font-body text-[10px] text-gray-400 mt-2">
+                La révocation prend effet immédiatement. Les prélèvements déjà soumis à la banque ne pourront pas être annulés par cette action.
+              </p>
+            </div>
+          </Card>
+        </div>
       )}
 
       {/* ── RGPD — Supprimer mon compte ── */}
