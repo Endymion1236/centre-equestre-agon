@@ -23,6 +23,7 @@ import DeleteCreneauModal from "./DeleteCreneauModal";
 import EditCreneauModal, { type EditForm } from "./EditCreneauModal";
 import MonthView from "./MonthView";
 import TimelineView from "./TimelineView";
+import WeekView from "./WeekView";
 
 export default function PlanningPage() {
   const { toast } = useToast();
@@ -218,6 +219,12 @@ export default function PlanningPage() {
         setDeleteWeekCount(snapWeek.docs.length);
       }
     } catch { setDeleteCount(1); }
+  };
+
+  const openEdit = (c: Creneau & { id: string }) => {
+    setEditCreneau(c);
+    setEditForm({ activityTitle: c.activityTitle, monitor: c.monitor || "", startTime: c.startTime, endTime: c.endTime, maxPlaces: c.maxPlaces, priceTTC: (c as any).priceTTC || 0, color: (c as any).color || "" });
+    setEditApplyAll(false);
   };
 
   const confirmDelete = async (mode: "single" | "similar" | "week") => {
@@ -803,124 +810,23 @@ export default function PlanningPage() {
         </div>
       )}
 
-      {viewMode==="week"&&<>
-        <div className="flex items-center justify-between mb-5">
-          <button onClick={()=>setWeekOffset(w=>w-1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16}/>Préc.</button>
-          <div className="flex flex-col items-center gap-1">
-            <div className="font-display text-lg font-bold text-blue-800 capitalize">{fmtMonthFR(weekDates[0])}</div>
-            <div className="font-body text-xs text-slate-600">Du {weekDates[0].toLocaleDateString("fr-FR",{day:"numeric",month:"short"})} au {weekDates[6].toLocaleDateString("fr-FR",{day:"numeric",month:"short"})}</div>
-            <input type="date" 
-              title="Aller à cette date"
-              className="font-body text-xs px-2 py-1 rounded-lg border border-gray-200 bg-white cursor-pointer focus:border-blue-400 focus:outline-none text-slate-500"
-              onChange={e => {
-                if (!e.target.value) return;
-                const [py, pm, pd] = e.target.value.split("-").map(Number);
-                const picked = new Date(py, pm - 1, pd);
-                const today = new Date(); today.setHours(0,0,0,0);
-                const pickedDow = (picked.getDay() + 6) % 7;
-                const pickedMon = new Date(picked); pickedMon.setDate(picked.getDate() - pickedDow);
-                const todayDow = (today.getDay() + 6) % 7;
-                const todayMon = new Date(today); todayMon.setDate(today.getDate() - todayDow);
-                const diffWeeks = Math.round((pickedMon.getTime() - todayMon.getTime()) / (7 * 86400000));
-                setWeekOffset(diffWeeks);
-                // Réinitialiser la valeur pour permettre de re-sélectionner la même date
-                e.target.value = "";
-              }}/>
-          </div>
-          <div className="flex gap-2"><button onClick={()=>setWeekOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setWeekOffset(w=>w+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Suiv.<ChevronRight size={16}/></button></div>
-        </div>
-        {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:
-        <div className="overflow-x-auto -mx-4 px-4"><div className="grid grid-cols-7 gap-1.5" style={{ minWidth: "700px" }}>
-          {weekDates.map((d,i)=><div key={i} onClick={()=>{setViewMode("day");setDayOffset(Math.round((d.getTime()-new Date().getTime())/86400000));}} className={`text-center py-2 rounded-lg font-body text-xs font-semibold cursor-pointer hover:ring-2 hover:ring-blue-300 ${isToday(d)?"bg-blue-500 text-white":"bg-sand text-slate-600"}`}>{fmtDateFR(d)}</div>)}
-          {weekDates.map((d,i)=>{const ds=fmtDate(d);const allDc=creneaux.filter(c=>c.date===ds).sort((a,b)=>a.startTime.localeCompare(b.startTime));
-            // Séparer cours et stages
-            const isStageType=(c:any)=>c.activityType==="stage"||c.activityType==="stage_journee";
-            const dc=allDc.filter(c=>!isStageType(c));
-            const stages=allDc.filter(c=>isStageType(c));
-            // Grouper créneaux cours au même horaire sur la même ligne
-            const grouped:Array<{key:string;items:typeof dc}>=[];
-            dc.forEach(c=>{const key=`${c.startTime}-${c.endTime}`;const g=grouped.find(x=>x.key===key);if(g)g.items.push(c);else grouped.push({key,items:[c]});});
-            return(
-            <div key={`c${i}`} className="min-h-[160px] flex flex-col gap-1" style={{minWidth:"95px"}}>
-              {/* Stages : 3 badges selon l'heure */}
-              {(() => {
-                const goToDay = () => { setViewMode("day"); setDayOffset(Math.round((d.getTime()-new Date().getTime())/86400000)); };
-                const matin = stages.filter(c => parseInt(c.startTime) < 13);
-                const aprem = stages.filter(c => parseInt(c.startTime) >= 13 && parseInt(c.startTime) < 16);
-                const soir  = stages.filter(c => parseInt(c.startTime) >= 16);
-
-                const badge = (list: typeof stages, bg: string, border: string, dot: string, text: string) => {
-                  if (list.length === 0) return null;
-                  // Construire le label : horaire + titre tronqué
-                  const label = list.length === 1
-                    ? `${list[0].startTime} ${list[0].activityTitle.slice(0, 10)}`
-                    : `${list.length} stages`;
-                  // Horaires uniques pour afficher sous le titre
-                  const horaires = [...new Set(list.map(c => c.startTime))].join(", ");
-                  return (
-                    <button onClick={goToDay}
-                      className={`w-full flex flex-col px-1.5 py-1 rounded-lg border font-body cursor-pointer text-left hover:opacity-80 ${bg} ${border}`}>
-                      <div className={`flex items-center gap-1 text-[10px] font-semibold ${text}`}>
-                        <span className={`w-3.5 h-3.5 rounded-full ${dot} text-white text-[8px] flex items-center justify-center flex-shrink-0`}>{list.length}</span>
-                        <span className="truncate">{label}</span>
-                      </div>
-                      <div className={`text-[9px] pl-4 ${text} opacity-70`}>{horaires}</div>
-                    </button>
-                  );
-                };
-
-                return <>
-                  {badge(matin, "bg-green-50", "border-green-200", "bg-green-500", "text-green-700")}
-                  {badge(aprem, "bg-teal-50",  "border-teal-200",  "bg-teal-500",  "text-teal-700")}
-                  {badge(soir,  "bg-indigo-50","border-indigo-200","bg-indigo-500","text-indigo-700")}
-                </>;
-              })()}
-              {grouped.map(g=>{
-                // Plusieurs créneaux même horaire → côte à côte
-                if(g.items.length>1) return(
-                  <div key={g.key} className="flex gap-0.5">
-                    {g.items.map(c=>{const en=c.enrolled||[];const fill=c.maxPlaces>0?en.length/c.maxPlaces:0;const col=(c as any).color||typeColors[c.activityType]||"#666";return(
-                      <div key={c.id} onClick={()=>setSelectedCreneau(c)} className="flex-1 min-w-0 bg-white rounded-lg p-1.5 border border-blue-500/8 group relative hover:shadow-md cursor-pointer" style={{borderLeftWidth:3,borderLeftColor:col}}>
-                        <div className="font-body text-[10px] font-semibold" style={{color:col}}>{c.startTime}</div>
-                        <div className="font-body text-[10px] font-semibold text-blue-800 leading-tight mt-0.5" style={{overflowWrap:"break-word",wordBreak:"break-word"}}>{c.activityTitle}</div>
-                        <div className="font-body text-[9px] text-slate-500 mt-0.5 truncate">{c.monitor}</div>
-                        <div className={`font-body text-[9px] font-semibold mt-0.5 ${fill>=1?"text-red-500":fill>=0.7?"text-orange-500":"text-green-600"}`}>{en.length}/{c.maxPlaces}</div>
-                        <button onClick={e=>{e.stopPropagation();openDelete(c);}} className="absolute top-0.5 right-0.5 w-4 h-4 rounded bg-red-50 text-red-400 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Trash2 size={8}/></button>
-                        <button onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0,color:(c as any).color||""});setEditApplyAll(false);}} className="absolute top-0.5 right-5 w-4 h-4 rounded bg-blue-50 text-blue-400 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Settings size={8}/></button>
-                      </div>);})}
-                  </div>
-                );
-                // Créneau seul — affichage normal
-                const c=g.items[0];const en=c.enrolled||[];const fill=c.maxPlaces>0?en.length/c.maxPlaces:0;const col=(c as any).color||typeColors[c.activityType]||"#666";return(
-                <div key={c.id} onClick={()=>setSelectedCreneau(c)} className="bg-white rounded-lg p-2 border border-blue-500/8 group relative hover:shadow-md cursor-pointer" style={{borderLeftWidth:3,borderLeftColor:col}}>
-                  <div className="font-body text-[11px] font-semibold" style={{color:col}}>{c.startTime}–{c.endTime}</div>
-                  <div className="font-body text-xs font-semibold text-blue-800 leading-tight mt-0.5">{c.activityTitle}</div>
-                  <div className="font-body text-[10px] text-slate-600 mt-0.5">{c.monitor}</div>
-                  <div className="flex items-center gap-1 mt-1"><Users size={10} className="text-slate-600"/><span className={`font-body text-[10px] font-semibold ${fill>=1?"text-red-500":fill>=0.7?"text-orange-500":"text-green-600"}`}>{en.length}/{c.maxPlaces}</span></div>
-                  {en.length>0&&(()=>{
-                    const unpaidCount = en.filter((e:any) => {
-                      const isCard=e.paymentSource==="card";
-                      const hasPaid=isCard||payments.some((p:any)=>p.familyId===e.familyId&&p.status==="paid"&&(p.items||[]).some((i:any)=>i.childId===e.childId));
-                      const hasPending=!hasPaid&&!isCard&&payments.some((p:any)=>p.familyId===e.familyId&&(p.status==="pending"||p.status==="partial")&&(p.items||[]).some((i:any)=>i.childId===e.childId));
-                      return !hasPaid && !hasPending && !isCard;
-                    }).length;
-                    return <div className="flex items-center gap-1 mt-1">
-                      <div className="flex flex-wrap gap-0.5">{en.slice(0,6).map((e:any)=>{
-                        const isCard=e.paymentSource==="card";
-                        const hasPaid=isCard||payments.some((p:any)=>p.familyId===e.familyId&&p.status==="paid"&&(p.items||[]).some((i:any)=>i.childId===e.childId));
-                        const hasPending=!hasPaid&&!isCard&&payments.some((p:any)=>p.familyId===e.familyId&&(p.status==="pending"||p.status==="partial")&&(p.items||[]).some((i:any)=>i.childId===e.childId));
-                        return <span key={e.childId} title={`${e.childName} — ${isCard?"carte":hasPaid?"réglé":hasPending?"en attente":"non réglé"}`} className={`w-3 h-3 rounded-full flex-shrink-0 border ${isCard?"bg-blue-400 border-blue-500":hasPaid?"bg-green-400 border-green-500":hasPending?"bg-orange-300 border-orange-400":"bg-gray-200 border-gray-300"}`}/>;
-                      })}{en.length>6&&<span className="font-body text-[9px] text-slate-600 ml-0.5">+{en.length-6}</span>}</div>
-                      {unpaidCount>0&&<span className="font-body text-[9px] font-semibold text-red-500 bg-red-50 px-1 py-0.5 rounded" title={`${unpaidCount} impayé${unpaidCount>1?"s":""}`}>⚠️{unpaidCount}</span>}
-                    </div>;
-                  })()}
-                  <button onClick={e=>{e.stopPropagation();openDelete(c);}} className="absolute top-1 right-1 w-5 h-5 rounded bg-red-50 text-red-400 hover:bg-red-100 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Trash2 size={10}/></button>
-                  <button onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0,color:(c as any).color||""});setEditApplyAll(false);}} className="absolute top-1 right-7 w-5 h-5 rounded bg-blue-50 text-blue-400 hover:bg-blue-100 border-none cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center"><Settings size={10}/></button>
-                </div>);})}
-              <button onClick={()=>{setSelectedDate(ds);setShowSimple(true);setShowGenerator(false);}} className="mt-auto py-2 rounded-lg border border-dashed border-gray-200 text-slate-400 hover:border-blue-300 hover:text-blue-400 bg-transparent cursor-pointer font-body text-lg">+</button>
-            </div>);})}
-        </div></div>}
-      </>}
+      {viewMode === "week" && (
+        <WeekView
+          loading={loading}
+          weekDates={weekDates}
+          creneaux={creneaux}
+          payments={payments}
+          onPrev={() => setWeekOffset(w => w - 1)}
+          onNext={() => setWeekOffset(w => w + 1)}
+          onToday={() => setWeekOffset(0)}
+          onPickDate={setWeekOffset}
+          onSelectCreneau={setSelectedCreneau}
+          onOpenDelete={openDelete}
+          onOpenEdit={openEdit}
+          onAddCreneau={ds => { setSelectedDate(ds); setShowSimple(true); setShowGenerator(false); }}
+          onGoToDay={d => { setViewMode("day"); setDayOffset(Math.round((d.getTime() - new Date().getTime()) / 86400000)); }}
+        />
+      )}
 
       {/* ═══ VUE TIMELINE (style Celeris) ═══ */}
       {viewMode === "timeline" && (
