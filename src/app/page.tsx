@@ -12,6 +12,7 @@ export default function SplitHomePage() {
           display: flex;
           width: 100vw;
           height: 100vh;
+          height: 100svh;
           overflow: hidden;
         }
 
@@ -153,15 +154,15 @@ export default function SplitHomePage() {
         .panel-lb .panel-logo  { animation: riseUp 0.7s 0.2s both ease; }
 
         @media (max-width: 700px) {
-          .split-wrap { flex-direction: column; }
-          .panel, .split-wrap:hover .panel, .split-wrap .panel:hover { flex: 1 !important; }
+          .split-wrap { flex-direction: column; height: 100svh; }
+          .panel, .split-wrap:hover .panel, .split-wrap .panel:hover { flex: 1 !important; min-height: 0; }
           .panel-bg { filter: brightness(0.65) !important; }
-          .panel-inner { padding: 1.5rem; padding-bottom: 1.8rem; opacity: 1 !important; transform: none !important; }
+          .panel-inner { padding: 1.2rem; padding-bottom: 1.5rem; opacity: 1 !important; transform: none !important; justify-content: flex-end; }
           .panel-logo { display: none; }
-          .panel-title { font-size: 2.6rem; }
-          .panel-desc { font-size: 0.82rem; margin-bottom: 1.2rem; }
-          .panel-cta { font-size: 0.75rem; padding: 0.75em 1.6em; }
-          .tag { font-size: 0.55rem; margin-bottom: 0.7rem; }
+          .panel-title { font-size: clamp(1.9rem, 7vw, 2.6rem); margin-bottom: 0.6rem; }
+          .panel-desc { font-size: 0.78rem; margin-bottom: 0.9rem; max-width: 100%; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+          .panel-cta { font-size: 0.72rem; padding: 0.65em 1.4em; }
+          .tag { font-size: 0.52rem; margin-bottom: 0.5rem; padding: 0.3em 0.8em; }
           .sep, .puck { display: none; }
           .panel-lb .panel-inner { align-items: flex-start; text-align: left; }
           .panel-lb .panel-desc { margin-left: 0; }
