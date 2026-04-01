@@ -164,7 +164,7 @@ export default function TimelineView({
                             <div key={c.id}
                               onClick={() => onSelectCreneau(c)}
                               title={`${c.activityTitle}${c.monitor ? " · " + c.monitor : ""} · ${c.startTime}–${c.endTime}`}
-                              className="absolute rounded-lg border cursor-pointer hover:shadow-lg transition-shadow overflow-hidden group"
+                              className="absolute rounded-lg border cursor-pointer hover:shadow-lg transition-shadow group"
                               style={{
                                 top: c.top + 28,
                                 height: cardH,
@@ -174,7 +174,7 @@ export default function TimelineView({
                                 borderColor: `${col}40`,
                                 borderLeftWidth: 3,
                                 borderLeftColor: col,
-                                padding: "4px 5px",
+                                padding: isWide ? "4px 5px 18px 5px" : "4px 5px",
                                 boxSizing: "border-box",
                               }}>
                               {/* Heure */}
