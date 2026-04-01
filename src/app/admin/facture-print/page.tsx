@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 export default function FacturePrintPage() {
   const [html, setHtml] = useState<string | null>(null);
   const [error, setError] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     try {
@@ -35,17 +36,51 @@ export default function FacturePrintPage() {
     iframe?.contentWindow?.print();
   };
 
-  const handleDownload = () => {
-    if (!html) return;
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    // Extraire le numéro de facture depuis le HTML pour le nom du fichier
-    const match = html.match(/Facture\s+([\w-]+)/);
-    a.download = match ? `Facture-${match[1]}.html` : "Facture.html";
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  const handleDownloadPDF = async () => {
+    setDownloading(true);
+    try {
+      const iframe = document.getElementById("facture-frame") as HTMLIFrameElement;
+      const iframeDoc = iframe?.contentDocument;
+      if (!iframeDoc) return;
+
+      const { default: html2canvas } = await import("html2canvas");
+      const { default: jsPDF } = await import("jspdf");
+
+      const body = iframeDoc.body;
+      const canvas = await html2canvas(body, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#ffffff",
+        windowWidth: 794, // A4 px à 96dpi
+      });
+
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const imgH = (canvas.height * pageW) / canvas.width;
+
+      // Si la facture dépasse une page, on pagine
+      let yPos = 0;
+      while (yPos < imgH) {
+        if (yPos > 0) pdf.addPage();
+        pdf.addImage(imgData, "JPEG", 0, -yPos, pageW, imgH);
+        yPos += pageH;
+      }
+
+      // Extraire le numéro de facture
+      const match = html?.match(/FACTURE[^<]*<\/div>\s*<div[^>]*>([^<]+)/);
+      const num = match?.[1]?.trim() || "Facture";
+      pdf.save(`${num}.pdf`);
+    } catch (e) {
+      console.error("Erreur PDF:", e);
+      // Fallback : imprimer en PDF via le navigateur
+      const iframe = document.getElementById("facture-frame") as HTMLIFrameElement;
+      iframe?.contentWindow?.print();
+    } finally {
+      setDownloading(false);
+    }
   };
 
   if (error) return (
@@ -75,21 +110,19 @@ export default function FacturePrintPage() {
           📄 Facture
         </span>
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={handleDownload} style={{
-            display: "flex", alignItems: "center", gap: 6,
+          <button onClick={handlePrint} style={{
             background: "white", color: "#1e3a5f", border: "none",
             padding: "8px 16px", borderRadius: 8, fontFamily: "sans-serif",
             fontSize: 13, fontWeight: 600, cursor: "pointer",
           }}>
-            ⬇ Télécharger
-          </button>
-          <button onClick={handlePrint} style={{
-            display: "flex", alignItems: "center", gap: 6,
-            background: "#2050A0", color: "white", border: "none",
-            padding: "8px 16px", borderRadius: 8, fontFamily: "sans-serif",
-            fontSize: 13, fontWeight: 600, cursor: "pointer",
-          }}>
             🖨 Imprimer
+          </button>
+          <button onClick={handleDownloadPDF} disabled={downloading} style={{
+            background: downloading ? "#64748b" : "#2050A0", color: "white", border: "none",
+            padding: "8px 16px", borderRadius: 8, fontFamily: "sans-serif",
+            fontSize: 13, fontWeight: 600, cursor: downloading ? "not-allowed" : "pointer",
+          }}>
+            {downloading ? "⏳ Génération..." : "⬇ Télécharger PDF"}
           </button>
         </div>
       </div>
@@ -103,3 +136,4 @@ export default function FacturePrintPage() {
     </div>
   );
 }
+
