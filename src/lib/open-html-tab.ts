@@ -1,17 +1,23 @@
 /**
- * Ouvre un document HTML dans un nouvel onglet de façon compatible
- * avec tous les navigateurs (évite les problèmes Blob URL / document.write).
+ * Ouvre une facture HTML dans un nouvel onglet via sessionStorage.
+ * Méthode compatible avec tous les navigateurs modernes.
  */
 export function openHtmlInTab(html: string): void {
-  // Encoder en base64 pour une data URL stable cross-navigateur
-  const encoded = btoa(unescape(encodeURIComponent(html)));
-  const dataUrl = `data:text/html;charset=utf-8;base64,${encoded}`;
-  const w = window.open(dataUrl, "_blank");
-  // Fallback : si le navigateur bloque les data URLs (rare), utiliser Blob
-  if (!w) {
+  try {
+    sessionStorage.setItem("facture_html", html);
+    const w = window.open("/admin/facture-print", "_blank");
+    if (!w) {
+      // Popup bloqué — fallback même onglet
+      window.location.href = "/admin/facture-print";
+    }
+  } catch {
+    // Fallback final : Blob URL
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const blobUrl = URL.createObjectURL(blob);
-    window.open(blobUrl, "_blank");
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.target = "_blank";
+    a.click();
     setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
   }
 }
