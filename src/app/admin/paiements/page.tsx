@@ -1617,6 +1617,22 @@ export default function PaiementsPage() {
 
             // Filtrage — exclure les annulés et les SEPA programmés par défaut
             let filtered = payments.filter(p => p.status !== "cancelled" && p.status !== "sepa_scheduled");
+            // Inclure aussi les encaissements "avoir" qui n'ont pas de payment lié dans payments
+            const avoirEncaissements = encaissements
+              .filter((e: any) => e.mode === "avoir" && !payments.some(p => p.id === e.paymentId))
+              .map((e: any) => ({
+                id: e.id,
+                familyId: e.familyId,
+                familyName: e.familyName,
+                date: e.date,
+                totalTTC: e.montant || 0,
+                paidAmount: e.montant || 0,
+                status: "paid",
+                paymentMode: "avoir",
+                items: [{ activityTitle: e.activityTitle || "Avoir utilisé" }],
+                _fromEncaissement: true,
+              }));
+            filtered = [...filtered, ...avoirEncaissements] as any[];
             if (modeFilter !== "all") filtered = filtered.filter(p => p.paymentMode === modeFilter);
             if (statusFilter !== "all") filtered = filtered.filter(p => p.status === statusFilter);
             if (searchFilter) {

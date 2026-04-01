@@ -297,7 +297,30 @@ export default function ReserverPage() {
         date: serverTimestamp(),
       });
 
-      // 3. Stripe checkout (paiement unique ou acompte)
+      // 3. Email de confirmation au cavalier
+      if (family.parentEmail) {
+        const activitesList = cart.map(i => `• ${i.activityTitle} — ${i.childName}`).join("<br/>");
+        fetch("/api/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: family.parentEmail,
+            subject: `✅ Inscription confirmée — Centre Équestre d'Agon-Coutainville`,
+            html: `<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+              <h2 style="color:#2050A0;">Inscription confirmée !</h2>
+              <p>Bonjour <strong>${family.parentName}</strong>,</p>
+              <p>Votre inscription a bien été enregistrée :</p>
+              <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
+                ${activitesList}
+              </div>
+              <p>Montant : <strong>${cartTotal.toFixed(2)}€</strong></p>
+              <p>À bientôt au centre équestre !</p>
+            </div>`,
+          }),
+        }).catch(() => {});
+      }
+
+      // 4. Stripe checkout (paiement unique ou acompte)
       const hasStage = cart.some(i => i.isStage);
       const isDeposit = hasStage && depositMode === "deposit";
       const stageDate = hasStage ? cart.find(i => i.isStage)?.dates || "" : "";
@@ -321,7 +344,12 @@ export default function ReserverPage() {
           }),
         });
         const data = await res.json();
-        if (data.url) { window.location.href = data.url; return; }
+        if (data.url) {
+          setSuccess(true); // Afficher brièvement le succès
+          setCart([]);
+          setTimeout(() => { window.location.href = data.url; }, 800);
+          return;
+        }
       } catch (e) { console.error("Stripe error:", e); }
 
       // Fallback sans Stripe

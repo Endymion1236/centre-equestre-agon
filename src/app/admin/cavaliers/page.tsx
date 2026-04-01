@@ -2,7 +2,7 @@
 import { useAgentContext } from "@/hooks/useAgentContext";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, Timestamp, query, where } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, Timestamp, query, where, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { storage } from "@/lib/firebase";
@@ -1085,9 +1085,37 @@ export default function CavaliersPage() {
                                         <span className="text-blue-800 font-semibold">{r.activityTitle}</span>
                                         <span className="text-slate-600">({r.childName})</span>
                                       </div>
-                                      <Badge color={r.status === "confirmed" ? "green" : r.status === "cancelled" ? "red" : "gray"}>
-                                        {r.status === "confirmed" ? "Confirmée" : r.status === "cancelled" ? "Annulée" : r.status}
-                                      </Badge>
+                                      <div className="flex items-center gap-2">
+                                        <Badge color={r.status === "confirmed" ? "green" : r.status === "cancelled" ? "red" : "gray"}>
+                                          {r.status === "confirmed" ? "Confirmée" : r.status === "cancelled" ? "Annulée" : r.status}
+                                        </Badge>
+                                        {r.status !== "cancelled" && (
+                                          <button
+                                            onClick={async () => {
+                                              if (!confirm(`Annuler la réservation de ${r.childName} le ${new Date(r.date).toLocaleDateString("fr-FR")} ?`)) return;
+                                              try {
+                                                // Annuler la réservation
+                                                await updateDoc(doc(db, "reservations", r.id), { status: "cancelled", cancelledAt: new Date().toISOString() });
+                                                // Retirer l'enfant du créneau Firestore
+                                                if (r.creneauId) {
+                                                  const creneauSnap = await getDoc(doc(db, "creneaux", r.creneauId));
+                                                  if (creneauSnap.exists()) {
+                                                    const enrolled = (creneauSnap.data().enrolled || []).filter((e: any) => !(e.childId === r.childId && e.familyId === r.familyId));
+                                                    await updateDoc(doc(db, "creneaux", r.creneauId), { enrolled, enrolledCount: enrolled.length });
+                                                  }
+                                                }
+                                                fetchFamilies();
+                                              } catch (e: any) {
+                                                alert("Erreur : " + e.message);
+                                              }
+                                            }}
+                                            className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-0.5 rounded"
+                                            title="Annuler cette réservation"
+                                          >
+                                            <Trash2 size={12} />
+                                          </button>
+                                        )}
+                                      </div>
                                     </div>
                                   ))}
                                 </>
