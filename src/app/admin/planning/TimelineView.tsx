@@ -174,38 +174,38 @@ export default function TimelineView({
                                 borderColor: `${col}40`,
                                 borderLeftWidth: 3,
                                 borderLeftColor: col,
-                                padding: isWide ? "4px 5px 18px 5px" : "4px 5px",
+                                padding: "4px 5px 18px 5px",
                                 boxSizing: "border-box",
+                                overflow: "hidden",
                               }}>
                               {/* Heure */}
-                              <div style={{ fontSize: "10px", fontWeight: 700, color: col, lineHeight: 1.2, whiteSpace: "nowrap" }}>
+                              <div style={{ fontSize: "10px", fontWeight: 700, color: col, lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden" }}>
                                 {c.startTime}–{c.endTime}
                               </div>
-                              {/* Titre — retour à la ligne si assez large */}
+                              {/* Titre — 1 ligne si chevauchement, 2 lignes si seul */}
                               <div style={{
                                 fontSize: isWide ? "11px" : "10px",
                                 fontWeight: 600,
                                 color: "#1e3a5f",
-                                lineHeight: 1.25,
+                                lineHeight: 1.3,
                                 marginTop: 1,
-                                ...(isWide
-                                  ? { whiteSpace: "normal", wordBreak: "break-word" }
-                                  : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }
-                                ),
-                              }}>
+                                display: "-webkit-box",
+                                WebkitLineClamp: isWide ? 3 : 1,
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden",
+                              } as any}>
                                 {c.activityTitle}
                               </div>
                               {/* Moniteur */}
-                              {cardH > 50 && (
+                              {cardH > 55 && (
                                 <div style={{
                                   fontSize: "9px",
                                   color: "#64748b",
                                   lineHeight: 1.2,
                                   marginTop: 1,
-                                  ...(isWide
-                                    ? { whiteSpace: "normal" }
-                                    : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }
-                                  ),
+                                  overflow: "hidden",
+                                  whiteSpace: "nowrap",
+                                  textOverflow: "ellipsis",
                                 }}>
                                   {c.monitor}
                                 </div>
