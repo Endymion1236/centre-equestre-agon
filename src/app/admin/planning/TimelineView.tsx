@@ -152,11 +152,12 @@ export default function TimelineView({
                           const colWidth = 100 / totalCols;
                           const left = columns[cIdx] * colWidth;
 
-                          const isWide = colWidth >= 80; // créneau seul ou quasi-seul dans la colonne
+                          const isWide = colWidth >= 80;
                           return (
                             <div key={c.id}
                               onClick={() => onSelectCreneau(c)}
-                              className={`absolute rounded-lg border cursor-pointer hover:shadow-lg transition-shadow group ${isWide ? "" : "overflow-hidden"}`}
+                              title={`${c.activityTitle} · ${c.monitor || ""} · ${c.startTime}–${c.endTime}`}
+                              className={`absolute rounded-lg border cursor-pointer hover:shadow-lg transition-shadow group ${isWide ? "overflow-visible" : "overflow-hidden"}`}
                               style={{
                                 top: c.top + 28,
                                 height: c.height - 2,
@@ -167,10 +168,18 @@ export default function TimelineView({
                                 borderLeftWidth: 3,
                                 borderLeftColor: col,
                               }}>
-                              <div className="p-1.5 h-full flex flex-col">
-                                <div className={`font-body font-bold ${isWide ? "text-[11px]" : "text-[10px]"}`} style={{ color: col }}>{c.startTime}–{c.endTime}</div>
-                                <div className={`font-body font-semibold text-blue-800 leading-tight ${isWide ? "text-[11px]" : "text-[10px] truncate"}`}>{c.activityTitle}</div>
-                                {c.height > 45 && <div className={`font-body text-slate-500 ${isWide ? "text-[10px]" : "text-[9px] truncate"}`}>{c.monitor}</div>}
+                              <div className="p-1.5 flex flex-col min-h-0" style={{ height: c.height - 2, overflow: "hidden" }}>
+                                <div className={`font-body font-bold flex-shrink-0 ${isWide ? "text-[11px]" : "text-[10px]"}`} style={{ color: col }}>{c.startTime}–{c.endTime}</div>
+                                <div className={`font-body font-semibold text-blue-800 leading-tight flex-shrink-0 ${isWide ? "text-[12px]" : "text-[10px] truncate"}`}
+                                  style={isWide ? { wordBreak: "break-word", overflowWrap: "break-word", whiteSpace: "normal" } : {}}>
+                                  {c.activityTitle}
+                                </div>
+                                {c.height > 45 && (
+                                  <div className={`font-body text-slate-500 flex-shrink-0 ${isWide ? "text-[10px]" : "text-[9px] truncate"}`}
+                                    style={isWide ? { whiteSpace: "normal" } : {}}>
+                                    {c.monitor}
+                                  </div>
+                                )}
                                 <div className="mt-auto flex items-center gap-1">
                                   <span className={`font-body text-[9px] font-bold ${fill >= 1 ? "text-red-500" : fill >= 0.7 ? "text-orange-500" : "text-green-600"}`}>
                                     {en.length}/{c.maxPlaces}
