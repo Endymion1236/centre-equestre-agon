@@ -171,12 +171,33 @@ export default function TimelineView({
                               <div className="p-1.5 flex flex-col" style={{ height: c.height - 2, overflow: "hidden" }}>
                                 <div className="font-body text-[10px] font-bold flex-shrink-0" style={{ color: col }}>{c.startTime}–{c.endTime}</div>
                                 <div className="font-body font-semibold text-blue-800 leading-tight flex-shrink-0"
-                                  style={{ fontSize: isWide ? "11px" : "10px", whiteSpace: isWide ? "normal" : "nowrap", overflow: "hidden", textOverflow: isWide ? "clip" : "ellipsis" }}>
+                                  style={isWide ? {
+                                    fontSize: "11px",
+                                    whiteSpace: "normal",
+                                    wordBreak: "break-word",
+                                    overflowWrap: "anywhere",
+                                    overflow: "visible",
+                                  } : {
+                                    fontSize: "10px",
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                  }}>
                                   {c.activityTitle}
                                 </div>
                                 {c.height > 45 && (
                                   <div className="font-body text-slate-500 flex-shrink-0"
-                                    style={{ fontSize: "9px", whiteSpace: isWide ? "normal" : "nowrap", overflow: "hidden", textOverflow: isWide ? "clip" : "ellipsis" }}>
+                                    style={isWide ? {
+                                      fontSize: "9px",
+                                      whiteSpace: "normal",
+                                      wordBreak: "break-word",
+                                      overflow: "visible",
+                                    } : {
+                                      fontSize: "9px",
+                                      whiteSpace: "nowrap",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                    }}>
                                     {c.monitor}
                                   </div>
                                 )}
