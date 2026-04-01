@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     await fileRef.save(buffer, {
       metadata: {
         contentType: file.type,
-        cacheControl: "public, max-age=31536000",
+        cacheControl: "public, max-age=3600, must-revalidate",
       },
     });
 

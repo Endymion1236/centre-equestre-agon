@@ -68,16 +68,19 @@ interface VitrineContextType {
   images: Record<string, string>;
   getImage: (key: VitrineImageKey) => string;
   refresh: () => void;
+  cacheBust: number;
 }
 
 const VitrineContext = createContext<VitrineContextType>({
   images: {},
   getImage: (key) => VITRINE_DEFAULTS[key] || "",
   refresh: () => {},
+  cacheBust: 0,
 });
 
 export function VitrineProvider({ children }: { children: React.ReactNode }) {
   const [images, setImages] = useState<Record<string, string>>({});
+  const [cacheBust, setCacheBust] = useState(() => Date.now());
 
   const load = async () => {
     try {
@@ -85,6 +88,7 @@ export function VitrineProvider({ children }: { children: React.ReactNode }) {
       if (res.ok) {
         const data = await res.json();
         setImages(data.images || {});
+        setCacheBust(Date.now()); // force re-render des images
       }
     } catch {
       // Silencieux — on utilise les fallbacks
@@ -96,11 +100,17 @@ export function VitrineProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const getImage = (key: VitrineImageKey): string => {
-    return images[key] || VITRINE_DEFAULTS[key] || "";
+    const url = images[key] || VITRINE_DEFAULTS[key] || "";
+    if (!url) return "";
+    // Ajouter cache-busting seulement sur les URLs Firebase Storage
+    if (url.includes("storage.googleapis.com")) {
+      return `${url}?v=${cacheBust}`;
+    }
+    return url;
   };
 
   return (
-    <VitrineContext.Provider value={{ images, getImage, refresh: load }}>
+    <VitrineContext.Provider value={{ images, getImage, refresh: load, cacheBust }}>
       {children}
     </VitrineContext.Provider>
   );
