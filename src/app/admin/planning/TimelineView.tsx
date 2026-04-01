@@ -155,7 +155,7 @@ export default function TimelineView({
                           return (
                             <div key={c.id}
                               onClick={() => onSelectCreneau(c)}
-                              className="absolute rounded-lg border cursor-pointer hover:shadow-lg transition-shadow overflow-hidden group"
+                              className={`absolute rounded-lg border cursor-pointer hover:shadow-lg transition-shadow group ${totalCols === 1 ? "" : "overflow-hidden"}`}
                               style={{
                                 top: c.top + 28,
                                 height: c.height - 2,
@@ -168,8 +168,8 @@ export default function TimelineView({
                               }}>
                               <div className="p-1.5 h-full flex flex-col">
                                 <div className={`font-body font-bold ${totalCols === 1 ? "text-[11px]" : "text-[10px]"}`} style={{ color: col }}>{c.startTime}–{c.endTime}</div>
-                                <div className={`font-body font-semibold text-blue-800 leading-tight ${totalCols === 1 ? "text-[11px] line-clamp-3" : "text-[10px] truncate"}`}>{c.activityTitle}</div>
-                                {c.height > 45 && <div className={`font-body text-slate-500 ${totalCols === 1 ? "text-[10px] line-clamp-2" : "text-[9px] truncate"}`}>{c.monitor}</div>}
+                                <div className={`font-body font-semibold text-blue-800 leading-tight ${totalCols === 1 ? "text-[11px]" : "text-[10px] truncate"}`}>{c.activityTitle}</div>
+                                {c.height > 45 && <div className={`font-body text-slate-500 ${totalCols === 1 ? "text-[10px]" : "text-[9px] truncate"}`}>{c.monitor}</div>}
                                 <div className="mt-auto flex items-center gap-1">
                                   <span className={`font-body text-[9px] font-bold ${fill >= 1 ? "text-red-500" : fill >= 0.7 ? "text-orange-500" : "text-green-600"}`}>
                                     {en.length}/{c.maxPlaces}
