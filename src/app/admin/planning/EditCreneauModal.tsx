@@ -1,5 +1,5 @@
 "use client";
-import { X, Loader2 } from "lucide-react";
+import { X, Loader2, Copy } from "lucide-react";
 import type { Creneau } from "./types";
 
 // Créneaux horaires disponibles de 7h à 21h par tranches de 15min
@@ -29,12 +29,13 @@ interface Props {
   onApplyAllChange: (v: boolean) => void;
   onClose: () => void;
   onSave: () => void;
+  onDuplicate?: () => void;
 }
 
 const PRESET_COLORS = ["#2050A0","#27ae60","#e67e22","#7c3aed","#D63031","#16a085","#F0A010","#0ea5e9","#db2777","#64748b"];
 
 export default function EditCreneauModal({
-  creneau, form, saving, applyAll, onFormChange, onApplyAllChange, onClose, onSave
+  creneau, form, saving, applyAll, onFormChange, onApplyAllChange, onClose, onSave, onDuplicate
 }: Props) {
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
@@ -122,6 +123,12 @@ export default function EditCreneauModal({
         <div className="flex gap-3 p-5 border-t border-gray-100 flex-shrink-0">
           <button onClick={onClose}
             className="px-5 py-3 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">Annuler</button>
+          {onDuplicate && (
+            <button onClick={onDuplicate}
+              className="px-4 py-3 rounded-xl font-body text-sm font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 border-none cursor-pointer flex items-center gap-1.5">
+              <Copy size={14}/>Dupliquer
+            </button>
+          )}
           <button onClick={onSave} disabled={saving}
             className="flex-1 py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-400 border-none cursor-pointer disabled:opacity-50">
             {saving ? <Loader2 size={16} className="animate-spin inline mr-2"/> : null}

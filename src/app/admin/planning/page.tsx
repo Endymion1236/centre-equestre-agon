@@ -21,6 +21,7 @@ import SimpleCreneauForm from "./SimpleCreneauForm";
 import RdvModal, { RDV_CATEGORIES, type RdvForm } from "./RdvModal";
 import DeleteCreneauModal from "./DeleteCreneauModal";
 import EditCreneauModal, { type EditForm } from "./EditCreneauModal";
+import DuplicateCreneauModal from "./DuplicateCreneauModal";
 import MonthView from "./MonthView";
 import TimelineView from "./TimelineView";
 import WeekView from "./WeekView";
@@ -52,6 +53,7 @@ export default function PlanningPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editApplyAll, setEditApplyAll] = useState(false);
   const [showDuplicate, setShowDuplicate] = useState(false); const [dupWeeks, setDupWeeks] = useState(1); const [duplicating, setDuplicating] = useState(false);
+  const [duplicateCreneau, setDuplicateCreneau] = useState<(Creneau & { id: string })|null>(null);
 
   // ─── RDV Pro ───
   const [rdvPros, setRdvPros] = useState<any[]>([]);
@@ -308,6 +310,41 @@ export default function PlanningPage() {
       await fetchData();
     } catch (e) { console.error(e); toast("Erreur", "error"); }
     setEditSaving(false);
+  };
+
+  const handleDuplicateCreneau = async (dates: string[]) => {
+    if (!duplicateCreneau) return;
+    const src = duplicateCreneau;
+    // Vérifier doublons
+    const minDate = dates.reduce((a, b) => a < b ? a : b);
+    const maxDate = dates.reduce((a, b) => a > b ? a : b);
+    const snap = await getDocs(query(
+      collection(db, "creneaux"),
+      where("date", ">=", minDate),
+      where("date", "<=", maxDate)
+    ));
+    const existing = snap.docs.map(d => d.data());
+    let created = 0, skipped = 0;
+    for (const d of dates) {
+      const isDup = existing.some(ex =>
+        ex.date === d && ex.startTime === src.startTime && ex.activityTitle === src.activityTitle
+      );
+      if (isDup) { skipped++; continue; }
+      const { id: _id, ...srcData } = src as any;
+      await addDoc(collection(db, "creneaux"), {
+        ...srcData,
+        date: d,
+        enrolled: [],
+        enrolledCount: 0,
+        status: "planned",
+        createdAt: serverTimestamp(),
+      });
+      created++;
+    }
+    setDuplicateCreneau(null);
+    setEditCreneau(null);
+    toast(`✅ ${created} copie${created > 1 ? "s" : ""} créée${created > 1 ? "s" : ""}${skipped > 0 ? ` · ${skipped} doublon${skipped > 1 ? "s" : ""} ignoré${skipped > 1 ? "s" : ""}` : ""}`, "success");
+    await fetchData();
   };
 
   const exportPDF = () => {
@@ -952,6 +989,16 @@ export default function PlanningPage() {
           onApplyAllChange={setEditApplyAll}
           onClose={() => setEditCreneau(null)}
           onSave={handleEditSave}
+          onDuplicate={() => setDuplicateCreneau(editCreneau)}
+        />
+      )}
+
+      {/* ── Modal duplication créneau ── */}
+      {duplicateCreneau && (
+        <DuplicateCreneauModal
+          creneau={duplicateCreneau}
+          onDuplicate={handleDuplicateCreneau}
+          onClose={() => setDuplicateCreneau(null)}
         />
       )}
     </div>
