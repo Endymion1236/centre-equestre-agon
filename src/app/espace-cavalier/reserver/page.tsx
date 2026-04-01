@@ -5,7 +5,8 @@ import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serv
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
-import { Calendar, Clock, Users, Loader2, ShoppingCart, ChevronLeft, ChevronRight, X, Check, CreditCard } from "lucide-react";
+import { Calendar, Clock, Users, Loader2, ShoppingCart, ChevronLeft, ChevronRight, X, Check, CreditCard, CalendarDays, LayoutList } from "lucide-react";
+import TimelineReservation from "./TimelineReservation";
 import { useSearchParams } from "next/navigation";
 
 interface Creneau { id: string; activityId: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolled: any[]; enrolledCount: number; priceHT: number; priceTTC?: number; tvaTaux: number; }
@@ -42,6 +43,7 @@ export default function ReserverPage() {
   const familyId = user?.uid || "";
 
   const [monthOffset, setMonthOffset] = useState(0);
+  const [viewMode, setViewMode] = useState<"timeline" | "liste">("timeline");
 
   // Mois courant affiché
   const currentMonth = useMemo(() => {
@@ -351,7 +353,7 @@ export default function ReserverPage() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="font-display text-2xl font-bold text-blue-800">
             {initialFilter === "balade" ? "Promenades" : "Réserver"}
@@ -367,6 +369,33 @@ export default function ReserverPage() {
       </div>
 
       {success && <Card padding="md" className="mb-4 bg-green-50 border-green-200"><p className="font-body text-sm text-green-700"><Check size={16} className="inline mr-1" /> Inscription confirmée ! Rendez-vous au centre équestre.</p></Card>}
+
+      {/* ── Switcher Timeline / Liste ── */}
+      {initialFilter === "all" && (
+        <div className="flex bg-sand rounded-xl p-1 mb-5">
+          <button onClick={() => setViewMode("timeline")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-body text-sm font-semibold border-none cursor-pointer transition-all ${viewMode === "timeline" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 bg-transparent"}`}>
+            <CalendarDays size={15}/> Planning
+          </button>
+          <button onClick={() => setViewMode("liste")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-body text-sm font-semibold border-none cursor-pointer transition-all ${viewMode === "liste" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 bg-transparent"}`}>
+            <LayoutList size={15}/> Liste
+          </button>
+        </div>
+      )}
+
+      {/* ── VUE TIMELINE ── */}
+      {viewMode === "timeline" && initialFilter === "all" && (
+        <TimelineReservation
+          creneaux={creneaux}
+          children={(family?.children || []).map((c: any) => ({ id: c.id, firstName: c.firstName, galopLevel: c.galopLevel }))}
+          familyId={familyId}
+          onBook={(creneau) => { setSelectedCreneau(creneau as any); setSelectedChildren([]); }}
+        />
+      )}
+
+      {/* ── VUE LISTE ── */}
+      {(viewMode === "liste" || initialFilter !== "all") && (<>
 
       {/* Filtres catégorie — masqués si filtre imposé par l'URL */}
       {initialFilter === "all" && (
@@ -635,6 +664,8 @@ export default function ReserverPage() {
           {available.length === 0 && <Card padding="lg" className="text-center"><p className="font-body text-sm text-gray-600">Aucune activité disponible sur cette période.</p></Card>}
         </div>
       )}
+
+      </>) }{/* fin vue liste */}
 
       {/* PANIER MODAL */}
       {showCart && (
