@@ -16,7 +16,7 @@ interface Props {
   onGoToDay: (d: Date) => void;
 }
 
-const HOUR_HEIGHT = 100; // px par heure
+const HOUR_HEIGHT = 120; // px par heure
 
 export default function TimelineView({
   loading, weekDates, creneaux, payments,
@@ -182,7 +182,7 @@ export default function TimelineView({
                               <div style={{ fontSize: "10px", fontWeight: 700, color: col, lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden" }}>
                                 {c.startTime}–{c.endTime}
                               </div>
-                              {/* Titre — 1 ligne si chevauchement, 2 lignes si seul */}
+                              {/* Titre — toujours 2 lignes max */}
                               <div style={{
                                 fontSize: isWide ? "11px" : "10px",
                                 fontWeight: 600,
@@ -190,7 +190,7 @@ export default function TimelineView({
                                 lineHeight: 1.3,
                                 marginTop: 1,
                                 display: "-webkit-box",
-                                WebkitLineClamp: isWide ? 3 : 1,
+                                WebkitLineClamp: 2,
                                 WebkitBoxOrient: "vertical",
                                 overflow: "hidden",
                               } as any}>
