@@ -2,6 +2,14 @@
 import { X, Loader2 } from "lucide-react";
 import type { Creneau } from "./types";
 
+// Créneaux horaires disponibles de 7h à 21h par tranches de 15min
+const TIME_OPTIONS = Array.from({ length: (21 - 7) * 4 + 1 }, (_, i) => {
+  const totalMinutes = 7 * 60 + i * 15;
+  const h = Math.floor(totalMinutes / 60).toString().padStart(2, "0");
+  const m = (totalMinutes % 60).toString().padStart(2, "0");
+  return `${h}:${m}`;
+});
+
 export interface EditForm {
   activityTitle: string;
   monitor: string;
@@ -71,15 +79,19 @@ export default function EditCreneauModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Heure début</label>
-              <input type="time" value={form.startTime}
+              <select value={form.startTime}
                 onChange={e => onFormChange({...form, startTime: e.target.value})}
-                className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
+                className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none cursor-pointer">
+                {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
             </div>
             <div>
               <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Heure fin</label>
-              <input type="time" value={form.endTime}
+              <select value={form.endTime}
                 onChange={e => onFormChange({...form, endTime: e.target.value})}
-                className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
+                className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none cursor-pointer">
+                {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

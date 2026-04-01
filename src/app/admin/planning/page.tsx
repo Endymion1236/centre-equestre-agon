@@ -283,13 +283,19 @@ export default function PlanningPage() {
       if (editForm.color) update.color = editForm.color;
 
       if (editApplyAll) {
-        // Appliquer à tous les créneaux du même titre + même jour de semaine
-        const dow = new Date(editCreneau.date).getDay();
-        const targets = creneaux.filter(c =>
-          c.activityTitle === editCreneau.activityTitle &&
-          new Date(c.date).getDay() === dow &&
-          c.startTime === editCreneau.startTime
-        );
+        // Charger TOUS les créneaux futurs depuis Firestore (pas seulement la semaine affichée)
+        const today = new Date().toISOString().split("T")[0];
+        const allSnap = await getDocs(query(
+          collection(db, "creneaux"),
+          where("date", ">=", today)
+        ));
+        const dow = new Date(editCreneau.date + "T12:00:00").getDay();
+        const targets = allSnap.docs.filter(d => {
+          const c = d.data();
+          return c.activityTitle === editCreneau.activityTitle &&
+            new Date(c.date + "T12:00:00").getDay() === dow &&
+            c.startTime === editCreneau.startTime;
+        });
         for (const t of targets) {
           await updateDoc(doc(db, "creneaux", t.id), update);
         }
