@@ -254,6 +254,7 @@ export default function CavaleriePage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showSoinForm, setShowSoinForm] = useState(false);
+  const [editingSoin, setEditingSoin] = useState<SoinRecord | null>(null);
   const [showMouvForm, setShowMouvForm] = useState(false);
   const [showIndispoForm, setShowIndispoForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -478,6 +479,23 @@ export default function CavaleriePage() {
       alert("Erreur lors de l'enregistrement du soin.");
     }
     setSaving(false);
+  };
+
+  const updateSoin = async (soin: SoinRecord, updates: Partial<SoinRecord>) => {
+    await updateDoc(doc(db, "soins", soin.id), {
+      ...updates,
+      date: updates.date ? Timestamp.fromDate(new Date(updates.date as any)) : soin.date,
+      prochainRdv: updates.prochainRdv ? Timestamp.fromDate(new Date(updates.prochainRdv as any)) : null,
+      updatedAt: serverTimestamp(),
+    });
+    setEditingSoin(null);
+    fetchData();
+  };
+
+  const deleteSoin = async (soinId: string) => {
+    if (!confirm("Supprimer ce soin ?")) return;
+    await deleteDoc(doc(db, "soins", soinId));
+    fetchData();
   };
 
   const saveMouvement = async () => {
@@ -950,7 +968,7 @@ export default function CavaleriePage() {
                   const stOpt = soinTypeOptions.find(o => o.value === s.type);
                   const SI = stOpt?.icon || ClipboardList;
                   return (
-                    <Card key={item.key} padding="sm" className="flex items-start gap-3">
+                    <Card key={item.key} padding="sm" className="flex items-start gap-3 group">
                       <SI size={18} className="text-blue-400 mt-0.5 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         {item.isBatch ? (
@@ -984,6 +1002,17 @@ export default function CavaleriePage() {
                             {s.observations && <div className="font-body text-xs text-gray-300 mt-0.5">{s.observations}</div>}
                           </>
                         )}
+                      </div>
+                      {/* Boutons édition/suppression */}
+                      <div className="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => setEditingSoin(s)}
+                          className="w-7 h-7 rounded-lg bg-blue-50 text-blue-400 hover:text-blue-600 hover:bg-blue-100 flex items-center justify-center border-none cursor-pointer">
+                          <Edit3 size={12} />
+                        </button>
+                        <button onClick={() => deleteSoin(s.id)}
+                          className="w-7 h-7 rounded-lg bg-red-50 text-red-300 hover:text-red-500 hover:bg-red-100 flex items-center justify-center border-none cursor-pointer">
+                          <Trash2 size={12} />
+                        </button>
                       </div>
                     </Card>
                   );
@@ -1699,6 +1728,84 @@ export default function CavaleriePage() {
           </div>
         </div>
       )}
+      {/* ═══════════════════════════════════════════ */}
+      {/* MODAL : ÉDITION SOIN                        */}
+      {/* ═══════════════════════════════════════════ */}
+      {editingSoin && (() => {
+        const s = editingSoin;
+        const stOpt = soinTypeOptions.find(o => o.value === s.type);
+        return (
+          <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setEditingSoin(null)}>
+            <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center p-5 border-b border-gray-100 flex-shrink-0">
+                <div>
+                  <h2 className="font-display text-lg font-bold text-blue-800">Modifier le soin</h2>
+                  <p className="font-body text-xs text-slate-500 mt-0.5">{s.equideName} · {stOpt?.label}</p>
+                </div>
+                <button onClick={() => setEditingSoin(null)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
+              </div>
+              <div className="p-5 space-y-4 overflow-y-auto flex-1">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelStyle}>Type de soin</label>
+                    <select className={inputStyle} defaultValue={s.type}
+                      onChange={e => setEditingSoin({ ...editingSoin, type: e.target.value as SoinType })}>
+                      {soinTypeOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelStyle}>Date</label>
+                    <input type="date" className={inputStyle}
+                      defaultValue={s.date?.toDate ? s.date.toDate().toISOString().split("T")[0] : ""}
+                      onChange={e => setEditingSoin({ ...editingSoin, date: e.target.value as any })} />
+                  </div>
+                </div>
+                <div>
+                  <label className={labelStyle}>Libellé</label>
+                  <input className={inputStyle} defaultValue={s.label}
+                    onChange={e => setEditingSoin({ ...editingSoin, label: e.target.value })} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelStyle}>Praticien</label>
+                    <input className={inputStyle} defaultValue={s.praticien}
+                      onChange={e => setEditingSoin({ ...editingSoin, praticien: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className={labelStyle}>Coût (€)</label>
+                    <input type="number" className={inputStyle} defaultValue={s.cout?.toString() || ""}
+                      onChange={e => setEditingSoin({ ...editingSoin, cout: e.target.value ? Number(e.target.value) : null })} />
+                  </div>
+                </div>
+                <div>
+                  <label className={labelStyle}>Prochain RDV</label>
+                  <input type="date" className={inputStyle}
+                    defaultValue={s.prochainRdv?.toDate ? s.prochainRdv.toDate().toISOString().split("T")[0] : ""}
+                    onChange={e => setEditingSoin({ ...editingSoin, prochainRdv: e.target.value as any })} />
+                </div>
+                <div>
+                  <label className={labelStyle}>Observations</label>
+                  <textarea className={`${inputStyle} resize-y`} rows={3} defaultValue={s.observations}
+                    onChange={e => setEditingSoin({ ...editingSoin, observations: e.target.value })} />
+                </div>
+              </div>
+              <div className="flex justify-between gap-3 p-5 border-t border-gray-100 flex-shrink-0">
+                <button onClick={() => deleteSoin(s.id)}
+                  className="flex items-center gap-1.5 font-body text-sm text-red-500 bg-red-50 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-red-100">
+                  <Trash2 size={14} /> Supprimer
+                </button>
+                <div className="flex gap-2">
+                  <button onClick={() => setEditingSoin(null)} className={btnSecondary}>Annuler</button>
+                  <button onClick={() => updateSoin(s, editingSoin)} className={btnPrimary}>
+                    <Save size={14} /> Enregistrer
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
     </div>
   );
 }
