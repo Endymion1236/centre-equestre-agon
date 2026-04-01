@@ -1496,13 +1496,13 @@ export default function CavaleriePage() {
       {/* MODAL : FORMULAIRE SOIN                    */}
       {/* ═══════════════════════════════════════════ */}
       {showSoinForm && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center pt-16" onClick={() => setShowSoinForm(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-lg mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center p-5 border-b border-gray-100">
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setShowSoinForm(false)}>
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-5 border-b border-gray-100 flex-shrink-0">
               <h2 className="font-display text-lg font-bold text-blue-800">Enregistrer un soin</h2>
               <button onClick={() => setShowSoinForm(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
             </div>
-            <div className="p-5 space-y-4">
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
               <div>
                 <label className={labelStyle}>Équidés * <span className="font-normal text-gray-400">({soinForm.equideIds.length} sélectionné{soinForm.equideIds.length > 1 ? "s" : ""})</span></label>
                 <div className="flex gap-2 mb-2">
@@ -1587,7 +1587,7 @@ export default function CavaleriePage() {
                   onChange={e => setSoinForm({ ...soinForm, observations: e.target.value })} placeholder="Remarques éventuelles…" />
               </div>
             </div>
-            <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
+            <div className="flex justify-end gap-3 p-5 border-t border-gray-100 flex-shrink-0">
               <button onClick={() => setShowSoinForm(false)} className={btnSecondary}>Annuler</button>
               <button onClick={saveSoin} disabled={saving || soinForm.equideIds.length === 0} className={`${btnPrimary} ${saving ? "opacity-50" : ""}`}>
                 {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Enregistrer{soinForm.equideIds.length > 1 ? ` (${soinForm.equideIds.length} équidés)` : ""}
@@ -1601,13 +1601,13 @@ export default function CavaleriePage() {
       {/* MODAL : MOUVEMENT REGISTRE                 */}
       {/* ═══════════════════════════════════════════ */}
       {showMouvForm && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center pt-16" onClick={() => setShowMouvForm(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-lg mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center p-5 border-b border-gray-100">
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setShowMouvForm(false)}>
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-5 border-b border-gray-100 flex-shrink-0">
               <h2 className="font-display text-lg font-bold text-blue-800">Nouveau mouvement</h2>
               <button onClick={() => setShowMouvForm(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
             </div>
-            <div className="p-5 space-y-4">
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelStyle}>Équidé</label>
@@ -1690,7 +1690,7 @@ export default function CavaleriePage() {
                   onChange={e => setMouvForm({ ...mouvForm, observations: e.target.value })} />
               </div>
             </div>
-            <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
+            <div className="flex justify-end gap-3 p-5 border-t border-gray-100 flex-shrink-0">
               <button onClick={() => setShowMouvForm(false)} className={btnSecondary}>Annuler</button>
               <button onClick={saveMouvement} disabled={saving} className={`${btnPrimary} ${saving ? "opacity-50" : ""}`}>
                 {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Enregistrer
