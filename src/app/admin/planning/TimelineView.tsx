@@ -65,7 +65,7 @@ export default function TimelineView({
 
             return (
               <div className="overflow-x-auto -mx-4 px-4">
-                <div className="flex" style={{ minWidth: "1100px" }}>
+                <div className="flex" style={{ minWidth: "1250px" }}>
                   {/* Colonne heures */}
                   <div className="w-14 flex-shrink-0 relative" style={{ height: totalHeight }}>
                     {gridHours.map(h => (
@@ -124,7 +124,7 @@ export default function TimelineView({
                     };
 
                     return (
-                      <div key={dayIdx} className="flex-1 relative border-l border-gray-100" style={{ minWidth: "140px", height: totalHeight }}>
+                      <div key={dayIdx} className="flex-1 relative border-l border-gray-100" style={{ minWidth: "160px", height: totalHeight }}>
                         {/* Header jour */}
                         <div className={`sticky top-0 z-10 text-center py-1.5 font-body text-xs font-semibold border-b border-gray-200 ${isToday(d) ? "bg-blue-500 text-white" : "bg-sand text-slate-600"}`}>
                           {fmtDateFR(d)}
