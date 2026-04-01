@@ -803,6 +803,18 @@ export default function CavaliersPage() {
                       </div>
                     )}
 
+                    <FamilyDetailTabs
+                      family={family}
+                      children={children}
+                      allReservations={allReservations}
+                      allPayments={allPayments}
+                      allAvoirs={allAvoirs}
+                      allCartes={allCartes}
+                      allMandats={allMandats}
+                      allFidelite={allFidelite}
+                      fetchFamilies={fetchFamilies}
+                    />
+
                     {/* Cavaliers */}
                     <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Cavaliers ({children.length})</div>
                     {children.length === 0 ? (
@@ -1021,18 +1033,6 @@ export default function CavaliersPage() {
                         <Plus size={14} /> Ajouter un cavalier
                       </button>
                     )}
-
-                    <FamilyDetailTabs
-                      family={family}
-                      children={children}
-                      allReservations={allReservations}
-                      allPayments={allPayments}
-                      allAvoirs={allAvoirs}
-                      allCartes={allCartes}
-                      allMandats={allMandats}
-                      allFidelite={allFidelite}
-                      fetchFamilies={fetchFamilies}
-                    />
                   </div>
                 )}
               </Card>

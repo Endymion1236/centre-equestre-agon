@@ -1,9 +1,9 @@
 "use client";
 import { useState } from "react";
-import { doc, updateDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { doc, updateDoc, addDoc, collection, getDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Badge } from "@/components/ui";
-import { Receipt, Wallet, UserPlus, X, Trash2, CalendarDays } from "lucide-react";
+import { Receipt, Wallet, UserPlus, X, Trash2, CalendarDays, Plus, Save, Loader2 } from "lucide-react";
 import { openHtmlInTab } from "@/lib/open-html-tab";
 
 const TABS = [
@@ -33,6 +33,34 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
   fetchFamilies: () => void;
 }) {
   const [tab, setTab] = useState<TabId>("cavaliers");
+  const [editingMandat, setEditingMandat] = useState(false);
+  const [mandatForm, setMandatForm] = useState({ iban: "", bic: "", titulaire: family.parentName || "", dateSignature: new Date().toISOString().split("T")[0] });
+  const [mandatSaving, setMandatSaving] = useState(false);
+
+  const handleSaveMandat = async () => {
+    if (!mandatForm.iban || !mandatForm.titulaire) return;
+    setMandatSaving(true);
+    try {
+      const cleanIban = mandatForm.iban.replace(/\s/g, "").toUpperCase();
+      if (mandat) {
+        await updateDoc(doc(db, "mandats-sepa", mandat.id), {
+          iban: cleanIban, bic: mandatForm.bic, titulaire: mandatForm.titulaire,
+          dateSignature: mandatForm.dateSignature,
+        });
+      } else {
+        const nextNum = allMandats.length + 1;
+        const mandatId = `CEDC${nextNum}MD${Math.floor(Math.random() * 9000) + 1000}`;
+        await addDoc(collection(db, "mandats-sepa"), {
+          familyId: fid, familyName: family.parentName, mandatId,
+          iban: cleanIban, bic: mandatForm.bic, titulaire: mandatForm.titulaire,
+          dateSignature: mandatForm.dateSignature, status: "active", createdAt: serverTimestamp(),
+        });
+      }
+      setEditingMandat(false);
+      fetchFamilies();
+    } catch (e) { console.error(e); }
+    setMandatSaving(false);
+  };
 
   // ── Données calculées ──
   const fid = family.firestoreId;
@@ -295,8 +323,43 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
 
           {/* SEPA */}
           <div>
-            <div className="font-body text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">🏦 Mandat SEPA</div>
-            {mandat ? (
+            <div className="font-body text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+              <span>🏦 Mandat SEPA</span>
+              {!editingMandat && (
+                <button onClick={() => {
+                  setMandatForm({ iban: mandat?.iban || "", bic: mandat?.bic || "", titulaire: mandat?.titulaire || family.parentName || "", dateSignature: mandat?.dateSignature || new Date().toISOString().split("T")[0] });
+                  setEditingMandat(true);
+                }} className="font-body text-[10px] text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1">
+                  <Plus size={10} /> {mandat ? "Modifier" : "Ajouter"}
+                </button>
+              )}
+            </div>
+            {editingMandat ? (
+              <div className="bg-blue-50 rounded-lg p-3 flex flex-col gap-2">
+                <input placeholder="IBAN *" value={mandatForm.iban}
+                  onChange={e => setMandatForm({ ...mandatForm, iban: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-xs font-mono focus:outline-none focus:border-blue-500 bg-white" />
+                <div className="flex gap-2">
+                  <input placeholder="BIC" value={mandatForm.bic}
+                    onChange={e => setMandatForm({ ...mandatForm, bic: e.target.value })}
+                    className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
+                  <input placeholder="Titulaire *" value={mandatForm.titulaire}
+                    onChange={e => setMandatForm({ ...mandatForm, titulaire: e.target.value })}
+                    className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
+                </div>
+                <input type="date" value={mandatForm.dateSignature}
+                  onChange={e => setMandatForm({ ...mandatForm, dateSignature: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
+                <div className="flex gap-2">
+                  <button onClick={handleSaveMandat} disabled={mandatSaving || !mandatForm.iban || !mandatForm.titulaire}
+                    className="flex items-center gap-1 font-body text-xs font-semibold text-white bg-blue-500 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                    {mandatSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer
+                  </button>
+                  <button onClick={() => setEditingMandat(false)}
+                    className="font-body text-xs text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                </div>
+              </div>
+            ) : mandat ? (
               <div className="font-body text-xs py-2 px-3 bg-blue-50 rounded-lg border border-blue-100">
                 <div className="flex items-center gap-2 mb-1">
                   <Badge color="green">Actif</Badge>
@@ -306,7 +369,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                 <div className="text-slate-500">Titulaire : {mandat.titulaire}</div>
               </div>
             ) : (
-              <p className="font-body text-xs text-slate-400 italic">Aucun mandat SEPA.</p>
+              <p className="font-body text-xs text-slate-400 italic">Aucun mandat SEPA. Cliquez sur "Ajouter" pour créer.</p>
             )}
           </div>
 
