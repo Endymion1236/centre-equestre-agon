@@ -167,9 +167,9 @@ export default function TimelineView({
                                 borderLeftColor: col,
                               }}>
                               <div className="p-1.5 h-full flex flex-col">
-                                <div className="font-body text-[10px] font-bold" style={{ color: col }}>{c.startTime}–{c.endTime}</div>
-                                <div className={`font-body text-[10px] font-semibold text-blue-800 leading-tight ${totalCols === 1 ? "break-words" : "truncate"}`}>{c.activityTitle}</div>
-                                {c.height > 45 && <div className={`font-body text-[9px] text-slate-500 ${totalCols === 1 ? "break-words" : "truncate"}`}>{c.monitor}</div>}
+                                <div className={`font-body font-bold ${totalCols === 1 ? "text-[11px]" : "text-[10px]"}`} style={{ color: col }}>{c.startTime}–{c.endTime}</div>
+                                <div className={`font-body font-semibold text-blue-800 leading-tight ${totalCols === 1 ? "text-[11px] line-clamp-3" : "text-[10px] truncate"}`}>{c.activityTitle}</div>
+                                {c.height > 45 && <div className={`font-body text-slate-500 ${totalCols === 1 ? "text-[10px] line-clamp-2" : "text-[9px] truncate"}`}>{c.monitor}</div>}
                                 <div className="mt-auto flex items-center gap-1">
                                   <span className={`font-body text-[9px] font-bold ${fill >= 1 ? "text-red-500" : fill >= 0.7 ? "text-orange-500" : "text-green-600"}`}>
                                     {en.length}/{c.maxPlaces}
