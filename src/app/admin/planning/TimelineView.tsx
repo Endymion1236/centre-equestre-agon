@@ -152,7 +152,13 @@ export default function TimelineView({
                           const colWidth = 100 / totalCols;
                           const left = columns[cIdx] * colWidth;
 
-                          const isWide = totalCols === 1;
+                          // isWide = ce créneau n'a pas de voisin qui chevauche
+                          const hasOverlap = positioned.some((other, oIdx) =>
+                            oIdx !== cIdx &&
+                            other.top < c.top + c.height - 2 &&
+                            other.top + other.height - 2 > c.top + 2
+                          );
+                          const isWide = !hasOverlap;
                           const cardH = c.height - 2;
                           return (
                             <div key={c.id}
@@ -162,8 +168,8 @@ export default function TimelineView({
                               style={{
                                 top: c.top + 28,
                                 height: cardH,
-                                left: `calc(${left}% + 2px)`,
-                                width: `calc(${colWidth}% - 4px)`,
+                                left: isWide ? "2px" : `calc(${left}% + 2px)`,
+                                width: isWide ? "calc(100% - 4px)" : `calc(${colWidth}% - 4px)`,
                                 backgroundColor: `${col}15`,
                                 borderColor: `${col}40`,
                                 borderLeftWidth: 3,
