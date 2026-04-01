@@ -1624,7 +1624,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             {/* Bouton Cours / Activité ponctuelle */}
             {!isStage && selChild && (
               <button onClick={handleEnroll} disabled={!selChild||enrolling||(inscriptionMode==="annuel"&&frequenceCours>=2&&extraSlots.length<frequenceCours-1)} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${(!selChild||enrolling||(inscriptionMode==="annuel"&&frequenceCours>=2&&extraSlots.length<frequenceCours-1))?"bg-gray-200 text-slate-500":inscriptionMode==="annuel"?"bg-green-600 text-white hover:bg-green-500":"bg-blue-500 text-white hover:bg-blue-400"}`}>
-                {enrolling ? "..." : inscriptionMode === "annuel" ? `Inscrire à l'année (${totalAnnuel.toFixed(2)}€)` : showPay ? `Inscrire + Encaisser (${priceTTC.toFixed(2)}€)` : priceTTC > 0 ? `Inscrire — paiement en attente (${priceTTC.toFixed(2)}€)` : "Inscrire"}
+                {enrolling ? "..." : inscriptionMode === "annuel" ? `Inscrire à l'année (${totalAnnuel.toFixed(2)}€)` : (allCartes.some((c: any) => c.status === "active" && (c.remainingSessions || 0) > 0 && (c.childId === selChild || (c.familiale && c.familyId === selFam)))) ? "Inscrire 🎟️ (débit carte à la clôture)" : showPay ? `Inscrire + Encaisser (${priceTTC.toFixed(2)}€)` : priceTTC > 0 ? `Inscrire — paiement en attente (${priceTTC.toFixed(2)}€)` : "Inscrire"}
               </button>
             )}
           </div></div>)}

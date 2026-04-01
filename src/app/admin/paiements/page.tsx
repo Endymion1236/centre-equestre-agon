@@ -1867,9 +1867,25 @@ export default function PaiementsPage() {
                                   <div className={`font-body text-xs font-semibold ${isPaid ? "text-green-700" : isOverdue ? "text-red-600" : "text-blue-800"}`}>
                                     Échéance {e.echeance}/{e.echeancesTotal}
                                   </div>
-                                  <div className="font-body text-[10px] text-slate-600">
-                                    {e.echeanceDate ? new Date(e.echeanceDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : "—"}
-                                  </div>
+                                  {!isPaid ? (
+                                    <input
+                                      type="date"
+                                      defaultValue={e.echeanceDate || ""}
+                                      onBlur={async (ev) => {
+                                        const newDate = ev.target.value;
+                                        if (newDate && newDate !== e.echeanceDate) {
+                                          await updateDoc(doc(db, "payments", e.id), { echeanceDate: newDate, updatedAt: serverTimestamp() });
+                                          await refreshAll();
+                                          toast("Date de prélèvement mise à jour", "success");
+                                        }
+                                      }}
+                                      className="font-body text-[10px] text-slate-600 border border-gray-200 rounded px-1 py-0.5 bg-white focus:outline-none focus:border-blue-400 cursor-pointer"
+                                    />
+                                  ) : (
+                                    <div className="font-body text-[10px] text-slate-600">
+                                      {e.echeanceDate ? new Date(e.echeanceDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : "—"}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">

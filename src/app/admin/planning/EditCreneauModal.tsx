@@ -1,5 +1,8 @@
 "use client";
 import { X, Loader2, Copy } from "lucide-react";
+import { useState, useEffect } from "react";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import type { Creneau } from "./types";
 
 // Créneaux horaires disponibles de 7h à 21h par tranches de 15min
@@ -37,6 +40,13 @@ const PRESET_COLORS = ["#2050A0","#27ae60","#e67e22","#7c3aed","#D63031","#16a08
 export default function EditCreneauModal({
   creneau, form, saving, applyAll, onFormChange, onApplyAllChange, onClose, onSave, onDuplicate
 }: Props) {
+  const [moniteurs, setMoniteurs] = useState<string[]>([]);
+
+  useEffect(() => {
+    getDocs(collection(db, "moniteurs")).then(snap => {
+      setMoniteurs(snap.docs.map(d => (d.data() as any).name).filter(Boolean).sort());
+    });
+  }, []);
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
       <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
@@ -73,9 +83,16 @@ export default function EditCreneauModal({
           </div>
           <div>
             <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Moniteur</label>
-            <input value={form.monitor}
+            <select value={form.monitor}
               onChange={e => onFormChange({...form, monitor: e.target.value})}
-              className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
+              className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none cursor-pointer">
+              <option value="">— Choisir un moniteur —</option>
+              {moniteurs.map(m => <option key={m} value={m}>{m}</option>)}
+              {/* Si valeur actuelle pas dans la liste, l'ajouter */}
+              {form.monitor && !moniteurs.includes(form.monitor) && (
+                <option value={form.monitor}>{form.monitor}</option>
+              )}
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
