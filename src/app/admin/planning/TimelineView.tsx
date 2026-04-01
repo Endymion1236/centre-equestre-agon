@@ -65,7 +65,7 @@ export default function TimelineView({
 
             return (
               <div className="overflow-x-auto -mx-4 px-4">
-                <div className="flex" style={{ minWidth: "900px" }}>
+                <div className="flex" style={{ minWidth: "1100px" }}>
                   {/* Colonne heures */}
                   <div className="w-14 flex-shrink-0 relative" style={{ height: totalHeight }}>
                     {gridHours.map(h => (
@@ -124,7 +124,7 @@ export default function TimelineView({
                     };
 
                     return (
-                      <div key={dayIdx} className="flex-1 relative border-l border-gray-100" style={{ minWidth: "130px", height: totalHeight }}>
+                      <div key={dayIdx} className="flex-1 relative border-l border-gray-100" style={{ minWidth: "140px", height: totalHeight }}>
                         {/* Header jour */}
                         <div className={`sticky top-0 z-10 text-center py-1.5 font-body text-xs font-semibold border-b border-gray-200 ${isToday(d) ? "bg-blue-500 text-white" : "bg-sand text-slate-600"}`}>
                           {fmtDateFR(d)}
@@ -156,7 +156,7 @@ export default function TimelineView({
                           return (
                             <div key={c.id}
                               onClick={() => onSelectCreneau(c)}
-                              title={`${c.activityTitle} · ${c.monitor || ""} · ${c.startTime}–${c.endTime}`}
+                              title={`${c.activityTitle}${c.monitor ? " · " + c.monitor : ""} · ${c.startTime}–${c.endTime}`}
                               className={`absolute rounded-lg border cursor-pointer hover:shadow-lg transition-shadow group ${isWide ? "overflow-visible" : "overflow-hidden"}`}
                               style={{
                                 top: c.top + 28,
@@ -168,15 +168,15 @@ export default function TimelineView({
                                 borderLeftWidth: 3,
                                 borderLeftColor: col,
                               }}>
-                              <div className="p-1.5 flex flex-col min-h-0" style={{ height: c.height - 2, overflow: "hidden" }}>
-                                <div className={`font-body font-bold flex-shrink-0 ${isWide ? "text-[11px]" : "text-[10px]"}`} style={{ color: col }}>{c.startTime}–{c.endTime}</div>
-                                <div className={`font-body font-semibold text-blue-800 leading-tight flex-shrink-0 ${isWide ? "text-[12px]" : "text-[10px] truncate"}`}
-                                  style={isWide ? { wordBreak: "break-word", overflowWrap: "break-word", whiteSpace: "normal" } : {}}>
+                              <div className="p-1.5 flex flex-col" style={{ height: c.height - 2, overflow: "hidden" }}>
+                                <div className="font-body text-[10px] font-bold flex-shrink-0" style={{ color: col }}>{c.startTime}–{c.endTime}</div>
+                                <div className="font-body font-semibold text-blue-800 leading-tight flex-shrink-0"
+                                  style={{ fontSize: isWide ? "11px" : "10px", whiteSpace: isWide ? "normal" : "nowrap", overflow: "hidden", textOverflow: isWide ? "clip" : "ellipsis" }}>
                                   {c.activityTitle}
                                 </div>
                                 {c.height > 45 && (
-                                  <div className={`font-body text-slate-500 flex-shrink-0 ${isWide ? "text-[10px]" : "text-[9px] truncate"}`}
-                                    style={isWide ? { whiteSpace: "normal" } : {}}>
+                                  <div className="font-body text-slate-500 flex-shrink-0"
+                                    style={{ fontSize: "9px", whiteSpace: isWide ? "normal" : "nowrap", overflow: "hidden", textOverflow: isWide ? "clip" : "ellipsis" }}>
                                     {c.monitor}
                                   </div>
                                 )}
