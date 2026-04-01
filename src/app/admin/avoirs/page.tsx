@@ -62,6 +62,12 @@ export default function AvoirsPage() {
   const [useAmount, setUseAmount] = useState("");
   const [useInvoiceRef, setUseInvoiceRef] = useState("");
 
+  // Rembourser avoir
+  const [showRembModal, setShowRembModal] = useState(false);
+  const [rembAvoirId, setRembAvoirId] = useState<string | null>(null);
+  const [rembMode, setRembMode] = useState("especes");
+  const [rembRef, setRembRef] = useState("");
+
   const fetchData = async () => {
     try {
       const [aSnap, fSnap] = await Promise.all([
@@ -166,7 +172,46 @@ export default function AvoirsPage() {
     setSaving(false);
   };
 
-  // ─── Helpers ───
+  // ─── Rembourser avoir ───
+  const handleRemboursement = async () => {
+    if (!rembAvoirId) return;
+    const avoir = avoirs.find(a => a.id === rembAvoirId);
+    if (!avoir) return;
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, "avoirs", rembAvoirId), {
+        status: "annule",
+        usedAmount: avoir.amount,
+        remainingAmount: 0,
+        usageHistory: [...(avoir.usageHistory || []), {
+          date: new Date().toISOString(),
+          amount: avoir.remainingAmount,
+          invoiceRef: `REMB-${rembMode.toUpperCase()}${rembRef ? `-${rembRef}` : ""}`,
+        }],
+        updatedAt: serverTimestamp(),
+      });
+      // Trace comptable
+      await addDoc(collection(db, "comptabilite"), {
+        type: "remboursement_avoir",
+        avoirId: rembAvoirId,
+        familyId: avoir.familyId,
+        familyName: avoir.familyName,
+        amount: avoir.remainingAmount,
+        paymentMode: rembMode,
+        reference: rembRef || avoir.reference,
+        date: new Date().toISOString(),
+        createdAt: serverTimestamp(),
+      });
+      setShowRembModal(false);
+      setRembAvoirId(null);
+      setRembMode("especes");
+      setRembRef("");
+      fetchData();
+    } catch (e) { console.error(e); }
+    setSaving(false);
+  };
+
+
   const formatDate = (d: any): string => {
     if (!d) return "—";
     const date = d.toDate ? d.toDate() : new Date(d);
@@ -290,10 +335,16 @@ export default function AvoirsPage() {
                         </div>
                         <div className="font-body text-[10px] text-gray-400">restant</div>
                         {a.status === "actif" && (
-                          <button onClick={() => { setUseAvoirId(a.id); setUseAmount(""); setUseInvoiceRef(""); setShowUseModal(true); }}
-                            className="mt-2 font-body text-xs text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100">
-                            Utiliser
-                          </button>
+                          <div className="flex gap-1 mt-2">
+                            <button onClick={() => { setUseAvoirId(a.id); setUseAmount(""); setUseInvoiceRef(""); setShowUseModal(true); }}
+                              className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100">
+                              Utiliser
+                            </button>
+                            <button onClick={() => { setRembAvoirId(a.id); setRembMode("especes"); setRembRef(""); setShowRembModal(true); }}
+                              className="font-body text-xs text-orange-600 bg-orange-50 px-3 py-1 rounded-lg border-none cursor-pointer hover:bg-orange-100">
+                              Rembourser
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -402,6 +453,54 @@ export default function AvoirsPage() {
           </div>
         </div>
       )}
+      {/* ─── Modal : Rembourser un avoir ─── */}
+      {showRembModal && (() => {
+        const avoir = avoirs.find(a => a.id === rembAvoirId);
+        if (!avoir) return null;
+        return (
+          <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={() => setShowRembModal(false)}>
+            <div className="bg-white rounded-2xl w-full max-w-sm mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center p-5 border-b border-gray-100">
+                <div>
+                  <h2 className="font-display text-lg font-bold text-blue-800">Rembourser l'avoir</h2>
+                  <p className="font-body text-xs text-slate-500 mt-0.5">{avoir.familyName} · {avoir.remainingAmount.toFixed(2)}€ à rembourser</p>
+                </div>
+                <button onClick={() => setShowRembModal(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
+              </div>
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className={labelStyle}>Mode de remboursement</label>
+                  <div className="flex flex-wrap gap-2">
+                    {[["especes","Espèces"],["cheque","Chèque"],["virement","Virement"],["cb","CB"]].map(([v, l]) => (
+                      <button key={v} onClick={() => setRembMode(v)}
+                        className={`px-3 py-1.5 rounded-lg font-body text-sm border cursor-pointer transition-all
+                          ${rembMode === v ? "bg-orange-500 text-white border-orange-500" : "bg-white text-slate-600 border-gray-200 hover:border-orange-300"}`}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className={labelStyle}>Référence (optionnel)</label>
+                  <input className={inputStyle} value={rembRef} onChange={e => setRembRef(e.target.value)} placeholder="N° chèque, virement..." />
+                </div>
+                <div className="bg-orange-50 rounded-xl p-3">
+                  <p className="font-body text-xs text-orange-700">L'avoir sera marqué <strong>annulé</strong> et une trace comptable sera créée.</p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
+                <button onClick={() => setShowRembModal(false)}
+                  className="font-body text-sm text-gray-500 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                <button onClick={handleRemboursement} disabled={saving}
+                  className={`flex items-center gap-2 font-body text-sm font-semibold text-white bg-orange-500 px-5 py-2.5 rounded-lg border-none cursor-pointer ${saving ? "opacity-50" : ""}`}>
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                  Rembourser {avoir.remainingAmount.toFixed(2)}€
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
