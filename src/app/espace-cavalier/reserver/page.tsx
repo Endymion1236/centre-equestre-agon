@@ -35,6 +35,11 @@ export default function ReserverPage() {
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [paying, setPaying] = useState(false);
   const [depositMode, setDepositMode] = useState<"full" | "deposit">("full");
+  // Modal sélection enfant (depuis Timeline)
+  const [bookingCreneau, setBookingCreneau] = useState<Creneau | null>(null);
+  // Mode paiement dans le panier
+  const [cartPayMode, setCartPayMode] = useState<"cb" | "cheque" | "especes" | "virement">("cb");
+  const [cartPaySuccess, setCartPaySuccess] = useState(false);
   const [success, setSuccess] = useState(false);
   const [waitlistSuccess, setWaitlistSuccess] = useState<string | null>(null); // creneauId confirmé
   const [waitlistLoading, setWaitlistLoading] = useState<string | null>(null); // creneauId en cours
@@ -362,7 +367,7 @@ export default function ReserverPage() {
             {initialFilter === "balade" ? "Balades et promenades à cheval" : "Stages, cours ponctuels et activités"}
           </p>
         </div>
-        <button onClick={() => setShowCart(true)} className="relative flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600">
+        <button onClick={() => { setShowCart(true); setCartPaySuccess(false); setCartPayMode("cb"); }} className="relative flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600">
           <ShoppingCart size={16} /> Panier
           {cart.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{cart.length}</span>}
         </button>
@@ -390,7 +395,7 @@ export default function ReserverPage() {
           creneaux={creneaux}
           children={(family?.children || []).map((c: any) => ({ id: c.id, firstName: c.firstName, galopLevel: c.galopLevel }))}
           familyId={familyId}
-          onBook={(creneau) => { setSelectedCreneau(creneau as any); setSelectedChildren([]); }}
+          onBook={(creneau) => { setBookingCreneau(creneau as any); }}
         />
       )}
 
@@ -667,6 +672,48 @@ export default function ReserverPage() {
 
       </>) }{/* fin vue liste */}
 
+      {/* ── MODAL SÉLECTION ENFANT (depuis Timeline) ── */}
+      {bookingCreneau && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4"
+          onClick={() => setBookingCreneau(null)}>
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-100">
+              <div className="font-display text-base font-bold text-blue-800">{bookingCreneau.activityTitle}</div>
+              <div className="font-body text-xs text-slate-500 mt-0.5">{bookingCreneau.startTime}–{bookingCreneau.endTime} · {bookingCreneau.monitor}</div>
+            </div>
+            <div className="p-5">
+              <div className="font-body text-sm font-semibold text-slate-700 mb-3">Pour quel cavalier ?</div>
+              <div className="flex flex-col gap-2">
+                {(family?.children || [])
+                  .filter((ch: any) => !(bookingCreneau.enrolled || []).some((e: any) => e.childId === ch.id))
+                  .map((ch: any) => (
+                    <button key={ch.id}
+                      onClick={() => {
+                        addCoursToCart(bookingCreneau, ch.id);
+                        setBookingCreneau(null);
+                        setShowCart(true);
+                      }}
+                      className="flex items-center justify-between px-4 py-3 rounded-xl border border-blue-200 bg-blue-50 font-body text-sm text-blue-800 cursor-pointer hover:bg-blue-100 transition-all">
+                      <span className="font-semibold">{ch.firstName}</span>
+                      {ch.galopLevel && ch.galopLevel !== "—" && (
+                        <span className="font-body text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">G{ch.galopLevel}</span>
+                      )}
+                    </button>
+                  ))
+                }
+                {(family?.children || []).filter((ch: any) => !(bookingCreneau.enrolled || []).some((e: any) => e.childId === ch.id)).length === 0 && (
+                  <p className="font-body text-sm text-slate-500 text-center py-2">Tous vos cavaliers sont déjà inscrits à ce créneau.</p>
+                )}
+              </div>
+              <button onClick={() => setBookingCreneau(null)}
+                className="w-full mt-3 py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* PANIER MODAL */}
       {showCart && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onClick={() => setShowCart(false)}>
@@ -710,9 +757,9 @@ export default function ReserverPage() {
                   </div>
 
                   {/* Choix acompte si stages dans le panier */}
-                  {cart.some(i => i.isStage) && (
+                  {cart.some(i => i.isStage) && cartPayMode === "cb" && (
                     <div className="bg-blue-50 rounded-lg p-3 mb-4">
-                      <div className="font-body text-xs font-semibold text-blue-800 mb-2">Mode de paiement</div>
+                      <div className="font-body text-xs font-semibold text-blue-800 mb-2">Paiement CB</div>
                       <div className="flex gap-2">
                         <button onClick={() => setDepositMode("full")}
                           className={`flex-1 py-2 px-3 rounded-lg font-body text-xs font-semibold border cursor-pointer ${depositMode === "full" ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200"}`}>
@@ -723,20 +770,129 @@ export default function ReserverPage() {
                           Acompte 30% ({(cartTotal * 0.3).toFixed(0)}€)
                         </button>
                       </div>
-                      {depositMode === "deposit" && (
-                        <div className="font-body text-[10px] text-orange-600 mt-2">
-                          Le solde de {(cartTotal * 0.7).toFixed(0)}€ sera prélevé automatiquement 3 jours avant le stage sur la même carte.
-                        </div>
-                      )}
                     </div>
                   )}
 
-                  <button onClick={handlePay} disabled={paying}
-                    className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying ? "bg-gray-200 text-gray-600" : depositMode === "deposit" ? "bg-orange-500 text-white hover:bg-orange-400" : "bg-green-600 text-white hover:bg-green-500"}`}>
-                    {paying ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
-                    {paying ? "Paiement en cours..." : depositMode === "deposit" ? `Payer l'acompte ${(cartTotal * 0.3).toFixed(2)}€` : `Payer ${cartTotal.toFixed(2)}€`}
-                  </button>
-                  <p className="font-body text-[10px] text-gray-600 text-center mt-2">Paiement sécurisé par CAWL / Crédit Agricole</p>
+                  {/* Choix mode de paiement */}
+                  <div className="mb-4">
+                    <div className="font-body text-xs font-semibold text-slate-600 mb-2">Comment souhaitez-vous régler ?</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {([
+                        ["cb", "💳 Carte bancaire"],
+                        ["cheque", "📝 Chèque"],
+                        ["especes", "💵 Espèces"],
+                        ["virement", "🏦 Virement"],
+                      ] as const).map(([mode, label]) => (
+                        <button key={mode} onClick={() => setCartPayMode(mode)}
+                          className={`py-2.5 rounded-xl font-body text-sm font-semibold border cursor-pointer transition-all ${cartPayMode === mode ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-slate-500 hover:border-blue-300"}`}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Bouton CB → CAWL */}
+                  {cartPayMode === "cb" && (
+                    <>
+                      <button onClick={handlePay} disabled={paying}
+                        className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying ? "bg-gray-200 text-gray-600" : depositMode === "deposit" ? "bg-orange-500 text-white hover:bg-orange-400" : "bg-green-600 text-white hover:bg-green-500"}`}>
+                        {paying ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
+                        {paying ? "Paiement en cours..." : depositMode === "deposit" ? `Payer l'acompte ${(cartTotal * 0.3).toFixed(2)}€` : `Payer ${cartTotal.toFixed(2)}€`}
+                      </button>
+                      <p className="font-body text-[10px] text-gray-600 text-center mt-2">Paiement sécurisé par CAWL / Crédit Agricole</p>
+                    </>
+                  )}
+
+                  {/* Bouton Chèque/Espèces/Virement → déclaration */}
+                  {cartPayMode !== "cb" && (
+                    cartPaySuccess ? (
+                      <div className="text-center py-4">
+                        <div className="text-4xl mb-2">✅</div>
+                        <p className="font-body text-base font-semibold text-green-700">Déclaration envoyée !</p>
+                        <p className="font-body text-xs text-slate-500 mt-1">
+                          Le centre équestre va confirmer réception de votre {cartPayMode === "cheque" ? "chèque" : cartPayMode === "especes" ? "règlement en espèces" : "virement"}.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <button onClick={async () => {
+                          if (!user || !family) return;
+                          setPaying(true);
+                          try {
+                            // 1. Inscrire + créer réservations + paiement pending
+                            for (const item of cart) {
+                              for (const cid of item.creneauIds) {
+                                const crSnap = await getDoc(doc(db, "creneaux", cid));
+                                if (!crSnap.exists()) continue;
+                                const crData = crSnap.data();
+                                const enrolled = crData.enrolled || [];
+                                if (enrolled.some((e: any) => e.childId === item.childId)) continue;
+                                await updateDoc(doc(db, "creneaux", cid), {
+                                  enrolled: [...enrolled, { childId: item.childId, childName: item.childName, familyId: user.uid, familyName: family.parentName, enrolledAt: new Date().toISOString() }],
+                                  enrolledCount: enrolled.length + 1,
+                                });
+                              }
+                              const firstCr = creneaux.find(c => c.id === item.creneauIds[0]);
+                              await addDoc(collection(db, "reservations"), {
+                                familyId: user.uid, familyName: family.parentName,
+                                childId: item.childId, childName: item.childName,
+                                activityTitle: item.activityTitle, activityType: item.isStage ? "stage" : "cours",
+                                creneauId: item.creneauIds[0],
+                                date: firstCr?.date || new Date().toISOString().split("T")[0],
+                                startTime: firstCr?.startTime || "", endTime: firstCr?.endTime || "",
+                                priceTTC: item.prixFinal, status: "confirmed", source: "client",
+                                createdAt: serverTimestamp(),
+                              });
+                            }
+                            const payDoc = await addDoc(collection(db, "payments"), {
+                              familyId: user.uid, familyName: family.parentName,
+                              items: cart.map(i => ({
+                                activityTitle: `${i.activityTitle} — ${i.childName}`,
+                                childId: i.childId, childName: i.childName,
+                                creneauId: i.creneauIds[0],
+                                priceHT: i.prixFinal / 1.055, tva: 5.5, priceTTC: i.prixFinal,
+                              })),
+                              totalTTC: cartTotal,
+                              paymentMode: cartPayMode, paymentRef: "",
+                              status: "pending", paidAmount: 0,
+                              source: "client", date: serverTimestamp(),
+                            });
+                            // 2. Créer la déclaration
+                            await addDoc(collection(db, "payment_declarations"), {
+                              paymentId: payDoc.id,
+                              familyId: user.uid, familyName: family.parentName,
+                              familyEmail: family.parentEmail || user.email || "",
+                              montant: cartTotal,
+                              mode: cartPayMode,
+                              note: "",
+                              activityTitle: cart.map(i => i.activityTitle).join(", "),
+                              status: "pending_confirmation",
+                              createdAt: serverTimestamp(),
+                            });
+                            // 3. Email admin
+                            fetch("/api/send-email", {
+                              method: "POST", headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                to: "ceagon50@gmail.com",
+                                subject: `Paiement ${cartPayMode} à confirmer — ${family.parentName}`,
+                                html: `<p>${family.parentName} déclare un paiement de <strong>${cartTotal.toFixed(2)}€</strong> par ${cartPayMode}.<br/>Activités : ${cart.map(i => i.activityTitle).join(", ")}</p>`,
+                              }),
+                            }).catch(() => {});
+                            setCartPaySuccess(true);
+                            setCart([]);
+                          } catch (e) { console.error(e); alert("Erreur. Réessayez."); }
+                          setPaying(false);
+                        }} disabled={paying}
+                          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50">
+                          {paying ? <Loader2 size={18} className="animate-spin" /> : null}
+                          {paying ? "Envoi..." : `Déclarer mon paiement par ${cartPayMode === "cheque" ? "chèque" : cartPayMode === "especes" ? "espèces" : "virement"}`}
+                        </button>
+                        <p className="font-body text-[10px] text-gray-500 text-center mt-2">
+                          L'équipe confirmera réception lors de votre prochain passage.
+                        </p>
+                      </>
+                    )
+                  )}
                 </>
               )}
             </div>
