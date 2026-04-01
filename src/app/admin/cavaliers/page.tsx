@@ -1063,61 +1063,69 @@ export default function CavaliersPage() {
                     {(() => {
                       const reservations = getReservationsForFamily(family.firestoreId);
                       const today = new Date().toISOString().split("T")[0];
-                      const upcoming = reservations.filter(r => r.date >= today);
+                      const upcoming = reservations.filter(r => r.date >= today && r.status !== "cancelled");
                       const past = reservations.filter(r => r.date < today).slice(0, 5);
+
+                      // Grouper les réservations à venir par date+activité+heure
+                      const groupedUpcoming: Record<string, any[]> = {};
+                      upcoming.forEach((r: any) => {
+                        const key = `${r.date}_${r.activityTitle}_${r.startTime}`;
+                        if (!groupedUpcoming[key]) groupedUpcoming[key] = [];
+                        groupedUpcoming[key].push(r);
+                      });
+                      const groupedEntries = Object.entries(groupedUpcoming).sort(([a], [b]) => a.localeCompare(b));
+
                       return (reservations.length > 0 || true) ? (
                         <div className="mt-4 pt-3 border-t border-blue-500/8">
                           <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                            <CalendarDays size={12} /> Réservations ({reservations.length})
+                            <CalendarDays size={12} /> Réservations ({reservations.filter((r:any) => r.status !== "cancelled").length})
                           </div>
-                          {reservations.length === 0 ? (
+                          {upcoming.length === 0 && past.length === 0 ? (
                             <p className="font-body text-xs text-slate-600 italic">Aucune réservation.</p>
                           ) : (
                             <div className="flex flex-col gap-1">
-                              {upcoming.length > 0 && (
+                              {groupedEntries.length > 0 && (
                                 <>
-                                  <div className="font-body text-[10px] text-green-600 font-semibold mt-1 mb-0.5">A venir ({upcoming.length})</div>
-                                  {upcoming.slice(0, 8).map((r: any) => (
-                                    <div key={r.id} className="flex items-center justify-between font-body text-xs py-1.5 px-3 bg-green-50 rounded-lg">
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-green-700 font-semibold">{new Date(r.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</span>
+                                  <div className="font-body text-[10px] text-green-600 font-semibold mt-1 mb-0.5">A venir ({groupedEntries.length} séance{groupedEntries.length > 1 ? "s" : ""})</div>
+                                  {groupedEntries.slice(0, 8).map(([key, group]) => {
+                                    const r = group[0];
+                                    const childNames = group.map((g: any) => g.childName).join(", ");
+                                    return (
+                                    <div key={key} className="flex items-center justify-between font-body text-xs py-1.5 px-3 bg-green-50 rounded-lg">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-green-700 font-semibold">{new Date(r.date + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</span>
                                         <span className="text-slate-600">{r.startTime}–{r.endTime}</span>
                                         <span className="text-blue-800 font-semibold">{r.activityTitle}</span>
-                                        <span className="text-slate-600">({r.childName})</span>
+                                        <span className="text-slate-500">({childNames})</span>
+                                        {group.length > 1 && <Badge color="blue">{group.length} cavaliers</Badge>}
                                       </div>
-                                      <div className="flex items-center gap-2">
-                                        <Badge color={r.status === "confirmed" ? "green" : r.status === "cancelled" ? "red" : "gray"}>
-                                          {r.status === "confirmed" ? "Confirmée" : r.status === "cancelled" ? "Annulée" : r.status}
-                                        </Badge>
-                                        {r.status !== "cancelled" && (
-                                          <button
+                                      <div className="flex items-center gap-1">
+                                        {group.map((gr: any) => gr.status !== "cancelled" && (
+                                          <button key={gr.id}
                                             onClick={async () => {
-                                              if (!confirm(`Annuler la réservation de ${r.childName} le ${new Date(r.date).toLocaleDateString("fr-FR")} ?`)) return;
+                                              if (!confirm(`Annuler la réservation de ${gr.childName} le ${new Date(gr.date + "T12:00:00").toLocaleDateString("fr-FR")} ?`)) return;
                                               try {
-                                                // Annuler la réservation
-                                                await updateDoc(doc(db, "reservations", r.id), { status: "cancelled", cancelledAt: new Date().toISOString() });
-                                                // Retirer l'enfant du créneau Firestore
-                                                if (r.creneauId) {
-                                                  const creneauSnap = await getDoc(doc(db, "creneaux", r.creneauId));
+                                                await updateDoc(doc(db, "reservations", gr.id), { status: "cancelled", cancelledAt: new Date().toISOString() });
+                                                if (gr.creneauId) {
+                                                  const creneauSnap = await getDoc(doc(db, "creneaux", gr.creneauId));
                                                   if (creneauSnap.exists()) {
-                                                    const enrolled = (creneauSnap.data().enrolled || []).filter((e: any) => !(e.childId === r.childId && e.familyId === r.familyId));
-                                                    await updateDoc(doc(db, "creneaux", r.creneauId), { enrolled, enrolledCount: enrolled.length });
+                                                    const enrolled = (creneauSnap.data().enrolled || []).filter((e: any) => !(e.childId === gr.childId && e.familyId === gr.familyId));
+                                                    await updateDoc(doc(db, "creneaux", gr.creneauId), { enrolled, enrolledCount: enrolled.length });
                                                   }
                                                 }
                                                 fetchFamilies();
-                                              } catch (e: any) {
-                                                alert("Erreur : " + e.message);
-                                              }
+                                              } catch (e: any) { alert("Erreur : " + (e as any).message); }
                                             }}
                                             className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-0.5 rounded"
-                                            title="Annuler cette réservation"
+                                            title={`Annuler ${gr.childName}`}
                                           >
-                                            <Trash2 size={12} />
+                                            <Trash2 size={11} />
                                           </button>
-                                        )}
+                                        ))}
                                       </div>
                                     </div>
-                                  ))}
+                                    );
+                                  })}
                                 </>
                               )}
                               {past.length > 0 && (

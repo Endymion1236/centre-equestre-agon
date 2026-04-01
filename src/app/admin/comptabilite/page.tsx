@@ -263,6 +263,11 @@ export default function ComptabilitePage() {
       }
       
       // 4. Convertir en format attendu (montant = crédit - débit pour avoir + pour les recettes)
+      const EXTERNAL_KEYWORDS = [
+        "VIR SEPA EMIS", "VIR PERM", "VIREMENT EMIS", "VIRT EMIS",
+        "PRLV SEPA", "PRELEVEMENT", "CHEQUE EMIS", "REMISE CHEQUE",
+        "FRAIS", "COTISATION", "ABONNEMENT", "ASSURANCE",
+      ];
       const parsed = records.map(r => ({
         date: r.date,
         label: r.label,
@@ -270,7 +275,13 @@ export default function ComptabilitePage() {
         matched: false,
         matchType: "" as string,
         matchDetail: "" as string,
-      })).filter(r => r.amount > 0); // Ne garder que les recettes (encaissements reçus)
+      })).filter(r => {
+        if (r.amount <= 0) return false; // exclure les débits
+        const labelUp = r.label.toUpperCase();
+        // Exclure les virements sortants vers comptes externes
+        if (EXTERNAL_KEYWORDS.some(k => labelUp.includes(k))) return false;
+        return true;
+      });
 
       // Smart matching amélioré
       // Helper pour convertir un encaissement en détail affichable

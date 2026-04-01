@@ -284,18 +284,39 @@ export default function EmailTemplatesPage() {
     }));
   };
 
+  const TEMPLATE_TRIGGERS: Record<string, string> = {
+    confirmationStage: "📤 Envoyé automatiquement quand une inscription à un stage est enregistrée",
+    confirmationCours: "📤 Envoyé automatiquement quand une inscription à un cours est enregistrée",
+    rappelImpaye: "📤 Envoyé manuellement depuis la fiche famille (bouton 'Rappel impayé')",
+    rappelStage: "📤 Envoyé automatiquement J-3 avant le début d'un stage",
+    bienvenueNouvelleFamille: "📤 Envoyé automatiquement lors de la création d'une nouvelle famille",
+    relanceImpaye: "📤 Envoyé par le cron nocturne aux familles avec impayés > 30 jours",
+    confirmationPaiement: "📤 Envoyé automatiquement après encaissement d'un paiement Stripe",
+  };
+
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
           <h1 className="font-display text-2xl font-bold text-blue-800">Templates email</h1>
-          <p className="font-body text-xs text-slate-500">Personnalisez vos emails avec l&apos;aide de l&apos;IA</p>
+          <p className="font-body text-xs text-slate-500">Personnalisez vos emails automatiques</p>
         </div>
         <button onClick={handleSave} disabled={saving}
           className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-green-600 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-green-700 disabled:opacity-50">
           {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
           Sauvegarder tout
         </button>
+      </div>
+
+      {/* Bandeau d'aide */}
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5">
+        <div className="font-body text-sm font-semibold text-blue-800 mb-1">💡 Comment ça marche ?</div>
+        <div className="font-body text-xs text-blue-700 space-y-1">
+          <p>1. <strong>Choisissez un template</strong> dans la liste à gauche (ex: "Confirmation d'inscription")</p>
+          <p>2. <strong>Modifiez le contenu</strong> en mode HTML, ou demandez à <strong>l'IA de le réécrire</strong> avec vos instructions</p>
+          <p>3. <strong>Testez</strong> en vous envoyant un email d'exemple</p>
+          <p>4. <strong>Sauvegardez</strong> — l'email sera envoyé automatiquement à chaque événement</p>
+        </div>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-5">
@@ -317,7 +338,12 @@ export default function EmailTemplatesPage() {
             <div className="flex items-center justify-between mb-3">
               <div>
                 <div className="font-body text-base font-bold text-blue-800">{TEMPLATE_LABELS[selectedKey]}</div>
-                <div className="font-body text-[10px] text-slate-400">{current.description}</div>
+                <div className="font-body text-[10px] text-slate-500 mt-0.5">{current.description}</div>
+                {TEMPLATE_TRIGGERS[selectedKey] && (
+                  <div className="font-body text-[10px] text-blue-600 bg-blue-50 rounded px-2 py-1 mt-1 inline-block">
+                    {TEMPLATE_TRIGGERS[selectedKey]}
+                  </div>
+                )}
               </div>
               <button onClick={handleReset} className="font-body text-[10px] text-slate-400 bg-transparent border-none cursor-pointer hover:text-red-500 flex items-center gap-1">
                 <RotateCcw size={10} /> Réinitialiser
