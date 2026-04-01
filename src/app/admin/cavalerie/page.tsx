@@ -450,6 +450,10 @@ export default function CavaleriePage() {
     if (soinForm.equideIds.length === 0) return;
     setSaving(true);
     try {
+      // Pour un soin de masse, générer un batchId commun
+      const isMasse = soinForm.equideIds.length > 1;
+      const batchId = isMasse ? `batch_${Date.now()}` : null;
+
       for (const eqId of soinForm.equideIds) {
         const eq = equides.find(e => e.id === eqId);
         await addDoc(collection(db, "soins"), {
@@ -462,15 +466,13 @@ export default function CavaleriePage() {
           praticien: soinForm.praticien,
           cout: soinForm.cout ? Number(soinForm.cout) : null,
           observations: soinForm.observations,
+          ...(batchId ? { batchId, batchCount: soinForm.equideIds.length } : {}),
           createdAt: serverTimestamp(),
         });
       }
       setShowSoinForm(false);
       setSoinForm(emptySoin);
       fetchData();
-      if (soinForm.equideIds.length > 1) {
-        alert(`Soin enregistré pour ${soinForm.equideIds.length} équidés.`);
-      }
     } catch (e) {
       console.error(e);
       alert("Erreur lors de l'enregistrement du soin.");
@@ -911,31 +913,84 @@ export default function CavaleriePage() {
               <div className="w-14 h-14 rounded-2xl bg-green-50 flex items-center justify-center mx-auto mb-3"><Stethoscope size={28} className="text-green-400" /></div>
               <p className="font-body text-sm text-gray-500">Aucun soin enregistré.</p>
             </Card>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {[...soins].sort((a, b) => {
-                const da = a.date?.toDate ? a.date.toDate() : new Date(a.date);
-                const db2 = b.date?.toDate ? b.date.toDate() : new Date(b.date);
-                return db2.getTime() - da.getTime();
-              }).map(s => {
-                const stOpt = soinTypeOptions.find(o => o.value === s.type);
-                return (
-                  <Card key={s.id} padding="sm" className="flex items-center gap-3">
-                    {(() => { const SI = stOpt?.icon || ClipboardList; return <SI size={18} className="text-blue-400" />; })()}
-                    <div className="flex-1">
-                      <div className="font-body text-sm font-semibold text-blue-800">{s.equideName} — {s.label || stOpt?.label}</div>
-                      <div className="font-body text-xs text-gray-400">
-                        {formatDate(s.date)} · {s.praticien || "—"}
-                        {s.cout && <> · {s.cout}€</>}
-                        {s.prochainRdv && <> · Prochain : {formatDate(s.prochainRdv)}</>}
+          ) : (() => {
+            // Regrouper les soins de masse par batchId
+            const batches: Record<string, SoinRecord[]> = {};
+            const singles: SoinRecord[] = [];
+            soins.forEach(s => {
+              if ((s as any).batchId) {
+                const bid = (s as any).batchId;
+                if (!batches[bid]) batches[bid] = [];
+                batches[bid].push(s);
+              } else {
+                singles.push(s);
+              }
+            });
+
+            // Construire la liste d'items à afficher (un item par batch + un item par soin individuel)
+            const items: { key: string; date: Date; isBatch: boolean; soins: SoinRecord[] }[] = [
+              ...singles.map(s => ({
+                key: s.id,
+                date: s.date?.toDate ? s.date.toDate() : new Date(s.date as any),
+                isBatch: false,
+                soins: [s],
+              })),
+              ...Object.entries(batches).map(([bid, bsoins]) => ({
+                key: bid,
+                date: bsoins[0].date?.toDate ? bsoins[0].date.toDate() : new Date(bsoins[0].date as any),
+                isBatch: true,
+                soins: bsoins,
+              })),
+            ].sort((a, b) => b.date.getTime() - a.date.getTime());
+
+            return (
+              <div className="flex flex-col gap-2">
+                {items.map(item => {
+                  const s = item.soins[0];
+                  const stOpt = soinTypeOptions.find(o => o.value === s.type);
+                  const SI = stOpt?.icon || ClipboardList;
+                  return (
+                    <Card key={item.key} padding="sm" className="flex items-start gap-3">
+                      <SI size={18} className="text-blue-400 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        {item.isBatch ? (
+                          <>
+                            {/* Ligne résumé pour soin de masse */}
+                            <div className="font-body text-sm font-semibold text-blue-800">
+                              {s.label || stOpt?.label} — <span className="text-blue-500">{item.soins.length} équidés</span>
+                            </div>
+                            <div className="font-body text-xs text-gray-400">
+                              {formatDate(s.date)} · {s.praticien || "—"}
+                              {s.cout && <> · {(s.cout * item.soins.length).toFixed(2)}€ total</>}
+                              {s.prochainRdv && <> · Prochain : {formatDate(s.prochainRdv)}</>}
+                            </div>
+                            {/* Liste des chevaux concernés */}
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {item.soins.map(bs => (
+                                <span key={bs.id} className="font-body text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{bs.equideName}</span>
+                              ))}
+                            </div>
+                            {s.observations && <div className="font-body text-xs text-gray-300 mt-0.5">{s.observations}</div>}
+                          </>
+                        ) : (
+                          <>
+                            {/* Ligne normale pour soin individuel */}
+                            <div className="font-body text-sm font-semibold text-blue-800">{s.equideName} — {s.label || stOpt?.label}</div>
+                            <div className="font-body text-xs text-gray-400">
+                              {formatDate(s.date)} · {s.praticien || "—"}
+                              {s.cout && <> · {s.cout}€</>}
+                              {s.prochainRdv && <> · Prochain : {formatDate(s.prochainRdv)}</>}
+                            </div>
+                            {s.observations && <div className="font-body text-xs text-gray-300 mt-0.5">{s.observations}</div>}
+                          </>
+                        )}
                       </div>
-                      {s.observations && <div className="font-body text-xs text-gray-300 mt-0.5">{s.observations}</div>}
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
+                    </Card>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </>
       )}
 
