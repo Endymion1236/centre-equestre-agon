@@ -121,6 +121,7 @@ export default function PaiementsPage() {
   const { toast } = useToast();
   const searchParams = useSearchParams();
   const urlSearch = searchParams.get("search") || "";
+  const urlFamily = searchParams.get("family") || "";
   const [tab, setTab] = useState<"encaisser" | "journal" | "historique" | "echeances" | "impayes" | "declarations">(urlSearch ? "impayes" : "encaisser");
   const [editPayment, setEditPayment] = useState<any | null>(null);
   const [quickEncaisser, setQuickEncaisser] = useState<{ payment: any } | null>(null);
@@ -133,6 +134,7 @@ export default function PaiementsPage() {
   const [impayesExpanded, setImpayesExpanded] = useState<Set<string>>(new Set());
   const [editItems, setEditItems] = useState<any[]>([]);
   const [editRemisePct, setEditRemisePct] = useState("");
+  const [selectedFamily, setSelectedFamily] = useState<string>(urlFamily);
   const [editRemiseEuros, setEditRemiseEuros] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
@@ -164,7 +166,6 @@ export default function PaiementsPage() {
   const [correctionRaison, setCorrectionRaison] = useState("");
 
   // Basket state
-  const [selectedFamily, setSelectedFamily] = useState<string>("");
   const [familySearch, setFamilySearch] = useState("");
   const [basket, setBasket] = useState<BasketItem[]>([]);
   const [selectedActivity, setSelectedActivity] = useState("");

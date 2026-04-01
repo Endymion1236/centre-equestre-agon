@@ -791,6 +791,12 @@ export default function CavaliersPage() {
                               {soldeReel > 0 && totalAvoir > 0 && (
                                 <div className="font-body text-xs text-center text-slate-600">Solde réel après avoir : <span className="font-semibold text-red-500">{soldeReel.toFixed(2)}€</span></div>
                               )}
+                              {resteDu > 0 && (
+                                <a href={`/admin/paiements?family=${family.firestoreId}`}
+                                  className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg font-body text-xs font-semibold text-white bg-red-500 hover:bg-red-400 no-underline mt-1">
+                                  💳 Encaisser l'impayé ({resteDu.toFixed(2)}€) →
+                                </a>
+                              )}
                             </div>
                           );
                         })()}
