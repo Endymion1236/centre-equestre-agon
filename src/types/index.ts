@@ -9,8 +9,19 @@ export interface Family {
   authProvider: "google" | "facebook";
   authUid: string;
   children: Child[];
+  linkedChildren?: LinkedChild[]; // Cavaliers d'autres familles (ex: grands-parents)
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface LinkedChild {
+  childId: string;
+  childName: string;
+  birthDate?: string;
+  galopLevel?: string;
+  sourceFamilyId: string;
+  sourceFamilyName: string;
+  linkedAt: string; // ISO date
 }
 
 export interface Child {

@@ -120,6 +120,11 @@ export default function CavaliersPage() {
   const [emailBody, setEmailBody] = useState("");
   const [emailSending, setEmailSending] = useState(false);
 
+  // ── Lier des cavaliers d'une autre famille ──
+  const [showLinkChildren, setShowLinkChildren] = useState<string | null>(null); // familyId cible
+  const [linkSearch, setLinkSearch] = useState("");
+  const [linkSaving, setLinkSaving] = useState(false);
+
   const fetchFamilies = async () => {
     try {
       const [famSnap, resSnap, paySnap, avoirsSnap, cartesSnap, creneauxSnap, mandatsSnap] = await Promise.all([
@@ -710,6 +715,10 @@ export default function CavaliersPage() {
                             className="font-body text-xs text-purple-500 bg-purple-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-purple-100 flex items-center gap-1">
                             <GitMerge size={12} /> Fusionner
                           </button>
+                          <button onClick={() => { setShowLinkChildren(family.firestoreId); setLinkSearch(""); }}
+                            className="font-body text-xs text-teal-600 bg-teal-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-teal-100 flex items-center gap-1">
+                            <UserPlus size={12} /> Lier cavaliers
+                          </button>
                           {family.parentEmail && (
                             <button onClick={() => {
                               setEmailModal({ familyId: family.firestoreId, familyName: family.parentName, email: family.parentEmail! });
@@ -1001,6 +1010,36 @@ export default function CavaliersPage() {
                         className="font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1 mt-1">
                         <Plus size={14} /> Ajouter un cavalier
                       </button>
+                    )}
+
+                    {/* ── Cavaliers liés (autres familles) ── */}
+                    {((family as any).linkedChildren || []).length > 0 && (
+                      <div className="mt-4 pt-3 border-t border-teal-200">
+                        <div className="font-body text-xs font-semibold text-teal-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                          <UserPlus size={12}/> Cavaliers liés ({((family as any).linkedChildren || []).length})
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          {((family as any).linkedChildren || []).map((lc: any) => (
+                            <div key={lc.childId} className="flex items-center justify-between px-3 py-2 bg-teal-50 rounded-lg border border-teal-100">
+                              <div>
+                                <span className="font-body text-sm font-semibold text-teal-800">{lc.childName}</span>
+                                {lc.galopLevel && lc.galopLevel !== "—" && (
+                                  <span className="font-body text-[10px] text-teal-600 ml-2">G{lc.galopLevel}</span>
+                                )}
+                                <div className="font-body text-[10px] text-teal-600">Famille : {lc.sourceFamilyName}</div>
+                              </div>
+                              <button onClick={async () => {
+                                if (!confirm(`Retirer ${lc.childName} des cavaliers liés ?`)) return;
+                                const newLinked = ((family as any).linkedChildren || []).filter((c: any) => c.childId !== lc.childId);
+                                await updateDoc(doc(db, "families", family.firestoreId), { linkedChildren: newLinked });
+                                fetchFamilies();
+                              }} className="font-body text-[10px] text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer">
+                                <X size={14}/>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     )}
 
                     {/* Fiches sanitaires */}
@@ -1673,6 +1712,111 @@ export default function CavaliersPage() {
           </div>
         </div>
       )}
+
+      {/* ── Modal lier des cavaliers ── */}
+      {showLinkChildren && (() => {
+        const targetFamily = families.find(f => f.firestoreId === showLinkChildren);
+        if (!targetFamily) return null;
+        const alreadyLinked: string[] = [
+          ...(targetFamily.children || []).map((c: any) => c.id),
+          ...((targetFamily as any).linkedChildren || []).map((c: any) => c.childId),
+        ];
+        // Tous les cavaliers des autres familles
+        const otherFamilies = families.filter(f => f.firestoreId !== showLinkChildren);
+        const q = linkSearch.toLowerCase();
+        const filteredFamilies = otherFamilies.filter(f =>
+          !q || f.parentName.toLowerCase().includes(q) ||
+          (f.children || []).some((c: any) => c.firstName.toLowerCase().includes(q))
+        );
+
+        return (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setShowLinkChildren(null)}>
+            <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg shadow-2xl flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
+              <div className="p-5 border-b border-gray-100 flex-shrink-0">
+                <div className="flex items-center justify-between mb-1">
+                  <h2 className="font-display text-lg font-bold text-blue-800">Lier des cavaliers</h2>
+                  <button onClick={() => setShowLinkChildren(null)} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
+                </div>
+                <p className="font-body text-xs text-slate-500">
+                  Choisissez les cavaliers d'autres familles que <strong>{targetFamily.parentName}</strong> pourra voir et réserver.
+                </p>
+              </div>
+              <div className="p-4 flex-shrink-0">
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                  <input value={linkSearch} onChange={e => setLinkSearch(e.target.value)}
+                    placeholder="Rechercher une famille ou un cavalier..."
+                    className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400 bg-white"/>
+                </div>
+              </div>
+              <div className="overflow-y-auto flex-1 px-4 pb-4 flex flex-col gap-3">
+                {filteredFamilies.length === 0 && (
+                  <p className="font-body text-sm text-slate-500 text-center py-4">Aucune famille trouvée.</p>
+                )}
+                {filteredFamilies.map(f => (
+                  <div key={f.firestoreId} className="border border-gray-100 rounded-xl overflow-hidden">
+                    <div className="bg-sand px-3 py-2 font-body text-xs font-semibold text-slate-600">{f.parentName}</div>
+                    <div className="flex flex-col">
+                      {(f.children || []).map((child: any) => {
+                        const isLinked = alreadyLinked.includes(child.id);
+                        return (
+                          <div key={child.id} className="flex items-center justify-between px-3 py-2.5 border-t border-gray-50 first:border-t-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-body text-sm font-semibold text-blue-800">{child.firstName}</span>
+                              {child.galopLevel && child.galopLevel !== "—" && (
+                                <span className="font-body text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">G{child.galopLevel}</span>
+                              )}
+                              {child.birthDate && (
+                                <span className="font-body text-[10px] text-slate-400">
+                                  {new Date().getFullYear() - new Date(child.birthDate).getFullYear()} ans
+                                </span>
+                              )}
+                            </div>
+                            {isLinked ? (
+                              <span className="font-body text-[10px] text-green-600 bg-green-50 px-2 py-1 rounded-lg">✓ Lié</span>
+                            ) : (
+                              <button onClick={async () => {
+                                setLinkSaving(true);
+                                try {
+                                  const newLink = {
+                                    childId: child.id,
+                                    childName: child.firstName,
+                                    birthDate: child.birthDate || "",
+                                    galopLevel: child.galopLevel || "—",
+                                    sourceFamilyId: f.firestoreId,
+                                    sourceFamilyName: f.parentName,
+                                    linkedAt: new Date().toISOString(),
+                                  };
+                                  const existing = (targetFamily as any).linkedChildren || [];
+                                  await updateDoc(doc(db, "families", showLinkChildren), {
+                                    linkedChildren: [...existing, newLink],
+                                  });
+                                  await fetchFamilies();
+                                  toast(`${child.firstName} lié(e) à ${targetFamily.parentName}`, "success");
+                                } catch (e) { toast("Erreur", "error"); }
+                                setLinkSaving(false);
+                              }} disabled={linkSaving}
+                                className="font-body text-xs text-teal-600 bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg border-none cursor-pointer font-semibold disabled:opacity-50">
+                                + Lier
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="p-4 border-t border-gray-100 flex-shrink-0">
+                <button onClick={() => setShowLinkChildren(null)}
+                  className="w-full py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
+                  Fermer
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Modal email depuis fiche famille ── */}
       {emailModal && (

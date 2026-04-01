@@ -43,18 +43,24 @@ export default function ReservationsPage() {
     if (!user) return;
     const fetch = async () => {
       try {
-        const snap = await getDocs(
-          query(collection(db, "reservations"), where("familyId", "==", user.uid))
-        );
-        setReservations(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Reservation[]);
+        // Charger les réservations directes + celles faites par d'autres familles pour nos enfants (ex: grands-parents)
+        const [ownSnap, linkedSnap] = await Promise.all([
+          getDocs(query(collection(db, "reservations"), where("familyId", "==", user.uid))),
+          getDocs(query(collection(db, "reservations"), where("sourceFamilyId", "==", user.uid))),
+        ]);
+        const own = ownSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Reservation[];
+        const linked = linkedSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Reservation[];
+        // Dédupliquer par id
+        const all = [...own, ...linked.filter(r => !own.some(o => o.id === r.id))];
+        setReservations(all);
       } catch (e) {
-        // Fallback: load all and filter client-side (in case index is missing)
+        // Fallback client-side
         try {
           const snap = await getDocs(collection(db, "reservations"));
           setReservations(
             snap.docs
-              .map((d) => ({ id: d.id, ...d.data() } as Reservation))
-              .filter((r) => r.familyId === user.uid)
+              .map(d => ({ id: d.id, ...d.data() } as Reservation))
+              .filter(r => r.familyId === user.uid || (r as any).sourceFamilyId === user.uid)
           );
         } catch (e2) { console.error(e2); }
       }

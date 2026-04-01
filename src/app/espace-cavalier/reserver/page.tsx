@@ -44,7 +44,20 @@ export default function ReserverPage() {
   const [waitlistSuccess, setWaitlistSuccess] = useState<string | null>(null); // creneauId confirmé
   const [waitlistLoading, setWaitlistLoading] = useState<string | null>(null); // creneauId en cours
 
-  const children = family?.children || [];
+  // Tous les cavaliers disponibles = propres + liés
+  const ownChildren = family?.children || [];
+  const linkedChildren = (family as any)?.linkedChildren || [];
+  const children = [
+    ...ownChildren,
+    ...linkedChildren.map((lc: any) => ({
+      id: lc.childId,
+      firstName: `${lc.childName} (${lc.sourceFamilyName})`,
+      galopLevel: lc.galopLevel || "—",
+      sourceFamilyId: lc.sourceFamilyId,
+      sourceFamilyName: lc.sourceFamilyName,
+      isLinked: true,
+    })),
+  ];
   const familyId = user?.uid || "";
 
   const [monthOffset, setMonthOffset] = useState(0);
@@ -200,17 +213,21 @@ export default function ReserverPage() {
   const addCoursToCart = (creneau: Creneau, childId: string) => {
     const child = children.find((c: any) => c.id === childId);
     const priceTTC = (creneau as any).priceTTC || creneau.priceHT * (1 + (creneau.tvaTaux || 5.5) / 100);
+    // Enlever le suffixe " (NomFamille)" pour les cavaliers liés
+    const cleanName = ((child as any)?.firstName || "?").split(" (")[0];
+    const sourceFamilyId = (child as any)?.sourceFamilyId || null;
     setCart([...cart, {
       creneauIds: [creneau.id],
       activityTitle: creneau.activityTitle,
       dates: new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
       childId,
-      childName: (child as any)?.firstName || "?",
+      childName: cleanName,
       prixBase: Math.round(priceTTC * 100) / 100,
       remiseEuros: 0,
       rang: 0,
       prixFinal: Math.round(priceTTC * 100) / 100,
       isStage: false,
+      ...(sourceFamilyId ? { sourceFamilyId } : {}),
     }]);
     setSelectedCreneau(null);
     setSelectedChildren([]);
@@ -235,7 +252,12 @@ export default function ReserverPage() {
           const enrolled = creneauData.enrolled || [];
           if (enrolled.some((e: any) => e.childId === item.childId)) continue;
           await updateDoc(doc(db, "creneaux", cid), {
-            enrolled: [...enrolled, { childId: item.childId, childName: item.childName, familyId: user.uid, familyName: family.parentName, enrolledAt: new Date().toISOString() }],
+            enrolled: [...enrolled, {
+              childId: item.childId, childName: item.childName,
+              familyId: user.uid, familyName: family.parentName,
+              ...(( item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
+              enrolledAt: new Date().toISOString(),
+            }],
             enrolledCount: enrolled.length + 1,
           });
         }
@@ -243,6 +265,8 @@ export default function ReserverPage() {
         const firstCreneau = creneaux.find(c => c.id === item.creneauIds[0]);
         await addDoc(collection(db, "reservations"), {
           familyId: user.uid, familyName: family.parentName,
+          // Pour les cavaliers liés, ajouter aussi sourceFamilyId pour que les parents voient la réservation
+          ...((item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
           childId: item.childId, childName: item.childName,
           activityTitle: item.activityTitle, activityType: item.isStage ? "stage" : "cours",
           creneauId: item.creneauIds[0],
@@ -828,13 +852,19 @@ export default function ReserverPage() {
                                 const enrolled = crData.enrolled || [];
                                 if (enrolled.some((e: any) => e.childId === item.childId)) continue;
                                 await updateDoc(doc(db, "creneaux", cid), {
-                                  enrolled: [...enrolled, { childId: item.childId, childName: item.childName, familyId: user.uid, familyName: family.parentName, enrolledAt: new Date().toISOString() }],
+                                  enrolled: [...enrolled, {
+                                    childId: item.childId, childName: item.childName,
+                                    familyId: user.uid, familyName: family.parentName,
+                                    ...((item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
+                                    enrolledAt: new Date().toISOString(),
+                                  }],
                                   enrolledCount: enrolled.length + 1,
                                 });
                               }
                               const firstCr = creneaux.find(c => c.id === item.creneauIds[0]);
                               await addDoc(collection(db, "reservations"), {
                                 familyId: user.uid, familyName: family.parentName,
+                                ...((item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
                                 childId: item.childId, childName: item.childName,
                                 activityTitle: item.activityTitle, activityType: item.isStage ? "stage" : "cours",
                                 creneauId: item.creneauIds[0],
