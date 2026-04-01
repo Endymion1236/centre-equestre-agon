@@ -124,7 +124,7 @@ export default function TimelineView({
                     };
 
                     return (
-                      <div key={dayIdx} className="flex-1 relative border-l border-gray-100" style={{ minWidth: "110px", height: totalHeight }}>
+                      <div key={dayIdx} className="flex-1 relative border-l border-gray-100" style={{ minWidth: "130px", height: totalHeight }}>
                         {/* Header jour */}
                         <div className={`sticky top-0 z-10 text-center py-1.5 font-body text-xs font-semibold border-b border-gray-200 ${isToday(d) ? "bg-blue-500 text-white" : "bg-sand text-slate-600"}`}>
                           {fmtDateFR(d)}
@@ -168,8 +168,8 @@ export default function TimelineView({
                               }}>
                               <div className="p-1.5 h-full flex flex-col">
                                 <div className="font-body text-[10px] font-bold" style={{ color: col }}>{c.startTime}–{c.endTime}</div>
-                                <div className="font-body text-[10px] font-semibold text-blue-800 leading-tight truncate">{c.activityTitle}</div>
-                                {c.height > 45 && <div className="font-body text-[9px] text-slate-500 truncate">{c.monitor}</div>}
+                                <div className={`font-body text-[10px] font-semibold text-blue-800 leading-tight ${totalCols === 1 ? "break-words" : "truncate"}`}>{c.activityTitle}</div>
+                                {c.height > 45 && <div className={`font-body text-[9px] text-slate-500 ${totalCols === 1 ? "break-words" : "truncate"}`}>{c.monitor}</div>}
                                 <div className="mt-auto flex items-center gap-1">
                                   <span className={`font-body text-[9px] font-bold ${fill >= 1 ? "text-red-500" : fill >= 0.7 ? "text-orange-500" : "text-green-600"}`}>
                                     {en.length}/{c.maxPlaces}
