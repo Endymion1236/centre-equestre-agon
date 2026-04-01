@@ -1188,16 +1188,23 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         const emailData = emailTemplates.bienvenueNouvelleFamille({ parentName: newFam.parentName.trim() });
                         fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: newFam.parentEmail.trim(), ...emailData }) }).catch(() => {});
                       }
-                      panelToast(`Famille ${newFam.parentName} créée !`, "success");
-                      // Sélectionner la nouvelle famille et le cavalier
-                      setSelFam(famRef.id);
-                      setSelChild(childId);
-                      setSearch(newFam.parentName);
+                      // ── Inscrire directement le cavalier dans le créneau ──
+                      await onEnroll(
+                        creneau.id!,
+                        {
+                          childId,
+                          childName: newChild.firstName.trim(),
+                          familyId: famRef.id,
+                          familyName: newFam.parentName.trim(),
+                          enrolledAt: new Date().toISOString(),
+                        },
+                        undefined,
+                        { skipPayment: true, skipEmail: false }
+                      );
+                      panelToast(`✅ Famille ${newFam.parentName} créée et ${newChild.firstName} inscrit(e) !`, "success");
                       setShowNewFamily(false);
                       setNewFam({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
                       setNewChild({ firstName: "", birthDate: "", galopLevel: "—" });
-                      // Rafraîchir les données (le parent va recharger via onClose)
-                      onClose();
                     } catch (e: any) {
                       panelToast("Erreur : " + e.message, "error");
                     }
