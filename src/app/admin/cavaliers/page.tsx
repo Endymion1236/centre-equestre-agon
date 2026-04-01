@@ -67,6 +67,7 @@ export default function CavaliersPage() {
   const [allCartes, setAllCartes] = useState<any[]>([]);
   const [allCreneaux, setAllCreneaux] = useState<any[]>([]);
   const [allMandats, setAllMandats] = useState<any[]>([]);
+  const [allFidelite, setAllFidelite] = useState<any[]>([]);
   const [editingMandat, setEditingMandat] = useState<string | null>(null); // familyId en cours d'édition
   const [mandatForm, setMandatForm] = useState({ iban: "", bic: "", titulaire: "", dateSignature: new Date().toISOString().split("T")[0] });
   const [mandatSaving, setMandatSaving] = useState(false);
@@ -127,7 +128,7 @@ export default function CavaliersPage() {
 
   const fetchFamilies = async () => {
     try {
-      const [famSnap, resSnap, paySnap, avoirsSnap, cartesSnap, creneauxSnap, mandatsSnap] = await Promise.all([
+      const [famSnap, resSnap, paySnap, avoirsSnap, cartesSnap, creneauxSnap, mandatsSnap, fideliteSnap] = await Promise.all([
         getDocs(collection(db, "families")),
         getDocs(collection(db, "reservations")),
         getDocs(collection(db, "payments")),
@@ -135,6 +136,7 @@ export default function CavaliersPage() {
         getDocs(collection(db, "cartes")),
         getDocs(collection(db, "creneaux")),
         getDocs(collection(db, "mandats-sepa")),
+        getDocs(collection(db, "fidelite")),
       ]);
       setFamilies(famSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as (Family & { firestoreId: string })[]);
       setAllReservations(resSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -144,6 +146,7 @@ export default function CavaliersPage() {
       const today = new Date().toISOString().split("T")[0];
       setAllCreneaux(creneauxSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((c: any) => c.date >= today));
       setAllMandats(mandatsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setAllFidelite(fideliteSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (e) { console.error(e); }
     setLoading(false);
   };
@@ -1421,6 +1424,42 @@ export default function CavaliersPage() {
                       );
                     })()}
 
+                    {/* ─── Fidélité ─── */}
+                    {(() => {
+                      const fid = allFidelite.find((f: any) => f.id === family.firestoreId);
+                      const points = fid?.points || 0;
+                      const history = (fid?.history || []).slice(-5).reverse();
+                      if (points === 0 && history.length === 0) return null;
+                      return (
+                        <div className="mt-4 pt-3 border-t border-blue-500/8">
+                          <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                            ⭐ Fidélité
+                          </div>
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="bg-gold-50 border border-gold-200 rounded-xl px-4 py-2 flex items-center gap-2">
+                              <span className="font-display text-xl font-bold text-gold-600">{points}</span>
+                              <span className="font-body text-xs text-gold-600">points</span>
+                            </div>
+                            <span className="font-body text-xs text-slate-500">
+                              ≈ {(points / 100).toFixed(2)}€ de réduction
+                            </span>
+                          </div>
+                          {history.length > 0 && (
+                            <div className="flex flex-col gap-1">
+                              {history.map((h: any, i: number) => (
+                                <div key={i} className="flex items-center justify-between font-body text-xs py-1 px-2 rounded-lg bg-sand">
+                                  <span className="text-slate-600">{h.label || "Encaissement"}</span>
+                                  <span className={`font-semibold ${h.points > 0 ? "text-green-600" : "text-red-500"}`}>
+                                    {h.points > 0 ? "+" : ""}{h.points} pts
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
                     {/* ═══ NOTES INTERNES (suite) ═══ */}
                     <div className="mt-4 pt-3 border-t border-blue-500/8">
                       <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Notes internes</div>
@@ -1886,13 +1925,18 @@ export default function CavaliersPage() {
                     const htmlContent = emailTemplate === "libre"
                       ? `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#333;white-space:pre-wrap;">${emailBody.replace(/</g,"&lt;")}</div>`
                       : emailBody;
-                    await fetch("/api/send-email", {
+                    const res = await fetch("/api/send-email", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({ to: emailModal.email, subject: emailSubject, html: htmlContent }),
                     });
-                    toast(`✅ Email envoyé à ${emailModal.email}`, "success");
-                    setEmailModal(null);
+                    const data = await res.json();
+                    if (!res.ok || data.error) {
+                      toast(`❌ Erreur : ${data.error || "Envoi échoué"}`, "error");
+                    } else {
+                      toast(`✅ Email envoyé${data.testMode ? ` (mode test → ${data.sentTo})` : ` à ${emailModal.email}`}`, "success");
+                      setEmailModal(null);
+                    }
                   } catch (e) {
                     toast("Erreur lors de l'envoi", "error");
                   } finally {
