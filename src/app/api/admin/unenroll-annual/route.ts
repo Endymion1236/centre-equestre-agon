@@ -108,7 +108,56 @@ export async function POST(req: NextRequest) {
     }
     if (payBatchCount > 0) await payBatch.commit();
 
-    // ── 4. Annuler les écheances-sepa non encore remises ────────────────────
+    // ── 4b. Créer un avoir pour les sommes déjà encaissées ───────────────────
+    let avoirCreated = 0;
+    let avoirAmount = 0;
+    try {
+      const paidSnap = await adminDb.collection("payments")
+        .where("familyId", "==", familyId)
+        .where("status", "==", "paid")
+        .get();
+
+      for (const doc of paidSnap.docs) {
+        const p = doc.data();
+        const concernsChild = (p.items || []).some((i: any) => i.childId === childId);
+        if (!concernsChild) continue;
+        // Montant payé pour cet enfant dans ce paiement
+        const childItems = (p.items || []).filter((i: any) => i.childId === childId);
+        const paid = childItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
+        if (paid > 0) avoirAmount += paid;
+      }
+
+      if (avoirAmount > 0) {
+        // Récupérer infos famille
+        const familyDoc = await adminDb.collection("families").doc(familyId).get();
+        const familyData = familyDoc.data();
+        const familyName = familyData?.parentName || familyData?.name || familyId;
+
+        const expiryDate = new Date();
+        expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+
+        await adminDb.collection("avoirs").add({
+          familyId,
+          familyName,
+          type: "avoir",
+          amount: avoirAmount,
+          usedAmount: 0,
+          remainingAmount: avoirAmount,
+          reason: `Désinscription annuelle — ${childName}`,
+          reference: `AV-${Date.now().toString(36).toUpperCase()}`,
+          expiryDate: expiryDate.toISOString(),
+          status: "actif",
+          usageHistory: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        avoirCreated = 1;
+      }
+    } catch (e) {
+      console.error("Erreur création avoir:", e);
+    }
+
+
     let cancelledSepa = 0;
     try {
       const sepaSnap = await adminDb
@@ -182,11 +231,14 @@ export async function POST(req: NextRequest) {
       cancelledPayments,
       cancelledSepa,
       cancelledSubscriptions,
+      avoirCreated,
+      avoirAmount,
       message: [
         `${childName || childId} désinscrit(e) de ${unenrolledCount} séance(s)`,
         cancelledReservations > 0 ? `${cancelledReservations} réservation(s) annulée(s)` : "",
         cancelledPayments > 0 ? `${cancelledPayments} paiement(s) annulé(s)` : "",
         cancelledSepa > 0 ? `${cancelledSepa} échéance(s) SEPA supprimée(s)` : "",
+        avoirCreated > 0 ? `✅ Avoir de ${avoirAmount.toFixed(2)}€ créé` : "",
       ].filter(Boolean).join(" · "),
     });
   } catch (error: any) {
