@@ -2079,8 +2079,12 @@ export default function PaiementsPage() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-body text-base font-bold text-blue-800">{decl.familyName}</span>
-                          <span className={`font-body text-xs font-semibold px-2 py-0.5 rounded-full ${decl.mode === "cheque" ? "bg-blue-50 text-blue-700" : "bg-green-50 text-green-700"}`}>
-                            {decl.mode === "cheque" ? "📝 Chèque" : "💵 Espèces"}
+                          <span className={`font-body text-xs font-semibold px-2 py-0.5 rounded-full ${
+                            decl.mode === "cheque" ? "bg-blue-50 text-blue-700" :
+                            decl.mode === "virement" ? "bg-purple-50 text-purple-700" :
+                            "bg-green-50 text-green-700"
+                          }`}>
+                            {decl.mode === "cheque" ? "📝 Chèque" : decl.mode === "virement" ? "🏦 Virement" : "💵 Espèces"}
                           </span>
                         </div>
                         <div className="font-body text-sm text-slate-600">{decl.activityTitle}</div>
@@ -2091,7 +2095,7 @@ export default function PaiementsPage() {
                         <div className="font-body text-xl font-bold text-blue-500 mb-2">{(decl.montant || 0).toFixed(2)}€</div>
                         <div className="flex flex-col gap-1.5">
                           <button onClick={async () => {
-                            if (!confirm(`Confirmer réception de ${decl.montant.toFixed(2)}€ en ${decl.mode === "cheque" ? "chèque" : "espèces"} de ${decl.familyName} ?`)) return;
+                            if (!confirm(`Confirmer réception de ${decl.montant.toFixed(2)}€ en ${decl.mode === "cheque" ? "chèque" : decl.mode === "virement" ? "virement" : "espèces"} de ${decl.familyName} ?`)) return;
                             try {
                               // Mettre à jour le paiement
                               if (decl.paymentId) {
@@ -2113,7 +2117,7 @@ export default function PaiementsPage() {
                                     familyName: decl.familyName,
                                     montant: decl.montant,
                                     mode: decl.mode,
-                                    modeLabel: decl.mode === "cheque" ? "Chèque" : "Espèces",
+                                    modeLabel: decl.mode === "cheque" ? "Chèque" : decl.mode === "virement" ? "Virement" : "Espèces",
                                     ref: decl.note || "",
                                     activityTitle: decl.activityTitle,
                                     date: serverTimestamp(),
@@ -2136,7 +2140,7 @@ export default function PaiementsPage() {
                                       <p>Bonjour <strong>${decl.familyName}</strong>,</p>
                                       <p>Nous avons bien reçu votre règlement :</p>
                                       <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
-                                        <p style="margin:0;color:#166534;font-weight:600;">✅ ${decl.montant.toFixed(2)}€ — ${decl.mode === "cheque" ? "Chèque" : "Espèces"}</p>
+                                        <p style="margin:0;color:#166534;font-weight:600;">✅ ${decl.montant.toFixed(2)}€ — ${decl.mode === "cheque" ? "Chèque" : decl.mode === "virement" ? "Virement" : "Espèces"}</p>
                                         <p style="margin:8px 0 0;color:#555;font-size:13px;">${decl.activityTitle}</p>
                                       </div>
                                       <p>À bientôt au centre équestre !</p>
