@@ -19,6 +19,7 @@ import {
   LogOut,
   Loader2,
   ExternalLink,
+  FlaskConical,
 } from "lucide-react";
 
 const navItems = [
@@ -29,6 +30,7 @@ const navItems = [
   { href: "/espace-cavalier/profil", icon: Users, label: "Profil famille" },
   { href: "/espace-cavalier/progression", icon: TrendingUp, label: "Progression" },
   { href: "/espace-cavalier/satisfaction", icon: Star, label: "Satisfaction" },
+  { href: "/espace-cavalier/test-protocol", icon: FlaskConical, label: "Tests" },
 ];
 
 function LoginScreen() {
