@@ -153,67 +153,70 @@ export default function TimelineView({
                           const left = columns[cIdx] * colWidth;
 
                           const isWide = colWidth >= 80;
+                          const cardH = c.height - 2;
                           return (
                             <div key={c.id}
                               onClick={() => onSelectCreneau(c)}
                               title={`${c.activityTitle}${c.monitor ? " · " + c.monitor : ""} · ${c.startTime}–${c.endTime}`}
-                              className={`absolute rounded-lg border cursor-pointer hover:shadow-lg transition-shadow group ${isWide ? "overflow-visible" : "overflow-hidden"}`}
+                              className="absolute rounded-lg border cursor-pointer hover:shadow-lg transition-shadow overflow-hidden group"
                               style={{
                                 top: c.top + 28,
-                                height: c.height - 2,
+                                height: cardH,
                                 left: `calc(${left}% + 2px)`,
                                 width: `calc(${colWidth}% - 4px)`,
                                 backgroundColor: `${col}15`,
                                 borderColor: `${col}40`,
                                 borderLeftWidth: 3,
                                 borderLeftColor: col,
+                                padding: "4px 5px",
+                                boxSizing: "border-box",
                               }}>
-                              <div className="p-1.5 flex flex-col" style={{ height: c.height - 2, overflow: "hidden" }}>
-                                <div className="font-body text-[10px] font-bold flex-shrink-0" style={{ color: col }}>{c.startTime}–{c.endTime}</div>
-                                <div className="font-body font-semibold text-blue-800 leading-tight flex-shrink-0"
-                                  style={isWide ? {
-                                    fontSize: "11px",
-                                    whiteSpace: "normal",
-                                    wordBreak: "break-word",
-                                    overflowWrap: "anywhere",
-                                    overflow: "visible",
-                                  } : {
-                                    fontSize: "10px",
-                                    whiteSpace: "nowrap",
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                  }}>
-                                  {c.activityTitle}
+                              {/* Heure */}
+                              <div style={{ fontSize: "10px", fontWeight: 700, color: col, lineHeight: 1.2, whiteSpace: "nowrap" }}>
+                                {c.startTime}–{c.endTime}
+                              </div>
+                              {/* Titre — retour à la ligne si assez large */}
+                              <div style={{
+                                fontSize: isWide ? "11px" : "10px",
+                                fontWeight: 600,
+                                color: "#1e3a5f",
+                                lineHeight: 1.25,
+                                marginTop: 1,
+                                ...(isWide
+                                  ? { whiteSpace: "normal", wordBreak: "break-word" }
+                                  : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }
+                                ),
+                              }}>
+                                {c.activityTitle}
+                              </div>
+                              {/* Moniteur */}
+                              {cardH > 50 && (
+                                <div style={{
+                                  fontSize: "9px",
+                                  color: "#64748b",
+                                  lineHeight: 1.2,
+                                  marginTop: 1,
+                                  ...(isWide
+                                    ? { whiteSpace: "normal" }
+                                    : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }
+                                  ),
+                                }}>
+                                  {c.monitor}
                                 </div>
-                                {c.height > 45 && (
-                                  <div className="font-body text-slate-500 flex-shrink-0"
-                                    style={isWide ? {
-                                      fontSize: "9px",
-                                      whiteSpace: "normal",
-                                      wordBreak: "break-word",
-                                      overflow: "visible",
-                                    } : {
-                                      fontSize: "9px",
-                                      whiteSpace: "nowrap",
-                                      overflow: "hidden",
-                                      textOverflow: "ellipsis",
-                                    }}>
-                                    {c.monitor}
+                              )}
+                              {/* Compteur places */}
+                              <div style={{ position: "absolute", bottom: 4, left: 5, display: "flex", alignItems: "center", gap: 3 }}>
+                                <span style={{ fontSize: "9px", fontWeight: 700, color: fill >= 1 ? "#ef4444" : fill >= 0.7 ? "#f97316" : "#16a34a" }}>
+                                  {en.length}/{c.maxPlaces}
+                                </span>
+                                {en.length > 0 && (
+                                  <div style={{ display: "flex", gap: 1 }}>
+                                    {en.slice(0, 5).map((e: any) => {
+                                      const hasPaid = payments.some((p: any) => p.familyId === e.familyId && p.status === "paid");
+                                      return <span key={e.childId} style={{ width: 6, height: 6, borderRadius: "50%", background: hasPaid ? "#22c55e" : "#fb923c", display: "inline-block" }} />;
+                                    })}
                                   </div>
                                 )}
-                                <div className="mt-auto flex items-center gap-1">
-                                  <span className={`font-body text-[9px] font-bold ${fill >= 1 ? "text-red-500" : fill >= 0.7 ? "text-orange-500" : "text-green-600"}`}>
-                                    {en.length}/{c.maxPlaces}
-                                  </span>
-                                  {en.length > 0 && (
-                                    <div className="flex gap-px">
-                                      {en.slice(0, 5).map((e: any) => {
-                                        const hasPaid = payments.some((p: any) => p.familyId === e.familyId && p.status === "paid");
-                                        return <span key={e.childId} className={`w-1.5 h-1.5 rounded-full ${hasPaid ? "bg-green-500" : "bg-orange-400"}`} />;
-                                      })}
-                                    </div>
-                                  )}
-                                </div>
                               </div>
                             </div>
                           );
