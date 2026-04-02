@@ -182,8 +182,13 @@ export default function TimelineReservation({ creneaux, children, familyId, onBo
   }, [creneaux, weekDays, filter, activeChildren]);
 
   const spotsLeft = (c: Creneau) => c.maxPlaces - (c.enrolled?.length || 0);
-  const isAlreadyEnrolled = (c: Creneau) =>
+  // Un enfant au moins de la famille est inscrit (pour le badge)
+  const hasFamilyEnrolled = (c: Creneau) =>
     (c.enrolled || []).some((e: any) => e.familyId === familyId);
+  // Tous les enfants de la famille sont inscrits (pour masquer le bouton Réserver)
+  const isAlreadyEnrolled = (c: Creneau) =>
+    children.length > 0 &&
+    children.every((ch: any) => (c.enrolled || []).some((e: any) => e.childId === ch.id));
 
   const prix = (c: Creneau) => c.priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
 
@@ -291,6 +296,7 @@ export default function TimelineReservation({ creneaux, children, familyId, onBo
           {dayCreneaux.map(c => {
             const spots = spotsLeft(c);
             const full = spots <= 0;
+            const familyEnrolled = hasFamilyEnrolled(c);
             const enrolled = isAlreadyEnrolled(c);
             const relevance = isRelevantForFamily(c, activeChildren);
             const col = c.color || TYPE_COLORS[c.activityType] || "#666";
@@ -299,7 +305,7 @@ export default function TimelineReservation({ creneaux, children, familyId, onBo
             return (
               <div key={c.id}
                 className={`rounded-2xl border overflow-hidden transition-all ${
-                  enrolled ? "border-green-200 bg-green-50" :
+                  familyEnrolled ? "border-green-200 bg-green-50" :
                   full ? "border-gray-200 bg-gray-50 opacity-70" :
                   "border-blue-500/10 bg-white shadow-sm"
                 }`}
@@ -315,7 +321,7 @@ export default function TimelineReservation({ creneaux, children, familyId, onBo
                             <Sparkles size={9}/> Parfait pour toi
                           </span>
                         )}
-                        {enrolled && (
+                        {familyEnrolled && (
                           <span className="flex items-center gap-0.5 font-body text-[10px] font-semibold text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full">
                             <Check size={9}/> Inscrit
                           </span>

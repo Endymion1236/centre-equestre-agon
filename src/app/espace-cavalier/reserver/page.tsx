@@ -302,15 +302,22 @@ export default function ReserverPage() {
       const paymentDocRef = await addDoc(collection(db, "payments"), {
         familyId: user.uid, familyName: family.parentName,
         familyEmail: family.parentEmail || user.email || "",
-        items: cart.map(i => ({
-          activityTitle: `${i.activityTitle} — ${i.childName}${i.remiseEuros > 0 ? ` (-${i.remiseEuros}€)` : ""}`,
-          childId: i.childId,
-          childName: i.childName,
-          creneauId: i.creneauIds[0],
-          stageKey: i.isStage ? `${i.activityTitle}_${i.dates}` : null,
-          activityType: i.isStage ? "stage" : "cours",
-          priceHT: i.prixFinal / 1.055, tva: 5.5, priceTTC: i.prixFinal,
-        })),
+        items: cart.map(i => {
+          const firstCr = creneaux.find(c => c.id === i.creneauIds[0]);
+          return {
+            activityTitle: `${i.activityTitle} — ${i.childName}${i.remiseEuros > 0 ? ` (-${i.remiseEuros}€)` : ""}`,
+            childId: i.childId,
+            childName: i.childName,
+            creneauId: i.creneauIds[0],
+            stageKey: i.isStage ? `${i.activityTitle}_${i.dates}` : null,
+            activityType: i.isStage ? "stage" : "cours",
+            priceHT: i.prixFinal / 1.055, tva: 5.5, priceTTC: i.prixFinal,
+            date: firstCr?.date || null,
+            startTime: firstCr?.startTime || null,
+            endTime: firstCr?.endTime || null,
+            monitor: firstCr?.monitor || null,
+          };
+        }),
         totalTTC: cartTotal,
         paymentMode: "", paymentRef: "",
         status: "pending", paidAmount: 0,

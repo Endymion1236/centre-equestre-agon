@@ -157,19 +157,39 @@ export async function GET(req: NextRequest) {
       const resendKey = process.env.RESEND_API_KEY;
       if (parentEmail && resendKey) {
         try {
-          const prestations = (pData.items || []).map((i: any) => i.activityTitle).join(", ") || "Prestation";
-          const hasStage = (pData.items || []).some((i: any) => i.activityType === "stage");
+          const items = pData.items || [];
+          const hasStage = items.some((i: any) => i.activityType === "stage");
+
+          // Construire une description détaillée par article
+          const lignesDetail = items.map((i: any) => {
+            const parts = [i.activityTitle, i.childName].filter(Boolean);
+            const infos = [];
+            if (i.date) {
+              const d = new Date(i.date);
+              const dateStr = d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+              infos.push(dateStr);
+            }
+            if (i.startTime && i.endTime) infos.push(`${i.startTime}–${i.endTime}`);
+            if (i.monitor) infos.push(`avec ${i.monitor}`);
+            return `${parts.join(" — ")}${infos.length ? `<br/><span style="color:#888;font-size:12px;">${infos.join(" · ")}</span>` : ""}`;
+          }).join("<br/><br/>");
+
+          const prestations = items.map((i: any) => i.activityTitle).join(", ") || "Prestation";
           const templateKey = hasStage ? "confirmationStage" : "confirmationPaiement";
           const vars: Record<string, string | number> = hasStage ? {
             parentName: pData.familyName || "Client",
-            stageTitle: pData.items?.[0]?.activityTitle || "Stage",
-            dates: prestations, horaires: "",
-            enfants: (pData.items || []).map((i: any) => i.childName).filter(Boolean).join(", "),
+            stageTitle: items[0]?.activityTitle || "Stage",
+            dates: items.map((i: any) => {
+              if (!i.date) return "";
+              return new Date(i.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" });
+            }).filter(Boolean).join(", "),
+            horaires: items.map((i: any) => i.startTime && i.endTime ? `${i.startTime}–${i.endTime}` : "").filter(Boolean)[0] || "",
+            enfants: items.map((i: any) => i.childName).filter(Boolean).join(", "),
             montant: paidAmount.toFixed(2),
           } : {
             parentName: pData.familyName || "Client",
             montant: paidAmount.toFixed(2),
-            prestations,
+            prestations: lignesDetail || prestations,
           };
           const { subject, html } = await loadTemplate(templateKey, vars);
           fetch("https://api.resend.com/emails", {
