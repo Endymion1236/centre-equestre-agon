@@ -20,15 +20,7 @@ async function getHostedCheckoutStatus(hostedCheckoutId: string): Promise<any> {
   const method = "GET";
   const date = new Date().toUTCString();
 
-  // Spec Worldline V1HMAC :
-  // - contentType vide pour GET
-  // - headers X-GCS-* triés inclus dans la signature
-  // - format: METHOD
-
-DATE
-X-GCS-HEADER:value
-PATH
-
+  // Spec Worldline V1HMAC: contentType vide pour GET, headers X-GCS-* inclus
   const serverMetaInfo = Buffer.from(JSON.stringify({
     sdkCreator: "OnlinePayments",
     sdkIdentifier: "NodejsServerSDK/v7.4.0",
