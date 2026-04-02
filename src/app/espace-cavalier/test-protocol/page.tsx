@@ -126,11 +126,32 @@ const SCENARIOS: Scenario[] = [
         ],
       },
       {
-        id: "RES-02", titre: "Paiement par CB (CAWL)", priorite: "critique",
-        description: "Flux de paiement carte bancaire",
+        id: "RES-02", titre: "Paiement CB — 1 cours (CAWL)", priorite: "critique",
+        description: "Payer 1 cours par CB et vérifier Firestore + admin",
         steps: [
-          { action: "Dans le panier → sélectionner '💳 Carte bancaire' → cliquer Payer", attendu: "Redirection vers la page CAWL / Crédit Agricole" },
-          { action: "Compléter le paiement de test (si disponible)", attendu: "Retour sur l'espace cavalier avec confirmation" },
+          { action: "Réserver 1 cours → panier → Carte bancaire → Payer", attendu: "Redirection vers page CAWL (payment.preprod.ca.cawl-solutions.fr)" },
+          { action: "Saisir carte test → Continue Transaction sur simulateur 3DS", attendu: "Retour sur /reservations avec bandeau vert 'Paiement confirmé'" },
+          { action: "Mes factures → vérifier le statut", attendu: "Facture affiche 'Payé' + mode 'CB en ligne'" },
+          { action: "Admin → Paiements → Encaissements", attendu: "Ligne CAWL visible avec montant correct" },
+          { action: "Vérifier email reçu sur ceagon50@gmail.com", attendu: "Email de confirmation avec nom famille + montant + activité" },
+        ],
+      },
+      {
+        id: "RES-02B", titre: "Paiement CB — 2 stages panier unique", priorite: "critique",
+        description: "Réserver 2 stages différents en un seul paiement CAWL",
+        steps: [
+          { action: "Réserver Stage A → panier → 'Continuer mes réservations'", attendu: "Panier garde 1 article, modal se ferme" },
+          { action: "Réserver Stage B → vérifier le panier", attendu: "2 lignes dans le panier, total = Stage A + Stage B" },
+          { action: "Carte bancaire → Payer", attendu: "1 seule page CAWL avec le total global" },
+          { action: "Mes factures après paiement", attendu: "1 seule facture 'Payée' avec les 2 stages" },
+        ],
+      },
+      {
+        id: "RES-02C", titre: "Blocage doublon panier", priorite: "haute",
+        description: "Impossible d'inscrire le même enfant 2x au même créneau",
+        steps: [
+          { action: "Réserver Baby pour Eliot → Continuer → re-sélectionner Baby pour Eliot", attendu: "Alerte 'Cet enfant est déjà dans le panier pour ce stage'" },
+          { action: "Vérifier le panier", attendu: "Toujours 1 seul article, pas de doublon" },
         ],
       },
       {
