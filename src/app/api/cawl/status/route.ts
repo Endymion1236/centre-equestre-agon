@@ -147,7 +147,7 @@ export async function GET(req: NextRequest) {
           const prestations = (pData.items || []).map((i: any) => i.activityTitle).join(", ") || "Prestation";
           const hasStage = (pData.items || []).some((i: any) => i.activityType === "stage");
           const templateKey = hasStage ? "confirmationStage" : "confirmationPaiement";
-          const vars = hasStage ? {
+          const vars: Record<string, string | number> = hasStage ? {
             parentName: pData.familyName || "Client",
             stageTitle: pData.items?.[0]?.activityTitle || "Stage",
             dates: prestations, horaires: "",
