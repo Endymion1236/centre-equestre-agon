@@ -6,6 +6,7 @@ const onlinePaymentsSdk = require("onlinepayments-sdk-nodejs");
 const isProduction = process.env.CAWL_ENV === "production";
 
 // Accepte les deux noms de variable pour compatibilité
+const apiKeyId = process.env.CAWL_API_KEY_ID || process.env.CAWL_API_KEY || "";
 const secretApiKey = process.env.CAWL_SECRET_API_KEY || process.env.CAWL_API_SECRET || "";
 
 export const cawlSdk = onlinePaymentsSdk.init({
@@ -15,7 +16,7 @@ export const cawlSdk = onlinePaymentsSdk.init({
     : "payment.preprod.ca.cawl-solutions.fr",
   scheme: "https",
   port: 443,
-  apiKeyId: process.env.CAWL_API_KEY_ID || "",
+  apiKeyId,
   secretApiKey,
   enableLogging: !isProduction,
 });
