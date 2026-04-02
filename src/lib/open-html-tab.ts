@@ -5,10 +5,10 @@
 export function openHtmlInTab(html: string): void {
   try {
     sessionStorage.setItem("facture_html", html);
-    const w = window.open("/admin/facture-print", "_blank");
+    const w = window.open("/espace-cavalier/facture-print", "_blank");
     if (!w) {
       // Popup bloqué — fallback même onglet
-      window.location.href = "/admin/facture-print";
+      window.location.href = "/espace-cavalier/facture-print";
     }
   } catch {
     // Fallback final : Blob URL
