@@ -186,7 +186,22 @@ export default function ReserverPage() {
     const prixBase = (first as any).priceTTC || first.priceHT * (1 + (first.tvaTaux || 5.5) / 100);
     const dates = stageCreneaux.map(c => new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short" })).join(", ");
 
-    const newItems: CartItem[] = selectedChildren.map((childId, idx) => {
+    // Filtrer les enfants déjà dans le panier pour ce stage
+    const firstCrId = stageCreneaux[0]?.id;
+    const childrenToAdd = selectedChildren.filter(childId => {
+      const alreadyInCart = cart.some(i => i.childId === childId && i.creneauIds.includes(firstCrId));
+      if (alreadyInCart) console.log(`Doublon panier ignoré: childId=${childId} créneau=${firstCrId}`);
+      return !alreadyInCart;
+    });
+
+    if (childrenToAdd.length === 0) {
+      alert("Cet enfant est déjà dans le panier pour ce stage.");
+      setSelectedChildren([]);
+      setSelectedCreneau(null);
+      return;
+    }
+
+    const newItems: CartItem[] = childrenToAdd.map((childId, idx) => {
       const child = children.find((c: any) => c.id === childId);
       const rang = existingStageCount + idx;
       const remise = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
@@ -211,6 +226,11 @@ export default function ReserverPage() {
   };
 
   const addCoursToCart = (creneau: Creneau, childId: string) => {
+    // Bloquer le doublon panier
+    if (cart.some(i => i.childId === childId && i.creneauIds.includes(creneau.id))) {
+      alert("Cet enfant est déjà dans le panier pour ce créneau.");
+      return;
+    }
     const child = children.find((c: any) => c.id === childId);
     const priceTTC = (creneau as any).priceTTC || creneau.priceHT * (1 + (creneau.tvaTaux || 5.5) / 100);
     // Enlever le suffixe " (NomFamille)" pour les cavaliers liés
