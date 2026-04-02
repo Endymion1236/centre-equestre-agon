@@ -71,11 +71,7 @@ export async function POST(req: NextRequest) {
         returnUrl,
         locale: "fr_FR",
         showResultPage: false,
-        paymentProductFilters: {
-          restrictTo: {
-            products: [1], // CB uniquement
-          },
-        },
+        // Pas de filtre produit en test — laisser CAWL proposer tous les moyens disponibles
       },
     };
 

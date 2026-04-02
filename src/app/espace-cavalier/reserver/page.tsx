@@ -279,8 +279,9 @@ export default function ReserverPage() {
       }
 
       // 2. Créer le paiement pending
-      await addDoc(collection(db, "payments"), {
+      const paymentDocRef = await addDoc(collection(db, "payments"), {
         familyId: user.uid, familyName: family.parentName,
+        familyEmail: family.parentEmail || user.email || "",
         items: cart.map(i => ({
           activityTitle: `${i.activityTitle} — ${i.childName}${i.remiseEuros > 0 ? ` (-${i.remiseEuros}€)` : ""}`,
           childId: i.childId,
@@ -296,6 +297,7 @@ export default function ReserverPage() {
         source: "client",
         date: serverTimestamp(),
       });
+      const newPaymentId = paymentDocRef.id;
 
       // 3. Email de confirmation au cavalier
       if (family.parentEmail) {
@@ -333,6 +335,7 @@ export default function ReserverPage() {
             familyId: user.uid,
             familyEmail: family.parentEmail || user.email,
             familyName: family.parentName,
+            paymentId: newPaymentId,
             depositPercent: isDeposit ? 30 : null,
             stageDate,
             items: cart.map(i => ({
@@ -345,9 +348,8 @@ export default function ReserverPage() {
         });
         const data = await res.json();
         if (data.url) {
-          setSuccess(true); // Afficher brièvement le succès
-          setCart([]);
-          setTimeout(() => { window.location.href = data.url; }, 800);
+          // Redirection immédiate vers CAWL — pas de setCart ici pour éviter le message "panier vide"
+          window.location.href = data.url;
           return;
         }
       } catch (e) { console.error("Stripe error:", e); }
