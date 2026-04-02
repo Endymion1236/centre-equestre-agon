@@ -772,9 +772,20 @@ export default function ReserverPage() {
       {showCart && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onClick={() => setShowCart(false)}>
           <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[85vh] overflow-auto shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="p-5 border-b border-gray-100 flex justify-between items-center">
-              <h2 className="font-display text-lg font-bold text-blue-800"><ShoppingCart size={18} className="inline mr-2" />Mon panier</h2>
-              <button onClick={() => setShowCart(false)} className="text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button>
+            <div className="p-5 border-b border-gray-100">
+              <div className="flex justify-between items-center mb-3">
+                <h2 className="font-display text-lg font-bold text-blue-800"><ShoppingCart size={18} className="inline mr-2" />Mon panier</h2>
+                <button onClick={() => setShowCart(false)} className="text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button>
+              </div>
+              {cart.length > 0 && (
+                <button
+                  onClick={() => setShowCart(false)}
+                  className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl py-2.5 px-4 cursor-pointer transition-colors"
+                >
+                  <ShoppingCart size={15} />
+                  Continuer mes réservations
+                </button>
+              )}
             </div>
             <div className="p-5">
               {cart.length === 0 ? (
