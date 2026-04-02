@@ -7,9 +7,19 @@ import { loadTemplate } from "@/lib/email-template-loader";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  // CAWL ajoute HOSTEDCHECKOUTID et RETURNMAC à l'URL de retour
-  const hostedCheckoutId = req.nextUrl.searchParams.get("HOSTEDCHECKOUTID") || "";
-  const returnMac = req.nextUrl.searchParams.get("RETURNMAC") || "";
+  // Log URL complète pour débugger les paramètres CAWL
+  console.log("CAWL status URL complète:", req.nextUrl.toString());
+  console.log("CAWL status params:", Object.fromEntries(req.nextUrl.searchParams.entries()));
+
+  // CAWL retourne HOSTEDCHECKOUTID et RETURNMAC (tester les deux casses)
+  const hostedCheckoutId =
+    req.nextUrl.searchParams.get("HOSTEDCHECKOUTID") ||
+    req.nextUrl.searchParams.get("hostedCheckoutId") ||
+    req.nextUrl.searchParams.get("hostedcheckoutid") || "";
+  const returnMac =
+    req.nextUrl.searchParams.get("RETURNMAC") ||
+    req.nextUrl.searchParams.get("returnMac") ||
+    req.nextUrl.searchParams.get("returnmac") || "";
   const ref = req.nextUrl.searchParams.get("ref") || "";
   const paymentId = req.nextUrl.searchParams.get("paymentId") || "";
   const familyId = req.nextUrl.searchParams.get("familyId") || "";
@@ -17,7 +27,7 @@ export async function GET(req: NextRequest) {
   const depositPercent = parseInt(depositStr) || 0;
   const isDeposit = depositPercent > 0 && depositPercent < 100;
 
-  console.log(`CAWL status retour: hostedCheckoutId=${hostedCheckoutId}, ref=${ref}, paymentId=${paymentId}`);
+  console.log(`CAWL status: hostedCheckoutId=${hostedCheckoutId}, returnMac=${!!returnMac}, ref=${ref}, paymentId=${paymentId}`);
 
   // Sans HOSTEDCHECKOUTID ou RETURNMAC → redirection directe (annulation probable)
   if (!hostedCheckoutId || !returnMac) {
