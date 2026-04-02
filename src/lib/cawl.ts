@@ -3,9 +3,10 @@
 
 const onlinePaymentsSdk = require("onlinepayments-sdk-nodejs");
 
-// Environnement test : payment.preprod.ca.cawl-solutions.fr
-// Environnement prod  : payment.ca.cawl-solutions.fr
 const isProduction = process.env.CAWL_ENV === "production";
+
+// Accepte les deux noms de variable pour compatibilité
+const secretApiKey = process.env.CAWL_SECRET_API_KEY || process.env.CAWL_API_SECRET || "";
 
 export const cawlSdk = onlinePaymentsSdk.init({
   integrator: "Centre Equestre Agon-Coutainville",
@@ -15,12 +16,10 @@ export const cawlSdk = onlinePaymentsSdk.init({
   scheme: "https",
   port: 443,
   apiKeyId: process.env.CAWL_API_KEY_ID || "",
-  secretApiKey: process.env.CAWL_API_SECRET || "",
+  secretApiKey,
   enableLogging: !isProduction,
 });
 
 export const CAWL_PSPID = process.env.CAWL_PSPID || "";
-
-// Webhook verification
 export const CAWL_WEBHOOK_KEY_ID = process.env.CAWL_WEBHOOK_KEY_ID || "";
 export const CAWL_WEBHOOK_SECRET = process.env.CAWL_WEBHOOK_SECRET || "";

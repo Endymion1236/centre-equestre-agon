@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cawlSdk, CAWL_PSPID } from "@/lib/cawl";
+import { adminDb } from "@/lib/firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,18 +32,16 @@ export async function POST(req: NextRequest) {
 
     // Description pour la page de paiement
     const description = items.map((item: any) => {
-      const name = isDeposit ? `Acompte ${depositPercent}% — ${item.name}` : item.name;
-      return name;
+      return isDeposit ? `Acompte ${depositPercent}% — ${item.name}` : item.name;
     }).join(", ");
 
     // Référence unique marchand
     const merchantRef = `CE-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
     const origin = req.nextUrl.origin;
-    const successUrl = isDeposit
-      ? `${origin}/espace-cavalier/reservations?success=true&deposit=true`
-      : `${origin}/espace-cavalier/reservations?success=true`;
-    const cancelUrl = `${origin}/espace-cavalier/reserver?cancelled=true`;
+
+    // URL de retour — CAWL ajoute automatiquement HOSTEDCHECKOUTID et RETURNMAC
+    const returnUrl = `${origin}/api/cawl/status?ref=${merchantRef}&paymentId=${paymentId || ""}&familyId=${familyId}&deposit=${isDeposit ? depositPercent : "0"}`;
 
     // Créer la session Hosted Checkout CAWL
     const checkoutRequest = {
@@ -68,9 +68,14 @@ export async function POST(req: NextRequest) {
         },
       },
       hostedCheckoutSpecificInput: {
-        returnUrl: `${origin}/api/cawl/status?ref=${merchantRef}&paymentId=${paymentId || ""}&familyId=${familyId}`,
+        returnUrl,
         locale: "fr_FR",
         showResultPage: false,
+        paymentProductFilters: {
+          restrictTo: {
+            products: [1], // CB uniquement
+          },
+        },
       },
     };
 
@@ -80,13 +85,31 @@ export async function POST(req: NextRequest) {
       {}
     );
 
+    const hostedCheckoutId = response.body.hostedCheckoutId;
+    const partialRedirectUrl = response.body.partialRedirectUrl || "";
+
     // Construire l'URL de redirection
     const redirectUrl = response.body.redirectUrl
-      || `https://payment.preprod.ca.cawl-solutions.fr/hostedcheckout/${response.body.partialRedirectUrl}`;
+      || `https://payment.preprod.ca.cawl-solutions.fr/hostedcheckout/${partialRedirectUrl}`;
+
+    // ── Sauvegarder la référence CAWL dans le payment Firestore ──────────
+    if (paymentId) {
+      try {
+        await adminDb.collection("payments").doc(paymentId).update({
+          cawlRef: merchantRef,
+          cawlHostedCheckoutId: hostedCheckoutId,
+          cawlInitiatedAt: FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        console.error("CAWL: impossible de sauvegarder cawlRef dans payments:", e);
+      }
+    }
+
+    console.log(`CAWL checkout créé: ${merchantRef} — ${totalCents / 100}€ — paymentId=${paymentId}`);
 
     return NextResponse.json({
       url: redirectUrl,
-      hostedCheckoutId: response.body.hostedCheckoutId,
+      hostedCheckoutId,
       merchantRef,
     });
   } catch (error: any) {
