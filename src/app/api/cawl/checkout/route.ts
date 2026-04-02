@@ -85,12 +85,26 @@ export async function POST(req: NextRequest) {
       {}
     );
 
-    const hostedCheckoutId = response.body.hostedCheckoutId;
+    // Log complet de la réponse pour débugger
+    console.log("CAWL response.body:", JSON.stringify(response.body, null, 2));
+    console.log("CAWL response.status:", response.status);
+
+    const hostedCheckoutId = response.body.hostedCheckoutId || "";
     const partialRedirectUrl = response.body.partialRedirectUrl || "";
+
+    // L'URL CAWL preprod correcte selon la doc
+    const baseUrl = process.env.CAWL_ENV === "production"
+      ? "https://payment.ca.cawl-solutions.fr"
+      : "https://payment.preprod.ca.cawl-solutions.fr";
 
     // Construire l'URL de redirection
     const redirectUrl = response.body.redirectUrl
-      || `https://payment.preprod.ca.cawl-solutions.fr/hostedcheckout/${partialRedirectUrl}`;
+      || (partialRedirectUrl ? `${baseUrl}/${partialRedirectUrl}` : null);
+
+    if (!redirectUrl) {
+      console.error("CAWL: pas d'URL de redirection dans la réponse:", response.body);
+      return NextResponse.json({ error: "CAWL n'a pas retourné d'URL de paiement" }, { status: 500 });
+    }
 
     // ── Sauvegarder la référence CAWL dans le payment Firestore ──────────
     if (paymentId) {
