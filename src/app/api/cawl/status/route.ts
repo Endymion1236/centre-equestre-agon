@@ -6,7 +6,7 @@ import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
 
-// Appel direct CAWL sans SDK — plus fiable en serverless
+// Appel direct CAWL sans SDK — signature HMAC exacte selon spec Worldline
 async function getHostedCheckoutStatus(hostedCheckoutId: string): Promise<any> {
   const isProduction = process.env.CAWL_ENV === "production";
   const host = isProduction
@@ -19,11 +19,31 @@ async function getHostedCheckoutStatus(hostedCheckoutId: string): Promise<any> {
   const path = `/v2/${pspid}/hostedcheckouts/${hostedCheckoutId}`;
   const method = "GET";
   const date = new Date().toUTCString();
-  const contentType = "application/json";
 
-  // Signature HMAC-SHA256 selon le standard Worldline/CAWL
-  const toSign = `${method}\n${contentType}\n${date}\n${path}\n`;
-  const signature = crypto.createHmac("sha256", secretKey).update(toSign).digest("base64");
+  // Spec Worldline V1HMAC :
+  // - contentType vide pour GET
+  // - headers X-GCS-* triés inclus dans la signature
+  // - format: METHOD
+
+DATE
+X-GCS-HEADER:value
+PATH
+
+  const serverMetaInfo = Buffer.from(JSON.stringify({
+    sdkCreator: "OnlinePayments",
+    sdkIdentifier: "NodejsServerSDK/v7.4.0",
+    platformIdentifier: "Node.js",
+    integrator: "Centre Equestre Agon-Coutainville",
+  })).toString("base64");
+
+  const xGcsHeader = `x-gcs-servermetainfo:${serverMetaInfo}`;
+  const toSign = `${method}
+
+${date}
+${xGcsHeader}
+${path}
+`;
+  const signature = crypto.createHmac("SHA256", secretKey).update(toSign).digest("base64");
   const authorization = `GCS v1HMAC:${apiKeyId}:${signature}`;
 
   const url = `https://${host}${path}`;
@@ -33,13 +53,14 @@ async function getHostedCheckoutStatus(hostedCheckoutId: string): Promise<any> {
     method: "GET",
     headers: {
       "Date": date,
-      "Content-Type": contentType,
+      "Content-Type": "application/json",
+      "X-GCS-ServerMetaInfo": serverMetaInfo,
       "Authorization": authorization,
     },
   });
 
   const data = await res.json();
-  console.log(`CAWL getHostedCheckout status=${res.status}:`, JSON.stringify(data));
+  console.log(`CAWL getHostedCheckout status=${res.status}:`, JSON.stringify(data).substring(0, 500));
   return { status: res.status, body: data };
 }
 
