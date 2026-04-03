@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { GALOPS_PROGRAMME, DOMAINE_LABELS, getNiveauById } from "@/lib/galops-programme";
+import { GALOPS_PROGRAMME, DOMAINE_LABELS, getNiveauById, type Domaine } from "@/lib/galops-programme";
 import { CheckCircle2, Circle, ChevronDown, ChevronRight, Save } from "lucide-react";
 
 interface Props {
@@ -18,7 +18,7 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [selectedNiveau, setSelectedNiveau] = useState<string>("");
-  const [expandedDomaines, setExpandedDomaines] = useState<Set<string>>(new Set(["pratique_poney", "pratique_pied", "soins", "connaissances"]));
+  const [expandedDomaines, setExpandedDomaines] = useState<Set<string>>(new Set(["pratique_cheval", "pratique_pied", "soins", "connaissances"]));
 
   const docId = `${familyId}_${childId}`;
 
@@ -135,7 +135,7 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
               className="w-full flex items-center justify-between p-3 bg-gray-50 cursor-pointer border-none text-left"
             >
               <span className="font-body text-sm font-semibold text-slate-700">
-                {DOMAINE_LABELS[domaine]}
+                {DOMAINE_LABELS[domaine as Domaine] ?? domaine}
               </span>
               <div className="flex items-center gap-2">
                 <span className="font-body text-xs text-slate-500">{acquisDomaine}/{comps.length}</span>

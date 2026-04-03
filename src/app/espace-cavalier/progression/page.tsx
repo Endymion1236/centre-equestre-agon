@@ -5,7 +5,7 @@ import { db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { Card, Badge } from "@/components/ui";
 import { CheckCircle2, Circle, ChevronDown, ChevronRight, Trophy } from "lucide-react";
-import { GALOPS_PROGRAMME, DOMAINE_LABELS, getNiveauById } from "@/lib/galops-programme";
+import { GALOPS_PROGRAMME, DOMAINE_LABELS, getNiveauById, type Domaine } from "@/lib/galops-programme";
 
 export default function ProgressionPage() {
   const { user, family } = useAuth();
@@ -124,7 +124,7 @@ export default function ProgressionPage() {
                             className="w-full flex items-center justify-between p-3 bg-gray-50 cursor-pointer border-none text-left"
                           >
                             <span className="font-body text-sm font-semibold text-slate-700">
-                              {DOMAINE_LABELS[domaine]}
+                              {DOMAINE_LABELS[domaine as Domaine] ?? domaine}
                             </span>
                             <div className="flex items-center gap-2">
                               <span className={`font-body text-xs font-semibold ${acquisDomaine === comps.length ? "text-green-600" : "text-slate-500"}`}>
