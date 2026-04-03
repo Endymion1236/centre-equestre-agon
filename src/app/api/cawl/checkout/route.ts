@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const {
       items, familyId, familyEmail, familyName,
-      depositPercent, paymentId, stageDate,
+      depositPercent, paymentId, stageDate, totalTTC, adminInitiated,
     } = body;
 
     if (!items || items.length === 0) {
@@ -20,11 +20,27 @@ export async function POST(req: NextRequest) {
     }
 
     // Calcul du montant total en centimes
+    // Accepte : priceInCents (panier client), priceTTC (admin), ou totalTTC global
     const isDeposit = depositPercent && depositPercent > 0 && depositPercent < 100;
     const multiplier = isDeposit ? depositPercent / 100 : 1;
-    const totalCents = items.reduce((sum: number, item: any) => {
-      return sum + Math.round((item.priceInCents || 0) * multiplier) * (item.quantity || 1);
-    }, 0);
+
+    let totalCents: number;
+    if (totalTTC && totalTTC > 0) {
+      // Montant fourni directement (depuis admin — lien impayé)
+      totalCents = Math.round(totalTTC * 100 * multiplier);
+    } else {
+      // Calculer depuis les items — accepte priceInCents ou priceTTC
+      totalCents = items.reduce((sum: number, item: any) => {
+        const cents = item.priceInCents
+          ? Math.round(item.priceInCents * multiplier)
+          : item.priceTTC
+            ? Math.round(item.priceTTC * 100 * multiplier)
+            : item.priceHT
+              ? Math.round(item.priceHT * 100 * 1.2 * multiplier)
+              : 0;
+        return sum + cents * (item.quantity || 1);
+      }, 0);
+    }
 
     if (totalCents <= 0) {
       return NextResponse.json({ error: "Montant invalide" }, { status: 400 });
