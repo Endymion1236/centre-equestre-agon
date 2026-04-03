@@ -13,7 +13,7 @@ export default function DashboardPage() {
   const { user, family } = useAuth();
   const firstName = user?.displayName?.split(" ")[0] || "Bonjour";
   const [stats, setStats] = useState({ reservations: 0, resteDu: 0, avoir: 0, totalPaye: 0 });
-  const { permission, loading, requestPermission } = usePushNotifications(user?.uid || null);
+  const { permission, loading, error: pushError, requestPermission } = usePushNotifications(user?.uid || null);
   const [cards, setCards] = useState<any[]>([]);
   const [fidelite, setFidelite] = useState<any>(null);
   const [fideliteSettings, setFideliteSettings] = useState<{ taux: number; minPoints: number; enabled: boolean } | null>(null);
@@ -121,6 +121,11 @@ export default function DashboardPage() {
             <span className="font-body text-xs text-green-700 font-semibold">Notifications activées ✓</span>
           </div>
         </Card>
+      )}
+      {pushError && (
+        <div className="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded-lg font-body text-xs text-red-600">
+          ⚠️ Notifications : {pushError}
+        </div>
       )}
 
       {/* Alert: incomplete profile */}

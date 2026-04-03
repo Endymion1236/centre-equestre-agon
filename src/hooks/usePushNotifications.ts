@@ -10,6 +10,7 @@ export function usePushNotifications(familyId: string | null) {
   const [permission, setPermission] = useState<NotificationPermission>("default");
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined" && "Notification" in window) {
@@ -17,30 +18,91 @@ export function usePushNotifications(familyId: string | null) {
     }
   }, []);
 
-  const requestPermission = async () => {
-    if (!familyId) return;
-    setLoading(true);
+  // Enregistrer le service worker explicitement avant de demander le token
+  const ensureServiceWorker = async (): Promise<ServiceWorkerRegistration | null> => {
+    if (!("serviceWorker" in navigator)) {
+      console.warn("Push: serviceWorker non supporté");
+      return null;
+    }
     try {
+      // Vérifier si déjà enregistré
+      const existing = await navigator.serviceWorker.getRegistration("/sw.js");
+      if (existing) {
+        console.log("Push: SW déjà enregistré", existing.scope);
+        return existing;
+      }
+      // Enregistrer explicitement
+      const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      await navigator.serviceWorker.ready;
+      console.log("Push: SW enregistré", reg.scope);
+      return reg;
+    } catch (e: any) {
+      console.error("Push: erreur SW", e.message);
+      return null;
+    }
+  };
+
+  const requestPermission = async () => {
+    if (!familyId) { setError("familyId manquant"); return; }
+    if (!VAPID_KEY) { setError("VAPID_KEY non configurée"); return; }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // 1. S'assurer que le service worker est prêt
+      const swReg = await ensureServiceWorker();
+      if (!swReg) {
+        setError("Service worker non disponible sur ce navigateur");
+        return;
+      }
+
+      // 2. Demander la permission
       const perm = await Notification.requestPermission();
       setPermission(perm);
-      if (perm !== "granted") return;
+      if (perm !== "granted") {
+        setError("Permission refusée");
+        return;
+      }
 
+      // 3. Obtenir l'instance messaging
       const messaging = await getMessagingInstance();
-      if (!messaging) return;
+      if (!messaging) {
+        setError("Firebase Messaging non supporté sur ce navigateur");
+        return;
+      }
 
-      const fcmToken = await getToken(messaging, { vapidKey: VAPID_KEY });
+      // 4. Obtenir le token FCM en passant le service worker
+      console.log("Push: demande token FCM...");
+      const fcmToken = await getToken(messaging, {
+        vapidKey: VAPID_KEY,
+        serviceWorkerRegistration: swReg,
+      });
+
+      if (!fcmToken) {
+        setError("Impossible d'obtenir le token FCM");
+        return;
+      }
+
+      console.log("Push: token obtenu ✅", fcmToken.slice(0, 20) + "...");
       setToken(fcmToken);
 
-      // Sauvegarder le token dans Firestore pour cette famille
+      // 5. Sauvegarder dans Firestore
       await setDoc(doc(db, "push_tokens", familyId), {
         token: fcmToken,
         familyId,
-        platform: /iPhone|iPad|iPod|Android/.test(navigator.userAgent) ? "mobile" : "desktop",
+        platform: /Android/.test(navigator.userAgent) ? "android"
+          : /iPhone|iPad|iPod/.test(navigator.userAgent) ? "ios"
+          : "desktop",
+        userAgent: navigator.userAgent.slice(0, 100),
         updatedAt: serverTimestamp(),
       }, { merge: true });
 
-    } catch (e) {
-      console.error("Push permission error:", e);
+      console.log("Push: token sauvegardé en Firestore ✅");
+
+    } catch (e: any) {
+      console.error("Push error:", e);
+      setError(e.message || "Erreur inconnue");
     } finally {
       setLoading(false);
     }
@@ -53,7 +115,6 @@ export function usePushNotifications(familyId: string | null) {
     getMessagingInstance().then(messaging => {
       if (!messaging) return;
       unsub = onMessage(messaging, (payload) => {
-        // Afficher une notification native même quand l'appli est ouverte
         if (payload.notification) {
           new Notification(payload.notification.title || "Centre Équestre", {
             body: payload.notification.body,
@@ -65,5 +126,5 @@ export function usePushNotifications(familyId: string | null) {
     return () => { unsub?.(); };
   }, [permission]);
 
-  return { permission, token, loading, requestPermission };
+  return { permission, token, loading, error, requestPermission };
 }
