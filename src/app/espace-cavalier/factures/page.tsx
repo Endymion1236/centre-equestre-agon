@@ -67,6 +67,8 @@ export default function FacturesPage() {
   const [declareMode, setDeclareMode] = useState<"cheque" | "especes">("cheque");
   const [declareMontant, setDeclareMontant] = useState("");
   const [declareNote, setDeclareNote] = useState("");
+  const [declareChequeRef, setDeclareChequeRef] = useState("");
+  const [declareDateEncaissement, setDeclareDateEncaissement] = useState("");
   const [declareSending, setDeclareSending] = useState(false);
   const [declareSuccess, setDeclareSuccess] = useState(false); // paymentId en cours
   const [tab, setTab] = useState<"factures" | "reservations" | "cartes" | "fidelite">("factures");
@@ -272,6 +274,9 @@ export default function FacturesPage() {
                                     setDeclareMontant(((p.totalTTC || 0) - (p.paidAmount || 0)).toFixed(2));
                                     setDeclareMode("cheque");
                                     setDeclareNote("");
+                                    setDeclareChequeRef("");
+                                    setDeclareDateEncaissement("");
+                                    setDeclareSuccess(false);
                                     setDeclareSuccess(false);
                                   }}
                                   className="flex items-center gap-1.5 font-body text-xs font-semibold text-slate-600 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg border-none cursor-pointer">
@@ -642,14 +647,39 @@ export default function FacturesPage() {
                     />
                   </div>
 
+                  {/* Référence chèque (si chèque) */}
+                  {declareMode === "cheque" && (
+                    <div>
+                      <label className="font-body text-xs font-semibold text-slate-600 block mb-2">N° de chèque <span className="text-slate-400 font-normal">(optionnel)</span></label>
+                      <input
+                        type="text"
+                        value={declareChequeRef}
+                        onChange={e => setDeclareChequeRef(e.target.value)}
+                        placeholder="Ex: 1234567"
+                        className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  )}
+
+                  {/* Date d'encaissement prévue */}
+                  <div>
+                    <label className="font-body text-xs font-semibold text-slate-600 block mb-2">Date d'encaissement prévue <span className="text-slate-400 font-normal">(optionnel)</span></label>
+                    <input
+                      type="date"
+                      value={declareDateEncaissement}
+                      onChange={e => setDeclareDateEncaissement(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+
                   {/* Note optionnelle */}
                   <div>
-                    <label className="font-body text-xs font-semibold text-slate-600 block mb-2">Note (optionnel)</label>
+                    <label className="font-body text-xs font-semibold text-slate-600 block mb-2">Note <span className="text-slate-400 font-normal">(optionnel)</span></label>
                     <input
                       type="text"
                       value={declareNote}
                       onChange={e => setDeclareNote(e.target.value)}
-                      placeholder={declareMode === "cheque" ? "Ex: chèque n°1234567" : "Ex: remis en main propre"}
+                      placeholder={declareMode === "cheque" ? "Ex: remis en main propre" : "Ex: remis en main propre"}
                       className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:border-blue-500 focus:outline-none"
                     />
                   </div>
@@ -674,6 +704,8 @@ export default function FacturesPage() {
                             montant,
                             mode: declareMode,
                             note: declareNote || "",
+                            chequeRef: declareChequeRef || "",
+                            dateEncaissement: declareDateEncaissement || "",
                             activityTitle: (declaringPayment.items || []).map((i: any) => i.activityTitle).join(", "),
                             status: "pending_confirmation", // admin doit confirmer
                             createdAt: serverTimestamp(),
@@ -690,6 +722,8 @@ export default function FacturesPage() {
                                 <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
                                   <p style="margin:0;font-weight:600;color:#166534;">💰 ${montant.toFixed(2)}€ en ${declareMode === "cheque" ? "chèque" : "espèces"}</p>
                                   <p style="margin:8px 0 0;color:#555;font-size:13px;">📋 ${(declaringPayment.items || []).map((i: any) => i.activityTitle).join(", ")}</p>
+                                  ${declareChequeRef ? `<p style="margin:4px 0 0;color:#555;font-size:13px;">🔢 Chèque n° ${declareChequeRef}</p>` : ""}
+                                  ${declareDateEncaissement ? `<p style="margin:4px 0 0;color:#555;font-size:13px;">📅 Encaissement prévu le ${new Date(declareDateEncaissement).toLocaleDateString("fr-FR")}</p>` : ""}
                                   ${declareNote ? `<p style="margin:4px 0 0;color:#555;font-size:13px;">📝 ${declareNote}</p>` : ""}
                                 </div>
                                 <p style="font-size:13px;color:#555;">Confirmez la réception dans l'admin → Paiements.</p>
