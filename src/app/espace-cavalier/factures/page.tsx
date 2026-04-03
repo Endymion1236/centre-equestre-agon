@@ -226,9 +226,14 @@ export default function FacturesPage() {
                           </div>
                           <div className="flex items-center gap-3">
                             <span className="font-body text-lg font-bold text-blue-500">{(p.totalTTC || 0).toFixed(2)}€</span>
-                            <Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : "gray"}>
-                              {p.status === "paid" ? "Payé" : p.status === "partial" ? "Partiel" : "En attente"}
+                            <Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "pending_confirmation" ? "orange" : "gray"}>
+                              {p.status === "paid" ? "Payé" : p.status === "partial" ? "Partiel" : p.status === "pending_confirmation" ? "Déclaré" : "En attente"}
                             </Badge>
+                            {p.status === "pending_confirmation" && (
+                              <span className="flex items-center gap-1 font-body text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded-lg">
+                                ⏳ En attente de confirmation par le centre
+                              </span>
+                            )}
                             {(p.status === "pending" || p.status === "partial") && (
                               <>
                                 <button
