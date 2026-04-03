@@ -180,6 +180,22 @@ export async function GET(req: NextRequest) {
         const isStage = c.activityType === "stage" || c.activityType === "stage_journee";
         for (const e of (c.enrolled || [])) {
           if (!e.familyId) continue;
+
+          // ── Skip forfaits annuels — ils connaissent leur créneau récurrent ──
+          // Un inscrit via forfait annuel a source="annuel" sur sa réservation
+          // ou un payment de type annuel/sepa_scheduled actif pour cet enfant
+          try {
+            const resSnap = await adminDb.collection("reservations")
+              .where("familyId", "==", e.familyId)
+              .where("childId", "==", e.childId || "")
+              .where("creneauId", "==", c.id)
+              .limit(1).get();
+            if (!resSnap.empty && resSnap.docs[0].data().source === "annuel") {
+              console.log(`  → Skip forfait annuel: ${e.childName} / ${c.activityTitle}`);
+              continue;
+            }
+          } catch {}
+
           let familyEmail = e.familyEmail || "";
           let parentName = e.familyName || "";
           if (!familyEmail) {
