@@ -144,6 +144,7 @@ export default function PaiementsPage() {
   const [avoirs, setAvoirs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [declarations, setDeclarations] = useState<any[]>([]);
+  const [confirmingDeclId, setConfirmingDeclId] = useState<string | null>(null);
 
   // Historique filters
   const [histModeFilter, setHistModeFilter] = useState<string>("all");
@@ -2127,33 +2128,48 @@ export default function PaiementsPage() {
                       <div className="text-right flex-shrink-0">
                         <div className="font-body text-xl font-bold text-blue-500 mb-2">{(decl.montant || 0).toFixed(2)}€</div>
                         <div className="flex flex-col gap-1.5">
-                          <button onClick={async () => {
+                          <button disabled={confirmingDeclId === decl.id} onClick={async () => {
                             if (!confirm(`Confirmer réception de ${decl.montant.toFixed(2)}€ en ${decl.mode === "cheque" ? "chèque" : decl.mode === "virement" ? "virement" : "espèces"} de ${decl.familyName} ?`)) return;
+                            setConfirmingDeclId(decl.id);
                             try {
+                              // Vérification anti-doublon
+                              const declSnap = await getDoc(doc(db, "payment_declarations", decl.id));
+                              if (!declSnap.exists() || declSnap.data()?.status === "confirmed") {
+                                toast("Déjà confirmé", "info");
+                                setDeclarations(prev => prev.filter(d => d.id !== decl.id));
+                                setConfirmingDeclId(null);
+                                return;
+                              }
                               // Mettre à jour le paiement
+                              console.log("Confirmation déclaration:", decl.id, "paymentId:", decl.paymentId);
                               if (decl.paymentId) {
                                 const paySnap = await getDoc(doc(db, "payments", decl.paymentId));
+                                console.log("Payment trouvé:", paySnap.exists(), paySnap.data()?.status);
                                 if (paySnap.exists()) {
                                   const pData = paySnap.data();
                                   const newPaid = Math.round(((pData.paidAmount || 0) + decl.montant) * 100) / 100;
                                   const newStatus = newPaid >= (pData.totalTTC || 0) ? "paid" : "partial";
+                                  const chequeRef = decl.chequeRef ? `Chèque n°${decl.chequeRef}` : (decl.note || "");
                                   await updateDoc(doc(db, "payments", decl.paymentId), {
                                     paidAmount: newPaid, status: newStatus,
                                     paymentMode: decl.mode,
-                                    paymentRef: decl.note || "",
+                                    paymentRef: chequeRef,
                                     updatedAt: serverTimestamp(),
                                   });
                                   // Créer un encaissement
+                                  const encDate = decl.dateEncaissement
+                                    ? new Date(decl.dateEncaissement + "T12:00:00")
+                                    : new Date();
                                   await addDoc(collection(db, "encaissements"), {
                                     paymentId: decl.paymentId,
                                     familyId: decl.familyId,
                                     familyName: decl.familyName,
                                     montant: decl.montant,
                                     mode: decl.mode,
-                                    modeLabel: decl.mode === "cheque" ? "Chèque" : decl.mode === "virement" ? "Virement" : "Espèces",
-                                    ref: decl.note || "",
+                                    modeLabel: decl.mode === "cheque" ? `Chèque${decl.chequeRef ? ` n°${decl.chequeRef}` : ""}` : decl.mode === "virement" ? "Virement" : "Espèces",
+                                    ref: chequeRef,
                                     activityTitle: decl.activityTitle,
-                                    date: serverTimestamp(),
+                                    date: Timestamp.fromDate(encDate),
                                   });
                                 }
                               }
@@ -2183,10 +2199,12 @@ export default function PaiementsPage() {
                               }
                               setDeclarations(prev => prev.filter(d => d.id !== decl.id));
                               toast(`✅ Paiement de ${decl.familyName} confirmé`, "success");
-                            } catch (e) { console.error(e); toast("Erreur", "error"); }
+                            } catch (e) { console.error("Erreur confirmation:", e); toast("Erreur lors de la confirmation", "error"); }
+                            finally { setConfirmingDeclId(null); }
+                            setConfirmingDeclId(null);
                           }}
-                            className="font-body text-xs font-semibold text-white bg-green-500 hover:bg-green-600 px-4 py-2 rounded-lg border-none cursor-pointer">
-                            ✓ Confirmer réception
+                            className={`font-body text-xs font-semibold text-white px-4 py-2 rounded-lg border-none cursor-pointer ${confirmingDeclId === decl.id ? "bg-gray-400 cursor-not-allowed" : "bg-green-500 hover:bg-green-600"}`}>
+                            {confirmingDeclId === decl.id ? "⏳ Confirmation..." : "✓ Confirmer réception"}
                           </button>
                           <button onClick={async () => {
                             await updateDoc(doc(db, "payment_declarations", decl.id), { status: "rejected", rejectedAt: serverTimestamp() });
