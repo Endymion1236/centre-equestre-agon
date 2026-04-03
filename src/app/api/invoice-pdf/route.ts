@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getClubInfo } from "@/lib/club-info";
-import { renderToBuffer, Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { renderToBuffer, Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
+import { readFileSync } from "fs";
+import { join } from "path";
+
+// Logo encodé en base64 au démarrage
+let logoBase64 = "";
+try {
+  const logoBuffer = readFileSync(join(process.cwd(), "public", "images", "logo-ce-agon.png"));
+  logoBase64 = `data:image/png;base64,${logoBuffer.toString("base64")}`;
+} catch { console.warn("Logo non trouvé"); }
 import React from "react";
 
 export const dynamic = "force-dynamic";
@@ -61,6 +70,7 @@ const s = StyleSheet.create({
   payDetail:  { fontSize: 8, color: GRAY, lineHeight: 1.6 },
   // Footer
   footer:     { position: "absolute", bottom: 24, left: 40, right: 40, textAlign: "center", fontSize: 7, color: "#9ca3af", borderTopWidth: 1, borderTopColor: "#e5e7eb", paddingTop: 6 },
+  logo:       { width: 48, height: 48, objectFit: "contain" },
   // Mention TVA non applicable
   mentionTVA: { fontSize: 7.5, color: GRAY, marginTop: 8, fontStyle: "italic" },
 });
@@ -102,15 +112,18 @@ export async function POST(request: NextRequest) {
 
         // ── En-tête ──────────────────────────────────────────────────────
         React.createElement(View, { style: s.header },
-          React.createElement(View, {},
-            React.createElement(Text, { style: s.clubName }, CLUB.nom),
-            React.createElement(Text, { style: s.clubSub }, CLUB.legalName),
-            React.createElement(Text, { style: s.clubSub }, CLUB.address),
-            React.createElement(Text, { style: s.clubSub }, `Tél : ${CLUB.tel} · ${CLUB.email}`),
-            React.createElement(Text, { style: s.clubSub }, `SIRET : ${CLUB.siret}`),
-            CLUB.tvaIntra
-              ? React.createElement(Text, { style: s.clubSub }, `N° TVA intracommunautaire : ${CLUB.tvaIntra}`)
-              : React.createElement(Text, { style: s.clubSub }, "TVA non applicable — art. 293B CGI"),
+          React.createElement(View, { style: { flexDirection: "row", alignItems: "center", gap: 10 } },
+            logoBase64 ? React.createElement(Image, { src: logoBase64, style: s.logo }) : null,
+            React.createElement(View, {},
+              React.createElement(Text, { style: s.clubName }, CLUB.nom),
+              React.createElement(Text, { style: s.clubSub }, CLUB.legalName),
+              React.createElement(Text, { style: s.clubSub }, CLUB.address),
+              React.createElement(Text, { style: s.clubSub }, `Tél : ${CLUB.tel} · ${CLUB.email}`),
+              React.createElement(Text, { style: s.clubSub }, `SIRET : ${CLUB.siret}`),
+              CLUB.tvaIntra
+                ? React.createElement(Text, { style: s.clubSub }, `N° TVA intracommunautaire : ${CLUB.tvaIntra}`)
+                : React.createElement(Text, { style: s.clubSub }, "TVA non applicable — art. 293B CGI"),
+            ),
           ),
           React.createElement(View, {},
             React.createElement(Text, { style: s.invTitle }, "FACTURE"),
