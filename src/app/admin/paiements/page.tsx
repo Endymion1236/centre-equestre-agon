@@ -2072,7 +2072,7 @@ export default function PaiementsPage() {
                                         }),
                                       });
                                       const data = await res.json();
-                                      if (!data.paymentUrl) throw new Error("Pas de lien");
+                                      if (!data.url && !data.paymentUrl) throw new Error("Pas de lien");
                                       // Envoyer l'email avec le lien
                                       await fetch("/api/send-email", {
                                         method: "POST",
@@ -2092,7 +2092,7 @@ export default function PaiementsPage() {
                                                 <div style="color:#666;font-size:12px;margin-top:6px;">${(p.items||[]).map((i:any)=>i.activityTitle).join(" · ").slice(0,80)}</div>
                                               </div>
                                               <div style="text-align:center;margin:24px 0;">
-                                                <a href="${data.paymentUrl}" style="background:#2050A0;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;display:inline-block;">
+                                                <a href="${data.url || data.paymentUrl}" style="background:#2050A0;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;display:inline-block;">
                                                   💳 Payer en ligne
                                                 </a>
                                               </div>
