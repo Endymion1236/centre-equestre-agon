@@ -51,12 +51,24 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
   const save = async () => {
     setSaving(true);
     try {
+      // Auto-valider tous les niveaux précédents à 100%
+      const currentIdx = GALOPS_PROGRAMME.findIndex(n => n.id === selectedNiveau);
+      const enrichedAcquis = { ...acquis };
+      if (currentIdx > 0) {
+        GALOPS_PROGRAMME.slice(0, currentIdx).forEach(niveau => {
+          niveau.competences.forEach(c => {
+            enrichedAcquis[c.id] = true;
+          });
+        });
+      }
+
       await setDoc(doc(db, "progressions", docId), {
         childId, familyId, childName,
         niveauEnCours: selectedNiveau,
-        acquis,
+        acquis: enrichedAcquis,
         updatedAt: serverTimestamp(),
       }, { merge: true });
+      setAcquis(enrichedAcquis);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e) { console.error(e); }
