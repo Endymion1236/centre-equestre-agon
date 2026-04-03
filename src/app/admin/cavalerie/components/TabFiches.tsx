@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
@@ -106,7 +106,7 @@ export default function TabFiches({
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Pré-remplir le form quand editingEquide change
-  useState(() => {
+  useEffect(() => {
     if (editingEquide) {
       setForm({
         name: editingEquide.name, sire: editingEquide.sire || "", puce: editingEquide.puce || "",
@@ -128,7 +128,7 @@ export default function TabFiches({
       setForm(emptyForm);
       setEditingId(null);
     }
-  });
+  }, [editingEquide]);
 
   // Filtrage
   const filtered = equides.filter(e => {
