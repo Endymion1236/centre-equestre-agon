@@ -10,7 +10,6 @@ import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { validateChildrenUpdate } from "@/lib/utils";
 import FamilyDetailTabs from "../FamilyDetailTabs";
-import ProgressionEditor from "@/components/ProgressionEditor";
 import EnrollModal from "./EnrollModal";
 import MergeFamilyModal from "./MergeFamilyModal";
 import LinkChildrenModal from "./LinkChildrenModal";
@@ -54,8 +53,6 @@ export default function FamilyCard({
   const [showLinkChildren, setShowLinkChildren] = useState(false);
   const [emailModal, setEmailModal] = useState(false);
   const [showEnroll, setShowEnroll] = useState<{ childId: string; childName: string } | null>(null);
-  const [showProgression, setShowProgression] = useState<string | null>(null); // childId
-
   // ── Édition famille ────────────────────────────────────────────────────────
   const [editingFamily, setEditingFamily] = useState(false);
   const [editForm, setEditForm] = useState({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
@@ -477,10 +474,7 @@ export default function FamilyCard({
                             className="font-body text-xs text-blue-500 bg-blue-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
                             <CalendarDays size={12}/> Inscrire
                           </button>
-                          <button onClick={() => setShowProgression(showProgression === child.id ? null : child.id)}
-                            className="font-body text-xs text-purple-600 bg-purple-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-purple-100 flex items-center gap-1">
-                            📈 Progression
-                          </button>
+
                           <button onClick={() => startEditChild(child)}
                             className="font-body text-xs text-slate-600 bg-gray-100 px-2 py-1 rounded-lg border-none cursor-pointer hover:bg-gray-200 flex items-center gap-1">
                             <Edit3 size={10}/> Modifier
@@ -490,13 +484,7 @@ export default function FamilyCard({
                             <Trash2 size={10}/> Suppr.
                           </button>
                         </div>
-                        {/* Progression editor */}
-                        {showProgression === child.id && (
-                          <div className="mt-2 bg-white rounded-xl border border-purple-100 p-4">
-                            <div className="font-body text-xs font-semibold text-purple-600 uppercase tracking-wider mb-3">📈 Progression — {child.firstName}</div>
-                            <ProgressionEditor childId={child.id} familyId={fid} childName={child.firstName} galopLevel={child.galopLevel}/>
-                          </div>
-                        )}
+
                         {/* Réservations + notes péda */}
                         {(() => {
                           const childReservations = allReservations.filter((r: any) => r.childId === child.id && r.date >= new Date().toISOString().split("T")[0]);

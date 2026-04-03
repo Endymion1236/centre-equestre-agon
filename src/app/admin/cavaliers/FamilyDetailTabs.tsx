@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import ProgressionEditor from "@/components/ProgressionEditor";
 import { doc, updateDoc, addDoc, collection, getDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Badge } from "@/components/ui";
@@ -8,6 +9,7 @@ import { openHtmlInTab } from "@/lib/open-html-tab";
 
 const TABS = [
   { id: "cavaliers", label: "👥 Cavaliers" },
+  { id: "progression", label: "📈 Progression" },
   { id: "reservations", label: "📅 Réservations" },
   { id: "paiements", label: "💳 Paiements" },
   { id: "divers", label: "🗂 Divers" },
@@ -161,6 +163,36 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      )}
+
+      {/* ════════════════════════════════ */}
+      {/* ── Onglet Progression ── */}
+      {/* ════════════════════════════════ */}
+      {tab === "progression" && (
+        <div className="flex flex-col gap-4">
+          {children.length === 0 ? (
+            <p className="font-body text-xs text-slate-400 italic">Aucun cavalier.</p>
+          ) : (
+            children.map((child: any) => (
+              <div key={child.id} className="bg-white rounded-xl border border-purple-100 p-4">
+                <div className="font-body text-xs font-semibold text-purple-600 uppercase tracking-wider mb-3">
+                  📈 {child.firstName}{child.lastName ? ` ${child.lastName}` : ""}
+                  {child.galopLevel && child.galopLevel !== "—" && (
+                    <span className="ml-2 font-body text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full normal-case">
+                      {child.galopLevel}
+                    </span>
+                  )}
+                </div>
+                <ProgressionEditor
+                  childId={child.id}
+                  familyId={fid}
+                  childName={child.firstName}
+                  galopLevel={child.galopLevel}
+                />
+              </div>
+            ))
           )}
         </div>
       )}
