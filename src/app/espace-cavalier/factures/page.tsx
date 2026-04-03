@@ -6,7 +6,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Receipt, CreditCard, Ticket, Download } from "lucide-react";
-import { openHtmlInTab } from "@/lib/open-html-tab";
+import { downloadInvoicePdf } from "@/lib/download-invoice";
 
 interface Payment {
   id: string;
@@ -292,10 +292,7 @@ export default function FacturesPage() {
                               const totalTVA = totalTTC - totalHT;
                               const invoiceNumber = (p as any).orderId || `F-${d2.getFullYear()}${String(d2.getMonth()+1).padStart(2,"0")}-${(p.id || "").slice(-4).toUpperCase()}`;
                               try {
-                                const res = await fetch("/api/invoice", {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({
+                                await downloadInvoicePdf({
                                     invoiceNumber,
                                     date: d2.toLocaleDateString("fr-FR"),
                                     familyName: p.familyName,
@@ -305,10 +302,7 @@ export default function FacturesPage() {
                                     paidAmount: p.paidAmount || 0,
                                     paymentMode: modeLabels[p.paymentMode] || p.paymentMode || "",
                                     paymentDate: p.paidAmount > 0 ? d2.toLocaleDateString("fr-FR") : "",
-                                  }),
-                                });
-                                const data = await res.json();
-                                if (data.html) openHtmlInTab(data.html);
+                                  });
                               } catch (e) { console.error(e); }
                             }}
                               className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-600 hover:text-blue-500 hover:bg-blue-50 cursor-pointer border-none"

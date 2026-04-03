@@ -5,7 +5,7 @@ import { doc, updateDoc, addDoc, collection, getDoc, serverTimestamp } from "fir
 import { db } from "@/lib/firebase";
 import { Badge } from "@/components/ui";
 import { Receipt, Wallet, UserPlus, X, Trash2, CalendarDays, Plus, Save, Loader2 } from "lucide-react";
-import { openHtmlInTab } from "@/lib/open-html-tab";
+import { downloadInvoicePdf } from "@/lib/download-invoice";
 
 const TABS = [
   { id: "cavaliers", label: "👥 Cavaliers" },
@@ -297,8 +297,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                         const invoiceNumber = p.orderId || `F-${invDate.getFullYear()}${String(invDate.getMonth()+1).padStart(2,"0")}-${(p.id||"").slice(-4).toUpperCase()}`;
                         const items = (p.items||[]).map((i: any) => ({ label: i.activityTitle||"Prestation", priceHT: i.priceHT||Math.round((i.priceTTC||0)/1.055*100)/100, tva: i.tva||5.5, priceTTC: i.priceTTC||0 }));
                         const totalHT = items.reduce((s: number, i: any) => s+(i.priceHT||0), 0);
-                        const res = await fetch("/api/invoice", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ invoiceNumber, date: invDate.toLocaleDateString("fr-FR"), familyName: family.parentName||p.familyName, items, totalHT, totalTVA: (p.totalTTC||0)-totalHT, totalTTC: p.totalTTC||0, paidAmount: p.paidAmount||p.totalTTC||0, paymentMode: modeLabels[p.paymentMode]||p.paymentMode||"", paymentDate: p.status==="paid" ? invDate.toLocaleDateString("fr-FR") : "" }) });
-                        if (res.ok) { const data = await res.json(); if (data.html) openHtmlInTab(data.html); }
+                        await downloadInvoicePdf({ invoiceNumber, date: invDate.toLocaleDateString("fr-FR"), familyName: family.parentName||p.familyName, familyEmail: family.parentEmail||"", items, totalHT, totalTVA: (p.totalTTC||0)-totalHT, totalTTC: p.totalTTC||0, paidAmount: p.paidAmount||p.totalTTC||0, paymentMode: modeLabels[p.paymentMode]||p.paymentMode||"", paymentDate: p.status==="paid" ? invDate.toLocaleDateString("fr-FR") : "" });
                       }} className="text-blue-500 bg-blue-50 px-1.5 py-1 rounded cursor-pointer border-none hover:bg-blue-100 text-[10px]">📄</button>
                     </div>
                   </div>

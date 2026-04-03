@@ -16,6 +16,7 @@ import {
   Users,
   Star,
   MoreHorizontal,
+  ChevronLeft,
   TrendingUp,
   LogOut,
   Loader2,
@@ -332,14 +333,19 @@ export default function EspaceCavalierLayout({
       <div className="flex-1 overflow-auto">
         {/* Top bar */}
         <div className="sticky top-0 z-50 bg-cream/95 backdrop-blur-xl border-b border-blue-500/8 px-4 md:px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="no-underline">
+          <div className="flex items-center gap-2">
+            {pathname !== "/espace-cavalier/dashboard" && (
+              <Link href="/espace-cavalier/dashboard"
+                className="md:hidden flex items-center gap-1 font-body text-xs font-semibold text-blue-500 bg-blue-50 px-2.5 py-1.5 rounded-lg no-underline hover:bg-blue-100">
+                <ChevronLeft size={14}/> Accueil
+              </Link>
+            )}
+            <Link href="/" className="no-underline hidden md:block">
               <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-display text-xs font-bold">
                 CE
               </div>
             </Link>
-            <span className="font-display text-sm font-bold text-blue-800">Centre Equestre</span>
-            <span className="font-body text-xs text-gray-600 ml-1 hidden sm:inline">Espace cavalier</span>
+            <span className="font-display text-sm font-bold text-blue-800 hidden md:inline">Centre Equestre</span>
           </div>
           <div className="flex items-center gap-2">
             <Link href="/" className="md:hidden font-body text-xs text-gray-600 no-underline flex items-center gap-1">
