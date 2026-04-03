@@ -111,7 +111,7 @@ export default function PedagogiePage() {
 
   const toggleObjStatus = async (child: any, objId: string) => {
     const peda = child.peda || { objectifs: [], notes: [] };
-    const updated = peda.objectifs.map((o: PedaObjectif) => {
+    const updated = (peda.objectifs || []).map((o: PedaObjectif) => {
       if (o.id !== objId) return o;
       const next = o.status === "en_cours" ? "valide" : o.status === "valide" ? "a_revoir" : "en_cours";
       return { ...o, status: next };
@@ -123,26 +123,26 @@ export default function PedagogiePage() {
     const level = child.galopLevel || "Bronze";
     const defaults = defaultObjectifs[level] || defaultObjectifs["Bronze"];
     const peda = child.peda || { objectifs: [], notes: [] };
-    const existing = peda.objectifs.map((o: PedaObjectif) => o.label);
+    const existing = (peda.objectifs || []).map((o: PedaObjectif) => o.label);
     const newObjs = defaults.filter(d => !existing.includes(d)).map(label => ({
       id: Date.now().toString() + Math.random().toString(36).slice(2, 5),
       label, status: "en_cours" as const, addedAt: new Date().toISOString(),
     }));
     if (newObjs.length === 0) return;
-    await updatePeda(child.familyId, child.id, { ...peda, objectifs: [...peda.objectifs, ...newObjs] });
+    await updatePeda(child.familyId, child.id, { ...peda, objectifs: [...(peda.objectifs || []), ...newObjs] });
   };
 
   const deleteNote = async (child: any, noteIndex: number) => {
     if (!confirm("Supprimer cette note ?")) return;
     const peda = child.peda || { objectifs: [], notes: [] };
-    const newNotes = peda.notes.filter((_: any, i: number) => i !== noteIndex);
+    const newNotes = (peda.notes || []).filter((_: any, i: number) => i !== noteIndex);
     await updatePeda(child.familyId, child.id, { ...peda, notes: newNotes });
   };
 
   const deleteObjectif = async (child: any, objId: string) => {
     if (!confirm("Supprimer cet objectif ?")) return;
     const peda = child.peda || { objectifs: [], notes: [] };
-    await updatePeda(child.familyId, child.id, { ...peda, objectifs: peda.objectifs.filter((o: PedaObjectif) => o.id !== objId) });
+    await updatePeda(child.familyId, child.id, { ...peda, objectifs: (peda.objectifs || []).filter((o: PedaObjectif) => o.id !== objId) });
   };
 
   const [editingNote, setEditingNote] = useState<{ childId: string; noteIndex: number; text: string } | null>(null);
@@ -151,7 +151,7 @@ export default function PedagogiePage() {
   const saveEditNote = async (child: any) => {
     if (!editingNote || !editingNote.text.trim()) return;
     const peda = child.peda || { objectifs: [], notes: [] };
-    const newNotes = peda.notes.map((n: PedaNote, i: number) =>
+    const newNotes = (peda.notes || []).map((n: PedaNote, i: number) =>
       i === editingNote.noteIndex ? { ...n, text: editingNote.text.trim() } : n
     );
     await updatePeda(child.familyId, child.id, { ...peda, notes: newNotes });
@@ -194,8 +194,8 @@ export default function PedagogiePage() {
           const uniqueKey = `${child.familyId}_${child.id}`;
           const isExp = expanded === uniqueKey;
           const peda = child.peda || { objectifs: [], notes: [] };
-          const objDone = peda.objectifs.filter((o: PedaObjectif) => o.status === "valide").length;
-          const objTotal = peda.objectifs.length;
+          const objDone = (peda.objectifs || []).filter((o: PedaObjectif) => o.status === "valide").length;
+          const objTotal = (peda.objectifs || []).length;
 
           return (
             <Card key={uniqueKey} padding="md">
@@ -240,11 +240,11 @@ export default function PedagogiePage() {
                       </div>
                     )}
 
-                    {peda.objectifs.length === 0 ? (
+                    {(peda.objectifs || []).length === 0 ? (
                       <p className="font-body text-xs text-slate-600 italic">Aucun objectif. Cliquez sur &quot;+ Objectifs type&quot; pour pré-remplir.</p>
                     ) : (
                       <div className="flex flex-col gap-1.5">
-                        {peda.objectifs.map((obj: PedaObjectif) => (
+                        {(peda.objectifs || []).map((obj: PedaObjectif) => (
                           <div key={obj.id} className="flex items-center justify-between bg-sand rounded-lg px-4 py-2.5">
                             <span className={`font-body text-sm ${obj.status === "valide" ? "text-green-600 line-through" : "text-blue-800"}`}>
                               {obj.status === "valide" ? "● " : obj.status === "a_revoir" ? "▲ " : "○ "} {obj.label}
@@ -288,11 +288,11 @@ export default function PedagogiePage() {
                       </div>
                     )}
 
-                    {peda.notes.length === 0 ? (
+                    {(peda.notes || []).length === 0 ? (
                       <p className="font-body text-xs text-slate-600 italic">Aucune note pour l&apos;instant.</p>
                     ) : (
                       <div className="flex flex-col gap-1.5">
-                        {(showAllNotes === uniqueKey ? peda.notes : peda.notes.slice(0, 5)).map((note: PedaNote, i: number) => {
+                        {(showAllNotes === uniqueKey ? (peda.notes || []) : (peda.notes || []).slice(0, 5)).map((note: PedaNote, i: number) => {
                           const isBilanIA = (note as any).type === "bilan_ia";
                           const isSeance  = (note as any).type === "seance";
                           const noteKey   = `${uniqueKey}_${i}`;
@@ -385,12 +385,12 @@ export default function PedagogiePage() {
                             </div>
                           );
                         })}
-                        {peda.notes.length > 5 && showAllNotes !== uniqueKey && (
+                        {(peda.notes || []).length > 5 && showAllNotes !== uniqueKey && (
                           <button onClick={() => setShowAllNotes(uniqueKey)} className="font-body text-xs text-blue-500 bg-blue-50 py-1.5 rounded-lg border-none cursor-pointer text-center">
-                            ▼ Voir les {peda.notes.length - 5} notes antérieures
+                            ▼ Voir les {(peda.notes || []).length - 5} notes antérieures
                           </button>
                         )}
-                        {showAllNotes === uniqueKey && peda.notes.length > 5 && (
+                        {showAllNotes === uniqueKey && (peda.notes || []).length > 5 && (
                           <button onClick={() => setShowAllNotes(null)} className="font-body text-xs text-slate-600 bg-sand py-1.5 rounded-lg border-none cursor-pointer text-center">
                             ▲ Réduire
                           </button>
