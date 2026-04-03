@@ -1,148 +1,237 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getClubInfo } from "@/lib/club-info";
-import { renderToBuffer, Document, Page, Text, View, StyleSheet, Font } from "@react-pdf/renderer";
+import { renderToBuffer, Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import React from "react";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-// Styles PDF
-const styles = StyleSheet.create({
-  page: { fontFamily: "Helvetica", fontSize: 9, padding: 40, color: "#1f2937", backgroundColor: "#ffffff" },
-  header: { flexDirection: "row", justifyContent: "space-between", marginBottom: 24, paddingBottom: 16, borderBottomWidth: 2, borderBottomColor: "#1e3a5f" },
-  clubName: { fontSize: 14, fontFamily: "Helvetica-Bold", color: "#1e3a5f", marginBottom: 2 },
-  clubDetail: { fontSize: 8, color: "#6b7280", marginBottom: 1 },
-  invoiceTitle: { fontSize: 20, fontFamily: "Helvetica-Bold", color: "#1e3a5f", textAlign: "right" },
-  invoiceNum: { fontSize: 10, color: "#6b7280", textAlign: "right", marginBottom: 2 },
-  invoiceDate: { fontSize: 9, color: "#6b7280", textAlign: "right" },
-  partiesRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 24, marginTop: 8 },
-  partyBox: { width: "45%" },
-  partyLabel: { fontSize: 7, fontFamily: "Helvetica-Bold", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 },
-  partyName: { fontSize: 10, fontFamily: "Helvetica-Bold", color: "#1e3a5f", marginBottom: 2 },
-  partyDetail: { fontSize: 8, color: "#6b7280", lineHeight: 1.5 },
-  tableHeader: { flexDirection: "row", backgroundColor: "#1e3a5f", padding: 8, borderRadius: 4, marginBottom: 2 },
-  tableHeaderText: { color: "#ffffff", fontSize: 8, fontFamily: "Helvetica-Bold" },
-  tableRow: { flexDirection: "row", padding: "6 8", borderBottomWidth: 1, borderBottomColor: "#f3f4f6" },
-  tableRowAlt: { flexDirection: "row", padding: "6 8", backgroundColor: "#f9fafb", borderBottomWidth: 1, borderBottomColor: "#f3f4f6" },
-  col1: { flex: 3 },
-  col2: { flex: 1, textAlign: "center" },
-  col3: { flex: 1, textAlign: "right" },
-  col4: { flex: 1, textAlign: "right" },
-  totalsBox: { alignItems: "flex-end", marginTop: 12 },
-  totalsRow: { flexDirection: "row", justifyContent: "flex-end", gap: 16, marginBottom: 3 },
-  totalsLabel: { fontSize: 8, color: "#6b7280", width: 80, textAlign: "right" },
-  totalsValue: { fontSize: 8, color: "#1f2937", width: 70, textAlign: "right" },
-  totalsTTCLabel: { fontSize: 11, fontFamily: "Helvetica-Bold", color: "#1e3a5f", width: 80, textAlign: "right" },
-  totalsTTCValue: { fontSize: 11, fontFamily: "Helvetica-Bold", color: "#1e3a5f", width: 70, textAlign: "right" },
-  paymentBox: { marginTop: 20, padding: 12, borderRadius: 6, borderWidth: 1 },
-  paymentPaid: { backgroundColor: "#f0fdf4", borderColor: "#86efac" },
-  paymentUnpaid: { backgroundColor: "#fff7ed", borderColor: "#fdba74" },
-  paymentLabel: { fontSize: 10, fontFamily: "Helvetica-Bold" },
-  paymentLabelPaid: { color: "#15803d" },
-  paymentLabelUnpaid: { color: "#c2410c" },
-  paymentDetail: { fontSize: 8, color: "#6b7280", marginTop: 4 },
-  footer: { position: "absolute", bottom: 24, left: 40, right: 40, textAlign: "center", fontSize: 7, color: "#9ca3af", borderTopWidth: 1, borderTopColor: "#e5e7eb", paddingTop: 8 },
+const BLUE = "#1e3a5f";
+const GRAY = "#6b7280";
+const LIGHT = "#f9fafb";
+const GREEN = "#15803d";
+const ORANGE = "#c2410c";
+
+const s = StyleSheet.create({
+  page:       { fontFamily: "Helvetica", fontSize: 9, padding: "32 40 60 40", color: "#1f2937", backgroundColor: "#fff" },
+  // Header
+  header:     { flexDirection: "row", justifyContent: "space-between", marginBottom: 20, paddingBottom: 14, borderBottomWidth: 2, borderBottomColor: BLUE },
+  clubName:   { fontSize: 13, fontFamily: "Helvetica-Bold", color: BLUE, marginBottom: 2 },
+  clubSub:    { fontSize: 8, color: GRAY, marginBottom: 1.5 },
+  invTitle:   { fontSize: 22, fontFamily: "Helvetica-Bold", color: BLUE, textAlign: "right" },
+  invMeta:    { fontSize: 8, color: GRAY, textAlign: "right", marginTop: 2 },
+  // Parties
+  parties:    { flexDirection: "row", justifyContent: "space-between", marginBottom: 20 },
+  partyBox:   { width: "47%" },
+  partyLabel: { fontSize: 7, fontFamily: "Helvetica-Bold", color: "#9ca3af", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 4 },
+  partyName:  { fontSize: 10, fontFamily: "Helvetica-Bold", color: BLUE, marginBottom: 2 },
+  partySub:   { fontSize: 8, color: GRAY, lineHeight: 1.6 },
+  // Table
+  thead:      { flexDirection: "row", backgroundColor: BLUE, padding: "6 8", borderRadius: 3, marginBottom: 1 },
+  theadTxt:   { color: "#fff", fontSize: 8, fontFamily: "Helvetica-Bold" },
+  trow:       { flexDirection: "row", padding: "5 8", borderBottomWidth: 1, borderBottomColor: "#f3f4f6" },
+  trowAlt:    { flexDirection: "row", padding: "5 8", backgroundColor: LIGHT, borderBottomWidth: 1, borderBottomColor: "#f3f4f6" },
+  cDesc:      { flex: 4 },
+  cQty:       { flex: 1, textAlign: "center" },
+  cPUHT:      { flex: 1.2, textAlign: "right" },
+  cRemise:    { flex: 1, textAlign: "right" },
+  cTVA:       { flex: 1, textAlign: "right" },
+  cTTC:       { flex: 1.2, textAlign: "right" },
+  cellTxt:    { fontSize: 8.5, color: "#374151" },
+  cellGray:   { fontSize: 8.5, color: GRAY },
+  cellBold:   { fontSize: 8.5, fontFamily: "Helvetica-Bold", color: BLUE },
+  // Récap TVA
+  tvaSection: { marginTop: 10, marginBottom: 4 },
+  tvaLabel:   { fontSize: 7, fontFamily: "Helvetica-Bold", color: GRAY, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 4 },
+  tvaRow:     { flexDirection: "row", gap: 8, marginBottom: 2 },
+  tvaCell:    { width: 70, fontSize: 8, color: GRAY },
+  tvaCellVal: { width: 70, fontSize: 8, color: "#374151" },
+  // Totaux
+  totalsBox:  { alignItems: "flex-end", marginTop: 8, marginBottom: 16 },
+  totalRow:   { flexDirection: "row", marginBottom: 3 },
+  totLbl:     { fontSize: 8.5, color: GRAY, width: 90, textAlign: "right" },
+  totVal:     { fontSize: 8.5, color: "#1f2937", width: 75, textAlign: "right" },
+  totTTCLbl:  { fontSize: 11, fontFamily: "Helvetica-Bold", color: BLUE, width: 90, textAlign: "right" },
+  totTTCVal:  { fontSize: 11, fontFamily: "Helvetica-Bold", color: BLUE, width: 75, textAlign: "right" },
+  // Paiement
+  payBox:     { padding: "10 12", borderRadius: 5, borderWidth: 1, marginBottom: 14 },
+  payPaid:    { backgroundColor: "#f0fdf4", borderColor: "#86efac" },
+  payUnpaid:  { backgroundColor: "#fff7ed", borderColor: "#fdba74" },
+  payTitle:   { fontSize: 10, fontFamily: "Helvetica-Bold", marginBottom: 3 },
+  payDetail:  { fontSize: 8, color: GRAY, lineHeight: 1.6 },
+  // Footer
+  footer:     { position: "absolute", bottom: 24, left: 40, right: 40, textAlign: "center", fontSize: 7, color: "#9ca3af", borderTopWidth: 1, borderTopColor: "#e5e7eb", paddingTop: 6 },
+  // Mention TVA non applicable
+  mentionTVA: { fontSize: 7.5, color: GRAY, marginTop: 8, fontStyle: "italic" },
 });
+
+// Regrouper les items par taux de TVA pour le récap
+function getTvaRecap(items: any[]) {
+  const recap: Record<string, { base: number; tva: number; montant: number }> = {};
+  for (const item of items) {
+    const taux = item.tva ?? item.tvaTaux ?? 5.5;
+    const key = `${taux}`;
+    const ht = item.priceHT || 0;
+    const montantTVA = ht * (taux / 100);
+    if (!recap[key]) recap[key] = { base: 0, tva: taux, montant: 0 };
+    recap[key].base += ht;
+    recap[key].montant += montantTVA;
+  }
+  return Object.values(recap);
+}
 
 export async function POST(request: NextRequest) {
   try {
     const CLUB = await getClubInfo();
     const body = await request.json();
-    const { invoiceNumber, date, familyName, familyEmail, items = [], totalHT = 0, totalTVA = 0, totalTTC = 0, paidAmount = 0, paymentMode, paymentDate } = body;
+    const {
+      invoiceNumber, date, prestationDate,
+      familyName, familyEmail, familyAddress,
+      items = [], totalHT = 0, totalTVA = 0, totalTTC = 0,
+      paidAmount = 0, paymentMode, paymentDate,
+      remise,
+    } = body;
 
     const isPaid = (paidAmount || 0) >= (totalTTC || 0);
     const resteDu = Math.max(0, (totalTTC || 0) - (paidAmount || 0));
+    const tvaRecap = getTvaRecap(items);
+    const isTVAApplicable = totalTVA > 0;
 
-    const pdfDoc = React.createElement(Document, {},
-      React.createElement(Page, { size: "A4", style: styles.page },
-        // Header
-        React.createElement(View, { style: styles.header },
+    const doc = React.createElement(Document, { title: `Facture ${invoiceNumber}`, author: CLUB.nom },
+      React.createElement(Page, { size: "A4", style: s.page },
+
+        // ── En-tête ──────────────────────────────────────────────────────
+        React.createElement(View, { style: s.header },
           React.createElement(View, {},
-            React.createElement(Text, { style: styles.clubName }, CLUB.nom || "Centre Équestre"),
-            React.createElement(Text, { style: styles.clubDetail }, CLUB.address || ""),
-            React.createElement(Text, { style: styles.clubDetail }, `${CLUB.tel || ""} · ${CLUB.email || ""}`),
-            React.createElement(Text, { style: styles.clubDetail }, `SIRET : ${CLUB.siret || ""}`),
+            React.createElement(Text, { style: s.clubName }, CLUB.nom),
+            React.createElement(Text, { style: s.clubSub }, CLUB.legalName),
+            React.createElement(Text, { style: s.clubSub }, CLUB.address),
+            React.createElement(Text, { style: s.clubSub }, `Tél : ${CLUB.tel} · ${CLUB.email}`),
+            React.createElement(Text, { style: s.clubSub }, `SIRET : ${CLUB.siret}`),
+            CLUB.tvaIntra
+              ? React.createElement(Text, { style: s.clubSub }, `N° TVA intracommunautaire : ${CLUB.tvaIntra}`)
+              : React.createElement(Text, { style: s.clubSub }, "TVA non applicable — art. 293B CGI"),
           ),
           React.createElement(View, {},
-            React.createElement(Text, { style: styles.invoiceTitle }, "FACTURE"),
-            React.createElement(Text, { style: styles.invoiceNum }, `N° ${invoiceNumber}`),
-            React.createElement(Text, { style: styles.invoiceDate }, `Date : ${date}`),
+            React.createElement(Text, { style: s.invTitle }, "FACTURE"),
+            React.createElement(Text, { style: s.invMeta }, `N° ${invoiceNumber}`),
+            React.createElement(Text, { style: s.invMeta }, `Émise le : ${date}`),
+            prestationDate
+              ? React.createElement(Text, { style: s.invMeta }, `Prestation du : ${prestationDate}`)
+              : null,
           ),
         ),
 
-        // Parties
-        React.createElement(View, { style: styles.partiesRow },
-          React.createElement(View, { style: styles.partyBox },
-            React.createElement(Text, { style: styles.partyLabel }, "Émetteur"),
-            React.createElement(Text, { style: styles.partyName }, CLUB.nom || ""),
-            React.createElement(Text, { style: styles.partyDetail }, `${CLUB.legalName || ""}\n${CLUB.address || ""}\n${CLUB.tel || ""}\n${CLUB.email || ""}`),
+        // ── Parties ──────────────────────────────────────────────────────
+        React.createElement(View, { style: s.parties },
+          React.createElement(View, { style: s.partyBox },
+            React.createElement(Text, { style: s.partyLabel }, "Émetteur"),
+            React.createElement(Text, { style: s.partyName }, CLUB.nom),
+            React.createElement(Text, { style: s.partySub },
+              `${CLUB.legalName}\n${CLUB.address}\nSIRET : ${CLUB.siret}${CLUB.tvaIntra ? `\nTVA : ${CLUB.tvaIntra}` : ""}`),
           ),
-          React.createElement(View, { style: styles.partyBox },
-            React.createElement(Text, { style: styles.partyLabel }, "Client"),
-            React.createElement(Text, { style: styles.partyName }, familyName || ""),
-            familyEmail ? React.createElement(Text, { style: styles.partyDetail }, familyEmail) : null,
+          React.createElement(View, { style: s.partyBox },
+            React.createElement(Text, { style: s.partyLabel }, "Client"),
+            React.createElement(Text, { style: s.partyName }, familyName || ""),
+            familyEmail ? React.createElement(Text, { style: s.partySub }, familyEmail) : null,
+            familyAddress ? React.createElement(Text, { style: s.partySub }, familyAddress) : null,
           ),
         ),
 
-        // Table
-        React.createElement(View, { style: styles.tableHeader },
-          React.createElement(Text, { style: [styles.tableHeaderText, styles.col1] }, "Prestation"),
-          React.createElement(Text, { style: [styles.tableHeaderText, styles.col2] }, "Qté"),
-          React.createElement(Text, { style: [styles.tableHeaderText, styles.col3] }, "PU HT"),
-          React.createElement(Text, { style: [styles.tableHeaderText, styles.col4] }, "Total TTC"),
+        // ── Tableau des prestations ───────────────────────────────────────
+        React.createElement(View, { style: s.thead },
+          React.createElement(Text, { style: [s.theadTxt, s.cDesc] }, "Désignation"),
+          React.createElement(Text, { style: [s.theadTxt, s.cQty] }, "Qté"),
+          React.createElement(Text, { style: [s.theadTxt, s.cPUHT] }, "PU HT"),
+          React.createElement(Text, { style: [s.theadTxt, s.cRemise] }, "Remise"),
+          React.createElement(Text, { style: [s.theadTxt, s.cTVA] }, "TVA"),
+          React.createElement(Text, { style: [s.theadTxt, s.cTTC] }, "Total TTC"),
         ),
-        ...(items || []).map((item: any, i: number) =>
-          React.createElement(View, { key: i, style: i % 2 === 0 ? styles.tableRow : styles.tableRowAlt },
-            React.createElement(Text, { style: [{ fontSize: 9, color: "#1f2937" }, styles.col1] },
-              `${item.activityTitle || item.description || ""}${item.childName ? ` — ${item.childName}` : ""}`
+        ...(items).map((item: any, i: number) => {
+          const taux = item.tva ?? item.tvaTaux ?? 5.5;
+          const disc = item.remise || item.discount || 0;
+          return React.createElement(View, { key: String(i), style: i % 2 === 0 ? s.trow : s.trowAlt },
+            React.createElement(View, { style: s.cDesc },
+              React.createElement(Text, { style: s.cellTxt },
+                `${item.activityTitle || item.description || "Prestation"}${item.childName ? ` — ${item.childName}` : ""}`),
             ),
-            React.createElement(Text, { style: [{ fontSize: 9, color: "#6b7280" }, styles.col2] }, "1"),
-            React.createElement(Text, { style: [{ fontSize: 9, color: "#6b7280" }, styles.col3] }, `${(item.priceHT || 0).toFixed(2)}€`),
-            React.createElement(Text, { style: [{ fontSize: 9, fontFamily: "Helvetica-Bold", color: "#1e3a5f" }, styles.col4] }, `${(item.priceTTC || 0).toFixed(2)}€`),
-          )
+            React.createElement(Text, { style: [s.cellGray, s.cQty] }, `${item.quantity || 1}`),
+            React.createElement(Text, { style: [s.cellGray, s.cPUHT] }, `${(item.priceHT || 0).toFixed(2)} €`),
+            React.createElement(Text, { style: [s.cellGray, s.cRemise] }, disc > 0 ? `-${disc.toFixed(2)} €` : "—"),
+            React.createElement(Text, { style: [s.cellGray, s.cTVA] }, `${taux} %`),
+            React.createElement(Text, { style: [s.cellBold, s.cTTC] }, `${(item.priceTTC || 0).toFixed(2)} €`),
+          );
+        }),
+
+        // ── Récap TVA ────────────────────────────────────────────────────
+        isTVAApplicable ? React.createElement(View, { style: s.tvaSection },
+          React.createElement(Text, { style: s.tvaLabel }, "Détail TVA"),
+          React.createElement(View, { style: s.tvaRow },
+            React.createElement(Text, { style: s.tvaCell }, "Taux"),
+            React.createElement(Text, { style: s.tvaCell }, "Base HT"),
+            React.createElement(Text, { style: s.tvaCell }, "Montant TVA"),
+          ),
+          ...tvaRecap.map((t, i) =>
+            React.createElement(View, { key: String(i), style: s.tvaRow },
+              React.createElement(Text, { style: s.tvaCellVal }, `${t.tva} %`),
+              React.createElement(Text, { style: s.tvaCellVal }, `${t.base.toFixed(2)} €`),
+              React.createElement(Text, { style: s.tvaCellVal }, `${t.montant.toFixed(2)} €`),
+            )
+          ),
+        ) : null,
+
+        // ── Totaux ───────────────────────────────────────────────────────
+        React.createElement(View, { style: s.totalsBox },
+          remise > 0 ? React.createElement(View, { style: s.totalRow },
+            React.createElement(Text, { style: s.totLbl }, "Remise"),
+            React.createElement(Text, { style: s.totVal }, `-${remise.toFixed(2)} €`),
+          ) : null,
+          React.createElement(View, { style: s.totalRow },
+            React.createElement(Text, { style: s.totLbl }, "Total HT"),
+            React.createElement(Text, { style: s.totVal }, `${(totalHT || 0).toFixed(2)} €`),
+          ),
+          React.createElement(View, { style: s.totalRow },
+            React.createElement(Text, { style: s.totLbl }, `TVA${tvaRecap.length === 1 ? ` (${tvaRecap[0].tva} %)` : ""}`),
+            React.createElement(Text, { style: s.totVal }, `${(totalTVA || 0).toFixed(2)} €`),
+          ),
+          React.createElement(View, { style: { ...s.totalRow, borderTopWidth: 1, borderTopColor: "#e5e7eb", paddingTop: 4, marginTop: 2 } },
+            React.createElement(Text, { style: s.totTTCLbl }, "Total TTC"),
+            React.createElement(Text, { style: s.totTTCVal }, `${(totalTTC || 0).toFixed(2)} €`),
+          ),
         ),
 
-        // Totaux
-        React.createElement(View, { style: styles.totalsBox },
-          React.createElement(View, { style: styles.totalsRow },
-            React.createElement(Text, { style: styles.totalsLabel }, "Total HT"),
-            React.createElement(Text, { style: styles.totalsValue }, `${(totalHT || 0).toFixed(2)}€`),
-          ),
-          React.createElement(View, { style: styles.totalsRow },
-            React.createElement(Text, { style: styles.totalsLabel }, "TVA"),
-            React.createElement(Text, { style: styles.totalsValue }, `${(totalTVA || 0).toFixed(2)}€`),
-          ),
-          React.createElement(View, { style: { ...styles.totalsRow, marginTop: 4, paddingTop: 4, borderTopWidth: 1, borderTopColor: "#e5e7eb" } },
-            React.createElement(Text, { style: styles.totalsTTCLabel }, "Total TTC"),
-            React.createElement(Text, { style: styles.totalsTTCValue }, `${(totalTTC || 0).toFixed(2)}€`),
-          ),
-        ),
+        // ── Non applicable TVA ───────────────────────────────────────────
+        !isTVAApplicable
+          ? React.createElement(Text, { style: s.mentionTVA }, "TVA non applicable en vertu de l'article 293B du CGI.")
+          : null,
 
-        // Statut paiement
-        React.createElement(View, { style: [styles.paymentBox, isPaid ? styles.paymentPaid : styles.paymentUnpaid] },
-          React.createElement(Text, { style: [styles.paymentLabel, isPaid ? styles.paymentLabelPaid : styles.paymentLabelUnpaid] },
-            isPaid ? "✓ Réglé" : "En attente de règlement"
-          ),
+        // ── Statut paiement ──────────────────────────────────────────────
+        React.createElement(View, { style: [s.payBox, isPaid ? s.payPaid : s.payUnpaid] },
+          React.createElement(Text, { style: [s.payTitle, { color: isPaid ? GREEN : ORANGE }] },
+            isPaid ? "✓ Facture réglée" : "⏳ En attente de règlement"),
           isPaid && paymentMode
-            ? React.createElement(Text, { style: styles.paymentDetail }, `Mode : ${paymentMode}${paymentDate ? ` · le ${paymentDate}` : ""}`)
+            ? React.createElement(Text, { style: s.payDetail }, `Mode de règlement : ${paymentMode}${paymentDate ? ` · le ${paymentDate}` : ""}`)
             : null,
-          !isPaid && resteDu > 0
-            ? React.createElement(Text, { style: [styles.paymentDetail, { color: "#c2410c" }] }, `Reste dû : ${resteDu.toFixed(2)}€`)
+          !isPaid && paidAmount > 0
+            ? React.createElement(Text, { style: s.payDetail }, `Acompte versé : ${paidAmount.toFixed(2)} € · Reste dû : ${resteDu.toFixed(2)} €`)
             : null,
-          !isPaid && CLUB.iban
-            ? React.createElement(Text, { style: styles.paymentDetail }, `Virement : IBAN ${CLUB.iban} · BIC ${CLUB.bic || ""}`)
+          !isPaid && resteDu > 0 && CLUB.iban
+            ? React.createElement(Text, { style: s.payDetail },
+                `Règlement par virement :\nIBAN : ${CLUB.iban}\nBIC : ${CLUB.bic || ""}`)
             : null,
         ),
 
-        // Footer
-        React.createElement(Text, { style: styles.footer },
-          `${CLUB.nom || ""} · ${CLUB.legalName || ""} · SIRET ${CLUB.siret || ""} · ${CLUB.email || ""}`
+        // ── Pied de page ─────────────────────────────────────────────────
+        React.createElement(Text, { style: s.footer },
+          `${CLUB.nom} · ${CLUB.legalName} · SIRET ${CLUB.siret}` +
+          (CLUB.tvaIntra ? ` · TVA ${CLUB.tvaIntra}` : "") +
+          ` · ${CLUB.email}` +
+          (CLUB.website ? ` · ${CLUB.website}` : ""),
         ),
       )
     );
 
-    const buffer = await renderToBuffer(pdfDoc);
-
+    const buffer = await renderToBuffer(doc);
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "application/pdf",
