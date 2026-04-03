@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
   const results = {
     monitorRecap: { pushSent: 0, emailsSent: 0, monitors: [] as string[] },
     familyReminders: { pushSent: 0, emailsSent: 0, errors: 0, families: 0 },
+    soldeStagej7: { emailsSent: 0, errors: 0 },
   };
 
   const resendKey = process.env.RESEND_API_KEY;
@@ -249,6 +250,109 @@ export async function GET(req: NextRequest) {
       }
     } else {
       console.log("  → Aucun créneau demain");
+    }
+
+    // ══════════════════════════════════════
+    // JOB 3 : RAPPEL SOLDE STAGE J-7
+    // ══════════════════════════════════════
+    const j7 = new Date();
+    j7.setDate(j7.getDate() + 7);
+    const j7Str = j7.toISOString().split("T")[0];
+    const j7Label = j7.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+
+    console.log(`\n💳 [JOB 3] Rappels solde stage J-7 — stages du ${j7Str}`);
+
+    // Trouver les créneaux de stage dans 7 jours
+    const j7Snap = await adminDb.collection("creneaux")
+      .where("date", "==", j7Str)
+      .get();
+    const j7Creneaux = j7Snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+    const j7Stages = j7Creneaux.filter((c: any) => c.activityType === "stage" || c.activityType === "stage_journee");
+
+    if (j7Stages.length > 0) {
+      // Trouver les paiements partiels (acompte 30% versé, solde 70% attendu)
+      const soldePending = await adminDb.collection("payments")
+        .where("status", "==", "partial")
+        .get();
+
+      // Grouper par famille
+      const familiesJ7: Record<string, { email: string; familyName: string; items: any[] }> = {};
+
+      for (const payDoc of soldePending.docs) {
+        const p = payDoc.data() as any;
+        if (!p.familyEmail || !p.familyId) continue;
+
+        // Vérifier si ce paiement concerne un stage dans 7 jours
+        const stageItems = (p.items || []).filter((item: any) => {
+          return j7Stages.some((c: any) => c.id === item.creneauId || c.activityTitle === item.activityTitle?.split(" — ")[0]);
+        });
+        if (stageItems.length === 0) continue;
+
+        const solde = (p.totalTTC || 0) - (p.paidAmount || 0);
+        if (solde <= 0) continue;
+
+        if (!familiesJ7[p.familyId]) {
+          familiesJ7[p.familyId] = { email: p.familyEmail, familyName: p.familyName || "", items: [] };
+        }
+        familiesJ7[p.familyId].items.push({
+          activityTitle: stageItems[0]?.activityTitle || p.items[0]?.activityTitle || "Stage",
+          solde,
+          paymentId: payDoc.id,
+        });
+      }
+
+      for (const [familyId, data] of Object.entries(familiesJ7)) {
+        try {
+          const totalSolde = data.items.reduce((s, i) => s + i.solde, 0);
+          const activites = data.items.map(i => i.activityTitle).join(", ");
+
+          // Générer le lien de paiement CAWL pour le solde
+          const paymentId = data.items[0]?.paymentId || "";
+          const soldeLink = `${appUrl}/espace-cavalier/factures?payId=${paymentId}`;
+
+          const subject = `💳 Rappel solde stage — ${totalSolde.toFixed(2)}€ à régler avant le ${j7Label}`;
+          const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+            <div style="background:#2050A0;color:white;padding:20px;border-radius:12px 12px 0 0;text-align:center;">
+              <h2 style="margin:0;font-size:18px;">Centre Équestre d'Agon-Coutainville</h2>
+            </div>
+            <div style="background:#f8faff;padding:24px;border:1px solid #e0e8ff;border-top:none;border-radius:0 0 12px 12px;">
+              <p>Bonjour <strong>${data.familyName}</strong>,</p>
+              <p>Votre stage commence dans <strong>7 jours</strong> (${j7Label}).</p>
+              <p>Il reste un solde à régler :</p>
+              <div style="background:white;border:2px solid #2050A0;border-radius:8px;padding:16px;margin:16px 0;text-align:center;">
+                <div style="font-size:28px;font-weight:bold;color:#2050A0;">${totalSolde.toFixed(2)}€</div>
+                <div style="color:#555;font-size:13px;margin-top:4px;">${activites}</div>
+              </div>
+              <div style="text-align:center;margin:24px 0;">
+                <a href="${soldeLink}" style="background:#2050A0;color:white;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">
+                  💳 Régler le solde en ligne
+                </a>
+              </div>
+              <p style="color:#888;font-size:12px;text-align:center;">
+                Accédez à votre espace cavalier → Mes factures pour régler par CB en ligne.
+              </p>
+            </div>
+          </div>`;
+
+          await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              from: fromEmail,
+              to: data.email,
+              ...(process.env.RESEND_BCC_EMAIL ? { bcc: process.env.RESEND_BCC_EMAIL } : {}),
+              subject, html,
+            }),
+          });
+          results.soldeStagej7.emailsSent++;
+          console.log(`  ✅ Rappel solde J-7 → ${data.email} (${totalSolde.toFixed(2)}€)`);
+        } catch (e) {
+          results.soldeStagej7.errors++;
+          console.error(`  ❌ Erreur rappel solde J-7 → ${data.email}`, e);
+        }
+      }
+    } else {
+      console.log("  → Aucun stage dans 7 jours");
     }
 
     console.log("\n✅ Cron daily-notifications terminé");
