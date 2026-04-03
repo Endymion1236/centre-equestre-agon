@@ -198,6 +198,7 @@ export default function EspaceCavalierLayout({
   const router = useRouter();
   const [showVoice, setShowVoice] = useState(false);
   const [voiceContext, setVoiceContext] = useState<Record<string, any>>({});
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   // Charger le planning réel pour le chatbot famille
   useEffect(() => {
@@ -317,8 +318,7 @@ export default function EspaceCavalierLayout({
     { href: "/espace-cavalier/profil", icon: Users, label: "Profil" },
   ];
 
-  // Menu "Plus" mobile — items accessibles via le drawer
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  // Menu "Plus" mobile — items accessibles via le drawer (état déclaré plus haut)
   const moreItems = [
     { href: "/espace-cavalier/progression", icon: TrendingUp, label: "Progression" },
     { href: "/espace-cavalier/satisfaction", icon: Star, label: "Satisfaction" },
