@@ -122,20 +122,12 @@ export async function POST(request: NextRequest) {
           ),
         ),
 
-        // ── Parties ──────────────────────────────────────────────────────
-        React.createElement(View, { style: s.parties },
-          React.createElement(View, { style: s.partyBox },
-            React.createElement(Text, { style: s.partyLabel }, "Émetteur"),
-            React.createElement(Text, { style: s.partyName }, CLUB.nom),
-            React.createElement(Text, { style: s.partySub },
-              `${CLUB.legalName}\n${CLUB.address}\nSIRET : ${CLUB.siret}${CLUB.tvaIntra ? `\nTVA : ${CLUB.tvaIntra}` : ""}`),
-          ),
-          React.createElement(View, { style: s.partyBox },
-            React.createElement(Text, { style: s.partyLabel }, "Client"),
-            React.createElement(Text, { style: s.partyName }, familyName || ""),
-            familyEmail ? React.createElement(Text, { style: s.partySub }, familyEmail) : null,
-            familyAddress ? React.createElement(Text, { style: s.partySub }, familyAddress) : null,
-          ),
+        // ── Client ───────────────────────────────────────────────────────
+        React.createElement(View, { style: { marginBottom: 20 } },
+          React.createElement(Text, { style: s.partyLabel }, "Facturé à"),
+          React.createElement(Text, { style: s.partyName }, familyName || ""),
+          familyEmail ? React.createElement(Text, { style: s.partySub }, familyEmail) : null,
+          familyAddress ? React.createElement(Text, { style: s.partySub }, familyAddress) : null,
         ),
 
         // ── Tableau des prestations ───────────────────────────────────────
