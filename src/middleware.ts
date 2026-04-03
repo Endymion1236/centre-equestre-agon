@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Middleware léger — pas de vérification token (Firebase Auth est côté client)
-// La vraie protection admin est dans auth-context.tsx via custom claims Firebase
-// Ce middleware existe pour bloquer les routes /api/admin/* sans CRON_SECRET
+// Middleware minimal — ne prétend pas faire ce qu'il ne fait pas.
+// La vraie protection admin est assurée par :
+// 1. Firebase custom claims (vérifiés dans auth-context.tsx côté client)
+// 2. adminAuth.verifyIdToken() dans les routes API sensibles
+// 3. CRON_SECRET pour les routes cron/admin internes
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Protéger les routes API admin sensibles (set-claims, etc.)
-  if (pathname.startsWith("/api/admin/")) {
-    const secret = req.nextUrl.searchParams.get("secret")
-      || req.headers.get("authorization")?.replace("Bearer ", "");
-    if (!secret || secret !== process.env.CRON_SECRET) {
-      // Laisser passer — chaque route vérifie son propre secret
-      return NextResponse.next();
+  // Bloquer les routes cron si pas le bon secret
+  if (pathname.startsWith("/api/cron/")) {
+    const auth = req.headers.get("authorization");
+    const secret = process.env.CRON_SECRET;
+    if (!secret || auth !== `Bearer ${secret}`) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   }
 
@@ -21,5 +22,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/api/admin/:path*"],
+  matcher: ["/api/cron/:path*"],
 };

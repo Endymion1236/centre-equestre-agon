@@ -12,16 +12,21 @@ export async function POST(req: NextRequest) {
     const sig = req.headers.get("stripe-signature");
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
+    // Signature Stripe obligatoire — refus si absente ou invalide
+    if (!webhookSecret) {
+      console.error("STRIPE_WEBHOOK_SECRET manquant");
+      return NextResponse.json({ error: "Webhook not configured" }, { status: 500 });
+    }
+    if (!sig) {
+      console.error("Stripe webhook: signature absente");
+      return NextResponse.json({ error: "Missing signature" }, { status: 400 });
+    }
     let event;
-    if (webhookSecret && sig) {
-      try {
-        event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
-      } catch (err: any) {
-        console.error("Webhook signature verification failed:", err.message);
-        return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
-      }
-    } else {
-      event = JSON.parse(body);
+    try {
+      event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
+    } catch (err: any) {
+      console.error("Webhook signature verification failed:", err.message);
+      return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
     }
 
     switch (event.type) {

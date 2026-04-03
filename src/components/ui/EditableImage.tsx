@@ -51,7 +51,9 @@ export function EditableImage({
       const formData = new FormData();
       formData.append("file", file);
       formData.append("key", imageKey);
-      formData.append("adminEmail", user.email);
+      // Envoyer le token Firebase au lieu de l'email (vérification serveur)
+      const token = await user.getIdToken();
+      formData.append("authToken", token);
 
       const res = await fetch("/api/upload-vitrine", {
         method: "POST",

@@ -8,6 +8,26 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.text();
+
+    // Vérification HMAC-SHA256 — CAWL signe les webhooks avec CAWL_SECRET_API_KEY
+    const signature = req.headers.get("x-gcs-signature") || req.headers.get("x-signature") || "";
+    const webhookSecret = process.env.CAWL_SECRET_API_KEY || process.env.CAWL_SECRET_API_KEY_VALUE || "";
+
+    if (webhookSecret && signature) {
+      const crypto = await import("crypto");
+      const expectedSig = crypto
+        .createHmac("sha256", webhookSecret)
+        .update(body)
+        .digest("base64");
+      if (expectedSig !== signature) {
+        console.error("CAWL webhook: signature invalide");
+        return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+      }
+    } else if (!webhookSecret) {
+      // Pas de secret configuré → log et continuer (mode test)
+      console.warn("CAWL webhook: CAWL_SECRET_API_KEY non configuré, signature non vérifiée");
+    }
+
     let event: any;
     try {
       event = JSON.parse(body);

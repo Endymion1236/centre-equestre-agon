@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminStorage, adminDb } from "@/lib/firebase-admin";
+import { adminStorage, adminDb, adminAuth } from "@/lib/firebase-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -51,10 +51,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Clé image non autorisée" }, { status: 400 });
     }
 
-    // Vérifier que c'est bien un admin (double check côté serveur)
-    const ADMIN_EMAILS = ["ceagon@orange.fr", "ceagon50@gmail.com", "emmelinelagy@gmail.com"];
-    if (!adminEmail || !ADMIN_EMAILS.includes(adminEmail)) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 403 });
+    // Vérifier l'identité admin via token Firebase (custom claim)
+    const authHeader = formData.get("authToken") as string | null;
+    if (!authHeader) {
+      return NextResponse.json({ error: "Token d'authentification requis" }, { status: 401 });
+    }
+    try {
+      const decoded = await adminAuth.verifyIdToken(authHeader);
+      if (!decoded.admin) {
+        return NextResponse.json({ error: "Accès réservé aux administrateurs" }, { status: 403 });
+      }
+    } catch {
+      return NextResponse.json({ error: "Token invalide ou expiré" }, { status: 401 });
     }
 
     // Vérifier le type de fichier
