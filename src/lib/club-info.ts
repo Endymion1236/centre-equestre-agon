@@ -25,7 +25,7 @@ const DEFAULTS: ClubInfo = {
   tel: "02 44 84 99 96",
   email: "ceagon@orange.fr",
   siret: "50756918400017",
-  tvaIntra: "",
+  tvaIntra: "FR12507569184",
   iban: "FR76 1660 6100 6400 1353 9343 253",
   bic: "AGRIFRPP866",
   website: "https://centreequestreagon.com",
