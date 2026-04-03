@@ -15,6 +15,7 @@ import {
   Receipt,
   Users,
   Star,
+  MoreHorizontal,
   TrendingUp,
   LogOut,
   Loader2,
@@ -316,6 +317,14 @@ export default function EspaceCavalierLayout({
     { href: "/espace-cavalier/profil", icon: Users, label: "Profil" },
   ];
 
+  // Menu "Plus" mobile — items accessibles via le drawer
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const moreItems = [
+    { href: "/espace-cavalier/progression", icon: TrendingUp, label: "Progression" },
+    { href: "/espace-cavalier/satisfaction", icon: Star, label: "Satisfaction" },
+    { href: "/espace-cavalier/test-protocol", icon: FlaskConical, label: "Tests" },
+  ];
+
   // Logged in → show dashboard layout
   return (
     <div className="min-h-screen bg-cream flex">
@@ -376,6 +385,24 @@ export default function EspaceCavalierLayout({
       </div>
 
       {/* ─── Bottom Navigation Mobile ─── */}
+      {/* Drawer menu Plus */}
+      {showMoreMenu && (
+        <div className="md:hidden fixed inset-0 z-[60]" onClick={() => setShowMoreMenu(false)}>
+          <div className="absolute bottom-16 right-2 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden" onClick={e => e.stopPropagation()}>
+            {moreItems.map(item => {
+              const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+              return (
+                <Link key={item.href} href={item.href} onClick={() => setShowMoreMenu(false)}
+                  className={`flex items-center gap-3 px-5 py-3.5 font-body text-sm border-b border-gray-50 last:border-0 no-underline ${isActive ? "text-blue-500 bg-blue-50 font-semibold" : "text-slate-700"}`}>
+                  <item.icon size={18} className={isActive ? "text-blue-500" : "text-slate-400"}/>
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 flex items-center justify-around px-2 py-2 safe-area-inset-bottom">
         {mobileNav.map(item => {
           const Icon = item.icon;
@@ -389,6 +416,12 @@ export default function EspaceCavalierLayout({
             </Link>
           );
         })}
+        {/* Bouton Plus */}
+        <button onClick={() => setShowMoreMenu(m => !m)}
+          className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg cursor-pointer border-none bg-transparent transition-colors ${showMoreMenu ? "text-blue-500" : "text-slate-400"}`}>
+          <MoreHorizontal size={22} className={showMoreMenu ? "text-blue-500" : "text-slate-400"}/>
+          <span className="font-body text-[10px] font-medium">Plus</span>
+        </button>
       </div>
     </div>
   );
