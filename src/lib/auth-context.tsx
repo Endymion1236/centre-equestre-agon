@@ -158,9 +158,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const isAdmin = user?.email
-    ? ADMIN_EMAILS.includes(user.email)
-    : false;
+  // isAdmin : custom claim Firebase en priorité, fallback sur liste emails
+  // Les custom claims sont dans user.getIdTokenResult().claims.admin
+  // On garde le fallback email pour la transition (tant que les claims ne sont pas tous initialisés)
+  const [adminClaim, setAdminClaim] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!user) { setAdminClaim(null); return; }
+    user.getIdTokenResult(false).then(result => {
+      setAdminClaim(result.claims.admin === true);
+    }).catch(() => setAdminClaim(null));
+  }, [user]);
+
+  const isAdmin = adminClaim !== null
+    ? adminClaim
+    : (user?.email ? ADMIN_EMAILS.includes(user.email) : false);
 
   return (
     <AuthContext.Provider
