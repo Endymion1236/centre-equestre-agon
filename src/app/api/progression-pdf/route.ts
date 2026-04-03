@@ -26,7 +26,6 @@ export async function GET(req: NextRequest) {
   const niveauEnCoursId: string = data.niveauEnCours || "";
   const niveauIdx = GALOPS_PROGRAMME.findIndex(n => n.id === niveauEnCoursId);
   const niveauEnCours = niveauIdx >= 0 ? GALOPS_PROGRAMME[niveauIdx] : null;
-  const niveauxPrecedents = niveauIdx > 0 ? GALOPS_PROGRAMME.slice(0, niveauIdx) : [];
 
   const today = new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 
@@ -128,15 +127,8 @@ export async function GET(req: NextRequest) {
 
   ${!niveauEnCours ? `<p style="color:#6b7280;font-style:italic;">Aucune progression enregistrée.</p>` : `
 
-  <!-- Niveau en cours -->
-  <h2 style="font-size:13px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;">Niveau en cours</h2>
+  <!-- Niveau en cours uniquement -->
   ${renderNiveau(niveauEnCours, true)}
-
-  <!-- Niveaux précédents -->
-  ${niveauxPrecedents.length > 0 ? `
-    <h2 style="font-size:13px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.08em;margin-top:24px;margin-bottom:12px;">Niveaux précédents</h2>
-    ${[...niveauxPrecedents].reverse().map(n => renderNiveau(n, false)).join("")}
-  ` : ""}
 
   `}
 
