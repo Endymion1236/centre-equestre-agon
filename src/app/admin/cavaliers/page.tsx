@@ -1,4 +1,5 @@
 "use client";
+import ProgressionEditor from "@/components/ProgressionEditor";
 import { useAgentContext } from "@/hooks/useAgentContext";
 
 import { useState, useEffect } from "react";
@@ -59,6 +60,7 @@ export default function CavaliersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [expandedFamily, setExpandedFamily] = useState<string | null>(null);
+  const [showProgression, setShowProgression] = useState<{familyId: string; childId: string} | null>(null);
   const [editingGalop, setEditingGalop] = useState<{ familyId: string; childId: string } | null>(null);
 
   // ─── Réservations & paiements par famille ───
@@ -953,6 +955,10 @@ export default function CavaliersPage() {
                                     className="font-body text-xs text-blue-500 bg-blue-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
                                     <CalendarDays size={12} /> Inscrire
                                   </button>
+                                  <button onClick={(e) => { e.stopPropagation(); setShowProgression(showProgression?.childId === child.id && showProgression?.familyId === family.firestoreId ? null : { familyId: family.firestoreId, childId: child.id }); }}
+                                    className="font-body text-xs text-purple-600 bg-purple-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-purple-100 flex items-center gap-1">
+                                    📈 Progression
+                                  </button>
                                   <button onClick={() => startEditChild(family.firestoreId, child)}
                                     className="font-body text-xs text-slate-600 bg-gray-100 px-2 py-1 rounded-lg border-none cursor-pointer hover:bg-gray-200 flex items-center gap-1">
                                     <Edit3 size={10} /> Modifier
@@ -994,6 +1000,18 @@ export default function CavaliersPage() {
                                     </div>
                                   );
                                 })()}
+                                  {/* Progression editor */}
+                                  {showProgression?.familyId === family.firestoreId && showProgression?.childId === child.id && (
+                                    <div className="mt-2 bg-white rounded-xl border border-purple-100 p-4">
+                                      <div className="font-body text-xs font-semibold text-purple-600 uppercase tracking-wider mb-3">📈 Progression — {child.firstName}</div>
+                                      <ProgressionEditor
+                                        childId={child.id}
+                                        familyId={family.firestoreId}
+                                        childName={child.firstName}
+                                        galopLevel={child.galopLevel}
+                                      />
+                                    </div>
+                                  )}
                               </>
                             )}
                           </div>
