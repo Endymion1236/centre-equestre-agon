@@ -92,19 +92,32 @@ export function usePushNotifications(familyId: string | null) {
     }
   };
 
-  // Messages foreground
+  // Messages foreground — passe par le SW pour Android Chrome
   useEffect(() => {
     if (permission !== "granted") return;
     let unsub: (() => void) | null = null;
     getMessagingInstance().then(messaging => {
       if (!messaging) return;
-      unsub = onMessage(messaging, (payload) => {
-        if (payload.notification) {
-          new Notification(payload.notification.title || "Centre Équestre", {
-            body: payload.notification.body,
-            icon: "/icons/icon-192x192.png",
-          });
+      unsub = onMessage(messaging, async (payload) => {
+        const title = payload.notification?.title || "Centre Équestre";
+        const body = payload.notification?.body || "";
+        const url = (payload.fcmOptions as any)?.link || "/espace-cavalier";
+        // Utiliser le SW pour afficher la notif (fonctionne sur Android Chrome)
+        if ("serviceWorker" in navigator) {
+          const reg = await navigator.serviceWorker.getRegistration("/");
+          if (reg) {
+            reg.showNotification(title, {
+              body,
+              icon: "/icons/icon-192x192.png",
+              badge: "/icons/icon-72x72.png",
+              tag: "ce-agon-fg",
+              data: { url },
+            });
+            return;
+          }
         }
+        // Fallback desktop
+        new Notification(title, { body, icon: "/icons/icon-192x192.png" });
       });
     });
     return () => { unsub?.(); };

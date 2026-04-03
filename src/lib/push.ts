@@ -17,16 +17,23 @@ export async function sendPush({ token, title, body, url, icon }: PushOptions): 
     await adminMessaging.send({
       token,
       notification: { title, body },
+      data: { title, body, url: url || "/espace-cavalier" },
       webpush: {
+        headers: { Urgency: "high" },
         notification: {
           title,
           body,
           icon: icon || "/icons/icon-192x192.png",
           badge: "/icons/icon-72x72.png",
+          requireInteraction: false,
         },
         fcmOptions: {
           link: url || `${process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app"}/espace-cavalier`,
         },
+      },
+      android: {
+        priority: "high",
+        notification: { channelId: "default" },
       },
     });
     return true;
@@ -73,16 +80,23 @@ export async function sendPushBatch(
       const response = await adminMessaging.sendEachForMulticast({
         tokens: batch,
         notification: { title, body },
+        data: { title, body, url: url || "/espace-cavalier" },
         webpush: {
+          headers: { Urgency: "high" },
           notification: {
             title,
             body,
             icon: "/icons/icon-192x192.png",
             badge: "/icons/icon-72x72.png",
+            requireInteraction: false,
           },
           fcmOptions: {
             link: url || `${process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app"}/espace-cavalier`,
           },
+        },
+        android: {
+          priority: "high",
+          notification: { channelId: "default" },
         },
       });
 
