@@ -144,6 +144,7 @@ export default function PaiementsPage() {
   const [encaissements, setEncaissements] = useState<any[]>([]);
   const [avoirs, setAvoirs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [declarations, setDeclarations] = useState<any[]>([]);
   const [confirmingDeclId, setConfirmingDeclId] = useState<string | null>(null);
 
@@ -189,16 +190,18 @@ export default function PaiementsPage() {
   const [appliedPromo, setAppliedPromo] = useState<{ label: string; discountMode: string; discountValue: number } | null>(null);
   const [manualDiscount, setManualDiscount] = useState("");
 
-  useEffect(() => {
-    Promise.all([
-      getDocs(collection(db, "families")),
-      getDocs(collection(db, "activities")),
-      getDocs(collection(db, "payments")),
-      getDocs(query(collection(db, "encaissements"), orderBy("date", "desc"), limit(500))),
-      getDocs(collection(db, "avoirs")),
-      getDoc(doc(db, "settings", "promos")),
-      getDocs(query(collection(db, "payment_declarations"), where("status", "==", "pending_confirmation"))),
-    ]).then(([famSnap, actSnap, paySnap, encSnap, avoirsSnap, promoSnap, declSnap]) => {
+  const fetchData = async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    try {
+      const [famSnap, actSnap, paySnap, encSnap, avoirsSnap, promoSnap, declSnap] = await Promise.all([
+        getDocs(collection(db, "families")),
+        getDocs(collection(db, "activities")),
+        getDocs(collection(db, "payments")),
+        getDocs(query(collection(db, "encaissements"), orderBy("date", "desc"), limit(500))),
+        getDocs(collection(db, "avoirs")),
+        getDoc(doc(db, "settings", "promos")),
+        getDocs(query(collection(db, "payment_declarations"), where("status", "==", "pending_confirmation"))),
+      ]);
       setFamilies(famSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as any);
       setActivities(actSnap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })) as any);
       const pays = loadPayments(paySnap.docs) as any[];
@@ -210,8 +213,6 @@ export default function PaiementsPage() {
       const decls = declSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setDeclarations(decls);
       setLoading(false);
-
-      // Contexte agent — données paiements
       const impayes = (pays as any[]).filter(p => p.status === "pending" || p.status === "partial");
       const totalImpaye = impayes.reduce((s: number, p: any) => s + ((p.totalTTC||0) - (p.paidAmount||0)), 0);
       window.dispatchEvent(new CustomEvent("agent:setContext", { detail: {
@@ -225,8 +226,11 @@ export default function PaiementsPage() {
           prestations: (p.items||[]).map((i: any) => i.activityTitle).join(", "),
         })),
       }}));
-    }).catch(() => setLoading(false));
-  }, []);
+    } catch { setLoading(false); }
+    if (isRefresh) setRefreshing(false);
+  };
+
+  useEffect(() => { fetchData(); }, []);
 
   // ═══ ENCAISSEMENT RAPIDE DEPUIS L'ONGLET IMPAYÉS ═══
   const handleQuickEncaisser = async () => {
@@ -932,7 +936,14 @@ export default function PaiementsPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-bold text-blue-800 mb-6">Paiements & facturation</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="font-display text-2xl font-bold text-blue-800">Paiements & facturation</h1>
+        <button onClick={() => fetchData(true)} disabled={refreshing}
+          className="flex items-center gap-1.5 font-body text-xs text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50 disabled:opacity-50 transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={refreshing ? "animate-spin" : ""}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+          {refreshing ? "Actualisation..." : "Actualiser"}
+        </button>
+      </div>
 
       <div className="flex gap-1.5 mb-6 overflow-x-auto pb-1 -mx-1 px-1 hide-scrollbar">
         {([["encaisser", "Encaisser", ShoppingCart], ["journal", "Journal", Receipt], ["historique", "Historique", Receipt], ["echeances", "Échéances", Receipt], ["impayes", "Impayés", Receipt], ["declarations", "Déclarations", Receipt]] as const).map(([id, label, Icon]) => (
