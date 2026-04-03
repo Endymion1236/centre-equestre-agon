@@ -18,7 +18,7 @@ const TABS = [
 type TabId = typeof TABS[number]["id"];
 
 const modeLabels: Record<string, string> = {
-  cb_terminal: "CB", cb_online: "Stripe", cheque: "Chèque",
+  cb_terminal: "CB", cb_online: "CB en ligne", cheque: "Chèque",
   especes: "Espèces", cheque_vacances: "Chq. Vac.", pass_sport: "Pass'Sport",
   ancv: "ANCV", virement: "Virement", avoir: "Avoir", carte: "Carte",
 };

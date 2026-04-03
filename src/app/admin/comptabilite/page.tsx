@@ -40,7 +40,7 @@ const accounts = [
 ];
 
 const modeLabels: Record<string, string> = {
-  cb_terminal: "CB Terminal", cb_online: "Stripe", cheque: "Chèque", especes: "Espèces",
+  cb_terminal: "CB Terminal", cb_online: "CB en ligne", cheque: "Chèque", especes: "Espèces",
   cheque_vacances: "Chèques Vacances", pass_sport: "Pass'Sport", ancv: "ANCV",
   virement: "Virement", avoir: "Avoir", prelevement_sepa: "Prélèvement SEPA",
 };

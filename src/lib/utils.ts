@@ -51,7 +51,7 @@ export const formatEuro = (v: any): string => {
 
 /** Modes de paiement normalisés */
 export const PAYMENT_MODES = [
-  { id: "cb_online", label: "CB (Stripe)" },
+  { id: "cb_online", label: "CB en ligne" },
   { id: "cb_terminal", label: "CB (terminal)" },
   { id: "cheque", label: "Chèque" },
   { id: "especes", label: "Espèces" },

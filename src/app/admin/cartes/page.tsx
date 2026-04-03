@@ -36,7 +36,7 @@ const payModes = [
   { id: "cb_terminal", label: "CB Terminal", icon: "💳" },
   { id: "cheque", label: "Chèque", icon: "📝" },
   { id: "especes", label: "Espèces", icon: "💶" },
-  { id: "cb_online", label: "Stripe", icon: "🌐" },
+  { id: "cb_online", label: "CB en ligne", icon: "🌐" },
 ];
 
 export default function CartesPage() {

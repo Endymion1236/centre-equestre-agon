@@ -59,7 +59,7 @@ interface Payment {
 
 const paymentModes: { id: PaymentMode; label: string }[] = [
   { id: "cb_terminal", label: "CB (terminal)" },
-  { id: "cb_online", label: "CB en ligne (Stripe)" },
+  { id: "cb_online", label: "CB en ligne (CAWL)" },
   { id: "cheque", label: "Chèque" },
   { id: "especes", label: "Espèces" },
   { id: "cheque_vacances", label: "Chèques vacances" },
@@ -125,6 +125,7 @@ export default function PaiementsPage() {
   const [tab, setTab] = useState<"encaisser" | "journal" | "historique" | "echeances" | "impayes" | "declarations">(urlSearch ? "impayes" : "encaisser");
   const [editPayment, setEditPayment] = useState<any | null>(null);
   const [quickEncaisser, setQuickEncaisser] = useState<{ payment: any } | null>(null);
+  const [sendingCawlLink, setSendingCawlLink] = useState<string | null>(null); // paymentId en cours
   const [quickMode, setQuickMode] = useState("cheque");
   const [quickMontant, setQuickMontant] = useState("");
   const [quickDate, setQuickDate] = useState(() => new Date().toISOString().split("T")[0]);
@@ -2047,6 +2048,70 @@ export default function PaiementsPage() {
                                 fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: email, ...emailData }) }).catch(e => console.warn("Email:", e));
                                 toast(`Relance envoyée à ${email}`);
                               }} className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">Relancer</button>
+                              {/* Bouton lien de paiement CAWL */}
+                              {(families.find(f => f.firestoreId === p.familyId)?.parentEmail) && (
+                                <button
+                                  disabled={sendingCawlLink === p.id}
+                                  onClick={async () => {
+                                    const fam = families.find(f => f.firestoreId === p.familyId);
+                                    const email = fam?.parentEmail || "";
+                                    setSendingCawlLink(p.id);
+                                    try {
+                                      // Créer une session CAWL
+                                      const res = await fetch("/api/cawl/checkout", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                          items: p.items || [],
+                                          familyId: p.familyId,
+                                          familyName: p.familyName,
+                                          familyEmail: email,
+                                          paymentId: p.id,
+                                          totalTTC: due,
+                                          adminInitiated: true,
+                                        }),
+                                      });
+                                      const data = await res.json();
+                                      if (!data.paymentUrl) throw new Error("Pas de lien");
+                                      // Envoyer l'email avec le lien
+                                      await fetch("/api/send-email", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                          to: email,
+                                          subject: `💳 Lien de paiement — ${due.toFixed(2)}€ · Centre Équestre d'Agon`,
+                                          html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+                                            <div style="background:#1e3a5f;color:white;padding:20px 24px;border-radius:12px 12px 0 0;">
+                                              <h2 style="margin:0;font-size:17px;">Centre Équestre d'Agon-Coutainville</h2>
+                                            </div>
+                                            <div style="background:#f8faff;padding:24px;border:1px solid #dde8ff;border-top:none;border-radius:0 0 12px 12px;">
+                                              <p style="margin:0 0 12px;">Bonjour <strong>${p.familyName}</strong>,</p>
+                                              <p style="margin:0 0 16px;color:#555;">Voici votre lien de paiement sécurisé pour régler :</p>
+                                              <div style="background:white;border:2px solid #2050A0;border-radius:8px;padding:16px;margin:16px 0;text-align:center;">
+                                                <div style="font-size:28px;font-weight:bold;color:#2050A0;">${due.toFixed(2)}€</div>
+                                                <div style="color:#666;font-size:12px;margin-top:6px;">${(p.items||[]).map((i:any)=>i.activityTitle).join(" · ").slice(0,80)}</div>
+                                              </div>
+                                              <div style="text-align:center;margin:24px 0;">
+                                                <a href="${data.paymentUrl}" style="background:#2050A0;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;display:inline-block;">
+                                                  💳 Payer en ligne
+                                                </a>
+                                              </div>
+                                              <p style="color:#999;font-size:11px;text-align:center;">Lien sécurisé Crédit Agricole · Paiement par carte bancaire</p>
+                                            </div>
+                                          </div>`,
+                                        }),
+                                      });
+                                      toast(`✅ Lien de paiement envoyé à ${email}`, "success");
+                                    } catch (e) {
+                                      console.error(e);
+                                      toast("Erreur lors de la création du lien", "error");
+                                    }
+                                    setSendingCawlLink(null);
+                                  }}
+                                  className="font-body text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-indigo-100 disabled:opacity-50 flex items-center gap-1">
+                                  {sendingCawlLink === p.id ? <Loader2 size={10} className="animate-spin"/> : "💳"} Envoyer lien CB
+                                </button>
+                              )}
                               <button onClick={() => { setEditPayment(p); setEditItems((p.items || []).map((i: any) => ({ ...i }))); setEditRemisePct(""); setEditRemiseEuros(""); }}
                                 className="font-body text-xs text-slate-600 bg-gray-100 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">✏️ Modifier</button>
                             </div>
