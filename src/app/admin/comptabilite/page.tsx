@@ -444,11 +444,37 @@ export default function ComptabilitePage() {
 
         // ── 3. Virement / SEPA / Prélèvement ──────────────────────────────
         if (label.includes("VIR") || label.includes("SEPA") || label.includes("PRLV")) {
-          // a) Match individuel virement/sepa
+          // a) Match individuel virement/sepa par montant exact
           const match = periodEnc.filter(inWindow).find(e =>
             (e.mode === "virement" || e.mode === "sepa" || e.mode === "prelevement_sepa") && Math.abs((e.montant || 0) - bl.amount) < 0.02
           );
           if (match) return { ...bl, matched: true, matchType: "Virement", matchDetail: `Virement ${match.familyName}` };
+
+          // b) Match virement par nom de famille dans le libellé bancaire
+          // Ex: "VIR DUPONT MARIE" → chercher famille "Dupont" dans les paiements virement en attente
+          const virPayments = payments.filter(p =>
+            p.paymentMode === "virement" && (p.status === "pending" || p.status === "partial")
+          );
+          const nameMatch = virPayments.find(p => {
+            if (!p.familyName) return false;
+            // Normaliser : "Dupont Marie" → ["DUPONT", "MARIE"]
+            const nameParts = p.familyName.toUpperCase().split(/\s+/).filter((n: string) => n.length > 2);
+            return nameParts.some((part: string) => label.includes(part));
+          });
+          if (nameMatch) {
+            const amountClose = Math.abs((nameMatch.totalTTC || 0) - bl.amount) < 0.02;
+            return {
+              ...bl, matched: true, matchType: "Virement",
+              matchDetail: `Virement ${nameMatch.familyName}${amountClose ? "" : ` ⚠️ montant: attendu ${nameMatch.totalTTC?.toFixed(2)}€, reçu ${bl.amount.toFixed(2)}€`}`,
+              manualPaymentId: nameMatch.id,
+            };
+          }
+
+          // c) Match par montant exact sur TOUS les paiements virement (même sans fenêtre)
+          const allVirMatch = payments.find(p =>
+            p.paymentMode === "virement" && Math.abs((p.totalTTC || 0) - bl.amount) < 0.02
+          );
+          if (allVirMatch) return { ...bl, matched: true, matchType: "Virement", matchDetail: `Virement ${allVirMatch.familyName}`, manualPaymentId: allVirMatch.id };
 
           // b) Match remise SEPA (somme des prélèvements groupés)
           if (label.includes("PRLV") || label.includes("SEPA")) {
@@ -1150,9 +1176,83 @@ export default function ComptabilitePage() {
       {/* ─── Rapprochement bancaire ─── */}
       {!loading && tab === "rapprochement" && (
         <div className="flex flex-col gap-5">
+
+          {/* ── Dashboard rapprochement ────────────────────────────────── */}
+          {(() => {
+            // Virements en attente depuis > 7 jours
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            const virAttendus = payments.filter(p =>
+              p.paymentMode === "virement" &&
+              (p.status === "pending" || p.status === "partial") &&
+              p.date?.seconds && new Date(p.date.seconds * 1000) < sevenDaysAgo
+            );
+            // Stats bankLines
+            const nbMatched = bankLines.filter(b => b.matched).length;
+            const nbPending = bankLines.filter(b => !b.matched).length;
+            const montantPending = bankLines.filter(b => !b.matched).reduce((s, b) => s + b.amount, 0);
+
+            return (
+              <>
+                {/* KPIs rapprochement */}
+                {bankLines.length > 0 && (
+                  <div className="grid grid-cols-3 gap-3">
+                    <Card padding="sm" className="text-center">
+                      <div className="font-body text-xl font-bold text-green-600">{nbMatched}</div>
+                      <div className="font-body text-[11px] text-slate-500">✅ Rapprochées</div>
+                    </Card>
+                    <Card padding="sm" className="text-center">
+                      <div className="font-body text-xl font-bold text-orange-500">{nbPending}</div>
+                      <div className="font-body text-[11px] text-slate-500">⏳ À traiter</div>
+                      {nbPending > 0 && <div className="font-body text-[10px] text-orange-400">{montantPending.toFixed(0)}€</div>}
+                    </Card>
+                    <Card padding="sm" className="text-center">
+                      <div className="font-body text-xl font-bold text-blue-500">
+                        {bankLines.length > 0 ? Math.round((nbMatched / bankLines.length) * 100) : 0}%
+                      </div>
+                      <div className="font-body text-[11px] text-slate-500">Taux match</div>
+                    </Card>
+                  </div>
+                )}
+
+                {/* Alertes virements attendus non reçus */}
+                {virAttendus.length > 0 && (
+                  <Card padding="md" className="border-orange-200 bg-orange-50">
+                    <div className="font-body text-sm font-semibold text-orange-700 mb-2">
+                      ⚠️ {virAttendus.length} virement{virAttendus.length > 1 ? "s" : ""} attendu{virAttendus.length > 1 ? "s" : ""} depuis plus de 7 jours
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      {virAttendus.map((p: any) => {
+                        const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
+                        const joursAttente = d ? Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24)) : "?";
+                        return (
+                          <div key={p.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
+                            <div>
+                              <span className="font-body text-sm font-semibold text-blue-800">{p.familyName}</span>
+                              <span className="font-body text-xs text-slate-500 ml-2">
+                                {(p.items || []).map((i: any) => i.activityTitle).join(", ").slice(0, 40)}
+                              </span>
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                              <div className="font-body text-sm font-bold text-orange-600">{(p.totalTTC || 0).toFixed(2)}€</div>
+                              <div className="font-body text-[10px] text-slate-400">J+{joursAttente}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="font-body text-xs text-orange-600 mt-2">
+                      Total attendu : <strong>{virAttendus.reduce((s: number, p: any) => s + (p.totalTTC || 0), 0).toFixed(2)}€</strong>
+                    </div>
+                  </Card>
+                )}
+              </>
+            );
+          })()}
+
           <Card padding="md" className="bg-blue-50 border-blue-500/8">
             <div className="font-body text-sm text-blue-800">
-              Importez votre relevé bancaire au format CSV pour rapprocher les mouvements avec vos encaissements. Les CB, Stripe, chèques et virements sont matchés automatiquement par montant. Cliquez sur "Pointer" pour les lignes non rapprochées.
+              Importez votre relevé bancaire au format CSV pour rapprocher les mouvements avec vos encaissements. Les virements sont également matchés par nom de famille dans le libellé. Cliquez sur "Pointer" pour les lignes non rapprochées.
             </div>
           </Card>
 
