@@ -308,6 +308,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <span className="font-display text-sm font-bold text-white">Admin</span>
           </div>
           <div className="flex items-center gap-2">
+            <Link href="/admin/dashboard" className="font-body text-xs text-white/70 no-underline flex items-center gap-1 bg-white/10 px-2.5 py-1.5 rounded-lg">
+              <BarChart3 size={12} /> Dashboard
+            </Link>
             <Link href="/" className="font-body text-xs text-white/50 no-underline flex items-center gap-1">
               <ExternalLink size={12} /> Site
             </Link>
