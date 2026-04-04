@@ -124,7 +124,8 @@ export default function ComptabilitePage() {
   // Filter by period
   const filteredPayments = useMemo(() => {
     return payments.filter((p) => {
-      if ((p as any).status === "cancelled") return false;
+      // Seules les factures (paid) apparaissent dans le journal — les proformas (pending/draft) sont exclues
+      if ((p as any).status === "cancelled" || (p as any).status === "pending" || (p as any).status === "draft") return false;
       const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
       if (!d) return false;
       const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;

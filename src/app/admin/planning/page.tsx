@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc, query, where, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import {
@@ -487,6 +487,19 @@ export default function PlanningPage() {
 
       if (isPaid) {
         // Encaissement immédiat → toujours créer un payment séparé (pas de fusion)
+        // Attribuer un numéro de facture séquentiel
+        let invoiceNumber = "";
+        try {
+          const year = new Date().getFullYear();
+          const counterRef = doc(db, "settings", "invoiceCounter");
+          const counterSnap = await getDoc(counterRef);
+          const currentNum = counterSnap.exists() ? (counterSnap.data()?.[`year_${year}`] || 0) : 0;
+          const nextNum = currentNum + 1;
+          await setDoc(counterRef, { [`year_${year}`]: nextNum }, { merge: true });
+          invoiceNumber = `F-${year}-${String(nextNum).padStart(4, "0")}`;
+        } catch (e) {
+          invoiceNumber = `F-${new Date().getFullYear()}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+        }
         const payRef = await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
           familyId: child.familyId, familyName: child.familyName,
           items: [newItem],
@@ -495,6 +508,7 @@ export default function PlanningPage() {
           paymentRef: "",
           status: "paid",
           paidAmount: Math.round(priceTTC * 100) / 100,
+          invoiceNumber,
           date: serverTimestamp(),
         });
         payRefId = payRef.id;

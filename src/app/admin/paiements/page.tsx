@@ -376,13 +376,32 @@ export default function PaiementsPage() {
     const displayMode = uniqueModes.length === 1 ? uniqueModes[0] : uniqueModes.length > 1 ? "mixte" : mode;
 
     // 4. Mettre à jour le payment avec paidAmount calculé
-    await updateDoc(doc(db, "payments", paymentId), {
+    const updateData: any = {
       paidAmount: totalEncaisse,
       status: newStatus,
       paymentMode: displayMode,
       paymentModes: uniqueModes,
       updatedAt: serverTimestamp(),
-    });
+    };
+
+    // 4b. Attribuer un numéro de facture séquentiel quand le paiement est soldé
+    if (newStatus === "paid" && !paymentData.invoiceNumber) {
+      try {
+        const year = new Date().getFullYear();
+        const counterRef = doc(db, "settings", "invoiceCounter");
+        const counterSnap = await getDoc(counterRef);
+        const currentNum = counterSnap.exists() ? (counterSnap.data()?.[`year_${year}`] || 0) : 0;
+        const nextNum = currentNum + 1;
+        await setDoc(counterRef, { [`year_${year}`]: nextNum }, { merge: true });
+        updateData.invoiceNumber = `F-${year}-${String(nextNum).padStart(4, "0")}`;
+      } catch (e) {
+        console.error("Erreur attribution numéro facture:", e);
+        // Fallback
+        updateData.invoiceNumber = `F-${new Date().getFullYear()}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+      }
+    }
+
+    await updateDoc(doc(db, "payments", paymentId), updateData);
 
     // 5. Attribuer des points de fidélité (1 point par euro encaissé)
     // Ne pas attribuer sur les avoirs ni les remboursements
@@ -1669,8 +1688,9 @@ export default function PaiementsPage() {
             const [searchFilter, setSearchFilter] = [histSearch, setHistSearch];
             const [periodFilter, setPeriodFilter] = [histPeriod, setHistPeriod];
 
-            // Filtrage — inclure les annulés, exclure seulement les SEPA programmés
-            let filtered = payments.filter(p => p.status !== "sepa_scheduled");
+            // Filtrage — Historique = factures uniquement (paid, partial encaissé, cancelled)
+            // Les pending/draft sont des proformas → visibles dans Impayés, pas ici
+            let filtered = payments.filter(p => p.status === "paid" || p.status === "partial" || p.status === "cancelled");
             // Inclure aussi les encaissements "avoir" qui n'ont pas de payment lié dans payments
             const avoirEncaissements = encaissements
               .filter((e: any) => e.mode === "avoir" && !payments.some(p => p.id === e.paymentId))
@@ -1778,7 +1798,7 @@ export default function PaiementsPage() {
                     {filtered.map((p, idx) => {
                       const date = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
                       const mode = paymentModes.find((m) => m.id === p.paymentMode);
-                      const invoiceNum = `F${date.getFullYear()}-${String(payments.length - payments.indexOf(p)).padStart(3, "0")}`;
+                      const invoiceNum = (p as any).invoiceNumber || `PF-${((p as any).orderId || p.id || "").slice(-6).toUpperCase()}`;
                       const ht = (p.items || []).reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
                       const displayTTC = (p as any).originalTotalTTC || p.totalTTC || 0;
                       const printInvoice = async () => {
@@ -2219,7 +2239,7 @@ export default function PaiementsPage() {
                                   const totalHT = items.reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
                                   const totalTTC = p.totalTTC || 0;
                                   const invDate = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
-                                  const invoiceNumber = (p as any).orderId || `F-${invDate.getFullYear()}${String(invDate.getMonth()+1).padStart(2,"0")}-${(p.id || "").slice(-4).toUpperCase()}`;
+                                  const invoiceNumber = (p as any).invoiceNumber || `PF-${((p as any).orderId || p.id || "").slice(-6).toUpperCase()}`;
                                   await downloadInvoicePdf({ invoiceNumber, date: invDate.toLocaleDateString("fr-FR"), familyName: p.familyName, familyEmail: families.find(f => f.firestoreId === p.familyId)?.parentEmail || "", items, totalHT, totalTVA: totalTTC - totalHT, totalTTC, paidAmount: p.paidAmount || 0, paymentMode: p.paymentMode ? (paymentModes.find(m => m.id === p.paymentMode)?.label || p.paymentMode) : "", paymentDate: p.paidAmount > 0 ? invDate.toLocaleDateString("fr-FR") : "" });
                                 }} className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1"><Receipt size={10}/> Facture</button>
                                 <button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1"><Plus size={10}/> Dupliquer</button>
