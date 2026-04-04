@@ -588,14 +588,17 @@ export default function PaiementsPage() {
       const expiry = new Date();
       expiry.setFullYear(expiry.getFullYear() + 1);
 
+      const avoirAmount = Math.round(totalEnc * 100) / 100;
+      const avoirReason = `Annulation commande — ${(payment.items || []).map((i: any) => i.activityTitle).join(", ").slice(0, 60)}`;
+
       await addDoc(collection(db, "avoirs"), {
         familyId: payment.familyId,
         familyName: payment.familyName,
         type: "avoir",
-        amount: Math.round(totalEnc * 100) / 100,
+        amount: avoirAmount,
         usedAmount: 0,
-        remainingAmount: Math.round(totalEnc * 100) / 100,
-        reason: `Annulation commande — ${(payment.items || []).map((i: any) => i.activityTitle).join(", ").slice(0, 60)}`,
+        remainingAmount: avoirAmount,
+        reason: avoirReason,
         reference: ref,
         sourcePaymentId: payment.id,
         sourceType: "annulation",
@@ -604,6 +607,21 @@ export default function PaiementsPage() {
         usageHistory: [],
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+      });
+
+      // Trace dans le journal des encaissements (montant négatif = avoir)
+      await addDoc(collection(db, "encaissements"), {
+        paymentId: payment.id,
+        familyId: payment.familyId,
+        familyName: payment.familyName,
+        montant: -avoirAmount,
+        mode: "avoir",
+        modeLabel: "Avoir (annulation)",
+        ref: ref,
+        activityTitle: (payment.items || []).map((i: any) => i.activityTitle).join(", "),
+        date: serverTimestamp(),
+        isAvoir: true,
+        avoirRef: ref,
       });
 
       const warnMsg = unenrollErrors > 0 ? `\n⚠️ ${unenrollErrors} désinscription(s) à vérifier manuellement.` : "";
@@ -653,14 +671,15 @@ export default function PaiementsPage() {
         const ref = `AV-${Date.now().toString(36).toUpperCase()}`;
         const expiry = new Date();
         expiry.setFullYear(expiry.getFullYear() + 1);
+        const tropPercuAmount = Math.round(tropPercu * 100) / 100;
 
         await addDoc(collection(db, "avoirs"), {
           familyId: payment.familyId,
           familyName: payment.familyName,
           type: "avoir",
-          amount: Math.round(tropPercu * 100) / 100,
+          amount: tropPercuAmount,
           usedAmount: 0,
-          remainingAmount: Math.round(tropPercu * 100) / 100,
+          remainingAmount: tropPercuAmount,
           reason: `Retrait prestation — ${itemToRemove.activityTitle}`,
           reference: ref,
           sourcePaymentId: payment.id,
@@ -670,6 +689,21 @@ export default function PaiementsPage() {
           usageHistory: [],
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
+        });
+
+        // Trace dans le journal des encaissements (montant négatif = avoir)
+        await addDoc(collection(db, "encaissements"), {
+          paymentId: payment.id,
+          familyId: payment.familyId,
+          familyName: payment.familyName,
+          montant: -tropPercuAmount,
+          mode: "avoir",
+          modeLabel: "Avoir (trop-perçu)",
+          ref: ref,
+          activityTitle: itemToRemove.activityTitle,
+          date: serverTimestamp(),
+          isAvoir: true,
+          avoirRef: ref,
         });
       }
 

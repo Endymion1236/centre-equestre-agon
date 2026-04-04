@@ -5,8 +5,9 @@ import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
+import { downloadAvoirPdf } from "@/lib/download-avoir";
 import {
-  Plus, Search, Loader2, X, Save, Wallet, CreditCard, TrendingDown, TrendingUp, Check, BadgeEuro,
+  Plus, Search, Loader2, X, Save, Wallet, CreditCard, TrendingDown, TrendingUp, Check, BadgeEuro, FileDown,
 } from "lucide-react";
 import type { Family } from "@/types";
 
@@ -124,6 +125,21 @@ export default function AvoirsPage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+
+      // Trace dans le journal des encaissements (montant négatif)
+      await addDoc(collection(db, "encaissements"), {
+        paymentId: "",
+        familyId: selFamily,
+        familyName: fam?.parentName || "",
+        montant: -amt,
+        mode: "avoir",
+        modeLabel: avoirType === "avoir" ? "Avoir (création manuelle)" : "Avance (création manuelle)",
+        ref: ref,
+        activityTitle: reason || (avoirType === "avoir" ? "Avoir" : "Avance"),
+        date: serverTimestamp(),
+        isAvoir: true,
+        avoirRef: ref,
+      });
       setSelFamily("");
       setAmount("");
       setReason("");
@@ -201,6 +217,21 @@ export default function AvoirsPage() {
         reference: rembRef || avoir.reference,
         date: new Date().toISOString(),
         createdAt: serverTimestamp(),
+      });
+      // Trace dans le journal des encaissements (sortie de trésorerie)
+      await addDoc(collection(db, "encaissements"), {
+        paymentId: "",
+        familyId: avoir.familyId,
+        familyName: avoir.familyName,
+        montant: -avoir.remainingAmount,
+        mode: rembMode,
+        modeLabel: `Remboursement avoir (${rembMode})`,
+        ref: avoir.reference,
+        activityTitle: `Remboursement avoir ${avoir.reference}`,
+        date: serverTimestamp(),
+        isAvoir: true,
+        avoirRef: avoir.reference,
+        isRemboursement: true,
       });
       setShowRembModal(false);
       setRembAvoirId(null);
@@ -346,6 +377,25 @@ export default function AvoirsPage() {
                             </button>
                           </div>
                         )}
+                        <button onClick={() => {
+                          const d = a.createdAt?.toDate ? a.createdAt.toDate() : new Date();
+                          const exp = a.expiryDate?.toDate ? a.expiryDate.toDate() : null;
+                          downloadAvoirPdf({
+                            avoirNumber: a.reference,
+                            date: d.toLocaleDateString("fr-FR"),
+                            familyName: a.familyName,
+                            reason: a.reason || "",
+                            items: [],
+                            totalHT: Math.round(a.amount / 1.055 * 100) / 100,
+                            totalTVA: Math.round((a.amount - a.amount / 1.055) * 100) / 100,
+                            totalTTC: a.amount,
+                            type: a.type || "avoir",
+                            expiryDate: exp ? exp.toLocaleDateString("fr-FR") : "—",
+                          });
+                        }}
+                          className="font-body text-xs text-slate-500 bg-slate-50 px-3 py-1 rounded-lg border-none cursor-pointer hover:bg-slate-100 flex items-center gap-1 mt-1">
+                          <FileDown size={12} /> PDF
+                        </button>
                       </div>
                     </div>
                     {/* Usage history */}

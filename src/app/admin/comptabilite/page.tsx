@@ -717,13 +717,15 @@ export default function ComptabilitePage() {
           return pm === period;
         });
         const totalEncaisse = periodEncaissements.reduce((s, e) => s + (e.montant || 0), 0);
+        const totalAvoirsEmis = periodEncaissements.filter(e => e.isAvoir).reduce((s, e) => s + Math.abs(e.montant || 0), 0);
         return (
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 mb-6">
             {[
               { label: "CA HT", value: `${totalHT.toFixed(0)}€`, color: "text-blue-500" },
               { label: "TVA collectée", value: `${totalTVA.toFixed(0)}€`, color: "text-orange-500" },
               { label: "CA TTC (facturé)", value: `${totalTTC.toFixed(0)}€`, color: "text-blue-800" },
               { label: "Total encaissé", value: `${totalEncaisse.toFixed(0)}€`, color: "text-green-600" },
+              { label: "Avoirs émis", value: totalAvoirsEmis > 0 ? `-${totalAvoirsEmis.toFixed(0)}€` : "0€", color: totalAvoirsEmis > 0 ? "text-red-500" : "text-slate-400" },
               { label: "Paiements", value: filteredPayments.length.toString(), color: "text-slate-600" },
             ].map((k, i) => (
               <Card key={i} padding="sm">
@@ -780,6 +782,47 @@ export default function ComptabilitePage() {
                   </div>
                 );
               })}
+
+              {/* ── Avoirs (encaissements négatifs) ── */}
+              {(() => {
+                const avoirEncaissements = encaissementsCompta.filter(e => {
+                  if (!e.isAvoir) return false;
+                  const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+                  if (!d) return false;
+                  const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                  return pm === period;
+                });
+                if (avoirEncaissements.length === 0) return null;
+                const totalAvoirs = avoirEncaissements.reduce((s, e) => s + Math.abs(e.montant || 0), 0);
+                return (
+                  <>
+                    <div className="px-5 py-2 bg-red-50/50 border-b border-red-200/50 flex font-body text-[10px] font-semibold text-red-500 uppercase tracking-wider">
+                      <span>Avoirs émis sur la période</span>
+                    </div>
+                    {avoirEncaissements.map((e: any) => {
+                      const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : new Date();
+                      return (
+                        <div key={e.id} className="px-5 py-3 border-b border-red-100/50 last:border-b-0 flex items-center hover:bg-red-50/20 bg-red-50/10">
+                          <span className="w-20 font-body text-xs text-slate-500">{d.toLocaleDateString("fr-FR")}</span>
+                          <span className="flex-1 font-body text-sm font-semibold text-red-700">{e.familyName}</span>
+                          <span className="w-40 font-body text-xs text-red-500 truncate">{e.activityTitle || e.modeLabel || "Avoir"}</span>
+                          <span className="w-20 text-center"><Badge color="red">{e.avoirRef || "Avoir"}</Badge></span>
+                          <span className="w-16 text-right font-body text-xs text-red-400">—</span>
+                          <span className="w-16 text-right font-body text-xs text-red-400">—</span>
+                          <span className="w-16 text-right font-body text-sm font-semibold text-red-600">-{Math.abs(e.montant || 0).toFixed(2)}€</span>
+                        </div>
+                      );
+                    })}
+                    <div className="px-5 py-2 bg-red-50/30 flex font-body text-xs font-semibold text-red-600">
+                      <span className="flex-1">Total avoirs</span>
+                      <span className="w-40"></span><span className="w-20"></span>
+                      <span className="w-16"></span><span className="w-16"></span>
+                      <span className="w-16 text-right">-{totalAvoirs.toFixed(2)}€</span>
+                    </div>
+                  </>
+                );
+              })()}
+
               <div className="px-5 py-3 bg-sand flex font-body text-sm font-bold">
                 <span className="flex-1">TOTAL</span>
                 <span className="w-40"></span><span className="w-20"></span>
