@@ -12,6 +12,7 @@ import { useAgentContext } from "@/hooks/useAgentContext";
 import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle, Copy, ChevronDown } from "lucide-react";
 import { openHtmlInTab } from "@/lib/open-html-tab";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
+import { downloadAvoirPdf } from "@/lib/download-avoir";
 import type { Family, Activity } from "@/types";
 
 /** Normalise un payment chargé depuis Firestore — tue les NaN à la source */
@@ -559,6 +560,7 @@ export default function PaiementsPage() {
         status: "cancelled",
         cancelledAt: serverTimestamp(),
         cancelReason: "Annulation manuelle",
+        originalTotalTTC: payment.totalTTC || 0,
         updatedAt: serverTimestamp(),
       });
 
@@ -710,7 +712,9 @@ export default function PaiementsPage() {
       if (newItems.length === 0) {
         await updateDoc(doc(db, "payments", payment.id), {
           status: "cancelled", cancelledAt: serverTimestamp(),
-          cancelReason: "Dernière prestation retirée", updatedAt: serverTimestamp(),
+          cancelReason: "Dernière prestation retirée",
+          originalTotalTTC: payment.originalTotalTTC || payment.totalTTC || 0,
+          updatedAt: serverTimestamp(),
         });
       } else {
         const newPaid = Math.min(totalEnc, newTotal);
@@ -1775,6 +1779,7 @@ export default function PaiementsPage() {
                       const mode = paymentModes.find((m) => m.id === p.paymentMode);
                       const invoiceNum = `F${date.getFullYear()}-${String(payments.length - payments.indexOf(p)).padStart(3, "0")}`;
                       const ht = (p.items || []).reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
+                      const displayTTC = (p as any).originalTotalTTC || p.totalTTC || 0;
                       const printInvoice = async () => {
                         await downloadInvoicePdf({
                           invoiceNumber: invoiceNum, date: date.toLocaleDateString("fr-FR"),
@@ -1786,16 +1791,42 @@ export default function PaiementsPage() {
                           paidAmount: p.paidAmount || p.totalTTC || 0,
                         });
                       };
+                      // Trouver l'avoir lié pour les annulés
+                      const linkedAvoir = p.status === "cancelled" ? avoirs.find((a: any) => a.sourcePaymentId === p.id && a.type === "avoir") : null;
+                      const printAvoir = linkedAvoir ? async () => {
+                        const avoirDate = linkedAvoir.createdAt?.toDate ? linkedAvoir.createdAt.toDate() : new Date();
+                        const expDate = linkedAvoir.expiryDate?.toDate ? linkedAvoir.expiryDate.toDate() : null;
+                        await downloadAvoirPdf({
+                          avoirNumber: linkedAvoir.reference,
+                          date: avoirDate.toLocaleDateString("fr-FR"),
+                          familyName: p.familyName,
+                          familyEmail: families.find(f => f.firestoreId === p.familyId)?.parentEmail || "",
+                          sourceInvoiceNumber: invoiceNum,
+                          reason: linkedAvoir.reason || `Annulation ${invoiceNum}`,
+                          items: (p.items || []).map((i: any) => ({ ...i, description: i.activityTitle })),
+                          totalHT: Math.round(linkedAvoir.amount / 1.055 * 100) / 100,
+                          totalTVA: Math.round((linkedAvoir.amount - linkedAvoir.amount / 1.055) * 100) / 100,
+                          totalTTC: linkedAvoir.amount,
+                          type: "avoir",
+                          expiryDate: expDate ? expDate.toLocaleDateString("fr-FR") : "—",
+                        });
+                      } : null;
                       return (
                         <div key={p.id || idx} className={`px-5 py-3 border-b border-blue-500/8 last:border-b-0 flex items-center hover:bg-blue-50/30 transition-colors ${p.status === "cancelled" ? "bg-red-50/30 opacity-70" : ""}`}>
                           <span className="w-20 font-body text-xs text-slate-600">{date.toLocaleDateString("fr-FR")}</span>
                           <span className="w-20 font-body text-xs font-semibold text-blue-800">{invoiceNum}</span>
                           <span className="flex-1"><div className={`font-body text-sm font-semibold ${p.status === "cancelled" ? "text-red-600 line-through" : "text-blue-800"}`}>{p.familyName}</div></span>
                           <span className="w-32 font-body text-xs text-slate-600 truncate">{(p.items || []).map((i: any) => i.activityTitle).join(", ")}</span>
-                          <span className={`w-20 text-right font-body text-sm font-bold ${p.status === "cancelled" ? "text-red-500 line-through" : "text-blue-500"}`}>{p.totalTTC?.toFixed(2)}€</span>
+                          <span className={`w-20 text-right font-body text-sm font-bold ${p.status === "cancelled" ? "text-red-500 line-through" : "text-blue-500"}`}>{displayTTC.toFixed(2)}€</span>
                           <span className="w-20 text-center"><Badge color={p.status === "cancelled" ? "red" : "blue"}>{(p.paymentMode as string) === "mixte" && (p as any).paymentModes ? (p as any).paymentModes.map((m: string) => paymentModes.find(pm => pm.id === m)?.label?.replace("(CAWL)", "").trim() || m).join(" + ") : mode?.label || p.paymentMode}</Badge></span>
                           <span className="w-16 text-center"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "cancelled" ? "red" : p.status === "draft" ? "blue" : "gray"}>{p.status === "paid" ? "Réglé" : p.status === "partial" ? "Partiel" : p.status === "cancelled" ? "Annulé" : p.status === "draft" ? "Brouillon" : "À régler"}</Badge></span>
-                          <span className="w-16 text-center"><button onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button></span>
+                          <span className="w-16 text-center">
+                            {p.status === "cancelled" && printAvoir ? (
+                              <button onClick={printAvoir} title="Télécharger l'avoir PDF" className="font-body text-xs text-red-500 bg-red-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-red-100"><Receipt size={12} /></button>
+                            ) : (
+                              <button onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button>
+                            )}
+                          </span>
                           <span className="w-16 text-center"><button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} title="Dupliquer cette commande" className="font-body text-xs text-purple-500 bg-purple-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-purple-100"><Copy size={12} /></button></span>
                         </div>
                       );

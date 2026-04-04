@@ -684,11 +684,14 @@ export default function PlanningPage() {
         const montantAvoir = matchItem.priceTTC || 0;
         const newItems = (paymentData.items || []).filter((i: any) => i !== matchItem);
         const newTotal = newItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
+        // Conserver le montant original pour l'historique
+        const originalTotalTTC = paymentData.originalTotalTTC || paymentData.totalTTC || 0;
 
         if (newItems.length === 0) {
           await updateDoc(doc(db, "payments", paymentDoc.id), {
             status: "cancelled", cancelledAt: serverTimestamp(),
             cancelReason: `Désinscription ${child.childName}`, updatedAt: serverTimestamp(),
+            originalTotalTTC,
           });
         } else {
           const newPaid = Math.min(paymentData.paidAmount || 0, newTotal);
@@ -697,6 +700,7 @@ export default function PlanningPage() {
             paidAmount: Math.round(newPaid * 100) / 100,
             status: newPaid >= newTotal ? "paid" : newPaid > 0 ? "partial" : "pending",
             updatedAt: serverTimestamp(),
+            originalTotalTTC,
           });
         }
 
