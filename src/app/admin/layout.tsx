@@ -143,6 +143,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [showVoice, setShowVoice] = useState(false);
   const [voiceContext, setVoiceContext] = useState<Record<string, any>>({});
   const [moduleContext, setModuleContext] = useState<Record<string, any>>({});
+  const [nbImpayes, setNbImpayes] = useState(0);
+
+  // Charger le nombre d'impayés
+  useEffect(() => {
+    if (!user || !isAdmin) return;
+    getDocs(collection(db, "payments")).then(snap => {
+      const count = snap.docs.filter(d => {
+        const s = d.data().status;
+        return s === "pending" || s === "partial";
+      }).length;
+      setNbImpayes(count);
+    }).catch(() => {});
+  }, [user, isAdmin]);
 
   // Écouter les événements des modules pour enrichir le contexte agent
   useEffect(() => {
@@ -311,6 +324,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Link href="/admin/dashboard" className="font-body text-xs text-white/70 no-underline flex items-center gap-1 bg-white/10 px-2.5 py-1.5 rounded-lg">
               <BarChart3 size={12} /> Dashboard
             </Link>
+            {nbImpayes > 0 && (
+              <Link href="/admin/paiements?tab=impayes" className="font-body text-xs text-white no-underline flex items-center gap-1 bg-red-500/80 px-2.5 py-1.5 rounded-lg">
+                <CreditCard size={12} /> {nbImpayes}
+              </Link>
+            )}
             <Link href="/" className="font-body text-xs text-white/50 no-underline flex items-center gap-1">
               <ExternalLink size={12} /> Site
             </Link>
@@ -355,7 +373,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         )}
 
-        <div className="p-4 md:p-8 max-w-[960px]">
+        <div className="p-4 md:p-8 max-w-[960px] relative">
+          {/* Badge impayés desktop */}
+          {nbImpayes > 0 && (
+            <div className="hidden md:block absolute top-4 right-4">
+              <Link href="/admin/paiements?tab=impayes" className="flex items-center gap-2 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 px-4 py-2 rounded-xl no-underline transition-colors">
+                <CreditCard size={14} />
+                <span className="font-body text-sm font-semibold">{nbImpayes} impayé{nbImpayes > 1 ? "s" : ""}</span>
+              </Link>
+            </div>
+          )}
           {children}
         </div>
 

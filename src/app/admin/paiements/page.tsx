@@ -124,7 +124,8 @@ export default function PaiementsPage() {
   const searchParams = useSearchParams();
   const urlSearch = searchParams.get("search") || "";
   const urlFamily = searchParams.get("family") || "";
-  const [tab, setTab] = useState<"encaisser" | "journal" | "historique" | "echeances" | "impayes" | "declarations">(urlSearch ? "impayes" : "encaisser");
+  const urlTab = searchParams.get("tab") || "";
+  const [tab, setTab] = useState<"encaisser" | "journal" | "historique" | "echeances" | "impayes" | "declarations">(urlTab === "impayes" ? "impayes" : urlSearch ? "impayes" : "encaisser");
   const [editPayment, setEditPayment] = useState<any | null>(null);
   const [quickEncaisser, setQuickEncaisser] = useState<{ payment: any } | null>(null);
   const [sendingCawlLink, setSendingCawlLink] = useState<string | null>(null); // paymentId en cours
