@@ -266,14 +266,15 @@ export async function createAvoir(
   const ref = `AV-${Date.now().toString(36).toUpperCase()}`;
   const expiry = new Date();
   expiry.setFullYear(expiry.getFullYear() + 1);
+  const amount = Math.round(montant * 100) / 100;
 
   await addDoc(collection(db, "avoirs"), {
     familyId,
     familyName,
     type: "avoir",
-    amount: Math.round(montant * 100) / 100,
+    amount,
     usedAmount: 0,
-    remainingAmount: Math.round(montant * 100) / 100,
+    remainingAmount: amount,
     reason,
     reference: ref,
     sourcePaymentId: sourcePaymentId || "",
@@ -283,6 +284,21 @@ export async function createAvoir(
     usageHistory: [],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
+  });
+
+  // Trace dans le journal des encaissements (montant négatif = avoir)
+  await addDoc(collection(db, "encaissements"), {
+    paymentId: sourcePaymentId || "",
+    familyId,
+    familyName,
+    montant: -amount,
+    mode: "avoir",
+    modeLabel: `Avoir (${sourceType || "désinscription"})`,
+    ref,
+    activityTitle: reason,
+    date: serverTimestamp(),
+    isAvoir: true,
+    avoirRef: ref,
   });
 
   return ref;
