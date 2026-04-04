@@ -376,12 +376,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="p-4 md:p-8 max-w-[960px] relative">
           {/* Badge impayés desktop */}
           {nbImpayes > 0 && (
-            <div className="hidden md:flex fixed top-3 right-6 z-40">
-              <Link href="/admin/paiements?tab=impayes" className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg no-underline transition-colors shadow-sm">
-                <CreditCard size={13} />
-                <span className="font-body text-xs font-semibold">{nbImpayes} impayé{nbImpayes > 1 ? "s" : ""}</span>
-              </Link>
-            </div>
+            <Link href="/admin/paiements?tab=impayes" className="hidden md:flex fixed top-3 right-3 z-40 w-10 h-10 items-center justify-center no-underline" title={`${nbImpayes} impayé${nbImpayes > 1 ? "s" : ""}`}>
+              <CreditCard size={20} className="text-red-500" />
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white font-body text-[10px] font-bold rounded-full flex items-center justify-center">{nbImpayes}</span>
+            </Link>
           )}
           {children}
         </div>
