@@ -1664,8 +1664,8 @@ export default function PaiementsPage() {
             const [searchFilter, setSearchFilter] = [histSearch, setHistSearch];
             const [periodFilter, setPeriodFilter] = [histPeriod, setHistPeriod];
 
-            // Filtrage — exclure les annulés et les SEPA programmés par défaut
-            let filtered = payments.filter(p => p.status !== "cancelled" && p.status !== "sepa_scheduled");
+            // Filtrage — inclure les annulés, exclure seulement les SEPA programmés
+            let filtered = payments.filter(p => p.status !== "sepa_scheduled");
             // Inclure aussi les encaissements "avoir" qui n'ont pas de payment lié dans payments
             const avoirEncaissements = encaissements
               .filter((e: any) => e.mode === "avoir" && !payments.some(p => p.id === e.paymentId))
@@ -1727,7 +1727,7 @@ export default function PaiementsPage() {
                 {/* Filtres : statut + recherche + période */}
                 <div className="flex flex-wrap gap-3 mb-4 items-center">
                   <div className="flex gap-1.5">
-                    {([["all", "Tous"], ["paid", "Réglés"], ["pending", "À régler"], ["partial", "Partiels"]] as const).map(([val, label]) => (
+                    {([["all", "Tous"], ["paid", "Réglés"], ["pending", "À régler"], ["partial", "Partiels"], ["cancelled", "Annulés"]] as const).map(([val, label]) => (
                       <button key={val} onClick={() => setHistStatusFilter(val as any)}
                         className={`font-body text-xs px-3 py-1.5 rounded-lg border-none cursor-pointer transition-all ${histStatusFilter === val ? "bg-blue-500 text-white" : "bg-white text-slate-600 border border-gray-200"}`}>
                         {label}
@@ -1787,14 +1787,14 @@ export default function PaiementsPage() {
                         });
                       };
                       return (
-                        <div key={p.id || idx} className="px-5 py-3 border-b border-blue-500/8 last:border-b-0 flex items-center hover:bg-blue-50/30 transition-colors">
+                        <div key={p.id || idx} className={`px-5 py-3 border-b border-blue-500/8 last:border-b-0 flex items-center hover:bg-blue-50/30 transition-colors ${p.status === "cancelled" ? "bg-red-50/30 opacity-70" : ""}`}>
                           <span className="w-20 font-body text-xs text-slate-600">{date.toLocaleDateString("fr-FR")}</span>
                           <span className="w-20 font-body text-xs font-semibold text-blue-800">{invoiceNum}</span>
-                          <span className="flex-1"><div className="font-body text-sm font-semibold text-blue-800">{p.familyName}</div></span>
+                          <span className="flex-1"><div className={`font-body text-sm font-semibold ${p.status === "cancelled" ? "text-red-600 line-through" : "text-blue-800"}`}>{p.familyName}</div></span>
                           <span className="w-32 font-body text-xs text-slate-600 truncate">{(p.items || []).map((i: any) => i.activityTitle).join(", ")}</span>
-                          <span className="w-20 text-right font-body text-sm font-bold text-blue-500">{p.totalTTC?.toFixed(2)}€</span>
-                          <span className="w-20 text-center"><Badge color="blue">{(p.paymentMode as string) === "mixte" && (p as any).paymentModes ? (p as any).paymentModes.map((m: string) => paymentModes.find(pm => pm.id === m)?.label?.replace("(CAWL)", "").trim() || m).join(" + ") : mode?.label || p.paymentMode}</Badge></span>
-                          <span className="w-16 text-center"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "draft" ? "blue" : "gray"}>{p.status === "paid" ? "Réglé" : p.status === "partial" ? "Partiel" : p.status === "draft" ? "Brouillon" : "À régler"}</Badge></span>
+                          <span className={`w-20 text-right font-body text-sm font-bold ${p.status === "cancelled" ? "text-red-500 line-through" : "text-blue-500"}`}>{p.totalTTC?.toFixed(2)}€</span>
+                          <span className="w-20 text-center"><Badge color={p.status === "cancelled" ? "red" : "blue"}>{(p.paymentMode as string) === "mixte" && (p as any).paymentModes ? (p as any).paymentModes.map((m: string) => paymentModes.find(pm => pm.id === m)?.label?.replace("(CAWL)", "").trim() || m).join(" + ") : mode?.label || p.paymentMode}</Badge></span>
+                          <span className="w-16 text-center"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "cancelled" ? "red" : p.status === "draft" ? "blue" : "gray"}>{p.status === "paid" ? "Réglé" : p.status === "partial" ? "Partiel" : p.status === "cancelled" ? "Annulé" : p.status === "draft" ? "Brouillon" : "À régler"}</Badge></span>
                           <span className="w-16 text-center"><button onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button></span>
                           <span className="w-16 text-center"><button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} title="Dupliquer cette commande" className="font-body text-xs text-purple-500 bg-purple-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-purple-100"><Copy size={12} /></button></span>
                         </div>

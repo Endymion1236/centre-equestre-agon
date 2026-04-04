@@ -753,6 +753,8 @@ export default function ComptabilitePage() {
       {/* ─── Journal des ventes ─── */}
       {!loading && tab === "journal" && (
         <Card className="!p-0 overflow-hidden">
+          <div className="overflow-x-auto">
+          <div className="min-w-[700px]">
           <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
             <span className="w-20">Date</span>
             <span className="flex-1">Client</span>
@@ -832,6 +834,8 @@ export default function ComptabilitePage() {
               </div>
             </>
           )}
+          </div>
+          </div>
         </Card>
       )}
 
