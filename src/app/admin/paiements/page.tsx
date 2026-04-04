@@ -1792,25 +1792,36 @@ export default function PaiementsPage() {
                           paidAmount: p.paidAmount || p.totalTTC || 0,
                         });
                       };
-                      // Trouver l'avoir lié pour les annulés
-                      const linkedAvoir = p.status === "cancelled" ? avoirs.find((a: any) => a.sourcePaymentId === p.id && a.type === "avoir") : null;
-                      const printAvoir = linkedAvoir ? async () => {
-                        const avoirDate = linkedAvoir.createdAt?.toDate ? linkedAvoir.createdAt.toDate() : new Date();
-                        const expDate = linkedAvoir.expiryDate?.toDate ? linkedAvoir.expiryDate.toDate() : null;
-                        await downloadAvoirPdf({
-                          avoirNumber: linkedAvoir.reference,
-                          date: avoirDate.toLocaleDateString("fr-FR"),
-                          familyName: p.familyName,
-                          familyEmail: families.find(f => f.firestoreId === p.familyId)?.parentEmail || "",
-                          sourceInvoiceNumber: invoiceNum,
-                          reason: linkedAvoir.reason || `Annulation ${invoiceNum}`,
-                          items: (p.items || []).map((i: any) => ({ ...i, description: i.activityTitle })),
-                          totalHT: Math.round(linkedAvoir.amount / 1.055 * 100) / 100,
-                          totalTVA: Math.round((linkedAvoir.amount - linkedAvoir.amount / 1.055) * 100) / 100,
-                          totalTTC: linkedAvoir.amount,
-                          type: "avoir",
-                          expiryDate: expDate ? expDate.toLocaleDateString("fr-FR") : "—",
-                        });
+                      // Trouver TOUS les avoirs liés pour les annulés
+                      const linkedAvoirs = p.status === "cancelled" ? avoirs.filter((a: any) => a.sourcePaymentId === p.id && a.type === "avoir") : [];
+                      const printAllAvoirs = linkedAvoirs.length > 0 ? async () => {
+                        for (const av of linkedAvoirs) {
+                          const avoirDate = av.createdAt?.toDate ? av.createdAt.toDate() : new Date();
+                          const expDate = av.expiryDate?.toDate ? av.expiryDate.toDate() : null;
+                          // Extraire l'item correspondant à cet avoir depuis le motif
+                          const avoirItems = av.reason ? [{
+                            activityTitle: av.reason.replace("Désinscription ", "").replace(" — ", " — "),
+                            childName: "",
+                            priceHT: Math.round(av.amount / 1.055 * 100) / 100,
+                            priceTTC: av.amount,
+                            tva: 5.5,
+                            quantity: 1,
+                          }] : (p.items || []).map((i: any) => ({ ...i, description: i.activityTitle }));
+                          await downloadAvoirPdf({
+                            avoirNumber: av.reference,
+                            date: avoirDate.toLocaleDateString("fr-FR"),
+                            familyName: p.familyName,
+                            familyEmail: families.find(f => f.firestoreId === p.familyId)?.parentEmail || "",
+                            sourceInvoiceNumber: invoiceNum,
+                            reason: av.reason || `Annulation ${invoiceNum}`,
+                            items: avoirItems,
+                            totalHT: Math.round(av.amount / 1.055 * 100) / 100,
+                            totalTVA: Math.round((av.amount - av.amount / 1.055) * 100) / 100,
+                            totalTTC: av.amount,
+                            type: "avoir",
+                            expiryDate: expDate ? expDate.toLocaleDateString("fr-FR") : "—",
+                          });
+                        }
                       } : null;
                       return (
                         <div key={p.id || idx} className={`px-5 py-3 border-b border-blue-500/8 last:border-b-0 flex items-center hover:bg-blue-50/30 transition-colors ${p.status === "cancelled" ? "bg-red-50/30 opacity-70" : ""}`}>
@@ -1822,8 +1833,8 @@ export default function PaiementsPage() {
                           <span className="w-20 text-center"><Badge color={p.status === "cancelled" ? "red" : "blue"}>{(p.paymentMode as string) === "mixte" && (p as any).paymentModes ? (p as any).paymentModes.map((m: string) => paymentModes.find(pm => pm.id === m)?.label?.replace("(CAWL)", "").trim() || m).join(" + ") : mode?.label || p.paymentMode}</Badge></span>
                           <span className="w-16 text-center"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "cancelled" ? "red" : p.status === "draft" ? "blue" : "gray"}>{p.status === "paid" ? "Réglé" : p.status === "partial" ? "Partiel" : p.status === "cancelled" ? "Annulé" : p.status === "draft" ? "Brouillon" : "À régler"}</Badge></span>
                           <span className="w-16 text-center">
-                            {p.status === "cancelled" && printAvoir ? (
-                              <button onClick={printAvoir} title="Télécharger l'avoir PDF" className="font-body text-xs text-red-500 bg-red-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-red-100"><Receipt size={12} /></button>
+                            {p.status === "cancelled" && printAllAvoirs ? (
+                              <button onClick={printAllAvoirs} title={`Télécharger ${linkedAvoirs.length} avoir(s) PDF`} className="font-body text-xs text-red-500 bg-red-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-red-100 flex items-center gap-0.5 justify-center"><Receipt size={12} />{linkedAvoirs.length > 1 ? <span className="text-[9px]">×{linkedAvoirs.length}</span> : null}</button>
                             ) : (
                               <button onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button>
                             )}
