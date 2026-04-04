@@ -532,6 +532,32 @@ export default function PaiementsPage() {
     const inscriptionMsg = hasInscriptions || isForfait ? "\n\n⚠️ Les cavaliers seront aussi désinscrits des créneaux associés." : "";
 
     if (totalEnc === 0) {
+      // Si c'est une facture définitive (invoiceNumber), on ne peut pas supprimer → annuler avec avoir à 0
+      if ((payment as any).invoiceNumber) {
+        if (!confirm(`Annuler la facture ${(payment as any).invoiceNumber} de ${payment.familyName} ?\n\n${(payment.items || []).map((i: any) => `• ${i.childName || ""} — ${i.activityTitle}`).join("\n")}\n\nLa facture sera marquée annulée (non supprimée — obligation légale).${inscriptionMsg}`)) return;
+
+        // Désinscrire
+        if (isForfait) {
+          const childIds = [...new Set((payment.items || []).filter((i: any) => i.childId).map((i: any) => i.childId))];
+          for (const childId of childIds) {
+            const childName = (payment.items || []).find((i: any) => i.childId === childId)?.childName || "";
+            try { await fetch("/api/admin/unenroll-annual", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ childId, childName, familyId: payment.familyId }) }); } catch (e) { console.error(e); }
+          }
+        } else {
+          for (const item of payment.items || []) await unenrollPaymentItem(payment, item);
+        }
+
+        await updateDoc(doc(db, "payments", payment.id), {
+          status: "cancelled", cancelledAt: serverTimestamp(),
+          cancelReason: "Annulation facture (non encaissée)",
+          originalTotalTTC: payment.totalTTC || 0,
+          updatedAt: serverTimestamp(),
+        });
+        toast(`Facture ${(payment as any).invoiceNumber} annulée`, "success");
+        await refreshAll();
+        return;
+      }
+
       if (!confirm(`Annuler l'inscription de ${payment.familyName} ?\n\n${(payment.items || []).map((i: any) => `• ${i.childName || ""} — ${i.activityTitle}`).join("\n")}\n\nTotal : ${(payment.totalTTC || 0).toFixed(2)}€ (non encaissé)${inscriptionMsg}`)) return;
 
       // Pour les forfaits annuels : désinscription en masse via API
@@ -1690,7 +1716,11 @@ export default function PaiementsPage() {
 
             // Filtrage — Historique = factures uniquement (paid, partial encaissé, cancelled)
             // Les pending/draft sont des proformas → visibles dans Impayés, pas ici
-            let filtered = payments.filter(p => p.status === "paid" || p.status === "partial" || p.status === "cancelled");
+            // SAUF si une proforma a été convertie en facture définitive (invoiceNumber présent)
+            let filtered = payments.filter(p => 
+              p.status === "paid" || p.status === "partial" || p.status === "cancelled" ||
+              ((p as any).invoiceNumber && p.status !== "sepa_scheduled")
+            );
             // Inclure aussi les encaissements "avoir" qui n'ont pas de payment lié dans payments
             const avoirEncaissements = encaissements
               .filter((e: any) => e.mode === "avoir" && !payments.some(p => p.id === e.paymentId))
@@ -2241,7 +2271,24 @@ export default function PaiementsPage() {
                                   const invDate = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
                                   const invoiceNumber = (p as any).invoiceNumber || `PF-${((p as any).orderId || p.id || "").slice(-6).toUpperCase()}`;
                                   await downloadInvoicePdf({ invoiceNumber, date: invDate.toLocaleDateString("fr-FR"), familyName: p.familyName, familyEmail: families.find(f => f.firestoreId === p.familyId)?.parentEmail || "", items, totalHT, totalTVA: totalTTC - totalHT, totalTTC, paidAmount: p.paidAmount || 0, paymentMode: p.paymentMode ? (paymentModes.find(m => m.id === p.paymentMode)?.label || p.paymentMode) : "", paymentDate: p.paidAmount > 0 ? invDate.toLocaleDateString("fr-FR") : "" });
-                                }} className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1"><Receipt size={10}/> Facture</button>
+                                }} className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1"><Receipt size={10}/> {(p as any).invoiceNumber ? "Facture" : "Proforma"}</button>
+                                {!(p as any).invoiceNumber && (
+                                  <button onClick={async () => {
+                                    if (!confirm(`Convertir cette proforma en facture définitive pour ${p.familyName} ?\n\nUne fois convertie, la facture aura un numéro séquentiel et ne pourra plus être supprimée.`)) return;
+                                    try {
+                                      const year = new Date().getFullYear();
+                                      const counterRef = doc(db, "settings", "invoiceCounter");
+                                      const counterSnap = await getDoc(counterRef);
+                                      const currentNum = counterSnap.exists() ? (counterSnap.data()?.[`year_${year}`] || 0) : 0;
+                                      const nextNum = currentNum + 1;
+                                      await setDoc(counterRef, { [`year_${year}`]: nextNum }, { merge: true });
+                                      const invoiceNumber = `F-${year}-${String(nextNum).padStart(4, "0")}`;
+                                      await updateDoc(doc(db, "payments", p.id!), { invoiceNumber, updatedAt: serverTimestamp() });
+                                      setPayments(prev => prev.map(x => x.id === p.id ? { ...x, invoiceNumber } as any : x));
+                                      toast(`Facture ${invoiceNumber} créée pour ${p.familyName}`, "success");
+                                    } catch (e) { console.error(e); toast("Erreur conversion", "error"); }
+                                  }} className="font-body text-[10px] text-orange-600 bg-orange-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-orange-100 flex items-center gap-1"><Receipt size={10}/> → Facture définitive</button>
+                                )}
                                 <button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1"><Plus size={10}/> Dupliquer</button>
                               </div>
                               <button onClick={() => deletePaymentCommand(p)} className="font-body text-[10px] text-red-500 bg-red-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-red-100 flex items-center gap-1"><Trash2 size={10}/> Annuler</button>
