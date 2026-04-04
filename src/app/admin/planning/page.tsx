@@ -498,10 +498,44 @@ export default function PlanningPage() {
           date: serverTimestamp(),
         });
         payRefId = payRef.id;
+
+        // ─── Mode AVOIR : déduire des avoirs de la famille ───
+        if (payMode === "avoir") {
+          try {
+            const avoirsSnap = await getDocs(query(collection(db, "avoirs"), where("familyId", "==", child.familyId)));
+            const avoirsActifs = avoirsSnap.docs
+              .map(d => ({ id: d.id, ...d.data() } as any))
+              .filter((a: any) => a.status === "actif" && (a.remainingAmount || 0) > 0)
+              .sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+            let remaining = Math.round(priceTTC * 100) / 100;
+            for (const a of avoirsActifs) {
+              if (remaining <= 0) break;
+              const deduction = Math.min(remaining, a.remainingAmount || 0);
+              remaining -= deduction;
+              await updateDoc(doc(db, "avoirs", a.id), {
+                usedAmount: (a.usedAmount || 0) + deduction,
+                remainingAmount: Math.max(0, (a.remainingAmount || 0) - deduction),
+                status: (a.remainingAmount || 0) - deduction <= 0 ? "utilise" : "actif",
+                usageHistory: [...(a.usageHistory || []), {
+                  date: new Date().toISOString(), amount: deduction, invoiceRef: payRefId.slice(-6).toUpperCase(),
+                }],
+                updatedAt: serverTimestamp(),
+              });
+            }
+            if (remaining > 0) {
+              // Avoir insuffisant → passer en partial
+              await updateDoc(doc(db, "payments", payRefId), {
+                paidAmount: Math.round((priceTTC - remaining) * 100) / 100,
+                status: "partial",
+              });
+            }
+          } catch (e) { console.error("Erreur déduction avoir:", e); }
+        }
+
         await addDoc(collection(db, "encaissements"), {
           paymentId: payRefId, familyId: child.familyId, familyName: child.familyName,
           montant: Math.round(priceTTC * 100) / 100, mode: payMode,
-          modeLabel: payMode === "cb_terminal" ? "CB (terminal)" : payMode === "especes" ? "Espèces" : payMode === "cheque" ? "Chèque" : payMode || "",
+          modeLabel: payMode === "cb_terminal" ? "CB (terminal)" : payMode === "especes" ? "Espèces" : payMode === "cheque" ? "Chèque" : payMode === "avoir" ? "Avoir" : payMode || "",
           ref: "", activityTitle: `${c.activityTitle} — ${child.childName}`,
           date: serverTimestamp(),
         });
