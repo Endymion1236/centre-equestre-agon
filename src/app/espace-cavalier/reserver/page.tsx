@@ -38,11 +38,12 @@ export default function ReserverPage() {
   // Modal sélection enfant (depuis Timeline)
   const [bookingCreneau, setBookingCreneau] = useState<Creneau | null>(null);
   // Mode paiement dans le panier
-  const [cartPayMode, setCartPayMode] = useState<"cb" | "cheque" | "especes" | "virement">("cb");
+  const [cartPayMode, setCartPayMode] = useState<"cb" | "cheque" | "especes" | "virement" | "avoir">("cb");
   const [cartPaySuccess, setCartPaySuccess] = useState(false);
   const [success, setSuccess] = useState(false);
   const [waitlistSuccess, setWaitlistSuccess] = useState<string | null>(null); // creneauId confirmé
   const [waitlistLoading, setWaitlistLoading] = useState<string | null>(null); // creneauId en cours
+  const [familyAvoirs, setFamilyAvoirs] = useState<any[]>([]);
 
   // Tous les cavaliers disponibles = propres + liés
   const ownChildren = family?.children || [];
@@ -448,7 +449,16 @@ export default function ReserverPage() {
             {initialFilter === "balade" ? "Balades et promenades à cheval" : "Stages, cours ponctuels et activités"}
           </p>
         </div>
-        <button onClick={() => { setShowCart(true); setCartPaySuccess(false); setCartPayMode("cb"); }} className="relative flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600">
+        <button onClick={async () => {
+          setShowCart(true); setCartPaySuccess(false); setCartPayMode("cb");
+          // Charger les avoirs de la famille
+          if (user?.uid) {
+            try {
+              const aSnap = await getDocs(query(collection(db, "avoirs"), where("familyId", "==", user.uid)));
+              setFamilyAvoirs(aSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((a: any) => a.status === "actif" && (a.remainingAmount || 0) > 0));
+            } catch { setFamilyAvoirs([]); }
+          }
+        }} className="relative flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600">
           <ShoppingCart size={16} /> Panier
           {cart.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{cart.length}</span>}
         </button>
@@ -881,6 +891,16 @@ export default function ReserverPage() {
                         </button>
                       ))}
                     </div>
+                    {/* Bouton avoir si la famille a un solde */}
+                    {familyAvoirs.length > 0 && (() => {
+                      const totalAvoir = familyAvoirs.reduce((s, a) => s + (a.remainingAmount || 0), 0);
+                      return (
+                        <button onClick={() => setCartPayMode("avoir")}
+                          className={`w-full mt-2 py-2.5 rounded-xl font-body text-sm font-semibold border cursor-pointer transition-all ${cartPayMode === "avoir" ? "border-purple-500 bg-purple-50 text-purple-700" : "border-gray-200 bg-white text-purple-600 hover:border-purple-300"}`}>
+                          💜 Utiliser mon avoir ({totalAvoir.toFixed(2)}€ disponible)
+                        </button>
+                      );
+                    })()}
                   </div>
 
                   {/* Bouton CB → CAWL */}
@@ -896,7 +916,99 @@ export default function ReserverPage() {
                   )}
 
                   {/* Bouton Chèque/Espèces/Virement → déclaration */}
-                  {cartPayMode !== "cb" && (
+                  {cartPayMode === "avoir" && (() => {
+                    const totalAvoir = familyAvoirs.reduce((s, a) => s + (a.remainingAmount || 0), 0);
+                    const couvre = totalAvoir >= cartTotal;
+                    return cartPaySuccess ? (
+                      <div className="text-center py-4">
+                        <div className="text-4xl mb-2">✅</div>
+                        <p className="font-body text-base font-semibold text-green-700">Avoir utilisé !</p>
+                        <p className="font-body text-xs text-slate-500 mt-1">
+                          {couvre ? "Votre avoir a couvert la totalité." : "Le centre équestre vous contactera pour le complément."}
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        {!couvre && (
+                          <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 mb-3">
+                            <p className="font-body text-xs text-orange-700">
+                              Votre avoir ({totalAvoir.toFixed(2)}€) ne couvre pas la totalité ({cartTotal.toFixed(2)}€). Le reste ({(cartTotal - totalAvoir).toFixed(2)}€) sera à régler séparément.
+                            </p>
+                          </div>
+                        )}
+                        <button onClick={async () => {
+                          if (!user || !family) return;
+                          setPaying(true);
+                          try {
+                            // 1. Inscrire + créer réservations + paiement
+                            for (const item of cart) {
+                              for (const cid of item.creneauIds) {
+                                const crSnap = await getDoc(doc(db, "creneaux", cid));
+                                if (!crSnap.exists()) continue;
+                                const crData = crSnap.data();
+                                const enrolled = crData.enrolled || [];
+                                if (enrolled.some((e: any) => e.childId === item.childId)) continue;
+                                enrolled.push({ childId: item.childId, childName: item.childName, familyId: user.uid });
+                                await updateDoc(doc(db, "creneaux", cid), { enrolled, enrolledCount: enrolled.length });
+                                await addDoc(collection(db, "reservations"), {
+                                  creneauId: cid, childId: item.childId, childName: item.childName,
+                                  familyId: user.uid, familyName: family.parentName,
+                                  activityTitle: item.activityTitle, status: "confirmed", createdAt: serverTimestamp(),
+                                  ...((item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
+                                });
+                              }
+                            }
+                            // 2. Créer le paiement
+                            const toUse = Math.min(totalAvoir, cartTotal);
+                            const payRef = await addDoc(collection(db, "payments"), {
+                              familyId: user.uid, familyName: family.parentName,
+                              familyEmail: family.parentEmail || user.email || "",
+                              items: cart.map(i => ({
+                                activityTitle: i.activityTitle, childId: i.childId, childName: i.childName,
+                                priceTTC: i.prixFinal, priceHT: Math.round(i.prixFinal / 1.055 * 100) / 100,
+                                tva: 5.5, creneauId: i.creneauIds?.[0] || "",
+                              })),
+                              totalTTC: cartTotal, paidAmount: toUse,
+                              paymentMode: "avoir", paymentRef: "",
+                              status: toUse >= cartTotal ? "paid" : "partial",
+                              date: serverTimestamp(), createdAt: serverTimestamp(),
+                            });
+                            // 3. Déduire des avoirs
+                            let remaining = toUse;
+                            for (const a of familyAvoirs) {
+                              if (remaining <= 0) break;
+                              const deduction = Math.min(remaining, a.remainingAmount || 0);
+                              remaining -= deduction;
+                              await updateDoc(doc(db, "avoirs", a.id), {
+                                usedAmount: (a.usedAmount || 0) + deduction,
+                                remainingAmount: Math.max(0, (a.remainingAmount || 0) - deduction),
+                                status: (a.remainingAmount || 0) - deduction <= 0 ? "utilise" : "actif",
+                                usageHistory: [...(a.usageHistory || []), {
+                                  date: new Date().toISOString(), amount: deduction, invoiceRef: payRef.id.slice(-6).toUpperCase(),
+                                }],
+                                updatedAt: serverTimestamp(),
+                              });
+                            }
+                            // 4. Encaissement avoir
+                            await addDoc(collection(db, "encaissements"), {
+                              paymentId: payRef.id, familyId: user.uid, familyName: family.parentName,
+                              montant: toUse, mode: "avoir", modeLabel: "Avoir",
+                              ref: "", activityTitle: cart.map(i => i.activityTitle).join(", "),
+                              date: serverTimestamp(),
+                            });
+                            setCart([]);
+                            setCartPaySuccess(true);
+                          } catch (e) { console.error(e); alert("Erreur lors du paiement par avoir."); }
+                          setPaying(false);
+                        }} disabled={paying}
+                          className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying ? "bg-gray-200 text-gray-600" : "bg-purple-600 text-white hover:bg-purple-500"}`}>
+                          {paying ? <Loader2 size={18} className="animate-spin" /> : null}
+                          {paying ? "En cours..." : couvre ? `Payer avec mon avoir (${cartTotal.toFixed(2)}€)` : `Utiliser ${totalAvoir.toFixed(2)}€ d'avoir`}
+                        </button>
+                      </>
+                    );
+                  })()}
+                  {cartPayMode !== "cb" && cartPayMode !== "avoir" && (
                     cartPaySuccess ? (
                       <div className="text-center py-4">
                         <div className="text-4xl mb-2">✅</div>
