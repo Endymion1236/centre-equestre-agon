@@ -499,7 +499,7 @@ export default function PlanningPage() {
         });
         payRefId = payRef.id;
 
-        // ─── Mode AVOIR : déduire des avoirs de la famille ───
+        // ─── Mode AVOIR : vérifier solde puis déduire ───
         if (payMode === "avoir") {
           try {
             const avoirsSnap = await getDocs(query(collection(db, "avoirs"), where("familyId", "==", child.familyId)));
@@ -507,11 +507,26 @@ export default function PlanningPage() {
               .map(d => ({ id: d.id, ...d.data() } as any))
               .filter((a: any) => a.status === "actif" && (a.remainingAmount || 0) > 0)
               .sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+            const totalAvoirDispo = avoirsActifs.reduce((s: number, a: any) => s + (a.remainingAmount || 0), 0);
+
+            if (totalAvoirDispo <= 0) {
+              // Pas d'avoir → annuler le paiement paid et le repasser en pending
+              await updateDoc(doc(db, "payments", payRefId), {
+                paidAmount: 0,
+                status: "pending",
+                paymentMode: "",
+              });
+              // Pas d'encaissement à créer
+              throw new Error("NO_AVOIR");
+            }
+
             let remaining = Math.round(priceTTC * 100) / 100;
+            let totalDeduit = 0;
             for (const a of avoirsActifs) {
               if (remaining <= 0) break;
               const deduction = Math.min(remaining, a.remainingAmount || 0);
               remaining -= deduction;
+              totalDeduit += deduction;
               await updateDoc(doc(db, "avoirs", a.id), {
                 usedAmount: (a.usedAmount || 0) + deduction,
                 remainingAmount: Math.max(0, (a.remainingAmount || 0) - deduction),
@@ -523,22 +538,33 @@ export default function PlanningPage() {
               });
             }
             if (remaining > 0) {
-              // Avoir insuffisant → passer en partial
+              // Avoir insuffisant → partial avec le montant réellement déduit
               await updateDoc(doc(db, "payments", payRefId), {
-                paidAmount: Math.round((priceTTC - remaining) * 100) / 100,
+                paidAmount: Math.round(totalDeduit * 100) / 100,
                 status: "partial",
               });
             }
-          } catch (e) { console.error("Erreur déduction avoir:", e); }
-        }
+            // Encaissement uniquement du montant réellement déduit
+            await addDoc(collection(db, "encaissements"), {
+              paymentId: payRefId, familyId: child.familyId, familyName: child.familyName,
+              montant: Math.round(totalDeduit * 100) / 100, mode: "avoir",
+              modeLabel: "Avoir",
+              ref: "", activityTitle: `${c.activityTitle} — ${child.childName}`,
+              date: serverTimestamp(),
+            });
+          } catch (e: any) {
+            if (e?.message !== "NO_AVOIR") console.error("Erreur déduction avoir:", e);
+          }
+        } else {
 
         await addDoc(collection(db, "encaissements"), {
           paymentId: payRefId, familyId: child.familyId, familyName: child.familyName,
           montant: Math.round(priceTTC * 100) / 100, mode: payMode,
-          modeLabel: payMode === "cb_terminal" ? "CB (terminal)" : payMode === "especes" ? "Espèces" : payMode === "cheque" ? "Chèque" : payMode === "avoir" ? "Avoir" : payMode || "",
+          modeLabel: payMode === "cb_terminal" ? "CB (terminal)" : payMode === "especes" ? "Espèces" : payMode === "cheque" ? "Chèque" : payMode || "",
           ref: "", activityTitle: `${c.activityTitle} — ${child.childName}`,
           date: serverTimestamp(),
         });
+        } // fin else avoir
       } else {
         // Paiement en attente → fusionner dans la commande ouverte la plus récente
         const existingSnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", child.familyId), where("status", "==", "pending")));

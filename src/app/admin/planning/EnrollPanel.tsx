@@ -37,6 +37,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [search, setSearch] = useState(""); const [selFam, setSelFam] = useState(""); const [selChild, setSelChild] = useState("");
   const [enrolling, setEnrolling] = useState(false); const [justEnrolled, setJustEnrolled] = useState("");
   const [showPay, setShowPay] = useState(false); const [payMode, setPayMode] = useState("cb_terminal"); const [unenrolling, setUnenrolling] = useState("");
+  const [avoirSolde, setAvoirSolde] = useState<Record<string, number>>({});
   const [inscriptionMode, setInscriptionMode] = useState<"ponctuel" | "annuel">("ponctuel");
   const [licenceType, setLicenceType] = useState<"moins18" | "plus18">("moins18");
   const [adhesion, setAdhesion] = useState(true);
@@ -90,6 +91,22 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     getDocs(query(collection(db, "waitlist"), where("creneauId", "==", creneau.id), where("status", "==", "waiting")))
       .then(snap => setWaitlist(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))));
   }, [creneau.id]);
+
+  // Charger le solde avoir quand on sélectionne une famille
+  useEffect(() => {
+    if (!selFam) return;
+    if (avoirSolde[selFam] !== undefined) return;
+    getDocs(query(collection(db, "avoirs"), where("familyId", "==", selFam)))
+      .then(snap => {
+        const total = snap.docs.reduce((s, d) => {
+          const a = d.data();
+          return s + (a.status === "actif" ? (a.remainingAmount || 0) : 0);
+        }, 0);
+        setAvoirSolde(prev => ({ ...prev, [selFam]: Math.round(total * 100) / 100 }));
+      })
+      .catch(() => {});
+  }, [selFam]);
+
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [stageMode, setStageMode] = useState<"semaine" | "jour">("semaine");
   const [stageDaysCount, setStageDaysCount] = useState<number>(0);
@@ -1385,7 +1402,12 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         <div className="font-body text-[10px] text-slate-500 mt-1 ml-6">
                           {showPay ? "Le paiement sera enregistré immédiatement dans le journal." : "La prestation sera ajoutée aux impayés de la famille."}
                         </div>
-                        {showPay && <div className="flex flex-wrap gap-1.5 mt-2">{payModes.filter(m => m.id !== "carte").map(m=><button key={m.id} onClick={()=>setPayMode(m.id)} className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${payMode===m.id?"bg-blue-500 text-white border-blue-500":"bg-white text-slate-600 border-gray-200"}`}>{m.icon} {m.label}</button>)}</div>}
+                        {showPay && <div className="flex flex-wrap gap-1.5 mt-2">{payModes.filter(m => m.id !== "carte").map(m=>{
+                          const isAvoir = m.id === "avoir";
+                          const solde = isAvoir ? (avoirSolde[selFam] || 0) : 0;
+                          const disabled = isAvoir && solde <= 0;
+                          return <button key={m.id} onClick={()=>!disabled && setPayMode(m.id)} disabled={disabled} className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${disabled ? "opacity-40 cursor-not-allowed bg-gray-50 text-gray-400 border-gray-200" : payMode===m.id?"bg-blue-500 text-white border-blue-500":"bg-white text-slate-600 border-gray-200"}`}>{m.icon} {m.label}{isAvoir && solde > 0 ? ` (${solde.toFixed(0)}€)` : ""}</button>;
+                        })}</div>}
                       </>
                     )}
                   </div>
@@ -1594,7 +1616,12 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     <div className="font-body text-[10px] text-slate-500 mt-1 ml-6">
                       {showPay ? "Le paiement sera enregistré immédiatement." : "Ajouté aux impayés de la famille."}
                     </div>
-                    {showPay && <div className="flex flex-wrap gap-1.5 mt-2">{payModes.map(m=><button key={m.id} onClick={()=>setPayMode(m.id)} className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${payMode===m.id?"bg-blue-500 text-white border-blue-500":"bg-white text-slate-600 border-gray-200"}`}>{m.icon} {m.label}</button>)}</div>}
+                    {showPay && <div className="flex flex-wrap gap-1.5 mt-2">{payModes.map(m=>{
+                          const isAvoir = m.id === "avoir";
+                          const solde = isAvoir ? (avoirSolde[selFam] || 0) : 0;
+                          const disabled = isAvoir && solde <= 0;
+                          return <button key={m.id} onClick={()=>!disabled && setPayMode(m.id)} disabled={disabled} className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${disabled ? "opacity-40 cursor-not-allowed bg-gray-50 text-gray-400 border-gray-200" : payMode===m.id?"bg-blue-500 text-white border-blue-500":"bg-white text-slate-600 border-gray-200"}`}>{m.icon} {m.label}{isAvoir && solde > 0 ? ` (${solde.toFixed(0)}€)` : ""}</button>;
+                        })}</div>}
                   </div>
                 )}
               </div>
