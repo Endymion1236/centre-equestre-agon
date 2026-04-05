@@ -38,6 +38,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [enrolling, setEnrolling] = useState(false); const [justEnrolled, setJustEnrolled] = useState("");
   const [showPay, setShowPay] = useState(false); const [payMode, setPayMode] = useState("cb_terminal"); const [unenrolling, setUnenrolling] = useState("");
   const [avoirSolde, setAvoirSolde] = useState<Record<string, number>>({});
+  const [freeEnroll, setFreeEnroll] = useState(false);
   const [inscriptionMode, setInscriptionMode] = useState<"ponctuel" | "annuel">("ponctuel");
   const [licenceType, setLicenceType] = useState<"moins18" | "plus18">("moins18");
   const [adhesion, setAdhesion] = useState(true);
@@ -839,7 +840,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         }
       }
     } else {
-      await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, inscriptionMode === "ponctuel" && showPay ? payMode : undefined, enrollOptions);
+      const freeEnrollOptions = freeEnroll ? { skipPayment: true, skipEmail: false } : undefined;
+      await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, inscriptionMode === "ponctuel" && showPay && !freeEnroll ? payMode : undefined, enrollOptions || freeEnrollOptions);
     }
 
     if (inscriptionMode === "annuel") {
@@ -849,7 +851,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       const payInfo = showPay ? " — encaissé ✅" : priceTTC > 0 ? " — paiement en attente" : "";
       setJustEnrolled(`${childName}${payInfo}`);
     }
-    setSelChild(""); setSelFam(""); setSearch(""); setEnrolling(false); setShowPay(false); setInscriptionMode("ponctuel"); setExtraSlots([]); setExtraSlotSearch(""); setAnnualPayMode("cb_terminal");
+    setSelChild(""); setSelFam(""); setSearch(""); setEnrolling(false); setShowPay(false); setFreeEnroll(false); setInscriptionMode("ponctuel"); setExtraSlots([]); setExtraSlotSearch(""); setAnnualPayMode("cb_terminal");
     setTimeout(() => setJustEnrolled(""), 5000);
   };
 
@@ -1393,10 +1395,16 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       <div className="font-body text-xs text-gold-600 bg-gold-50 rounded-lg px-3 py-2">
                         🎟️ La carte sera débitée automatiquement à la clôture du montoir si l'enfant est présent. Aucun paiement à encaisser maintenant.
                       </div>
+                    ) : freeEnroll ? (
+                      <div className="bg-green-50 rounded-lg px-3 py-2">
+                        <div className="font-body text-sm font-semibold text-green-700">🎁 Inscription offerte</div>
+                        <div className="font-body text-[10px] text-green-600 mt-0.5">Aucun paiement ni impayé ne sera créé.</div>
+                        <button onClick={() => setFreeEnroll(false)} className="font-body text-[10px] text-slate-500 mt-1 bg-transparent border-none cursor-pointer underline">Annuler</button>
+                      </div>
                     ) : (
                       <>
                         <label className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox" checked={showPay} onChange={e => setShowPay(e.target.checked)} className="accent-blue-500 w-4 h-4"/>
+                          <input type="checkbox" checked={showPay} onChange={e => { setShowPay(e.target.checked); setFreeEnroll(false); }} className="accent-blue-500 w-4 h-4"/>
                           <span className="font-body text-sm text-blue-800 font-semibold">Encaisser maintenant ({priceTTC.toFixed(2)}€)</span>
                         </label>
                         <div className="font-body text-[10px] text-slate-500 mt-1 ml-6">
@@ -1408,6 +1416,12 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                           const disabled = isAvoir && solde <= 0;
                           return <button key={m.id} onClick={()=>!disabled && setPayMode(m.id)} disabled={disabled} className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${disabled ? "opacity-40 cursor-not-allowed bg-gray-50 text-gray-400 border-gray-200" : payMode===m.id?"bg-blue-500 text-white border-blue-500":"bg-white text-slate-600 border-gray-200"}`}>{m.icon} {m.label}{isAvoir && solde > 0 ? ` (${solde.toFixed(0)}€)` : ""}</button>;
                         })}</div>}
+                        {!showPay && (
+                          <button onClick={() => { setFreeEnroll(true); setShowPay(false); }}
+                            className="mt-2 ml-6 font-body text-[10px] text-green-600 bg-transparent border-none cursor-pointer underline">
+                            🎁 Offert / Rattrapage (pas de facturation)
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
