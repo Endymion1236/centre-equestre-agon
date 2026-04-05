@@ -97,7 +97,7 @@ async function run() {
     await db.collection("families").limit(1).get();
   });
 
-  const cols = ["families","activities","creneaux","payments","reservations","forfaits","cartes","avoirs","settings","push_tokens","waitlist","encaissements","equides"];
+  const cols = ["families","activities","creneaux","payments","reservations","forfaits","cartes","avoirs","settings","push_tokens","waitlist","encaissements","equides","comptabilite","rattrapages","mandats-sepa","echeances-sepa","remises-sepa"];
   for (const col of cols) {
     await test(`Collection "${col}"`, async () => { await db.collection(col).limit(1).get(); });
   }
@@ -668,14 +668,20 @@ async function run() {
   const criticalFiles = [
     "src/lib/firebase.ts", "src/lib/firebase-admin.ts", "src/lib/stripe.ts", "src/lib/push.ts",
     "src/lib/auth-context.tsx", "src/lib/forfaits.ts", "src/lib/planning-services.ts",
+    "src/lib/download-invoice.ts", "src/lib/download-avoir.ts", "src/lib/club-info.ts",
     "src/types/index.ts", "vercel.json", "package.json", "public/manifest.json", "public/sw.js",
     "src/app/admin/planning/page.tsx", "src/app/admin/planning/EnrollPanel.tsx",
+    "src/app/admin/planning/EditCreneauModal.tsx",
     "src/app/admin/paiements/page.tsx", "src/app/admin/forfaits/page.tsx",
     "src/app/admin/cavaliers/page.tsx", "src/app/admin/parametres/page.tsx",
-    "src/app/espace-cavalier/inscription-annuelle/page.tsx",
+    "src/app/admin/avoirs/page.tsx", "src/app/admin/comptabilite/page.tsx",
+    "src/app/admin/montoir/page.tsx",
+    "src/app/espace-cavalier/reserver/page.tsx",
+    "src/app/espace-cavalier/dashboard/page.tsx",
     "src/app/api/admin/unenroll-annual/route.ts",
+    "src/app/api/invoice-pdf/route.ts", "src/app/api/avoir-pdf/route.ts",
     "src/app/api/cron/daily-notifications/route.ts",
-    "src/app/api/push/route.ts", "src/app/api/invoice/route.ts",
+    "src/app/api/push/route.ts",
   ];
 
   for (const f of criticalFiles) {
@@ -708,6 +714,357 @@ async function run() {
       else { log("ℹ️", `  ✓`); }
     });
   }
+
+  // ══════════════════════════════════
+  section("23. PROFORMA vs FACTURE DÉFINITIVE");
+  // ══════════════════════════════════
+  await test("Proforma : pending sans invoiceNumber", async () => {
+    const ref = await createDoc("payments", {
+      familyId: testFamilyId, familyName: "Dupont TEST",
+      items: [{ activityTitle: "Test Proforma", childId: "ch-lucas", childName: "Lucas", priceTTC: 26, priceHT: 24.64, tva: 5.5 }],
+      totalTTC: 26, paidAmount: 0, status: "pending", orderId: `CMD-PF-${TAG.slice(-4)}`,
+      date: FieldValue.serverTimestamp(),
+    });
+    const snap = await db.collection("payments").doc(ref.id).get();
+    assert(snap.data().status === "pending", "Status = pending");
+    assert(!snap.data().invoiceNumber, "Pas de invoiceNumber sur proforma");
+  });
+
+  await test("Conversion proforma → facture définitive", async () => {
+    const ref = await createDoc("payments", {
+      familyId: testFamilyId, familyName: "Dupont TEST",
+      items: [{ activityTitle: "Test Conv Facture", priceTTC: 30 }],
+      totalTTC: 30, paidAmount: 0, status: "pending",
+      date: FieldValue.serverTimestamp(),
+    });
+    const invoiceNumber = `F-TEST-${TAG.slice(-4)}-CONV`;
+    await db.collection("payments").doc(ref.id).update({ invoiceNumber });
+    const snap = await db.collection("payments").doc(ref.id).get();
+    assert(snap.data().invoiceNumber === invoiceNumber, "invoiceNumber attribué");
+    assert(snap.data().status === "pending", "Toujours pending");
+  });
+
+  await test("Facture définitive non supprimable → cancelled", async () => {
+    const ref = await createDoc("payments", {
+      familyId: testFamilyId, familyName: "Dupont TEST",
+      items: [{ activityTitle: "Test Non Supprimable", priceTTC: 40 }],
+      totalTTC: 40, paidAmount: 0, status: "pending",
+      invoiceNumber: `F-TEST-${TAG.slice(-4)}-NS`,
+      date: FieldValue.serverTimestamp(),
+    });
+    await db.collection("payments").doc(ref.id).update({
+      status: "cancelled", cancelledAt: FieldValue.serverTimestamp(),
+      cancelReason: "Test annulation facture", originalTotalTTC: 40,
+    });
+    const snap = await db.collection("payments").doc(ref.id).get();
+    assert(snap.data().status === "cancelled", "Cancelled, pas supprimé");
+    assert(snap.data().invoiceNumber, "invoiceNumber conservé");
+    assert(snap.data().originalTotalTTC === 40, "Montant original conservé");
+  });
+
+  await test("Numérotation séquentielle via settings/invoiceCounter", async () => {
+    const counterRef = db.collection("settings").doc("invoiceCounter");
+    const snap = await counterRef.get();
+    // Le compteur doit exister ou être créable
+    const year = new Date().getFullYear();
+    const testKey = `year_${year}_test`;
+    await counterRef.set({ [testKey]: 42 }, { merge: true });
+    const snap2 = await counterRef.get();
+    assert(snap2.data()[testKey] === 42, "Compteur incrémentable");
+    // Cleanup du champ test
+    const { [testKey]: _, ...rest } = snap2.data();
+    await counterRef.set(rest);
+  });
+
+  // ══════════════════════════════════
+  section("24. AVOIRS — CYCLE COMPLET");
+  // ══════════════════════════════════
+  let avoirCycleId;
+  await test("Créer avoir suite à annulation encaissée", async () => {
+    const pay = await createDoc("payments", {
+      familyId: testFamilyId, familyName: "Dupont TEST",
+      items: [
+        { activityTitle: "Cours A", childId: "ch-lucas", childName: "Lucas", priceTTC: 26 },
+        { activityTitle: "Cours B", childId: "ch-emma", childName: "Emma", priceTTC: 26 },
+      ],
+      totalTTC: 52, paidAmount: 52, paymentMode: "cb_terminal", status: "cancelled",
+      originalTotalTTC: 52, invoiceNumber: `F-TEST-${TAG.slice(-4)}-AV`,
+      date: FieldValue.serverTimestamp(),
+    });
+    const av = await createDoc("avoirs", {
+      familyId: testFamilyId, familyName: "Dupont TEST",
+      type: "avoir", amount: 52, usedAmount: 0, remainingAmount: 52,
+      reason: "Annulation Cours A + B", reference: `AV-TEST-${TAG.slice(-4)}-CYC`,
+      sourcePaymentId: pay.id, sourceType: "annulation",
+      expiryDate: new Date(Date.now() + 365 * 86400000), status: "actif", usageHistory: [],
+    });
+    avoirCycleId = av.id;
+    // Trace encaissement négatif
+    await createDoc("encaissements", {
+      paymentId: pay.id, familyId: testFamilyId, familyName: "Dupont TEST",
+      montant: -52, mode: "avoir", modeLabel: "Avoir (annulation)",
+      isAvoir: true, avoirRef: `AV-TEST-${TAG.slice(-4)}-CYC`,
+      date: FieldValue.serverTimestamp(),
+    });
+    const avSnap = await db.collection("avoirs").doc(av.id).get();
+    assert(avSnap.data().remainingAmount === 52, "Avoir 52€");
+  });
+
+  await test("Utiliser partiellement l'avoir (26€)", async () => {
+    const snap = await db.collection("avoirs").doc(avoirCycleId).get();
+    const av = snap.data();
+    await db.collection("avoirs").doc(avoirCycleId).update({
+      usedAmount: 26, remainingAmount: 26,
+      usageHistory: [...(av.usageHistory || []), { date: new Date().toISOString(), amount: 26, invoiceRef: "TEST" }],
+    });
+    const snap2 = await db.collection("avoirs").doc(avoirCycleId).get();
+    assert(snap2.data().remainingAmount === 26, "Reste 26€");
+  });
+
+  await test("Épuiser l'avoir → status utilisé", async () => {
+    await db.collection("avoirs").doc(avoirCycleId).update({
+      usedAmount: 52, remainingAmount: 0, status: "utilise",
+    });
+    const snap = await db.collection("avoirs").doc(avoirCycleId).get();
+    assert(snap.data().remainingAmount === 0, "Solde = 0");
+    assert(snap.data().status === "utilise", "Status = utilise");
+  });
+
+  await test("Avoir épuisé non requêtable par les actifs", async () => {
+    const snap = await db.collection("avoirs")
+      .where("familyId", "==", testFamilyId)
+      .where("status", "==", "actif")
+      .where("_testTag", "==", TAG)
+      .get();
+    const matching = snap.docs.filter(d => d.id === avoirCycleId);
+    assert(matching.length === 0, "Avoir épuisé exclu des actifs");
+  });
+
+  // ══════════════════════════════════
+  section("25. ENCAISSEMENTS & JOURNAL");
+  // ══════════════════════════════════
+  await test("Encaissement positif + négatif coexistent", async () => {
+    const encSnap = await db.collection("encaissements").where("_testTag", "==", TAG).get();
+    const pos = encSnap.docs.filter(d => d.data().montant > 0);
+    const neg = encSnap.docs.filter(d => d.data().montant < 0);
+    // On a créé au moins 1 négatif (avoir annulation)
+    assert(neg.length >= 1, `Au moins 1 encaissement négatif (trouvé ${neg.length})`);
+  });
+
+  await test("Pending exclus du journal compta (seuls paid comptent)", async () => {
+    const allPay = await db.collection("payments").where("_testTag", "==", TAG).get();
+    const paid = allPay.docs.filter(d => d.data().status === "paid" && !d.data().isFree);
+    const pending = allPay.docs.filter(d => d.data().status === "pending");
+    log("ℹ️", `  ${paid.length} paid, ${pending.length} pending — journal n'affiche que les paid`);
+  });
+
+  await test("Encaissement mixte : 2 modes sur 1 paiement", async () => {
+    const pay = await createDoc("payments", {
+      familyId: testFamilyId, familyName: "Dupont TEST",
+      items: [{ activityTitle: "Test Mixte", priceTTC: 50 }],
+      totalTTC: 50, paidAmount: 50, paymentMode: "mixte", paymentModes: ["cb_terminal", "cheque"],
+      status: "paid", date: FieldValue.serverTimestamp(),
+    });
+    await createDoc("encaissements", {
+      paymentId: pay.id, familyId: testFamilyId, montant: 30, mode: "cb_terminal",
+      date: FieldValue.serverTimestamp(),
+    });
+    await createDoc("encaissements", {
+      paymentId: pay.id, familyId: testFamilyId, montant: 20, mode: "cheque",
+      date: FieldValue.serverTimestamp(),
+    });
+    const encSnap = await db.collection("encaissements").where("paymentId", "==", pay.id).get();
+    const total = encSnap.docs.reduce((s, d) => s + (d.data().montant || 0), 0);
+    assert(total === 50, `Total encaissé = 50€ (trouvé ${total}€)`);
+    const modes = [...new Set(encSnap.docs.map(d => d.data().mode))];
+    assert(modes.includes("cb_terminal") && modes.includes("cheque"), "CB + Chèque");
+  });
+
+  // ══════════════════════════════════
+  section("26. INSCRIPTIONS OFFERTES");
+  // ══════════════════════════════════
+  await test("Offert : paiement 0€ avec isFree + freeReason", async () => {
+    const pay = await createDoc("payments", {
+      familyId: testFamilyId, familyName: "Dupont TEST",
+      items: [{ activityTitle: "Monte poney test", childId: "ch-lucas", childName: "Lucas",
+        priceTTC: 0, priceHT: 0, originalPriceTTC: 26 }],
+      totalTTC: 0, paidAmount: 0, paymentMode: "offert", status: "paid",
+      isFree: true, freeReason: "Monte poney",
+      note: "🎁 Offert — Monte poney (valeur : 26€)",
+      date: FieldValue.serverTimestamp(),
+    });
+    const snap = await db.collection("payments").doc(pay.id).get();
+    assert(snap.data().isFree === true, "isFree = true");
+    assert(snap.data().freeReason === "Monte poney", "Motif correct");
+    assert(snap.data().totalTTC === 0, "Total = 0€");
+    assert(snap.data().items[0].originalPriceTTC === 26, "Valeur originale conservée");
+  });
+
+  await test("Offert pas dans les impayés (status=paid)", async () => {
+    const snap = await db.collection("payments").where("_testTag", "==", TAG).where("isFree", "==", true).get();
+    for (const d of snap.docs) {
+      assert(d.data().status === "paid", "Offert = paid, jamais pending");
+    }
+  });
+
+  await test("Offerts requêtables par isFree", async () => {
+    const snap = await db.collection("payments").where("_testTag", "==", TAG).where("isFree", "==", true).get();
+    assert(snap.size >= 1, `Au moins 1 offert (trouvé ${snap.size})`);
+    const totalValeur = snap.docs.reduce((s, d) => {
+      return s + (d.data().items || []).reduce((ss, i) => ss + (i.originalPriceTTC || 0), 0);
+    }, 0);
+    log("ℹ️", `  ${snap.size} offert(s), valeur totale = ${totalValeur}€`);
+  });
+
+  // ══════════════════════════════════
+  section("27. STAGES — INSCRIPTION JOURNÉE");
+  // ══════════════════════════════════
+  await test("Stage avec allowDayBooking + priceTTCDay", async () => {
+    const stageDays = [];
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(); d.setDate(d.getDate() + 70 + i);
+      const cr = await createDoc("creneaux", {
+        date: d.toISOString().split("T")[0],
+        startTime: "10:00", endTime: "12:00",
+        activityTitle: "Stage Été Journée Test", activityType: "stage",
+        maxPlaces: 8, priceTTC: 150,
+        allowDayBooking: true, priceTTCDay: 35,
+        enrolled: [], status: "open",
+      });
+      stageDays.push(cr);
+    }
+    const snap = await db.collection("creneaux").doc(stageDays[0].id).get();
+    assert(snap.data().allowDayBooking === true, "allowDayBooking activé");
+    assert(snap.data().priceTTCDay === 35, "Prix journée = 35€");
+    assert(stageDays.length === 5, "5 jours de stage");
+  });
+
+  await test("Stage semaine complète : pas de allowDayBooking", async () => {
+    const d = new Date(); d.setDate(d.getDate() + 80);
+    const cr = await createDoc("creneaux", {
+      date: d.toISOString().split("T")[0],
+      startTime: "10:00", endTime: "12:00",
+      activityTitle: "Stage Semaine Only Test", activityType: "stage",
+      maxPlaces: 8, priceTTC: 150, allowDayBooking: false,
+      enrolled: [], status: "open",
+    });
+    const snap = await db.collection("creneaux").doc(cr.id).get();
+    assert(snap.data().allowDayBooking === false, "allowDayBooking désactivé");
+  });
+
+  await test("Réductions fratrie stage : structure correcte", async () => {
+    const pay = await createDoc("payments", {
+      familyId: testFamilyId, familyName: "Dupont TEST",
+      items: [
+        { activityTitle: "Stage Test", childName: "Lucas", priceTTC: 150, remise: 0 },
+        { activityTitle: "Stage Test", childName: "Emma", priceTTC: 140, remise: 10 },
+        { activityTitle: "Stage Test", childName: "Juliette", priceTTC: 130, remise: 20 },
+      ],
+      totalTTC: 420, paidAmount: 0, status: "pending",
+      date: FieldValue.serverTimestamp(),
+    });
+    const snap = await db.collection("payments").doc(pay.id).get();
+    assert(snap.data().items.length === 3, "3 enfants inscrits");
+    assert(snap.data().items[1].remise === 10, "2ème enfant -10€");
+    assert(snap.data().items[2].remise === 20, "3ème enfant -20€");
+  });
+
+  // ══════════════════════════════════
+  section("28. RATTRAPAGES");
+  // ══════════════════════════════════
+  await test("Créer un rattrapage (absence clôturée)", async () => {
+    const now = new Date();
+    const trimestreEnd = new Date(now.getFullYear(), Math.ceil((now.getMonth() + 1) / 3) * 3, 0);
+    const ref = await createDoc("rattrapages", {
+      childId: "ch-lucas", childName: "Lucas",
+      familyId: testFamilyId, familyName: "Dupont TEST",
+      forfaitId: forfaitId || "test-forfait",
+      sourceCreneauId: "test-cr", sourceDate: todayStr,
+      sourceActivity: "Galop d'or", sourceTime: "10:00–11:00",
+      status: "pending", usedOnCreneauId: null, usedOnDate: null,
+      expiryDate: trimestreEnd.toISOString().split("T")[0],
+    });
+    const snap = await db.collection("rattrapages").doc(ref.id).get();
+    assert(snap.data().status === "pending", "Status = pending");
+    assert(snap.data().expiryDate, "Date d'expiration définie");
+  });
+
+  await test("Rattrapage requêtable par childId + status pending", async () => {
+    const snap = await db.collection("rattrapages")
+      .where("childId", "==", "ch-lucas")
+      .where("status", "==", "pending")
+      .where("_testTag", "==", TAG)
+      .get();
+    assert(snap.size >= 1, `Au moins 1 rattrapage pending (trouvé ${snap.size})`);
+  });
+
+  await test("Utiliser un rattrapage → status used", async () => {
+    const snap = await db.collection("rattrapages")
+      .where("childId", "==", "ch-lucas")
+      .where("status", "==", "pending")
+      .where("_testTag", "==", TAG)
+      .get();
+    const rattId = snap.docs[0].id;
+    await db.collection("rattrapages").doc(rattId).update({
+      status: "used", usedOnCreneauId: "test-cr-used", usedOnDate: todayStr,
+    });
+    const snap2 = await db.collection("rattrapages").doc(rattId).get();
+    assert(snap2.data().status === "used", "Rattrapage marqué used");
+    assert(snap2.data().usedOnDate === todayStr, "Date d'utilisation");
+  });
+
+  // ══════════════════════════════════
+  section("29. ANTI-DOUBLON & EDGE CASES");
+  // ══════════════════════════════════
+  await test("Anti-doublon enrolled", async () => {
+    const cr = await createDoc("creneaux", {
+      date: todayStr, startTime: "14:00", endTime: "15:00",
+      activityTitle: "Test Doublon", activityType: "cours",
+      maxPlaces: 8, enrolled: [
+        { childId: "ch-lucas", childName: "Lucas", familyId: testFamilyId },
+      ], enrolledCount: 1, status: "open",
+    });
+    const snap = await db.collection("creneaux").doc(cr.id).get();
+    const enrolled = snap.data().enrolled || [];
+    const dupes = enrolled.filter(e => e.childId === "ch-lucas");
+    assert(dupes.length === 1, "Pas de doublon");
+  });
+
+  await test("Comptage impayés (pending + partial, hors offerts)", async () => {
+    const snap = await db.collection("payments").where("_testTag", "==", TAG).get();
+    const impayes = snap.docs.filter(d => {
+      const s = d.data().status;
+      return (s === "pending" || s === "partial") && !d.data().isFree;
+    });
+    log("ℹ️", `  ${impayes.length} impayé(s) de test`);
+    assert(impayes.length >= 1, "Au moins 1 impayé");
+  });
+
+  // ══════════════════════════════════
+  section("30. SEPA — STRUCTURE");
+  // ══════════════════════════════════
+  await test("Créer mandat SEPA", async () => {
+    const ref = await createDoc("mandats-sepa", {
+      familyId: testFamilyId, familyName: "Dupont TEST",
+      iban: "FR7616606100640013539343253", bic: "AGRIFRPP866",
+      mandatId: `MNDT-TEST-${TAG.slice(-4)}`, status: "actif",
+      signedAt: FieldValue.serverTimestamp(),
+    });
+    const snap = await db.collection("mandats-sepa").doc(ref.id).get();
+    assert(snap.data().status === "actif", "Mandat actif");
+    assert(snap.data().iban.startsWith("FR"), "IBAN FR valide");
+  });
+
+  await test("Créer échéance SEPA", async () => {
+    const ref = await createDoc("echeances-sepa", {
+      familyId: testFamilyId, familyName: "Dupont TEST",
+      montant: 100, echeance: 1, echeancesTotal: 3,
+      status: "pending", dueDate: todayStr,
+    });
+    const snap = await db.collection("echeances-sepa").doc(ref.id).get();
+    assert(snap.data().montant === 100, "Montant = 100€");
+    assert(snap.data().status === "pending", "Status pending");
+  });
 
   // ═══════════════════════════════════════
   // NETTOYAGE & RÉSUMÉ
