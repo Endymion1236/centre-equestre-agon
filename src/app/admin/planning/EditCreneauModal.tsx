@@ -21,6 +21,8 @@ export interface EditForm {
   maxPlaces: number | string;
   priceTTC: number | string;
   color: string;
+  allowDayBooking?: boolean;
+  priceTTCDay?: number | string;
 }
 
 interface Props {
@@ -126,6 +128,30 @@ export default function EditCreneauModal({
                 className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
             </div>
           </div>
+
+          {/* Option inscription à la journée (stages uniquement) */}
+          {(creneau.activityType === "stage" || creneau.activityType === "stage_journee") && (
+            <div className="bg-green-50 rounded-xl p-3 flex flex-col gap-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={!!form.allowDayBooking} onChange={e => onFormChange({...form, allowDayBooking: e.target.checked})}
+                  className="accent-green-600 w-4 h-4"/>
+                <div>
+                  <div className="font-body text-sm font-semibold text-green-800">Autoriser l'inscription à la journée</div>
+                  <div className="font-body text-xs text-slate-500 mt-0.5">Les cavaliers pourront choisir des jours individuels au lieu de la semaine complète</div>
+                </div>
+              </label>
+              {form.allowDayBooking && (
+                <div>
+                  <label className="font-body text-xs font-semibold text-green-800 block mb-1">Prix TTC par journée (€)</label>
+                  <input type="number" min="0" step="0.5" value={form.priceTTCDay || ""}
+                    onChange={e => onFormChange({...form, priceTTCDay: e.target.value})}
+                    placeholder="Ex: 35"
+                    className="w-full px-3 py-2 rounded-lg border border-green-200 font-body text-sm bg-white focus:border-green-500 focus:outline-none"/>
+                  <div className="font-body text-[10px] text-slate-500 mt-1">Si vide, le tarif sera calculé au prorata du prix semaine</div>
+                </div>
+              )}
+            </div>
+          )}
 
           <label className="flex items-start gap-3 bg-blue-50 rounded-xl p-3 cursor-pointer">
             <input type="checkbox" checked={applyAll} onChange={e => onApplyAllChange(e.target.checked)}

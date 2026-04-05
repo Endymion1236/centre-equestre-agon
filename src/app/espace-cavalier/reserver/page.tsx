@@ -44,6 +44,8 @@ export default function ReserverPage() {
   const [waitlistSuccess, setWaitlistSuccess] = useState<string | null>(null); // creneauId confirmé
   const [waitlistLoading, setWaitlistLoading] = useState<string | null>(null); // creneauId en cours
   const [familyAvoirs, setFamilyAvoirs] = useState<any[]>([]);
+  const [stageBookingMode, setStageBookingMode] = useState<"semaine" | "jour">("semaine");
+  const [selectedDays, setSelectedDays] = useState<string[]>([]);
 
   // Tous les cavaliers disponibles = propres + liés
   const ownChildren = family?.children || [];
@@ -184,7 +186,19 @@ export default function ReserverPage() {
   const addStageToCart = (stageCreneaux: Creneau[]) => {
     if (selectedChildren.length === 0) return;
     const first = stageCreneaux[0];
-    const prixBase = (first as any).priceTTC || first.priceHT * (1 + (first.tvaTaux || 5.5) / 100);
+    const prixSemaine = (first as any).priceTTC || first.priceHT * (1 + (first.tvaTaux || 5.5) / 100);
+    const allowDay = (first as any).allowDayBooking;
+    const isJourMode = allowDay && stageBookingMode === "jour";
+
+    // Calculer le prix effectif
+    let prixBase: number;
+    if (isJourMode) {
+      const prixJour = (first as any).priceTTCDay || Math.round(prixSemaine / stageCreneaux.length * 100) / 100;
+      prixBase = Math.round(prixJour * stageCreneaux.length * 100) / 100;
+    } else {
+      prixBase = prixSemaine;
+    }
+
     const dates = stageCreneaux.map(c => new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short" })).join(", ");
 
     // Filtrer les enfants déjà dans le panier pour ce stage
@@ -202,14 +216,20 @@ export default function ReserverPage() {
       return;
     }
 
+    // Nombre total de jours du stage pour calculer la remise au prorata
+    const totalJoursStage = isJourMode ? stageCreneaux.length : 1; // pour le calcul de remise
+    const nbJoursSemaine = Math.max(1, stageCreneaux.length); // fallback
+
     const newItems: CartItem[] = childrenToAdd.map((childId, idx) => {
       const child = children.find((c: any) => c.id === childId);
       const rang = existingStageCount + idx;
-      const remise = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
+      const remiseSemaine = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
+      // Prorata de la remise si mode jour
+      const remise = isJourMode ? Math.round(remiseSemaine * stageCreneaux.length / nbJoursSemaine * 100) / 100 : remiseSemaine;
       return {
         creneauIds: stageCreneaux.map(c => c.id),
         activityTitle: first.activityTitle,
-        dates: `${stageCreneaux.length} jours (${dates})`,
+        dates: isJourMode ? `${stageCreneaux.length} jour${stageCreneaux.length > 1 ? "s" : ""} (${dates})` : `${stageCreneaux.length} jours (${dates})`,
         childId,
         childName: (child as any)?.firstName || "?",
         prixBase: Math.round(prixBase * 100) / 100,
@@ -574,7 +594,7 @@ export default function ReserverPage() {
 
                   return (
                     <Card key={key} padding="md" className={isSelected ? "ring-2 ring-green-500" : ""}>
-                      <div className="flex justify-between items-start cursor-pointer" onClick={() => { setSelectedCreneau(isSelected ? null : first); setSelectedChildren([]); }}>
+                      <div className="flex justify-between items-start cursor-pointer" onClick={() => { setSelectedCreneau(isSelected ? null : first); setSelectedChildren([]); setStageBookingMode("semaine"); setSelectedDays([]); }}>
                         <div>
                           <div className="font-body text-base font-semibold text-blue-800">{first.activityTitle}</div>
                           <div className="font-body text-xs text-gray-600 mt-1">
@@ -624,8 +644,51 @@ export default function ReserverPage() {
                       </div>
 
                       {/* Sélection enfants pour ce stage */}
-                      {isSelected && spots > 0 && (
+                      {isSelected && spots > 0 && (() => {
+                        const allowDay = (first as any).allowDayBooking;
+                        const prixJour = (first as any).priceTTCDay || Math.round(prix / joursUniques.length * 100) / 100;
+                        // State local pour le mode et les jours sélectionnés
+                        // On utilise un key basé sur le stage pour réinitialiser
+                        return (
                         <div className="mt-4 pt-4 border-t border-green-200">
+                          {/* Choix mode si autorisé */}
+                          {allowDay && (
+                            <div className="mb-3">
+                              <div className="font-body text-xs font-semibold text-green-700 mb-2">Mode d'inscription :</div>
+                              <div className="flex gap-2">
+                                <button onClick={(e) => { e.stopPropagation(); setStageBookingMode("semaine"); setSelectedDays([]); }}
+                                  className={`flex-1 py-2 rounded-lg font-body text-sm font-semibold border cursor-pointer ${stageBookingMode === "semaine" ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200"}`}>
+                                  Semaine complète ({prix.toFixed(0)}€)
+                                </button>
+                                <button onClick={(e) => { e.stopPropagation(); setStageBookingMode("jour"); }}
+                                  className={`flex-1 py-2 rounded-lg font-body text-sm font-semibold border cursor-pointer ${stageBookingMode === "jour" ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200"}`}>
+                                  À la journée ({prixJour.toFixed(0)}€/j)
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Sélection des jours si mode jour */}
+                          {allowDay && stageBookingMode === "jour" && (
+                            <div className="mb-3">
+                              <div className="font-body text-xs font-semibold text-green-700 mb-2">Choisissez vos jours :</div>
+                              <div className="flex flex-wrap gap-2">
+                                {joursUniques.map(c => {
+                                  const dayLabel = new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+                                  const sel = selectedDays.includes(c.id);
+                                  const daySpots = spotsLeft(c);
+                                  return (
+                                    <button key={c.id} disabled={daySpots <= 0} onClick={(e) => { e.stopPropagation(); setSelectedDays(sel ? selectedDays.filter(x => x !== c.id) : [...selectedDays, c.id]); }}
+                                      className={`px-3 py-2 rounded-lg border font-body text-sm cursor-pointer transition-all ${daySpots <= 0 ? "opacity-40 cursor-not-allowed bg-gray-100 border-gray-200 text-gray-400" : sel ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200 hover:border-green-400"}`}>
+                                      {sel ? <Check size={12} className="inline mr-1" /> : null}{dayLabel}
+                                      {daySpots <= 2 && daySpots > 0 && <span className="text-[10px] ml-1 text-orange-500">({daySpots} pl.)</span>}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
                           <div className="font-body text-xs font-semibold text-green-700 mb-2">Inscrire vos enfants :</div>
                           <div className="flex flex-wrap gap-2 mb-3">
                             {children.filter((c: any) => !(first.enrolled || []).some((e: any) => e.childId === c.id)).map((c: any) => {
@@ -639,36 +702,53 @@ export default function ReserverPage() {
                             })}
                           </div>
                           {/* Récap avec réductions */}
-                          {selectedChildren.length > 0 && (
+                          {selectedChildren.length > 0 && (() => {
+                            const isJourMode = allowDay && stageBookingMode === "jour";
+                            const prixEffectif = isJourMode ? prixJour * selectedDays.length : prix;
+                            const creneauxToBook = isJourMode ? stageCreneaux.filter(c => selectedDays.includes(c.id)) : stageCreneaux;
+                            const nbJours = isJourMode ? selectedDays.length : joursUniques.length;
+                            return (
+                            <>
                             <div className="bg-green-50 rounded-lg p-3 mb-3">
-                              {selectedChildren.map((childId, idx) => {
+                              {isJourMode && selectedDays.length === 0 && (
+                                <p className="font-body text-xs text-orange-600">Sélectionnez au moins un jour</p>
+                              )}
+                              {(isJourMode ? selectedDays.length > 0 : true) && selectedChildren.map((childId, idx) => {
                                 const child = children.find((c: any) => c.id === childId);
                                 const rang = existingStageCount + idx;
-                                const remise = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
-                                const prixFinal = Math.max(0, prix - remise);
+                                const remiseSemaine = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
+                                const remise = isJourMode ? Math.round(remiseSemaine / joursUniques.length * selectedDays.length * 100) / 100 : remiseSemaine;
+                                const prixFinal = Math.max(0, Math.round((prixEffectif - remise) * 100) / 100);
                                 return (
                                   <div key={childId} className="flex justify-between font-body text-sm py-1">
                                     <div className="flex items-center gap-2">
                                       <span className="text-blue-800 font-semibold">{(child as any)?.firstName}</span>
-                                      <span className="text-green-600 text-xs">-{remise}€</span>
+                                      {isJourMode && <span className="text-green-600 text-xs">{nbJours}j × {prixJour.toFixed(0)}€</span>}
+                                      {remise > 0 && <span className="text-green-600 text-xs">-{remise.toFixed(0)}€</span>}
                                     </div>
-                                    <div>
-                                      <span className="text-gray-600 line-through text-xs mr-1">{prix.toFixed(0)}€</span>
-                                      <span className="font-bold text-green-600">{prixFinal.toFixed(0)}€</span>
-                                    </div>
+                                    <span className="font-bold text-green-600">{prixFinal.toFixed(0)}€</span>
                                   </div>
                                 );
                               })}
                             </div>
-                          )}
-                          {selectedChildren.length > 0 && (
-                            <button onClick={(e) => { e.stopPropagation(); addStageToCart(stageCreneaux); }}
-                              className="w-full py-2.5 rounded-lg font-body text-sm font-semibold text-white bg-green-600 border-none cursor-pointer hover:bg-green-500">
-                              Ajouter au panier ({selectedChildren.length} enfant{selectedChildren.length > 1 ? "s" : ""})
-                            </button>
-                          )}
+                            {(!isJourMode || selectedDays.length > 0) && (
+                              <button onClick={(e) => {
+                                e.stopPropagation();
+                                if (isJourMode) {
+                                  // Mode jour : inscrire uniquement les jours sélectionnés
+                                  addStageToCart(creneauxToBook);
+                                } else {
+                                  addStageToCart(stageCreneaux);
+                                }
+                              }}
+                                className="w-full py-2.5 rounded-lg font-body text-sm font-semibold text-white bg-green-600 border-none cursor-pointer hover:bg-green-500">
+                                Ajouter au panier ({selectedChildren.length} enfant{selectedChildren.length > 1 ? "s" : ""}{isJourMode ? ` · ${nbJours} jour${nbJours > 1 ? "s" : ""}` : ""})
+                              </button>
+                            )}
+                            </>
+                          );})()}
                         </div>
-                      )}
+                      );})()}
                     </Card>
                   );
                 })}
