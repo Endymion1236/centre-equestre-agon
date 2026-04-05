@@ -40,6 +40,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [avoirSolde, setAvoirSolde] = useState<Record<string, number>>({});
   const [freeEnroll, setFreeEnroll] = useState(false);
   const [freeReason, setFreeReason] = useState("Rattrapage");
+  const [childRattrapages, setChildRattrapages] = useState<any[]>([]);
+  const [useRattrapage, setUseRattrapage] = useState<string | null>(null); // rattrapageId
   const [inscriptionMode, setInscriptionMode] = useState<"ponctuel" | "annuel">("ponctuel");
   const [licenceType, setLicenceType] = useState<"moins18" | "plus18">("moins18");
   const [adhesion, setAdhesion] = useState(true);
@@ -108,6 +110,21 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       })
       .catch(() => {});
   }, [selFam]);
+
+  // Charger les rattrapages disponibles pour l'enfant sélectionné
+  useEffect(() => {
+    if (!selChild) { setChildRattrapages([]); setUseRattrapage(null); return; }
+    const today = new Date().toISOString().split("T")[0];
+    getDocs(query(collection(db, "rattrapages"), where("childId", "==", selChild), where("status", "==", "pending")))
+      .then(snap => {
+        const valid = snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .filter((r: any) => !r.expiryDate || r.expiryDate >= today);
+        setChildRattrapages(valid);
+      })
+      .catch(() => setChildRattrapages([]));
+    setUseRattrapage(null);
+  }, [selChild]);
 
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [stageMode, setStageMode] = useState<"semaine" | "jour">("semaine");
@@ -1429,11 +1446,39 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                           const disabled = isAvoir && solde <= 0;
                           return <button key={m.id} onClick={()=>!disabled && setPayMode(m.id)} disabled={disabled} className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${disabled ? "opacity-40 cursor-not-allowed bg-gray-50 text-gray-400 border-gray-200" : payMode===m.id?"bg-blue-500 text-white border-blue-500":"bg-white text-slate-600 border-gray-200"}`}>{m.icon} {m.label}{isAvoir && solde > 0 ? ` (${solde.toFixed(0)}€)` : ""}</button>;
                         })}</div>}
-                        {!showPay && (
-                          <button onClick={() => { setFreeEnroll(true); setShowPay(false); }}
-                            className="mt-2 ml-6 font-body text-[10px] text-green-600 bg-transparent border-none cursor-pointer underline">
-                            🎁 Offert / Rattrapage (pas de facturation)
-                          </button>
+                        {!showPay && !freeEnroll && (
+                          <div className="mt-2 ml-6 flex flex-col gap-1.5">
+                            {childRattrapages.length > 0 && !useRattrapage && (
+                              <div className="bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
+                                <div className="font-body text-xs font-semibold text-purple-700">🔄 {childRattrapages.length} rattrapage{childRattrapages.length > 1 ? "s" : ""} disponible{childRattrapages.length > 1 ? "s" : ""}</div>
+                                <div className="flex flex-col gap-1 mt-1.5">
+                                  {childRattrapages.map((r: any) => (
+                                    <button key={r.id} onClick={() => { setUseRattrapage(r.id); setShowPay(false); setFreeEnroll(false); }}
+                                      className="flex items-center justify-between px-2 py-1.5 rounded bg-white border border-purple-100 font-body text-[10px] text-purple-700 cursor-pointer hover:bg-purple-50 text-left">
+                                      <span>Absent le {new Date(r.sourceDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} — {r.sourceActivity}</span>
+                                      <span className="text-purple-500 font-semibold ml-2">Utiliser →</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {useRattrapage && (
+                              <div className="bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
+                                <div className="font-body text-sm font-semibold text-purple-700">🔄 Rattrapage sélectionné</div>
+                                <div className="font-body text-[10px] text-purple-600 mt-0.5">
+                                  {(() => { const r = childRattrapages.find((x: any) => x.id === useRattrapage); return r ? `Absence du ${new Date(r.sourceDate).toLocaleDateString("fr-FR")} — ${r.sourceActivity}` : ""; })()}
+                                </div>
+                                <div className="font-body text-[10px] text-green-600 mt-0.5">Aucun paiement ne sera créé.</div>
+                                <button onClick={() => setUseRattrapage(null)} className="font-body text-[10px] text-slate-500 mt-1 bg-transparent border-none cursor-pointer underline">Annuler</button>
+                              </div>
+                            )}
+                            {!useRattrapage && (
+                              <button onClick={() => { setFreeEnroll(true); setShowPay(false); }}
+                                className="font-body text-[10px] text-green-600 bg-transparent border-none cursor-pointer underline text-left">
+                                🎁 Offert (pas de facturation)
+                              </button>
+                            )}
+                          </div>
                         )}
                       </>
                     )}

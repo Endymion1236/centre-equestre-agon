@@ -322,6 +322,51 @@ export default function MontoirPage() {
       } catch (e) { console.error("Erreur trace absent carte:", e); }
     }
 
+    // 4c. Créer des crédits rattrapage pour les absents ayant un forfait actif
+    let rattrapagesCreated = 0;
+    for (const child of absents) {
+      try {
+        // Vérifier si l'enfant a un forfait actif
+        const forfaitSnap = await getDocs(query(
+          collection(db, "forfaits"),
+          where("childId", "==", child.childId),
+          where("status", "in", ["active", "actif"])
+        ));
+        if (forfaitSnap.empty) continue;
+
+        // Anti-doublon : vérifier si un rattrapage existe déjà pour ce créneau + enfant
+        const existingSnap = await getDocs(query(
+          collection(db, "rattrapages"),
+          where("childId", "==", child.childId),
+          where("sourceCreneauId", "==", cid)
+        ));
+        if (!existingSnap.empty) continue;
+
+        // Calculer la fin du trimestre en cours
+        const now = new Date();
+        const currentMonth = now.getMonth(); // 0-11
+        const trimestreEnd = new Date(now.getFullYear(), Math.ceil((currentMonth + 1) / 3) * 3, 0); // dernier jour du trimestre
+
+        await addDoc(collection(db, "rattrapages"), {
+          childId: child.childId,
+          childName: child.childName,
+          familyId: child.familyId,
+          familyName: child.familyName,
+          forfaitId: forfaitSnap.docs[0].id,
+          sourceCreneauId: cid,
+          sourceDate: c.date,
+          sourceActivity: c.activityTitle,
+          sourceTime: `${c.startTime}–${c.endTime}`,
+          status: "pending", // pending | used | expired
+          usedOnCreneauId: null,
+          usedOnDate: null,
+          expiryDate: trimestreEnd.toISOString().split("T")[0],
+          createdAt: serverTimestamp(),
+        });
+        rattrapagesCreated++;
+      } catch (e) { console.error("Erreur création rattrapage:", e); }
+    }
+
     // 5. Proposer l'ajout de notes rapides
     if (presents.length > 0) {
       setQuickNoteChild({ cid, children: presents.map(p => ({ childId: p.childId, childName: p.childName, horseName: p.horseName || "" })) });
@@ -330,6 +375,7 @@ export default function MontoirPage() {
     const parts = [`Reprise clôturée.`];
     if (notesCreated > 0) parts.push(`${notesCreated} trace${notesCreated > 1 ? "s" : ""} péda.`);
     if (cartesDebitees > 0) parts.push(`${cartesDebitees} carte${cartesDebitees > 1 ? "s" : ""} débitée${cartesDebitees > 1 ? "s" : ""}.`);
+    if (rattrapagesCreated > 0) parts.push(`${rattrapagesCreated} rattrapage${rattrapagesCreated > 1 ? "s" : ""} créé${rattrapagesCreated > 1 ? "s" : ""}.`);
     toast(parts.join(" "), "success");
     fetchData();
   };
