@@ -400,7 +400,7 @@ export default function PlanningPage() {
   };
   const refreshCreneaux = async () => { const s=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[0]); const e=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[6]); const snap=await getDocs(query(collection(db,"creneaux"),where("date",">=",s),where("date","<=",e))); const fresh=snap.docs.map(d=>({id:d.id,...d.data()})) as (Creneau&{id:string})[]; setCreneaux(fresh); return fresh; };
 
-  const handleEnroll = async (cid: string, child: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean }) => {
+  const handleEnroll = async (cid: string, child: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean; freeReason?: string }) => {
     const enrolled = await enrollChildInCreneau(cid, child);
     if (!enrolled) return;
 
@@ -414,6 +414,37 @@ export default function PlanningPage() {
       const c = { id: snap.id, ...snap.data() } as any;
       await createReservation(child, c);
       reservationCreated = true;
+
+      // Inscription offerte → créer un paiement à 0€ avec motif (traçabilité)
+      if (options?.freeReason) {
+        const priceTTC = c.priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
+        const priceHT = priceTTC / (1 + (c.tvaTaux || 5.5) / 100);
+        await addDoc(collection(db, "payments"), {
+          orderId: generateOrderId(),
+          familyId: child.familyId, familyName: child.familyName,
+          items: [{
+            activityTitle: c.activityTitle, childId: child.childId, childName: child.childName,
+            creneauId: cid, activityType: c.activityType, date: c.date,
+            startTime: c.startTime, endTime: c.endTime,
+            priceHT: 0, tva: c.tvaTaux || 5.5, priceTTC: 0,
+            originalPriceTTC: Math.round(priceTTC * 100) / 100,
+          }],
+          totalTTC: 0, paidAmount: 0,
+          paymentMode: "offert",
+          paymentRef: "",
+          status: "paid",
+          isFree: true,
+          freeReason: options.freeReason,
+          note: `🎁 Offert — ${options.freeReason} (valeur : ${priceTTC.toFixed(2)}€)`,
+          date: serverTimestamp(),
+        });
+        // Pas d'encaissement, pas de facture — juste la trace
+        if (!options?.skipEmail && child.familyId) {
+          // Email optionnel si besoin
+        }
+        await refreshCreneaux();
+        return;
+      }
 
       // skipPayment = true pour les inscriptions stage multi-jours
       const priceTTC = c.priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);

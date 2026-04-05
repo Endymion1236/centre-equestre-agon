@@ -30,7 +30,7 @@ import { Creneau, EnrolledChild, payModes, typeColors, fmtDate } from "./types";
 
 function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allForfaits, onClose, onEnroll, onUnenroll }: {
   creneau: Creneau & { id: string }; families: (Family & { firestoreId: string })[]; allCreneaux: (Creneau & { id: string })[]; payments: any[]; allCartes: any[]; allForfaits: any[];  onClose: () => void;
-  onEnroll: (id: string, c: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean }) => Promise<void>;
+  onEnroll: (id: string, c: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean; freeReason?: string }) => Promise<void>;
   onUnenroll: (id: string, childId: string) => Promise<void>;
 }) {
   const { toast: panelToast } = useToast();
@@ -39,6 +39,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [showPay, setShowPay] = useState(false); const [payMode, setPayMode] = useState("cb_terminal"); const [unenrolling, setUnenrolling] = useState("");
   const [avoirSolde, setAvoirSolde] = useState<Record<string, number>>({});
   const [freeEnroll, setFreeEnroll] = useState(false);
+  const [freeReason, setFreeReason] = useState("Rattrapage");
   const [inscriptionMode, setInscriptionMode] = useState<"ponctuel" | "annuel">("ponctuel");
   const [licenceType, setLicenceType] = useState<"moins18" | "plus18">("moins18");
   const [adhesion, setAdhesion] = useState(true);
@@ -840,7 +841,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         }
       }
     } else {
-      const freeEnrollOptions = freeEnroll ? { skipPayment: true, skipEmail: false } : undefined;
+      const freeEnrollOptions = freeEnroll ? { freeReason, skipEmail: false } : undefined;
       await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, inscriptionMode === "ponctuel" && showPay && !freeEnroll ? payMode : undefined, enrollOptions || freeEnrollOptions);
     }
 
@@ -848,10 +849,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       setJustEnrolled(`${childName} inscrit(e) en forfait annuel — ${sessionsRestantes} séances — ${totalAnnuel.toFixed(2)}€ en ${payPlan}`);
       panelToast(`Forfait créé — ${totalAnnuel.toFixed(2)}€ en ${payPlan}`, "success");
     } else {
-      const payInfo = showPay ? " — encaissé ✅" : priceTTC > 0 ? " — paiement en attente" : "";
+      const payInfo = freeEnroll ? ` — 🎁 offert (${freeReason})` : showPay ? " — encaissé ✅" : priceTTC > 0 ? " — paiement en attente" : "";
       setJustEnrolled(`${childName}${payInfo}`);
     }
-    setSelChild(""); setSelFam(""); setSearch(""); setEnrolling(false); setShowPay(false); setFreeEnroll(false); setInscriptionMode("ponctuel"); setExtraSlots([]); setExtraSlotSearch(""); setAnnualPayMode("cb_terminal");
+    setSelChild(""); setSelFam(""); setSearch(""); setEnrolling(false); setShowPay(false); setFreeEnroll(false); setFreeReason("Rattrapage"); setInscriptionMode("ponctuel"); setExtraSlots([]); setExtraSlotSearch(""); setAnnualPayMode("cb_terminal");
     setTimeout(() => setJustEnrolled(""), 5000);
   };
 
@@ -1398,8 +1399,20 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     ) : freeEnroll ? (
                       <div className="bg-green-50 rounded-lg px-3 py-2">
                         <div className="font-body text-sm font-semibold text-green-700">🎁 Inscription offerte</div>
-                        <div className="font-body text-[10px] text-green-600 mt-0.5">Aucun paiement ni impayé ne sera créé.</div>
-                        <button onClick={() => setFreeEnroll(false)} className="font-body text-[10px] text-slate-500 mt-1 bg-transparent border-none cursor-pointer underline">Annuler</button>
+                        <div className="font-body text-[10px] text-green-600 mt-0.5">Un paiement à 0€ sera créé avec le motif ci-dessous (traçabilité).</div>
+                        <div className="mt-2">
+                          <label className="font-body text-[10px] font-semibold text-green-800 block mb-1">Motif</label>
+                          <select value={freeReason} onChange={e => setFreeReason(e.target.value)}
+                            className="w-full px-2 py-1.5 rounded-lg border border-green-200 font-body text-xs bg-white focus:border-green-500 focus:outline-none cursor-pointer">
+                            <option value="Rattrapage">Rattrapage (météo, absence moniteur...)</option>
+                            <option value="Essai">Séance d'essai</option>
+                            <option value="Monte poney">Monte d'un jeune poney</option>
+                            <option value="Geste commercial">Geste commercial</option>
+                            <option value="Bénévole">Contrepartie bénévolat</option>
+                            <option value="Autre">Autre</option>
+                          </select>
+                        </div>
+                        <button onClick={() => setFreeEnroll(false)} className="font-body text-[10px] text-slate-500 mt-2 bg-transparent border-none cursor-pointer underline">Annuler</button>
                       </div>
                     ) : (
                       <>
