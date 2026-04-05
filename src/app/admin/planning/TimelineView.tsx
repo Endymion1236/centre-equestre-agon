@@ -64,13 +64,13 @@ export default function TimelineView({
             const isStageType = (c: any) => c.activityType === "stage" || c.activityType === "stage_journee";
 
             return (
-              <div className="overflow-x-auto -mx-4 px-4">
-                <div className="flex" style={{ minWidth: "100%" }}>
+              <div className="overflow-x-auto -mx-4 px-4 pb-2">
+                <div className="flex" style={{ minWidth: "max(100%, 700px)" }}>
                   {/* Colonne heures */}
-                  <div className="w-14 flex-shrink-0 relative" style={{ height: totalHeight }}>
+                  <div className="w-12 sm:w-14 flex-shrink-0 relative" style={{ height: totalHeight }}>
                     {gridHours.map(h => (
                       <div key={h} className="absolute w-full flex items-start" style={{ top: (h - minHour) * HOUR_HEIGHT }}>
-                        <span className="font-body text-[10px] text-slate-400 pr-2 leading-none">{`${h}:00`}</span>
+                        <span className="font-body text-[10px] text-slate-400 pr-1 sm:pr-2 leading-none">{`${h}:00`}</span>
                       </div>
                     ))}
                   </div>
@@ -124,10 +124,11 @@ export default function TimelineView({
                     };
 
                     return (
-                      <div key={dayIdx} className="flex-1 relative border-l border-gray-100" style={{ minWidth: 0, height: totalHeight }}>
+                      <div key={dayIdx} className="flex-1 relative border-l border-gray-100" style={{ minWidth: 90, height: totalHeight }}>
                         {/* Header jour */}
-                        <div className={`sticky top-0 z-10 text-center py-1.5 font-body text-xs font-semibold border-b border-gray-200 ${isToday(d) ? "bg-blue-500 text-white" : "bg-sand text-slate-600"}`}>
-                          {fmtDateFR(d)}
+                        <div className={`sticky top-0 z-10 text-center py-1.5 font-body font-semibold border-b border-gray-200 ${isToday(d) ? "bg-blue-500 text-white" : "bg-sand text-slate-600"}`}>
+                          <div className="text-[11px] sm:text-xs leading-tight">{d.toLocaleDateString("fr-FR", { weekday: "short" })}</div>
+                          <div className="text-sm sm:text-base font-bold leading-tight">{d.getDate()}</div>
                         </div>
 
                         {/* Badges stages */}
