@@ -19,6 +19,7 @@ export default function DashboardPage() {
   const [fideliteSettings, setFideliteSettings] = useState<{ taux: number; minPoints: number; enabled: boolean } | null>(null);
   const [openCardId, setOpenCardId] = useState<string | null>(null);
   const [convertingPoints, setConvertingPoints] = useState(false);
+  const [showFidHistory, setShowFidHistory] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -250,31 +251,49 @@ export default function DashboardPage() {
       )}
 
       {/* ─── Fidélité ─── */}
-      {fideliteSettings?.enabled && (
+      {fideliteSettings?.enabled && (() => {
+        const points = fidelite?.points || 0;
+        const taux = fideliteSettings.taux || 50;
+        const minPoints = fideliteSettings.minPoints || 500;
+        const valeurEuros = (points / taux).toFixed(2);
+        const canConvert = points >= minPoints;
+        const history = (fidelite?.history || []).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const [showHistory, setShowHistory2] = [showFidHistory, setShowFidHistory];
+
+        return (
         <>
           <h2 className="font-display text-lg font-bold text-blue-800 mb-4">🏆 Fidélité</h2>
           <div className="flex flex-col gap-3 mb-8">
+            {/* Solde + explication */}
             <Card padding="md" className="bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-200">
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-yellow-400 flex items-center justify-center text-2xl flex-shrink-0">🏆</div>
                 <div className="flex-1">
                   <div className="font-body text-[10px] text-yellow-600 uppercase font-semibold tracking-wider">Solde de points</div>
-                  <div className="font-display text-3xl font-bold text-yellow-700">{fidelite?.points || 0}</div>
+                  <div className="font-display text-3xl font-bold text-yellow-700">{points}</div>
                   <div className="font-body text-[10px] text-yellow-600">
-                    = {((fidelite?.points || 0) / (fideliteSettings.taux || 50)).toFixed(2)}€ de réduction
+                    = {valeurEuros}€ de réduction
                   </div>
+                </div>
+              </div>
+              {/* Comment ça marche */}
+              <div className="mt-3 pt-3 border-t border-yellow-200/50">
+                <div className="font-body text-[10px] text-yellow-700 space-y-1">
+                  <p className="m-0">💰 <strong>1€ dépensé = 1 point</strong> gagné automatiquement</p>
+                  <p className="m-0">🎁 <strong>{taux} points = 1€</strong> de réduction convertible en avoir</p>
+                  <p className="m-0">⏰ Points valables <strong>1 an</strong> après chaque gain</p>
                 </div>
               </div>
             </Card>
 
-            {(fidelite?.points || 0) >= (fideliteSettings.minPoints || 500) ? (
-              <Card padding="md">
+            {/* Barre de progression */}
+            <Card padding="sm">
+              {canConvert ? (
                 <button
                   disabled={convertingPoints}
                   onClick={async () => {
                     if (!user || !fidelite) return;
-                    const taux = fideliteSettings.taux || 50;
-                    const montant = Math.floor(fidelite.points / taux * 100) / 100;
+                    const montant = Math.floor(points / taux * 100) / 100;
                     const pts = Math.floor(montant * taux);
                     if (!confirm(`Convertir ${pts} points en ${montant.toFixed(2)}€ d'avoir ?`)) return;
                     setConvertingPoints(true);
@@ -286,7 +305,7 @@ export default function DashboardPage() {
                         reason: `Conversion fidélité (${pts} pts)`, reference: `FID-${Date.now().toString(36).toUpperCase()}`,
                         sourceType: "fidelite", status: "actif", expiryDate: expiry, usageHistory: [], createdAt: serverTimestamp(),
                       });
-                      const newPts = (fidelite.points || 0) - pts;
+                      const newPts = points - pts;
                       await updateDoc(doc(db, "fidelite", user.uid), {
                         points: newPts,
                         history: [...(fidelite.history || []), { date: new Date().toISOString(), points: -pts, type: "conversion", label: `Avoir ${montant.toFixed(2)}€` }],
@@ -298,22 +317,60 @@ export default function DashboardPage() {
                     setConvertingPoints(false);
                   }}
                   className="w-full py-3 rounded-xl font-body text-sm font-bold text-white bg-yellow-500 border-none cursor-pointer hover:bg-yellow-600 disabled:opacity-50">
-                  {convertingPoints ? "..." : `Convertir en avoir — ${((fidelite?.points || 0) / (fideliteSettings.taux || 50)).toFixed(2)}€`}
+                  {convertingPoints ? "..." : `🎁 Convertir ${Math.floor(points / taux * 100) / 100}€ d'avoir`}
                 </button>
-              </Card>
-            ) : (
+              ) : (
+                <>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="font-body text-xs text-gray-500">
+                      Encore <strong>{minPoints - points} pts</strong> avant conversion
+                    </span>
+                    <span className="font-body text-[10px] text-yellow-600 font-semibold">{Math.round(points / minPoints * 100)}%</span>
+                  </div>
+                  <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-yellow-300 to-yellow-500 transition-all" style={{ width: `${Math.min(100, (points / minPoints) * 100)}%` }} />
+                  </div>
+                </>
+              )}
+            </Card>
+
+            {/* Historique des points */}
+            {history.length > 0 && (
               <Card padding="sm">
-                <div className="font-body text-xs text-gray-500 mb-2">
-                  Encore <strong>{(fideliteSettings.minPoints || 500) - (fidelite?.points || 0)} pts</strong> avant conversion
-                </div>
-                <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                  <div className="h-full rounded-full bg-yellow-400" style={{ width: `${Math.min(100, ((fidelite?.points || 0) / (fideliteSettings.minPoints || 500)) * 100)}%` }} />
-                </div>
+                <button onClick={() => setShowFidHistory(!showHistory)}
+                  className="w-full flex justify-between items-center bg-transparent border-none cursor-pointer p-0">
+                  <span className="font-body text-xs font-semibold text-blue-800">📋 Historique des points</span>
+                  <span className="font-body text-[10px] text-gray-400">{showHistory ? "▲ Masquer" : `▼ ${history.length} mouvement${history.length > 1 ? "s" : ""}`}</span>
+                </button>
+                {showHistory && (
+                  <div className="mt-3 flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                    {history.slice(0, 20).map((h: any, i: number) => {
+                      const isGain = h.type === "gain" || (h.points > 0);
+                      const d = new Date(h.date);
+                      return (
+                        <div key={i} className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-body text-xs text-gray-700 truncate">{h.label || (isGain ? "Encaissement" : "Conversion")}</div>
+                            <div className="font-body text-[10px] text-gray-400">{d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}</div>
+                          </div>
+                          <span className={`font-body text-sm font-bold flex-shrink-0 ml-2 ${isGain ? "text-green-600" : "text-red-500"}`}>
+                            {isGain ? "+" : ""}{h.points} pts
+                          </span>
+                        </div>
+                      );
+                    })}
+                    {history.length > 20 && (
+                      <div className="font-body text-[10px] text-gray-400 text-center py-1">
+                        + {history.length - 20} mouvement(s) plus ancien(s)
+                      </div>
+                    )}
+                  </div>
+                )}
               </Card>
             )}
           </div>
         </>
-      )}
+      );})()}
 
       {/* Quick actions */}
       <h2 className="font-display text-lg font-bold text-blue-800 mb-4">
