@@ -611,6 +611,26 @@ export default function PlanningPage() {
           ref: "", activityTitle: `${c.activityTitle} — ${child.childName}`,
           date: serverTimestamp(),
         });
+
+        // Points de fidélité (1 point par euro encaissé)
+        try {
+          const fidSettingsSnap = await getDoc(doc(db, "settings", "fidelite"));
+          const fidEnabled = fidSettingsSnap.exists() ? (fidSettingsSnap.data()?.enabled !== false) : false;
+          if (fidEnabled && priceTTC > 0) {
+            const pts = Math.floor(priceTTC);
+            const fidRef = doc(db, "fidelite", child.familyId);
+            const fidSnap = await getDoc(fidRef);
+            const expiry = new Date(); expiry.setFullYear(expiry.getFullYear() + 1);
+            const entry = { date: new Date().toISOString(), points: pts, type: "gain", label: `${c.activityTitle} — ${child.childName}`, expiry: expiry.toISOString(), montant: priceTTC };
+            if (fidSnap.exists()) {
+              const cur = fidSnap.data() || {};
+              await updateDoc(fidRef, { points: ((cur.points as number) || 0) + pts, history: [...((cur.history as any[]) || []), entry], updatedAt: serverTimestamp() });
+            } else {
+              await setDoc(fidRef, { familyId: child.familyId, familyName: child.familyName, points: pts, history: [entry], createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+            }
+          }
+        } catch (e) { console.error("Erreur fidélité planning:", e); }
+
         } // fin else avoir
       } else {
         // Paiement en attente → fusionner dans la commande ouverte la plus récente

@@ -307,30 +307,16 @@ export default function PaiementsPage() {
       }
 
       // ── Encaissement normal (CB, chèque, espèces, etc.) ──
-      const encDate = quickDate ? new Date(quickDate + "T12:00:00") : new Date();
-      await addDoc(collection(db, "encaissements"), {
-        paymentId: p.id,
-        familyId: p.familyId,
-        familyName: p.familyName,
-        montant: Math.round(montant * 100) / 100,
-        mode: quickMode,
-        modeLabel: paymentModes.find(m => m.id === quickMode)?.label || quickMode,
-        ref: quickRef,
-        activityTitle: (p.items || []).map((i: any) => i.activityTitle).join(", "),
-        date: encDate,
-      });
-      // Recalculer depuis tous les encaissements
-      const encSnap = await getDocs(query(collection(db, "encaissements"), where("paymentId", "==", p.id)));
-      const totalEncaisse = Math.round(encSnap.docs.reduce((s, d) => s + safeNumber(d.data().montant), 0) * 100) / 100;
-      const totalTTC = safeNumber(p.totalTTC);
-      const newStatus = totalEncaisse >= totalTTC ? "paid" : totalEncaisse > 0 ? "partial" : "pending";
-      await updateDoc(doc(db, "payments", p.id), {
-        paidAmount: totalEncaisse,
-        status: newStatus,
-        paymentMode: quickMode,
-        updatedAt: serverTimestamp(),
-      });
-      toast(`✅ ${montant.toFixed(2)}€ encaissé (${paymentModes.find(m => m.id === quickMode)?.label}) pour ${p.familyName}${totalEncaisse >= totalTTC ? " — Tout réglé !" : ` — Reste : ${(totalTTC - totalEncaisse).toFixed(2)}€`}`, "success");
+      // Utiliser la fonction centralisée qui gère points fidélité + invoiceNumber
+      await enregistrerEncaissement(
+        p.id!, p, montant, quickMode, quickRef,
+        (p.items || []).map((i: any) => i.activityTitle).join(", "),
+        quickDate,
+      );
+      const encSnap2 = await getDocs(query(collection(db, "encaissements"), where("paymentId", "==", p.id)));
+      const totalEncaisse2 = Math.round(encSnap2.docs.reduce((s, d) => s + safeNumber(d.data().montant), 0) * 100) / 100;
+      const totalTTC2 = safeNumber(p.totalTTC);
+      toast(`✅ ${montant.toFixed(2)}€ encaissé (${paymentModes.find(m => m.id === quickMode)?.label}) pour ${p.familyName}${totalEncaisse2 >= totalTTC2 ? " — Tout réglé !" : ` — Reste : ${(totalTTC2 - totalEncaisse2).toFixed(2)}€`}`, "success");
       setQuickEncaisser(null);
       setQuickMontant(""); setQuickRef("");
       setQuickDate(new Date().toISOString().split("T")[0]);
