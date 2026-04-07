@@ -155,18 +155,8 @@ export default function MontoirPage() {
 
   const assignHorse = (c: Creneau, childId: string, h: string) => {
     if (!h) { updateEnrolled(c.id, (c.enrolled||[]).map(e => e.childId===childId ? {...e, horseName: ""} : e)); return; }
-    // Vérifier si ce poney est déjà affecté dans un autre créneau simultané
-    const conflict = creneaux.find(other => {
-      if (other.id === c.id) return false;
-      if (other.startTime >= c.endTime || other.endTime <= c.startTime) return false;
-      return (other.enrolled || []).some((oe: any) => oe.horseName === h);
-    });
-    if (conflict) {
-      const occupePar = (conflict.enrolled || []).find((oe: any) => oe.horseName === h);
-      toast(`⚠️ ${h} est déjà affecté à "${conflict.activityTitle}" (${conflict.startTime}-${conflict.endTime})${occupePar ? ` — ${occupePar.childName}` : ""}`, "error");
-      return;
-    }
-    // Vérifier doublon dans le même créneau
+    // Bloquer uniquement si le poney est déjà affecté à un AUTRE enfant dans CE MÊME créneau
+    // (un poney peut tout à fait faire Stage Bronze 10h-12h ET Stage Argent 10h-12h : il fait 10h-11h puis 11h-12h)
     const doubleInThis = (c.enrolled || []).find((oe: any) => oe.childId !== childId && oe.horseName === h);
     if (doubleInThis) {
       toast(`⚠️ ${h} est déjà affecté à ${doubleInThis.childName} dans cette reprise`, "error");
@@ -694,31 +684,31 @@ export default function MontoirPage() {
                 </span>
                 <span className="w-32 font-body text-xs hidden sm:block" style={{color:"#334155"}}>{e.familyName}</span>
                 <span className="w-28 sm:w-36">{!closed ? (() => {
-                  // Filtrer les poneys déjà affectés dans des créneaux qui se chevauchent
-                  const usedInOtherCreneaux = new Set<string>();
-                  creneaux.forEach(other => {
-                    if (other.id === c.id) return;
-                    // Vérifier chevauchement horaire
-                    if (other.startTime < c.endTime && other.endTime > c.startTime) {
-                      (other.enrolled || []).forEach((oe: any) => { if (oe.horseName) usedInOtherCreneaux.add(oe.horseName); });
-                    }
-                  });
-                  // Aussi exclure les poneys déjà affectés dans CE créneau (sauf pour ce cavalier)
+                  // Poneys déjà affectés dans CE créneau (sauf pour ce cavalier) → doublon interdit
                   const usedInThis = new Set<string>();
                   en.forEach((oe: any) => { if (oe.childId !== e.childId && oe.horseName) usedInThis.add(oe.horseName); });
+                  // Poneys déjà affectés dans d'autres créneaux simultanés → affichage info seulement (pas bloqué)
+                  const usedElsewhere = new Set<string>();
+                  creneaux.forEach(other => {
+                    if (other.id === c.id) return;
+                    if (other.startTime >= c.endTime || other.endTime <= c.startTime) return;
+                    (other.enrolled || []).forEach((oe: any) => { if (oe.horseName) usedElsewhere.add(oe.horseName); });
+                  });
 
                   return (
                     <div className="w-28 sm:w-36 flex flex-col gap-1">
                       <select value={e.horseName||""} onChange={ev=>assignHorse(c,e.childId,ev.target.value)} className="px-2 py-1.5 rounded-lg border border-blue-500/8 font-body text-xs bg-white w-full">
                         <option value="">Affecter...</option>
                         {availableHorses.map(h => {
-                          const usedOther = usedInOtherCreneaux.has(h.name);
                           const usedHere = usedInThis.has(h.name);
+                          const usedOther = usedElsewhere.has(h.name);
                           const charge = poneyCharge[h.name];
-                          const chargeStr = charge ? ` (${charge.seances}s·${charge.heures}h)` : "";
-                          return <option key={h.id} value={h.name} disabled={usedOther || usedHere}
-                            style={usedOther || usedHere ? {color:"#ccc"} : charge?.seances >= seuilPoney.orange ? {color:"#f59e0b"} : {}}>
-                            {h.name}{chargeStr}{usedOther ? " ⚠" : usedHere ? " ✗" : ""}
+                          const chargeStr = charge ? ` (${charge.seances}s)` : "";
+                          // Bloqué seulement si doublon dans CE créneau
+                          // Juste un indicateur visuel si affecté dans un autre stage simultané (rotation normale)
+                          return <option key={h.id} value={h.name} disabled={usedHere}
+                            style={usedHere ? {color:"#ccc"} : charge?.seances >= seuilPoney.orange ? {color:"#f59e0b"} : {}}>
+                            {h.name}{chargeStr}{usedHere ? " ✗" : usedOther ? " ↺" : ""}
                           </option>;
                         })}
                       </select>
