@@ -241,27 +241,42 @@ export default function WeekView({
                 const dc = allDc.filter(c => !isStageType(c));
                 const stages = allDc.filter(c => isStageType(c));
 
-                const matin = stages.filter(c => parseInt(c.startTime) < 13);
-                const aprem = stages.filter(c => parseInt(c.startTime) >= 13 && parseInt(c.startTime) < 16);
-                const soir  = stages.filter(c => parseInt(c.startTime) >= 16);
+                // Grouper stages par startTime
+                const stagesByTime: Record<string, typeof stages> = {};
+                stages.forEach(c => {
+                  if (!stagesByTime[c.startTime]) stagesByTime[c.startTime] = [];
+                  stagesByTime[c.startTime].push(c);
+                });
 
-                // Grouper créneaux au même horaire
-                const grouped: Array<{ key: string; items: typeof dc }> = [];
+                // Grouper cours par horaire
+                const grouped: Array<{ key: string; items: typeof dc; startTime: string }> = [];
                 dc.forEach(c => {
                   const key = `${c.startTime}-${c.endTime}`;
                   const g = grouped.find(x => x.key === key);
-                  if (g) g.items.push(c); else grouped.push({ key, items: [c] });
+                  if (g) g.items.push(c); else grouped.push({ key, items: [c], startTime: c.startTime });
+                });
+
+                // Créer un flux unifié trié par startTime
+                type RenderItem = { type: "stage"; startTime: string; list: typeof stages } | { type: "cours"; startTime: string; group: typeof grouped[0] };
+                const renderItems: RenderItem[] = [
+                  ...Object.entries(stagesByTime).map(([st, list]) => ({ type: "stage" as const, startTime: st, list })),
+                  ...grouped.map(g => ({ type: "cours" as const, startTime: g.startTime, group: g })),
+                ];
+                renderItems.sort((a, b) => {
+                  const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + (m || 0); };
+                  const diff = toMin(a.startTime) - toMin(b.startTime);
+                  if (diff !== 0) return diff;
+                  // À horaire égal, cours avant stages
+                  return a.type === "cours" ? -1 : 1;
                 });
 
                 return (
                   <div key={`c${i}`} className="min-h-[160px] flex flex-col gap-1" style={{ minWidth: "95px" }}>
-                    {/* Badges stages */}
-                    <StageBadge list={matin} bg="bg-green-50"  border="border-green-200"  dot="bg-green-500"  text="text-green-700"  onGoToDay={() => onGoToDay(d)} />
-                    <StageBadge list={aprem} bg="bg-teal-50"   border="border-teal-200"   dot="bg-teal-500"   text="text-teal-700"   onGoToDay={() => onGoToDay(d)} />
-                    <StageBadge list={soir}  bg="bg-indigo-50" border="border-indigo-200" dot="bg-indigo-500" text="text-indigo-700" onGoToDay={() => onGoToDay(d)} />
-
-                    {/* Cours */}
-                    {grouped.map(g => {
+                    {renderItems.map((item, idx) => {
+                      if (item.type === "stage") {
+                        return <StageBadge key={`s-${idx}`} list={item.list} bg="bg-green-50" border="border-green-200" dot="bg-green-500" text="text-green-700" onGoToDay={() => onGoToDay(d)} />;
+                      }
+                      const g = item.group;
                       if (g.items.length > 1) {
                         return (
                           <div key={g.key} className="flex gap-0.5">

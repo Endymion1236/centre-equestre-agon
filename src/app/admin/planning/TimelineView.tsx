@@ -83,9 +83,13 @@ export default function TimelineView({
                     const stages = allDc.filter(c => isStageType(c));
                     const dc = allDc.filter(c => !isStageType(c));
 
-                    const stagesMatin = stages.filter(c => parseInt(c.startTime) < 13);
-                    const stagesAprem = stages.filter(c => parseInt(c.startTime) >= 13 && parseInt(c.startTime) < 16);
-                    const stagesSoir = stages.filter(c => parseInt(c.startTime) >= 16);
+                    // Grouper les stages par créneau horaire (même startTime)
+                    const stagesByTime: Record<string, typeof stages> = {};
+                    stages.forEach(c => {
+                      const key = c.startTime;
+                      if (!stagesByTime[key]) stagesByTime[key] = [];
+                      stagesByTime[key].push(c);
+                    });
 
                     const positioned = dc.map(c => {
                       const top = timeToY(c.startTime);
@@ -105,10 +109,6 @@ export default function TimelineView({
                       maxCol = Math.max(maxCol, columns[i]);
                     }
                     const totalCols = maxCol + 1;
-
-                    // Décalage vertical des créneaux cours quand il y a des badges stages
-                    const nbStageBadges = (stagesMatin.length > 0 ? 1 : 0) + (stagesAprem.length > 0 ? 1 : 0) + (stagesSoir.length > 0 ? 1 : 0);
-                    const stageOffset = nbStageBadges > 0 ? 30 + nbStageBadges * 22 : 28;
 
                     const stageBadge = (list: typeof stages, bg: string, border: string, dot: string, text: string) => {
                       if (list.length === 0) return null;
@@ -135,14 +135,24 @@ export default function TimelineView({
                           <div className="text-sm sm:text-base font-bold leading-tight">{d.getDate()}</div>
                         </div>
 
-                        {/* Badges stages */}
-                        {stages.length > 0 && (
-                          <div className="absolute left-1 right-1 z-[5] flex flex-col gap-0.5" style={{ top: 30 }}>
-                            {stageBadge(stagesMatin, "bg-green-50", "border-green-200", "bg-green-500", "text-green-700")}
-                            {stageBadge(stagesAprem, "bg-teal-50", "border-teal-200", "bg-teal-500", "text-teal-700")}
-                            {stageBadge(stagesSoir, "bg-indigo-50", "border-indigo-200", "bg-indigo-500", "text-indigo-700")}
-                          </div>
-                        )}
+                        {/* Badges stages — positionnés à leur heure réelle */}
+                        {Object.entries(stagesByTime).map(([startTime, list]) => {
+                          const yPos = timeToY(startTime) + 28;
+                          const totalEnrolled = list.reduce((s, c) => s + (c.enrolled?.length || 0), 0);
+                          const totalPlaces = list.reduce((s, c) => s + (c.maxPlaces || 0), 0);
+                          const label = list.length === 1
+                            ? `${list[0].startTime} ${list[0].activityTitle.slice(0, 12)}`
+                            : `${list.length} stages`;
+                          return (
+                            <button key={startTime} onClick={() => onGoToDay(d)}
+                              className="absolute left-1 right-1 z-[5] flex items-center gap-1 px-1.5 py-0.5 rounded border font-body cursor-pointer text-left hover:opacity-80 bg-green-50 border-green-200"
+                              style={{ top: yPos }}>
+                              <span className="w-3 h-3 rounded-full bg-green-500 text-white text-[7px] flex items-center justify-center flex-shrink-0">{list.length}</span>
+                              <span className="text-[9px] font-semibold text-green-700 truncate flex-1">{label}</span>
+                              <span className="text-[8px] text-green-700 opacity-70">{totalEnrolled}/{totalPlaces}</span>
+                            </button>
+                          );
+                        })}
 
                         {/* Lignes horaires */}
                         {gridHours.map(h => (
@@ -171,7 +181,7 @@ export default function TimelineView({
                               title={`${c.activityTitle}${c.monitor ? " · " + c.monitor : ""} · ${c.startTime}–${c.endTime}`}
                               className="absolute rounded-lg border cursor-pointer hover:shadow-lg transition-shadow group"
                               style={{
-                                top: c.top + stageOffset,
+                                top: c.top + 28,
                                 height: cardH,
                                 left: isWide ? "2px" : `calc(${left}% + 2px)`,
                                 width: isWide ? "calc(100% - 4px)" : `calc(${colWidth}% - 4px)`,
