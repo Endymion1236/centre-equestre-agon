@@ -153,7 +153,27 @@ export default function MontoirPage() {
     return hist;
   }, [families]);
 
-  const assignHorse = (c: Creneau, childId: string, h: string) => { updateEnrolled(c.id, (c.enrolled||[]).map(e => e.childId===childId ? {...e, horseName: h} : e)); };
+  const assignHorse = (c: Creneau, childId: string, h: string) => {
+    if (!h) { updateEnrolled(c.id, (c.enrolled||[]).map(e => e.childId===childId ? {...e, horseName: ""} : e)); return; }
+    // Vérifier si ce poney est déjà affecté dans un autre créneau simultané
+    const conflict = creneaux.find(other => {
+      if (other.id === c.id) return false;
+      if (other.startTime >= c.endTime || other.endTime <= c.startTime) return false;
+      return (other.enrolled || []).some((oe: any) => oe.horseName === h);
+    });
+    if (conflict) {
+      const occupePar = (conflict.enrolled || []).find((oe: any) => oe.horseName === h);
+      toast(`⚠️ ${h} est déjà affecté à "${conflict.activityTitle}" (${conflict.startTime}-${conflict.endTime})${occupePar ? ` — ${occupePar.childName}` : ""}`, "error");
+      return;
+    }
+    // Vérifier doublon dans le même créneau
+    const doubleInThis = (c.enrolled || []).find((oe: any) => oe.childId !== childId && oe.horseName === h);
+    if (doubleInThis) {
+      toast(`⚠️ ${h} est déjà affecté à ${doubleInThis.childName} dans cette reprise`, "error");
+      return;
+    }
+    updateEnrolled(c.id, (c.enrolled||[]).map(e => e.childId===childId ? {...e, horseName: h} : e));
+  };
   const [quickNoteChild, setQuickNoteChild] = useState<{ cid: string; children: any[] } | null>(null);
   const [quickNotes, setQuickNotes] = useState<Record<string, string>>({});
   // ── Bilan IA ──────────────────────────────────────────────────────────────
