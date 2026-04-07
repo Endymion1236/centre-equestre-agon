@@ -137,7 +137,7 @@ export default function TimelineView({
 
                         {/* Badges stages — positionnés à leur heure réelle */}
                         {Object.entries(stagesByTime).map(([startTime, list]) => {
-                          const yPos = timeToY(startTime);
+                          const yPos = timeToY(startTime) + 28;
                           const totalEnrolled = list.reduce((s, c) => s + (c.enrolled?.length || 0), 0);
                           const totalPlaces = list.reduce((s, c) => s + (c.maxPlaces || 0), 0);
                           const label = list.length === 1
