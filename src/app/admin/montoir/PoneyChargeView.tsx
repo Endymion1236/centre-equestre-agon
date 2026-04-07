@@ -2,8 +2,8 @@
 import { Card } from "@/components/ui";
 
 /**
- * Vue timeline charge journalière des poneys
- * Affiche chaque poney sur une ligne horizontale avec ses créneaux colorés
+ * Vue tableau charge journalière — 2 colonnes par numéro d'ordre
+ * Équidés 1-22 → colonne gauche | 23-46 → colonne droite
  */
 
 interface PoneyChargeViewProps {
@@ -13,170 +13,118 @@ interface PoneyChargeViewProps {
 }
 
 export default function PoneyChargeView({ creneaux, equides, availableHorses }: PoneyChargeViewProps) {
-  // Collecter toutes les attributions poney → [{poney, childName, créneau, startTime, endTime, activityTitle, activityType}]
-  const attributions: {
-    poney: string;
-    childName: string;
-    activityTitle: string;
-    activityType: string;
-    startTime: string;
-    endTime: string;
-    creneauId: string;
-  }[] = [];
+  const toMinutes = (t: string) => { const [h, m] = (t || "00:00").split(":").map(Number); return h * 60 + m; };
 
+  // Calcul charge par poney (avec rotation)
+  const chargeMap: Record<string, { heures: number; seances: number; details: string[] }> = {};
   creneaux.forEach(c => {
+    const dur = (toMinutes(c.endTime) - toMinutes(c.startTime)) / 60;
     (c.enrolled || []).forEach((e: any) => {
       if (!e.horseName) return;
-      attributions.push({
-        poney: e.horseName,
-        childName: e.childName || "",
-        activityTitle: c.activityTitle || "",
-        activityType: c.activityType || "cours",
-        startTime: c.startTime || "10:00",
-        endTime: c.endTime || "11:00",
-        creneauId: c.id,
-      });
+      if (!chargeMap[e.horseName]) chargeMap[e.horseName] = { heures: 0, seances: 0, details: [] };
+      let heuresReelles = dur;
+      if (c.rotationPoneys) {
+        const simultanes = creneaux.filter(other =>
+          other.id !== c.id && other.rotationPoneys &&
+          other.startTime < c.endTime && other.endTime > c.startTime &&
+          (other.enrolled || []).some((oe: any) => oe.horseName === e.horseName)
+        );
+        if (simultanes.length > 0) heuresReelles = dur / (simultanes.length + 1);
+      }
+      chargeMap[e.horseName].seances++;
+      chargeMap[e.horseName].heures = Math.round((chargeMap[e.horseName].heures + heuresReelles) * 10) / 10;
+      chargeMap[e.horseName].details.push(`${c.activityTitle} ${c.startTime}-${c.endTime}`);
     });
   });
 
-  if (attributions.length === 0) {
+  // Trier les équidés par ordre, fallback alphabétique
+  const sorted = [...availableHorses].sort((a, b) => {
+    const oa = a.ordre ?? 999;
+    const ob = b.ordre ?? 999;
+    if (oa !== ob) return oa - ob;
+    return (a.name || "").localeCompare(b.name || "");
+  });
+
+  const col1 = sorted.filter(h => (h.ordre ?? 999) <= 22);
+  const col2 = sorted.filter(h => (h.ordre ?? 999) >= 23);
+  const maxRows = Math.max(col1.length, col2.length);
+  if (maxRows === 0) return null;
+
+  const totalAttribues = Object.keys(chargeMap).length;
+
+  const renderRow = (h: any) => {
+    const ch = chargeMap[h.name];
+    const heures = ch?.heures ?? 0;
+    const seances = ch?.seances ?? 0;
+    const overload = heures >= 4;
+    const warning = heures >= 3;
+    const color = overload ? "text-red-600 font-bold" : warning ? "text-orange-500 font-semibold" : heures > 0 ? "text-blue-700 font-semibold" : "text-slate-400";
     return (
-      <Card padding="md" className="text-center">
-        <p className="font-body text-sm text-slate-500">Aucun poney attribué pour l'instant.</p>
-        <p className="font-body text-[10px] text-slate-400 mt-1">Attribuez des poneys dans les reprises ci-dessus.</p>
-      </Card>
+      <tr key={h.id} className={`border-b border-gray-100 ${heures > 0 ? "" : "opacity-50"}`}>
+        <td className="py-1 px-2 font-body text-[10px] text-slate-400 w-6 text-right">{h.ordre ?? "—"}</td>
+        <td className="py-1 px-2 font-body text-xs text-slate-700 truncate max-w-[100px]" title={h.name}>{h.name}</td>
+        <td className={`py-1 px-2 font-body text-xs text-right tabular-nums ${color}`}>
+          {heures > 0 ? `${heures}h` : "—"}
+          {seances > 0 && <span className="ml-1 text-[9px] text-slate-400">({seances}s)</span>}
+          {overload && " ⚠️"}
+        </td>
+      </tr>
     );
-  }
-
-  // Trouver la plage horaire de la journée
-  const allTimes = creneaux.flatMap(c => [c.startTime, c.endTime]).filter(Boolean);
-  const toMinutes = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
-  const minMin = Math.min(...allTimes.map(toMinutes));
-  const maxMin = Math.max(...allTimes.map(toMinutes));
-  const startMin = Math.floor(minMin / 60) * 60; // arrondir à l'heure
-  const endMin = Math.ceil(maxMin / 60) * 60;
-  const totalMin = endMin - startMin;
-  if (totalMin <= 0) return null;
-
-  // Grouper par poney
-  const poneys = [...new Set(attributions.map(a => a.poney))].sort();
-
-  // Heures pour la grille
-  const gridHours: string[] = [];
-  for (let m = startMin; m <= endMin; m += 60) {
-    gridHours.push(`${Math.floor(m / 60)}:00`);
-  }
-
-  // Couleurs par type d'activité
-  const typeColors: Record<string, { bg: string; border: string; text: string }> = {
-    stage: { bg: "bg-green-100", border: "border-green-300", text: "text-green-800" },
-    stage_journee: { bg: "bg-green-100", border: "border-green-300", text: "text-green-800" },
-    cours: { bg: "bg-blue-100", border: "border-blue-300", text: "text-blue-800" },
-    balade: { bg: "bg-orange-100", border: "border-orange-300", text: "text-orange-800" },
-    competition: { bg: "bg-purple-100", border: "border-purple-300", text: "text-purple-800" },
   };
 
   return (
-    <Card padding="md">
+    <Card padding="md" className="print:hidden">
       <div className="font-body text-sm font-semibold text-blue-800 mb-3 flex items-center gap-2">
         📊 Charge journalière des poneys
-        <span className="font-body text-[10px] text-slate-400 font-normal">({poneys.length} poney{poneys.length > 1 ? "s" : ""} attribué{poneys.length > 1 ? "s" : ""})</span>
+        <span className="font-body text-[10px] text-slate-400 font-normal">({totalAttribues} attribué{totalAttribues > 1 ? "s" : ""})</span>
       </div>
 
-      <div className="overflow-x-auto">
-        <div style={{ minWidth: "500px" }}>
-          {/* Grille horaire en-tête */}
-          <div className="flex items-end mb-1 ml-24">
-            {gridHours.map((h, i) => (
-              <div key={h} className="font-body text-[10px] text-slate-400" style={{ width: `${100 / (gridHours.length - 1)}%` }}>
-                {i < gridHours.length - 1 ? h : ""}
-              </div>
-            ))}
-          </div>
+      <div className="flex gap-4">
+        {/* Colonne gauche — équidés 1 à 22 */}
+        <div className="flex-1 min-w-0">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b-2 border-blue-100">
+                <th className="py-1 px-2 font-body text-[9px] font-semibold text-slate-400 uppercase text-right w-6">#</th>
+                <th className="py-1 px-2 font-body text-[9px] font-semibold text-slate-400 uppercase text-left">Équidé</th>
+                <th className="py-1 px-2 font-body text-[9px] font-semibold text-slate-400 uppercase text-right">Heures</th>
+              </tr>
+            </thead>
+            <tbody>
+              {col1.map(renderRow)}
+              {col1.length === 0 && (
+                <tr><td colSpan={3} className="py-3 text-center font-body text-xs text-slate-400">Aucun équidé (n°1-22)</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-          {/* Lignes poney */}
-          {poneys.map(poney => {
-            const attrs = attributions.filter(a => a.poney === poney);
-            const totalHeures = attrs.reduce((s, a) => {
-              return s + (toMinutes(a.endTime) - toMinutes(a.startTime)) / 60;
-            }, 0);
-            const isOverloaded = totalHeures >= 4;
-            const isWarning = totalHeures >= 3;
+        {/* Séparateur */}
+        <div className="w-px bg-gray-200 flex-shrink-0" />
 
-            return (
-              <div key={poney} className="flex items-center gap-2 mb-1.5">
-                {/* Nom du poney + total */}
-                <div className="w-24 flex-shrink-0 text-right pr-2">
-                  <div className={`font-body text-xs font-semibold truncate ${isOverloaded ? "text-red-600" : isWarning ? "text-orange-600" : "text-slate-700"}`}>
-                    {poney}
-                  </div>
-                  <div className={`font-body text-[9px] ${isOverloaded ? "text-red-500 font-bold" : isWarning ? "text-orange-500" : "text-slate-400"}`}>
-                    {totalHeures.toFixed(1)}h · {attrs.length}s
-                    {isOverloaded ? " ⚠️" : ""}
-                  </div>
-                </div>
-
-                {/* Barre timeline */}
-                <div className="flex-1 relative h-8 bg-gray-50 rounded-lg border border-gray-100 overflow-hidden">
-                  {/* Lignes horaires */}
-                  {gridHours.slice(0, -1).map((_, i) => (
-                    <div key={i} className="absolute top-0 bottom-0 border-l border-gray-200/50"
-                      style={{ left: `${(i / (gridHours.length - 1)) * 100}%` }} />
-                  ))}
-
-                  {/* Blocs d'activité */}
-                  {attrs.map((a, idx) => {
-                    const left = ((toMinutes(a.startTime) - startMin) / totalMin) * 100;
-                    const width = ((toMinutes(a.endTime) - toMinutes(a.startTime)) / totalMin) * 100;
-                    const colors = typeColors[a.activityType] || typeColors.cours;
-
-                    return (
-                      <div key={idx}
-                        className={`absolute top-0.5 bottom-0.5 rounded border ${colors.bg} ${colors.border} flex items-center px-1 overflow-hidden cursor-default group`}
-                        style={{ left: `${left}%`, width: `${Math.max(width, 3)}%` }}
-                        title={`${a.activityTitle}\n${a.startTime}–${a.endTime}\n${a.childName}`}>
-                        <span className={`text-[8px] font-semibold ${colors.text} truncate`}>
-                          {a.childName.split(" ")[0]}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Poneys sans attribution */}
-          {availableHorses
-            .filter(h => !poneys.includes(h.name))
-            .slice(0, 5) // max 5 pour ne pas surcharger
-            .map(h => (
-              <div key={h.id} className="flex items-center gap-2 mb-1.5 opacity-40">
-                <div className="w-24 flex-shrink-0 text-right pr-2">
-                  <div className="font-body text-xs text-slate-400 truncate">{h.name}</div>
-                  <div className="font-body text-[9px] text-slate-300">0h · repos</div>
-                </div>
-                <div className="flex-1 h-8 bg-gray-50 rounded-lg border border-gray-100" />
-              </div>
-            ))
-          }
+        {/* Colonne droite — équidés 23 à 46 */}
+        <div className="flex-1 min-w-0">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b-2 border-blue-100">
+                <th className="py-1 px-2 font-body text-[9px] font-semibold text-slate-400 uppercase text-right w-6">#</th>
+                <th className="py-1 px-2 font-body text-[9px] font-semibold text-slate-400 uppercase text-left">Équidé</th>
+                <th className="py-1 px-2 font-body text-[9px] font-semibold text-slate-400 uppercase text-right">Heures</th>
+              </tr>
+            </thead>
+            <tbody>
+              {col2.map(renderRow)}
+              {col2.length === 0 && (
+                <tr><td colSpan={3} className="py-3 text-center font-body text-xs text-slate-400">Aucun équidé (n°23-46)</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      {/* Légende */}
-      <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-gray-100">
-        <span className="flex items-center gap-1 font-body text-[10px] text-slate-500">
-          <span className="w-3 h-3 rounded bg-blue-100 border border-blue-300" /> Cours
-        </span>
-        <span className="flex items-center gap-1 font-body text-[10px] text-slate-500">
-          <span className="w-3 h-3 rounded bg-green-100 border border-green-300" /> Stage
-        </span>
-        <span className="flex items-center gap-1 font-body text-[10px] text-slate-500">
-          <span className="w-3 h-3 rounded bg-orange-100 border border-orange-300" /> Balade
-        </span>
-        <span className="flex items-center gap-1 font-body text-[10px] text-slate-500 ml-auto">
-          ⚠️ = 4h+ (surcharge)
-        </span>
+      <div className="flex items-center gap-4 mt-3 pt-2 border-t border-gray-100">
+        <span className="font-body text-[10px] text-slate-400">⚠️ = surcharge 4h+</span>
+        <span className="font-body text-[10px] text-orange-500">3h+ = attention</span>
       </div>
     </Card>
   );
