@@ -602,7 +602,7 @@ export default function MontoirPage() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <div><h1 className="font-display text-2xl font-bold text-blue-800">Montoir</h1><p className="font-body text-xs text-slate-600">Présences · Affectation poneys · Clôture reprises</p></div>
-        <button onClick={()=>window.print()} className="flex items-center gap-2 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><Printer size={16} /> Imprimer</button>
+        <button onClick={()=>window.print()} className="print:hidden flex items-center gap-2 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><Printer size={16} /> Imprimer</button>
       </div>
       <div className="flex items-center justify-between mb-6">
         <button onClick={()=>setDayOffset(d=>d-1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16} /> Veille</button>
@@ -613,7 +613,7 @@ export default function MontoirPage() {
       <>
       {/* Charge journalière poneys */}
       {equides.length > 0 && Object.keys(poneyCharge).length > 0 && (
-        <Card padding="sm" className="mb-3">
+        <Card padding="sm" className="mb-3 print:hidden">
           <div className="font-body text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Charge poneys aujourd'hui</div>
           <div className="flex flex-wrap gap-1.5">
             {availableHorses.map(h => {
@@ -632,14 +632,14 @@ export default function MontoirPage() {
 
       {/* Vue timeline charge poneys */}
       {equides.length > 0 && creneaux.some(c => (c.enrolled || []).some((e: any) => e.horseName)) && (
-        <div className="mb-4">
+        <div className="mb-4 print:hidden">
           <PoneyChargeView creneaux={creneaux} equides={equides} availableHorses={availableHorses} />
         </div>
       )}
 
       {/* Équidés disponibles / indisponibles */}
       {equides.length > 0 && (
-        <div className="flex flex-wrap gap-3 mb-4">
+        <div className="flex flex-wrap gap-3 mb-4 print:hidden">
           <div className="font-body text-xs bg-green-50 text-green-700 px-3 py-1.5 rounded-lg">
             {availableHorses.length} équidé{availableHorses.length > 1 ? "s" : ""} disponible{availableHorses.length > 1 ? "s" : ""}
           </div>
@@ -658,7 +658,7 @@ export default function MontoirPage() {
               <div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px]" style={{color:"#475569"}}>{c.endTime}</div></div>
               <div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs" style={{color:"#334155"}}>{c.monitor} · {en.length}/{c.maxPlaces}</div></div>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap print:hidden">
               <Badge color={closed?"gray":pres===en.length&&en.length>0?"green":"orange"}>{closed?"Clôturée":`${pres}/${en.length} présents`}</Badge>
               {!closed && (
                 <button onClick={()=>toggleRotationPoneys(c)}
@@ -746,8 +746,9 @@ export default function MontoirPage() {
                   );
                 })() : <span className="font-body text-xs font-semibold text-blue-800">{e.horseName||"—"}</span>}</span>
                 <span className="w-20 sm:w-24 flex justify-center gap-1 sm:gap-2">{!closed ? <>
-                  <button onClick={()=>togglePresence(c,e.childId,"present")} className={`w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="present"?"bg-green-500 text-white":"bg-gray-100 text-slate-600 hover:bg-green-100"}`}><CheckCircle2 size={18}/></button>
-                  <button onClick={()=>togglePresence(c,e.childId,"absent")} className={`w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent"?"bg-red-500 text-white":"bg-gray-100 text-slate-600 hover:bg-red-100"}`}><XCircle size={18}/></button>
+                  <button onClick={()=>togglePresence(c,e.childId,"present")} className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="present"?"bg-green-500 text-white":"bg-gray-100 text-slate-600 hover:bg-green-100"}`}><CheckCircle2 size={18}/></button>
+                  <button onClick={()=>togglePresence(c,e.childId,"absent")} className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent"?"bg-red-500 text-white":"bg-gray-100 text-slate-600 hover:bg-red-100"}`}><XCircle size={18}/></button>
+                  <span className="hidden print:inline font-body text-xs font-semibold">{e.presence==="present"?"✓ Présent":e.presence==="absent"?"✗ Absent":"—"}</span>
                 </> : <Badge color={e.presence==="present"?"green":e.presence==="absent"?"red":"gray"}>{e.presence==="present"?"Présent":e.presence==="absent"?"Absent":"—"}</Badge>}</span>
               </div>
             ))}
