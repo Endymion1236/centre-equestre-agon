@@ -137,7 +137,7 @@ export default function TimelineView({
 
                         {/* Badges stages — positionnés à leur heure réelle */}
                         {Object.entries(stagesByTime).map(([startTime, list]) => {
-                          const yPos = timeToY(startTime) + 28;
+                          const yPos = timeToY(startTime);
                           const totalEnrolled = list.reduce((s, c) => s + (c.enrolled?.length || 0), 0);
                           const totalPlaces = list.reduce((s, c) => s + (c.maxPlaces || 0), 0);
                           const label = list.length === 1
@@ -145,11 +145,11 @@ export default function TimelineView({
                             : `${list.length} stages`;
                           return (
                             <button key={startTime} onClick={() => onGoToDay(d)}
-                              className="absolute left-1 right-1 z-[5] flex items-center gap-1 px-1.5 py-0.5 rounded border font-body cursor-pointer text-left hover:opacity-80 bg-green-50 border-green-200"
+                              className="absolute left-0.5 right-0.5 z-[15] flex items-center gap-1 px-1.5 py-1 rounded border font-body cursor-pointer text-left hover:opacity-80 bg-green-100 border-green-300 shadow-sm"
                               style={{ top: yPos }}>
-                              <span className="w-3 h-3 rounded-full bg-green-500 text-white text-[7px] flex items-center justify-center flex-shrink-0">{list.length}</span>
-                              <span className="text-[9px] font-semibold text-green-700 truncate flex-1">{label}</span>
-                              <span className="text-[8px] text-green-700 opacity-70">{totalEnrolled}/{totalPlaces}</span>
+                              <span className="w-4 h-4 rounded-full bg-green-500 text-white text-[8px] flex items-center justify-center flex-shrink-0 font-bold">{list.length}</span>
+                              <span className="text-[9px] font-semibold text-green-800 truncate flex-1">{label}</span>
+                              <span className="text-[8px] text-green-600 font-semibold">{totalEnrolled}/{totalPlaces}</span>
                             </button>
                           );
                         })}
