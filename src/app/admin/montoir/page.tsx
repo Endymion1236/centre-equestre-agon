@@ -21,7 +21,7 @@ import PoneyChargeView from "./PoneyChargeView";
 import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Printer, ClipboardList, Mic, MicOff, Sparkles,
 } from "lucide-react";
 
-interface Creneau { id: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolled: any[]; status: string; }
+interface Creneau { id: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolled: any[]; status: string; rotationPoneys?: boolean; }
 const typeColors: Record<string,string> = {stage:"#27ae60",balade:"#e67e22",cours:"#2050A0",competition:"#7c3aed"};
 
 export default function MontoirPage() {
@@ -155,14 +155,32 @@ export default function MontoirPage() {
 
   const assignHorse = (c: Creneau, childId: string, h: string) => {
     if (!h) { updateEnrolled(c.id, (c.enrolled||[]).map(e => e.childId===childId ? {...e, horseName: ""} : e)); return; }
-    // Bloquer uniquement si le poney est déjà affecté à un AUTRE enfant dans CE MÊME créneau
-    // (un poney peut tout à fait faire Stage Bronze 10h-12h ET Stage Argent 10h-12h : il fait 10h-11h puis 11h-12h)
+    // Doublon dans CE créneau — toujours interdit
     const doubleInThis = (c.enrolled || []).find((oe: any) => oe.childId !== childId && oe.horseName === h);
     if (doubleInThis) {
       toast(`⚠️ ${h} est déjà affecté à ${doubleInThis.childName} dans cette reprise`, "error");
       return;
     }
+    // Si PAS de rotation : bloquer si poney déjà pris sur un créneau simultané
+    if (!c.rotationPoneys) {
+      const conflict = creneaux.find(other => {
+        if (other.id === c.id) return false;
+        if (other.startTime >= c.endTime || other.endTime <= c.startTime) return false;
+        return (other.enrolled || []).some((oe: any) => oe.horseName === h);
+      });
+      if (conflict) {
+        const occupePar = (conflict.enrolled || []).find((oe: any) => oe.horseName === h);
+        toast(`⚠️ ${h} est déjà affecté à "${conflict.activityTitle}" (${conflict.startTime}-${conflict.endTime})${occupePar ? ` — ${occupePar.childName}` : ""}. Activez la rotation poneys si c'est un stage.`, "error");
+        return;
+      }
+    }
+    // Si rotation activée : le même poney peut faire deux stages simultanés (il fait 1h dans chacun)
     updateEnrolled(c.id, (c.enrolled||[]).map(e => e.childId===childId ? {...e, horseName: h} : e));
+  };
+
+  const toggleRotationPoneys = async (c: Creneau) => {
+    await updateDoc(doc(db, "creneaux", c.id), { rotationPoneys: !c.rotationPoneys });
+    fetchData();
   };
   const [quickNoteChild, setQuickNoteChild] = useState<{ cid: string; children: any[] } | null>(null);
   const [quickNotes, setQuickNotes] = useState<Record<string, string>>({});
@@ -642,6 +660,13 @@ export default function MontoirPage() {
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <Badge color={closed?"gray":pres===en.length&&en.length>0?"green":"orange"}>{closed?"Clôturée":`${pres}/${en.length} présents`}</Badge>
+              {!closed && (
+                <button onClick={()=>toggleRotationPoneys(c)}
+                  title="Rotation poneys : même poney autorisé sur deux stages simultanés (fait 1h dans chacun)"
+                  className={`flex items-center gap-1.5 font-body text-xs px-2.5 py-1.5 rounded-lg border-none cursor-pointer transition-all ${c.rotationPoneys ? "bg-green-100 text-green-700 font-semibold" : "bg-gray-100 text-gray-400"}`}>
+                  🔄 Rotation{c.rotationPoneys ? " ✓" : ""}
+                </button>
+              )}
               {!closed && en.length>0 && <>
                 <button onClick={async () => {
                   const recipients = new Map<string, { email: string; parentName: string; children: string[] }>();
@@ -684,10 +709,10 @@ export default function MontoirPage() {
                 </span>
                 <span className="w-32 font-body text-xs hidden sm:block" style={{color:"#334155"}}>{e.familyName}</span>
                 <span className="w-28 sm:w-36">{!closed ? (() => {
-                  // Poneys déjà affectés dans CE créneau (sauf pour ce cavalier) → doublon interdit
+                  // Doublon dans CE créneau → toujours bloqué
                   const usedInThis = new Set<string>();
                   en.forEach((oe: any) => { if (oe.childId !== e.childId && oe.horseName) usedInThis.add(oe.horseName); });
-                  // Poneys déjà affectés dans d'autres créneaux simultanés → affichage info seulement (pas bloqué)
+                  // Poneys sur créneaux simultanés → bloqué seulement si pas de rotation
                   const usedElsewhere = new Set<string>();
                   creneaux.forEach(other => {
                     if (other.id === c.id) return;
@@ -702,13 +727,12 @@ export default function MontoirPage() {
                         {availableHorses.map(h => {
                           const usedHere = usedInThis.has(h.name);
                           const usedOther = usedElsewhere.has(h.name);
+                          const blockedOther = usedOther && !c.rotationPoneys;
                           const charge = poneyCharge[h.name];
                           const chargeStr = charge ? ` (${charge.seances}s)` : "";
-                          // Bloqué seulement si doublon dans CE créneau
-                          // Juste un indicateur visuel si affecté dans un autre stage simultané (rotation normale)
-                          return <option key={h.id} value={h.name} disabled={usedHere}
-                            style={usedHere ? {color:"#ccc"} : charge?.seances >= seuilPoney.orange ? {color:"#f59e0b"} : {}}>
-                            {h.name}{chargeStr}{usedHere ? " ✗" : usedOther ? " ↺" : ""}
+                          return <option key={h.id} value={h.name} disabled={usedHere || blockedOther}
+                            style={usedHere || blockedOther ? {color:"#ccc"} : charge?.seances >= seuilPoney.orange ? {color:"#f59e0b"} : {}}>
+                            {h.name}{chargeStr}{usedHere ? " ✗" : blockedOther ? " ✗" : usedOther ? " ↺" : ""}
                           </option>;
                         })}
                       </select>
