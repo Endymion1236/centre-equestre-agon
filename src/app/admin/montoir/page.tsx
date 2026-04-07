@@ -119,7 +119,6 @@ export default function MontoirPage() {
   const poneyCharge = useMemo(() => {
     const charge: Record<string, { seances: number; heures: number }> = {};
     creneaux.forEach(c => {
-      if (c.status === "closed") return; // compter aussi les clôturées
       const dur = (() => {
         const [sh, sm] = (c.startTime || "00:00").split(":").map(Number);
         const [eh, em] = (c.endTime || "00:00").split(":").map(Number);
@@ -128,8 +127,22 @@ export default function MontoirPage() {
       (c.enrolled || []).forEach((e: any) => {
         if (!e.horseName) return;
         if (!charge[e.horseName]) charge[e.horseName] = { seances: 0, heures: 0 };
+        // Si rotation activée : ce poney fait dur/N heures dans ce créneau
+        // (N = nb de créneaux simultanés avec rotation qui ont ce poney)
+        let heuresReelles = dur;
+        if (c.rotationPoneys) {
+          const simultanes = creneaux.filter(other =>
+            other.id !== c.id &&
+            other.rotationPoneys &&
+            other.startTime < c.endTime && other.endTime > c.startTime &&
+            (other.enrolled || []).some((oe: any) => oe.horseName === e.horseName)
+          );
+          if (simultanes.length > 0) {
+            heuresReelles = dur / (simultanes.length + 1);
+          }
+        }
         charge[e.horseName].seances++;
-        charge[e.horseName].heures += dur;
+        charge[e.horseName].heures = Math.round((charge[e.horseName].heures + heuresReelles) * 10) / 10;
       });
     });
     return charge;
