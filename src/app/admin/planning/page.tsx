@@ -400,7 +400,7 @@ export default function PlanningPage() {
   };
   const refreshCreneaux = async () => { const s=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[0]); const e=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[6]); const snap=await getDocs(query(collection(db,"creneaux"),where("date",">=",s),where("date","<=",e))); const fresh=snap.docs.map(d=>({id:d.id,...d.data()})) as (Creneau&{id:string})[]; setCreneaux(fresh); return fresh; };
 
-  const handleEnroll = async (cid: string, child: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean; freeReason?: string }) => {
+  const handleEnroll = async (cid: string, child: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean; freeReason?: string; rattrapageId?: string }) => {
     const enrolled = await enrollChildInCreneau(cid, child);
     if (!enrolled) return;
 
@@ -442,6 +442,21 @@ export default function PlanningPage() {
         if (!options?.skipEmail && child.familyId) {
           // Email optionnel si besoin
         }
+        await refreshCreneaux();
+        return;
+      }
+
+      // Inscription en rattrapage → pas de paiement, marquer le rattrapage comme utilisé
+      if (options?.rattrapageId) {
+        try {
+          await updateDoc(doc(db, "rattrapages", options.rattrapageId), {
+            status: "used",
+            usedOnCreneauId: cid,
+            usedOnDate: c.date,
+            usedAt: serverTimestamp(),
+          });
+        } catch (e) { console.error("Erreur mise à jour rattrapage:", e); }
+        // Pas de paiement, pas d'encaissement — c'est un rattrapage
         await refreshCreneaux();
         return;
       }

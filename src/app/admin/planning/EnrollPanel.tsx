@@ -30,7 +30,7 @@ import { Creneau, EnrolledChild, payModes, typeColors, fmtDate } from "./types";
 
 function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allForfaits, onClose, onEnroll, onUnenroll }: {
   creneau: Creneau & { id: string }; families: (Family & { firestoreId: string })[]; allCreneaux: (Creneau & { id: string })[]; payments: any[]; allCartes: any[]; allForfaits: any[];  onClose: () => void;
-  onEnroll: (id: string, c: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean; freeReason?: string }) => Promise<void>;
+  onEnroll: (id: string, c: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean; freeReason?: string; rattrapageId?: string }) => Promise<void>;
   onUnenroll: (id: string, childId: string) => Promise<void>;
 }) {
   const { toast: panelToast } = useToast();
@@ -859,17 +859,18 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       }
     } else {
       const freeEnrollOptions = freeEnroll ? { freeReason, skipEmail: false } : undefined;
-      await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, inscriptionMode === "ponctuel" && showPay && !freeEnroll ? payMode : undefined, enrollOptions || freeEnrollOptions);
+      const rattrapageOptions = useRattrapage ? { rattrapageId: useRattrapage, skipEmail: false } : undefined;
+      await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, inscriptionMode === "ponctuel" && showPay && !freeEnroll && !useRattrapage ? payMode : undefined, enrollOptions || freeEnrollOptions || rattrapageOptions);
     }
 
     if (inscriptionMode === "annuel") {
       setJustEnrolled(`${childName} inscrit(e) en forfait annuel — ${sessionsRestantes} séances — ${totalAnnuel.toFixed(2)}€ en ${payPlan}`);
       panelToast(`Forfait créé — ${totalAnnuel.toFixed(2)}€ en ${payPlan}`, "success");
     } else {
-      const payInfo = freeEnroll ? ` — 🎁 offert (${freeReason})` : showPay ? " — encaissé ✅" : priceTTC > 0 ? " — paiement en attente" : "";
+      const payInfo = useRattrapage ? " — 🔄 rattrapage utilisé" : freeEnroll ? ` — 🎁 offert (${freeReason})` : showPay ? " — encaissé ✅" : priceTTC > 0 ? " — paiement en attente" : "";
       setJustEnrolled(`${childName}${payInfo}`);
     }
-    setSelChild(""); setSelFam(""); setSearch(""); setEnrolling(false); setShowPay(false); setFreeEnroll(false); setFreeReason("Rattrapage"); setInscriptionMode("ponctuel"); setExtraSlots([]); setExtraSlotSearch(""); setAnnualPayMode("cb_terminal");
+    setSelChild(""); setSelFam(""); setSearch(""); setEnrolling(false); setShowPay(false); setFreeEnroll(false); setFreeReason("Rattrapage"); setUseRattrapage(null); setInscriptionMode("ponctuel"); setExtraSlots([]); setExtraSlotSearch(""); setAnnualPayMode("cb_terminal");
     setTimeout(() => setJustEnrolled(""), 5000);
   };
 
