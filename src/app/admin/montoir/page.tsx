@@ -17,6 +17,7 @@ import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { emailTemplates } from "@/lib/email-templates";
+import PoneyChargeView from "./PoneyChargeView";
 import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Printer, ClipboardList, Mic, MicOff, Sparkles,
 } from "lucide-react";
 
@@ -599,6 +600,13 @@ export default function MontoirPage() {
             ))}
           </div>
         </Card>
+      )}
+
+      {/* Vue timeline charge poneys */}
+      {equides.length > 0 && creneaux.some(c => (c.enrolled || []).some((e: any) => e.horseName)) && (
+        <div className="mb-4">
+          <PoneyChargeView creneaux={creneaux} equides={equides} availableHorses={availableHorses} />
+        </div>
       )}
 
       {/* Équidés disponibles / indisponibles */}
