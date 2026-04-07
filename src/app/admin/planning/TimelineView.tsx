@@ -106,6 +106,10 @@ export default function TimelineView({
                     }
                     const totalCols = maxCol + 1;
 
+                    // Décalage vertical des créneaux cours quand il y a des badges stages
+                    const nbStageBadges = (stagesMatin.length > 0 ? 1 : 0) + (stagesAprem.length > 0 ? 1 : 0) + (stagesSoir.length > 0 ? 1 : 0);
+                    const stageOffset = nbStageBadges > 0 ? 30 + nbStageBadges * 22 : 28;
+
                     const stageBadge = (list: typeof stages, bg: string, border: string, dot: string, text: string) => {
                       if (list.length === 0) return null;
                       const label = list.length === 1
@@ -167,7 +171,7 @@ export default function TimelineView({
                               title={`${c.activityTitle}${c.monitor ? " · " + c.monitor : ""} · ${c.startTime}–${c.endTime}`}
                               className="absolute rounded-lg border cursor-pointer hover:shadow-lg transition-shadow group"
                               style={{
-                                top: c.top + 28,
+                                top: c.top + stageOffset,
                                 height: cardH,
                                 left: isWide ? "2px" : `calc(${left}% + 2px)`,
                                 width: isWide ? "calc(100% - 4px)" : `calc(${colWidth}% - 4px)`,
