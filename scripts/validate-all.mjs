@@ -1066,6 +1066,80 @@ async function run() {
     assert(snap.data().status === "pending", "Status pending");
   });
 
+
+  section("31. REFACTORING PAIEMENTS — INTÉGRITÉ");
+  // ══════════════════════════════════
+  const paiementsDir = "src/app/admin/paiements";
+
+  // Fichiers attendus après refactoring
+  const expectedFiles = [
+    `${paiementsDir}/page.tsx`,
+    `${paiementsDir}/types.ts`,
+    `${paiementsDir}/utils.ts`,
+    `${paiementsDir}/NoteField.tsx`,
+    `${paiementsDir}/TabEncaisser.tsx`,
+    `${paiementsDir}/TabJournal.tsx`,
+    `${paiementsDir}/TabHistorique.tsx`,
+    `${paiementsDir}/TabEcheances.tsx`,
+    `${paiementsDir}/TabImpayes.tsx`,
+    `${paiementsDir}/TabOfferts.tsx`,
+    `${paiementsDir}/TabDeclarations.tsx`,
+  ];
+
+  for (const f of expectedFiles) {
+    await test(`Fichier ${f.split("/").pop()} présent`, async () => {
+      assert(existsSync(resolve(process.cwd(), f)), `Manquant: ${f}`);
+    });
+  }
+
+  await test("page.tsx < 2000 lignes (refactoring validé)", async () => {
+    const content = readFileSync(resolve(process.cwd(), `${paiementsDir}/page.tsx`), "utf8");
+    const lines = content.split("\n").length;
+    assert(lines < 2000, `${lines} lignes (attendu < 2000)`);
+  });
+
+  await test("Chaque Tab export une fonction nommée", async () => {
+    const tabs = ["TabEncaisser", "TabJournal", "TabHistorique", "TabEcheances", "TabImpayes", "TabOfferts", "TabDeclarations"];
+    for (const tab of tabs) {
+      const src = readFileSync(resolve(process.cwd(), `${paiementsDir}/${tab}.tsx`), "utf8");
+      assert(src.includes(`export function ${tab}`), `${tab} : export function manquant`);
+    }
+  });
+
+  await test("types.ts exporte PaymentMode, BasketItem, Payment, paymentModes", async () => {
+    const src = readFileSync(resolve(process.cwd(), `${paiementsDir}/types.ts`), "utf8");
+    assert(src.includes("export type PaymentMode"), "PaymentMode manquant");
+    assert(src.includes("export interface BasketItem"), "BasketItem manquant");
+    assert(src.includes("export interface Payment"), "Payment manquant");
+    assert(src.includes("export const paymentModes"), "paymentModes manquant");
+  });
+
+  await test("utils.ts exporte normalizePayment et loadPayments", async () => {
+    const src = readFileSync(resolve(process.cwd(), `${paiementsDir}/utils.ts`), "utf8");
+    assert(src.includes("export const normalizePayment"), "normalizePayment manquant");
+    assert(src.includes("export const loadPayments"), "loadPayments manquant");
+  });
+
+  await test("page.tsx importe tous les Tab composants", async () => {
+    const src = readFileSync(resolve(process.cwd(), `${paiementsDir}/page.tsx`), "utf8");
+    const tabs = ["TabEncaisser", "TabJournal", "TabHistorique", "TabEcheances", "TabImpayes", "TabOfferts", "TabDeclarations"];
+    for (const tab of tabs) {
+      assert(src.includes(`import { ${tab} }`), `Import ${tab} manquant dans page.tsx`);
+    }
+  });
+
+  await test("page.tsx n'a plus de blocs JSX tab inline (extrait dans les Tab composants)", async () => {
+    const src = readFileSync(resolve(process.cwd(), `${paiementsDir}/page.tsx`), "utf8");
+    // Vérifier que les onglets ne contiennent plus de JSX lourd directement
+    const cardCount = (src.match(/<Card padding=/g) || []).length;
+    assert(cardCount < 3, `${cardCount} <Card padding= dans page.tsx (doit être < 3)`);
+  });
+
+  await test("NoteField.tsx exporte la fonction NoteField", async () => {
+    const src = readFileSync(resolve(process.cwd(), `${paiementsDir}/NoteField.tsx`), "utf8");
+    assert(src.includes("export function NoteField"), "NoteField export manquant");
+  });
+
   // ═══════════════════════════════════════
   // NETTOYAGE & RÉSUMÉ
   // ═══════════════════════════════════════
