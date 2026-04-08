@@ -182,7 +182,7 @@ export function TabImpayes({
                         <div key={idx} className="flex items-center justify-between py-1.5 font-body text-xs border-b border-gray-50 last:border-0">
                           <span className="text-slate-600 flex-1 min-w-0 truncate">{item.childName ? `${item.childName} — ` : ""}{item.activityTitle}{item.startTime ? ` ${item.startTime}` : ""}</span>
                           <div className="flex items-center gap-2 flex-shrink-0">
-                            <span className="text-blue-500 font-semibold">{(item.priceTTC || 0).toFixed(2)}€</span>
+                            <span className="text-blue-500 font-semibold">{(item.priceTTC || 0) === 0 ? <span className="text-slate-400 text-[10px]">Inclus</span> : `${(item.priceTTC || 0).toFixed(2)}€`}</span>
                             <button onClick={() => { if (!confirm(`Retirer "${item.activityTitle}" ?\n\nL'enfant sera désinscrit.`)) return; removePaymentItem(p, idx); }} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-0.5"><X size={12}/></button>
                           </div>
                         </div>

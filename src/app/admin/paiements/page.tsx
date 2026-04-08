@@ -726,7 +726,7 @@ export default function PaiementsPage() {
         priceHT: safeNumber(item.priceHT),
         priceTTC: safeNumber(item.priceTTC),
         tva: safeNumber(item.tva || item.tvaTaux || 5.5),
-        creneauId: "",
+        creneauId: item.creneauId || "",  // garder le creneauId original
         reservationId: "",
       };
     });
@@ -746,9 +746,44 @@ export default function PaiementsPage() {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+
+    // Réinscrire l'enfant cible dans les créneaux originaux
+    const targetChild = targetChildren[0];
+    if (targetChild) {
+      let inscriptions = 0;
+      for (const item of cleanedItems) {
+        if (!item.creneauId) continue;
+        try {
+          const creneauRef = doc(db, "creneaux", item.creneauId);
+          const crSnap = await getDoc(creneauRef);
+          if (!crSnap.exists()) continue;
+          const crData = crSnap.data();
+          const enrolled: any[] = crData.enrolled || [];
+          // Vérifier qu'il n'est pas déjà inscrit
+          if (enrolled.some((e: any) => e.childId === targetChild.id)) continue;
+          const newEnrolled = [...enrolled, {
+            childId: targetChild.id,
+            childName: targetChild.firstName || "",
+            familyId: targetFamily.firestoreId,
+            familyName: targetFamily.parentName || "",
+            enrolledAt: new Date().toISOString(),
+            paymentSource: "forfait",
+          }];
+          await updateDoc(creneauRef, { enrolled: newEnrolled, enrolledCount: newEnrolled.length });
+          inscriptions++;
+        } catch (e) { console.error("Erreur inscription créneau:", e); }
+      }
+      if (inscriptions > 0) {
+        toast(`✅ Commande créée pour ${targetFamily.parentName} — ${totalTTC.toFixed(2)}€ — ${inscriptions} créneau(x) inscrit(s).`, "success");
+      } else {
+        toast(`Commande créée pour ${targetFamily.parentName} — ${totalTTC.toFixed(2)}€ à encaisser (onglet Impayés).`);
+      }
+    } else {
+      toast(`Commande créée pour ${targetFamily.parentName} — ${totalTTC.toFixed(2)}€ à encaisser (onglet Impayés).`);
+    }
+
     setDuplicateTarget(null);
     await refreshAll();
-    toast(`Commande créée pour ${targetFamily.parentName} — ${totalTTC.toFixed(2)}€ à encaisser (onglet Impayés).`);
   };
 
   // ─── Broadcast concours : envoi en masse ───
