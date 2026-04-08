@@ -68,15 +68,24 @@ export default function CavaliersPage() {
 
   // ── Filtrage ──────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
-    if (!search.trim()) return families;
-    const q = search.toLowerCase();
-    return families.filter(f =>
-      f.parentName?.toLowerCase().includes(q) ||
-      f.parentEmail?.toLowerCase().includes(q) ||
+    const list = !search.trim() ? families : families.filter(f =>
+      f.parentName?.toLowerCase().includes(search.toLowerCase()) ||
+      (f as any).lastName?.toLowerCase().includes(search.toLowerCase()) ||
+      (f as any).firstName?.toLowerCase().includes(search.toLowerCase()) ||
+      f.parentEmail?.toLowerCase().includes(search.toLowerCase()) ||
       (f.children || []).some((c: any) =>
-        `${c.firstName} ${c.lastName || ""}`.toLowerCase().includes(q)
+        `${c.firstName} ${c.lastName || ""}`.toLowerCase().includes(search.toLowerCase())
       )
     );
+    // Tri alphabétique par nom de famille, puis prénom
+    return [...list].sort((a, b) => {
+      const lastA = ((a as any).lastName || a.parentName || "").toLowerCase();
+      const lastB = ((b as any).lastName || b.parentName || "").toLowerCase();
+      if (lastA !== lastB) return lastA.localeCompare(lastB, "fr");
+      const firstA = ((a as any).firstName || "").toLowerCase();
+      const firstB = ((b as any).firstName || "").toLowerCase();
+      return firstA.localeCompare(firstB, "fr");
+    });
   }, [families, search]);
 
   // ── Stats ─────────────────────────────────────────────────────────────────

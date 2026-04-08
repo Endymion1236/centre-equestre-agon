@@ -57,12 +57,15 @@ export default function FamilyCard({
   const [showProgression, setShowProgression] = useState<string | null>(null); // childId
   // ── Édition famille ────────────────────────────────────────────────────────
   const [editingFamily, setEditingFamily] = useState(false);
-  const [editForm, setEditForm] = useState({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
+  const [editForm, setEditForm] = useState({ parentName: "", lastName: "", firstName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
 
   const startEditFamily = () => {
     setEditingFamily(true);
     setEditForm({
-      parentName: family.parentName || "", parentEmail: family.parentEmail || "",
+      parentName: family.parentName || "",
+      lastName: (family as any).lastName || "",
+      firstName: (family as any).firstName || "",
+      parentEmail: family.parentEmail || "",
       parentPhone: family.parentPhone || "", address: family.address || "",
       zipCode: family.zipCode || "", city: family.city || "",
     });
@@ -71,8 +74,16 @@ export default function FamilyCard({
   const handleSaveFamily = async () => {
     setSaving(true);
     try {
+      const lastName = editForm.lastName.trim().toUpperCase();
+      const firstName = editForm.firstName.trim();
+      const computedName = lastName && firstName
+        ? `${lastName} ${firstName}`
+        : lastName || firstName || editForm.parentName.trim();
       await updateDoc(doc(db, "families", family.firestoreId), {
-        parentName: editForm.parentName.trim(), parentEmail: editForm.parentEmail.trim(),
+        parentName: computedName,
+        lastName: lastName || null,
+        firstName: firstName || null,
+        parentEmail: editForm.parentEmail.trim(),
         parentPhone: editForm.parentPhone.trim(), address: editForm.address.trim(),
         zipCode: editForm.zipCode.trim(), city: editForm.city.trim(),
         updatedAt: serverTimestamp(),
@@ -232,11 +243,20 @@ export default function FamilyCard({
         <div className="flex items-center justify-between cursor-pointer" onClick={() => setIsExpanded(e => !e)}>
           <div className="flex items-center gap-3">
             <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-body text-sm font-bold text-white ${accountColor}`}>
-              {family.parentName?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
+              {((family as any).lastName?.[0] || family.parentName?.[0] || "?").toUpperCase()}
+              {((family as any).firstName?.[0] || family.parentName?.split(" ")?.[1]?.[0] || "").toUpperCase()}
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <div className="font-body text-base font-semibold text-blue-800">{family.parentName || "Sans nom"}</div>
+                <div className="font-body text-base font-semibold text-blue-800">
+                  {(family as any).lastName
+                    ? <><span className="uppercase">{(family as any).lastName}</span>{(family as any).firstName ? ` ${(family as any).firstName}` : ""}</>
+                    : family.parentName || "Sans nom"
+                  }
+                </div>
+                {!(family as any).lastName && family.accountType !== "asso" && family.accountType !== "collectivite" && (
+                  <span title="Nom/prénom séparés manquants" className="font-body text-[10px] font-semibold text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded cursor-default">⚠️ à compléter</span>
+                )}
                 {family.accountType === "asso" && <span className="font-body text-[10px] font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">ASSO</span>}
                 {family.accountType === "collectivite" && <span className="font-body text-[10px] font-semibold text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded">COLLECTIVITÉ</span>}
               </div>
@@ -262,8 +282,18 @@ export default function FamilyCard({
             {editingFamily ? (
               <div className="bg-blue-50 rounded-lg p-4 mb-5">
                 <div className="font-body text-xs font-semibold text-blue-500 uppercase tracking-wider mb-3">Modifier les informations</div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
-                  {[["Nom", "parentName", "text"], ["Email", "parentEmail", "email"], ["Téléphone", "parentPhone", "tel"]].map(([label, key, type]) => (
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className={labelStyle}>Nom de famille</label>
+                    <input value={editForm.lastName} onChange={e => setEditForm(f => ({ ...f, lastName: e.target.value.toUpperCase() }))} placeholder="DUPONT" className={inputStyle}/>
+                  </div>
+                  <div>
+                    <label className={labelStyle}>Prénom</label>
+                    <input value={editForm.firstName} onChange={e => setEditForm(f => ({ ...f, firstName: e.target.value }))} placeholder="Marie" className={inputStyle}/>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  {[["Email", "parentEmail", "email"], ["Téléphone", "parentPhone", "tel"]].map(([label, key, type]) => (
                     <div key={key}>
                       <label className={labelStyle}>{label}</label>
                       <input type={type} value={(editForm as any)[key]} onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))} className={inputStyle}/>

@@ -24,6 +24,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
 
   const [newFamily, setNewFamily] = useState({
     parentName: "", parentEmail: "", parentPhone: "",
+    lastName: "", firstName: "",
     address: "", zipCode: "", city: "",
     accountType: "particulier" as AccountType,
     raisonSociale: "", structureParente: "", siret: "", referent: "",
@@ -32,7 +33,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
 
   const handleCreate = async () => {
     const isValid = newFamily.accountType === "particulier"
-      ? newFamily.parentName.trim()
+      ? (newFamily.lastName.trim() || newFamily.parentName.trim())
       : newFamily.raisonSociale.trim();
     if (!isValid) return;
     setSaving(true);
@@ -47,14 +48,19 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
           sanitaryForm: null,
         }));
 
+      // Nom affiché : "DUPONT Marie" si séparé, sinon parentName brut
+      const lastName = newFamily.lastName.trim().toUpperCase();
+      const firstName = newFamily.firstName.trim();
       const computedName = newFamily.accountType === "particulier"
-        ? newFamily.parentName.trim()
+        ? (lastName && firstName ? `${lastName} ${firstName}` : lastName || firstName || newFamily.parentName.trim())
         : newFamily.accountType === "collectivite" && newFamily.structureParente && newFamily.raisonSociale
           ? `${newFamily.structureParente.trim()} — ${newFamily.raisonSociale.trim()}`
           : newFamily.raisonSociale.trim() || newFamily.parentName.trim();
 
       await addDoc(collection(db, "families"), {
         parentName: computedName,
+        lastName: lastName || undefined,
+        firstName: firstName || undefined,
         parentEmail: newFamily.parentEmail.trim(),
         parentPhone: newFamily.parentPhone.trim(),
         address: newFamily.address.trim(),
@@ -90,7 +96,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
   };
 
   const canCreate = newFamily.accountType === "particulier"
-    ? newFamily.parentName.trim()
+    ? (newFamily.lastName.trim() || newFamily.parentName.trim())
     : newFamily.raisonSociale.trim();
 
   return (
@@ -122,9 +128,18 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
             <div className="grid grid-cols-1 gap-3">
               {newFamily.accountType === "particulier" ? (
                 <div>
-                  <label className={labelStyle}>Nom complet *</label>
-                  <input className={inputStyle} value={newFamily.parentName}
-                    onChange={e => setNewFamily({ ...newFamily, parentName: e.target.value })} placeholder="Ex: Dupont Marie"/>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelStyle}>Nom de famille *</label>
+                      <input className={inputStyle} value={newFamily.lastName}
+                        onChange={e => setNewFamily({ ...newFamily, lastName: e.target.value.toUpperCase() })} placeholder="Ex: DUPONT"/>
+                    </div>
+                    <div>
+                      <label className={labelStyle}>Prénom</label>
+                      <input className={inputStyle} value={newFamily.firstName}
+                        onChange={e => setNewFamily({ ...newFamily, firstName: e.target.value })} placeholder="Ex: Marie"/>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <>
