@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>🏇 Challenge Interne - Centre Équestre d'Agon</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', -apple-system, sans-serif; background: #F5F0E8; }
+  input, select, button { font-family: inherit; }
+  input[type="number"], input[type="text"], select { font-size: 16px !important; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+
+const DISCIPLINES = [
+  { id: "cso50", name: "CSO 50cm", type: "cso" },
+  { id: "cso70", name: "CSO 70cm", type: "cso" },
+  { id: "equifun", name: "Equifun", type: "equifun" },
+];
+
+const ROUNDS = [
+  { id: 1, name: "Manche 1", isFinal: false, coeff: 1 },
+  { id: 2, name: "Manche 2", isFinal: false, coeff: 1 },
+  { id: 3, name: "Manche 3", isFinal: false, coeff: 1 },
+  { id: 4, name: "Finale", isFinal: true, coeff: 1.5 },
+];
+
+const POINTS_TABLE = [10, 8, 7, 6, 5, 4, 3, 2, 1];
+const MIN_POINTS = 1;
+const getPointsForRank = (rank) => {
+  if (rank <= 0) return MIN_POINTS;
+  if (rank <= POINTS_TABLE.length) return POINTS_TABLE[rank - 1];
+  return MIN_POINTS;
+};
+
+const defaultData = () => ({ riders: [], results: {}, nextId: 1 });
+
+// ── Firebase sync ─────────────────────────────────────────────
+// challengeId est passé en paramètre URL: ?id=challenge-2026-03-15-...
+const getChallengeId = () => new URLSearchParams(window.location.search).get("id") || null;
+const API_BASE = window.location.origin;
+
+const saveData = async (data) => {
+  const id = getChallengeId();
+  if (!id) { // fallback localStorage si pas d'ID
+    try { localStorage.setItem("challenge-local", JSON.stringify(data)); } catch {}
+    return;
+  }
+  try {
+    await fetch(`${API_BASE}/api/challenges`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, riders: data.riders, results: data.results, nextId: data.nextId }),
+    });
+  } catch(e) {
+    console.warn("Sauvegarde Firebase échouée, fallback local:", e);
+    try { localStorage.setItem(`challenge-${id}`, JSON.stringify(data)); } catch {}
+  }
+};
+
+const loadData = async () => {
+  const id = getChallengeId();
+  if (!id) {
+    try {
+      const raw = localStorage.getItem("challenge-local");
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  }
+  try {
+    const res = await fetch(`${API_BASE}/api/challenges?id=${encodeURIComponent(id)}`);
+    if (!res.ok) return null;
+    const d = await res.json();
+    return { riders: d.riders || [], results: d.results || {}, nextId: d.nextId || 1, title: d.title };
+  } catch(e) {
+    console.warn("Chargement Firebase échoué:", e);
+    try {
+      const raw = localStorage.getItem(`challenge-${id}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  }
+};
+
+const formatTime = (seconds) => {
+  if (seconds === null || seconds === undefined || seconds === "") return "-";
+  const s = parseFloat(seconds);
+  if (isNaN(s)) return "-";
+  const mins = Math.floor(s / 60);
+  const secs = (s % 60).toFixed(2);
+  return mins > 0 ? `${mins}m${secs.padStart(5, "0")}` : `${secs}s`;
+};
+
+const formatStopwatch = (ms) => {
+  const mins = Math.floor(ms / 60000);
+  const secs = Math.floor((ms % 60000) / 1000);
+  const centis = Math.floor((ms % 1000) / 10);
+  return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}.${centis.toString().padStart(2, "0")}`;
+};
+
+/*
+  Equifun penalties:
+  - Pénalité simple: 5s
+  - Obstacle cassé: 20s
+  - Porte (entrée/sortie) non franchie: 40s
+  - Obstacle raté 1ère fois: 10s
+  - Obstacle raté 2ème fois: 25s
+*/
+const calcEquifunPenalties = (eq) => {
+  const p5 = parseInt(eq.pen5 || 0);
+  const p10 = parseInt(eq.pen10 || 0);
+  const p20 = parseInt(eq.pen20 || 0);
+  const p25 = parseInt(eq.pen25 || 0);
+  const p40 = parseInt(eq.pen40 || 0);
+  return p5 * 5 + p10 * 10 + p20 * 20 + p25 * 25 + p40 * 40;
+};
+
+const computeCsoScore = (result) => {
+  if (!result) return null;
+  const eliminated = result.eliminated || false;
+  const time = parseFloat(result.time);
+  const hasTime = result.time !== "" && result.time !== null && result.time !== undefined && !isNaN(time);
+  // If no time AND not eliminated, nothing to score
+  if (!hasTime && !eliminated) return null;
+  const rails = parseInt(result.rails || 0);
+  const penaltyPoints = rails * 4;
+  return { total: eliminated ? Infinity : penaltyPoints + time, penaltyPoints, rails, time: hasTime ? time : 0, eliminated, raw: result };
+};
+
+const computeEquifunScore = (result) => {
+  if (!result) return null;
+  const eliminated = result.eliminated || false;
+  const time = parseFloat(result.time);
+  const hasTime = result.time !== "" && result.time !== null && result.time !== undefined && !isNaN(time);
+  if (!hasTime && !eliminated) return null;
+  const penaltySeconds = calcEquifunPenalties(result);
+  return { total: eliminated ? Infinity : (hasTime ? time : 0) + penaltySeconds, penaltySeconds, time: hasTime ? time : 0, eliminated, raw: result };
+};
+
+const getScore = (result, discipline) =>
+  discipline.type === "cso" ? computeCsoScore(result) : computeEquifunScore(result);
+
+const MAX_ATTEMPTS = 3;
+
+const getBestResult = (results, riderId, discipline, roundId) => {
+  const scores = [];
+  for (let a = 1; a <= MAX_ATTEMPTS; a++) {
+    const s = getScore(results[`${riderId}-${discipline.id}-${roundId}-${a}`], discipline);
+    if (s) scores.push(s);
+  }
+  if (scores.length === 0) return null;
+  // Non-eliminated first, then lowest total
+  const valid = scores.filter((s) => !s.eliminated);
+  if (valid.length > 0) return valid.reduce((best, s) => s.total < best.total ? s : best);
+  return scores[0]; // all eliminated
+};
+
+const emptyResult = () => ({ time: "", pony: "", rails: 0, pen5: 0, pen10: 0, pen20: 0, pen25: 0, pen40: 0, eliminated: false });
+
+const TAB_CAVALIERS = "cavaliers";
+const TAB_SAISIE = "saisie";
+const TAB_CLASSEMENT = "classement";
+const TAB_GENERAL = "general";
+
+const thS = { padding: "10px 6px", textAlign: "center", fontWeight: 700, fontSize: "11px", color: "#6B5D4F" };
+const tdS = { padding: "9px 6px", fontSize: "13px" };
+
+const Medal = ({ rank }) => {
+  const m = { 1: "🥇", 2: "🥈", 3: "🥉" };
+  return m[rank] ? <span style={{ fontSize: "18px" }}>{m[rank]}</span> : <span style={{ fontSize: "13px", fontWeight: 700, color: "#8B7D6B" }}>{rank}</span>;
+};
+
+// ================================================================
+// CHRONO — Fixed stop & apply
+// ================================================================
+function InlineChrono({ riders, onApply }) {
+  const [displayMs, setDisplayMs] = useState(0);
+  const [running, setRunning] = useState(false);
+  const [selectedRider, setSelectedRider] = useState("");
+  const [selectedAttempt, setSelectedAttempt] = useState(1);
+
+  // All timing state lives in refs to avoid async state issues
+  const intervalRef = useRef(null);
+  const runningRef = useRef(false);
+  const startRef = useRef(0);
+  const accumulatedRef = useRef(0);
+
+  useEffect(() => () => { if (intervalRef.current) clearInterval(intervalRef.current); }, []);
+
+  const getCurrentMs = () => {
+    if (runningRef.current) {
+      return accumulatedRef.current + (Date.now() - startRef.current);
+    }
+    return accumulatedRef.current;
+  };
+
+  const startChrono = () => {
+    if (runningRef.current) return;
+    runningRef.current = true;
+    setRunning(true);
+    startRef.current = Date.now();
+    intervalRef.current = setInterval(() => {
+      setDisplayMs(accumulatedRef.current + (Date.now() - startRef.current));
+    }, 10);
+  };
+
+  const stopChrono = () => {
+    if (!runningRef.current) return;
+    const finalMs = accumulatedRef.current + (Date.now() - startRef.current);
+    clearInterval(intervalRef.current);
+    intervalRef.current = null;
+    accumulatedRef.current = finalMs;
+    runningRef.current = false;
+    setRunning(false);
+    setDisplayMs(finalMs);
+    return finalMs;
+  };
+
+  const resetChrono = () => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = null;
+    runningRef.current = false;
+    accumulatedRef.current = 0;
+    startRef.current = 0;
+    setRunning(false);
+    setDisplayMs(0);
+  };
+
+  const applyTime = (ms) => {
+    if (!selectedRider || ms === 0) return;
+    const timeInSeconds = (ms / 1000).toFixed(2);
+    onApply(parseInt(selectedRider), selectedAttempt, timeInSeconds);
+    resetChrono();
+  };
+
+  const handleStopAndApply = () => {
+    if (!selectedRider) return;
+    let ms;
+    if (runningRef.current) {
+      ms = stopChrono();
+    } else {
+      ms = accumulatedRef.current;
+    }
+    if (ms > 0) {
+      const timeInSeconds = (ms / 1000).toFixed(2);
+      onApply(parseInt(selectedRider), selectedAttempt, timeInSeconds);
+      // Reset after a tiny delay so user sees the final time
+      setTimeout(() => resetChrono(), 100);
+    }
+  };
+
+  const handleApplyOnly = () => {
+    applyTime(accumulatedRef.current);
+  };
+
+  const riderName = riders.find(r => r.id === parseInt(selectedRider))?.name || "...";
+
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, #2D4A30 0%, #3A5A3E 50%, #4A6B4E 100%)",
+      borderRadius: "16px", padding: "16px", marginBottom: "14px",
+      boxShadow: "0 4px 20px rgba(45,74,48,0.35)", color: "#fff",
+    }}>
+      <div style={{
+        fontFamily: "'SF Mono', 'Courier New', monospace",
+        fontSize: "48px", fontWeight: 800, textAlign: "center",
+        padding: "8px 0 12px", letterSpacing: "2px",
+        textShadow: running ? "0 0 25px rgba(160,255,160,0.4)" : "none",
+        color: running ? "#A0FFA0" : "#fff", transition: "color 0.3s",
+      }}>
+        {formatStopwatch(displayMs)}
+      </div>
+
+      {/* Rider selector */}
+      <div style={{ display: "flex", gap: "6px", marginBottom: "10px", flexWrap: "wrap" }}>
+        <select value={selectedRider} onChange={(e) => setSelectedRider(e.target.value)} style={{
+          flex: 1, minWidth: "140px", padding: "10px", borderRadius: "10px",
+          border: "2px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.12)",
+          color: "#fff", fontSize: "14px", fontWeight: 600,
+        }}>
+          <option value="" style={{ color: "#333" }}>Choisir le cavalier...</option>
+          {riders.map((r) => (
+            <option key={r.id} value={r.id} style={{ color: "#333" }}>
+              {r.name}
+            </option>
+          ))}
+        </select>
+        <select value={selectedAttempt} onChange={(e) => setSelectedAttempt(parseInt(e.target.value))} style={{
+          padding: "10px 14px", borderRadius: "10px",
+          border: "2px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.12)",
+          color: "#fff", fontSize: "14px", fontWeight: 600,
+        }}>
+          <option value={1} style={{ color: "#333" }}>Passage 1</option>
+          <option value={2} style={{ color: "#333" }}>Passage 2</option>
+          <option value={3} style={{ color: "#333" }}>Passage 3</option>
+        </select>
+      </div>
+
+      {/* Main buttons */}
+      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+        {!running ? (
+          <button onClick={startChrono} style={{
+            flex: 1, minWidth: "80px", padding: "14px", background: "#4CAF50",
+            color: "#fff", border: "none", borderRadius: "12px", fontWeight: 800,
+            fontSize: "16px", cursor: "pointer", boxShadow: "0 3px 12px rgba(76,175,80,0.4)",
+          }}>
+            ▶ {displayMs > 0 ? "Reprendre" : "START"}
+          </button>
+        ) : (
+          <button onClick={stopChrono} style={{
+            flex: 1, minWidth: "80px", padding: "14px", background: "#E74C3C",
+            color: "#fff", border: "none", borderRadius: "12px", fontWeight: 800,
+            fontSize: "16px", cursor: "pointer", boxShadow: "0 3px 12px rgba(231,76,60,0.4)",
+          }}>
+            ⏸ STOP
+          </button>
+        )}
+        <button onClick={handleStopAndApply} disabled={!selectedRider || (displayMs === 0 && !running)} style={{
+          flex: 1.5, minWidth: "130px", padding: "14px",
+          background: (!selectedRider || (displayMs === 0 && !running)) ? "rgba(255,255,255,0.08)" : "linear-gradient(135deg, #E67E22, #F39C12)",
+          color: (!selectedRider || (displayMs === 0 && !running)) ? "rgba(255,255,255,0.25)" : "#fff",
+          border: "none", borderRadius: "12px", fontWeight: 800, fontSize: "14px",
+          cursor: (!selectedRider || (displayMs === 0 && !running)) ? "default" : "pointer",
+          boxShadow: (selectedRider && (displayMs > 0 || running)) ? "0 3px 12px rgba(230,126,34,0.4)" : "none",
+        }}>
+          ⏱→ Stop & Appliquer
+        </button>
+        <button onClick={resetChrono} style={{
+          padding: "14px 16px", background: "rgba(255,255,255,0.12)",
+          color: "#fff", border: "2px solid rgba(255,255,255,0.2)",
+          borderRadius: "12px", fontWeight: 600, fontSize: "14px", cursor: "pointer",
+        }}>🔄</button>
+      </div>
+
+      {/* Apply button when stopped with time */}
+      {!running && displayMs > 0 && selectedRider && (
+        <button onClick={handleApplyOnly} style={{
+          width: "100%", marginTop: "8px", padding: "10px",
+          background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)",
+          borderRadius: "10px", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer",
+        }}>
+          📋 Appliquer {(displayMs / 1000).toFixed(2)}s à {riderName} (passage {selectedAttempt})
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ================================================================
+// PRINT
+// ================================================================
+function PrintButton({ contentFn, title }) {
+  const handlePrint = () => {
+    const win = window.open("", "_blank");
+    win.document.write(`<html><head><title>${title}</title>
+    <style>
+      @page { margin: 15mm; }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: 'Segoe UI', Arial, sans-serif; color: #2A2520; background: #fff; }
+
+      .header {
+        background: linear-gradient(135deg, #2D4A30 0%, #3A5A3E 40%, #5B7C5E 100%);
+        color: #fff; padding: 25px 30px; border-radius: 0 0 20px 20px;
+        text-align: center; position: relative; overflow: hidden;
+        margin: -15mm -15mm 20px -15mm; padding-top: 30px;
+      }
+      .header::before {
+        content: ""; position: absolute; top: -30px; right: -30px;
+        width: 120px; height: 120px; border-radius: 50%;
+        background: rgba(255,255,255,0.06);
+      }
+      .header::after {
+        content: ""; position: absolute; bottom: -40px; left: -20px;
+        width: 160px; height: 160px; border-radius: 50%;
+        background: rgba(255,255,255,0.04);
+      }
+      .header .club { font-size: 10px; letter-spacing: 4px; text-transform: uppercase; opacity: 0.7; margin-bottom: 6px; }
+      .header h1 { font-size: 26px; font-weight: 800; margin: 4px 0; text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+      .header h2 { font-size: 15px; font-weight: 400; opacity: 0.85; margin-top: 2px; }
+      .header .date { font-size: 11px; opacity: 0.6; margin-top: 8px; }
+
+      .podium { display: flex; justify-content: center; gap: 12px; margin: 0 auto 20px; max-width: 500px; }
+      .podium-card {
+        flex: 1; text-align: center; padding: 14px 8px; border-radius: 14px;
+        box-shadow: 0 3px 12px rgba(0,0,0,0.08); position: relative;
+      }
+      .podium-card.gold { background: linear-gradient(135deg, #FFF8E1, #FFECB3); border: 2px solid #FFD54F; order: 2; transform: scale(1.05); }
+      .podium-card.silver { background: linear-gradient(135deg, #F5F5F5, #E0E0E0); border: 2px solid #BDBDBD; order: 1; }
+      .podium-card.bronze { background: linear-gradient(135deg, #FFF3E0, #FFE0B2); border: 2px solid #FFB74D; order: 3; }
+      .podium-medal { font-size: 30px; display: block; margin-bottom: 4px; }
+      .podium-name { font-size: 14px; font-weight: 800; color: #2A2520; }
+      .podium-score { font-size: 11px; color: #666; margin-top: 2px; }
+
+      table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 10px; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
+      thead th {
+        background: linear-gradient(135deg, #3A5A3E, #4A6B4E);
+        color: #fff; padding: 12px 10px; font-size: 11px; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.5px; text-align: center;
+      }
+      thead th.left { text-align: left; }
+      tbody tr { transition: background 0.2s; }
+      tbody tr:nth-child(even) { background: #FAFAF7; }
+      tbody tr.highlight { background: rgba(91,124,94,0.06); }
+      tbody td { padding: 10px; text-align: center; font-size: 13px; border-bottom: 1px solid #F0EBE3; }
+      tbody td.left { text-align: left; }
+      tbody td.name { font-weight: 700; font-size: 14px; }
+      tbody td.rank { font-size: 16px; }
+      tbody td.points { font-weight: 800; font-size: 16px; color: #3A5A3E; background: rgba(91,124,94,0.06); }
+      tbody td.elim { color: #C0392B; font-weight: 700; font-size: 11px; }
+      tbody td.pen { color: #C0392B; font-weight: 600; }
+
+      .bareme { margin-top: 16px; padding: 10px 16px; background: #F5F0E8; border-radius: 10px; font-size: 11px; color: #6B5D4F; text-align: center; }
+      .bareme strong { color: #3A5A3E; }
+
+      .footer {
+        margin-top: 24px; padding-top: 12px; border-top: 2px solid #F0EBE3;
+        text-align: center; font-size: 10px; color: #A09888;
+      }
+      .footer .logo { font-size: 20px; display: block; margin-bottom: 4px; }
+
+      @media print {
+        body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        .header { margin: -15mm -15mm 20px -15mm; }
+      }
+    </style></head><body>
+    <div class="header">
+      <div class="club">Centre Équestre Poney Club d'Agon-Coutainville</div>
+      <h1>🏇 Challenge Interne</h1>
+      ${contentFn().title}
+      <div class="date">${new Date().toLocaleDateString("fr-FR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</div>
+    </div>
+    ${contentFn().podium || ""}
+    ${contentFn().table}
+    ${contentFn().bareme || ""}
+    <div class="footer">
+      <span class="logo">🐴</span>
+      Centre Équestre Poney Club d'Agon-Coutainville — Challenge Interne
+    </div>
+    </body></html>`);
+    win.document.close();
+    setTimeout(() => win.print(), 300);
+  };
+  return (
+    <button onClick={handlePrint} style={{
+      display: "flex", alignItems: "center", gap: "6px", margin: "12px auto",
+      padding: "10px 24px", background: "linear-gradient(135deg, #3A5A3E, #5B7C5E)",
+      color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700,
+      fontSize: "14px", cursor: "pointer", boxShadow: "0 3px 12px rgba(59,90,62,0.25)",
+    }}>🖨️ Imprimer</button>
+  );
+}
+
+// ================================================================
+// EXPORT / IMPORT
+// ================================================================
+function ExportImport({ data, onImport }) {
+  const fileRef = useRef();
+  const [status, setStatus] = useState(null);
+  const handleExport = () => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `challenge-equestre-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+  const handleImport = (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const imported = JSON.parse(ev.target.result);
+        if (!imported.riders || !imported.results) { setStatus("error"); return; }
+        onImport(imported); setStatus("success");
+      } catch { setStatus("error"); }
+      setTimeout(() => setStatus(null), 3000);
+    };
+    reader.readAsText(file); e.target.value = "";
+  };
+  return (
+    <div style={{ background: "#fff", borderRadius: "14px", padding: "16px", boxShadow: "0 2px 10px rgba(0,0,0,0.05)", marginBottom: "14px" }}>
+      <h3 style={{ margin: "0 0 10px", fontSize: "14px", color: "#3A5A3E" }}>📦 Transfert de données</h3>
+      <p style={{ fontSize: "12px", color: "#8B7D6B", margin: "0 0 10px" }}>Exporte sur un appareil, importe sur l'autre.</p>
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+        <button onClick={handleExport} style={{ flex: 1, minWidth: "130px", padding: "12px 16px", background: "linear-gradient(135deg, #5B7C5E, #7A9B6D)", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>📤 Exporter</button>
+        <button onClick={() => fileRef.current?.click()} style={{ flex: 1, minWidth: "130px", padding: "12px 16px", background: "linear-gradient(135deg, #8B7355, #A0896D)", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>📥 Importer</button>
+        <input ref={fileRef} type="file" accept=".json" onChange={handleImport} style={{ display: "none" }} />
+      </div>
+      {status === "success" && <div style={{ marginTop: "8px", padding: "8px", background: "#E8F5E9", borderRadius: "8px", color: "#2E7D32", fontSize: "13px", fontWeight: 600, textAlign: "center" }}>✅ Importé !</div>}
+      {status === "error" && <div style={{ marginTop: "8px", padding: "8px", background: "#FFEBEE", borderRadius: "8px", color: "#C62828", fontSize: "13px", fontWeight: 600, textAlign: "center" }}>❌ Fichier invalide</div>}
+    </div>
+  );
+}
+
+// ================================================================
+// MAIN APP
+// ================================================================
+function ChallengeApp() {
+  const [data, setData] = useState(defaultData());
+  const [tab, setTab] = useState(TAB_CAVALIERS);
+  const [selectedRound, setSelectedRound] = useState(1);
+  const [selectedDiscipline, setSelectedDiscipline] = useState("cso50");
+  const [loaded, setLoaded] = useState(false);
+  const [newRiderName, setNewRiderName] = useState("");
+  const [newRiderDiscipline, setNewRiderDiscipline] = useState("cso50");
+  const [editingRider, setEditingRider] = useState(null);
+  const [showConfirmReset, setShowConfirmReset] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedRiders, setSelectedRiders] = useState(new Set());
+  const [confirmDeleteMulti, setConfirmDeleteMulti] = useState(false);
+  const [confirmDeleteSingle, setConfirmDeleteSingle] = useState(null);
+
+  const [challengeTitle, setChallengeTitle] = React.useState("");
+  const [syncStatus, setSyncStatus] = React.useState("idle"); // idle | saving | saved | error
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const d = await loadData();
+        if (d) {
+          setData({ riders: d.riders || [], results: d.results || {}, nextId: d.nextId || 1 });
+          if (d.title) setChallengeTitle(d.title);
+        }
+      } catch(e) { console.error(e); }
+      setLoaded(true);
+    };
+    load();
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    setSyncStatus("saving");
+    const timer = setTimeout(async () => {
+      try {
+        await saveData(data);
+        setSyncStatus("saved");
+        setTimeout(() => setSyncStatus("idle"), 2000);
+      } catch {
+        setSyncStatus("error");
+      }
+    }, 800); // debounce 800ms
+    return () => clearTimeout(timer);
+  }, [data, loaded]);
+
+  const updateData = useCallback((fn) => {
+    setData((prev) => fn({ ...prev, riders: [...prev.riders], results: { ...prev.results } }));
+  }, []);
+
+  const addRider = () => {
+    const name = newRiderName.trim();
+    if (!name) return;
+    updateData((d) => {
+      d.riders.push({ id: d.nextId, name, discipline: newRiderDiscipline });
+      d.nextId++;
+      return d;
+    });
+    setNewRiderName("");
+  };
+
+  const removeRiders = (ids) => {
+    const idSet = new Set(ids);
+    updateData((d) => {
+      d.riders = d.riders.filter((r) => !idSet.has(r.id));
+      const nr = {};
+      for (const [k, v] of Object.entries(d.results)) {
+        if (!idSet.has(parseInt(k.split("-")[0]))) nr[k] = v;
+      }
+      d.results = nr;
+      return d;
+    });
+  };
+
+  const removeSelected = () => {
+    if (selectedRiders.size === 0) return;
+    removeRiders([...selectedRiders]);
+    setSelectedRiders(new Set()); setSelectMode(false);
+  };
+
+  const toggleRiderSelection = (id) => {
+    setSelectedRiders((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllInDiscipline = (discId) => {
+    const ids = data.riders.filter((r) => r.discipline === discId).map((r) => r.id);
+    setSelectedRiders((prev) => {
+      const next = new Set(prev);
+      const allSel = ids.every((id) => next.has(id));
+      ids.forEach((id) => allSel ? next.delete(id) : next.add(id));
+      return next;
+    });
+  };
+
+  const updateRider = (id, name, discipline) => {
+    updateData((d) => {
+      const r = d.riders.find((x) => x.id === id);
+      if (r) { r.name = name; r.discipline = discipline; }
+      return d;
+    });
+    setEditingRider(null);
+  };
+
+  const setResult = (riderId, disciplineId, roundId, attempt, field, value) => {
+    const key = `${riderId}-${disciplineId}-${roundId}-${attempt}`;
+    updateData((d) => {
+      if (!d.results[key]) d.results[key] = emptyResult();
+      d.results[key] = { ...d.results[key], [field]: value };
+      return d;
+    });
+  };
+
+  const getResult = (riderId, disciplineId, roundId, attempt) =>
+    data.results[`${riderId}-${disciplineId}-${roundId}-${attempt}`] || emptyResult();
+
+  const clearResult = (riderId, disciplineId, roundId, attempt) => {
+    const key = `${riderId}-${disciplineId}-${roundId}-${attempt}`;
+    updateData((d) => {
+      delete d.results[key];
+      return d;
+    });
+  };
+
+  const handleChronoApply = (riderId, attempt, time) => {
+    setResult(riderId, selectedDiscipline, selectedRound, attempt, "time", time);
+  };
+
+  const getRoundRanking = (disciplineId, roundId) => {
+    const disc = DISCIPLINES.find((d) => d.id === disciplineId);
+    const riders = data.riders.filter((r) => r.discipline === disciplineId);
+    const ranked = riders
+      .map((r) => ({ rider: r, score: getBestResult(data.results, r.id, disc, roundId) }))
+      .filter((r) => r.score !== null);
+    ranked.sort((a, b) => {
+      if (a.score.eliminated && !b.score.eliminated) return 1;
+      if (!a.score.eliminated && b.score.eliminated) return -1;
+      if (a.score.eliminated && b.score.eliminated) return 0;
+      return a.score.total - b.score.total;
+    });
+    let rank = 0;
+    return ranked.map((r) => {
+      if (r.score.eliminated) return { ...r, rank: "EL", points: MIN_POINTS };
+      rank++;
+      return { ...r, rank, points: getPointsForRank(rank) };
+    });
+  };
+
+  const getGeneralRanking = (disciplineId) => {
+    const riders = data.riders.filter((r) => r.discipline === disciplineId);
+    const ranked = riders.map((r) => {
+      let totalPoints = 0;
+      const roundPoints = [];
+      for (const round of ROUNDS) {
+        const rr = getRoundRanking(disciplineId, round.id);
+        const entry = rr.find((e) => e.rider.id === r.id);
+        if (entry) { const w = entry.points * round.coeff; totalPoints += w; roundPoints.push(w); }
+        else roundPoints.push(null);
+      }
+      return { rider: r, totalPoints, roundPoints, hasResults: roundPoints.some((p) => p !== null) };
+    });
+    return ranked.filter((r) => r.hasResults).sort((a, b) => b.totalPoints - a.totalPoints).map((r, i) => ({ ...r, rank: i + 1 }));
+  };
+
+  const resetAll = () => { setData(defaultData()); setShowConfirmReset(false); };
+  const discipline = DISCIPLINES.find((d) => d.id === selectedDiscipline);
+  const ridersForDiscipline = data.riders.filter((r) => r.discipline === selectedDiscipline);
+
+  if (!loaded) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: "#5B7C5E", fontSize: "18px" }}>Chargement...</div>;
+
+  return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(165deg, #F5F0E8 0%, #EDE7DA 40%, #E8E0D0 100%)", fontFamily: "'Segoe UI', -apple-system, sans-serif", color: "#3A3228" }}>
+      {/* Header */}
+      <div style={{ background: "linear-gradient(135deg, #3A5A3E 0%, #5B7C5E 60%, #7A9B6D 100%)", padding: "14px 10px 10px", color: "#fff", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 4px 20px rgba(59,90,62,0.3)" }}>
+        <div style={{ textAlign: "center", marginBottom: "8px" }}>
+          <div style={{ fontSize: "9px", letterSpacing: "3px", textTransform: "uppercase", opacity: 0.8 }}>Centre Équestre d'Agon</div>
+          <h1 style={{ margin: "2px 0 0", fontSize: "18px", fontWeight: 700 }}>
+            🏇 {challengeTitle || "Challenge Interne"}
+          </h1>
+          {getChallengeId() && (
+            <div style={{ fontSize: "10px", opacity: 0.7, marginTop: "2px" }}>
+              {syncStatus === "saving" && "⏳ Sauvegarde..."}
+              {syncStatus === "saved" && "✅ Sauvegardé en ligne"}
+              {syncStatus === "error" && "⚠️ Erreur de synchronisation"}
+              {syncStatus === "idle" && "☁️ Synchronisé avec Firebase"}
+            </div>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: "2px", justifyContent: "center" }}>
+          {[
+            { id: TAB_CAVALIERS, l: "Cavaliers", i: "👤" },
+            { id: TAB_SAISIE, l: "Saisie & Chrono", i: "⏱️" },
+            { id: TAB_CLASSEMENT, l: "Manche", i: "📊" },
+            { id: TAB_GENERAL, l: "Général", i: "🏆" },
+          ].map((t) => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{
+              padding: "7px 10px", border: "none", borderRadius: "8px",
+              background: tab === t.id ? "rgba(255,255,255,0.25)" : "transparent",
+              color: "#fff", fontWeight: tab === t.id ? 700 : 400, fontSize: "11px", cursor: "pointer",
+            }}>{t.i} {t.l}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ maxWidth: "800px", margin: "0 auto", padding: "14px" }}>
+        {/* Selectors */}
+        {(tab === TAB_SAISIE || tab === TAB_CLASSEMENT) && <Selectors selectedDiscipline={selectedDiscipline} setSelectedDiscipline={setSelectedDiscipline} selectedRound={selectedRound} setSelectedRound={setSelectedRound} showRounds />}
+        {tab === TAB_GENERAL && <Selectors selectedDiscipline={selectedDiscipline} setSelectedDiscipline={setSelectedDiscipline} />}
+
+        {/* CAVALIERS */}
+        {tab === TAB_CAVALIERS && (
+          <div>
+            <div style={{ background: "#fff", borderRadius: "16px", padding: "16px", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", marginBottom: "12px" }}>
+              <h2 style={{ margin: "0 0 12px", fontSize: "15px", color: "#3A5A3E" }}>Ajouter un cavalier</h2>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                <input type="text" placeholder="Nom du cavalier" value={newRiderName} onChange={(e) => setNewRiderName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addRider()}
+                  style={{ flex: 1, minWidth: "140px", padding: "10px 12px", border: "2px solid #D4CBB8", borderRadius: "10px", fontSize: "14px", outline: "none" }} />
+                <select value={newRiderDiscipline} onChange={(e) => setNewRiderDiscipline(e.target.value)} style={{ padding: "10px", border: "2px solid #D4CBB8", borderRadius: "10px", fontSize: "14px", background: "#fff" }}>
+                  {DISCIPLINES.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+                <button onClick={addRider} style={{ minWidth: "100px", padding: "10px 18px", background: "#5B7C5E", color: "#fff", border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}>+ Ajouter</button>
+              </div>
+            </div>
+
+            {data.riders.length > 0 && (
+              <div style={{ marginBottom: "10px", padding: "0 4px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <button onClick={() => { setSelectMode(!selectMode); setSelectedRiders(new Set()); setConfirmDeleteMulti(false); }}
+                    style={{ padding: "8px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, cursor: "pointer", background: selectMode ? "#E74C3C" : "#fff", color: selectMode ? "#fff" : "#6B5D4F", border: selectMode ? "none" : "2px solid #D4CBB8" }}>
+                    {selectMode ? "✕ Annuler" : "☑ Sélectionner"}
+                  </button>
+                  {selectMode && selectedRiders.size > 0 && !confirmDeleteMulti && (
+                    <button onClick={() => setConfirmDeleteMulti(true)}
+                      style={{ padding: "8px 16px", background: "#C0392B", color: "#fff", border: "none", borderRadius: "8px", fontWeight: 700, fontSize: "13px", cursor: "pointer" }}>
+                      🗑️ Supprimer ({selectedRiders.size})
+                    </button>
+                  )}
+                </div>
+                {confirmDeleteMulti && (
+                  <div style={{ marginTop: "8px", background: "#FFF5F5", border: "2px solid #C0392B", borderRadius: "10px", padding: "10px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: "#C0392B" }}>Supprimer {selectedRiders.size} cavalier(s) ?</span>
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <button onClick={() => { removeSelected(); setConfirmDeleteMulti(false); }} style={{ padding: "6px 14px", background: "#C0392B", color: "#fff", border: "none", borderRadius: "6px", fontWeight: 700, fontSize: "12px", cursor: "pointer" }}>Oui</button>
+                      <button onClick={() => setConfirmDeleteMulti(false)} style={{ padding: "6px 14px", background: "#eee", border: "none", borderRadius: "6px", fontSize: "12px", cursor: "pointer" }}>Non</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {DISCIPLINES.map((disc) => {
+              const riders = data.riders.filter((r) => r.discipline === disc.id);
+              if (!riders.length) return null;
+              const allSel = riders.every((r) => selectedRiders.has(r.id));
+              return (
+                <div key={disc.id} style={{ background: "#fff", borderRadius: "14px", padding: "14px 16px", boxShadow: "0 2px 10px rgba(0,0,0,0.05)", marginBottom: "10px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                    <h3 style={{ margin: 0, fontSize: "13px", color: "#5B7C5E" }}>{disc.name} <span style={{ color: "#A09888", fontWeight: 400 }}>({riders.length})</span></h3>
+                    {selectMode && <button onClick={() => selectAllInDiscipline(disc.id)} style={{ padding: "4px 10px", background: allSel ? "#5B7C5E" : "#F5F0E8", color: allSel ? "#fff" : "#6B5D4F", border: "none", borderRadius: "6px", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}>{allSel ? "✓ Désélect." : "Tout sélect."}</button>}
+                  </div>
+                  {riders.map((r) => (
+                    <div key={r.id} style={{ display: "flex", alignItems: "center", padding: "7px 4px", borderBottom: "1px solid #F0EBE3", gap: "8px", background: selectedRiders.has(r.id) ? "rgba(192,57,43,0.05)" : confirmDeleteSingle === r.id ? "rgba(192,57,43,0.05)" : "transparent", borderRadius: "4px", flexWrap: "wrap" }}>
+                      {selectMode && <input type="checkbox" checked={selectedRiders.has(r.id)} onChange={() => toggleRiderSelection(r.id)} style={{ width: "20px", height: "20px", accentColor: "#C0392B", cursor: "pointer" }} />}
+                      {editingRider === r.id ? (
+                        <EditRider rider={r} onSave={(n, d) => updateRider(r.id, n, d)} onCancel={() => setEditingRider(null)} />
+                      ) : (
+                        <>
+                          <div style={{ flex: 1, cursor: selectMode ? "pointer" : "default" }} onClick={selectMode ? () => toggleRiderSelection(r.id) : undefined}>
+                            <span style={{ fontWeight: 600, fontSize: "14px" }}>{r.name}</span>
+                          </div>
+                          {!selectMode && confirmDeleteSingle !== r.id && (
+                            <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                              <button onClick={() => setEditingRider(r.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "14px", padding: "4px" }}>✏️</button>
+                              <button onClick={() => setConfirmDeleteSingle(r.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "14px", padding: "4px" }}>🗑️</button>
+                            </div>
+                          )}
+                          {confirmDeleteSingle === r.id && !selectMode && (
+                            <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                              <span style={{ fontSize: "12px", color: "#C0392B", fontWeight: 600 }}>Supprimer ?</span>
+                              <button onClick={() => { removeRiders([r.id]); setConfirmDeleteSingle(null); }}
+                                style={{ padding: "5px 12px", background: "#C0392B", color: "#fff", border: "none", borderRadius: "6px", fontWeight: 700, fontSize: "12px", cursor: "pointer" }}>Oui</button>
+                              <button onClick={() => setConfirmDeleteSingle(null)}
+                                style={{ padding: "5px 12px", background: "#eee", border: "none", borderRadius: "6px", fontSize: "12px", cursor: "pointer" }}>Non</button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+
+            {data.riders.length === 0 && <div style={{ textAlign: "center", padding: "40px 20px", color: "#A09888" }}><div style={{ fontSize: "40px", marginBottom: "12px" }}>🐴</div><p>Aucun cavalier inscrit.</p></div>}
+            <ExportImport data={data} onImport={(imported) => setData(imported)} />
+            <div style={{ marginTop: "20px", textAlign: "center" }}>
+              {!showConfirmReset ? (
+                <button onClick={() => setShowConfirmReset(true)} style={{ padding: "8px 20px", background: "transparent", color: "#C0392B", border: "1px solid #C0392B", borderRadius: "8px", fontSize: "12px", cursor: "pointer" }}>🔄 Réinitialiser tout</button>
+              ) : (
+                <div style={{ background: "#FFF5F5", border: "2px solid #C0392B", borderRadius: "12px", padding: "14px" }}>
+                  <p style={{ margin: "0 0 10px", fontSize: "13px", fontWeight: 600, color: "#C0392B" }}>⚠️ Tout supprimer ?</p>
+                  <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
+                    <button onClick={resetAll} style={{ padding: "8px 18px", background: "#C0392B", color: "#fff", border: "none", borderRadius: "8px", fontWeight: 700, cursor: "pointer" }}>Oui</button>
+                    <button onClick={() => setShowConfirmReset(false)} style={{ padding: "8px 18px", background: "#eee", border: "none", borderRadius: "8px", cursor: "pointer" }}>Annuler</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* SAISIE & CHRONO */}
+        {tab === TAB_SAISIE && (
+          <div>
+            <InlineChrono riders={ridersForDiscipline} onApply={handleChronoApply} />
+            {ridersForDiscipline.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "30px", color: "#A09888" }}><p>Aucun cavalier en {discipline?.name}.</p></div>
+            ) : (
+              ridersForDiscipline.map((rider) => (
+                <RiderCard key={rider.id} rider={rider} discipline={discipline} roundId={selectedRound} getResult={getResult} setResult={setResult} clearResult={clearResult} />
+              ))
+            )}
+          </div>
+        )}
+
+        {/* CLASSEMENT MANCHE */}
+        {tab === TAB_CLASSEMENT && <RoundView disciplineId={selectedDiscipline} roundId={selectedRound} getRoundRanking={getRoundRanking} discipline={discipline} />}
+
+        {/* GENERAL */}
+        {tab === TAB_GENERAL && <GeneralView disciplineId={selectedDiscipline} getGeneralRanking={getGeneralRanking} discipline={discipline} />}
+      </div>
+    </div>
+  );
+}
+
+// ================================================================
+// Selectors
+// ================================================================
+function Selectors({ selectedDiscipline, setSelectedDiscipline, selectedRound, setSelectedRound, showRounds }) {
+  return (
+    <div style={{ marginBottom: "12px" }}>
+      <div style={{ display: "flex", gap: "5px", marginBottom: showRounds ? "6px" : "0", flexWrap: "wrap" }}>
+        {DISCIPLINES.map((d) => (
+          <button key={d.id} onClick={() => setSelectedDiscipline(d.id)} style={{
+            padding: "7px 13px", border: selectedDiscipline === d.id ? "2px solid #5B7C5E" : "2px solid #D4CBB8",
+            borderRadius: "20px", background: selectedDiscipline === d.id ? "#5B7C5E" : "#fff",
+            color: selectedDiscipline === d.id ? "#fff" : "#5B4A3A", fontWeight: 600, fontSize: "12px", cursor: "pointer",
+          }}>{d.name}</button>
+        ))}
+      </div>
+      {showRounds && (
+        <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
+          {ROUNDS.map((r) => (
+            <button key={r.id} onClick={() => setSelectedRound(r.id)} style={{
+              padding: "5px 11px", border: selectedRound === r.id ? "2px solid #8B7355" : "2px solid #D4CBB8",
+              borderRadius: "16px", background: selectedRound === r.id ? "#8B7355" : "#fff",
+              color: selectedRound === r.id ? "#fff" : "#6B5D4F", fontWeight: 600, fontSize: "11px", cursor: "pointer",
+            }}>{r.isFinal ? "🏆 " : ""}{r.name}{r.isFinal ? " (×1.5)" : ""}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ================================================================
+// Round View
+// ================================================================
+function RoundView({ disciplineId, roundId, getRoundRanking, discipline }) {
+  const ranking = getRoundRanking(disciplineId, roundId);
+  const round = ROUNDS.find((r) => r.id === roundId);
+  const isCso = discipline.type === "cso";
+
+  if (!ranking.length) return <div style={{ textAlign: "center", padding: "40px", color: "#A09888" }}><div style={{ fontSize: "36px", marginBottom: "12px" }}>📊</div><p>Aucun résultat.</p></div>;
+
+  return (
+    <>
+      <PrintButton title={`${round.name} - ${discipline.name}`} contentFn={() => {
+        const medals = ["🥇","🥈","🥉"];
+        const podiumClasses = ["gold","silver","bronze"];
+        const top3 = ranking.filter(r => r.rank !== "EL" && r.rank <= 3);
+        return {
+          title: `<h2>${discipline.name} — ${round.name}${round.isFinal ? " (×1.5)" : ""}</h2>`,
+          podium: top3.length >= 2 ? `<div class="podium">${top3.map(r => `
+            <div class="podium-card ${podiumClasses[r.rank-1]}">
+              <span class="podium-medal">${medals[r.rank-1]}</span>
+              <div class="podium-name">${r.rider.name}</div>
+              <div class="podium-score">${r.score.total.toFixed(2)}s — ${r.points} pts</div>
+            </div>`).join("")}</div>` : "",
+          table: `<table><thead><tr>
+            <th>#</th><th class="left">Cavalier</th>
+            <th>Pén.</th><th>Temps</th><th>Score</th><th>Points</th>
+          </tr></thead><tbody>
+          ${ranking.map((r) => `<tr class="${r.rank <= 3 && r.rank !== "EL" ? "highlight" : ""}">
+            <td class="rank">${r.rank === "EL" ? '<span class="elim">ÉL</span>' : medals[r.rank-1] || r.rank}</td>
+            <td class="left name">${r.rider.name}</td>
+            <td${(r.rank !== "EL" && (isCso ? r.score.penaltyPoints : r.score.penaltySeconds) > 0) ? ' class="pen"' : ""}>${r.rank === "EL" ? "-" : (isCso ? r.score.penaltyPoints : r.score.penaltySeconds)}</td>
+            <td>${r.rank === "EL" ? "-" : formatTime(r.score.time)}</td>
+            <td>${r.rank === "EL" ? '<span class="elim">Élim.</span>' : r.score.total.toFixed(2)}</td>
+            <td class="points">${r.points}</td>
+          </tr>`).join("")}
+          </tbody></table>`,
+          bareme: `<div class="bareme"><strong>Barème :</strong> 1er=10, 2e=8, 3e=7, 4e=6, 5e=5, 6e=4, 7e=3, 8e=2, 9e+=1, Élim.=1${isCso ? " — <strong>1 barre = 4 pts pén.</strong>" : ""}${round.isFinal ? " — <strong>Finale ×1.5</strong>" : ""}</div>`
+        };
+      }} />
+      <div style={{ background: "#fff", borderRadius: "16px", overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
+        <div style={{ padding: "14px 16px", borderBottom: "2px solid #F0EBE3" }}>
+          <h3 style={{ margin: 0, fontSize: "14px", color: "#3A5A3E" }}>
+            {round.isFinal ? "🏆" : "📊"} {round.name} — {discipline.name}
+            {round.isFinal && <span style={{ fontSize: "11px", color: "#8B7355", marginLeft: "6px" }}>(×1.5)</span>}
+          </h3>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+            <thead><tr style={{ background: "#F5F0E8" }}>
+              <th style={thS}>#</th>
+              <th style={{ ...thS, textAlign: "left" }}>Cavalier</th>
+              <th style={thS}>Pén. (s)</th>
+              <th style={thS}>Temps</th>
+              <th style={thS}>Score</th>
+              <th style={{ ...thS, color: "#3A5A3E", fontWeight: 800 }}>Pts</th>
+            </tr></thead>
+            <tbody>
+              {ranking.map((r) => (
+                <tr key={r.rider.id} style={{ borderBottom: "1px solid #F0EBE3", background: r.rank <= 3 && r.rank !== "EL" ? "rgba(91,124,94,0.04)" : "transparent" }}>
+                  <td style={{ ...tdS, textAlign: "center" }}>{r.rank === "EL" ? <span style={{ color: "#C0392B", fontWeight: 700, fontSize: "11px" }}>ÉL</span> : <Medal rank={r.rank} />}</td>
+                  <td style={{ ...tdS, fontWeight: 600 }}>{r.rider.name}</td>
+                  <td style={{ ...tdS, textAlign: "center", color: (isCso ? r.score?.penaltyPoints : r.score?.penaltySeconds) > 0 ? "#C0392B" : "#5B7C5E", fontWeight: 600 }}>
+                    {r.rank === "EL" ? "-" : (isCso ? r.score.penaltyPoints : r.score.penaltySeconds)}
+                  </td>
+                  <td style={{ ...tdS, textAlign: "center", color: "#6B5D4F" }}>{r.rank === "EL" ? "-" : formatTime(r.score.time)}</td>
+                  <td style={{ ...tdS, textAlign: "center", fontWeight: 600 }}>{r.rank === "EL" ? "Élim." : r.score.total.toFixed(2)}</td>
+                  <td style={{ ...tdS, textAlign: "center", fontWeight: 800, fontSize: "15px", color: "#3A5A3E", background: "rgba(91,124,94,0.06)" }}>{r.points}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div style={{ marginTop: "10px", padding: "10px 14px", background: "#fff", borderRadius: "10px", fontSize: "11px", color: "#8B7D6B" }}>
+        <strong>Barème :</strong> 1er=10, 2e=8, 3e=7, 4e=6, 5e=5, 6e=4, 7e=3, 8e=2, 9e+=1, Élim.=1
+        {isCso && <span> — <strong>1 barre = 4 pts pén.</strong></span>}
+        {round.isFinal && <span> — <strong>Finale ×1.5</strong></span>}
+      </div>
+    </>
+  );
+}
+
+// ================================================================
+// General View
+// ================================================================
+function GeneralView({ disciplineId, getGeneralRanking, discipline }) {
+  const ranking = getGeneralRanking(disciplineId);
+  if (!ranking.length) return <div style={{ textAlign: "center", padding: "40px", color: "#A09888" }}><div style={{ fontSize: "36px", marginBottom: "12px" }}>🏆</div><p>Pas encore de classement.</p></div>;
+  return (
+    <>
+      <PrintButton title={`Général - ${discipline.name}`} contentFn={() => {
+        const medals = ["🥇","🥈","🥉"];
+        const podiumClasses = ["gold","silver","bronze"];
+        const top3 = ranking.filter(r => r.rank <= 3);
+        return {
+          title: `<h2>${discipline.name} — Classement Général</h2>`,
+          podium: top3.length >= 2 ? `<div class="podium">${top3.map(r => `
+            <div class="podium-card ${podiumClasses[r.rank-1]}">
+              <span class="podium-medal">${medals[r.rank-1]}</span>
+              <div class="podium-name">${r.rider.name}</div>
+              <div class="podium-score">${r.totalPoints.toFixed(1)} pts</div>
+            </div>`).join("")}</div>` : "",
+          table: `<table><thead><tr>
+            <th>#</th><th class="left">Cavalier</th>
+            ${ROUNDS.map((r) => `<th>${r.isFinal ? "Fin. ×1.5" : "M" + r.id}</th>`).join("")}
+            <th>TOTAL</th>
+          </tr></thead><tbody>
+          ${ranking.map((r) => `<tr class="${r.rank <= 3 ? "highlight" : ""}">
+            <td class="rank">${medals[r.rank-1] || r.rank}</td>
+            <td class="left name">${r.rider.name}</td>
+            ${r.roundPoints.map((p) => `<td>${p !== null ? p.toFixed(1) : "-"}</td>`).join("")}
+            <td class="points">${r.totalPoints.toFixed(1)}</td>
+          </tr>`).join("")}
+          </tbody></table>`,
+          bareme: ""
+        };
+      }} />
+      <div style={{ background: "#fff", borderRadius: "16px", overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
+        <div style={{ padding: "14px 16px", borderBottom: "2px solid #F0EBE3" }}>
+          <h3 style={{ margin: 0, fontSize: "14px", color: "#3A5A3E" }}>🏆 Classement Général — {discipline.name}</h3>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+            <thead><tr style={{ background: "#F5F0E8" }}>
+              <th style={thS}>#</th>
+              <th style={{ ...thS, textAlign: "left" }}>Cavalier</th>
+              {ROUNDS.map((r) => <th key={r.id} style={{ ...thS, fontSize: "10px" }}>{r.isFinal ? "Fin. ×1.5" : `M${r.id}`}</th>)}
+              <th style={{ ...thS, color: "#3A5A3E", fontWeight: 800, background: "rgba(91,124,94,0.08)" }}>TOTAL</th>
+            </tr></thead>
+            <tbody>
+              {ranking.map((r) => (
+                <tr key={r.rider.id} style={{ borderBottom: "1px solid #F0EBE3", background: r.rank <= 3 ? "rgba(91,124,94,0.04)" : "transparent" }}>
+                  <td style={{ ...tdS, textAlign: "center" }}><Medal rank={r.rank} /></td>
+                  <td style={{ ...tdS, fontWeight: 600 }}>{r.rider.name}</td>
+                  {r.roundPoints.map((p, i) => <td key={i} style={{ ...tdS, textAlign: "center", fontSize: "12px", color: p !== null ? "#5B4A3A" : "#CCBBAA" }}>{p !== null ? p.toFixed(1) : "-"}</td>)}
+                  <td style={{ ...tdS, textAlign: "center", fontWeight: 800, fontSize: "16px", color: "#3A5A3E", background: "rgba(91,124,94,0.08)" }}>{r.totalPoints.toFixed(1)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ================================================================
+// Sub-components
+// ================================================================
+function EditRider({ rider, onSave, onCancel }) {
+  const [name, setName] = useState(rider.name);
+  const [disc, setDisc] = useState(rider.discipline);
+  return (
+    <div style={{ display: "flex", gap: "4px", alignItems: "center", flex: 1, flexWrap: "wrap" }}>
+      <input type="text" value={name} onChange={(e) => setName(e.target.value)} style={{ flex: 1, minWidth: "100px", padding: "6px 8px", border: "2px solid #5B7C5E", borderRadius: "8px", fontSize: "12px" }} autoFocus />
+      <select value={disc} onChange={(e) => setDisc(e.target.value)} style={{ padding: "6px", border: "2px solid #D4CBB8", borderRadius: "8px", fontSize: "11px" }}>
+        {DISCIPLINES.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+      </select>
+      <button onClick={() => onSave(name.trim() || rider.name, disc)} style={{ background: "#5B7C5E", color: "#fff", border: "none", borderRadius: "6px", padding: "6px 10px", fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>✓</button>
+      <button onClick={onCancel} style={{ background: "#ddd", border: "none", borderRadius: "6px", padding: "6px 10px", fontSize: "12px", cursor: "pointer" }}>✕</button>
+    </div>
+  );
+}
+
+function RiderCard({ rider, discipline, roundId, getResult, setResult, clearResult }) {
+  const [extraAttempts, setExtraAttempts] = useState(0);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const r1 = getResult(rider.id, discipline.id, roundId, 1);
+  const r2 = getResult(rider.id, discipline.id, roundId, 2);
+  const r3 = getResult(rider.id, discipline.id, roundId, 3);
+
+  const hasData = (r) => (r.time !== "" && r.time !== undefined) || (r.pony || "") !== "" || r.rails > 0 || r.pen5 > 0 || r.pen10 > 0 || r.pen20 > 0 || r.pen25 > 0 || r.pen40 > 0 || r.eliminated;
+  const anyData = hasData(r1) || hasData(r2) || hasData(r3);
+
+  useEffect(() => {
+    if (hasData(r3)) setExtraAttempts(2);
+    else if (hasData(r2)) setExtraAttempts((prev) => Math.max(prev, 1));
+  }, [r2, r3]);
+
+  const clearAll = () => {
+    clearResult(rider.id, discipline.id, roundId, 1);
+    clearResult(rider.id, discipline.id, roundId, 2);
+    clearResult(rider.id, discipline.id, roundId, 3);
+    setExtraAttempts(0);
+    setConfirmReset(false);
+  };
+
+  const resultsMap = {
+    [`${rider.id}-${discipline.id}-${roundId}-1`]: r1,
+    [`${rider.id}-${discipline.id}-${roundId}-2`]: r2,
+    [`${rider.id}-${discipline.id}-${roundId}-3`]: r3,
+  };
+  const best = getBestResult(resultsMap, rider.id, discipline, roundId);
+  const isCso = discipline.type === "cso";
+
+  return (
+    <div style={{ background: "#fff", borderRadius: "14px", padding: "12px 14px", marginBottom: "8px", boxShadow: "0 2px 10px rgba(0,0,0,0.05)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+        <span style={{ fontWeight: 700, fontSize: "14px" }}>{rider.name}</span>
+        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+          {anyData && !confirmReset && (
+            <button onClick={() => setConfirmReset(true)} style={{ background: "none", border: "none", fontSize: "12px", color: "#A09888", cursor: "pointer", padding: "2px" }} title="Réinitialiser cette manche">🔄</button>
+          )}
+          {best && (
+            <span style={{ padding: "2px 10px", borderRadius: "12px", fontSize: "11px", fontWeight: 700, background: best.eliminated ? "#C0392B" : "#5B7C5E", color: "#fff" }}>
+              {best.eliminated ? "Éliminé" : `${best.total.toFixed(2)}s`}
+            </span>
+          )}
+        </div>
+      </div>
+      {confirmReset && (
+        <div style={{ marginBottom: "8px", background: "#FFF5F5", border: "2px solid #C0392B", borderRadius: "10px", padding: "8px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+          <span style={{ fontSize: "12px", fontWeight: 600, color: "#C0392B" }}>Effacer tous les passages de cette manche ?</span>
+          <div style={{ display: "flex", gap: "6px" }}>
+            <button onClick={clearAll} style={{ padding: "5px 12px", background: "#C0392B", color: "#fff", border: "none", borderRadius: "6px", fontWeight: 700, fontSize: "12px", cursor: "pointer" }}>Oui</button>
+            <button onClick={() => setConfirmReset(false)} style={{ padding: "5px 12px", background: "#eee", border: "none", borderRadius: "6px", fontSize: "12px", cursor: "pointer" }}>Non</button>
+          </div>
+        </div>
+      )}
+      <AttemptRow label="Passage 1" result={r1} isCso={isCso} onChange={(f, v) => setResult(rider.id, discipline.id, roundId, 1, f, v)} onClear={() => clearResult(rider.id, discipline.id, roundId, 1)} />
+      {extraAttempts >= 1 && (
+        <AttemptRow label="Passage 2" result={r2} isCso={isCso} onChange={(f, v) => setResult(rider.id, discipline.id, roundId, 2, f, v)} onClear={() => clearResult(rider.id, discipline.id, roundId, 2)} />
+      )}
+      {extraAttempts >= 2 && (
+        <AttemptRow label="Passage 3" result={r3} isCso={isCso} onChange={(f, v) => setResult(rider.id, discipline.id, roundId, 3, f, v)} onClear={() => clearResult(rider.id, discipline.id, roundId, 3)} />
+      )}
+      {extraAttempts < 2 && (
+        <button onClick={() => setExtraAttempts((prev) => prev + 1)} style={{ width: "100%", padding: "7px", background: "#F5F0E8", border: "1px dashed #C4B8A4", borderRadius: "8px", color: "#8B7D6B", fontSize: "11px", cursor: "pointer", marginTop: "4px" }}>
+          + {extraAttempts === 0 ? "2e" : "3e"} passage
+        </button>
+      )}
+    </div>
+  );
+}
+
+function AttemptRow({ label, result, isCso, onChange, onClear }) {
+  const eqTotal = !isCso ? calcEquifunPenalties(result) : 0;
+  const [confirmClear, setConfirmClear] = useState(false);
+  const hasData = (result.time !== "" && result.time !== undefined) || (result.pony || "") !== "" || result.rails > 0 || result.pen5 > 0 || result.pen10 > 0 || result.pen20 > 0 || result.pen25 > 0 || result.pen40 > 0 || result.eliminated;
+
+  return (
+    <div style={{ marginBottom: "8px", padding: "8px", background: "#FAFAF7", borderRadius: "10px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+        <div style={{ fontSize: "10px", fontWeight: 700, color: "#8B7D6B", textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
+        {hasData && !confirmClear && (
+          <button onClick={() => setConfirmClear(true)} style={{ background: "none", border: "none", fontSize: "11px", color: "#A09888", cursor: "pointer", padding: "2px 4px" }}>🗑️</button>
+        )}
+        {confirmClear && (
+          <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+            <span style={{ fontSize: "10px", color: "#C0392B", fontWeight: 600 }}>Effacer ?</span>
+            <button onClick={() => { onClear(); setConfirmClear(false); }} style={{ padding: "2px 8px", background: "#C0392B", color: "#fff", border: "none", borderRadius: "4px", fontSize: "10px", fontWeight: 700, cursor: "pointer" }}>Oui</button>
+            <button onClick={() => setConfirmClear(false)} style={{ padding: "2px 8px", background: "#eee", border: "none", borderRadius: "4px", fontSize: "10px", cursor: "pointer" }}>Non</button>
+          </div>
+        )}
+      </div>
+
+      {/* Pony + Time + eliminated */}
+      <div style={{ display: "flex", gap: "5px", alignItems: "flex-end", flexWrap: "wrap", marginBottom: isCso ? "0" : "6px" }}>
+        <div style={{ minWidth: "90px", flex: "0.8" }}>
+          <label style={{ fontSize: "9px", color: "#A09888" }}>Poney</label>
+          <input type="text" placeholder="Nom du poney" value={result.pony || ""} onChange={(e) => onChange("pony", e.target.value)}
+            style={{ width: "100%", padding: "8px", border: "2px solid #E8E0D0", borderRadius: "8px", fontSize: "14px", fontWeight: 500, color: "#5B4A3A", background: "#fff", boxSizing: "border-box" }} />
+        </div>
+        <div style={{ flex: 1, minWidth: "90px" }}>
+          <label style={{ fontSize: "9px", color: "#A09888" }}>Temps (sec)</label>
+          <input type="number" step="0.01" placeholder="0.00" value={result.time} onChange={(e) => onChange("time", e.target.value)} disabled={result.eliminated}
+            style={{ width: "100%", padding: "8px", border: "2px solid #E8E0D0", borderRadius: "8px", fontSize: "14px", fontWeight: 600, background: result.eliminated ? "#f0f0f0" : "#fff", boxSizing: "border-box" }} />
+        </div>
+
+        {/* CSO: rails */}
+        {isCso && (
+          <div style={{ minWidth: "70px" }}>
+            <label style={{ fontSize: "9px", color: "#A09888" }}>Barres tombées</label>
+            <input type="number" step="1" min="0" placeholder="0" value={result.rails || 0} onChange={(e) => onChange("rails", parseInt(e.target.value) || 0)} disabled={result.eliminated}
+              style={{ width: "100%", padding: "8px", border: "2px solid #E8E0D0", borderRadius: "8px", fontSize: "14px", fontWeight: 600, background: result.eliminated ? "#f0f0f0" : "#fff", boxSizing: "border-box" }} />
+            {(result.rails || 0) > 0 && !result.eliminated && (
+              <div style={{ fontSize: "10px", color: "#C0392B", fontWeight: 600, marginTop: "2px" }}>= {(result.rails || 0) * 4} pts pén.</div>
+            )}
+          </div>
+        )}
+
+        <label style={{ display: "flex", alignItems: "center", gap: "3px", cursor: "pointer", fontSize: "11px", color: result.eliminated ? "#C0392B" : "#A09888", paddingBottom: "6px" }}>
+          <input type="checkbox" checked={result.eliminated || false} onChange={(e) => onChange("eliminated", e.target.checked)} style={{ accentColor: "#C0392B" }} />
+          Élim.
+        </label>
+      </div>
+
+      {/* Equifun: tap-to-count penalties */}
+      {!isCso && !result.eliminated && (
+        <div>
+          <div style={{ fontSize: "9px", color: "#8B7D6B", fontWeight: 600, marginBottom: "6px", textTransform: "uppercase" }}>Pénalités Equifun <span style={{ fontWeight: 400, textTransform: "none" }}>(tape pour ajouter, appui long pour enlever)</span></div>
+          <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
+            <PenTapButton label="Faute" seconds={5} value={result.pen5 || 0} onChange={(v) => onChange("pen5", v)} color="#E67E22" />
+            <PenTapButton label="Raté 1×" seconds={10} value={result.pen10 || 0} onChange={(v) => onChange("pen10", v)} color="#E74C3C" />
+            <PenTapButton label="Cassé" seconds={20} value={result.pen20 || 0} onChange={(v) => onChange("pen20", v)} color="#C0392B" />
+            <PenTapButton label="Raté 2×" seconds={25} value={result.pen25 || 0} onChange={(v) => onChange("pen25", v)} color="#8E44AD" />
+            <PenTapButton label="Porte" seconds={40} value={result.pen40 || 0} onChange={(v) => onChange("pen40", v)} color="#2C3E50" />
+          </div>
+          {eqTotal > 0 && (
+            <div style={{ marginTop: "6px", fontSize: "13px", fontWeight: 700, color: "#C0392B", textAlign: "center", padding: "4px", background: "rgba(192,57,43,0.06)", borderRadius: "8px" }}>
+              Total pénalités : +{eqTotal}s
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PenTapButton({ label, seconds, value, onChange, color }) {
+  const timerRef = useRef(null);
+  const isLongPressRef = useRef(false);
+
+  const handlePointerDown = () => {
+    isLongPressRef.current = false;
+    timerRef.current = setTimeout(() => {
+      isLongPressRef.current = true;
+      onChange(Math.max(0, value - 1));
+    }, 500);
+  };
+
+  const handlePointerUp = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (!isLongPressRef.current) {
+      onChange(value + 1);
+    }
+  };
+
+  const handlePointerLeave = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  };
+
+  return (
+    <div
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerLeave}
+      style={{
+        flex: "1 1 0",
+        minWidth: "58px",
+        background: value > 0 ? color : "#F5F0E8",
+        color: value > 0 ? "#fff" : "#6B5D4F",
+        borderRadius: "12px",
+        padding: "8px 4px",
+        textAlign: "center",
+        cursor: "pointer",
+        userSelect: "none",
+        WebkitUserSelect: "none",
+        transition: "all 0.15s",
+        boxShadow: value > 0 ? `0 3px 10px ${color}44` : "none",
+        border: value > 0 ? "none" : "2px solid #E8E0D0",
+        touchAction: "manipulation",
+      }}
+    >
+      <div style={{ fontSize: "10px", fontWeight: 700, opacity: value > 0 ? 1 : 0.7, marginBottom: "2px" }}>{label}</div>
+      <div style={{ fontSize: "22px", fontWeight: 800, lineHeight: 1 }}>
+        {value > 0 ? value : "·"}
+      </div>
+      <div style={{ fontSize: "9px", fontWeight: 600, opacity: 0.8, marginTop: "2px" }}>
+        {value > 0 ? `+${value * seconds}s` : `${seconds}s`}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(ChallengeApp));
+</script>
+</body>
+</html>
