@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card } from "@/components/ui";
 import { Plus, ExternalLink, Loader2, Trophy, Calendar, Users, RefreshCw } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
@@ -17,6 +17,8 @@ export default function CompetitionsPage() {
   const [newTitle, setNewTitle] = useState("");
   const [newDate, setNewDate] = useState(new Date().toISOString().split("T")[0]);
   const [newDisciplines, setNewDisciplines] = useState<string[]>(["cso50", "cso70", "equifun"]);
+  const [importing, setImporting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const fetchChallenges = async () => {
     setLoading(true);
@@ -26,6 +28,39 @@ export default function CompetitionsPage() {
   };
 
   useEffect(() => { fetchChallenges(); }, []);
+
+  const importJSON = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      if (!json.riders || !json.results) { toast("Fichier JSON invalide (riders/results manquants)", "error"); return; }
+      // Titre par défaut depuis le nom du fichier
+      const titleFromFile = file.name.replace(/challenge-equestre-?/, "").replace(/\.json$/, "").replace(/-/g, " ").trim();
+      const dateMatch = file.name.match(/\d{4}-\d{2}-\d{2}/);
+      const date = dateMatch ? dateMatch[0] : new Date().toISOString().slice(0, 10);
+      const title = titleFromFile || `Challenge ${date}`;
+      // Créer le challenge dans Firebase
+      const res = await fetch("/api/challenges", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, date, disciplines: ["cso50", "cso70", "equifun"] }),
+      });
+      const created = await res.json();
+      if (!res.ok) { toast(created.error || "Erreur création", "error"); return; }
+      // Uploader les données
+      await fetch("/api/challenges", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: created.id, riders: json.riders, results: json.results, nextId: json.nextId || 1 }),
+      });
+      toast(`✅ Challenge "${title}" importé — ${json.riders.length} cavaliers`, "success");
+      fetchChallenges();
+    } catch (err: any) {
+      toast(err.message || "Erreur import", "error");
+    }
+    setImporting(false);
+    if (fileRef.current) fileRef.current.value = "";
+  };
 
   const createChallenge = async () => {
     if (!newTitle.trim()) return;
@@ -69,6 +104,11 @@ export default function CompetitionsPage() {
         </div>
         <div className="flex gap-2">
           <button onClick={fetchChallenges} className="flex items-center gap-1.5 font-body text-xs text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50"><RefreshCw size={13} /> Actualiser</button>
+          <button onClick={() => fileRef.current?.click()} disabled={importing}
+            className="flex items-center gap-1.5 font-body text-xs text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50 disabled:opacity-50">
+            {importing ? <><Loader2 size={13} className="animate-spin" /> Import...</> : <>📥 Importer JSON</>}
+          </button>
+          <input ref={fileRef} type="file" accept=".json" onChange={importJSON} className="hidden" />
           <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-green-600 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-green-500"><Plus size={16} /> Nouveau challenge</button>
         </div>
       </div>
