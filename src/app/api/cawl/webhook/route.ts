@@ -13,19 +13,25 @@ export async function POST(req: NextRequest) {
     const signature = req.headers.get("x-gcs-signature") || req.headers.get("x-signature") || "";
     const webhookSecret = process.env.CAWL_SECRET_API_KEY || process.env.CAWL_SECRET_API_KEY_VALUE || "";
 
-    if (webhookSecret && signature) {
-      const crypto = await import("crypto");
-      const expectedSig = crypto
-        .createHmac("sha256", webhookSecret)
-        .update(body)
-        .digest("base64");
-      if (expectedSig !== signature) {
-        console.error("CAWL webhook: signature invalide");
-        return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
-      }
-    } else if (!webhookSecret) {
-      // Pas de secret configuré → log et continuer (mode test)
-      console.warn("CAWL webhook: CAWL_SECRET_API_KEY non configuré, signature non vérifiée");
+    // Refus strict si secret non configuré (pas de mode "on continue quand même")
+    if (!webhookSecret) {
+      console.error("CAWL webhook: CAWL_SECRET_API_KEY non configuré — requête rejetée");
+      return NextResponse.json({ error: "Webhook not configured" }, { status: 500 });
+    }
+
+    if (!signature) {
+      console.error("CAWL webhook: signature absente");
+      return NextResponse.json({ error: "Missing signature" }, { status: 400 });
+    }
+
+    const crypto = await import("crypto");
+    const expectedSig = crypto
+      .createHmac("sha256", webhookSecret)
+      .update(body)
+      .digest("base64");
+    if (expectedSig !== signature) {
+      console.error("CAWL webhook: signature invalide");
+      return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
     }
 
     let event: any;
