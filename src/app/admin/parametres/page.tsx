@@ -1465,7 +1465,7 @@ export default function ParametresPage() {
             <div className="flex flex-col gap-2">
               {([
                 ["nouvelle_inscription", "Nouvelle inscription", "Un cavalier s'inscrit à un créneau ou un stage"],
-                ["nouveau_paiement", "Nouveau paiement reçu", "Un paiement CB/Stripe est confirmé"],
+                ["nouveau_paiement", "Nouveau paiement reçu", "Un paiement CB en ligne est confirmé"],
                 ["impaye", "Impayé détecté", "Un paiement en attente dépasse 7 jours"],
                 ["liste_attente", "Place libérée (liste d'attente)", "Une place se libère et un cavalier en liste d'attente est notifié"],
                 ["annulation", "Annulation d'inscription", "Un cavalier annule une réservation"],

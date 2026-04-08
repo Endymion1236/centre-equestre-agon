@@ -97,7 +97,7 @@ const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }> = {
 <p>Votre espace personnel est prêt.</p>
 <p>N'hésitez pas à nous contacter au 02 44 84 99 96 pour toute question.</p>`,
   },
-  // Confirmation Stripe générique (paiement reçu)
+  // Confirmation paiement reçu
   confirmationPaiement: {
     subject: "Paiement reçu — {montant}€",
     body: `<p>Bonjour <strong>{parentName}</strong>,</p>
@@ -108,7 +108,7 @@ const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }> = {
 </div>
 <p style="color:#555;">À bientôt au centre équestre !</p>`,
   },
-  // Confirmation abonnement Stripe (paiement en N fois)
+  // Confirmation paiement en N fois
   confirmationAbonnement: {
     subject: "Inscription confirmée — Paiement mensuel en {nbEcheances} fois",
     body: `<p>Bonjour <strong>{parentName}</strong>,</p>

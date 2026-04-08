@@ -24,7 +24,6 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
     "@react-pdf/renderer": "^4.3.2",
-    "@stripe/stripe-js": "^4.0.0",
     "elevenlabs": "^1.59.0",
     "firebase": "^11.10.0",
     "firebase-admin": "^13.7.0",
@@ -36,8 +35,7 @@
     "openai": "^6.33.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "resend": "^4.8.0",
-    "stripe": "^17.7.0"
+    "resend": "^4.8.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

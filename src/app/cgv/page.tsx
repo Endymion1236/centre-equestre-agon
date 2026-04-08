@@ -44,7 +44,7 @@ export default function CGVPage() {
             <h2 className="font-display text-lg font-bold text-blue-700 mb-3">4. Tarifs et paiement</h2>
             <div className="font-body text-sm text-gray-600 leading-relaxed space-y-2">
               <p>Les tarifs en vigueur sont ceux affichés sur le site au moment de la réservation. Ils sont exprimés en euros TTC.</p>
-              <p>Modes de paiement acceptés : carte bancaire (en ligne via Stripe ou sur terminal), chèque, espèces, chèques-vacances ANCV, Pass Sport.</p>
+              <p>Modes de paiement acceptés : carte bancaire (en ligne via CAWL/Crédit Agricole ou sur terminal), chèque, espèces, chèques-vacances ANCV, Pass Sport.</p>
               <p>Pour les forfaits annuels, un paiement en plusieurs fois peut être proposé selon les modalités convenues avec le centre.</p>
             </div>
           </section>

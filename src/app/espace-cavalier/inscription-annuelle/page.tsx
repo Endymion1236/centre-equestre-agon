@@ -245,13 +245,10 @@ export default function InscriptionAnnuellePage() {
           ],
           totalTTC: grandTotal,
           paymentPlan,
-          status: paymentPlan === "1x" ? "pending" : "echeance",
-          skipPayment: true, // Avoid double payment creation via Stripe webhook
+          status: paymentPlan === "1x" ? "pending" : "echeance",        skipPayment: true,
           createdAt: serverTimestamp(),
         });
       }
-
-      // Try Stripe checkout
       try {
         const res = await fetch("/api/cawl/checkout", {
           method: "POST",
@@ -283,8 +280,8 @@ export default function InscriptionAnnuellePage() {
           window.location.href = data.url;
           return;
         }
-      } catch (stripeErr) {
-        console.error("Stripe error (non-bloquant):", stripeErr);
+      } catch (cawlErr) {
+        console.error("CAWL checkout (non-bloquant):", cawlErr);
       }
 
       // Fallback: redirect with success

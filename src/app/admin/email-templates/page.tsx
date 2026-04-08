@@ -291,7 +291,7 @@ export default function EmailTemplatesPage() {
     rappelStage: "📤 Envoyé automatiquement J-3 avant le début d'un stage",
     bienvenueNouvelleFamille: "📤 Envoyé automatiquement lors de la création d'une nouvelle famille",
     relanceImpaye: "📤 Envoyé par le cron nocturne aux familles avec impayés > 30 jours",
-    confirmationPaiement: "📤 Envoyé automatiquement après encaissement d'un paiement Stripe",
+    confirmationPaiement: "📤 Envoyé automatiquement après encaissement d'un paiement",
   };
 
   return (

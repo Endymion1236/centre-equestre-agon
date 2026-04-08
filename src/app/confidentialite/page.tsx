@@ -35,7 +35,7 @@ export default function ConfidentialitePage() {
                 <div><strong>Données d'identité :</strong> nom, prénom, date de naissance</div>
                 <div><strong>Données de contact :</strong> adresse e-mail, numéro de téléphone</div>
                 <div><strong>Données du responsable légal</strong> (pour les mineurs) : nom, prénom, e-mail, téléphone</div>
-                <div><strong>Données de paiement :</strong> traitées exclusivement par Stripe (nous ne stockons aucune coordonnée bancaire)</div>
+                <div><strong>Données de paiement :</strong> traitées via notre prestataire de paiement sécurisé (nous ne stockons aucune coordonnée bancaire)</div>
                 <div><strong>Données d'utilisation :</strong> historique des réservations, forfaits, présences</div>
                 <div><strong>Données techniques :</strong> adresse IP, navigateur (via Firebase Authentication)</div>
               </div>
@@ -70,7 +70,7 @@ export default function ConfidentialitePage() {
               <p>Nous faisons appel aux sous-traitants suivants, qui présentent des garanties suffisantes au sens du RGPD :</p>
               <div className="bg-sand rounded-xl p-4 space-y-2">
                 <div><strong>Google Firebase</strong> (Google LLC) — authentification, base de données, stockage fichiers. Hébergement Europe (Belgique). <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-500 no-underline">Politique de confidentialité</a></div>
-                <div><strong>Stripe Inc.</strong> — traitement des paiements en ligne. Certifié PCI-DSS niveau 1. <a href="https://stripe.com/fr/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-500 no-underline">Politique de confidentialité</a></div>
+                <div><strong>Crédit Agricole Worldline (CAWL)</strong> — traitement des paiements en ligne. Certifié PCI-DSS.</div>
                 <div><strong>Resend Inc.</strong> — envoi d'e-mails transactionnels. <a href="https://resend.com/legal/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-blue-500 no-underline">Politique de confidentialité</a></div>
                 <div><strong>Vercel Inc.</strong> — hébergement du site web. <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-blue-500 no-underline">Politique de confidentialité</a></div>
               </div>
@@ -100,7 +100,7 @@ export default function ConfidentialitePage() {
           <section className="mb-8">
             <h2 className="font-display text-lg font-bold text-blue-700 mb-3">6. Sécurité des données</h2>
             <p className="font-body text-sm text-gray-600 leading-relaxed">
-              Vos données sont protégées par des mesures techniques appropriées : connexions chiffrées (HTTPS/TLS), authentification sécurisée via Google Firebase, accès limité aux seules personnes habilitées, sauvegardes régulières. Les coordonnées bancaires ne transitent jamais par nos serveurs (traitement délégué à Stripe).
+              Vos données sont protégées par des mesures techniques appropriées : connexions chiffrées (HTTPS/TLS), authentification sécurisée via Google Firebase, accès limité aux seules personnes habilitées, sauvegardes régulières. Les coordonnées bancaires ne transitent jamais par nos serveurs (traitement délégué à notre prestataire de paiement).
             </p>
           </section>
 

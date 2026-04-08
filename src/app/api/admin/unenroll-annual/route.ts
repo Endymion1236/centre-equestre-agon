@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
-import { stripe } from "@/lib/stripe";
 
 export async function POST(req: NextRequest) {
   try {
@@ -183,24 +182,9 @@ export async function POST(req: NextRequest) {
       console.error("Erreur annulation SEPA:", e);
     }
 
-    // ── 5. Annuler les souscriptions Stripe actives ──────────────────────────
-    let cancelledSubscriptions = 0;
-    try {
-      const familyDoc = await adminDb.collection("families").doc(familyId).get();
-      const familyData = familyDoc.data();
-      if (familyData?.parentEmail) {
-        const customers = await stripe.customers.list({ email: familyData.parentEmail, limit: 1 });
-        if (customers.data.length > 0) {
-          const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: "active", limit: 10 });
-          for (const sub of subs.data) {
-            if (sub.metadata?.familyId === familyId) {
-              await stripe.subscriptions.cancel(sub.id);
-              cancelledSubscriptions++;
-            }
-          }
-        }
-      }
-    } catch (e) { console.error("Stripe (non-bloquant):", e); }
+    // ── 5. Annuler les souscriptions CAWL actives (Stripe supprimé) ──────────
+    const cancelledSubscriptions = 0;
+    // Les paiements récurrents sont désormais gérés via CAWL/SEPA
 
     // ── 6. Marquer le forfait comme annulé ───────────────────────────────────
     const forfaitsSnap = await adminDb

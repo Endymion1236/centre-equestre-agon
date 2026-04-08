@@ -369,8 +369,6 @@ export default function ReserverPage() {
           }),
         }).catch(() => {});
       }
-
-      // 4. Stripe checkout (paiement unique ou acompte)
       const hasStage = cart.some(i => i.isStage);
       const isDeposit = hasStage && depositMode === "deposit";
       const stageDate = hasStage ? cart.find(i => i.isStage)?.dates || "" : "";
@@ -400,9 +398,9 @@ export default function ReserverPage() {
           window.location.href = data.url;
           return;
         }
-      } catch (e) { console.error("Stripe error:", e); }
-
-      // Fallback sans Stripe
+      } catch (cawlErr) {
+        console.error("CAWL checkout (non-bloquant):", cawlErr);
+      }
       setCart([]);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 5000);

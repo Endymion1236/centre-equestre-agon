@@ -36,7 +36,7 @@ export default function ReservationsPage() {
   const success = searchParams.get("success");
   const deposit = searchParams.get("deposit");
 
-  // Le paiement est confirmé par le webhook Stripe côté serveur
+  // Le paiement est confirmé par le webhook CAWL côté serveur
   // On affiche juste un message de confirmation sans modifier Firestore
 
   useEffect(() => {

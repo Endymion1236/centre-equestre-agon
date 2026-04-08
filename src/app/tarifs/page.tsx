@@ -288,7 +288,7 @@ export default function TarifsPage() {
             Bon à savoir
           </h3>
           <div className="flex flex-col gap-2.5 font-body text-sm text-gray-500">
-            <p>💳 Paiement en ligne sécurisé par carte bancaire (Stripe)</p>
+            <p>💳 Paiement en ligne sécurisé par carte bancaire</p>
             <p>🔄 Forfaits payables en 1x, 3x ou 10x sans frais</p>
             <p>❌ Annulation gratuite jusqu&apos;à 72h avant l&apos;activité</p>
             <p>⚠️ Au-delà de 72h, 50% du montant est retenu</p>

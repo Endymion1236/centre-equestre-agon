@@ -126,8 +126,7 @@ export interface Reservation {
   discountPercent: number; // Dégressivité appliquée
   discountReason: string | null; // "2ème stage", "famille"
   status: ReservationStatus;
-  stripePaymentId: string | null;
-  createdAt: Date;
+    createdAt: Date;
 }
 
 // ─── Paiements & Facturation ───
@@ -146,8 +145,7 @@ export interface Invoice {
   dueDate: Date;
   paidDate: Date | null;
   paymentMethod: PaymentMethod | null;
-  stripePaymentId: string | null;
-  createdAt: Date;
+    createdAt: Date;
 }
 
 export interface InvoiceItem {
@@ -170,8 +168,7 @@ export interface PaymentPlan {
   paidInstallments: number;
   nextDueDate: Date;
   nextAmount: number;
-  stripeSubscriptionId: string | null;
-  status: "active" | "completed" | "failed";
+    status: "active" | "completed" | "failed";
 }
 
 export interface DeferredCheque {
