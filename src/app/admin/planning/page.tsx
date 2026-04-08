@@ -400,9 +400,32 @@ export default function PlanningPage() {
   };
   const refreshCreneaux = async () => { const s=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[0]); const e=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[6]); const snap=await getDocs(query(collection(db,"creneaux"),where("date",">=",s),where("date","<=",e))); const fresh=snap.docs.map(d=>({id:d.id,...d.data()})) as (Creneau&{id:string})[]; setCreneaux(fresh); return fresh; };
 
-  const handleEnroll = async (cid: string, child: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean; freeReason?: string; rattrapageId?: string }) => {
+  const handleEnroll = async (cid: string, child: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean; freeReason?: string; rattrapageId?: string; competitionItems?: any[] }) => {
     const enrolled = await enrollChildInCreneau(cid, child);
     if (!enrolled) return;
+
+    // ── Mode Compétition : créer un paiement avec les lignes engagement/coaching ──
+    if (options?.competitionItems && options.competitionItems.length > 0) {
+      try {
+        const c = creneaux.find(x => x.id === cid) as any;
+        const totalTTC = options.competitionItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
+        const totalHT = options.competitionItems.reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
+        const payData: any = {
+          orderId: `COMP-${Date.now().toString(36).toUpperCase()}`,
+          familyId: child.familyId, familyName: child.familyName,
+          items: options.competitionItems,
+          totalTTC, totalHT, totalTVA: totalTTC - totalHT,
+          paymentMode: payMode || "",
+          paymentRef: "", status: payMode ? "paid" : "pending",
+          paidAmount: payMode ? totalTTC : 0,
+          source: "competition", creneauId: cid,
+          date: serverTimestamp(), createdAt: serverTimestamp(),
+        };
+        await addDoc(collection(db, "payments"), payData);
+      } catch (e) { console.error("Erreur paiement compétition:", e); }
+      await refreshCreneaux();
+      return;
+    }
 
     // Variables de rollback — capturées au fur et à mesure pour être disponibles dans le catch
     let usedCardId: string | null = null;

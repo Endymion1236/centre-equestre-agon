@@ -44,6 +44,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [useRattrapage, setUseRattrapage] = useState<string | null>(null); // rattrapageId
   const [inscriptionMode, setInscriptionMode] = useState<"ponctuel" | "annuel">("ponctuel");
   const [licenceType, setLicenceType] = useState<"moins18" | "plus18">("moins18");
+  // ── Mode compétition ──
+  const isCompetition = creneau.activityType === "competition";
+  const [compEngagement, setCompEngagement] = useState("");
+  const [compCoaching, setCompCoaching] = useState("");
+  const [compEpreuve, setCompEpreuve] = useState("");
   const [adhesion, setAdhesion] = useState(true);
   const [licence, setLicence] = useState(true);
   const [assuranceOccasionnelle, setAssuranceOccasionnelle] = useState(false);
@@ -858,9 +863,30 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         }
       }
     } else {
-      const freeEnrollOptions = freeEnroll ? { freeReason, skipEmail: false } : undefined;
-      const rattrapageOptions = useRattrapage ? { rattrapageId: useRattrapage, skipEmail: false } : undefined;
-      await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, inscriptionMode === "ponctuel" && showPay && !freeEnroll && !useRattrapage ? payMode : undefined, enrollOptions || freeEnrollOptions || rattrapageOptions);
+      // ── Mode Compétition : items engagement + coaching libres ──
+      if (isCompetition) {
+        const engagementTTC = parseFloat(compEngagement) || 0;
+        const coachingTTC = parseFloat(compCoaching) || 0;
+        const compItems: any[] = [];
+        if (engagementTTC > 0) compItems.push({
+          activityTitle: `Engagement — ${compEpreuve || creneau.activityTitle}`,
+          childId: selChild, childName, creneauId: creneau.id, activityType: "competition",
+          description: compEpreuve || "Engagement compétition",
+          priceHT: engagementTTC / 1.055, tva: 5.5, priceTTC: engagementTTC,
+        });
+        if (coachingTTC > 0) compItems.push({
+          activityTitle: `Coaching — ${creneau.activityTitle}`,
+          childId: selChild, childName, creneauId: creneau.id, activityType: "competition",
+          description: "Coaching moniteur",
+          priceHT: coachingTTC / 1.055, tva: 5.5, priceTTC: coachingTTC,
+        });
+        const compOptions = compItems.length > 0 ? { competitionItems: compItems, skipEmail: false } : undefined;
+        await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, showPay ? payMode : undefined, compOptions);
+      } else {
+        const freeEnrollOptions = freeEnroll ? { freeReason, skipEmail: false } : undefined;
+        const rattrapageOptions = useRattrapage ? { rattrapageId: useRattrapage, skipEmail: false } : undefined;
+        await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, inscriptionMode === "ponctuel" && showPay && !freeEnroll && !useRattrapage ? payMode : undefined, enrollOptions || freeEnrollOptions || rattrapageOptions);
+      }
     }
 
     if (inscriptionMode === "annuel") {
@@ -1336,7 +1362,56 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             )}
 
             {/* Choix du mode d'inscription — COURS réguliers uniquement */}
-            {selChild && !isStage && (() => {
+            {/* ── Mode Compétition : tarifs libres engagement + coaching ── */}
+            {selChild && isCompetition && (
+              <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex flex-col gap-3">
+                <div className="font-body text-sm font-semibold text-orange-800">🏆 Compétition — tarifs libres</div>
+                <div>
+                  <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Épreuve / Discipline</label>
+                  <input value={compEpreuve} onChange={e => setCompEpreuve(e.target.value)}
+                    placeholder="Ex: CSO 70cm, Pony Games, Équifun..."
+                    className="w-full px-3 py-2 rounded-lg border border-orange-200 font-body text-sm bg-white focus:outline-none focus:border-orange-400" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Engagement (€)</label>
+                    <input type="number" min="0" step="0.50" value={compEngagement} onChange={e => setCompEngagement(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full px-3 py-2 rounded-lg border border-orange-200 font-body text-sm bg-white focus:outline-none focus:border-orange-400" />
+                    <div className="font-body text-[10px] text-slate-400 mt-0.5">Frais d'inscription à la compétition</div>
+                  </div>
+                  <div>
+                    <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Coaching (€)</label>
+                    <input type="number" min="0" step="0.50" value={compCoaching} onChange={e => setCompCoaching(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full px-3 py-2 rounded-lg border border-orange-200 font-body text-sm bg-white focus:outline-none focus:border-orange-400" />
+                    <div className="font-body text-[10px] text-slate-400 mt-0.5">Accompagnement moniteur</div>
+                  </div>
+                </div>
+                {(parseFloat(compEngagement) > 0 || parseFloat(compCoaching) > 0) && (
+                  <div className="bg-white rounded-lg px-3 py-2 border border-orange-100">
+                    <div className="font-body text-xs text-slate-600 mb-1">Récapitulatif :</div>
+                    {parseFloat(compEngagement) > 0 && <div className="font-body text-xs text-slate-700">Engagement : <strong>{parseFloat(compEngagement).toFixed(2)}€</strong></div>}
+                    {parseFloat(compCoaching) > 0 && <div className="font-body text-xs text-slate-700">Coaching : <strong>{parseFloat(compCoaching).toFixed(2)}€</strong></div>}
+                    <div className="font-body text-sm font-bold text-orange-700 mt-1">
+                      Total : {((parseFloat(compEngagement) || 0) + (parseFloat(compCoaching) || 0)).toFixed(2)}€
+                    </div>
+                  </div>
+                )}
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={showPay} onChange={e => setShowPay(e.target.checked)} className="accent-orange-500 w-4 h-4" />
+                  <span className="font-body text-sm text-orange-800 font-semibold">Encaisser maintenant</span>
+                </label>
+                {showPay && <div className="flex flex-wrap gap-1.5">{payModes.filter(m => m.id !== "carte" && m.id !== "avoir").map(m =>
+                  <button key={m.id} onClick={() => setPayMode(m.id)}
+                    className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${payMode === m.id ? "bg-orange-500 text-white border-orange-500" : "bg-white text-slate-600 border-gray-200"}`}>
+                    {m.icon} {m.label}
+                  </button>
+                )}</div>}
+              </div>
+            )}
+
+            {selChild && !isStage && !isCompetition && (() => {
               const isCours = creneau.activityType === "cours" || creneau.activityType === "cours_collectif" || creneau.activityType === "cours_particulier";
               const isBalade = ["balade","promenade","ponyride"].includes(creneau.activityType);
               // SlotKey du créneau courant pour vérification précise du forfait
