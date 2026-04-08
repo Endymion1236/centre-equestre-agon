@@ -456,7 +456,12 @@ export default function FamilyCard({
                             <Users size={14} className="text-blue-500"/>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="font-body text-sm font-semibold text-blue-800">{child.firstName}{child.lastName ? ` ${child.lastName}` : ""}</div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <div className="font-body text-sm font-semibold text-blue-800">{child.firstName}{child.lastName ? ` ${child.lastName}` : ""}</div>
+                              {!child.lastName && (
+                                <span title="Nom de famille manquant" className="font-body text-[10px] font-semibold text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded cursor-default">⚠️ nom manquant</span>
+                              )}
+                            </div>
                             <div className="font-body text-xs text-slate-600">
                               {child.birthDate ? (
                                 <>
