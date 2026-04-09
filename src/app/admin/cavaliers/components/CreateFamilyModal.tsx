@@ -29,7 +29,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
     accountType: "particulier" as AccountType,
     raisonSociale: "", structureParente: "", siret: "", referent: "",
   });
-  const [newChildren, setNewChildren] = useState([{ firstName: "", birthDate: "", galopLevel: "—" }]);
+  const [newChildren, setNewChildren] = useState([{ firstName: "", lastName: "", birthDate: "", galopLevel: "—" }]);
 
   const handleCreate = async () => {
     const isValid = newFamily.accountType === "particulier"
@@ -43,6 +43,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
         .map(c => ({
           id: `child_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           firstName: c.firstName.trim(),
+          lastName: c.lastName.trim(),
           birthDate: c.birthDate ? new Date(c.birthDate) : null,
           galopLevel: c.galopLevel || "—",
           sanitaryForm: null,
@@ -214,24 +215,32 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
               Cavaliers {newFamily.accountType !== "particulier" && <span className="text-slate-400 font-normal normal-case">(optionnel)</span>}
             </div>
             {newChildren.map((child, i) => (
-              <div key={i} className="flex gap-2 mb-2 items-end">
-                <div className="flex-1">
-                  {i === 0 && <label className={labelStyle}>Prénom</label>}
-                  <input className={inputStyle} value={child.firstName}
-                    onChange={e => { const up = [...newChildren]; up[i].firstName = e.target.value; setNewChildren(up); }}
-                    placeholder="Prénom"/>
-                </div>
-                <div className="w-36">
-                  {i === 0 && <label className={labelStyle}>Date de naissance</label>}
-                  <input type="date" className={inputStyle} value={child.birthDate}
-                    onChange={e => { const up = [...newChildren]; up[i].birthDate = e.target.value; setNewChildren(up); }}/>
-                </div>
-                <div className="w-28">
-                  {i === 0 && <label className={labelStyle}>Niveau</label>}
-                  <select className={inputStyle} value={child.galopLevel}
-                    onChange={e => { const up = [...newChildren]; up[i].galopLevel = e.target.value; setNewChildren(up); }}>
-                    {galopLevels.map(g => <option key={g} value={g}>{g === "—" ? "Débutant" : g}</option>)}
-                  </select>
+              <div key={i} className="flex flex-col gap-2 mb-3 p-3 bg-sand rounded-lg">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    {i === 0 && <label className={labelStyle}>Prénom *</label>}
+                    <input className={inputStyle} value={child.firstName}
+                      onChange={e => { const up = [...newChildren]; up[i].firstName = e.target.value; setNewChildren(up); }}
+                      placeholder="Prénom"/>
+                  </div>
+                  <div>
+                    {i === 0 && <label className={labelStyle}>Nom de famille</label>}
+                    <input className={inputStyle} value={child.lastName}
+                      onChange={e => { const up = [...newChildren]; up[i].lastName = e.target.value; setNewChildren(up); }}
+                      placeholder="Nom"/>
+                  </div>
+                  <div>
+                    {i === 0 && <label className={labelStyle}>Date de naissance</label>}
+                    <input type="date" className={inputStyle} value={child.birthDate}
+                      onChange={e => { const up = [...newChildren]; up[i].birthDate = e.target.value; setNewChildren(up); }}/>
+                  </div>
+                  <div>
+                    {i === 0 && <label className={labelStyle}>Niveau</label>}
+                    <select className={inputStyle} value={child.galopLevel}
+                      onChange={e => { const up = [...newChildren]; up[i].galopLevel = e.target.value; setNewChildren(up); }}>
+                      {galopLevels.map(g => <option key={g} value={g}>{g === "—" ? "Débutant" : g}</option>)}
+                    </select>
+                  </div>
                 </div>
                 {newChildren.length > 1 && (
                   <button onClick={() => setNewChildren(newChildren.filter((_, j) => j !== i))}
@@ -241,7 +250,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
                 )}
               </div>
             ))}
-            <button onClick={() => setNewChildren([...newChildren, { firstName: "", birthDate: "", galopLevel: "—" }])}
+            <button onClick={() => setNewChildren([...newChildren, { firstName: "", lastName: "", birthDate: "", galopLevel: "—" }])}
               className="font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1 mt-2">
               <Plus size={14}/> Ajouter un cavalier
             </button>
