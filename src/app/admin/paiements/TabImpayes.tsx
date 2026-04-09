@@ -219,9 +219,9 @@ export function TabImpayes({
                             }} className="font-body text-[10px] text-orange-600 bg-orange-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-orange-100 flex items-center gap-1"><Receipt size={10}/> → Facture définitive</button>
                           )}
                           <button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1"><Plus size={10}/> Dupliquer</button>
-                          {p.source === "duplicate" && (p.items||[]).some((i:any) => i.activityType === "cours" || i.activityTitle?.includes("Forfait")) && (
+                          {(p.items||[]).some((i:any) => i.activityType === "cours" || i.activityTitle?.includes("Forfait")) && (
                             <button onClick={async () => {
-                              // Charger le paiement source (original) pour avoir les vrais creneauIds
+                              // Charger le paiement source si dupliqué, sinon utiliser le paiement lui-même
                               let paymentToUse = p;
                               if (p.sourcePaymentId) {
                                 try {
