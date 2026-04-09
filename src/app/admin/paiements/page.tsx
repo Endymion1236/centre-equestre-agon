@@ -742,60 +742,74 @@ export default function PaiementsPage() {
       createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
     });
 
-    // Inscrire l'enfant dans tous les créneaux futurs — même logique que forfait annuel
+    // ── Inscription dans les créneaux futurs ──────────────────────────────────
     let inscriptions = 0;
     if (targetChild) {
       const today = new Date().toISOString().split("T")[0];
 
-      // Pour chaque item avec un creneauId (créneau de référence)
-      for (const item of cleanedItems) {
-        if (!item.creneauId) continue;
+      // Collecter les creneauIds de référence depuis les items (items avec priceTTC > 0 et creneauId)
+      const refCreneauIds = cleanedItems
+        .filter((i: any) => i.creneauId && safeNumber(i.priceTTC) > 0)
+        .map((i: any) => i.creneauId);
+
+      console.log("🔍 duplicate: refCreneauIds =", refCreneauIds);
+      console.log("🔍 duplicate: items =", JSON.stringify(cleanedItems.map((i:any) => ({ title: i.activityTitle, creneauId: i.creneauId, priceTTC: i.priceTTC }))));
+
+      for (const refId of refCreneauIds) {
         try {
-          // Charger le créneau de référence pour connaître le jour/horaire/activité
-          const refSnap = await getDoc(doc(db, "creneaux", item.creneauId));
-          if (!refSnap.exists()) continue;
+          const refSnap = await getDoc(doc(db, "creneaux", refId));
+          if (!refSnap.exists()) { console.warn("Créneau ref introuvable:", refId); continue; }
           const ref = refSnap.data() as any;
           const dow = new Date(ref.date + "T12:00:00").getDay();
 
-          // Charger tous les créneaux futurs du même type
+          console.log(`🔍 Créneau ref: ${ref.activityTitle} ${ref.startTime} jour=${dow} moniteur=${ref.monitor}`);
+
+          // Charger tous les créneaux futurs de la même activité
           const futureSnap = await getDocs(query(
             collection(db, "creneaux"),
+            where("activityTitle", "==", ref.activityTitle),
             where("date", ">=", today)
           ));
+
+          console.log(`🔍 Créneaux futurs trouvés: ${futureSnap.docs.length}`);
 
           const slots = futureSnap.docs
             .map(d => ({ id: d.id, ...d.data() } as any))
             .filter(c =>
               new Date(c.date + "T12:00:00").getDay() === dow &&
               c.startTime === ref.startTime &&
-              c.activityTitle === ref.activityTitle &&
               (c.monitor || "") === (ref.monitor || "")
             );
+
+          console.log(`🔍 Slots filtrés (même jour/horaire/moniteur): ${slots.length}`);
 
           for (const slot of slots) {
             const enrolled: any[] = slot.enrolled || [];
             if (enrolled.some((e: any) => e.childId === targetChild.id)) continue;
-            const newEnrolled = [...enrolled, {
-              childId: targetChild.id,
-              childName: targetChild.firstName || "",
-              familyId: targetFamily.firestoreId,
-              familyName: targetFamily.parentName || "",
-              enrolledAt: new Date().toISOString(),
-            }];
-            await updateDoc(doc(db, "creneaux", slot.id), { enrolled: newEnrolled, enrolledCount: newEnrolled.length });
+            await updateDoc(doc(db, "creneaux", slot.id), {
+              enrolled: [...enrolled, {
+                childId: targetChild.id,
+                childName: targetChild.firstName || "",
+                familyId: targetFamily.firestoreId,
+                familyName: targetFamily.parentName || "",
+                enrolledAt: new Date().toISOString(),
+              }],
+              enrolledCount: enrolled.length + 1,
+            });
             inscriptions++;
           }
-        } catch (e) { console.error("Erreur inscription créneau:", e); }
+        } catch (e) { console.error("Erreur inscription:", e); }
       }
     }
 
     setDuplicateTarget(null);
     await refreshAll();
-    if (inscriptions > 0) {
-      toast(`✅ ${targetFamily.parentName} — commande créée + ${inscriptions} séance(s) inscrite(s)`, "success");
-    } else {
-      toast(`Commande créée pour ${targetFamily.parentName} — ${totalTTC.toFixed(2)}€ (aucun créneau trouvé à inscrire)`, "success");
-    }
+    toast(
+      inscriptions > 0
+        ? `✅ ${targetFamily.parentName} — commande créée + ${inscriptions} séance(s) inscrite(s)`
+        : `⚠️ Commande créée pour ${targetFamily.parentName} mais aucune séance inscrite (vérifiez la console)`,
+      inscriptions > 0 ? "success" : "error"
+    );
   };
 
   // ─── Broadcast concours : envoi en masse ───
