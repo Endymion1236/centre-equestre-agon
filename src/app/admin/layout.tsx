@@ -18,6 +18,7 @@ import {
   Image,
   BookOpen,
   Settings,
+  Globe,
   LogOut,
   Loader2,
   ShieldAlert,
@@ -68,6 +69,7 @@ const navItems = [
   { href: "/admin/activites", icon: ClipboardList, label: "Activités" },
   { href: "/admin/documents", icon: FileText, label: "Documents" },
   { href: "/admin/modeles", icon: LayoutTemplate, label: "Modèles" },
+  { href: "/admin/contenu", icon: Globe, label: "Contenu site" },
   { href: "/admin/parametres", icon: Settings, label: "Paramètres" },
   { href: "/admin/tests", icon: CheckCircle2, label: "Plan de tests" },
 ] as any[];

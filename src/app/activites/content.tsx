@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useVitrine } from "@/lib/use-vitrine";
 import { Badge, Button, Card } from "@/components/ui";
 import { EditableImage } from "@/components/ui/EditableImage";
 import type { VitrineImageKey } from "@/hooks/useVitrineImages";
@@ -446,8 +447,17 @@ function ActivityCard({ activity }: { activity: Activity }) {
 
 export function ActivitiesContent() {
   const [filter, setFilter] = useState("all");
-  const filtered =
-    filter === "all" ? activities : activities.filter((a) => a.category === filter);
+  const { vitrine } = useVitrine();
+
+  // Override les données statiques avec les valeurs Firebase si disponibles
+  const v = vitrine.activites as any;
+  const dynamicActivities = activities.map(a => {
+    const key = a.id === "baby" ? "baby_poney" : a.id === "bronze" ? "galop_bronze" : a.id === "argent" ? "galop_argent" : a.id === "or" ? "galop_or" : a.id === "balade" ? "balade" : a.id === "cours" ? "cours" : null;
+    if (!key || !v[key]) return a;
+    return { ...a, title: v[key].title || a.title, ages: v[key].ages || a.ages, schedule: v[key].schedule || a.schedule, description: v[key].description || a.description, price: v[key].price || a.price };
+  });
+
+  const filtered = filter === "all" ? dynamicActivities : dynamicActivities.filter((a) => a.category === filter);
 
   return (
     <section className="py-12 px-6 max-w-[900px] mx-auto">
