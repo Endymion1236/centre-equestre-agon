@@ -734,14 +734,31 @@ export default function PaiementsPage() {
           refDate = r.date; refStartTime = r.startTime; refTitle = r.activityTitle; refMonitor = r.monitor || "";
         } else {
           // Extraire depuis le libellé : "Forfait Titre (Titre — Mer 17:00)"
+          // On extrait le titre ET l'horaire directement depuis le libellé
+          const matchFull = item.activityTitle?.match(/\((.+?) — \w+ (\d{2}:\d{2})\)/);
           const matchTitle = item.activityTitle?.match(/\((.+?) —/);
           if (!matchTitle) continue;
           refTitle = matchTitle[1].trim();
-          // Chercher un créneau existant avec ce titre
-          const sSnap = await getDocs(query(collection(db, "creneaux"), where("activityTitle", "==", refTitle), where("date", ">=", today)));
+          // Extraire l'horaire depuis le libellé si disponible (ex: "Mer 17:00" → "17:00")
+          const libelleStartTime = matchFull ? matchFull[2] : null;
+
+          // Chercher un créneau existant avec ce titre pour avoir le jour/moniteur
+          const sSnap = await getDocs(query(
+            collection(db, "creneaux"),
+            where("activityTitle", "==", refTitle),
+            where("date", ">=", today)
+          ));
           if (sSnap.empty) continue;
-          const r = sSnap.docs[0].data() as any;
-          refDate = r.date; refStartTime = r.startTime; refMonitor = r.monitor || "";
+
+          // Si on a l'horaire depuis le libellé, chercher un créneau qui correspond
+          let refDoc = sSnap.docs[0].data() as any;
+          if (libelleStartTime) {
+            const matching = sSnap.docs.find(d => d.data().startTime === libelleStartTime);
+            if (matching) refDoc = matching.data();
+          }
+          refDate = refDoc.date;
+          refStartTime = libelleStartTime || refDoc.startTime;
+          refMonitor = refDoc.monitor || "";
         }
 
         const dow = new Date(refDate + "T12:00:00").getDay();
