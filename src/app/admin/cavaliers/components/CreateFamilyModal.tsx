@@ -20,6 +20,23 @@ interface Props {
 
 export default function CreateFamilyModal({ onClose, onDone }: Props) {
   const [saving, setSaving] = useState(false);
+
+  // Fermeture avec confirmation si des données ont été saisies
+  const hasData = () => {
+    return (
+      newFamily.lastName.trim() || newFamily.firstName.trim() ||
+      newFamily.parentEmail.trim() || newFamily.parentPhone.trim() ||
+      newFamily.raisonSociale.trim() ||
+      newChildren.some(c => c.firstName.trim() || c.lastName.trim())
+    );
+  };
+
+  const handleClose = () => {
+    if (hasData()) {
+      if (!confirm("Des informations ont été saisies. Quitter sans enregistrer ?")) return;
+    }
+    onClose();
+  };
   const { toast } = useToast();
 
   const [newFamily, setNewFamily] = useState({
@@ -101,11 +118,11 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
     : newFamily.raisonSociale.trim();
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center pt-12 overflow-y-auto" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center pt-12 overflow-y-auto" onClick={handleClose}>
       <div className="bg-white rounded-2xl w-full max-w-lg mx-4 mb-8 shadow-xl" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center p-5 border-b border-gray-100">
           <h2 className="font-display text-lg font-bold text-blue-800">Nouvelle famille</h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none hover:bg-gray-200"><X size={16}/></button>
+          <button onClick={handleClose} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none hover:bg-gray-200"><X size={16}/></button>
         </div>
         <div className="p-5 space-y-5">
           {/* Type de compte */}
@@ -257,7 +274,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
           </div>
         </div>
         <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
-          <button onClick={onClose} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+          <button onClick={handleClose} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
           <button onClick={handleCreate} disabled={saving || !canCreate}
             className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600 disabled:opacity-50">
             {saving ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>} Créer la famille
