@@ -59,8 +59,8 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
 
       await addDoc(collection(db, "families"), {
         parentName: computedName,
-        lastName: lastName || undefined,
-        firstName: firstName || undefined,
+        lastName: lastName || null,
+        firstName: firstName || null,
         parentEmail: newFamily.parentEmail.trim(),
         parentPhone: newFamily.parentPhone.trim(),
         address: newFamily.address.trim(),
