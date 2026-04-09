@@ -777,11 +777,10 @@ export default function PaiementsPage() {
           .map(d => ({ id: d.id, ...d.data() } as any))
           .filter(c =>
             new Date(c.date + "T12:00:00").getDay() === dow &&
-            c.startTime === refStartTime &&
-            (c.monitor || "") === refMonitor
+            c.startTime === refStartTime
           );
 
-        console.log(`📅 Slots filtrés (dow=${dow} startTime=${refStartTime} monitor=${refMonitor}): ${slots.length}`);
+        console.log(`📅 Slots filtrés (dow=${dow} startTime=${refStartTime}): ${slots.length}`);
         slots.forEach(s => console.log(`  → ${s.date} ${s.startTime} dow=${new Date(s.date+"T12:00:00").getDay()} monitor=${s.monitor}`));
 
         for (const slot of slots) {
