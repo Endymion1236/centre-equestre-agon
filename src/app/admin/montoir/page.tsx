@@ -615,7 +615,13 @@ export default function MontoirPage() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <div><h1 className="font-display text-2xl font-bold text-blue-800">Montoir</h1><p className="font-body text-xs text-slate-600">Présences · Affectation poneys · Clôture reprises</p></div>
-        <button onClick={()=>window.print()} className="print:hidden flex items-center gap-2 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><Printer size={16} /> Imprimer</button>
+        <div className="print:hidden flex items-center gap-2">
+          <a href={`/montoir/display?date=${dateStr}`} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-600 px-4 py-2 rounded-lg no-underline hover:bg-blue-500">
+            📺 Projeter
+          </a>
+          <button onClick={()=>window.print()} className="flex items-center gap-2 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><Printer size={16} /> Imprimer</button>
+        </div>
       </div>
       <div className="flex items-center justify-between mb-6">
         <button onClick={()=>setDayOffset(d=>d-1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16} /> Veille</button>
