@@ -713,77 +713,89 @@ export default function PaiementsPage() {
     const targetFamily = families.find(f => f.firestoreId === targetFamilyId);
     if (!targetFamily) return;
     const targetChildren = targetFamily.children || [];
+    const targetChild = targetChildren[0];
+
     const cleanedItems = (payment.items || []).map((item: any, idx: number) => {
       const mapped = targetChildren[idx] || targetChildren[0];
-      const targetChild = mapped
-        ? { childId: mapped.id || "", childName: mapped.firstName || "" }
-        : { childId: "", childName: "" };
+      const tc = mapped ? { childId: mapped.id || "", childName: mapped.firstName || "" } : { childId: "", childName: "" };
       return {
-        ...targetChild,
+        ...tc,
         activityType: item.activityType || "",
         activityTitle: item.activityTitle || item.label || "",
         stageKey: item.stageKey || "",
         priceHT: safeNumber(item.priceHT),
         priceTTC: safeNumber(item.priceTTC),
         tva: safeNumber(item.tva || item.tvaTaux || 5.5),
-        creneauId: item.creneauId || "",  // garder le creneauId original
+        creneauId: item.creneauId || "",
         reservationId: "",
       };
     });
+
     const totalTTC = round2(cleanedItems.reduce((s: number, i: any) => s + safeNumber(i.priceTTC), 0));
     await addDoc(collection(db, "payments"), {
       orderId: generateOrderId(),
       familyId: targetFamily.firestoreId,
       familyName: targetFamily.parentName || "",
-      items: cleanedItems,
-      totalTTC,
-      status: "pending",
-      paidAmount: 0,
-      paymentMode: "",
-      paymentRef: "",
-      source: "duplicate",
-      sourcePaymentId: payment.id,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+      items: cleanedItems, totalTTC,
+      status: "pending", paidAmount: 0, paymentMode: "", paymentRef: "",
+      source: "duplicate", sourcePaymentId: payment.id,
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
     });
 
-    // Réinscrire l'enfant cible dans les créneaux originaux
-    const targetChild = targetChildren[0];
+    // Inscrire l'enfant dans tous les créneaux futurs — même logique que forfait annuel
+    let inscriptions = 0;
     if (targetChild) {
-      let inscriptions = 0;
+      const today = new Date().toISOString().split("T")[0];
+
+      // Pour chaque item avec un creneauId (créneau de référence)
       for (const item of cleanedItems) {
         if (!item.creneauId) continue;
         try {
-          const creneauRef = doc(db, "creneaux", item.creneauId);
-          const crSnap = await getDoc(creneauRef);
-          if (!crSnap.exists()) continue;
-          const crData = crSnap.data();
-          const enrolled: any[] = crData.enrolled || [];
-          // Vérifier qu'il n'est pas déjà inscrit
-          if (enrolled.some((e: any) => e.childId === targetChild.id)) continue;
-          const newEnrolled = [...enrolled, {
-            childId: targetChild.id,
-            childName: targetChild.firstName || "",
-            familyId: targetFamily.firestoreId,
-            familyName: targetFamily.parentName || "",
-            enrolledAt: new Date().toISOString(),
-            paymentSource: "forfait",
-          }];
-          await updateDoc(creneauRef, { enrolled: newEnrolled, enrolledCount: newEnrolled.length });
-          inscriptions++;
+          // Charger le créneau de référence pour connaître le jour/horaire/activité
+          const refSnap = await getDoc(doc(db, "creneaux", item.creneauId));
+          if (!refSnap.exists()) continue;
+          const ref = refSnap.data() as any;
+          const dow = new Date(ref.date + "T12:00:00").getDay();
+
+          // Charger tous les créneaux futurs du même type
+          const futureSnap = await getDocs(query(
+            collection(db, "creneaux"),
+            where("date", ">=", today)
+          ));
+
+          const slots = futureSnap.docs
+            .map(d => ({ id: d.id, ...d.data() } as any))
+            .filter(c =>
+              new Date(c.date + "T12:00:00").getDay() === dow &&
+              c.startTime === ref.startTime &&
+              c.activityTitle === ref.activityTitle &&
+              (c.monitor || "") === (ref.monitor || "")
+            );
+
+          for (const slot of slots) {
+            const enrolled: any[] = slot.enrolled || [];
+            if (enrolled.some((e: any) => e.childId === targetChild.id)) continue;
+            const newEnrolled = [...enrolled, {
+              childId: targetChild.id,
+              childName: targetChild.firstName || "",
+              familyId: targetFamily.firestoreId,
+              familyName: targetFamily.parentName || "",
+              enrolledAt: new Date().toISOString(),
+            }];
+            await updateDoc(doc(db, "creneaux", slot.id), { enrolled: newEnrolled, enrolledCount: newEnrolled.length });
+            inscriptions++;
+          }
         } catch (e) { console.error("Erreur inscription créneau:", e); }
       }
-      if (inscriptions > 0) {
-        toast(`✅ Commande créée pour ${targetFamily.parentName} — ${totalTTC.toFixed(2)}€ — ${inscriptions} créneau(x) inscrit(s).`, "success");
-      } else {
-        toast(`Commande créée pour ${targetFamily.parentName} — ${totalTTC.toFixed(2)}€ à encaisser (onglet Impayés).`);
-      }
-    } else {
-      toast(`Commande créée pour ${targetFamily.parentName} — ${totalTTC.toFixed(2)}€ à encaisser (onglet Impayés).`);
     }
 
     setDuplicateTarget(null);
     await refreshAll();
+    if (inscriptions > 0) {
+      toast(`✅ ${targetFamily.parentName} — commande créée + ${inscriptions} séance(s) inscrite(s)`, "success");
+    } else {
+      toast(`Commande créée pour ${targetFamily.parentName} — ${totalTTC.toFixed(2)}€ (aucun créneau trouvé à inscrire)`, "success");
+    }
   };
 
   // ─── Broadcast concours : envoi en masse ───
