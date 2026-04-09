@@ -814,11 +814,9 @@ export default function PaiementsPage() {
       createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
     });
 
-    // Inscrire l'enfant dans tous les créneaux futurs via la fonction dédiée
-    // On passe le paiement avec les items originaux (source) qui ont les creneauIds
-    const paymentSource = payment; // items originaux de Mia avec creneauIds
-    const newPaymentForEnroll = { ...paymentSource, items: cleanedItems };
-    const inscriptions = await enrollChildInForfait(newPaymentForEnroll, targetFamilyId);
+    // Inscrire l'enfant dans tous les créneaux futurs en utilisant les items ORIGINAUX
+    // (qui ont les creneauIds de référence) plutôt que les cleanedItems
+    const inscriptions = await enrollChildInForfait(payment, targetFamilyId);
 
     setDuplicateTarget(null);
     await refreshAll();

@@ -221,7 +221,17 @@ export function TabImpayes({
                           <button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1"><Plus size={10}/> Dupliquer</button>
                           {p.source === "duplicate" && (p.items||[]).some((i:any) => i.activityType === "cours" || i.activityTitle?.includes("Forfait")) && (
                             <button onClick={async () => {
-                              const n = await enrollChildInForfait(p, p.familyId);
+                              // Charger le paiement source (original) pour avoir les vrais creneauIds
+                              let paymentToUse = p;
+                              if (p.sourcePaymentId) {
+                                try {
+                                  const { getDoc: gd, doc: dc } = await import("firebase/firestore");
+                                  const { db: database } = await import("@/lib/firebase");
+                                  const srcSnap = await gd(dc(database, "payments", p.sourcePaymentId));
+                                  if (srcSnap.exists()) paymentToUse = { id: srcSnap.id, ...srcSnap.data() };
+                                } catch {}
+                              }
+                              const n = await enrollChildInForfait(paymentToUse, p.familyId);
                               toast(n > 0 ? `✅ ${n} séance(s) inscrite(s)` : "⚠️ Aucune séance inscrite — vérifiez le planning", n > 0 ? "success" : "error");
                             }} className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1">
                               📅 Inscrire créneaux
