@@ -763,15 +763,11 @@ export default function PaiementsPage() {
 
         const dow = new Date(refDate + "T12:00:00").getDay();
 
-        console.log(`📅 enrollChildInForfait: titre="${refTitle}" startTime="${refStartTime}" dow=${dow} monitor="${refMonitor}"`);
-
         const futureSnap = await getDocs(query(
           collection(db, "creneaux"),
           where("activityTitle", "==", refTitle),
           where("date", ">=", today)
         ));
-
-        console.log(`📅 Créneaux futurs avec titre "${refTitle}": ${futureSnap.docs.length}`);
 
         const slots = futureSnap.docs
           .map(d => ({ id: d.id, ...d.data() } as any))
@@ -779,9 +775,6 @@ export default function PaiementsPage() {
             new Date(c.date + "T12:00:00").getDay() === dow &&
             c.startTime === refStartTime
           );
-
-        console.log(`📅 Slots filtrés (dow=${dow} startTime=${refStartTime}): ${slots.length}`);
-        slots.forEach(s => console.log(`  → ${s.date} ${s.startTime} dow=${new Date(s.date+"T12:00:00").getDay()} monitor=${s.monitor}`));
 
         for (const slot of slots) {
           const enrolled: any[] = slot.enrolled || [];
