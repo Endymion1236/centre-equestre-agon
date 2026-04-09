@@ -32,6 +32,7 @@ interface TabImpayesProps {
   removePaymentItem: (payment: any, itemIndex: number) => Promise<void>;
   setDuplicateTarget: (val: any) => void;
   deletePaymentCommand: (payment: any) => Promise<void>;
+  enrollChildInForfait: (payment: any, familyId: string) => Promise<number>;
 }
 
 export function TabImpayes({
@@ -39,7 +40,7 @@ export function TabImpayes({
   setQuickEncaisser, setQuickMontant, setQuickDate, setQuickRef, setQuickMode,
   setEditPayment, setEditItems, setEditRemisePct, setEditRemiseEuros,
   setPayLinkModal, setPayLinkEmail, setPayLinkAmount, setPayLinkMessage,
-  removePaymentItem, setDuplicateTarget, deletePaymentCommand,
+  removePaymentItem, setDuplicateTarget, deletePaymentCommand, enrollChildInForfait,
 }: TabImpayesProps) {
   const [impayesSearch, setImpayesSearch] = useState("");
   const [impayesExpanded, setImpayesExpanded] = useState<Set<string>>(new Set());
@@ -218,6 +219,14 @@ export function TabImpayes({
                             }} className="font-body text-[10px] text-orange-600 bg-orange-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-orange-100 flex items-center gap-1"><Receipt size={10}/> → Facture définitive</button>
                           )}
                           <button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1"><Plus size={10}/> Dupliquer</button>
+                          {p.source === "duplicate" && (p.items||[]).some((i:any) => i.activityType === "cours" || i.activityTitle?.includes("Forfait")) && (
+                            <button onClick={async () => {
+                              const n = await enrollChildInForfait(p, p.familyId);
+                              toast(n > 0 ? `✅ ${n} séance(s) inscrite(s)` : "⚠️ Aucune séance inscrite — vérifiez le planning", n > 0 ? "success" : "error");
+                            }} className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1">
+                              📅 Inscrire créneaux
+                            </button>
+                          )}
                         </div>
                         <button onClick={() => deletePaymentCommand(p)} className="font-body text-[10px] text-red-500 bg-red-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-red-100 flex items-center gap-1"><Trash2 size={10}/> Annuler</button>
                       </div>

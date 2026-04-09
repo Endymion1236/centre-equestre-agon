@@ -708,6 +708,78 @@ export default function PaiementsPage() {
     toast(`Panier pré-rempli pour ${family.parentName} — ${items.length} prestation(s). Ajustez les créneaux puis encaissez.`);
   };
 
+  // ─── Inscription d'un enfant dans tous les créneaux futurs d'un forfait ───
+  const enrollChildInForfait = async (payment: any, targetFamilyId: string): Promise<number> => {
+    const targetFamily = families.find(f => f.firestoreId === targetFamilyId);
+    if (!targetFamily) return 0;
+    const targetChild = (targetFamily.children || [])[0];
+    if (!targetChild) return 0;
+
+    const today = `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,"0")}-${String(new Date().getDate()).padStart(2,"0")}`;
+    let inscriptions = 0;
+
+    // Items de type forfait/cours
+    const forfaitItems = (payment.items || []).filter((i: any) =>
+      i.activityType === "cours" || i.activityTitle?.includes("Forfait")
+    );
+
+    for (const item of forfaitItems) {
+      try {
+        let refDate = "", refStartTime = "", refTitle = "", refMonitor = "";
+
+        if (item.creneauId) {
+          const refSnap = await getDoc(doc(db, "creneaux", item.creneauId));
+          if (!refSnap.exists()) continue;
+          const r = refSnap.data() as any;
+          refDate = r.date; refStartTime = r.startTime; refTitle = r.activityTitle; refMonitor = r.monitor || "";
+        } else {
+          // Extraire depuis le libellé : "Forfait Titre (Titre — Mer 17:00)"
+          const matchTitle = item.activityTitle?.match(/\((.+?) —/);
+          if (!matchTitle) continue;
+          refTitle = matchTitle[1].trim();
+          // Chercher un créneau existant avec ce titre
+          const sSnap = await getDocs(query(collection(db, "creneaux"), where("activityTitle", "==", refTitle), where("date", ">=", today)));
+          if (sSnap.empty) continue;
+          const r = sSnap.docs[0].data() as any;
+          refDate = r.date; refStartTime = r.startTime; refMonitor = r.monitor || "";
+        }
+
+        const dow = new Date(refDate + "T12:00:00").getDay();
+
+        const futureSnap = await getDocs(query(
+          collection(db, "creneaux"),
+          where("activityTitle", "==", refTitle),
+          where("date", ">=", today)
+        ));
+
+        const slots = futureSnap.docs
+          .map(d => ({ id: d.id, ...d.data() } as any))
+          .filter(c =>
+            new Date(c.date + "T12:00:00").getDay() === dow &&
+            c.startTime === refStartTime &&
+            (c.monitor || "") === refMonitor
+          );
+
+        for (const slot of slots) {
+          const enrolled: any[] = slot.enrolled || [];
+          if (enrolled.some((e: any) => e.childId === targetChild.id)) continue;
+          await updateDoc(doc(db, "creneaux", slot.id), {
+            enrolled: [...enrolled, {
+              childId: targetChild.id,
+              childName: targetChild.firstName || "",
+              familyId: targetFamily.firestoreId,
+              familyName: targetFamily.parentName || "",
+              enrolledAt: new Date().toISOString(),
+            }],
+            enrolledCount: enrolled.length + 1,
+          });
+          inscriptions++;
+        }
+      } catch (e) { console.error("Erreur inscription forfait:", e); }
+    }
+    return inscriptions;
+  };
+
   // ─── Duplication Mode 2 : commande pending vers une autre famille ───
   const duplicateToFamily = async (payment: any, targetFamilyId: string) => {
     const targetFamily = families.find(f => f.firestoreId === targetFamilyId);
@@ -742,72 +814,18 @@ export default function PaiementsPage() {
       createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
     });
 
-    // ── Inscription dans les créneaux futurs ──────────────────────────────────
-    let inscriptions = 0;
-    if (targetChild) {
-      const today = new Date().toISOString().split("T")[0];
-
-      // Collecter les creneauIds de référence depuis les items (items avec priceTTC > 0 et creneauId)
-      const refCreneauIds = cleanedItems
-        .filter((i: any) => i.creneauId && safeNumber(i.priceTTC) > 0)
-        .map((i: any) => i.creneauId);
-
-      console.log("🔍 duplicate: refCreneauIds =", refCreneauIds);
-      console.log("🔍 duplicate: items =", JSON.stringify(cleanedItems.map((i:any) => ({ title: i.activityTitle, creneauId: i.creneauId, priceTTC: i.priceTTC }))));
-
-      for (const refId of refCreneauIds) {
-        try {
-          const refSnap = await getDoc(doc(db, "creneaux", refId));
-          if (!refSnap.exists()) { console.warn("Créneau ref introuvable:", refId); continue; }
-          const ref = refSnap.data() as any;
-          const dow = new Date(ref.date + "T12:00:00").getDay();
-
-          console.log(`🔍 Créneau ref: ${ref.activityTitle} ${ref.startTime} jour=${dow} moniteur=${ref.monitor}`);
-
-          // Charger tous les créneaux futurs de la même activité
-          const futureSnap = await getDocs(query(
-            collection(db, "creneaux"),
-            where("activityTitle", "==", ref.activityTitle),
-            where("date", ">=", today)
-          ));
-
-          console.log(`🔍 Créneaux futurs trouvés: ${futureSnap.docs.length}`);
-
-          const slots = futureSnap.docs
-            .map(d => ({ id: d.id, ...d.data() } as any))
-            .filter(c =>
-              new Date(c.date + "T12:00:00").getDay() === dow &&
-              c.startTime === ref.startTime &&
-              (c.monitor || "") === (ref.monitor || "")
-            );
-
-          console.log(`🔍 Slots filtrés (même jour/horaire/moniteur): ${slots.length}`);
-
-          for (const slot of slots) {
-            const enrolled: any[] = slot.enrolled || [];
-            if (enrolled.some((e: any) => e.childId === targetChild.id)) continue;
-            await updateDoc(doc(db, "creneaux", slot.id), {
-              enrolled: [...enrolled, {
-                childId: targetChild.id,
-                childName: targetChild.firstName || "",
-                familyId: targetFamily.firestoreId,
-                familyName: targetFamily.parentName || "",
-                enrolledAt: new Date().toISOString(),
-              }],
-              enrolledCount: enrolled.length + 1,
-            });
-            inscriptions++;
-          }
-        } catch (e) { console.error("Erreur inscription:", e); }
-      }
-    }
+    // Inscrire l'enfant dans tous les créneaux futurs via la fonction dédiée
+    // On passe le paiement avec les items originaux (source) qui ont les creneauIds
+    const paymentSource = payment; // items originaux de Mia avec creneauIds
+    const newPaymentForEnroll = { ...paymentSource, items: cleanedItems };
+    const inscriptions = await enrollChildInForfait(newPaymentForEnroll, targetFamilyId);
 
     setDuplicateTarget(null);
     await refreshAll();
     toast(
       inscriptions > 0
         ? `✅ ${targetFamily.parentName} — commande créée + ${inscriptions} séance(s) inscrite(s)`
-        : `⚠️ Commande créée pour ${targetFamily.parentName} mais aucune séance inscrite (vérifiez la console)`,
+        : `⚠️ Commande créée pour ${targetFamily.parentName} — aucune séance inscrite automatiquement`,
       inscriptions > 0 ? "success" : "error"
     );
   };
@@ -1028,6 +1046,7 @@ export default function PaiementsPage() {
           removePaymentItem={removePaymentItem}
           setDuplicateTarget={setDuplicateTarget}
           deletePaymentCommand={deletePaymentCommand}
+          enrollChildInForfait={enrollChildInForfait}
         />
       )}
 
