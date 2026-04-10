@@ -71,7 +71,7 @@ const navItems = [
   { href: "/admin/documents", icon: FileText, label: "Documents" },
   { href: "/admin/modeles", icon: LayoutTemplate, label: "Modèles" },
   { href: "/admin/contenu", icon: Globe, label: "Contenu site" },
-  { href: "/admin/equipe", icon: Users, label: "Équipe" },
+  { href: "/admin/equipe", icon: Users, label: "Accès moniteurs" },
   { href: "/admin/parametres", icon: Settings, label: "Paramètres" },
   { href: "/admin/tests", icon: CheckCircle2, label: "Plan de tests" },
 ] as any[];
