@@ -1418,7 +1418,7 @@ export default function PaiementsPage() {
               </div>
               <button onClick={() => setQuickEncaisser(null)} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
             </div>
-            <div className="p-5 flex flex-col gap-4">
+            <div className="p-5 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0">
               {/* Montant */}
               <div>
                 <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Montant (€)</label>
