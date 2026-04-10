@@ -11,6 +11,7 @@ import {
   User,
   onAuthStateChanged,
   signInWithPopup,
+  signInWithEmailAndPassword,
   signOut as firebaseSignOut,
 } from "firebase/auth";
 import { doc, getDoc, setDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
@@ -23,8 +24,11 @@ interface AuthContextType {
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   signInWithFacebook: () => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
+  isMoniteur: boolean;
+  userRole: "admin" | "moniteur" | "cavalier";
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -33,8 +37,11 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   signInWithGoogle: async () => {},
   signInWithFacebook: async () => {},
+  signInWithEmail: async () => {},
   signOut: async () => {},
   isAdmin: false,
+  isMoniteur: false,
+  userRole: "cavalier",
 });
 
 // Nicolas & Emmeline admin emails
@@ -149,6 +156,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const signInWithEmail = async (email: string, password: string) => {
+    await signInWithEmailAndPassword(auth, email, password);
+  };
+
   const signOut = async () => {
     try {
       await firebaseSignOut(auth);
@@ -159,20 +170,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // isAdmin : custom claim Firebase en priorité, fallback sur liste emails
-  // Les custom claims sont dans user.getIdTokenResult().claims.admin
-  // On garde le fallback email pour la transition (tant que les claims ne sont pas tous initialisés)
   const [adminClaim, setAdminClaim] = useState<boolean | null>(null);
+  const [moniteurClaim, setMoniteurClaim] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!user) { setAdminClaim(null); return; }
+    if (!user) { setAdminClaim(null); setMoniteurClaim(false); return; }
     user.getIdTokenResult(false).then(result => {
       setAdminClaim(result.claims.admin === true);
-    }).catch(() => setAdminClaim(null));
+      setMoniteurClaim(result.claims.moniteur === true);
+    }).catch(() => { setAdminClaim(null); setMoniteurClaim(false); });
   }, [user]);
 
   const isAdmin = adminClaim !== null
     ? adminClaim
     : (user?.email ? ADMIN_EMAILS.includes(user.email) : false);
+  
+  const isMoniteur = moniteurClaim;
+  const userRole: "admin" | "moniteur" | "cavalier" = isAdmin ? "admin" : isMoniteur ? "moniteur" : "cavalier";
 
   return (
     <AuthContext.Provider
@@ -182,8 +196,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         signInWithGoogle,
         signInWithFacebook,
+        signInWithEmail,
         signOut,
         isAdmin,
+        isMoniteur,
+        userRole,
       }}
     >
       {children}

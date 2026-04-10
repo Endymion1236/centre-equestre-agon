@@ -71,13 +71,34 @@ const navItems = [
   { href: "/admin/documents", icon: FileText, label: "Documents" },
   { href: "/admin/modeles", icon: LayoutTemplate, label: "Modèles" },
   { href: "/admin/contenu", icon: Globe, label: "Contenu site" },
+  { href: "/admin/equipe", icon: Users, label: "Équipe" },
   { href: "/admin/parametres", icon: Settings, label: "Paramètres" },
   { href: "/admin/tests", icon: CheckCircle2, label: "Plan de tests" },
 ] as any[];
 
 function AdminSidebar() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, isMoniteur, userRole } = useAuth();
   const pathname = usePathname();
+
+  // Pages autorisées pour les moniteurs
+  const MONITEUR_PAGES = [
+    "/admin/dashboard",
+    "/admin/planning",
+    "/admin/montoir",
+    "/admin/cavalerie",
+    "/admin/pedagogie",
+    "/admin/management",
+  ];
+  // Sections (séparateurs) autorisées pour les moniteurs
+  const MONITEUR_SECTIONS = ["Terrain"];
+
+  // Filtrer les navItems selon le rôle
+  const filteredNavItems = isMoniteur
+    ? navItems.filter((item: any) => {
+        if (item.separator) return MONITEUR_SECTIONS.includes(item.label);
+        return MONITEUR_PAGES.includes(item.href);
+      })
+    : navItems;
 
   return (
     <div data-testid="admin-nav" className="w-[210px] bg-blue-800 p-2 flex flex-col gap-0.5 flex-shrink-0 min-h-screen hidden md:flex">
@@ -85,11 +106,13 @@ function AdminSidebar() {
         <img src="/images/logo-ce-agon.png" alt="Logo" className="w-9 h-9 rounded-lg object-contain" />
         <div>
           <div className="font-display text-sm font-bold text-white">Centre Equestre</div>
-          <div className="font-body text-[10px] text-white/40 uppercase tracking-widest mt-0.5">Administration</div>
+          <div className="font-body text-[10px] text-white/40 uppercase tracking-widest mt-0.5">
+            {isMoniteur ? "Moniteur" : "Administration"}
+          </div>
         </div>
       </div>
 
-      {navItems.map((item, idx) => {
+      {filteredNavItems.map((item: any, idx: number) => {
         if (item.separator) {
           return (
             <div key={`sep-${idx}`} className="px-3 pt-5 pb-1.5">
@@ -141,7 +164,7 @@ function AdminSidebar() {
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, isAdmin, signOut: authSignOut } = useAuth();
+  const { user, loading, isAdmin, isMoniteur, userRole, signOut: authSignOut } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showVoice, setShowVoice] = useState(false);
   const [voiceContext, setVoiceContext] = useState<Record<string, any>>({});
@@ -289,14 +312,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  if (!isAdmin) {
+  if (!isAdmin && !isMoniteur) {
     return (
       <div className="min-h-screen bg-cream flex items-center justify-center px-6">
         <div className="text-center max-w-sm">
           <ShieldAlert className="w-12 h-12 text-orange-400 mx-auto mb-4" />
           <h1 className="font-display text-xl font-bold text-blue-800 mb-2">Accès réservé</h1>
           <p className="font-body text-sm text-gray-500 mb-2">
-            Le back-office est réservé aux administrateurs.
+            Le back-office est réservé aux administrateurs et moniteurs.
           </p>
           <p className="font-body text-xs text-gray-400 mb-6">
             Connecté en tant que : {user?.email}
@@ -346,7 +369,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {mobileMenuOpen && (
           <div className="md:hidden fixed inset-0 top-[56px] z-40 bg-black/30" onClick={() => setMobileMenuOpen(false)}>
             <div className="bg-blue-800 w-[260px] h-full overflow-y-auto p-3 flex flex-col gap-0.5 shadow-2xl" onClick={e => e.stopPropagation()}>
-              {navItems.map((item: any, idx: number) => {
+              {(isMoniteur && !isAdmin ? navItems.filter((item: any) => {
+                if (item.separator) return ["Terrain"].includes(item.label);
+                return ["/admin/dashboard","/admin/planning","/admin/montoir","/admin/cavalerie","/admin/pedagogie","/admin/management"].includes(item.href);
+              }) : navItems).map((item: any, idx: number) => {
                 if (item.separator) {
                   return (
                     <div key={`msep-${idx}`} className="px-3 pt-5 pb-1.5">

@@ -36,7 +36,29 @@ const navItems = [
 ];
 
 function LoginScreen() {
-  const { signInWithGoogle, signInWithFacebook } = useAuth();
+  const { signInWithGoogle, signInWithFacebook, signInWithEmail } = useAuth();
+  const [showEmail, setShowEmail] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [emailLoading, setEmailLoading] = useState(false);
+
+  const handleEmailLogin = async () => {
+    setEmailError("");
+    if (!email || !password) { setEmailError("Remplissez tous les champs."); return; }
+    setEmailLoading(true);
+    try {
+      await signInWithEmail(email, password);
+    } catch (err: any) {
+      if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
+        setEmailError("Email ou mot de passe incorrect.");
+      } else {
+        setEmailError("Erreur de connexion. Réessayez.");
+      }
+    } finally {
+      setEmailLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-cream flex items-center justify-center px-6">
@@ -77,6 +99,62 @@ function LoginScreen() {
               </svg>
               Continuer avec Facebook
             </button>
+
+            {/* Séparateur */}
+            <div className="flex items-center gap-3 my-1">
+              <div className="flex-1 h-px bg-gray-200"></div>
+              <span className="font-body text-xs text-gray-400">ou</span>
+              <div className="flex-1 h-px bg-gray-200"></div>
+            </div>
+
+            {/* Login email/mot de passe (moniteurs) */}
+            {!showEmail ? (
+              <button
+                onClick={() => setShowEmail(true)}
+                className="w-full flex items-center justify-center gap-3 px-6 py-3.5 rounded-xl border border-gray-200 bg-white font-body text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all cursor-pointer"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="2"/>
+                  <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                </svg>
+                Connexion par email
+              </button>
+            ) : (
+              <div className="flex flex-col gap-2.5 pt-1">
+                <input
+                  type="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 font-body text-sm text-gray-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none"
+                  autoFocus
+                />
+                <input
+                  type="password"
+                  placeholder="Mot de passe"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleEmailLogin()}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 font-body text-sm text-gray-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none"
+                />
+                {emailError && (
+                  <p className="font-body text-xs text-red-500 text-center">{emailError}</p>
+                )}
+                <button
+                  onClick={handleEmailLogin}
+                  disabled={emailLoading}
+                  className="w-full px-6 py-3.5 rounded-xl bg-blue-600 font-body text-sm font-semibold text-white hover:bg-blue-700 transition-all cursor-pointer border-none disabled:opacity-50"
+                >
+                  {emailLoading ? "Connexion..." : "Se connecter"}
+                </button>
+                <button
+                  onClick={() => { setShowEmail(false); setEmailError(""); }}
+                  className="font-body text-xs text-gray-400 hover:text-gray-600 cursor-pointer bg-transparent border-none"
+                >
+                  ← Retour
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="mt-6 pt-5 border-t border-blue-500/8 text-center">
@@ -194,7 +272,7 @@ export default function EspaceCavalierLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading, signOut, isAdmin } = useAuth();
+  const { user, loading, signOut, isAdmin, isMoniteur } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [showVoice, setShowVoice] = useState(false);
@@ -274,12 +352,12 @@ export default function EspaceCavalierLayout({
     loadContext();
   }, [showVoice]);
 
-  // Redirection admin → back-office
+  // Redirection admin ou moniteur → back-office
   useEffect(() => {
-    if (user && isAdmin && !loading) {
+    if (user && (isAdmin || isMoniteur) && !loading) {
       router.replace("/admin/dashboard");
     }
-  }, [user, isAdmin, loading, router]);
+  }, [user, isAdmin, isMoniteur, loading, router]);
 
   // Loading state
   if (loading) {
@@ -293,8 +371,8 @@ export default function EspaceCavalierLayout({
     );
   }
 
-  // Admin → en cours de redirection
-  if (user && isAdmin) {
+  // Admin ou moniteur → en cours de redirection
+  if (user && (isAdmin || isMoniteur)) {
     return (
       <div className="min-h-screen bg-cream flex items-center justify-center">
         <div className="text-center">
