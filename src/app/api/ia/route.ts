@@ -109,7 +109,7 @@ interface GenerateEmailTemplateRequest {
   userPrompt?: string;
 }
 
-type IARequest = RapprochementRequest | AssistantRequest | SuggestionsRequest | EmailRepriseRequest | BilanPedaRequest | GenerateEmailTemplateRequest;
+type IARequest = RapprochementRequest | AssistantRequest | SuggestionsRequest | EmailRepriseRequest | BilanPedaRequest | GenerateEmailTemplateRequest | ThemeStageRequest;
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
