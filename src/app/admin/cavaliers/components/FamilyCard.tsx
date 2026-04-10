@@ -20,6 +20,12 @@ const galopLevels = ["—", "Poney Bronze", "Poney Argent", "Poney Or", "Bronze"
 const inputStyle = "w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400";
 const labelStyle = "font-body text-[10px] font-semibold text-slate-600 uppercase block mb-1";
 
+const FAMILY_TAGS = [
+  { id: "cavalier_annee", label: "Cavalier année", color: "text-green-700 bg-green-50", emoji: "🏇" },
+  { id: "stage", label: "Stage", color: "text-blue-700 bg-blue-50", emoji: "🎯" },
+  { id: "passage", label: "Passage", color: "text-orange-700 bg-orange-50", emoji: "👋" },
+] as const;
+
 const calcAge = (birthDate: any): string => {
   if (!birthDate) return "";
   const d = typeof birthDate === "string" ? new Date(birthDate) : birthDate?.seconds ? new Date(birthDate.seconds * 1000) : birthDate instanceof Date ? birthDate : null;
@@ -58,6 +64,7 @@ export default function FamilyCard({
   // ── Édition famille ────────────────────────────────────────────────────────
   const [editingFamily, setEditingFamily] = useState(false);
   const [editForm, setEditForm] = useState({ parentName: "", lastName: "", firstName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
+  const [editTags, setEditTags] = useState<string[]>([]);
 
   const startEditFamily = () => {
     setEditingFamily(true);
@@ -69,6 +76,7 @@ export default function FamilyCard({
       parentPhone: family.parentPhone || "", address: family.address || "",
       zipCode: family.zipCode || "", city: family.city || "",
     });
+    setEditTags(family.tags || []);
   };
 
   const handleSaveFamily = async () => {
@@ -86,6 +94,7 @@ export default function FamilyCard({
         parentEmail: editForm.parentEmail.trim(),
         parentPhone: editForm.parentPhone.trim(), address: editForm.address.trim(),
         zipCode: editForm.zipCode.trim(), city: editForm.city.trim(),
+        tags: editTags,
         updatedAt: serverTimestamp(),
       });
       setEditingFamily(false);
@@ -259,6 +268,10 @@ export default function FamilyCard({
                 )}
                 {family.accountType === "asso" && <span className="font-body text-[10px] font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">ASSO</span>}
                 {family.accountType === "collectivite" && <span className="font-body text-[10px] font-semibold text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded">COLLECTIVITÉ</span>}
+                {(family.tags || []).map((tag: string) => {
+                  const t = FAMILY_TAGS.find(ft => ft.id === tag);
+                  return t ? <span key={tag} className={`font-body text-[10px] font-semibold ${t.color} px-1.5 py-0.5 rounded`}>{t.emoji} {t.label}</span> : null;
+                })}
               </div>
               <div className="font-body text-xs text-slate-600">
                 {family.parentEmail && <><Mail size={10} className="inline mr-1"/>{family.parentEmail} · </>}
@@ -312,6 +325,23 @@ export default function FamilyCard({
                   <div>
                     <label className={labelStyle}>Ville</label>
                     <input value={editForm.city} onChange={e => setEditForm(f => ({ ...f, city: e.target.value }))} className={inputStyle}/>
+                  </div>
+                </div>
+                {/* Tags client */}
+                <div className="mb-3">
+                  <label className={labelStyle}>Type de client</label>
+                  <div className="flex flex-wrap gap-2">
+                    {FAMILY_TAGS.map(tag => {
+                      const active = editTags.includes(tag.id);
+                      return (
+                        <button key={tag.id} type="button"
+                          onClick={() => setEditTags(prev => active ? prev.filter(t => t !== tag.id) : [...prev, tag.id])}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold border cursor-pointer transition-all
+                            ${active ? `${tag.color} border-current` : "text-slate-400 bg-white border-gray-200 hover:border-gray-300"}`}>
+                          {tag.emoji} {tag.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
                 <div className="flex gap-2">

@@ -29,6 +29,7 @@ export default function CavaliersPage() {
 
   // ── UI ────────────────────────────────────────────────────────────────────
   const [search, setSearch] = useState("");
+  const [filterTag, setFilterTag] = useState<string>("");
   const [showCreateFamily, setShowCreateFamily] = useState(false);
   const { toast } = useToast();
 
@@ -68,7 +69,7 @@ export default function CavaliersPage() {
 
   // ── Filtrage ──────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
-    const list = !search.trim() ? families : families.filter(f =>
+    let list = !search.trim() ? families : families.filter(f =>
       f.parentName?.toLowerCase().includes(search.toLowerCase()) ||
       (f as any).lastName?.toLowerCase().includes(search.toLowerCase()) ||
       (f as any).firstName?.toLowerCase().includes(search.toLowerCase()) ||
@@ -77,6 +78,10 @@ export default function CavaliersPage() {
         `${c.firstName} ${c.lastName || ""}`.toLowerCase().includes(search.toLowerCase())
       )
     );
+    // Filtre par tag
+    if (filterTag) {
+      list = list.filter(f => (f as any).tags?.includes(filterTag));
+    }
     // Tri alphabétique par nom de famille, puis prénom
     return [...list].sort((a, b) => {
       const lastA = ((a as any).lastName || a.parentName || "").toLowerCase();
@@ -86,7 +91,7 @@ export default function CavaliersPage() {
       const firstB = ((b as any).firstName || "").toLowerCase();
       return firstA.localeCompare(firstB, "fr");
     });
-  }, [families, search]);
+  }, [families, search, filterTag]);
 
   // ── Stats ─────────────────────────────────────────────────────────────────
   const allChildren = families.flatMap(f => f.children || []);
@@ -126,6 +131,29 @@ export default function CavaliersPage() {
           placeholder="Rechercher : prénom + nom enfant, famille, email..."
           className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400 bg-white"/>
         {search && <div className="font-body text-[10px] text-slate-600 mt-1 ml-1">{filtered.length} famille{filtered.length > 1 ? "s" : ""} trouvée{filtered.length > 1 ? "s" : ""}</div>}
+      </div>
+
+      {/* Filtres par type */}
+      <div className="flex flex-wrap gap-2 mb-5">
+        <button onClick={() => setFilterTag("")}
+          className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border cursor-pointer transition-all
+            ${!filterTag ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-500 border-gray-200 hover:border-gray-300"}`}>
+          Tous ({families.length})
+        </button>
+        {[
+          { id: "cavalier_annee", label: "Cavaliers année", emoji: "🏇", color: "text-green-700 bg-green-50 border-green-200" },
+          { id: "stage", label: "Stages", emoji: "🎯", color: "text-blue-700 bg-blue-50 border-blue-200" },
+          { id: "passage", label: "Passages", emoji: "👋", color: "text-orange-700 bg-orange-50 border-orange-200" },
+        ].map(tag => {
+          const count = families.filter(f => (f as any).tags?.includes(tag.id)).length;
+          return (
+            <button key={tag.id} onClick={() => setFilterTag(filterTag === tag.id ? "" : tag.id)}
+              className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border cursor-pointer transition-all
+                ${filterTag === tag.id ? tag.color : "bg-white text-slate-400 border-gray-200 hover:border-gray-300"}`}>
+              {tag.emoji} {tag.label} ({count})
+            </button>
+          );
+        })}
       </div>
 
       {/* Liste */}

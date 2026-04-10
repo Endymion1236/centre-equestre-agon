@@ -10,6 +10,7 @@ export interface Family {
   authUid: string;
   children: Child[];
   linkedChildren?: LinkedChild[]; // Cavaliers d'autres familles (ex: grands-parents)
+  tags?: string[]; // "cavalier_annee" | "stage" | "passage"
   createdAt: Date;
   updatedAt: Date;
 }

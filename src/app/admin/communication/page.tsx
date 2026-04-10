@@ -34,6 +34,9 @@ export default function CommunicationPage() {
     { id: "with-children", label: "Familles avec enfants", count: families.filter((f) => (f.children || []).length > 0).length },
     { id: "no-children", label: "Profils incomplets", count: families.filter((f) => (f.children || []).length === 0).length },
     { id: "with-email", label: "Familles avec email", count: families.filter((f) => f.parentEmail).length },
+    { id: "tag-cavalier_annee", label: "🏇 Cavaliers année", count: families.filter((f) => (f as any).tags?.includes("cavalier_annee")).length },
+    { id: "tag-stage", label: "🎯 Stages", count: families.filter((f) => (f as any).tags?.includes("stage")).length },
+    { id: "tag-passage", label: "👋 Passages", count: families.filter((f) => (f as any).tags?.includes("passage")).length },
   ];
 
   const getRecipients = () => {
@@ -41,6 +44,10 @@ export default function CommunicationPage() {
     if (selectedAudience === "with-children") return families.filter(f => f.parentEmail && (f.children || []).length > 0);
     if (selectedAudience === "no-children") return families.filter(f => f.parentEmail && (f.children || []).length === 0);
     if (selectedAudience === "with-email") return families.filter(f => f.parentEmail);
+    if (selectedAudience.startsWith("tag-")) {
+      const tag = selectedAudience.replace("tag-", "");
+      return families.filter(f => f.parentEmail && (f as any).tags?.includes(tag));
+    }
     return [];
   };
 
