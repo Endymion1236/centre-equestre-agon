@@ -864,17 +864,17 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       );
       const allFutureCreneaux = allFutureSnap.docs.map(d => ({ id: d.id, ...d.data() })) as (Creneau & { id: string })[];
 
-      // Créneau principal : filtrer par jour + heure + activityTitle + moniteur
+      // Créneau principal : filtrer par jour + heure + activityTitle SEULEMENT
+      // Ne PAS filtrer par moniteur — il peut changer en cours de saison (remplacements)
       const dow = new Date(creneau.date + "T12:00:00").getDay();
       const slotsToEnroll = allFutureCreneaux.filter(c =>
         c.date >= today &&
         new Date(c.date + "T12:00:00").getDay() === dow &&
         c.startTime === creneau.startTime &&
-        c.activityTitle === creneau.activityTitle &&
-        (c.monitor || "") === (creneau.monitor || "")
+        c.activityTitle === creneau.activityTitle
       );
 
-      console.log(`📋 Inscription annuelle : ${slotsToEnroll.length} séances pour "${creneau.activityTitle}" (${creneau.monitor}) (jour ${dow}, ${creneau.startTime})`);
+      console.log(`📋 Inscription annuelle : ${slotsToEnroll.length} séances pour "${creneau.activityTitle}" (jour ${dow}, ${creneau.startTime})`);
 
       for (const slot of slotsToEnroll) {
         await onEnroll(slot.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, undefined, { skipPayment: true, skipEmail: true });
@@ -885,7 +885,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       // Au lieu de parser la clé (fragile), on retrouve le slot dans allCreneaux
       for (const slotKey of extraSlots) {
         // Chercher un créneau de la semaine qui correspond à cette clé
-        const refCreneau = allCreneaux.find(c => {
+        // Utiliser weekCreneaux (toute la semaine) plutôt qu'allCreneaux (vue courante)
+        const refCreneau = weekCreneaux.find(c => {
           const cdow = new Date(c.date + "T12:00:00").getDay();
           return `${cdow}-${c.startTime}-${c.activityTitle}-${c.monitor || ""}` === slotKey;
         });
@@ -900,11 +901,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           c.date >= today &&
           new Date(c.date + "T12:00:00").getDay() === extraDow &&
           c.startTime === refCreneau.startTime &&
-          c.activityTitle === refCreneau.activityTitle &&
-          (c.monitor || "") === (refCreneau.monitor || "")
+          c.activityTitle === refCreneau.activityTitle
+          // Pas de filtre monitor — peut changer en cours de saison
         );
 
-        console.log(`📋 Créneau supplémentaire : ${extraCreneaux.length} séances pour "${refCreneau.activityTitle}" (${refCreneau.monitor}) (jour ${extraDow}, ${refCreneau.startTime})`);
+        console.log(`📋 Créneau supplémentaire : ${extraCreneaux.length} séances pour "${refCreneau.activityTitle}" (jour ${extraDow}, ${refCreneau.startTime})`);
         for (const slot of extraCreneaux) {
           await onEnroll(slot.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, undefined, { skipPayment: true, skipEmail: true });
         }
