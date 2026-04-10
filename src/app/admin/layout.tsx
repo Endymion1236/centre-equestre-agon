@@ -44,6 +44,7 @@ const navItems = [
   { separator: true, label: "Terrain" },
   { href: "/admin/planning", icon: CalendarDays, label: "Planning" },
   { href: "/admin/montoir", icon: ClipboardList, label: "Montoir" },
+  { href: "/admin/equides", icon: GripVertical, label: "Équidés" },
   { href: "/admin/competitions", icon: Ticket, label: "Compétitions" },
   { href: "/admin/cavalerie", icon: Heart, label: "Cavalerie" },
   { href: "/admin/pedagogie", icon: GraduationCap, label: "Suivi péda." },
