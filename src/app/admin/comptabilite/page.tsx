@@ -6,6 +6,7 @@ import { db } from "@/lib/firebase";
 import { safeNumber } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Download, Upload, Check, FileText, Building2, Receipt, Calculator, Search, Printer, Plus, Sparkles, Bot } from "lucide-react";
+import { authFetch } from "@/lib/auth-fetch";
 
 interface Payment {
   id: string;
@@ -596,7 +597,7 @@ export default function ComptabilitePage() {
         if (!d) return false;
         return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}` === period;
       });
-      const res = await fetch("/api/ia", {
+      const res = await authFetch("/api/ia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -633,7 +634,7 @@ export default function ComptabilitePage() {
           acc[p.familyName] = (acc[p.familyName] || 0) + safeNumber(p.paidAmount); return acc;
         }, {})
       ).sort((a: any, b: any) => b[1]-a[1]).slice(0,5).map(([name, total]) => ({ name, total: total as number }));
-      const res = await fetch("/api/ia", {
+      const res = await authFetch("/api/ia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
+import { verifyAuth } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,10 @@ const TEST_MODE = !process.env.RESEND_FROM_EMAIL || process.env.RESEND_TEST_MODE
 const TEST_EMAIL = process.env.RESEND_OWNER_EMAIL || "nicolasrichard16@hotmail.com";
 
 export async function POST(request: NextRequest) {
+  // 🔒 Auth obligatoire — route admin
+  const auth = await verifyAuth(request, { adminOnly: true });
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) {
@@ -69,7 +74,8 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error("Resend error:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
     }
 
     return NextResponse.json({
@@ -81,9 +87,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("Send email error:", error);
-    return NextResponse.json(
-      { error: error.message || "Erreur serveur" },
-      { status: 500 }
-    );
+    console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

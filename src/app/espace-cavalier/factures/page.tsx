@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Receipt, CreditCard, Ticket, Download } from "lucide-react";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
+import { authFetch } from "@/lib/auth-fetch";
 
 interface Payment {
   id: string;
@@ -244,7 +245,7 @@ export default function FacturesPage() {
                                     setPayingOnline(p.id!);
                                     try {
                                       const restant = (p.totalTTC || 0) - (p.paidAmount || 0);
-                                      const res = await fetch("/api/cawl/checkout", {
+                                      const res = await authFetch("/api/cawl/checkout", {
                                         method: "POST",
                                         headers: { "Content-Type": "application/json" },
                                         body: JSON.stringify({
@@ -705,7 +706,7 @@ export default function FacturesPage() {
                             createdAt: serverTimestamp(),
                           });
                           // Notifier l'admin par email
-                          fetch("/api/send-email", {
+                          authFetch("/api/send-email", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({

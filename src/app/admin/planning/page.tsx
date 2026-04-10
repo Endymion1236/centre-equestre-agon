@@ -25,6 +25,7 @@ import DuplicateCreneauModal from "./DuplicateCreneauModal";
 import MonthView from "./MonthView";
 import TimelineView from "./TimelineView";
 import WeekView from "./WeekView";
+import { authFetch } from "@/lib/auth-fetch";
 
 export default function PlanningPage() {
   const { toast } = useToast();
@@ -392,7 +393,7 @@ export default function PlanningPage() {
         : viewMode === "month" ? fmtMonthFR(currentMonth)
         : `Semaine du ${fmtDateFR(weekDates[0])} au ${fmtDateFR(weekDates[6])}`;
       const payload = visibleCreneaux.map(c => ({ id: c.id||"", activityTitle: c.activityTitle, activityType: c.activityType, date: c.date, startTime: c.startTime, endTime: c.endTime, monitor: c.monitor, maxPlaces: c.maxPlaces, enrolled: (c.enrolled||[]).length, fill: c.maxPlaces>0?(c.enrolled||[]).length/c.maxPlaces:0, status: c.status }));
-      const res = await fetch("/api/ia", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ type:"suggestions_planning", creneaux:payload, periode:periodeLabel, viewMode }) });
+      const res = await authFetch("/api/ia", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ type:"suggestions_planning", creneaux:payload, periode:periodeLabel, viewMode }) });
       const data = await res.json();
       if (data.success) { setIaSuggestions(data.suggestions); setIaStats(data.stats); }
       else setIaSuggestions(`Erreur : ${data.error}`);
@@ -723,7 +724,7 @@ export default function PlanningPage() {
           date: new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
           horaire: `${c.startTime}–${c.endTime}`, prix: priceTTC,
         });
-        fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: fam.parentEmail, ...emailData }) }).catch(e => console.warn("Email:", e));
+        authFetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: fam.parentEmail, ...emailData }) }).catch(e => console.warn("Email:", e));
       } catch (e) { console.error("Email confirmation cours:", e); }
       }
     }
@@ -857,7 +858,7 @@ export default function PlanningPage() {
                   parentName: fam2.parentName || "", childName: child.childName,
                   activite: c.activityTitle, montantAvoir: avoirMontant, refAvoir: ref,
                 });
-                fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: fam2.parentEmail, ...emailData }) }).catch(e => console.warn("Email avoir:", e));
+                authFetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: fam2.parentEmail, ...emailData }) }).catch(e => console.warn("Email avoir:", e));
               } catch (e) { console.error("Email avoir:", e); }
             }
           } else {
@@ -915,7 +916,7 @@ export default function PlanningPage() {
             .sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
           if (waiting.length > 0) {
             const first = waiting[0] as any;
-            fetch("/api/send-email", {
+            authFetch("/api/send-email", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({

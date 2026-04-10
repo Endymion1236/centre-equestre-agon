@@ -189,6 +189,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true });
   } catch (error: any) {
     console.error("CAWL webhook error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

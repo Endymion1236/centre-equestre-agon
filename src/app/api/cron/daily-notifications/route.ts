@@ -375,6 +375,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: true, ...results });
   } catch (error: any) {
     console.error("Cron daily-notifications error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

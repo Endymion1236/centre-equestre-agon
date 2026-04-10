@@ -21,6 +21,7 @@ import PoneyChargeView from "./PoneyChargeView";
 import ThemeSuggestion from "./ThemeSuggestion";
 import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Printer, ClipboardList, Mic, MicOff, Sparkles,
 } from "lucide-react";
+import { authFetch } from "@/lib/auth-fetch";
 
 interface Creneau { id: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolled: any[]; status: string; rotationPoneys?: boolean; }
 const typeColors: Record<string,string> = {stage:"#27ae60",balade:"#e67e22",cours:"#2050A0",competition:"#7c3aed"};
@@ -469,7 +470,7 @@ export default function MontoirPage() {
     try {
       const formData = new FormData();
       formData.append("audio", audioFile);
-      const res = await fetch("/api/whisper", { method: "POST", body: formData });
+      const res = await authFetch("/api/whisper", { method: "POST", body: formData });
       const data = await res.json();
       if (data.success) {
         setTranscripts(prev => ({ ...prev, [childId]: data.text }));
@@ -494,7 +495,7 @@ export default function MontoirPage() {
     const recentNotes = (peda.notes || []).slice(0, 3).map((n: any) => n.text);
 
     try {
-      const res = await fetch("/api/ia", {
+      const res = await authFetch("/api/ia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -708,7 +709,7 @@ export default function MontoirPage() {
                       const emailData = isStageType
                         ? emailTemplates.rappelStage({ parentName: r.parentName, enfants: r.children, stageTitle: c.activityTitle, dateDebut: new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }), horaire: `${c.startTime}–${c.endTime}` })
                         : emailTemplates.rappelCours({ parentName: r.parentName, childName: r.children.join(", "), coursTitle: c.activityTitle, date: new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }), horaire: `${c.startTime}–${c.endTime}`, moniteur: c.monitor || "" });
-                      fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: r.email, ...emailData }) }).catch(e => console.warn("Email:", e));
+                      authFetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: r.email, ...emailData }) }).catch(e => console.warn("Email:", e));
                       sent++;
                     } catch (e) { console.error(e); }
                   }

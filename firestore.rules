@@ -1,0 +1,149 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+    function isAuth() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isAuth() && request.auth.token.admin == true;
+    }
+    function isMoniteur() {
+      return isAuth() && request.auth.token.moniteur == true;
+    }
+    function isStaff() {
+      return isAdmin() || isMoniteur();
+    }
+    function isOwner(familyId) {
+      return isAuth() && resource.data.uid == request.auth.uid;
+    }
+
+    // ── Familles ──────────────────────────────────────────────────────────
+    // Les cavaliers peuvent lire leur propre famille, l'admin peut tout faire
+    match /families/{familyId} {
+      allow read: if isStaff() || (isAuth() && resource.data.uid == request.auth.uid);
+      allow create: if isAuth();
+      allow update, delete: if isStaff() || (isAuth() && resource.data.uid == request.auth.uid);
+    }
+
+    // ── Planning (créneaux) ───────────────────────────────────────────────
+    match /creneaux/{docId} {
+      allow read: if isAuth();
+      allow write: if isStaff();
+    }
+
+    // ── Paiements / Encaissements ─────────────────────────────────────────
+    match /payments/{docId} {
+      allow read: if isStaff() || (isAuth() && resource.data.familyId != null);
+      allow write: if isAdmin();
+    }
+    match /encaissements/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Équidés ───────────────────────────────────────────────────────────
+    match /equides/{docId} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+
+    // ── Soins équidés ─────────────────────────────────────────────────────
+    match /soins/{docId} {
+      allow read, write: if isStaff();
+    }
+
+    // ── Mouvements (registre) ─────────────────────────────────────────────
+    match /mouvements/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── SEPA ──────────────────────────────────────────────────────────────
+    match /mandats-sepa/{docId} {
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null);
+      allow write: if isAdmin();
+    }
+    match /echeances-sepa/{docId} {
+      allow read, write: if isAdmin();
+    }
+    match /remises-sepa/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Rapprochement bancaire ────────────────────────────────────────────
+    match /rapprochements/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Challenges / Compétitions ─────────────────────────────────────────
+    match /challenges/{docId} {
+      allow read: if isAuth();
+      allow write: if isStaff();
+    }
+
+    // ── Fidélité ──────────────────────────────────────────────────────────
+    match /loyalty/{docId} {
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null);
+      allow write: if isAdmin();
+    }
+
+    // ── Push tokens ───────────────────────────────────────────────────────
+    match /push_tokens/{docId} {
+      allow read: if isAdmin();
+      allow create, update: if isAuth();
+      allow delete: if isAdmin() || (isAuth() && resource.data.uid == request.auth.uid);
+    }
+
+    // ── Settings (paramètres globaux) ─────────────────────────────────────
+    match /settings/{docId} {
+      allow read: if true;  // Vitrine, tarifs = publics
+      allow write: if isAdmin();
+    }
+
+    // ── Progression pédagogique ───────────────────────────────────────────
+    match /progression/{docId} {
+      allow read: if isStaff() || (isAuth() && resource.data.familyId != null);
+      allow write: if isStaff();
+    }
+
+    // ── Devis ─────────────────────────────────────────────────────────────
+    match /devis/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Avoirs ────────────────────────────────────────────────────────────
+    match /avoirs/{docId} {
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null);
+      allow write: if isAdmin();
+    }
+
+    // ── Cartes de séances ─────────────────────────────────────────────────
+    match /cartes/{docId} {
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null);
+      allow write: if isAdmin();
+    }
+
+    // ── Management (planning équipe) ──────────────────────────────────────
+    match /management/{docId} {
+      allow read, write: if isAdmin();
+    }
+    match /salaries/{docId} {
+      allow read, write: if isAdmin();
+    }
+    match /taches-type/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Satisfaction ──────────────────────────────────────────────────────
+    match /satisfaction/{docId} {
+      allow read: if isAdmin();
+      allow create: if isAuth();
+    }
+
+    // ── Bloc par défaut — DENY ALL ────────────────────────────────────────
+    // Toute collection non listée ci-dessus est bloquée
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

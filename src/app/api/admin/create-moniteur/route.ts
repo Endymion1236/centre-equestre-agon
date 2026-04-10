@@ -45,7 +45,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Cet email est déjà utilisé" }, { status: 409 });
     }
     console.error("Erreur création moniteur:", error);
-    return NextResponse.json({ error: error.message || "Erreur serveur" }, { status: 500 });
+    console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }
 
@@ -72,6 +73,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Erreur suppression moniteur:", error);
-    return NextResponse.json({ error: error.message || "Erreur serveur" }, { status: 500 });
+    console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

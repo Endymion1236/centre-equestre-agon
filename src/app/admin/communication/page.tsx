@@ -6,6 +6,7 @@ import { db } from "@/lib/firebase";
 import { Card, Badge, Button } from "@/components/ui";
 import { Send, Mail, Users, Star, Zap, Loader2, Plus, Clock, Check, History } from "lucide-react";
 import type { Family } from "@/types";
+import { authFetch } from "@/lib/auth-fetch";
 
 export default function CommunicationPage() {
   const [tab, setTab] = useState<"newsletter" | "historique">("newsletter");
@@ -70,7 +71,7 @@ export default function CommunicationPage() {
       try {
         const personalSubject = replaceVariables(subject, fam);
         const personalBody = replaceVariables(body, fam);
-        const res = await fetch("/api/send-email", {
+        const res = await authFetch("/api/send-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

@@ -8,6 +8,7 @@ import { Card, Badge } from "@/components/ui";
 import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle, Copy, ChevronDown, Gift } from "lucide-react";
 import type { Family, Activity } from "@/types";
 import { BasketItem, PaymentMode, paymentModes } from "./types";
+import { authFetch } from "@/lib/auth-fetch";
 
 interface TabEncaisserProps {
   families: (Family & { firestoreId: string })[];
@@ -351,7 +352,7 @@ export function TabEncaisser({
                         mode: paymentModes.find(m => m.id === paymentMode)?.label || paymentMode,
                         prestations: familyPending.flatMap(p => (p.items || []).map((i: any) => i.activityTitle)).join(", "),
                       });
-                      fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: selectedFam.parentEmail, ...emailData }) }).catch(e => console.warn("Email:", e));
+                      authFetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: selectedFam.parentEmail, ...emailData }) }).catch(e => console.warn("Email:", e));
                     } catch (e) { console.error("Email confirmation paiement:", e); }
                   }
                   setPaidAmount("");

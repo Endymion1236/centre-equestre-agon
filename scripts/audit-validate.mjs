@@ -142,7 +142,7 @@ for (const { path, name } of ROUTES_REQUIRING_AUTH) {
   test(`C2 — ${name} doit avoir une authentification`, () => {
     const content = readFile(path);
     if (!content) return; // Route supprimée = OK
-    const hasAuth = /verifyIdToken|CRON_SECRET|Authorization.*Bearer|x-webhook-secret|hmac|HMAC/.test(content);
+    const hasAuth = /verifyIdToken|verifyAuth|CRON_SECRET|Authorization.*Bearer|x-webhook-secret|hmac|HMAC/.test(content);
     assert(hasAuth, `Route ${name} n'a aucune vérification d'authentification !`);
   });
 }

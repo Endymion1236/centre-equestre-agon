@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { cawlSdk, CAWL_PSPID } from "@/lib/cawl";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { verifyAuth } from "@/lib/api-auth";
 
 export async function POST(req: NextRequest) {
+  // 🔒 Auth obligatoire
+  const auth = await verifyAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await req.json();
     const {
@@ -140,6 +145,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("CAWL checkout error:", error);
-    return NextResponse.json({ error: error.message || "Erreur CAWL" }, { status: 500 });
+    console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

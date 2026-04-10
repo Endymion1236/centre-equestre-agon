@@ -4,6 +4,7 @@ import { renderToBuffer, Document, Page, Text, View, StyleSheet, Image } from "@
 import { readFileSync } from "fs";
 import { join } from "path";
 import React from "react";
+import { verifyAuth } from "@/lib/api-auth";
 
 let logoBase64 = "";
 try {
@@ -85,6 +86,10 @@ function getTvaRecap(items: any[]) {
 }
 
 export async function POST(request: NextRequest) {
+  // 🔒 Auth obligatoire
+  const auth = await verifyAuth(request);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const CLUB = await getClubInfo();
     const body = await request.json();
@@ -245,6 +250,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("avoir-pdf error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

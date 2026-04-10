@@ -6,6 +6,7 @@ import { Sparkles, Loader2, Check, RefreshCw } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import type { TacheType, Salarie, TachePlanifiee, JourSemaine } from "./types";
 import { JOURS, JOURS_LABELS, getLundideSemaine, formatDateCourte } from "./types";
+import { authFetch } from "@/lib/auth-fetch";
 
 interface Props {
   semaine: string;
@@ -50,7 +51,7 @@ export default function TabAgentIA({ semaine, tachesType, salaries, tachesExista
     setLoading(true);
     setProposition(null);
     try {
-      const res = await fetch("/api/ia", {
+      const res = await authFetch("/api/ia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -114,7 +115,7 @@ export default function TabAgentIA({ semaine, tachesType, salaries, tachesExista
     setQLoading(true);
     setReponse(null);
     try {
-      const res = await fetch("/api/ia", {
+      const res = await authFetch("/api/ia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

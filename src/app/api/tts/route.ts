@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ElevenLabsClient } from "elevenlabs";
+import { verifyAuth } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -7,6 +8,10 @@ export const maxDuration = 30;
 const DEFAULT_VOICE_ID = "XB0fDUnXU5powFXDhCwa"; // Charlotte
 
 export async function POST(request: NextRequest) {
+  // 🔒 Auth obligatoire
+  const auth = await verifyAuth(request);
+  if (auth instanceof NextResponse) return auth;
+
   if (!process.env.ELEVENLABS_API_KEY) {
     return NextResponse.json({ error: "ELEVENLABS_API_KEY non configurée" }, { status: 500 });
   }
@@ -52,6 +57,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("ElevenLabs TTS error:", error);
-    return NextResponse.json({ error: error.message || "Erreur TTS" }, { status: 500 });
+    console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

@@ -109,7 +109,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, url: publicUrl, key });
   } catch (error: any) {
     console.error("[upload-vitrine]", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }
 
@@ -120,6 +121,7 @@ export async function GET() {
     const data = snap.exists ? snap.data() : {};
     return NextResponse.json({ ok: true, images: data });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

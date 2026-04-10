@@ -6,6 +6,7 @@ import { doc, getDoc, setDoc, collection, getDocs, deleteDoc, addDoc, updateDoc,
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { Save, Plus, Trash2, Loader2, AlertTriangle, Users } from "lucide-react";
+import { authFetch } from "@/lib/auth-fetch";
 
 const defaultAccounts = [
   { code: "70641000", label: "Animations collectivité", tva: "5.50%", affectation: "Animations CE, collectivités" },
@@ -1503,7 +1504,7 @@ export default function ParametresPage() {
               <button onClick={async () => {
                 setTestPushSending(true);
                 try {
-                  const res = await fetch("/api/push", {
+                  const res = await authFetch("/api/push", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({

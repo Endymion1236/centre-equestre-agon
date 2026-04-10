@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
+import { verifyAuth } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 // Augmenter la limite de taille pour les fichiers audio
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
+  // 🔒 Auth obligatoire
+  const auth = await verifyAuth(request);
+  if (auth instanceof NextResponse) return auth;
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
@@ -41,9 +46,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("Whisper error:", error);
-    return NextResponse.json(
-      { error: error.message || "Erreur transcription" },
-      { status: 500 }
-    );
+    console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

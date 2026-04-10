@@ -1,7 +1,12 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
+import { verifyAuth } from "@/lib/api-auth";
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  // 🔒 Auth obligatoire — route admin
+  const auth = await verifyAuth(req, { adminOnly: true });
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const snap = await adminDb.collection("equides").get();
     const equides = snap.docs

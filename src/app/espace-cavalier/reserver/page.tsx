@@ -8,6 +8,7 @@ import { Card, Badge } from "@/components/ui";
 import { Calendar, Clock, Users, Loader2, ShoppingCart, ChevronLeft, ChevronRight, X, Check, CreditCard, CalendarDays, LayoutList } from "lucide-react";
 import TimelineReservation from "./TimelineReservation";
 import { useSearchParams } from "next/navigation";
+import { authFetch } from "@/lib/auth-fetch";
 
 interface Creneau { id: string; activityId: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolled: any[]; enrolledCount: number; priceHT: number; priceTTC?: number; tvaTaux: number; }
 
@@ -350,7 +351,7 @@ export default function ReserverPage() {
       // 3. Email de confirmation au cavalier
       if (family.parentEmail) {
         const activitesList = cart.map(i => `• ${i.activityTitle} — ${i.childName}`).join("<br/>");
-        fetch("/api/send-email", {
+        authFetch("/api/send-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -374,7 +375,7 @@ export default function ReserverPage() {
       const stageDate = hasStage ? cart.find(i => i.isStage)?.dates || "" : "";
       
       try {
-        const res = await fetch("/api/cawl/checkout", {
+        const res = await authFetch("/api/cawl/checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1158,7 +1159,7 @@ export default function ReserverPage() {
                               createdAt: serverTimestamp(),
                             });
                             // 3. Email admin
-                            fetch("/api/send-email", {
+                            authFetch("/api/send-email", {
                               method: "POST", headers: { "Content-Type": "application/json" },
                               body: JSON.stringify({
                                 to: "ceagon50@gmail.com",

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { verifyAuth } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -125,6 +126,10 @@ type IARequest = RapprochementRequest | AssistantRequest | SuggestionsRequest | 
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  // 🔒 Auth obligatoire
+  const auth = await verifyAuth(request);
+  if (auth instanceof NextResponse) return auth;
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
@@ -581,9 +586,7 @@ Génère une réponse JSON structurée (et UNIQUEMENT du JSON, sans markdown ni 
 
   } catch (error: any) {
     console.error("IA API error:", error);
-    return NextResponse.json(
-      { error: error.message || "Erreur serveur" },
-      { status: 500 }
-    );
+    console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

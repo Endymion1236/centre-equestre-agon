@@ -5,6 +5,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card } from "@/components/ui";
 import { Save, Loader2, Sparkles, Eye, Code, ChevronDown, ChevronUp, RotateCcw, Send, X } from "lucide-react";
+import { authFetch } from "@/lib/auth-fetch";
 
 // ─── Types ───
 interface TemplateConfig {
@@ -231,7 +232,7 @@ export default function EmailTemplatesPage() {
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      const res = await fetch("/api/ia", {
+      const res = await authFetch("/api/ia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -264,7 +265,7 @@ export default function EmailTemplatesPage() {
     try {
       const html = wrapHtml(previewReplace(current.body));
       const subject = previewReplace(current.subject) + " [TEST]";
-      const res = await fetch("/api/send-email", {
+      const res = await authFetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ to: sendTestTo, subject, html }),

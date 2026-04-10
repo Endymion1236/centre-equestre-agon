@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { adminDb } from "@/lib/firebase-admin";
+import { verifyAuth } from "@/lib/api-auth";
 import { FieldValue } from "firebase-admin/firestore";
 
 export const dynamic = "force-dynamic";
@@ -378,6 +379,10 @@ async function executeTool(name: string, input: any): Promise<string> {
 // ── Route principale ──────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  // 🔒 Auth obligatoire — route admin (agent IA avec écriture Firestore)
+  const auth = await verifyAuth(req, { adminOnly: true });
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { question, context, confirmed, pendingAction, history = [] } = await req.json();
 

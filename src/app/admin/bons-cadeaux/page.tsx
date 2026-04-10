@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Card } from "@/components/ui";
 import { Gift, Printer, Eye } from "lucide-react";
+import { authFetch } from "@/lib/auth-fetch";
 
 export default function BonsCadeauxPage() {
   const [form, setForm] = useState({ recipientName: "", activity: "", amount: "", fromName: "", message: "", validUntil: "" });
@@ -10,7 +11,7 @@ export default function BonsCadeauxPage() {
   const inp = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
 
   const handlePreview = async () => {
-    const res = await fetch("/api/bon-cadeau", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+    const res = await authFetch("/api/bon-cadeau", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
     setPreviewHtml(await res.text());
   };
   const handlePrint = () => { const w = window.open("","_blank"); if(w){w.document.write(previewHtml);w.document.close();w.print();} };

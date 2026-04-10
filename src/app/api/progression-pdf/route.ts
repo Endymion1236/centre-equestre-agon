@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { GALOPS_PROGRAMME, DOMAINE_LABELS } from "@/lib/galops-programme";
+import { verifyAuth } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  // 🔒 Auth obligatoire
+  const auth = await verifyAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
   const childId = req.nextUrl.searchParams.get("childId") || "";
   const familyId = req.nextUrl.searchParams.get("familyId") || "";
   const childName = req.nextUrl.searchParams.get("childName") || "Cavalier";

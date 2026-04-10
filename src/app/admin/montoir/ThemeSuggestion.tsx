@@ -4,6 +4,7 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp
 import { db } from "@/lib/firebase";
 import { Loader2, Sparkles, Plus, Trash2, Check } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
+import { authFetch } from "@/lib/auth-fetch";
 
 // Thèmes par défaut — chargés en Firestore si vide
 const THEMES_DEFAUT = [
@@ -87,7 +88,7 @@ export default function ThemeSuggestion({ creneau, families }: Props) {
         themesVus: getThemesVus(e.childId),
       }));
 
-      const res = await fetch("/api/ia", {
+      const res = await authFetch("/api/ia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
+import { verifyAuth } from "@/lib/api-auth";
 
 export async function POST(req: NextRequest) {
+  // 🔒 Auth obligatoire — route admin
+  const auth = await verifyAuth(req, { adminOnly: true });
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { childId, childName, familyId } = await req.json();
 
@@ -227,6 +232,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("Erreur désinscription en masse:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

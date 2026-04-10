@@ -9,6 +9,7 @@ import {
   Loader2, Search, Users, Calendar, ChevronDown, ChevronUp, Pause, Play, XCircle, CreditCard, TrendingUp, UserMinus, Plus, X, Check, AlertTriangle, RefreshCw,
 } from "lucide-react";
 import type { Family } from "@/types";
+import { authFetch } from "@/lib/auth-fetch";
 
 interface Forfait {
   id: string;
@@ -382,7 +383,7 @@ export default function ForfaitsPage() {
     if (!confirm(`Désinscrire ${f.childName} de TOUS les cours annuels futurs ?\n\nCela le retirera de toutes les séances à venir et annulera les échéances non réglées.`)) return;
     setUnenrolling(f.id);
     try {
-      const res = await fetch("/api/admin/unenroll-annual", {
+      const res = await authFetch("/api/admin/unenroll-annual", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ childId: f.childId, childName: f.childName, familyId: f.familyId }),

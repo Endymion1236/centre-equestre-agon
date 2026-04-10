@@ -6,6 +6,7 @@ import { Card, Badge } from "@/components/ui";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { Plus, Trash2, Send, Check, Loader2, X, Copy, FileText, ChevronDown, ChevronUp } from "lucide-react";
 import type { Family } from "@/types";
+import { authFetch } from "@/lib/auth-fetch";
 
 interface DevisItem {
   label: string;
@@ -184,7 +185,7 @@ export default function DevisPage() {
         </div>
       </div>`;
 
-      await fetch("/api/send-email", {
+      await authFetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { sendPush, sendPushBatch } from "@/lib/push";
+import { verifyAuth } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,10 @@ interface PushPayload {
 }
 
 export async function POST(req: NextRequest) {
+  // 🔒 Auth obligatoire — route admin
+  const auth = await verifyAuth(req, { adminOnly: true });
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const payload: PushPayload = await req.json();
     const { title, body, url } = payload;

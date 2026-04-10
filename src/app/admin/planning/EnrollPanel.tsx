@@ -58,6 +58,7 @@ import {
 import { X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera, FileImage, Mail, Sparkles, Send } from "lucide-react";
 import type { Activity, Family } from "@/types";
 import { Creneau, EnrolledChild, payModes, typeColors, fmtDate } from "./types";
+import { authFetch } from "@/lib/auth-fetch";
 
 function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allForfaits, onClose, onEnroll, onUnenroll }: {
   creneau: Creneau & { id: string }; families: (Family & { firestoreId: string })[]; allCreneaux: (Creneau & { id: string })[]; payments: any[]; allCartes: any[]; allForfaits: any[];  onClose: () => void;
@@ -232,7 +233,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       // Mettre à jour le statut waitlist
       await updateDoc(doc(db, "waitlist", entry.id), { status: "accepted", acceptedAt: new Date().toISOString() });
       // Notifier la famille par email
-      fetch("/api/send-email", {
+      authFetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -624,14 +625,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               dates: stageMode === "jour" ? new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : dates,
               totalTTC: stageTotalTTC,
             });
-            fetch("/api/send-email", {
+            authFetch("/api/send-email", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ to: fam.parentEmail, ...confirmEmail }),
             }).catch(e => console.warn("Email stage:", e));
 
             // Notification push
-            fetch("/api/push", {
+            authFetch("/api/push", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -954,7 +955,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     // Notifier le premier en liste d'attente s'il y en a
     if (waitlist.length > 0) {
       const first = waitlist[0];
-      fetch("/api/send-email", {
+      authFetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -998,7 +999,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         const child = (fam?.children || []).find((c: any) => c.id === e.childId);
         return { firstName: e.childName, galopLevel: child?.galopLevel || "—", parentName: e.familyName };
       });
-      const res = await fetch("/api/ia", {
+      const res = await authFetch("/api/ia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "email_reprise", creneau, cavaliers }),
@@ -1020,7 +1021,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     let sent = 0;
     for (const r of recipients) {
       try {
-        await fetch("/api/send-email", {
+        await authFetch("/api/send-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1298,7 +1299,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       // Email bienvenue
                       if (newFam.parentEmail.trim()) {
                         const emailData = emailTemplates.bienvenueNouvelleFamille({ parentName: newFam.parentName.trim() });
-                        fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: newFam.parentEmail.trim(), ...emailData }) }).catch(() => {});
+                        authFetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: newFam.parentEmail.trim(), ...emailData }) }).catch(() => {});
                       }
                       // ── Inscrire directement le cavalier dans le créneau ──
                       await onEnroll(

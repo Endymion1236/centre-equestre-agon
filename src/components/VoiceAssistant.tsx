@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { Mic, MicOff, Loader2, Volume2, VolumeX, X } from "lucide-react";
+import { authFetch } from "@/lib/auth-fetch";
 
 interface Message {
   role: "user" | "assistant";
@@ -79,7 +80,7 @@ export default function VoiceAssistant({
     try {
       const fd = new FormData();
       fd.append("audio", file);
-      const res = await fetch("/api/whisper", { method: "POST", body: fd });
+      const res = await authFetch("/api/whisper", { method: "POST", body: fd });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
       const text = data.text?.trim() || "";
@@ -150,7 +151,7 @@ Pas de markdown ni de listes — texte simple uniquement.`;
     try {
       if (mode === "admin") {
         // ── Agent avec outils Firestore ──────────────────────────────────
-        const res = await fetch("/api/agent", {
+        const res = await authFetch("/api/agent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -183,7 +184,7 @@ Pas de markdown ni de listes — texte simple uniquement.`;
         if (!muted) await speakText(answer);
       } else {
         // ── Chatbot famille simple ───────────────────────────────────────
-        const res = await fetch("/api/ia", {
+        const res = await authFetch("/api/ia", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -208,7 +209,7 @@ Pas de markdown ni de listes — texte simple uniquement.`;
   const speakText = async (text: string) => {
     setSpeaking(true);
     try {
-      const res = await fetch("/api/tts", {
+      const res = await authFetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, voiceId }),

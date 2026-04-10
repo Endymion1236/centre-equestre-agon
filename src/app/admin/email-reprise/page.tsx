@@ -4,6 +4,7 @@ import { collection, getDocs, addDoc, query, where, serverTimestamp } from "fire
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Send, Mail, Check, Sparkles, X } from "lucide-react";
+import { authFetch } from "@/lib/auth-fetch";
 
 export default function EmailReprisePage() {
   const [creneaux, setCreneaux] = useState<any[]>([]);
@@ -72,7 +73,7 @@ export default function EmailReprisePage() {
     setIaLoading(true);
     try {
       const cavaliers = getCavaliers(selectedCreneau);
-      const res = await fetch("/api/ia", {
+      const res = await authFetch("/api/ia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -121,7 +122,7 @@ export default function EmailReprisePage() {
             02 44 84 99 96 — ceagon@orange.fr
           </div>
         </div>`;
-        const res = await fetch("/api/send-email", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ to:emails, subject, html:htmlBody }) });
+        const res = await authFetch("/api/send-email", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ to:emails, subject, html:htmlBody }) });
         const result = await res.json();
         emailStatus = result.success ? "sent" : "error";
       } catch (e) { emailStatus = "error"; }

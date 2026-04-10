@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { verifyAuth } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
+  // 🔒 Auth obligatoire — route admin
+  const auth = await verifyAuth(req, { adminOnly: true });
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await req.json();
     const {
@@ -125,6 +130,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, paymentUrl });
   } catch (error: any) {
     console.error("send-payment-link error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

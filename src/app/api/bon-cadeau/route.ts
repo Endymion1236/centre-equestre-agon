@@ -1,7 +1,12 @@
 import { getClubInfo } from "@/lib/club-info";
 import { NextRequest, NextResponse } from "next/server";
+import { verifyAuth } from "@/lib/api-auth";
 
 export async function POST(req: NextRequest) {
+  // 🔒 Auth obligatoire
+  const auth = await verifyAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const CLUB = await getClubInfo();
     const { recipientName, activity, amount, fromName, message, validUntil } = await req.json();
@@ -70,6 +75,7 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

@@ -5,6 +5,7 @@ import { db } from "@/lib/firebase";
 import { X, Save, Loader2, Plus, Trash2 } from "lucide-react";
 import { emailTemplates } from "@/lib/email-templates";
 import { useToast } from "@/components/ui/Toast";
+import { authFetch } from "@/lib/auth-fetch";
 
 const galopLevels = ["—", "Poney Bronze", "Poney Argent", "Poney Or", "Bronze", "Argent", "Or", "G1", "G2", "G3", "G4", "G5", "G6", "G7"];
 
@@ -97,7 +98,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
 
       if (newFamily.parentEmail.trim()) {
         const emailData = emailTemplates.bienvenueNouvelleFamille({ parentName: computedName });
-        fetch("/api/send-email", {
+        authFetch("/api/send-email", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ to: newFamily.parentEmail.trim(), ...emailData }),
         }).catch(() => {});

@@ -147,6 +147,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, html });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

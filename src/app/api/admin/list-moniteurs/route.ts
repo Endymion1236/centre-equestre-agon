@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ moniteurs });
   } catch (error: any) {
     console.error("Erreur listage moniteurs:", error);
-    return NextResponse.json({ error: error.message || "Erreur serveur" }, { status: 500 });
+    console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

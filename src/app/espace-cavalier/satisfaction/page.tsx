@@ -5,6 +5,7 @@ import { collection, addDoc, getDocs, query, where, orderBy, serverTimestamp, li
 import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ui";
 import { Star, Send, CheckCircle2, Loader2, ChevronDown } from "lucide-react";
+import { authFetch } from "@/lib/auth-fetch";
 
 const ASPECTS = [
   { id: "moniteur", label: "Moniteur / encadrement" },
@@ -98,7 +99,7 @@ export default function SatisfactionPage() {
 
       // Notifier l'admin par email (fire-and-forget)
       const stars = "⭐".repeat(globalNote);
-      fetch("/api/send-email", {
+      authFetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -24,6 +24,7 @@ import { TabEcheances } from "./TabEcheances";
 import { TabImpayes } from "./TabImpayes";
 import { TabOfferts } from "./TabOfferts";
 import { TabDeclarations } from "./TabDeclarations";
+import { authFetch } from "@/lib/auth-fetch";
 
 export default function PaiementsPage() {
   const { toast } = useToast();
@@ -450,7 +451,7 @@ export default function PaiementsPage() {
           const childIds = [...new Set((payment.items || []).filter((i: any) => i.childId).map((i: any) => i.childId))];
           for (const childId of childIds) {
             const childName = (payment.items || []).find((i: any) => i.childId === childId)?.childName || "";
-            try { await fetch("/api/admin/unenroll-annual", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ childId, childName, familyId: payment.familyId }) }); } catch (e) { console.error(e); }
+            try { await authFetch("/api/admin/unenroll-annual", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ childId, childName, familyId: payment.familyId }) }); } catch (e) { console.error(e); }
           }
         } else {
           for (const item of payment.items || []) await unenrollPaymentItem(payment, item);
@@ -475,7 +476,7 @@ export default function PaiementsPage() {
         for (const childId of childIds) {
           const childName = (payment.items || []).find((i: any) => i.childId === childId)?.childName || "";
           try {
-            await fetch("/api/admin/unenroll-annual", {
+            await authFetch("/api/admin/unenroll-annual", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ childId, childName, familyId: payment.familyId }),
@@ -527,7 +528,7 @@ export default function PaiementsPage() {
         for (const childId of childIds) {
           const childName = (payment.items || []).find((i: any) => i.childId === childId)?.childName || "";
           try {
-            await fetch("/api/admin/unenroll-annual", {
+            await authFetch("/api/admin/unenroll-annual", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ childId, childName, familyId: payment.familyId }),
@@ -1715,7 +1716,7 @@ export default function PaiementsPage() {
                     <button disabled={payLinkGenerating} onClick={async () => {
                       setPayLinkGenerating(true);
                       try {
-                        const res = await fetch("/api/ia", {
+                        const res = await authFetch("/api/ia", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({
@@ -1768,7 +1769,7 @@ Règles :
                   onClick={async () => {
                     setPayLinkSending(true);
                     try {
-                      const res = await fetch("/api/send-payment-link", {
+                      const res = await authFetch("/api/send-payment-link", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({

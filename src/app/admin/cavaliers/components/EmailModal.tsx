@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Loader2, Mail, X } from "lucide-react";
 import { emailTemplates } from "@/lib/email-templates";
 import { useToast } from "@/components/ui/Toast";
+import { authFetch } from "@/lib/auth-fetch";
 
 interface Props {
   emailModal: { familyId: string; familyName: string; email: string };
@@ -44,7 +45,7 @@ export default function EmailModal({ emailModal, allPayments, onClose }: Props) 
       const htmlContent = emailTemplate === "libre"
         ? `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#333;white-space:pre-wrap;">${emailBody.replace(/</g, "&lt;")}</div>`
         : emailBody;
-      const res = await fetch("/api/send-email", {
+      const res = await authFetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ to: emailModal.email, subject: emailSubject, html: htmlContent }),

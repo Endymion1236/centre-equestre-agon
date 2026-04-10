@@ -9,6 +9,7 @@ import { paymentModes } from "./types";
 import { normalizePayment } from "./utils";
 import { emailTemplates } from "@/lib/email-templates";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
+import { authFetch } from "@/lib/auth-fetch";
 
 interface TabDeclarationsProps {
   loading: boolean;
@@ -126,7 +127,7 @@ export function TabDeclarations({
                       });
                       // Email confirmation à la famille
                       if (decl.familyEmail) {
-                        fetch("/api/send-email", {
+                        authFetch("/api/send-email", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({

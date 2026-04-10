@@ -11,6 +11,7 @@ try {
   logoBase64 = `data:image/png;base64,${logoBuffer.toString("base64")}`;
 } catch { console.warn("Logo non trouvé"); }
 import React from "react";
+import { verifyAuth } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -91,6 +92,10 @@ function getTvaRecap(items: any[]) {
 }
 
 export async function POST(request: NextRequest) {
+  // 🔒 Auth obligatoire
+  const auth = await verifyAuth(request);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const CLUB = await getClubInfo();
     const body = await request.json();
@@ -246,6 +251,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("invoice-pdf error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

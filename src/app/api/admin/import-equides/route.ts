@@ -106,6 +106,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ success: true, total: EQUIDES_PRESENTS.length, dryRun, results });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message, results }, { status: 500 });
+    console.error("API error:", error);
+    return NextResponse.json({ error: "Erreur interne", results }, { status: 500 });
   }
 }

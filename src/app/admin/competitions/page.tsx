@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { Card } from "@/components/ui";
 import { Plus, ExternalLink, Loader2, Trophy, Calendar, Users, RefreshCw } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
+import { authFetch } from "@/lib/auth-fetch";
 
 const inp = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
 
@@ -22,7 +23,7 @@ export default function CompetitionsPage() {
 
   const fetchChallenges = async () => {
     setLoading(true);
-    try { const res = await fetch("/api/challenges"); if (res.ok) setChallenges(await res.json()); }
+    try { const res = await authFetch("/api/challenges"); if (res.ok) setChallenges(await res.json()); }
     catch (e) { console.error(e); }
     setLoading(false);
   };
@@ -42,14 +43,14 @@ export default function CompetitionsPage() {
       const date = dateMatch ? dateMatch[0] : new Date().toISOString().slice(0, 10);
       const title = titleFromFile || `Challenge ${date}`;
       // Créer le challenge dans Firebase
-      const res = await fetch("/api/challenges", {
+      const res = await authFetch("/api/challenges", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, date, disciplines: ["cso50", "cso70", "equifun"] }),
       });
       const created = await res.json();
       if (!res.ok) { toast(created.error || "Erreur création", "error"); return; }
       // Uploader les données
-      await fetch("/api/challenges", {
+      await authFetch("/api/challenges", {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: created.id, riders: json.riders, results: json.results, nextId: json.nextId || 1 }),
       });
@@ -66,7 +67,7 @@ export default function CompetitionsPage() {
     if (!newTitle.trim()) return;
     setCreating(true);
     try {
-      const res = await fetch("/api/challenges", { method: "POST", headers: { "Content-Type": "application/json" },
+      const res = await authFetch("/api/challenges", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: newTitle.trim(), date: newDate, disciplines: newDisciplines }) });
       const data = await res.json();
       if (!res.ok) { toast(data.error || "Erreur création", "error"); setCreating(false); return; }
@@ -79,7 +80,7 @@ export default function CompetitionsPage() {
   const archiveChallenge = async (id: string) => {
     if (!confirm("Archiver ce challenge ?")) return;
     try {
-      await fetch("/api/challenges", { method: "PUT", headers: { "Content-Type": "application/json" },
+      await authFetch("/api/challenges", { method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, status: "archived" }) });
       toast("Challenge archivé", "success"); fetchChallenges();
     } catch (e: any) { toast(e.message, "error"); }

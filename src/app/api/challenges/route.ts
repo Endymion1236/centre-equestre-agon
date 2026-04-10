@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
+import { verifyAuth } from "@/lib/api-auth";
 
 // GET /api/challenges — liste tous les challenges
 // GET /api/challenges?id=xxx — charge un challenge précis
@@ -28,6 +29,10 @@ export async function GET(req: NextRequest) {
 
 // POST /api/challenges — crée un nouveau challenge
 export async function POST(req: NextRequest) {
+  // 🔒 Auth obligatoire — route admin
+  const auth = await verifyAuth(req, { adminOnly: true });
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await req.json();
     const { title, date, disciplines } = body;

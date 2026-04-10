@@ -6,7 +6,7 @@ Site vitrine + réservation en ligne + gestion complète
 
 - **Frontend** : Next.js 15 + React 19 + TypeScript + Tailwind CSS 4
 - **Backend** : Firebase (Auth + Firestore + Storage)
-- **Paiements** : Stripe (CB + SEPA + Payment Plans)
+- **Paiements** : CAWL — Crédit Agricole Worldline (Hosted Checkout Page)
 - **Emails** : Resend
 - **Hébergement** : Vercel
 - **Icônes** : Lucide React
@@ -38,11 +38,10 @@ Puis remplir les valeurs dans `.env.local` :
 6. Va dans ⚙️ Paramètres → Général → "Vos applications" → Ajouter une app Web
 7. Copie les clés dans `.env.local`
 
-#### Stripe
-1. Va sur https://dashboard.stripe.com/
-2. Crée un compte (gratuit)
-3. Copie la clé publique et secrète dans `.env.local`
-4. Configure un webhook vers `/api/stripe/webhook`
+#### CAWL (Crédit Agricole Worldline)
+1. Accès fourni par le Crédit Agricole
+2. Copie CAWL_PSPID, CAWL_API_KEY_ID, CAWL_SECRET_API_KEY dans `.env.local`
+3. Configure le webhook vers `/api/cawl/webhook`
 
 #### Resend
 1. Va sur https://resend.com/
@@ -119,8 +118,8 @@ src/
 |-------|---------|--------|
 | 1 | Site vitrine (8 pages) | 🚧 En cours |
 | 2 | Auth + profils famille | ⏳ |
-| 3A | Réservation + paiement Stripe | ⏳ |
-| 3B | Intégration bancaire (Bridge) | ⏳ |
+| 3A | Réservation + paiement CAWL | ✅ |
+| 3B | Rapprochement bancaire CSV Crédit Agricole | ✅ |
 | 4 | Communication & fidélisation | ⏳ |
 | 5 | Polish & migration domaine | ⏳ |
 

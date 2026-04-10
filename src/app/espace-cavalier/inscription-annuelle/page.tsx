@@ -6,6 +6,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
 import { Check, ChevronRight, AlertTriangle, Calculator, CreditCard, Loader2, Calendar, Plus, Search } from "lucide-react";
+import { authFetch } from "@/lib/auth-fetch";
 
 interface Creneau {
   id: string;
@@ -250,7 +251,7 @@ export default function InscriptionAnnuellePage() {
         });
       }
       try {
-        const res = await fetch("/api/cawl/checkout", {
+        const res = await authFetch("/api/cawl/checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
