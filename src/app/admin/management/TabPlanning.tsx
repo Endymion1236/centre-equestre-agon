@@ -229,7 +229,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     const HEURES = [7,8,9,10,11,12,13,14,15,16,17,18,19,20];
     const pct = (min: number) => `${((min-START)/TOTAL)*100}%`;
     const w = (dur: number) => `${Math.max((dur/TOTAL)*100, 1)}%`;
-    const ROW_H = 36;
+    const ROW_H = 44;
     const LABEL_W = 110;
 
     const printTimeline = () => {
@@ -253,11 +253,11 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
           .salarie-charge { font-size: 10px; color: #64748b; }
           .day-row { display: flex; align-items: center; margin-bottom: 4px; }
           .day-label { width: ${LABEL_W}px; flex-shrink: 0; font-size: 10px; color: #475569; font-weight: 600; padding-right: 8px; text-align: right; }
-          .day-bar { flex: 1; height: ${ROW_H}px; background: #f8faff; border-radius: 6px; position: relative; border: 1px solid #e2e8f0; overflow: hidden; }
+          .day-bar { flex: 1; height: ${ROW_H}px; background: #f8faff; border-radius: 6px; position: relative; border: 1px solid #e2e8f0; overflow: visible; }
           .act-block { position: absolute; top: 0; bottom: 0; background: #dbeafe; border-right: 2px solid #93c5fd; }
-          .act-label { position: absolute; top: 50%; transform: translateY(-50%); font-size: 8px; color: #1d4ed8; font-weight: 600; padding-left: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-          .task-block { position: absolute; top: 3px; bottom: 3px; border-radius: 4px; display: flex; align-items: center; overflow: hidden; }
-          .task-label { font-size: 9px; color: white; font-weight: 700; padding: 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .act-label { position: absolute; top: 50%; transform: translateY(-50%); font-size: 9px; color: #1d4ed8; font-weight: 700; padding-left: 4px; white-space: nowrap; }
+          .task-block { position: absolute; top: 3px; bottom: 3px; border-radius: 4px; display: flex; align-items: center; overflow: visible; }
+          .task-label { font-size: 10px; color: white; font-weight: 700; padding: 0 5px; white-space: nowrap; }
           .task-time { font-size: 8px; color: rgba(255,255,255,0.8); padding-left: 4px; white-space: nowrap; flex-shrink: 0; }
           .hour-grid { position: absolute; top: 0; bottom: 0; border-left: 1px dashed #e2e8f0; pointer-events: none; }
           .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
@@ -324,7 +324,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                       <div style={{width:LABEL_W, flexShrink:0, fontFamily:"sans-serif", fontSize:10, fontWeight:600, color:"#475569", paddingRight:8, textAlign:"right"}}>
                         {jourLabel}
                       </div>
-                      <div style={{flex:1, height:ROW_H, background:"#f8faff", borderRadius:6, position:"relative", border:"1px solid #e8edf5", overflow:"hidden"}}>
+                      <div style={{flex:1, height:ROW_H, background:"#f8faff", borderRadius:6, position:"relative", border:"1px solid #e8edf5", overflow:"visible"}}>
                         {/* Grille heures */}
                         {HEURES.slice(1).map(h => (
                           <div key={h} style={{position:"absolute", left:pct(h*60), top:0, bottom:0, borderLeft:"1px dashed #e2e8f0"}}/>
@@ -335,8 +335,8 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                           const s=heureToMin(c.startTime), e=heureToMin(c.endTime);
                           if(s<START||s>=END) return null;
                           return (
-                            <div key={i} style={{position:"absolute", left:pct(s), width:w(e-s), top:0, bottom:0, background:"#dbeafe", borderRight:"2px solid #93c5fd", display:"flex", alignItems:"center", overflow:"hidden"}}>
-                              <span style={{fontSize:8, color:"#1d4ed8", fontWeight:700, padding:"0 4px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>
+                            <div key={i} style={{position:"absolute", left:pct(s), width:w(e-s), top:0, bottom:0, background:"#dbeafe", borderRight:"2px solid #93c5fd", display:"flex", alignItems:"center", overflow:"visible", zIndex:1}}>
+                              <span style={{fontSize:9, color:"#1d4ed8", fontWeight:700, padding:"0 4px", whiteSpace:"nowrap", overflow:"visible"}}>
                                 {c.activityTitle}
                               </span>
                             </div>
@@ -349,30 +349,27 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                           if(s<START||s>=END) return null;
                           const cat=getCat(t.categorie);
                           const durMin = t.dureeMinutes;
-                          const wPx = (durMin/TOTAL)*100; // % largeur
-                          const showTime = durMin >= 45;
-                          const showLabel = durMin >= 30;
+                          const isShort = durMin < 45;
                           return (
                             <div key={t.id}
                               title={`${t.tacheLabel} — ${t.heureDebut} (${durMin}min)`}
                               style={{
-                                position:"absolute", left:pct(s), width:w(durMin),
+                                position:"absolute", left:pct(s), width:w(durMin), minWidth:isShort?6:undefined,
                                 top:3, bottom:3,
                                 background: t.done ? "#94a3b8" : (cat?.color||"#64748b"),
                                 borderRadius:5,
                                 opacity: t.done ? 0.5 : 1,
                                 cursor:"pointer",
                                 display:"flex", alignItems:"center",
-                                overflow:"hidden",
+                                overflow:"visible",
                                 boxShadow: t.done ? "none" : "0 1px 3px rgba(0,0,0,0.15)",
+                                zIndex: 2,
                               }}
                               onClick={()=>toggleDone(t)}>
-                              {showLabel && (
-                                <span style={{fontSize:9, color:"white", fontWeight:700, paddingLeft:5, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", flex:1}}>
-                                  {t.done ? "✓ " : ""}{t.tacheLabel}
-                                </span>
-                              )}
-                              {showTime && (
+                              <span style={{fontSize:10, color:"white", fontWeight:700, paddingLeft:5, paddingRight:4, whiteSpace:"nowrap", overflow:"visible", flex:"none"}}>
+                                {t.done ? "✓ " : ""}{t.tacheLabel}
+                              </span>
+                              {!isShort && (
                                 <span style={{fontSize:8, color:"rgba(255,255,255,0.8)", paddingRight:4, flexShrink:0, whiteSpace:"nowrap"}}>
                                   {t.heureDebut}
                                 </span>
@@ -439,12 +436,12 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
           .sal-name { font-size: 13px; font-weight: 800; color: #1e293b; display: flex; align-items: center; gap: 6px; }
           .sal-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
           .sal-charge { font-size: 9px; color: #64748b; margin-top: 1px; }
-          .sal-bar { flex: 1; height: ${ROW_H}px; background: #f8faff; border-radius: 8px; position: relative; border: 1px solid #e2e8f0; overflow: hidden; }
+          .sal-bar { flex: 1; height: ${ROW_H}px; background: #f8faff; border-radius: 8px; position: relative; border: 1px solid #e2e8f0; overflow: visible; }
           .hour-grid { position: absolute; top: 0; bottom: 0; border-left: 1px dashed #e2e8f0; }
-          .act-block { position: absolute; top: 0; bottom: 0; background: #dbeafe; border-right: 2px solid #93c5fd; display: flex; align-items: center; overflow: hidden; }
-          .act-label { font-size: 9px; color: #1d4ed8; font-weight: 700; padding: 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-          .task-block { position: absolute; top: 4px; bottom: 4px; border-radius: 5px; display: flex; align-items: center; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
-          .task-label { font-size: 10px; color: white; font-weight: 700; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+          .act-block { position: absolute; top: 0; bottom: 0; background: #dbeafe; border-right: 2px solid #93c5fd; display: flex; align-items: center; overflow: visible; }
+          .act-label { font-size: 9px; color: #1d4ed8; font-weight: 700; padding: 0 5px; white-space: nowrap; }
+          .task-block { position: absolute; top: 4px; bottom: 4px; border-radius: 5px; display: flex; align-items: center; overflow: visible; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+          .task-label { font-size: 10px; color: white; font-weight: 700; padding: 0 6px; white-space: nowrap; flex: none; }
           .task-time { font-size: 9px; color: rgba(255,255,255,0.85); padding-right: 5px; white-space: nowrap; flex-shrink: 0; }
           .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; padding-top: 14px; border-top: 1px solid #e2e8f0; }
           .legend-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #475569; }
@@ -536,7 +533,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                 </div>
 
                 {/* Barre timeline */}
-                <div style={{flex:1, height:ROW_H, background:"#f8faff", borderRadius:8, position:"relative", border:"1px solid #e8edf5", overflow:"hidden"}}>
+                <div style={{flex:1, height:ROW_H, background:"#f8faff", borderRadius:8, position:"relative", border:"1px solid #e8edf5", overflow:"visible"}}>
                   {/* Grille heures */}
                   {HEURES.slice(1).map(h => (
                     <div key={h} style={{position:"absolute", left:pct(h*60), top:0, bottom:0, borderLeft:"1px dashed #e2e8f0"}}/>
@@ -547,8 +544,8 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                     const s = heureToMin(c.startTime), e = heureToMin(c.endTime);
                     if (s < START || s >= END) return null;
                     return (
-                      <div key={`act-${i}`} style={{position:"absolute", left:pct(s), width:w(e-s), top:0, bottom:0, background:"#dbeafe", borderRight:"2px solid #93c5fd", display:"flex", alignItems:"center", overflow:"hidden"}}>
-                        <span style={{fontSize:9, color:"#1d4ed8", fontWeight:700, padding:"0 5px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>
+                      <div key={`act-${i}`} style={{position:"absolute", left:pct(s), width:w(e-s), top:0, bottom:0, background:"#dbeafe", borderRight:"2px solid #93c5fd", display:"flex", alignItems:"center", overflow:"visible", zIndex:1}}>
+                        <span style={{fontSize:9, color:"#1d4ed8", fontWeight:700, padding:"0 5px", whiteSpace:"nowrap", overflow:"visible"}}>
                           {c.activityTitle}
                         </span>
                       </div>
@@ -561,6 +558,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                     if (s < START || s >= END) return null;
                     const cat = getCat(t.categorie);
                     const durMin = t.dureeMinutes;
+                    const isShort = durMin < 45;
                     return (
                       <div key={t.id}
                         title={`${t.tacheLabel} — ${t.heureDebut} (${durMin}min)`}
@@ -572,16 +570,19 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                           opacity: t.done ? 0.5 : 1,
                           cursor:"pointer",
                           display:"flex", alignItems:"center",
-                          overflow:"hidden",
+                          overflow:"visible",
                           boxShadow: t.done ? "none" : "0 1px 3px rgba(0,0,0,0.15)",
+                          zIndex: 2,
                         }}
                         onClick={() => toggleDone(t)}>
-                        <span style={{fontSize:10, color:"white", fontWeight:700, paddingLeft:6, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", flex:1}}>
+                        <span style={{fontSize:10, color:"white", fontWeight:700, paddingLeft:6, paddingRight:4, whiteSpace:"nowrap", overflow:"visible", flex:"none"}}>
                           {t.done ? "✓ " : ""}{t.tacheLabel}
                         </span>
-                        <span style={{fontSize:9, color:"rgba(255,255,255,0.85)", paddingRight:5, flexShrink:0, whiteSpace:"nowrap"}}>
-                          {t.heureDebut}
-                        </span>
+                        {!isShort && (
+                          <span style={{fontSize:9, color:"rgba(255,255,255,0.85)", paddingRight:5, flexShrink:0, whiteSpace:"nowrap"}}>
+                            {t.heureDebut}
+                          </span>
+                        )}
                       </div>
                     );
                   })}
