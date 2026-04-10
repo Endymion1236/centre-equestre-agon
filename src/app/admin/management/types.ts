@@ -1,0 +1,85 @@
+export type JourSemaine = "lundi" | "mardi" | "mercredi" | "jeudi" | "vendredi" | "samedi" | "dimanche";
+export const JOURS: JourSemaine[] = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
+export const JOURS_LABELS: Record<JourSemaine, string> = {
+  lundi: "Lundi", mardi: "Mardi", mercredi: "Mercredi",
+  jeudi: "Jeudi", vendredi: "Vendredi", samedi: "Samedi", dimanche: "Dimanche",
+};
+
+export type CategorieTache = "ecuries" | "soins" | "menage" | "animation" | "admin" | "autre";
+export const CATEGORIES: { id: CategorieTache; label: string; color: string; emoji: string }[] = [
+  { id: "ecuries",   label: "Écuries",    color: "#92400e", emoji: "🐴" },
+  { id: "soins",     label: "Soins",      color: "#065f46", emoji: "💊" },
+  { id: "menage",    label: "Ménage",     color: "#1e40af", emoji: "🧹" },
+  { id: "animation", label: "Animation",  color: "#7c3aed", emoji: "🎠" },
+  { id: "admin",     label: "Admin",      color: "#374151", emoji: "📋" },
+  { id: "autre",     label: "Autre",      color: "#6b7280", emoji: "📌" },
+];
+
+export interface TacheType {
+  id: string;
+  label: string;
+  categorie: CategorieTache;
+  dureeMinutes: number;   // durée estimée
+  recurrente: boolean;    // apparaît par défaut chaque semaine
+  joursDefaut: JourSemaine[]; // jours où elle apparaît par défaut
+  notes?: string;
+  createdAt?: any;
+}
+
+export interface Salarie {
+  id: string;
+  nom: string;
+  couleur: string;    // couleur d'affichage
+  actif: boolean;
+  createdAt?: any;
+}
+
+export interface TachePlanifiee {
+  id: string;
+  tacheTypeId: string;
+  tacheLabel: string;       // copie du label (au cas où tacheType modifié)
+  categorie: CategorieTache;
+  salarieId: string;
+  salarieName: string;
+  jour: JourSemaine;
+  heureDebut: string;       // "08:00"
+  dureeMinutes: number;
+  semaine: string;          // "2026-W15" format ISO
+  done: boolean;
+  notes?: string;
+  createdAt?: any;
+}
+
+export interface PlanningISemaine {
+  id: string;           // = semaine ex: "2026-W15"
+  semaine: string;
+  taches: TachePlanifiee[];
+  genereParIA: boolean;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+// Helper : obtenir le numéro de semaine ISO
+export function getISOWeek(date: Date): string {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  const weekNum = 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+  return `${d.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+}
+
+// Helper : obtenir le lundi d'une semaine ISO
+export function getLundideSemaine(semaine: string): Date {
+  const [year, week] = semaine.split("-W").map(Number);
+  const jan4 = new Date(year, 0, 4);
+  const startOfWeek1 = new Date(jan4);
+  startOfWeek1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
+  const lundi = new Date(startOfWeek1);
+  lundi.setDate(startOfWeek1.getDate() + (week - 1) * 7);
+  return lundi;
+}
+
+export function formatDateCourte(date: Date): string {
+  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+}

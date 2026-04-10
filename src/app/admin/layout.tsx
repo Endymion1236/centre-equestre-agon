@@ -47,6 +47,7 @@ const navItems = [
   { href: "/admin/competitions", icon: Ticket, label: "Compétitions" },
   { href: "/admin/cavalerie", icon: Heart, label: "Cavalerie" },
   { href: "/admin/pedagogie", icon: GraduationCap, label: "Suivi péda." },
+  { href: "/admin/management", icon: ClipboardList, label: "Management" },
   // ─── Commercial ───
   { separator: true, label: "Commercial" },
   { href: "/admin/cavaliers", icon: Users, label: "Cavaliers" },

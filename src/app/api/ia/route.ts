@@ -109,7 +109,18 @@ interface GenerateEmailTemplateRequest {
   userPrompt?: string;
 }
 
-type IARequest = RapprochementRequest | AssistantRequest | SuggestionsRequest | EmailRepriseRequest | BilanPedaRequest | GenerateEmailTemplateRequest | ThemeStageRequest;
+interface PlanningManagementRequest {
+  type: "planning_management";
+  semaine: string;
+  semaineLabel: string;
+  salaries: { id: string; nom: string }[];
+  tachesType: { id: string; label: string; categorie: string; dureeMinutes: number; recurrente: boolean; joursDefaut: string[] }[];
+  activitesParJour: Record<string, string[]>;
+  chargeActuelle: Record<string, number>;
+  tachesDejaAssignees: number;
+}
+
+type IARequest = RapprochementRequest | AssistantRequest | SuggestionsRequest | EmailRepriseRequest | BilanPedaRequest | GenerateEmailTemplateRequest | ThemeStageRequest | PlanningManagementRequest;
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
@@ -497,6 +508,75 @@ Génère une réponse JSON structurée (et UNIQUEMENT du JSON, sans markdown ni 
         analyseParEnfant,
         themesRankes,
       });
+    }
+
+    // ── Planning management ──────────────────────────────────────────────────
+    if (body.type === "planning_management") {
+      const { semaine, semaineLabel, salaries, tachesType, activitesParJour, chargeActuelle } = body;
+
+      const joursLabels: Record<string,string> = {
+        lundi:"Lundi",mardi:"Mardi",mercredi:"Mercredi",jeudi:"Jeudi",vendredi:"Vendredi",samedi:"Samedi",dimanche:"Dimanche"
+      };
+
+      const activitesStr = Object.entries(activitesParJour)
+        .filter(([,acts]) => (acts as string[]).length > 0)
+        .map(([jour, acts]) => `${joursLabels[jour]||jour}: ${(acts as string[]).join(", ")}`)
+        .join("\n");
+
+      const chargeStr = Object.entries(chargeActuelle)
+        .map(([nom, h]) => `${nom}: ${h}h déjà assignées`)
+        .join(", ");
+
+      const tachesStr = tachesType
+        .map(t => `- "${t.label}" (${t.categorie}, ${t.dureeMinutes}min, jours habituels: ${(t.joursDefaut||[]).join("/")})`)
+        .join("\n");
+
+      const prompt = [
+        "Tu es un assistant de management pour un centre équestre.",
+        `Tu dois créer le planning de la semaine ${semaineLabel} pour l'équipe.`,
+        "",
+        `Salariés disponibles: ${salaries.map(s => s.nom).join(", ")}`,
+        chargeStr ? `Charge actuelle: ${chargeStr}` : "",
+        "",
+        "Activités planifiées cette semaine (à prendre en compte pour les disponibilités):",
+        activitesStr || "Aucune activité",
+        "",
+        "Tâches à planifier:",
+        tachesStr,
+        "",
+        "Règles:",
+        "- Répartir équitablement la charge entre les salariés",
+        "- Tenir compte des activités (un moniteur qui donne un cours ne peut pas faire les écuries en même temps)",
+        "- Les tâches d'écuries matin sont généralement tôt (7h-9h)",
+        "- Les tâches d'écuries soir sont en fin de journée (17h-19h)",
+        "- Les check lists sont après les cours du matin (12h-13h) ou le soir",
+        "- Prioriser les tâches récurrentes",
+        "",
+        "Réponds UNIQUEMENT en JSON (sans markdown):",
+        "{",
+        '  "taches": [',
+        '    { "tacheLabel": "nom exact de la tache", "tacheTypeId": "id si connu", "salarie": "nom", "salarieId": "id", "jour": "lundi|mardi|mercredi|jeudi|vendredi", "heureDebut": "HH:MM" }',
+        "  ],",
+        '  "resume": { "Prenom1": "Xh", "Prenom2": "Yh" },',
+        '  "explication": "2-3 phrases expliquant les choix de répartition"',
+        "}",
+      ].filter(Boolean).join("\n");
+
+      const message = await client.messages.create({
+        model: "claude-sonnet-4-5",
+        max_tokens: 2000,
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      const raw = message.content[0].type === "text" ? message.content[0].text.trim() : "{}";
+      let parsed: any = {};
+      try {
+        parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
+      } catch {
+        parsed = { taches: [], explication: raw, resume: {} };
+      }
+
+      return NextResponse.json({ success: true, planning: parsed });
     }
 
   } catch (error: any) {

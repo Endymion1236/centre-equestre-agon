@@ -1,0 +1,193 @@
+"use client";
+import { useState } from "react";
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
+import { useToast } from "@/components/ui/Toast";
+import type { TacheType, CategorieTache, JourSemaine } from "./types";
+import { CATEGORIES, JOURS, JOURS_LABELS } from "./types";
+
+interface Props { taches: TacheType[]; onRefresh: () => void; }
+
+const DUREES = [15,30,45,60,90,120,180,240];
+
+const emptyForm = (): Partial<TacheType> => ({
+  label: "", categorie: "ecuries", dureeMinutes: 30,
+  recurrente: true, joursDefaut: ["lundi","mardi","mercredi","jeudi","vendredi"], notes: "",
+});
+
+export default function TabBibliotheque({ taches, onRefresh }: Props) {
+  const { toast } = useToast();
+  const [showNew, setShowNew] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [form, setForm] = useState<Partial<TacheType>>(emptyForm());
+  const [saving, setSaving] = useState(false);
+
+  const startEdit = (t: TacheType) => { setEditId(t.id); setForm({ ...t }); setShowNew(false); };
+  const cancelEdit = () => { setEditId(null); setForm(emptyNew()); };
+  const emptyNew = () => emptyForm();
+
+  const toggleJour = (j: JourSemaine) => {
+    const jours = form.joursDefaut || [];
+    setForm({ ...form, joursDefaut: jours.includes(j) ? jours.filter(x => x !== j) : [...jours, j] });
+  };
+
+  const save = async () => {
+    if (!form.label?.trim()) return;
+    setSaving(true);
+    try {
+      if (editId) {
+        await updateDoc(doc(db, "taches-type", editId), { ...form, updatedAt: serverTimestamp() });
+        toast("✅ Tâche modifiée", "success");
+        setEditId(null);
+      } else {
+        await addDoc(collection(db, "taches-type"), { ...form, createdAt: serverTimestamp() });
+        toast("✅ Tâche créée", "success");
+        setShowNew(false);
+      }
+      setForm(emptyNew());
+      onRefresh();
+    } catch (e: any) { toast(`Erreur : ${e.message}`, "error"); }
+    setSaving(false);
+  };
+
+  const del = async (t: TacheType) => {
+    if (!confirm(`Supprimer "${t.label}" ?`)) return;
+    await deleteDoc(doc(db, "taches-type", t.id));
+    onRefresh();
+  };
+
+  const byCategorie = CATEGORIES.map(cat => ({
+    cat,
+    items: taches.filter(t => t.categorie === cat.id),
+  })).filter(g => g.items.length > 0 || (showNew && form.categorie === g.cat.id));
+
+  const FormBlock = () => (
+    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col gap-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2">
+          <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Nom de la tâche</label>
+          <input autoFocus value={form.label || ""} onChange={e => setForm({...form, label: e.target.value})}
+            onKeyDown={e => e.key === "Enter" && save()}
+            placeholder="Ex: Écuries matin, Check list poney..."
+            className="w-full px-3 py-2 rounded-lg border border-blue-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400"/>
+        </div>
+        <div>
+          <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Catégorie</label>
+          <select value={form.categorie} onChange={e => setForm({...form, categorie: e.target.value as CategorieTache})}
+            className="w-full px-3 py-2 rounded-lg border border-blue-200 font-body text-sm bg-white focus:outline-none">
+            {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Durée estimée</label>
+          <select value={form.dureeMinutes} onChange={e => setForm({...form, dureeMinutes: parseInt(e.target.value)})}
+            className="w-full px-3 py-2 rounded-lg border border-blue-200 font-body text-sm bg-white focus:outline-none">
+            {DUREES.map(d => <option key={d} value={d}>{d < 60 ? `${d} min` : `${d/60}h${d%60 > 0 ? d%60 : ""}`}</option>)}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label className="font-body text-xs font-semibold text-blue-800 block mb-1.5">Jours par défaut</label>
+        <div className="flex flex-wrap gap-1.5">
+          {JOURS.map(j => (
+            <button key={j} onClick={() => toggleJour(j)}
+              className={`px-2.5 py-1 rounded-lg font-body text-xs font-semibold border-none cursor-pointer transition-all
+                ${(form.joursDefaut||[]).includes(j) ? "bg-blue-500 text-white" : "bg-white text-slate-500 border border-gray-200"}`}>
+              {JOURS_LABELS[j].slice(0,3)}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Notes (optionnel)</label>
+        <input value={form.notes || ""} onChange={e => setForm({...form, notes: e.target.value})}
+          placeholder="Instructions, précisions..."
+          className="w-full px-3 py-2 rounded-lg border border-blue-200 font-body text-sm bg-white focus:outline-none"/>
+      </div>
+      <div className="flex items-center gap-2">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={!!form.recurrente} onChange={e => setForm({...form, recurrente: e.target.checked})} className="accent-blue-500 w-4 h-4"/>
+          <span className="font-body text-xs text-slate-600">Tâche récurrente (proposée chaque semaine)</span>
+        </label>
+      </div>
+      <div className="flex gap-2">
+        <button onClick={save} disabled={!form.label?.trim() || saving}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-body text-sm font-semibold text-white bg-blue-500 border-none cursor-pointer hover:bg-blue-600 disabled:opacity-50">
+          <Check size={14}/> {editId ? "Modifier" : "Créer"}
+        </button>
+        <button onClick={() => { setShowNew(false); cancelEdit(); setForm(emptyNew()); }}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-body text-sm text-slate-500 bg-white border border-gray-200 cursor-pointer">
+          <X size={14}/> Annuler
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex items-center justify-between">
+        <p className="font-body text-sm text-slate-500">{taches.length} tâche{taches.length > 1 ? "s" : ""} dans la bibliothèque</p>
+        <button onClick={() => { setShowNew(true); setEditId(null); setForm(emptyNew()); }}
+          className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-600">
+          <Plus size={15}/> Nouvelle tâche
+        </button>
+      </div>
+
+      {showNew && !editId && <FormBlock />}
+
+      {byCategorie.map(({ cat, items }) => (
+        <div key={cat.id}>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-base">{cat.emoji}</span>
+            <span className="font-body text-xs font-bold uppercase tracking-wider" style={{color: cat.color}}>{cat.label}</span>
+            <span className="font-body text-xs text-slate-400">({items.length})</span>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {items.map(t => (
+              <div key={t.id}>
+                {editId === t.id ? <FormBlock /> : (
+                  <div className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl px-4 py-2.5 hover:border-blue-200 transition-all">
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background: cat.color}}/>
+                    <div className="flex-1 min-w-0">
+                      <span className="font-body text-sm font-semibold text-blue-800">{t.label}</span>
+                      {t.notes && <span className="ml-2 font-body text-xs text-slate-400">{t.notes}</span>}
+                    </div>
+                    <span className="font-body text-xs text-slate-400">
+                      {t.dureeMinutes < 60 ? `${t.dureeMinutes}min` : `${t.dureeMinutes/60}h`}
+                    </span>
+                    <div className="flex flex-wrap gap-0.5">
+                      {(t.joursDefaut || []).map(j => (
+                        <span key={j} className="font-body text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{JOURS_LABELS[j].slice(0,3)}</span>
+                      ))}
+                    </div>
+                    {t.recurrente && <span className="font-body text-[9px] bg-green-50 text-green-600 px-1.5 py-0.5 rounded-full">récurrente</span>}
+                    <div className="flex gap-1">
+                      <button onClick={() => startEdit(t)} className="w-7 h-7 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-blue-50 hover:text-blue-500">
+                        <Pencil size={13}/>
+                      </button>
+                      <button onClick={() => del(t)} className="w-7 h-7 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500">
+                        <Trash2 size={13}/>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {taches.length === 0 && !showNew && (
+        <div className="text-center py-12 bg-white rounded-2xl border border-gray-100">
+          <div className="text-4xl mb-3">📋</div>
+          <p className="font-body text-sm text-slate-500 mb-4">Aucune tâche dans la bibliothèque.</p>
+          <button onClick={() => setShowNew(true)}
+            className="font-body text-sm font-semibold text-blue-500 bg-blue-50 px-5 py-2.5 rounded-xl border-none cursor-pointer hover:bg-blue-100">
+            Créer ma première tâche
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
