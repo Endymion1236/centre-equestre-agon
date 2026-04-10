@@ -71,6 +71,18 @@ interface EmailRepriseRequest {
   context?: string; // info supplémentaire optionnelle (météo, annulation, etc.)
 }
 
+interface ThemeStageRequest {
+  type: "theme_stage";
+  stageTitle: string;
+  stageDate: string;
+  enfants: {
+    childId: string;
+    childName: string;
+    themesVus: string[];
+  }[];
+  themesDisponibles: string[];
+}
+
 interface BilanPedaRequest {
   type: "bilan_peda";
   transcript: string;
@@ -410,6 +422,81 @@ Génère une réponse JSON structurée (et UNIQUEMENT du JSON, sans markdown ni 
       }
 
       return NextResponse.json({ success: true, bilan: parsed });
+    }
+
+    // ── Suggestion de thème pour stage ─────────────────────────────────────
+    if (body.type === "theme_stage") {
+      const { stageTitle, stageDate, enfants, themesDisponibles } = body;
+
+      // Calculer les thèmes non vus par chaque enfant
+      const analyseParEnfant = enfants.map((e: any) => {
+        const themesFaits = e.themesVus || [];
+        const themesPasFaits = themesDisponibles.filter((t: string) => !themesFaits.includes(t));
+        return { ...e, themesFaits, themesPasFaits };
+      });
+
+      // Compter combien d'enfants n'ont pas fait chaque thème
+      const scoreThemes: Record<string, number> = {};
+      themesDisponibles.forEach((t: string) => { scoreThemes[t] = 0; });
+      analyseParEnfant.forEach((e: any) => {
+        e.themesPasFaits.forEach((t: string) => { scoreThemes[t] = (scoreThemes[t] || 0) + 1; });
+      });
+
+      // Trier : le thème "nouveau pour le plus d'enfants" en premier
+      const themesRankes = Object.entries(scoreThemes)
+        .sort(([, a], [, b]) => (b as number) - (a as number))
+        .map(([theme, nb]) => ({ theme, nbEnfantsPasFait: nb }));
+
+      const themesListStr = themesRankes.map((t: any) =>
+        `- "${t.theme}" : ${t.nbEnfantsPasFait}/${enfants.length} enfants ne l'ont pas encore fait`
+      ).join("\n");
+
+      const enfantsDetailStr = analyseParEnfant.map((e: any) =>
+        `- ${e.childName} : a déjà fait [${e.themesFaits.join(", ") || "aucun"}] — reste à faire : [${e.themesPasFaits.join(", ") || "tous faits !"}]`
+      ).join("\n");
+
+      const prompt = [
+        "Tu es conseiller pédagogique pour un centre équestre.",
+        `Un stage "${stageTitle}" se tient le ${stageDate}.`,
+        `Il y a ${enfants.length} enfant(s) inscrit(s).`,
+        "",
+        "Voici l'analyse des thèmes narratifs :",
+        themesListStr,
+        "",
+        "Détail par enfant :",
+        enfantsDetailStr,
+        "",
+        "Donne une recommandation claire et concise en JSON UNIQUEMENT (sans markdown) :",
+        "{",
+        '  "themesRecommandes": [',
+        '    { "theme": "nom du thème", "score": 0, "raison": "phrase courte" }',
+        "  ],",
+        '  "themeSuggere": "le meilleur thème unique à choisir",',
+        "  \"messageEquipe\": \"1-2 phrases pour l'equipe d'animation\",",
+        '  "enfantsDejaFaitTout": []',
+        "}",
+      ].join("\n");
+
+      const message = await client.messages.create({
+        model: "claude-sonnet-4-5",
+        max_tokens: 600,
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      const raw = message.content[0].type === "text" ? message.content[0].text.trim() : "{}";
+      let parsed: any = {};
+      try {
+        parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
+      } catch {
+        parsed = { themeSuggere: "Erreur analyse", messageEquipe: raw, themesRecommandes: [], enfantsDejaFaitTout: [] };
+      }
+
+      return NextResponse.json({
+        success: true,
+        suggestion: parsed,
+        analyseParEnfant,
+        themesRankes,
+      });
     }
 
   } catch (error: any) {

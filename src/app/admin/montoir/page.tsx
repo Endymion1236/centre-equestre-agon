@@ -18,6 +18,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { emailTemplates } from "@/lib/email-templates";
 import PoneyChargeView from "./PoneyChargeView";
+import ThemeSuggestion from "./ThemeSuggestion";
 import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Printer, ClipboardList, Mic, MicOff, Sparkles,
 } from "lucide-react";
 
@@ -685,6 +686,9 @@ export default function MontoirPage() {
                   className={`flex items-center gap-1.5 font-body text-xs px-2.5 py-1.5 rounded-lg border-none cursor-pointer transition-all ${c.rotationPoneys ? "bg-green-100 text-green-700 font-semibold" : "bg-gray-100 text-gray-400"}`}>
                   🔄 Rotation{c.rotationPoneys ? " ✓" : ""}
                 </button>
+              )}
+              {!closed && (c.activityType === "stage" || c.activityType === "stage_journee") && (
+                <ThemeSuggestion creneau={c} families={families} />
               )}
               {!closed && en.length>0 && <>
                 <button onClick={async () => {
