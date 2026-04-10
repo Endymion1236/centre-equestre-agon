@@ -51,7 +51,6 @@ const navItems = [
   // ─── Commercial ───
   { separator: true, label: "Commercial" },
   { href: "/admin/cavaliers", icon: Users, label: "Cavaliers" },
-  { href: "/admin/passage", icon: UserPlus, label: "Passage" },
   { href: "/admin/paiements", icon: CreditCard, label: "Paiements" },
   { href: "/admin/devis", icon: FileText, label: "Devis" },
   { href: "/admin/forfaits", icon: CalendarDays, label: "Forfaits" },

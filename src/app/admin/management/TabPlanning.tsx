@@ -32,11 +32,12 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   const [addCell, setAddCell] = useState<{ salarieId: string; jour: JourSemaine } | null>(null);
   const [addForm, setAddForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30 });
   const [saving, setSaving] = useState(false);
-  const [view, setView] = useState<"tableau" | "timeline" | "journalier">("tableau");
+  const [view, setView] = useState<"tableau" | "timeline" | "journalier" | "fiche">("tableau");
   const [selectedDay, setSelectedDay] = useState<JourSemaine>(() => {
     const dayIndex = (new Date().getDay() + 6) % 7; // 0=lundi
     return JOURS[Math.min(dayIndex, 4)] as JourSemaine; // cap à vendredi
   });
+  const [selectedSalarieId, setSelectedSalarieId] = useState<string>("");
 
   const lundi = getLundideSemaine(semaine);
 
@@ -625,6 +626,161 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     );
   };
 
+  // ── Vue Fiche individuelle (lisible + imprimable) ────────────────────────
+  const FicheView = () => {
+    const activeSalaries = salaries.filter(s => s.actif);
+    const sal = activeSalaries.find(s => s.id === selectedSalarieId) || activeSalaries[0];
+    if (!sal) return <div className="text-center py-8 text-slate-400 font-body text-sm">Aucun salarié actif.</div>;
+
+    // Auto-select first salarie if none selected
+    if (!selectedSalarieId && sal) {
+      setTimeout(() => setSelectedSalarieId(sal.id), 0);
+    }
+
+    const printFiche = () => {
+      const el = document.getElementById("management-fiche-print");
+      if (!el) return;
+      const win = window.open("", "_blank");
+      if (!win) return;
+      win.document.write(`<html><head><meta charset="utf-8"><title>Planning ${sal.nom} — Semaine ${semaine}</title>
+        <style>
+          * { margin:0; padding:0; box-sizing:border-box; }
+          body { font-family: Arial, sans-serif; padding: 20px; background: white; color: #1e293b; }
+          h1 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+          .subtitle { font-size: 12px; color: #64748b; margin-bottom: 20px; }
+          .day-section { margin-bottom: 18px; page-break-inside: avoid; }
+          .day-title { font-size: 14px; font-weight: 800; color: #1e3a5f; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 8px; }
+          .task-row { display: flex; align-items: center; padding: 6px 0; border-bottom: 1px solid #f1f5f9; }
+          .task-time { width: 70px; font-size: 13px; font-weight: 700; color: #475569; flex-shrink: 0; }
+          .task-name { flex: 1; font-size: 13px; font-weight: 600; }
+          .task-dur { width: 60px; font-size: 11px; color: #64748b; text-align: right; flex-shrink: 0; }
+          .task-cat { font-size: 10px; color: #94a3b8; margin-left: 8px; }
+          .activity-row { display: flex; align-items: center; padding: 5px 0; border-bottom: 1px solid #f1f5f9; background: #f0f7ff; margin: 0 -8px; padding: 5px 8px; border-radius: 4px; }
+          .activity-row .task-name { color: #1d4ed8; }
+          .total { margin-top: 6px; font-size: 12px; font-weight: 700; color: #475569; text-align: right; }
+          .empty-day { font-size: 11px; color: #94a3b8; font-style: italic; padding: 4px 0; }
+          @media print { body { padding: 10px; } .day-section { page-break-inside: avoid; } }
+        </style></head><body>
+        <h1>Planning — ${sal.nom}</h1>
+        <div class="subtitle">Semaine ${semaine.split("-W")[1]} · ${semaine.split("-W")[0]} · ${formatDateCourte(lundi)} → ${formatDateCourte(new Date(lundi.getTime()+4*86400000))}</div>
+        ${el.innerHTML}
+      </body></html>`);
+      win.document.close();
+      setTimeout(() => win.print(), 300);
+    };
+
+    return (
+      <div className="flex flex-col gap-4">
+        {/* Sélecteur salarié */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {activeSalaries.map(s => (
+            <button key={s.id} onClick={() => setSelectedSalarieId(s.id)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-body text-sm font-semibold border cursor-pointer transition-all
+                ${selectedSalarieId === s.id || (!selectedSalarieId && s.id === sal.id)
+                  ? "text-white border-transparent"
+                  : "bg-white text-slate-600 border-gray-200 hover:bg-gray-50"}`}
+              style={selectedSalarieId === s.id || (!selectedSalarieId && s.id === sal.id) ? {background: s.couleur} : {}}>
+              <div className="w-2.5 h-2.5 rounded-full" style={{background: selectedSalarieId === s.id || (!selectedSalarieId && s.id === sal.id) ? "white" : s.couleur}}/>
+              {s.nom}
+            </button>
+          ))}
+        </div>
+
+        {/* Bouton imprimer */}
+        <div className="flex justify-between items-center">
+          <div className="font-display text-lg font-bold text-blue-800">
+            Planning de {sal.nom}
+          </div>
+          <button onClick={printFiche}
+            className="flex items-center gap-2 font-body text-xs font-semibold text-slate-600 bg-white border border-gray-200 px-4 py-2 rounded-lg cursor-pointer hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors">
+            <Printer size={14}/> Imprimer la fiche
+          </button>
+        </div>
+
+        <div id="management-fiche-print">
+          {jourDates.slice(0,5).map(({jour, date}) => {
+            const dateStr = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+            const dayTaches = taches.filter(t => t.salarieId === sal.id && t.jour === jour)
+              .sort((a,b) => heureToMin(a.heureDebut) - heureToMin(b.heureDebut));
+            const dayActivities = creneaux.filter(c => c.date === dateStr && c.monitor === sal.nom)
+              .sort((a: any, b: any) => heureToMin(a.startTime) - heureToMin(b.startTime));
+            const dayCharge = dayTaches.reduce((s, t) => s + t.dureeMinutes, 0);
+            const jourComplet = date.toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" });
+            const isEmpty = dayTaches.length === 0 && dayActivities.length === 0;
+
+            return (
+              <div key={jour} style={{marginBottom:18, pageBreakInside:"avoid"}}>
+                <div style={{fontSize:14, fontWeight:800, color:"#1e3a5f", borderBottom:"2px solid #e2e8f0", paddingBottom:4, marginBottom:8, textTransform:"capitalize"}}>
+                  {jourComplet}
+                </div>
+
+                {isEmpty ? (
+                  <div style={{fontSize:11, color:"#94a3b8", fontStyle:"italic", padding:"4px 0"}}>Rien de prévu</div>
+                ) : (
+                  <>
+                    {/* Activités planning (cours, stages...) */}
+                    {dayActivities.map((c: any, i: number) => (
+                      <div key={`act-${i}`} style={{display:"flex", alignItems:"center", padding:"6px 8px", borderBottom:"1px solid #f1f5f9", background:"#f0f7ff", borderRadius:4, marginBottom:2}}>
+                        <div style={{width:70, fontSize:13, fontWeight:700, color:"#1d4ed8", flexShrink:0}}>{c.startTime}</div>
+                        <div style={{flex:1, fontSize:13, fontWeight:600, color:"#1d4ed8"}}>
+                          📅 {c.activityTitle}
+                        </div>
+                        <div style={{width:60, fontSize:11, color:"#64748b", textAlign:"right", flexShrink:0}}>
+                          → {c.endTime}
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Tâches planifiées */}
+                    {dayTaches.map(t => {
+                      const cat = getCat(t.categorie);
+                      const fin = minToHeure(heureToMin(t.heureDebut) + t.dureeMinutes);
+                      return (
+                        <div key={t.id}
+                          style={{display:"flex", alignItems:"center", padding:"6px 0", borderBottom:"1px solid #f1f5f9", cursor:"pointer", opacity: t.done ? 0.5 : 1}}
+                          onClick={() => toggleDone(t)}>
+                          <div style={{width:70, fontSize:13, fontWeight:700, color:"#475569", flexShrink:0}}>{t.heureDebut}</div>
+                          <div style={{flex:1, display:"flex", alignItems:"center", gap:6}}>
+                            <span style={{fontSize:14}}>{cat?.emoji}</span>
+                            <span style={{fontSize:13, fontWeight:600, color: t.done ? "#94a3b8" : (cat?.color || "#1e293b"), textDecoration: t.done ? "line-through" : "none"}}>
+                              {t.tacheLabel}
+                            </span>
+                            <span style={{fontSize:10, color:"#94a3b8"}}>{cat?.label}</span>
+                          </div>
+                          <div style={{width:80, fontSize:11, color:"#64748b", textAlign:"right", flexShrink:0}}>
+                            {fmtDuree(t.dureeMinutes)} → {fin}
+                          </div>
+                          <div style={{width:24, height:24, borderRadius:6, border:`2px solid ${t.done?"#16a34a":"#d1d5db"}`, background:t.done?"#16a34a":"white", display:"flex", alignItems:"center", justifyContent:"center", marginLeft:8, flexShrink:0}}>
+                            {t.done && <Check size={14} color="white"/>}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Total jour */}
+                    {dayCharge > 0 && (
+                      <div style={{marginTop:6, fontSize:12, fontWeight:700, color:"#475569", textAlign:"right"}}>
+                        Total : {fmtDuree(dayCharge)} · {dayTaches.filter(t=>t.done).length}/{dayTaches.length} tâches validées
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Total semaine */}
+          <div style={{marginTop:12, padding:"10px 14px", background:"#f0f7ff", borderRadius:8, border:"1px solid #bfdbfe"}}>
+            <div style={{fontFamily:"sans-serif", fontSize:13, fontWeight:800, color:"#1e3a5f"}}>
+              Total semaine : {fmtDuree(chargeParSalarie[sal.id] || 0)}
+              {" · "}{taches.filter(t=>t.salarieId===sal.id&&t.done).length}/{taches.filter(t=>t.salarieId===sal.id).length} tâches validées
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-4">
       {/* Navigation semaine */}
@@ -662,11 +818,11 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       </div>
 
       {/* Toggle vue */}
-      <div className="flex gap-2">
-        {(["tableau","timeline","journalier"] as const).map(v => (
+      <div className="flex gap-2 flex-wrap">
+        {(["tableau","timeline","journalier","fiche"] as const).map(v => (
           <button key={v} onClick={()=>setView(v)}
             className={`px-4 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${view===v?"bg-blue-500 text-white":"bg-white text-slate-500 border border-gray-200"}`}>
-            {v === "tableau" ? "📊 Tableau" : v === "timeline" ? "📅 Timeline" : "👤 Journalier"}
+            {v === "tableau" ? "📊 Tableau" : v === "timeline" ? "📅 Timeline" : v === "journalier" ? "👤 Journalier" : "📋 Fiche"}
           </button>
         ))}
       </div>
@@ -675,7 +831,10 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden p-4">
         {salaries.filter(s=>s.actif).length === 0 ? (
           <div className="text-center py-8 text-slate-400 font-body text-sm">Ajoutez des salariés dans l'onglet Équipe.</div>
-        ) : view === "tableau" ? <TableauView/> : view === "timeline" ? <TimelineView/> : <JournalierView/>}
+        ) : view === "tableau" ? <TableauView/>
+          : view === "timeline" ? <TimelineView/>
+          : view === "journalier" ? <JournalierView/>
+          : <FicheView/>}
       </div>
     </div>
   );
