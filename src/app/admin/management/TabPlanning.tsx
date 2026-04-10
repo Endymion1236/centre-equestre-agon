@@ -5,7 +5,7 @@ import { db } from "@/lib/firebase";
 import { Plus, Trash2, Check, ChevronLeft, ChevronRight, Printer } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import type { TacheType, TachePlanifiee, Salarie, JourSemaine } from "./types";
-import { CATEGORIES, JOURS, JOURS_LABELS, getLundideSemaine, formatDateCourte } from "./types";
+import { CATEGORIES, JOURS, JOURS_LABELS, getLundideSemaine, formatDateCourte, fmtDuree } from "./types";
 
 interface Props {
   semaine: string;
@@ -137,7 +137,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                   <span style={{fontFamily:"sans-serif", fontSize:13, fontWeight:700, color:"#1e293b"}}>{sal.nom}</span>
                 </div>
                 <div style={{fontFamily:"sans-serif", fontSize:10, color:"#94a3b8", marginTop:2}}>
-                  {Math.round((chargeParSalarie[sal.id]||0)/60*10)/10}h cette semaine
+                  {fmtDuree(chargeParSalarie[sal.id]||0)} cette semaine
                 </div>
               </td>
               {jourDates.slice(0,5).map(({jour}) => {
@@ -291,7 +291,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
           </div>
 
           {salaries.filter(s=>s.actif).map(sal => {
-            const chargeSal = Math.round((chargeParSalarie[sal.id]||0)/60*10)/10;
+            const chargeSal = fmtDuree(chargeParSalarie[sal.id]||0);
             const doneSal = taches.filter(t=>t.salarieId===sal.id&&t.done).length;
             const totalSal = taches.filter(t=>t.salarieId===sal.id).length;
             return (
@@ -300,7 +300,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                 <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:6, paddingLeft:LABEL_W}}>
                   <div style={{width:12, height:12, borderRadius:"50%", background:sal.couleur, flexShrink:0}}/>
                   <span style={{fontFamily:"sans-serif", fontSize:13, fontWeight:800, color:"#1e293b"}}>{sal.nom}</span>
-                  <span style={{fontFamily:"sans-serif", fontSize:10, color:"#64748b"}}>{chargeSal}h cette semaine</span>
+                  <span style={{fontFamily:"sans-serif", fontSize:10, color:"#64748b"}}>{chargeSal} cette semaine</span>
                   {totalSal > 0 && (
                     <span style={{fontFamily:"sans-serif", fontSize:10, color:"#16a34a", background:"#f0fdf4", padding:"1px 6px", borderRadius:10}}>
                       {doneSal}/{totalSal} ✓
@@ -311,7 +311,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                 {/* Lignes par jour */}
                 {jourDates.slice(0,5).map(({jour, date}) => {
                   const cellTaches = taches.filter(t=>t.salarieId===sal.id&&t.jour===jour);
-                  const dateStr = date.toISOString().split("T")[0];
+                  const dateStr = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
                   const actCreneau = creneaux.filter(c=>c.date===dateStr&&c.monitor===sal.nom);
                   const jourLabel = `${JOURS_LABELS[jour].slice(0,3)} ${formatDateCourte(date)}`;
 
@@ -424,14 +424,14 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       <div className="flex flex-wrap gap-2">
         {salaries.filter(s=>s.actif).map(sal => {
           const charge = chargeParSalarie[sal.id]||0;
-          const heures = Math.round(charge/60*10)/10;
+          const heures = fmtDuree(charge);
           const done = taches.filter(t=>t.salarieId===sal.id&&t.done).length;
           const total = taches.filter(t=>t.salarieId===sal.id).length;
           return (
             <div key={sal.id} className="flex items-center gap-2 bg-white border border-gray-100 rounded-xl px-3 py-2">
               <div className="w-2.5 h-2.5 rounded-full" style={{background:sal.couleur}}/>
               <span className="font-body text-xs font-semibold text-blue-800">{sal.nom}</span>
-              <span className="font-body text-xs text-slate-500">{heures}h</span>
+              <span className="font-body text-xs text-slate-500">{heures}</span>
               {total > 0 && <span className="font-body text-[10px] text-green-600">{done}/{total} ✓</span>}
             </div>
           );

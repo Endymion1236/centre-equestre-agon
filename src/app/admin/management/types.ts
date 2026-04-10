@@ -72,12 +72,23 @@ export function getISOWeek(date: Date): string {
 // Helper : obtenir le lundi d'une semaine ISO
 export function getLundideSemaine(semaine: string): Date {
   const [year, week] = semaine.split("-W").map(Number);
-  const jan4 = new Date(year, 0, 4);
+  const jan4 = new Date(year, 0, 4, 12, 0, 0); // midi pour éviter DST
   const startOfWeek1 = new Date(jan4);
   startOfWeek1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
   const lundi = new Date(startOfWeek1);
   lundi.setDate(startOfWeek1.getDate() + (week - 1) * 7);
+  lundi.setHours(12, 0, 0, 0); // forcer midi local
   return lundi;
+}
+
+// Formater minutes en Xh YYmin
+export function fmtDuree(minutes: number): string {
+  if (minutes <= 0) return '0min';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return m + 'min';
+  if (m === 0) return h + 'h';
+  return h + 'h' + String(m).padStart(2, '0');
 }
 
 export function formatDateCourte(date: Date): string {
