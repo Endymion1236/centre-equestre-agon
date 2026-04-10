@@ -46,6 +46,7 @@ export default function PaiementsPage() {
   const [quickDate, setQuickDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [quickRef, setQuickRef] = useState("");
   const [quickSaving, setQuickSaving] = useState(false);
+  const [quickMandatActif, setQuickMandatActif] = useState<boolean | null>(null);
   const [impayesSearch, setImpayesSearch] = useState(urlSearch);
   const [impayesExpanded, setImpayesExpanded] = useState<Set<string>>(new Set());
   const [editItems, setEditItems] = useState<any[]>([]);
@@ -148,6 +149,16 @@ export default function PaiementsPage() {
   useEffect(() => { fetchData(); }, []);
 
   // ═══ ENCAISSEMENT RAPIDE DEPUIS L'ONGLET IMPAYÉS ═══
+  // Charger le mandat SEPA dès que la modale s'ouvre
+  useEffect(() => {
+    if (!quickEncaisser) { setQuickMandatActif(null); return; }
+    setQuickMandatActif(null);
+    getDocs(query(collection(db, "mandats-sepa"),
+      where("familyId", "==", quickEncaisser.payment.familyId),
+      where("status", "==", "active")
+    )).then(snap => setQuickMandatActif(!snap.empty)).catch(() => setQuickMandatActif(false));
+  }, [quickEncaisser]);
+
   const handleQuickEncaisser = async () => {
     if (!quickEncaisser) return;
     const p = quickEncaisser.payment;
@@ -1437,15 +1448,40 @@ export default function PaiementsPage() {
                     { id: "virement", label: "Virement", icon: "🏦" },
                     { id: "cb_terminal", label: "CB", icon: "💳" },
                     { id: "prelevement_sepa", label: "SEPA", icon: "🏦" },
-                  ].map(m => (
-                    <button key={m.id} onClick={() => setQuickMode(m.id)}
-                      className={`py-2.5 rounded-xl font-body text-sm font-semibold border cursor-pointer transition-all ${quickMode === m.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200 hover:border-blue-300"}`}>
-                      {m.icon} {m.label}
-                    </button>
-                  ))}
+                  ].map(m => {
+                    const isSepa = m.id === "prelevement_sepa";
+                    const sepaBlocked = isSepa && quickMandatActif === false;
+                    return (
+                      <button key={m.id}
+                        onClick={() => !sepaBlocked && setQuickMode(m.id)}
+                        disabled={sepaBlocked}
+                        title={sepaBlocked ? "Aucun mandat SEPA actif pour cette famille" : undefined}
+                        className={`py-2.5 rounded-xl font-body text-sm font-semibold border transition-all
+                          ${sepaBlocked ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-60" :
+                            quickMode === m.id ? "bg-blue-500 text-white border-blue-500 cursor-pointer" :
+                            "bg-white text-slate-600 border-gray-200 hover:border-blue-300 cursor-pointer"}`}>
+                        {m.icon} {m.label}
+                        {sepaBlocked && <span className="block text-[9px] text-red-400 mt-0.5">Pas de mandat</span>}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
               {/* Échéancier SEPA */}
+              {quickMandatActif === false && quickMode === "prelevement_sepa" && (
+                <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
+                  <span className="text-red-500 text-base">⚠️</span>
+                  <div>
+                    <p className="font-body text-xs font-semibold text-red-600">Aucun mandat SEPA actif pour cette famille</p>
+                    <p className="font-body text-[10px] text-red-400 mt-0.5">Créez un mandat dans <strong>Prélèvements SEPA</strong> avant d'utiliser ce mode.</p>
+                  </div>
+                </div>
+              )}
+              {quickMandatActif === null && quickMode === "prelevement_sepa" && (
+                <div className="font-body text-xs text-slate-400 flex items-center gap-2">
+                  <span className="animate-spin inline-block">⏳</span> Vérification du mandat...
+                </div>
+              )}
               {quickMode === "prelevement_sepa" && (
                 <div className="bg-blue-50 rounded-xl p-4 flex flex-col gap-3">
                   <div className="font-body text-xs font-semibold text-blue-800">Échéancier SEPA</div>
@@ -1489,7 +1525,7 @@ export default function PaiementsPage() {
               </div>
               <div className="flex gap-3 pt-1">
                 <button onClick={() => setQuickEncaisser(null)} className="px-5 py-3 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">Annuler</button>
-                <button onClick={handleQuickEncaisser} disabled={quickSaving || !quickMontant}
+                <button onClick={handleQuickEncaisser} disabled={quickSaving || !quickMontant || (quickMode === "prelevement_sepa" && quickMandatActif !== true)}
                   className="flex-1 py-3 rounded-xl font-body text-sm font-semibold text-white bg-green-600 hover:bg-green-700 border-none cursor-pointer disabled:opacity-50">
                   {quickSaving ? <Loader2 size={16} className="animate-spin inline mr-2"/> : "💶 "}
                   Confirmer {quickMontant ? `${parseFloat(quickMontant).toFixed(2)}€` : ""}
