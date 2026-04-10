@@ -4,17 +4,12 @@ import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useSearchParams } from "next/navigation";
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
 const toDateStr = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 interface EnrolledChild { childId: string; childName: string; horseName?: string; presence?: string; }
 interface Creneau { id: string; activityTitle: string; startTime: string; endTime: string; monitor: string; enrolled: EnrolledChild[]; }
 interface Equide { id: string; name: string; type: "cheval" | "poney" | "shetland" | "ane" | string; ordre?: number; status?: string; }
-
-// ── Couleurs par type d'équidé ─────────────────────────────────────────────────
-const TYPE_COLOR: Record<string, string> = { cheval: "#2050A0", poney: "#16a34a", default: "#666" };
 
 export default function MontiorDisplayClient() {
   const params = useSearchParams();
@@ -37,27 +32,43 @@ export default function MontiorDisplayClient() {
         .filter(c => (c.enrolled || []).length > 0)
         .sort((a, b) => a.startTime.localeCompare(b.startTime));
       setCreneaux(cData);
-      setEquides(eSnap.docs.map(d => ({ id: d.id, ...d.data() } as Equide)).sort((a, b) => (a.ordre || 99) - (b.ordre || 99)));
+      setEquides(
+        eSnap.docs
+          .map(d => ({ id: d.id, ...d.data() } as Equide))
+          .filter(e => e.status !== "sorti" && e.status !== "deces" && e.status !== "retraite")
+          .sort((a, b) => (a.ordre ?? 99) - (b.ordre ?? 99))
+      );
       setLastUpdate(new Date());
     } catch (e) { console.error(e); }
     setLoading(false);
   }, [dateStr]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-
-  // Rafraîchissement auto toutes les 30 secondes
   useEffect(() => {
     const interval = setInterval(fetchData, 30_000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  // Séparer chevaux et poneys (shetland + ane → côté poneys)
-  // Ne garder que les équidés actifs
-  const actifs = equides.filter(e => !e.status || e.status === "actif" || e.status === "en_formation");
-  const chevaux = actifs.filter(e => e.type === "cheval");
-  const poneys  = actifs.filter(e => e.type !== "cheval");
+  // Séparer chevaux et poneys
+  const chevaux = equides.filter(e => e.type === "cheval");
+  const poneys  = equides.filter(e => e.type !== "cheval");
 
-  // Pour un équidé donné : trouver les cavaliers assignés par créneau
+  // Horaires spécifiques à une liste d'équidés (évite la colonne 17: qui déborde)
+  const getHoraires = (list: Equide[]) => {
+    const names = new Set(list.map(e => e.name));
+    const slots = new Set<string>();
+    for (const c of creneaux) {
+      const hasRider = (c.enrolled || []).some(e => e.horseName && names.has(e.horseName));
+      if (hasRider) slots.add(`${c.startTime}–${c.endTime}`);
+    }
+    // Si aucun créneau avec assignation, on affiche quand même tous les créneaux du jour
+    if (slots.size === 0) {
+      creneaux.forEach(c => slots.add(`${c.startTime}–${c.endTime}`));
+    }
+    return [...slots].sort();
+  };
+
+  // Cavaliers par équidé et par créneau
   const getRiders = (equideName: string): Record<string, string[]> => {
     const result: Record<string, string[]> = {};
     for (const c of creneaux) {
@@ -69,21 +80,6 @@ export default function MontiorDisplayClient() {
     return result;
   };
 
-  // Horaires par section — évite les colonnes fantômes
-  const getHoraires = (list: Equide[]) => {
-    const names = new Set(list.map(e => e.name));
-    const slots = new Set<string>();
-    creneaux.forEach(c => {
-      (c.enrolled || []).forEach(e => {
-        if (e.horseName && names.has(e.horseName))
-          slots.add(`${c.startTime}–${c.endTime}`);
-      });
-    });
-    // Si aucun slot trouvé, afficher tous les créneaux du jour
-    if (slots.size === 0) creneaux.forEach(c => slots.add(`${c.startTime}–${c.endTime}`));
-    return [...slots].sort();
-  };
-
   if (loading) return (
     <div style={styles.loadingScreen}>
       <div style={styles.loadingText}>⏳ Chargement du montoir...</div>
@@ -93,49 +89,50 @@ export default function MontiorDisplayClient() {
   const renderTable = (title: string, list: Equide[], color: string) => {
     const slots = getHoraires(list);
     return (
-    <div style={styles.tableSection}>
-      <div style={{ ...styles.sectionHeader, background: color }}>{title}</div>
-      <table style={styles.table}>
-        <thead>
-          <tr>
-            <th style={styles.thName}>{title === "PONEYS" ? "Poney" : "Cheval"}</th>
-            {slots.map(h => <th key={h} style={styles.thSlot}>{h}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {list.length === 0 ? (
-            <tr><td colSpan={slots.length + 1} style={{ padding: "20px", textAlign: "center", color: "#94a3b8", fontSize: 14 }}>
-              Aucun équidé de ce type
-            </td></tr>
-          ) : list.map((eq, idx) => {
-            const riders = getRiders(eq.name);
-            const hasAny = Object.keys(riders).length > 0;
-            return (
-              <tr key={eq.id} style={{ background: idx % 2 === 0 ? "#f8faff" : "#fff" }}>
-                <td style={{ ...styles.tdName, opacity: hasAny ? 1 : 0.35 }}>{eq.name}</td>
-                {slots.map(h => {
-                  const rnames = riders[h] || [];
-                  return (
-                    <td key={h} style={styles.tdSlot}>
-                      {rnames.length > 0 ? (
-                        <div style={styles.riderCell}>
-                          {rnames.map((n, i) => (
-                            <span key={i} style={{ ...styles.riderBadge, background: color + "18", color, borderColor: color + "40" }}>{n}</span>
-                          ))}
-                        </div>
-                      ) : <span style={styles.empty}>—</span>}
-                    </td>
-                  );
-                })}
+      <div style={styles.tableSection}>
+        <div style={{ ...styles.sectionHeader, background: color }}>{title}</div>
+        <table style={styles.table}>
+          <thead>
+            <tr>
+              <th style={styles.thName}>{title === "PONEYS" ? "Poney" : "Cheval"}</th>
+              {slots.map(h => <th key={h} style={styles.thSlot}>{h}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {list.length === 0 ? (
+              <tr>
+                <td colSpan={slots.length + 1} style={{ padding: "20px", textAlign: "center", color: "#94a3b8", fontSize: 14 }}>
+                  Aucun équidé de ce type
+                </td>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+            ) : list.map((eq, idx) => {
+              const riders = getRiders(eq.name);
+              const hasAny = Object.keys(riders).length > 0;
+              return (
+                <tr key={eq.id} style={{ background: idx % 2 === 0 ? "#f8faff" : "#fff" }}>
+                  <td style={{ ...styles.tdName, opacity: hasAny ? 1 : 0.35 }}>{eq.name}</td>
+                  {slots.map(h => {
+                    const rnames = riders[h] || [];
+                    return (
+                      <td key={h} style={styles.tdSlot}>
+                        {rnames.length > 0 ? (
+                          <div style={styles.riderCell}>
+                            {rnames.map((n, i) => (
+                              <span key={i} style={{ ...styles.riderBadge, background: color + "18", color, borderColor: color + "40" }}>{n}</span>
+                            ))}
+                          </div>
+                        ) : <span style={styles.empty}>—</span>}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     );
-  }
-  );
+  };
 
   return (
     <div style={styles.page}>
@@ -166,20 +163,17 @@ export default function MontiorDisplayClient() {
         </div>
       ) : (
         <div style={styles.body}>
-          <div style={styles.col}>
-            {renderTable("CHEVAUX", chevaux, "#2050A0")}
-          </div>
+          <div style={styles.col}>{renderTable("CHEVAUX", chevaux, "#2050A0")}</div>
           <div style={styles.divider} />
-          <div style={styles.col}>
-            {renderTable("PONEYS", poneys, "#16a34a")}
-          </div>
+          <div style={styles.col}>{renderTable("PONEYS", poneys, "#16a34a")}</div>
         </div>
       )}
 
       {/* Footer */}
       <div style={styles.footer}>
         <span>📅 Sélectionner une date :</span>
-        <input type="date" value={dateStr} onChange={e => { setDateStr(e.target.value); setLoading(true); }}
+        <input type="date" value={dateStr}
+          onChange={e => { setDateStr(e.target.value); setLoading(true); }}
           style={styles.dateInput} />
         <span style={{ marginLeft: 24, color: "#64748b", fontSize: 13 }}>
           Rafraîchissement automatique toutes les 30 secondes
@@ -189,7 +183,6 @@ export default function MontiorDisplayClient() {
   );
 }
 
-// ── Styles inline pour garantir le rendu grand écran ──────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   loadingScreen: { display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#0C1A2E" },
   loadingText: { color: "#fff", fontSize: 24, fontFamily: "sans-serif" },
