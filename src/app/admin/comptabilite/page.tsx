@@ -884,7 +884,13 @@ export default function ComptabilitePage() {
       {!loading && tab === "remise" && (() => {
         const paidPayments = payments.filter(p => p.status === "paid" && p.paidAmount > 0);
         const remisPaymentIds = (remises || []).flatMap((r: any) => r.paymentIds || []);
-        const nonRemis = paidPayments.filter(p => !remisPaymentIds.includes(p.id) && !(p as any).remiseId);
+        const nonRemis = paidPayments.filter(p => 
+          !remisPaymentIds.includes(p.id) && 
+          !(p as any).remiseId &&
+          p.paymentMode !== "virement" &&
+          p.paymentMode !== "prelevement_sepa" &&
+          p.paymentMode !== "cb_online"  // CB en ligne = virement CAWL, pas de remise physique
+        );
         const nonRemisByMode: Record<string, typeof nonRemis> = {};
         nonRemis.forEach(p => {
           const m = p.paymentMode || "autre";
@@ -913,7 +919,7 @@ export default function ComptabilitePage() {
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="font-body text-base font-semibold text-blue-800">Encaissements à remettre</h3>
-                <p className="font-body text-xs text-slate-500">{nonRemis.length} paiement{nonRemis.length > 1 ? "s" : ""} non encore inclus dans une remise</p>
+                <p className="font-body text-xs text-slate-500">{nonRemis.length} paiement{nonRemis.length > 1 ? "s" : ""} non encore inclus dans une remise <span className="text-slate-400">(virements et CB en ligne exclus — rapprochement direct)</span></p>
               </div>
               {nonRemis.length > 0 && <span className="font-body text-xl font-bold text-orange-500">{totalNonRemis.toFixed(2)}€</span>}
             </div>
@@ -954,7 +960,7 @@ export default function ComptabilitePage() {
                     { id: "cb_terminal", label: "CB", color: "bg-blue-100 text-blue-800" },
                     { id: "cheque", label: "Chèques", color: "bg-orange-100 text-orange-800" },
                     { id: "especes", label: "Espèces", color: "bg-green-100 text-green-800" },
-                    { id: "virement", label: "Virements", color: "bg-purple-100 text-purple-800" },
+                    // Virements exclus des remises : rapprochement direct uniquement
                   ].map(m => {
                     const toRemise = m.id ? nonRemis.filter(p => p.paymentMode === m.id) : nonRemis;
                     if (m.id && toRemise.length === 0) return null;
