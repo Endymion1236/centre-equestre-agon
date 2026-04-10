@@ -225,7 +225,7 @@ export default function PlanningPage() {
 
   const openEdit = (c: Creneau & { id: string }) => {
     setEditCreneau(c);
-    setEditForm({ activityTitle: c.activityTitle, monitor: c.monitor || "", startTime: c.startTime, endTime: c.endTime, maxPlaces: c.maxPlaces, priceTTC: (c as any).priceTTC || 0, color: (c as any).color || "", allowDayBooking: (c as any).allowDayBooking || false, priceTTCDay: (c as any).priceTTCDay || "" });
+    setEditForm({ activityTitle: c.activityTitle, monitor: c.monitor || "", startTime: c.startTime, endTime: c.endTime, maxPlaces: c.maxPlaces, priceTTC: (c as any).priceTTC || 0, color: (c as any).color || "", allowDayBooking: (c as any).allowDayBooking || false, priceTTCDay: (c as any).priceTTCDay || "", themeStage: (c as any).themeStage || "" });
     setEditApplyAll(false);
   };
 
@@ -282,6 +282,7 @@ export default function PlanningPage() {
         priceTTC: parseFloat(editForm.priceTTC) || 0,
         allowDayBooking: !!editForm.allowDayBooking,
         priceTTCDay: editForm.allowDayBooking ? (parseFloat(editForm.priceTTCDay as string) || 0) : 0,
+        themeStage: editForm.themeStage || null,
         updatedAt: serverTimestamp(),
       };
       if (editForm.color) update.color = editForm.color;

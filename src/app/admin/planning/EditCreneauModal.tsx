@@ -23,6 +23,7 @@ export interface EditForm {
   color: string;
   allowDayBooking?: boolean;
   priceTTCDay?: number | string;
+  themeStage?: string;
 }
 
 interface Props {
@@ -43,10 +44,15 @@ export default function EditCreneauModal({
   creneau, form, saving, applyAll, onFormChange, onApplyAllChange, onClose, onSave, onDuplicate
 }: Props) {
   const [moniteurs, setMoniteurs] = useState<string[]>([]);
+  const [themes, setThemes] = useState<{ id: string; label: string }[]>([]);
 
   useEffect(() => {
     getDocs(collection(db, "moniteurs")).then(snap => {
       setMoniteurs(snap.docs.map(d => (d.data() as any).name).filter(Boolean).sort());
+    });
+    getDocs(collection(db, "themes-stage")).then(snap => {
+      setThemes(snap.docs.map(d => ({ id: d.id, label: (d.data() as any).label }))
+        .sort((a, b) => a.label.localeCompare(b.label)));
     });
   }, []);
   return (
@@ -128,6 +134,22 @@ export default function EditCreneauModal({
                 className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
             </div>
           </div>
+
+          {/* Thème narratif (stages uniquement) */}
+          {(creneau.activityType === "stage" || creneau.activityType === "stage_journee") && (
+            <div className="bg-purple-50 rounded-xl p-3 flex flex-col gap-2">
+              <label className="font-body text-xs font-semibold text-purple-800 block">🎭 Thème narratif</label>
+              <select value={form.themeStage || ""}
+                onChange={e => onFormChange({ ...form, themeStage: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-purple-200 font-body text-sm bg-white focus:border-purple-500 focus:outline-none cursor-pointer">
+                <option value="">— Non défini —</option>
+                {themes.map(t => <option key={t.id} value={t.label}>{t.label}</option>)}
+              </select>
+              <div className="font-body text-[10px] text-purple-500">
+                Utilisé par l'IA pour recommander les thèmes non encore vus par les cavaliers.
+              </div>
+            </div>
+          )}
 
           {/* Option inscription à la journée (stages uniquement) */}
           {(creneau.activityType === "stage" || creneau.activityType === "stage_journee") && (
