@@ -32,7 +32,11 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   const [addCell, setAddCell] = useState<{ salarieId: string; jour: JourSemaine } | null>(null);
   const [addForm, setAddForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30 });
   const [saving, setSaving] = useState(false);
-  const [view, setView] = useState<"tableau" | "timeline">("tableau");
+  const [view, setView] = useState<"tableau" | "timeline" | "journalier">("tableau");
+  const [selectedDay, setSelectedDay] = useState<JourSemaine>(() => {
+    const dayIndex = (new Date().getDay() + 6) % 7; // 0=lundi
+    return JOURS[Math.min(dayIndex, 4)] as JourSemaine; // cap à vendredi
+  });
 
   const lundi = getLundideSemaine(semaine);
 
@@ -402,6 +406,224 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     );
   };
 
+  // ── Vue journalière par salarié ──────────────────────────────────────────
+  const JournalierView = () => {
+    const START = 7*60, END = 20*60;
+    const TOTAL = END-START;
+    const HEURES = [7,8,9,10,11,12,13,14,15,16,17,18,19,20];
+    const pct = (min: number) => `${((min-START)/TOTAL)*100}%`;
+    const w = (dur: number) => `${Math.max((dur/TOTAL)*100, 1)}%`;
+    const ROW_H = 44;
+    const LABEL_W = 140;
+
+    const dayData = jourDates.find(j => j.jour === selectedDay)!;
+    const dateStr = `${dayData.date.getFullYear()}-${String(dayData.date.getMonth()+1).padStart(2,"0")}-${String(dayData.date.getDate()).padStart(2,"0")}`;
+    const jourLabel = dayData.date.toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long", year:"numeric" });
+
+    const printJournalier = () => {
+      const printContent = document.getElementById("management-journalier-print");
+      if (!printContent) return;
+      const win = window.open("", "_blank");
+      if (!win) return;
+      win.document.write(`
+        <html><head><meta charset="utf-8"><title>Planning journalier — ${jourLabel}</title>
+        <style>
+          * { margin:0; padding:0; box-sizing:border-box; }
+          body { font-family: Arial, sans-serif; font-size: 11px; padding: 20px; background: white; }
+          h1 { font-size: 18px; font-weight: 800; color: #0C1A2E; margin-bottom: 4px; }
+          .subtitle { font-size: 12px; color: #64748b; margin-bottom: 20px; }
+          .header-row { display: flex; margin-left: ${LABEL_W}px; border-bottom: 2px solid #cbd5e1; padding-bottom: 4px; margin-bottom: 12px; }
+          .header-h { flex: 1; font-size: 10px; font-weight: 700; color: #475569; border-left: 1px solid #e2e8f0; padding-left: 4px; }
+          .sal-row { display: flex; align-items: center; margin-bottom: 6px; }
+          .sal-label { width: ${LABEL_W}px; flex-shrink: 0; padding-right: 12px; }
+          .sal-name { font-size: 13px; font-weight: 800; color: #1e293b; display: flex; align-items: center; gap: 6px; }
+          .sal-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+          .sal-charge { font-size: 9px; color: #64748b; margin-top: 1px; }
+          .sal-bar { flex: 1; height: ${ROW_H}px; background: #f8faff; border-radius: 8px; position: relative; border: 1px solid #e2e8f0; overflow: hidden; }
+          .hour-grid { position: absolute; top: 0; bottom: 0; border-left: 1px dashed #e2e8f0; }
+          .act-block { position: absolute; top: 0; bottom: 0; background: #dbeafe; border-right: 2px solid #93c5fd; display: flex; align-items: center; overflow: hidden; }
+          .act-label { font-size: 9px; color: #1d4ed8; font-weight: 700; padding: 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .task-block { position: absolute; top: 4px; bottom: 4px; border-radius: 5px; display: flex; align-items: center; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+          .task-label { font-size: 10px; color: white; font-weight: 700; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+          .task-time { font-size: 9px; color: rgba(255,255,255,0.85); padding-right: 5px; white-space: nowrap; flex-shrink: 0; }
+          .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; padding-top: 14px; border-top: 1px solid #e2e8f0; }
+          .legend-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #475569; }
+          .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+          .summary { margin-top: 20px; padding: 12px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
+          .summary h3 { font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 6px; }
+          .summary-line { font-size: 11px; color: #475569; margin-bottom: 3px; display: flex; align-items: center; gap: 6px; }
+          @media print { body { padding: 10px; } }
+        </style></head><body>
+        <h1>Planning journalier</h1>
+        <div class="subtitle">${jourLabel} — Semaine ${semaine.split("-W")[1]}</div>
+        ${printContent.innerHTML}
+        </body></html>
+      `);
+      win.document.close();
+      setTimeout(() => { win.print(); }, 300);
+    };
+
+    const activeSalaries = salaries.filter(s => s.actif);
+
+    return (
+      <div className="flex flex-col gap-3">
+        {/* Sélecteur de jour */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {jourDates.slice(0,5).map(({jour, date}) => {
+            const isToday = new Date().toDateString() === date.toDateString();
+            return (
+              <button key={jour} onClick={() => setSelectedDay(jour)}
+                className={`px-4 py-2 rounded-xl font-body text-xs font-semibold border cursor-pointer transition-all
+                  ${selectedDay===jour
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : isToday
+                      ? "bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100"
+                      : "bg-white text-slate-500 border-gray-200 hover:bg-gray-50"}`}>
+                {JOURS_LABELS[jour].slice(0,3)} {formatDateCourte(date)}
+                {isToday && selectedDay !== jour && <span className="ml-1 text-[10px]">•</span>}
+              </button>
+            );
+          })}
+          {jourDates.length > 5 && jourDates.slice(5).map(({jour, date}) => (
+            <button key={jour} onClick={() => setSelectedDay(jour)}
+              className={`px-4 py-2 rounded-xl font-body text-xs font-semibold border cursor-pointer transition-all
+                ${selectedDay===jour
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-white text-slate-400 border-gray-200 hover:bg-gray-50"}`}>
+              {JOURS_LABELS[jour].slice(0,3)} {formatDateCourte(date)}
+            </button>
+          ))}
+        </div>
+
+        {/* Bouton imprimer */}
+        <div className="flex justify-between items-center">
+          <div className="font-display text-sm font-bold text-blue-800 capitalize">{jourLabel}</div>
+          <button onClick={printJournalier}
+            className="flex items-center gap-2 font-body text-xs font-semibold text-slate-600 bg-white border border-gray-200 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors">
+            <Printer size={13}/> Imprimer cette journée
+          </button>
+        </div>
+
+        <div id="management-journalier-print">
+          {/* Axe horaire */}
+          <div style={{display:"flex", marginLeft:LABEL_W, marginBottom:6}}>
+            {HEURES.map(h => (
+              <div key={h} style={{flex:1, textAlign:"left", fontFamily:"sans-serif", fontSize:10, fontWeight:700, color:"#64748b", borderLeft:"1px solid #e2e8f0", paddingLeft:3}}>
+                {h}h
+              </div>
+            ))}
+          </div>
+
+          {/* Une ligne par salarié */}
+          {activeSalaries.map(sal => {
+            const dayTaches = taches.filter(t => t.salarieId === sal.id && t.jour === selectedDay);
+            const dayActivities = creneaux.filter(c => c.date === dateStr && c.monitor === sal.nom);
+            const dayCharge = dayTaches.reduce((sum, t) => sum + t.dureeMinutes, 0);
+            const dayDone = dayTaches.filter(t => t.done).length;
+
+            return (
+              <div key={sal.id} style={{display:"flex", alignItems:"center", marginBottom:6}}>
+                {/* Label salarié */}
+                <div style={{width:LABEL_W, flexShrink:0, paddingRight:12}}>
+                  <div style={{display:"flex", alignItems:"center", gap:6}}>
+                    <div style={{width:10, height:10, borderRadius:"50%", background:sal.couleur, flexShrink:0}}/>
+                    <span style={{fontFamily:"sans-serif", fontSize:13, fontWeight:800, color:"#1e293b"}}>{sal.nom}</span>
+                  </div>
+                  <div style={{fontFamily:"sans-serif", fontSize:9, color:"#64748b", marginTop:1, paddingLeft:16}}>
+                    {fmtDuree(dayCharge)}
+                    {dayTaches.length > 0 && ` · ${dayDone}/${dayTaches.length} ✓`}
+                  </div>
+                </div>
+
+                {/* Barre timeline */}
+                <div style={{flex:1, height:ROW_H, background:"#f8faff", borderRadius:8, position:"relative", border:"1px solid #e8edf5", overflow:"hidden"}}>
+                  {/* Grille heures */}
+                  {HEURES.slice(1).map(h => (
+                    <div key={h} style={{position:"absolute", left:pct(h*60), top:0, bottom:0, borderLeft:"1px dashed #e2e8f0"}}/>
+                  ))}
+
+                  {/* Activités planning */}
+                  {dayActivities.map((c, i) => {
+                    const s = heureToMin(c.startTime), e = heureToMin(c.endTime);
+                    if (s < START || s >= END) return null;
+                    return (
+                      <div key={`act-${i}`} style={{position:"absolute", left:pct(s), width:w(e-s), top:0, bottom:0, background:"#dbeafe", borderRight:"2px solid #93c5fd", display:"flex", alignItems:"center", overflow:"hidden"}}>
+                        <span style={{fontSize:9, color:"#1d4ed8", fontWeight:700, padding:"0 5px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>
+                          {c.activityTitle}
+                        </span>
+                      </div>
+                    );
+                  })}
+
+                  {/* Tâches planifiées */}
+                  {dayTaches.map(t => {
+                    const s = heureToMin(t.heureDebut);
+                    if (s < START || s >= END) return null;
+                    const cat = getCat(t.categorie);
+                    const durMin = t.dureeMinutes;
+                    return (
+                      <div key={t.id}
+                        title={`${t.tacheLabel} — ${t.heureDebut} (${durMin}min)`}
+                        style={{
+                          position:"absolute", left:pct(s), width:w(durMin),
+                          top:4, bottom:4,
+                          background: t.done ? "#94a3b8" : (cat?.color || "#64748b"),
+                          borderRadius:5,
+                          opacity: t.done ? 0.5 : 1,
+                          cursor:"pointer",
+                          display:"flex", alignItems:"center",
+                          overflow:"hidden",
+                          boxShadow: t.done ? "none" : "0 1px 3px rgba(0,0,0,0.15)",
+                        }}
+                        onClick={() => toggleDone(t)}>
+                        <span style={{fontSize:10, color:"white", fontWeight:700, paddingLeft:6, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", flex:1}}>
+                          {t.done ? "✓ " : ""}{t.tacheLabel}
+                        </span>
+                        <span style={{fontSize:9, color:"rgba(255,255,255,0.85)", paddingRight:5, flexShrink:0, whiteSpace:"nowrap"}}>
+                          {t.heureDebut}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Résumé journée */}
+          <div style={{marginTop:16, padding:"10px 14px", background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:8}}>
+            <div style={{fontFamily:"sans-serif", fontSize:11, fontWeight:700, color:"#1e293b", marginBottom:6}}>Résumé de la journée</div>
+            {activeSalaries.map(sal => {
+              const dayTaches = taches.filter(t => t.salarieId === sal.id && t.jour === selectedDay);
+              if (dayTaches.length === 0) return null;
+              const charge = dayTaches.reduce((sum, t) => sum + t.dureeMinutes, 0);
+              return (
+                <div key={sal.id} style={{fontFamily:"sans-serif", fontSize:10, color:"#475569", marginBottom:3, display:"flex", alignItems:"center", gap:6}}>
+                  <div style={{width:8, height:8, borderRadius:"50%", background:sal.couleur}}/>
+                  <strong>{sal.nom}</strong> — {fmtDuree(charge)} — {dayTaches.map(t => t.tacheLabel).join(", ")}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Légende */}
+          <div style={{display:"flex", flexWrap:"wrap", gap:8, marginTop:12, paddingTop:10, borderTop:"1px solid #e2e8f0"}}>
+            {CATEGORIES.map(cat => (
+              <div key={cat.id} style={{display:"flex", alignItems:"center", gap:4}}>
+                <div style={{width:10, height:10, borderRadius:3, background:cat.color}}/>
+                <span style={{fontFamily:"sans-serif", fontSize:9, color:"#475569"}}>{cat.emoji} {cat.label}</span>
+              </div>
+            ))}
+            <div style={{display:"flex", alignItems:"center", gap:4}}>
+              <div style={{width:10, height:10, borderRadius:3, background:"#dbeafe", border:"2px solid #93c5fd"}}/>
+              <span style={{fontFamily:"sans-serif", fontSize:9, color:"#475569"}}>📅 Activité planning</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-4">
       {/* Navigation semaine */}
@@ -440,10 +662,10 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
 
       {/* Toggle vue */}
       <div className="flex gap-2">
-        {(["tableau","timeline"] as const).map(v => (
+        {(["tableau","timeline","journalier"] as const).map(v => (
           <button key={v} onClick={()=>setView(v)}
             className={`px-4 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${view===v?"bg-blue-500 text-white":"bg-white text-slate-500 border border-gray-200"}`}>
-            {v === "tableau" ? "📊 Tableau" : "📅 Timeline"}
+            {v === "tableau" ? "📊 Tableau" : v === "timeline" ? "📅 Timeline" : "👤 Journalier"}
           </button>
         ))}
       </div>
@@ -452,7 +674,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden p-4">
         {salaries.filter(s=>s.actif).length === 0 ? (
           <div className="text-center py-8 text-slate-400 font-body text-sm">Ajoutez des salariés dans l'onglet Équipe.</div>
-        ) : view === "tableau" ? <TableauView/> : <TimelineView/>}
+        ) : view === "tableau" ? <TableauView/> : view === "timeline" ? <TimelineView/> : <JournalierView/>}
       </div>
     </div>
   );
