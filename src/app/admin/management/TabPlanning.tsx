@@ -2,7 +2,7 @@
 import { useState, useMemo } from "react";
 import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Plus, Trash2, Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Trash2, Check, ChevronLeft, ChevronRight, Printer } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import type { TacheType, TachePlanifiee, Salarie, JourSemaine } from "./types";
 import { CATEGORIES, JOURS, JOURS_LABELS, getLundideSemaine, formatDateCourte } from "./types";
@@ -222,67 +222,182 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   const TimelineView = () => {
     const START = 7*60, END = 20*60;
     const TOTAL = END-START;
+    const HEURES = [7,8,9,10,11,12,13,14,15,16,17,18,19,20];
     const pct = (min: number) => `${((min-START)/TOTAL)*100}%`;
-    const w = (dur: number) => `${(dur/TOTAL)*100}%`;
+    const w = (dur: number) => `${Math.max((dur/TOTAL)*100, 1)}%`;
+    const ROW_H = 36;
+    const LABEL_W = 110;
+
+    const printTimeline = () => {
+      const printContent = document.getElementById("management-timeline-print");
+      if (!printContent) return;
+      const win = window.open("", "_blank");
+      if (!win) return;
+      win.document.write(`
+        <html><head><meta charset="utf-8"><title>Planning équipe — Semaine ${semaine}</title>
+        <style>
+          * { margin:0; padding:0; box-sizing:border-box; }
+          body { font-family: Arial, sans-serif; font-size: 11px; padding: 16px; background: white; }
+          h1 { font-size: 16px; font-weight: 800; color: #0C1A2E; margin-bottom: 4px; }
+          .subtitle { font-size: 11px; color: #64748b; margin-bottom: 16px; }
+          .timeline-wrap { overflow: visible; }
+          .header-row { display: flex; margin-left: ${LABEL_W}px; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 8px; }
+          .header-h { flex: 1; font-size: 9px; font-weight: 700; color: #64748b; border-left: 1px solid #e2e8f0; padding-left: 3px; }
+          .salarie-block { margin-bottom: 16px; page-break-inside: avoid; }
+          .salarie-name { font-size: 13px; font-weight: 800; color: #1e293b; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+          .salarie-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+          .salarie-charge { font-size: 10px; color: #64748b; }
+          .day-row { display: flex; align-items: center; margin-bottom: 4px; }
+          .day-label { width: ${LABEL_W}px; flex-shrink: 0; font-size: 10px; color: #475569; font-weight: 600; padding-right: 8px; text-align: right; }
+          .day-bar { flex: 1; height: ${ROW_H}px; background: #f8faff; border-radius: 6px; position: relative; border: 1px solid #e2e8f0; overflow: hidden; }
+          .act-block { position: absolute; top: 0; bottom: 0; background: #dbeafe; border-right: 2px solid #93c5fd; }
+          .act-label { position: absolute; top: 50%; transform: translateY(-50%); font-size: 8px; color: #1d4ed8; font-weight: 600; padding-left: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+          .task-block { position: absolute; top: 3px; bottom: 3px; border-radius: 4px; display: flex; align-items: center; overflow: hidden; }
+          .task-label { font-size: 9px; color: white; font-weight: 700; padding: 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .task-time { font-size: 8px; color: rgba(255,255,255,0.8); padding-left: 4px; white-space: nowrap; flex-shrink: 0; }
+          .hour-grid { position: absolute; top: 0; bottom: 0; border-left: 1px dashed #e2e8f0; pointer-events: none; }
+          .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
+          .legend-item { display: flex; align-items: center; gap: 4px; font-size: 9px; color: #475569; }
+          .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+          @media print { body { padding: 8px; } .salarie-block { page-break-inside: avoid; } }
+        </style></head><body>
+        <h1>Planning équipe — Semaine ${semaine.split("-W")[1]} · ${semaine.split("-W")[0]}</h1>
+        <div class="subtitle">${formatDateCourte(lundi)} → ${formatDateCourte(new Date(lundi.getTime()+4*86400000))} · Généré le ${new Date().toLocaleDateString("fr-FR")}</div>
+        ${printContent.innerHTML}
+        </body></html>
+      `);
+      win.document.close();
+      setTimeout(() => { win.print(); }, 300);
+    };
 
     return (
-      <div className="flex flex-col gap-4 overflow-x-auto">
-        {/* Axe horaire */}
-        <div style={{display:"flex",alignItems:"center",marginLeft:100}}>
-          {[7,8,9,10,11,12,13,14,15,16,17,18,19,20].map(h=>(
-            <div key={h} style={{flex:1,textAlign:"left",fontFamily:"sans-serif",fontSize:9,color:"#94a3b8",borderLeft:"1px solid #f1f5f9",paddingLeft:2}}>
-              {h}h
-            </div>
-          ))}
+      <div className="flex flex-col gap-1">
+        {/* Bouton print */}
+        <div className="flex justify-end mb-2 print:hidden">
+          <button onClick={printTimeline}
+            className="flex items-center gap-2 font-body text-xs font-semibold text-slate-600 bg-white border border-gray-200 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors">
+            <Printer size={13}/> Imprimer le planning
+          </button>
         </div>
 
-        {salaries.filter(s=>s.actif).map(sal => (
-          <div key={sal.id}>
-            {/* Label salarié */}
-            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-              <div style={{width:8,height:8,borderRadius:"50%",background:sal.couleur}}/>
-              <span style={{fontFamily:"sans-serif",fontSize:12,fontWeight:700,color:"#1e293b"}}>{sal.nom}</span>
-              <span style={{fontFamily:"sans-serif",fontSize:10,color:"#94a3b8"}}>{Math.round((chargeParSalarie[sal.id]||0)/60*10)/10}h</span>
-            </div>
-            {/* Ligne par jour */}
-            {jourDates.slice(0,5).map(({jour,label})=>{
-              const cellTaches = taches.filter(t=>t.salarieId===sal.id&&t.jour===jour);
-              // Aussi les créneaux d'activités (stages, cours) de ce salarié
-              const jourDate = jourDates.find(jd=>jd.jour===jour);
-              const dateStr = jourDate?.date.toISOString().split("T")[0];
-              const actCreneau = creneaux.filter(c=>c.date===dateStr&&c.monitor===sal.nom);
-
-              return (
-                <div key={jour} style={{display:"flex",alignItems:"center",marginBottom:2}}>
-                  <div style={{width:100,flexShrink:0,fontFamily:"sans-serif",fontSize:9,color:"#94a3b8",paddingRight:6,textAlign:"right"}}>
-                    {JOURS_LABELS[jour].slice(0,3)} {formatDateCourte(jourDate!.date)}
-                  </div>
-                  <div style={{flex:1,height:28,background:"#f8faff",borderRadius:6,position:"relative",overflow:"hidden",border:"1px solid #eef2f7"}}>
-                    {/* Activités planning (gris clair) */}
-                    {actCreneau.map((c,i)=>{
-                      const s=heureToMin(c.startTime), e=heureToMin(c.endTime);
-                      if(s<START||s>=END) return null;
-                      return <div key={i} style={{position:"absolute",left:pct(s),width:w(e-s),top:0,bottom:0,background:"#e0e7ff",opacity:0.7,borderRight:"1px solid #c7d2fe"}} title={c.activityTitle}/>;
-                    })}
-                    {/* Tâches planifiées */}
-                    {cellTaches.map(t=>{
-                      const s=heureToMin(t.heureDebut);
-                      if(s<START||s>=END) return null;
-                      const cat=getCat(t.categorie);
-                      return (
-                        <div key={t.id} title={`${t.tacheLabel} ${t.heureDebut} (${t.dureeMinutes}min)`}
-                          style={{position:"absolute",left:pct(s),width:w(t.dureeMinutes),top:2,bottom:2,background:cat?.color||"#64748b",borderRadius:4,opacity:t.done?0.4:0.9,cursor:"pointer",overflow:"hidden",display:"flex",alignItems:"center",paddingLeft:3}}
-                          onClick={()=>toggleDone(t)}>
-                          <span style={{fontSize:9,color:"white",fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.tacheLabel}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
+        <div id="management-timeline-print">
+          {/* Axe horaire */}
+          <div style={{display:"flex", marginLeft:LABEL_W, marginBottom:6}}>
+            {HEURES.map(h => (
+              <div key={h} style={{flex:1, textAlign:"left", fontFamily:"sans-serif", fontSize:10, fontWeight:700, color:"#64748b", borderLeft:"1px solid #e2e8f0", paddingLeft:3}}>
+                {h}h
+              </div>
+            ))}
           </div>
-        ))}
+
+          {salaries.filter(s=>s.actif).map(sal => {
+            const chargeSal = Math.round((chargeParSalarie[sal.id]||0)/60*10)/10;
+            const doneSal = taches.filter(t=>t.salarieId===sal.id&&t.done).length;
+            const totalSal = taches.filter(t=>t.salarieId===sal.id).length;
+            return (
+              <div key={sal.id} style={{marginBottom:20}}>
+                {/* En-tête salarié */}
+                <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:6, paddingLeft:LABEL_W}}>
+                  <div style={{width:12, height:12, borderRadius:"50%", background:sal.couleur, flexShrink:0}}/>
+                  <span style={{fontFamily:"sans-serif", fontSize:13, fontWeight:800, color:"#1e293b"}}>{sal.nom}</span>
+                  <span style={{fontFamily:"sans-serif", fontSize:10, color:"#64748b"}}>{chargeSal}h cette semaine</span>
+                  {totalSal > 0 && (
+                    <span style={{fontFamily:"sans-serif", fontSize:10, color:"#16a34a", background:"#f0fdf4", padding:"1px 6px", borderRadius:10}}>
+                      {doneSal}/{totalSal} ✓
+                    </span>
+                  )}
+                </div>
+
+                {/* Lignes par jour */}
+                {jourDates.slice(0,5).map(({jour, date}) => {
+                  const cellTaches = taches.filter(t=>t.salarieId===sal.id&&t.jour===jour);
+                  const dateStr = date.toISOString().split("T")[0];
+                  const actCreneau = creneaux.filter(c=>c.date===dateStr&&c.monitor===sal.nom);
+                  const jourLabel = `${JOURS_LABELS[jour].slice(0,3)} ${formatDateCourte(date)}`;
+
+                  return (
+                    <div key={jour} style={{display:"flex", alignItems:"center", marginBottom:3}}>
+                      <div style={{width:LABEL_W, flexShrink:0, fontFamily:"sans-serif", fontSize:10, fontWeight:600, color:"#475569", paddingRight:8, textAlign:"right"}}>
+                        {jourLabel}
+                      </div>
+                      <div style={{flex:1, height:ROW_H, background:"#f8faff", borderRadius:6, position:"relative", border:"1px solid #e8edf5", overflow:"hidden"}}>
+                        {/* Grille heures */}
+                        {HEURES.slice(1).map(h => (
+                          <div key={h} style={{position:"absolute", left:pct(h*60), top:0, bottom:0, borderLeft:"1px dashed #e2e8f0"}}/>
+                        ))}
+
+                        {/* Activités planning (bleu clair avec label) */}
+                        {actCreneau.map((c,i) => {
+                          const s=heureToMin(c.startTime), e=heureToMin(c.endTime);
+                          if(s<START||s>=END) return null;
+                          return (
+                            <div key={i} style={{position:"absolute", left:pct(s), width:w(e-s), top:0, bottom:0, background:"#dbeafe", borderRight:"2px solid #93c5fd", display:"flex", alignItems:"center", overflow:"hidden"}}>
+                              <span style={{fontSize:8, color:"#1d4ed8", fontWeight:700, padding:"0 4px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>
+                                {c.activityTitle}
+                              </span>
+                            </div>
+                          );
+                        })}
+
+                        {/* Tâches planifiées */}
+                        {cellTaches.map(t => {
+                          const s=heureToMin(t.heureDebut);
+                          if(s<START||s>=END) return null;
+                          const cat=getCat(t.categorie);
+                          const durMin = t.dureeMinutes;
+                          const wPx = (durMin/TOTAL)*100; // % largeur
+                          const showTime = durMin >= 45;
+                          const showLabel = durMin >= 30;
+                          return (
+                            <div key={t.id}
+                              title={`${t.tacheLabel} — ${t.heureDebut} (${durMin}min)`}
+                              style={{
+                                position:"absolute", left:pct(s), width:w(durMin),
+                                top:3, bottom:3,
+                                background: t.done ? "#94a3b8" : (cat?.color||"#64748b"),
+                                borderRadius:5,
+                                opacity: t.done ? 0.5 : 1,
+                                cursor:"pointer",
+                                display:"flex", alignItems:"center",
+                                overflow:"hidden",
+                                boxShadow: t.done ? "none" : "0 1px 3px rgba(0,0,0,0.15)",
+                              }}
+                              onClick={()=>toggleDone(t)}>
+                              {showLabel && (
+                                <span style={{fontSize:9, color:"white", fontWeight:700, paddingLeft:5, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", flex:1}}>
+                                  {t.done ? "✓ " : ""}{t.tacheLabel}
+                                </span>
+                              )}
+                              {showTime && (
+                                <span style={{fontSize:8, color:"rgba(255,255,255,0.8)", paddingRight:4, flexShrink:0, whiteSpace:"nowrap"}}>
+                                  {t.heureDebut}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+
+          {/* Légende */}
+          <div style={{display:"flex", flexWrap:"wrap", gap:8, marginTop:12, paddingTop:10, borderTop:"1px solid #e2e8f0"}}>
+            {CATEGORIES.map(cat => (
+              <div key={cat.id} style={{display:"flex", alignItems:"center", gap:4}}>
+                <div style={{width:10, height:10, borderRadius:3, background:cat.color}}/>
+                <span style={{fontFamily:"sans-serif", fontSize:9, color:"#475569"}}>{cat.emoji} {cat.label}</span>
+              </div>
+            ))}
+            <div style={{display:"flex", alignItems:"center", gap:4}}>
+              <div style={{width:10, height:10, borderRadius:3, background:"#dbeafe", border:"2px solid #93c5fd"}}/>
+              <span style={{fontFamily:"sans-serif", fontSize:9, color:"#475569"}}>📅 Activité planning</span>
+            </div>
+          </div>
+        </div>
       </div>
     );
   };
