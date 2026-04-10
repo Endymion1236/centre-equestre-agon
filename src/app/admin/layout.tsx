@@ -36,6 +36,7 @@ import {
   Building2,
   FileText,
   CheckCircle2,
+  GripVertical,
 } from "lucide-react";
 
 const navItems = [
