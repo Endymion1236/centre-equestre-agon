@@ -728,6 +728,11 @@ export default function PlanningPage() {
       }
     }
     const fresh = await refreshCreneaux(); const upd = fresh.find(x => x.id === cid); if (upd) setSelectedCreneau(upd);
+    // Recharger allForfaits pour que rangEnfantFamille soit correct pour le prochain enfant
+    try {
+      const forfaitsSnap = await getDocs(query(collection(db, "forfaits"), where("status", "==", "actif")));
+      setAllForfaits(forfaitsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch(e) { console.error("Erreur refresh forfaits:", e); }
     } catch (error) {
       console.error("Erreur handleEnroll, rollback:", error);
       try {

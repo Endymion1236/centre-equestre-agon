@@ -74,6 +74,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [childRattrapages, setChildRattrapages] = useState<any[]>([]);
   const [useRattrapage, setUseRattrapage] = useState<string | null>(null); // rattrapageId
   const [inscriptionMode, setInscriptionMode] = useState<"ponctuel" | "annuel">("ponctuel");
+  const [weekCreneaux, setWeekCreneaux] = useState<(Creneau & { id: string })[]>([]);
   const [licenceType, setLicenceType] = useState<"moins18" | "plus18">("moins18");
   // ── Mode compétition ──
   const isCompetition = creneau.activityType === "competition";
@@ -343,6 +344,21 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       if (inscDoc) setInscParams(prev => ({ ...prev, ...inscDoc.data() }));
     }).catch(() => {});
   }, []);
+
+  // Charger TOUS les créneaux de la semaine pour les extra slots (2x/3x semaine)
+  // Indépendamment de la vue courante du planning (jour/semaine)
+  useEffect(() => {
+    const creneauDate = new Date(creneau.date + "T12:00:00");
+    const dow = creneauDate.getDay();
+    const mon = new Date(creneauDate); mon.setDate(creneauDate.getDate() - ((dow + 6) % 7));
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    const monStr = fmtDate(mon); const sunStr = fmtDate(sun);
+    getDocs(query(collection(db, "creneaux"), where("date", ">=", monStr), where("date", "<=", sunStr)))
+      .then(snap => {
+        setWeekCreneaux(snap.docs.map(d => ({ id: d.id, ...d.data() })) as (Creneau & { id: string })[]);
+      })
+      .catch(() => setWeekCreneaux(allCreneaux));
+  }, [creneau.id, creneau.date]);
 
   // Calcul forfait annuel avec prorata
   const prixLicence = licenceType === "moins18" ? inscParams.licenceMoins18 : inscParams.licencePlus18;
@@ -1617,8 +1633,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     {frequenceCours >= 2 && (() => {
                       const creneauDow = new Date(creneau.date + "T12:00:00").getDay();
                       const creneauKey = `${creneauDow}-${creneau.startTime}-${creneau.activityTitle}-${creneau.monitor || ""}`;
-                      // Tous les créneaux sauf stages et le créneau principal
-                      const autresSlots = allCreneaux.filter(c =>
+                      // Tous les créneaux de la semaine sauf stages et le créneau principal
+                      // Utiliser weekCreneaux (toute la semaine) et non allCreneaux (vue courante seulement)
+                      const autresSlots = weekCreneaux.filter(c =>
                         c.activityType !== "stage" &&
                         c.activityType !== "stage_journee" &&
                         c.id !== creneau.id
