@@ -1197,7 +1197,7 @@ export default function PaiementsPage() {
 
                 // Phase B : mapper les enfants
                 return (
-                  <div className="p-5 flex flex-col gap-4">
+                  <div className="p-5 flex flex-col gap-4 overflow-y-auto">
                     <button onClick={() => setDuplicateTarget({ ...duplicateTarget, targetFamilyId: "", targetSearch: "" })}
                       className="flex items-center gap-1 font-body text-xs text-slate-600 hover:text-gray-600 bg-transparent border-none cursor-pointer p-0">
                       ← Changer de famille
@@ -1410,8 +1410,8 @@ export default function PaiementsPage() {
       {/* ── Modal encaissement rapide ── */}
       {quickEncaisser && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setQuickEncaisser(null)}>
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
               <div>
                 <h2 className="font-display text-lg font-bold text-blue-800">Encaisser</h2>
                 <p className="font-body text-xs text-slate-500 mt-0.5">{quickEncaisser.payment.familyName}</p>
