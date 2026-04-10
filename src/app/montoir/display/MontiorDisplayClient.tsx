@@ -11,7 +11,7 @@ const toDateStr = (d: Date) =>
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface EnrolledChild { childId: string; childName: string; horseName?: string; presence?: string; }
 interface Creneau { id: string; activityTitle: string; startTime: string; endTime: string; monitor: string; enrolled: EnrolledChild[]; }
-interface Equide { id: string; nom: string; type: "cheval" | "poney" | string; ordre?: number; }
+interface Equide { id: string; name: string; type: "cheval" | "poney" | "shetland" | "ane" | string; ordre?: number; status?: string; }
 
 // ── Couleurs par type d'équidé ─────────────────────────────────────────────────
 const TYPE_COLOR: Record<string, string> = { cheval: "#2050A0", poney: "#16a34a", default: "#666" };
@@ -51,24 +51,38 @@ export default function MontiorDisplayClient() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  // Séparer chevaux et poneys
-  const chevaux = equides.filter(e => e.type === "cheval");
-  const poneys = equides.filter(e => e.type !== "cheval");
+  // Séparer chevaux et poneys (shetland + ane → côté poneys)
+  // Ne garder que les équidés actifs
+  const actifs = equides.filter(e => !e.status || e.status === "actif" || e.status === "en_formation");
+  const chevaux = actifs.filter(e => e.type === "cheval");
+  const poneys  = actifs.filter(e => e.type !== "cheval");
 
   // Pour un équidé donné : trouver les cavaliers assignés par créneau
-  const getRiders = (equideNom: string): Record<string, string[]> => {
+  const getRiders = (equideName: string): Record<string, string[]> => {
     const result: Record<string, string[]> = {};
     for (const c of creneaux) {
       const riders = (c.enrolled || [])
-        .filter(e => e.horseName === equideNom)
-        .map(e => e.childName?.split(" ")[0] || e.childName || "?"); // Prénom seulement
+        .filter(e => e.horseName === equideName)
+        .map(e => e.childName?.split(" ")[0] || e.childName || "?");
       if (riders.length > 0) result[`${c.startTime}–${c.endTime}`] = riders;
     }
     return result;
   };
 
-  // Créneaux horaires uniques triés
-  const horaires = [...new Set(creneaux.map(c => `${c.startTime}–${c.endTime}`))].sort();
+  // Horaires par section — évite les colonnes fantômes
+  const getHoraires = (list: Equide[]) => {
+    const names = new Set(list.map(e => e.name));
+    const slots = new Set<string>();
+    creneaux.forEach(c => {
+      (c.enrolled || []).forEach(e => {
+        if (e.horseName && names.has(e.horseName))
+          slots.add(`${c.startTime}–${c.endTime}`);
+      });
+    });
+    // Si aucun slot trouvé, afficher tous les créneaux du jour
+    if (slots.size === 0) creneaux.forEach(c => slots.add(`${c.startTime}–${c.endTime}`));
+    return [...slots].sort();
+  };
 
   if (loading) return (
     <div style={styles.loadingScreen}>
@@ -76,45 +90,40 @@ export default function MontiorDisplayClient() {
     </div>
   );
 
-  const renderTable = (title: string, list: Equide[], color: string) => (
+  const renderTable = (title: string, list: Equide[], color: string) => {
+    const slots = getHoraires(list);
+    return (
     <div style={styles.tableSection}>
-      {/* En-tête section */}
-      <div style={{ ...styles.sectionHeader, background: color }}>
-        {title}
-      </div>
+      <div style={{ ...styles.sectionHeader, background: color }}>{title}</div>
       <table style={styles.table}>
         <thead>
           <tr>
             <th style={styles.thName}>{title === "PONEYS" ? "Poney" : "Cheval"}</th>
-            {horaires.map(h => (
-              <th key={h} style={styles.thSlot}>{h}</th>
-            ))}
+            {slots.map(h => <th key={h} style={styles.thSlot}>{h}</th>)}
           </tr>
         </thead>
         <tbody>
-          {list.map((eq, idx) => {
-            const riders = getRiders(eq.nom);
+          {list.length === 0 ? (
+            <tr><td colSpan={slots.length + 1} style={{ padding: "20px", textAlign: "center", color: "#94a3b8", fontSize: 14 }}>
+              Aucun équidé de ce type
+            </td></tr>
+          ) : list.map((eq, idx) => {
+            const riders = getRiders(eq.name);
             const hasAny = Object.keys(riders).length > 0;
             return (
               <tr key={eq.id} style={{ background: idx % 2 === 0 ? "#f8faff" : "#fff" }}>
-                <td style={{ ...styles.tdName, opacity: hasAny ? 1 : 0.35 }}>
-                  {eq.nom}
-                </td>
-                {horaires.map(h => {
-                  const names = riders[h] || [];
+                <td style={{ ...styles.tdName, opacity: hasAny ? 1 : 0.35 }}>{eq.name}</td>
+                {slots.map(h => {
+                  const rnames = riders[h] || [];
                   return (
                     <td key={h} style={styles.tdSlot}>
-                      {names.length > 0 ? (
+                      {rnames.length > 0 ? (
                         <div style={styles.riderCell}>
-                          {names.map((n, i) => (
-                            <span key={i} style={{ ...styles.riderBadge, background: color + "18", color, borderColor: color + "40" }}>
-                              {n}
-                            </span>
+                          {rnames.map((n, i) => (
+                            <span key={i} style={{ ...styles.riderBadge, background: color + "18", color, borderColor: color + "40" }}>{n}</span>
                           ))}
                         </div>
-                      ) : (
-                        <span style={styles.empty}>—</span>
-                      )}
+                      ) : <span style={styles.empty}>—</span>}
                     </td>
                   );
                 })}
@@ -124,6 +133,8 @@ export default function MontiorDisplayClient() {
         </tbody>
       </table>
     </div>
+    );
+  }
   );
 
   return (

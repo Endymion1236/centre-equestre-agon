@@ -30,6 +30,7 @@ export interface Equide {
   maxReprisesPerDay: number;
   maxHeuresHebdo: number;
   notes: string;
+  ordre?: number;
   createdAt: any;
   updatedAt: any;
 }
