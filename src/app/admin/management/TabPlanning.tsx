@@ -283,14 +283,42 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                         <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,padding:8,display:"flex",flexDirection:"column",gap:6}}>
                           <select value={addForm.tacheTypeId} onChange={e=>{
                             const tt=tachesType.find(t=>t.id===e.target.value);
-                            setAddForm({...addForm,tacheTypeId:e.target.value,dureeMinutes:tt?.dureeMinutes||30});
+                            const firstHoraire = tt?.horairesDefaut?.sort()[0];
+                            setAddForm({...addForm, tacheTypeId:e.target.value, dureeMinutes:tt?.dureeMinutes||30, heureDebut: firstHoraire || addForm.heureDebut});
                           }} style={{width:"100%",padding:"4px 6px",borderRadius:6,border:"1px solid #bfdbfe",fontFamily:"sans-serif",fontSize:11,background:"white"}}>
                             <option value="">— Choisir —</option>
                             {tachesType.map(t=><option key={t.id} value={t.id}>{t.label} ({t.dureeMinutes < 60 ? `${t.dureeMinutes}min` : `${Math.floor(t.dureeMinutes/60)}h${t.dureeMinutes%60>0?t.dureeMinutes%60:""}`})</option>)}
                           </select>
+                          {/* Horaires standards en raccourcis */}
+                          {(() => {
+                            const tt = tachesType.find(t => t.id === addForm.tacheTypeId);
+                            const horaires = tt?.horairesDefaut?.sort() || [];
+                            if (horaires.length === 0) return null;
+                            return (
+                              <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+                                {horaires.map(h => (
+                                  <button key={h} onClick={() => setAddForm({...addForm, heureDebut: h})}
+                                    style={{padding:"3px 8px",borderRadius:6,border: addForm.heureDebut===h ? "2px solid #f59e0b" : "1px solid #e5e7eb",
+                                      background: addForm.heureDebut===h ? "#fffbeb" : "white",
+                                      fontFamily:"sans-serif",fontSize:11,fontWeight: addForm.heureDebut===h ? 700 : 500,
+                                      color: addForm.heureDebut===h ? "#b45309" : "#475569",cursor:"pointer"}}>
+                                    {h}
+                                  </button>
+                                ))}
+                                <button onClick={() => {
+                                  const el = document.getElementById("_custom_hour_select") as HTMLSelectElement;
+                                  if (el) el.style.display = el.style.display === "none" ? "block" : "none";
+                                }}
+                                  style={{padding:"3px 6px",borderRadius:6,border:"1px dashed #cbd5e1",background:"transparent",fontFamily:"sans-serif",fontSize:10,color:"#94a3b8",cursor:"pointer"}}>
+                                  Autre…
+                                </button>
+                              </div>
+                            );
+                          })()}
                           <div style={{display:"flex",gap:4}}>
-                            <select value={addForm.heureDebut} onChange={e=>setAddForm({...addForm,heureDebut:e.target.value})}
-                              style={{flex:1,padding:"3px 4px",borderRadius:6,border:"1px solid #bfdbfe",fontFamily:"sans-serif",fontSize:10,background:"white"}}>
+                            <select id="_custom_hour_select" value={addForm.heureDebut} onChange={e=>setAddForm({...addForm,heureDebut:e.target.value})}
+                              style={{flex:1,padding:"3px 4px",borderRadius:6,border:"1px solid #bfdbfe",fontFamily:"sans-serif",fontSize:10,background:"white",
+                                display: (tachesType.find(t=>t.id===addForm.tacheTypeId)?.horairesDefaut?.length || 0) > 0 ? "none" : "block"}}>
                               {TIME_SLOTS.map(t=><option key={t} value={t}>{t}</option>)}
                             </select>
                             <select value={addForm.dureeMinutes} onChange={e=>setAddForm({...addForm,dureeMinutes:parseInt(e.target.value)})}

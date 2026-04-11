@@ -13,7 +13,7 @@ const DUREES = [15,30,45,60,90,120,180,240];
 
 const emptyForm = (): Partial<TacheType> => ({
   label: "", categorie: "ecuries", dureeMinutes: 30,
-  recurrente: true, joursDefaut: ["lundi","mardi","mercredi","jeudi","vendredi"], notes: "",
+  recurrente: true, joursDefaut: ["lundi","mardi","mercredi","jeudi","vendredi"], horairesDefaut: [], notes: "",
 });
 
 // ── Formulaire extrait en composant stable (hors du render parent) ────────────
@@ -70,6 +70,48 @@ function TacheForm({ form, editId, saving, onChange, onSave, onCancel }: FormPro
               {JOURS_LABELS[j].slice(0, 3)}
             </button>
           ))}
+        </div>
+      </div>
+      <div>
+        <label className="font-body text-xs font-semibold text-blue-800 block mb-1.5">Horaires de début standards</label>
+        <p className="font-body text-[10px] text-slate-400 mb-2">Créneaux habituels — proposés en priorité lors de l'ajout au planning.</p>
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {(form.horairesDefaut || []).sort().map(h => (
+            <span key={h} className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 font-body text-xs font-semibold text-amber-700">
+              {h}
+              <button onClick={() => onChange({ ...form, horairesDefaut: (form.horairesDefaut || []).filter(x => x !== h) })}
+                className="bg-transparent border-none cursor-pointer text-amber-400 hover:text-red-500 p-0 text-xs leading-none">✕</button>
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-2 items-center flex-wrap">
+          <input
+            type="time"
+            id="_horaire_input"
+            className="px-2 py-1.5 rounded-lg border border-blue-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400 w-28"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const input = document.getElementById("_horaire_input") as HTMLInputElement;
+              const val = input?.value;
+              if (!val) return;
+              const existing = form.horairesDefaut || [];
+              if (existing.includes(val)) return;
+              onChange({ ...form, horairesDefaut: [...existing, val] });
+              input.value = "";
+            }}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-500 text-white font-body text-xs font-semibold border-none cursor-pointer hover:bg-amber-400">
+            <Plus size={12} /> Ajouter
+          </button>
+          <div className="flex gap-1 ml-1">
+            {["08:00","08:45","09:00","10:00","14:00","16:30"].filter(h => !(form.horairesDefaut || []).includes(h)).slice(0, 4).map(h => (
+              <button key={h} onClick={() => onChange({ ...form, horairesDefaut: [...(form.horairesDefaut || []), h] })}
+                className="px-2 py-1 rounded-md bg-gray-100 text-gray-500 font-body text-[10px] border-none cursor-pointer hover:bg-amber-100 hover:text-amber-700">
+                {h}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
       <div>
@@ -183,6 +225,13 @@ export default function TabBibliotheque({ taches, onRefresh }: Props) {
                       ))}
                     </div>
                     {t.recurrente && <span className="font-body text-[9px] bg-green-50 text-green-600 px-1.5 py-0.5 rounded-full">récurrente</span>}
+                    {(t.horairesDefaut && t.horairesDefaut.length > 0) && (
+                      <div className="flex flex-wrap gap-0.5">
+                        {t.horairesDefaut.sort().map(h => (
+                          <span key={h} className="font-body text-[9px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">{h}</span>
+                        ))}
+                      </div>
+                    )}
                     <div className="flex gap-1">
                       <button onClick={() => startEdit(t)} className="w-7 h-7 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-blue-50 hover:text-blue-500">
                         <Pencil size={13} />
