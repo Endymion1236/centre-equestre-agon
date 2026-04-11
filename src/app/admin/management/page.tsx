@@ -2,15 +2,16 @@
 import { useState, useEffect } from "react";
 import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Loader2, BookOpen, Calendar, Users, Sparkles } from "lucide-react";
-import type { TacheType, Salarie, TachePlanifiee } from "./types";
+import { Loader2, BookOpen, Calendar, Users, Sparkles, LayoutTemplate } from "lucide-react";
+import type { TacheType, Salarie, TachePlanifiee, ModelePlanning } from "./types";
 import { getISOWeek } from "./types";
 import TabBibliotheque from "./TabBibliotheque";
 import TabPlanning from "./TabPlanning";
 import TabEquipe from "./TabEquipe";
 import TabAgentIA from "./TabAgentIA";
+import TabModeles from "./TabModeles";
 
-type TabId = "planning" | "bibliotheque" | "equipe" | "ia";
+type TabId = "planning" | "bibliotheque" | "equipe" | "ia" | "modeles";
 
 export default function ManagementPage() {
   const [tab, setTab] = useState<TabId>("planning");
@@ -19,18 +20,21 @@ export default function ManagementPage() {
   const [salaries, setSalaries] = useState<Salarie[]>([]);
   const [tachesPlanifiees, setTachesPlanifiees] = useState<TachePlanifiee[]>([]);
   const [creneaux, setCreneaux] = useState<any[]>([]);
+  const [modeles, setModeles] = useState<ModelePlanning[]>([]);
   const [semaine, setSemaine] = useState(() => getISOWeek(new Date()));
 
   const fetchData = async () => {
     try {
-      const [ttSnap, salSnap, crSnap] = await Promise.all([
+      const [ttSnap, salSnap, crSnap, modSnap] = await Promise.all([
         getDocs(query(collection(db,"taches-type"), orderBy("categorie"))),
         getDocs(collection(db,"salaries-management")),
         getDocs(collection(db,"creneaux")),
+        getDocs(collection(db,"modeles-planning")),
       ]);
       setTachesType(ttSnap.docs.map(d=>({id:d.id,...d.data()} as TacheType)));
       setSalaries(salSnap.docs.map(d=>({id:d.id,...d.data()} as Salarie)).sort((a,b)=>a.nom.localeCompare(b.nom)));
       setCreneaux(crSnap.docs.map(d=>({id:d.id,...d.data()})));
+      setModeles(modSnap.docs.map(d=>({id:d.id,...d.data()} as ModelePlanning)));
     } catch(e) { console.error(e); }
     setLoading(false);
   };
@@ -49,6 +53,7 @@ export default function ManagementPage() {
 
   const TABS = [
     { id: "planning" as TabId, label: "Planning", icon: Calendar },
+    { id: "modeles" as TabId, label: "Modèles", icon: LayoutTemplate },
     { id: "bibliotheque" as TabId, label: "Bibliothèque", icon: BookOpen },
     { id: "equipe" as TabId, label: "Équipe", icon: Users },
     { id: "ia" as TabId, label: "Agent IA", icon: Sparkles },
@@ -90,7 +95,13 @@ export default function ManagementPage() {
               semaine={semaine} setSemaine={s=>{setSemaine(s);}}
               taches={tachesPlanifiees} tachesType={tachesType}
               salaries={salaries} creneaux={creneaux}
+              modeles={modeles}
               onRefresh={refresh}/>
+          )}
+          {tab==="modeles" && (
+            <TabModeles
+              modeles={modeles} tachesType={tachesType}
+              salaries={salaries} onRefresh={refresh}/>
           )}
           {tab==="bibliotheque" && <TabBibliotheque taches={tachesType} onRefresh={refresh}/>}
           {tab==="equipe" && <TabEquipe salaries={salaries} onRefresh={refresh}/>}

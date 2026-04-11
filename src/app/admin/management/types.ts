@@ -59,6 +59,33 @@ export interface PlanningISemaine {
   updatedAt?: any;
 }
 
+// ── Modèles de planning ───────────────────────────────────────────────
+
+/** Tâche dans un modèle (sans semaine, sans id Firestore) */
+export interface TacheModele {
+  tacheTypeId: string;
+  tacheLabel: string;
+  categorie: CategorieTache;
+  salarieId: string;
+  salarieName: string;
+  jour: JourSemaine;
+  heureDebut: string;       // "08:00"
+  dureeMinutes: number;
+  notes?: string;
+}
+
+/** Modèle de planning réutilisable */
+export interface ModelePlanning {
+  id: string;
+  nom: string;              // "Semaine scolaire", "Vacances été"
+  description?: string;     // Note libre
+  type: "scolaire" | "vacances" | "autre";
+  couleur: string;          // Pour différencier visuellement
+  taches: TacheModele[];    // Toutes les tâches du modèle
+  createdAt?: any;
+  updatedAt?: any;
+}
+
 // Helper : obtenir le numéro de semaine ISO
 export function getISOWeek(date: Date): string {
   const d = new Date(date);

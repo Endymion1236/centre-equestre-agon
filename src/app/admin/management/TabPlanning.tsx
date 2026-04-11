@@ -2,9 +2,9 @@
 import { useState, useMemo } from "react";
 import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Plus, Trash2, Check, ChevronLeft, ChevronRight, Printer } from "lucide-react";
+import { Plus, Trash2, Check, ChevronLeft, ChevronRight, Printer, Save, LayoutTemplate } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
-import type { TacheType, TachePlanifiee, Salarie, JourSemaine } from "./types";
+import type { TacheType, TachePlanifiee, Salarie, JourSemaine, ModelePlanning, TacheModele } from "./types";
 import { CATEGORIES, JOURS, JOURS_LABELS, getLundideSemaine, formatDateCourte, fmtDuree } from "./types";
 
 interface Props {
@@ -13,7 +13,8 @@ interface Props {
   taches: TachePlanifiee[];
   tachesType: TacheType[];
   salaries: Salarie[];
-  creneaux: any[]; // activités du planning ce jour
+  creneaux: any[];
+  modeles: ModelePlanning[];
   onRefresh: () => void;
 }
 
@@ -27,11 +28,16 @@ function minToHeure(m: number) { return `${String(Math.floor(m/60)).padStart(2,"
 
 const COULEURS_SALARIE = ["#2050A0","#16a34a","#dc2626","#d97706","#7c3aed","#0891b2","#be185d","#374151"];
 
-export default function TabPlanning({ semaine, setSemaine, taches, tachesType, salaries, creneaux, onRefresh }: Props) {
+export default function TabPlanning({ semaine, setSemaine, taches, tachesType, salaries, creneaux, modeles, onRefresh }: Props) {
   const { toast } = useToast();
   const [addCell, setAddCell] = useState<{ salarieId: string; jour: JourSemaine } | null>(null);
   const [addForm, setAddForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30 });
   const [saving, setSaving] = useState(false);
+  const [showApplyModele, setShowApplyModele] = useState(false);
+  const [showSaveModele, setShowSaveModele] = useState(false);
+  const [saveModeleName, setSaveModeleName] = useState("");
+  const [saveModeleType, setSaveModeleType] = useState<"scolaire" | "vacances" | "autre">("scolaire");
+  const [applyingModele, setApplyingModele] = useState(false);
   const [view, setView] = useState<"tableau" | "timeline" | "journalier" | "fiche">("tableau");
   const [selectedDay, setSelectedDay] = useState<JourSemaine>(() => {
     const dayIndex = (new Date().getDay() + 6) % 7; // 0=lundi
@@ -106,6 +112,87 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   const delTache = async (t: TachePlanifiee) => {
     await deleteDoc(doc(db, "taches-planifiees", t.id));
     onRefresh();
+  };
+
+  // ── Sauvegarder la semaine comme modèle ─────────────────────────────
+  const handleSaveAsModele = async () => {
+    if (!saveModeleName.trim()) { toast("Nom du modèle requis", "error"); return; }
+    if (taches.length === 0) { toast("La semaine est vide, rien à sauvegarder", "error"); return; }
+    setSaving(true);
+    try {
+      const tachesModele: TacheModele[] = taches.map(t => ({
+        tacheTypeId: t.tacheTypeId,
+        tacheLabel: t.tacheLabel,
+        categorie: t.categorie,
+        salarieId: t.salarieId,
+        salarieName: t.salarieName,
+        jour: t.jour,
+        heureDebut: t.heureDebut,
+        dureeMinutes: t.dureeMinutes,
+        notes: t.notes,
+      }));
+
+      const COULEURS_TYPE = { scolaire: "#2050A0", vacances: "#d97706", autre: "#6b7280" };
+      await addDoc(collection(db, "modeles-planning"), {
+        nom: saveModeleName.trim(),
+        description: `Créé depuis la semaine ${semaine}`,
+        type: saveModeleType,
+        couleur: COULEURS_TYPE[saveModeleType],
+        taches: tachesModele,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      toast(`Modèle "${saveModeleName}" créé avec ${tachesModele.length} tâches`, "success");
+      setShowSaveModele(false);
+      setSaveModeleName("");
+      onRefresh();
+    } catch (e: any) {
+      toast("Erreur lors de la sauvegarde", "error");
+    }
+    setSaving(false);
+  };
+
+  // ── Appliquer un modèle sur la semaine courante ─────────────────────
+  const handleApplyModele = async (modele: ModelePlanning) => {
+    const msg = taches.length > 0
+      ? `Appliquer "${modele.nom}" sur la semaine ${semaine} ?\n\nLes ${taches.length} tâches existantes seront conservées, les tâches du modèle seront AJOUTÉES.`
+      : `Appliquer "${modele.nom}" sur la semaine ${semaine} ?`;
+    if (!confirm(msg)) return;
+
+    setApplyingModele(true);
+    try {
+      let count = 0;
+      // Batch par groupes de 50
+      for (let i = 0; i < modele.taches.length; i += 50) {
+        const chunk = modele.taches.slice(i, i + 50);
+        const promises = chunk.map(t =>
+          addDoc(collection(db, "taches-planifiees"), {
+            tacheTypeId: t.tacheTypeId,
+            tacheLabel: t.tacheLabel,
+            categorie: t.categorie,
+            salarieId: t.salarieId,
+            salarieName: t.salarieName,
+            jour: t.jour,
+            heureDebut: t.heureDebut,
+            dureeMinutes: t.dureeMinutes,
+            notes: t.notes || "",
+            semaine,
+            done: false,
+            createdAt: serverTimestamp(),
+          })
+        );
+        await Promise.all(promises);
+        count += chunk.length;
+      }
+
+      toast(`Modèle "${modele.nom}" appliqué : ${count} tâches ajoutées`, "success");
+      setShowApplyModele(false);
+      onRefresh();
+    } catch (e: any) {
+      toast("Erreur lors de l'application du modèle", "error");
+    }
+    setApplyingModele(false);
   };
 
   // Calcul charge par salarié (minutes totales / semaine)
@@ -817,14 +904,75 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
         })}
       </div>
 
-      {/* Toggle vue */}
-      <div className="flex gap-2 flex-wrap">
+      {/* Toggle vue + actions modèles */}
+      <div className="flex gap-2 flex-wrap items-center">
         {(["tableau","timeline","journalier","fiche"] as const).map(v => (
           <button key={v} onClick={()=>setView(v)}
             className={`px-4 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${view===v?"bg-blue-500 text-white":"bg-white text-slate-500 border border-gray-200"}`}>
             {v === "tableau" ? "📊 Tableau" : v === "timeline" ? "📅 Timeline" : v === "journalier" ? "👤 Journalier" : "📋 Fiche"}
           </button>
         ))}
+        <div className="flex-1" />
+        {/* Bouton Appliquer un modèle */}
+        <div className="relative">
+          <button onClick={() => setShowApplyModele(!showApplyModele)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer border border-green-200 bg-white text-green-700 hover:bg-green-50">
+            <LayoutTemplate size={13}/> Appliquer un modèle
+          </button>
+          {showApplyModele && (
+            <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg p-3 min-w-[280px]">
+              <div className="font-body text-xs font-bold text-gray-500 mb-2">Appliquer sur la semaine {semaine}</div>
+              {modeles.length === 0 ? (
+                <p className="font-body text-xs text-gray-400 py-3 text-center">Aucun modèle. Créez-en dans l'onglet Modèles.</p>
+              ) : (
+                <div className="space-y-1 max-h-[250px] overflow-y-auto">
+                  {modeles.map(m => (
+                    <button key={m.id} onClick={() => handleApplyModele(m)}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-blue-50 cursor-pointer border-none bg-transparent text-left">
+                      <span>{m.type === "scolaire" ? "📚" : m.type === "vacances" ? "☀️" : "📌"}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-body text-xs font-semibold text-blue-800 truncate">{m.nom}</div>
+                        <div className="font-body text-[10px] text-gray-400">{m.taches.length} tâches · {fmtDuree(m.taches.reduce((s,t)=>s+t.dureeMinutes,0))}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button onClick={() => setShowApplyModele(false)}
+                className="mt-2 w-full text-center font-body text-[10px] text-gray-400 bg-transparent border-none cursor-pointer hover:text-gray-600">Fermer</button>
+            </div>
+          )}
+        </div>
+        {/* Bouton Sauvegarder comme modèle */}
+        <div className="relative">
+          <button onClick={() => setShowSaveModele(!showSaveModele)} disabled={taches.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer border border-blue-200 bg-white text-blue-600 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed">
+            <Save size={13}/> Sauvegarder comme modèle
+          </button>
+          {showSaveModele && (
+            <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg p-4 min-w-[300px]">
+              <div className="font-body text-xs font-bold text-gray-500 mb-3">Sauvegarder les {taches.length} tâches comme modèle</div>
+              <input value={saveModeleName} onChange={e => setSaveModeleName(e.target.value)} placeholder="Nom du modèle (ex: Semaine scolaire)"
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+              <div className="flex gap-2 mb-3">
+                {([["scolaire","📚","Scolaire"],["vacances","☀️","Vacances"],["autre","📌","Autre"]] as const).map(([id, emoji, label]) => (
+                  <button key={id} onClick={() => setSaveModeleType(id)}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border font-body text-xs cursor-pointer ${saveModeleType === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-600 border-gray-200"}`}>
+                    {emoji} {label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setShowSaveModele(false)}
+                  className="px-3 py-1.5 rounded-lg border border-gray-200 font-body text-xs text-gray-500 cursor-pointer bg-white">Annuler</button>
+                <button onClick={handleSaveAsModele}
+                  className="px-4 py-1.5 rounded-lg bg-blue-500 text-white font-body text-xs font-semibold cursor-pointer border-none hover:bg-blue-400">
+                  Créer le modèle
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Vue */}
