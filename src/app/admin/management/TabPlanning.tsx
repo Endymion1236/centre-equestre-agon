@@ -252,7 +252,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                                 {t.tacheLabel}
                               </div>
                               <div style={{fontFamily:"sans-serif", fontSize:9, color:"#94a3b8"}}>
-                                {t.heureDebut} · {t.dureeMinutes<60?`${t.dureeMinutes}min`:`${t.dureeMinutes/60}h`}
+                                {t.heureDebut}→{minToHeure(heureToMin(t.heureDebut) + t.dureeMinutes)} ({t.dureeMinutes<60?`${t.dureeMinutes}min`:`${Math.floor(t.dureeMinutes/60)}h${t.dureeMinutes%60>0?t.dureeMinutes%60:""}`})
                               </div>
                             </div>
                             <button onClick={()=>toggleDone(t)} style={{width:18,height:18,borderRadius:4,border:"1px solid "+(t.done?"#16a34a":"#d1d5db"),background:t.done?"#16a34a":"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,padding:0}}>
@@ -270,7 +270,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                             setAddForm({...addForm,tacheTypeId:e.target.value,dureeMinutes:tt?.dureeMinutes||30});
                           }} style={{width:"100%",padding:"4px 6px",borderRadius:6,border:"1px solid #bfdbfe",fontFamily:"sans-serif",fontSize:11,background:"white"}}>
                             <option value="">— Choisir —</option>
-                            {tachesType.map(t=><option key={t.id} value={t.id}>{t.label}</option>)}
+                            {tachesType.map(t=><option key={t.id} value={t.id}>{t.label} ({t.dureeMinutes < 60 ? `${t.dureeMinutes}min` : `${Math.floor(t.dureeMinutes/60)}h${t.dureeMinutes%60>0?t.dureeMinutes%60:""}`})</option>)}
                           </select>
                           <div style={{display:"flex",gap:4}}>
                             <select value={addForm.heureDebut} onChange={e=>setAddForm({...addForm,heureDebut:e.target.value})}
@@ -282,6 +282,12 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                               {[15,30,45,60,90,120,180,240].map(d=><option key={d} value={d}>{d<60?`${d}m`:`${d/60}h`}</option>)}
                             </select>
                           </div>
+                          {/* Heure de fin calculée */}
+                          {addForm.heureDebut && addForm.dureeMinutes > 0 && (
+                            <div style={{fontFamily:"sans-serif",fontSize:10,color:"#3b82f6",fontWeight:600,textAlign:"center",background:"#dbeafe",borderRadius:6,padding:"3px 0"}}>
+                              {addForm.heureDebut} → {minToHeure(heureToMin(addForm.heureDebut) + addForm.dureeMinutes)} ({addForm.dureeMinutes < 60 ? `${addForm.dureeMinutes}min` : `${Math.floor(addForm.dureeMinutes/60)}h${addForm.dureeMinutes%60>0?String(addForm.dureeMinutes%60).padStart(2,"0"):""}`})
+                            </div>
+                          )}
                           <div style={{display:"flex",gap:4}}>
                             <button onClick={addTache} disabled={saving||!addForm.tacheTypeId}
                               style={{flex:1,padding:"4px 0",borderRadius:6,border:"none",background:"#3b82f6",color:"white",fontFamily:"sans-serif",fontSize:11,fontWeight:600,cursor:"pointer"}}>
@@ -440,7 +446,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                           const isShort = durMin < 45;
                           return (
                             <div key={t.id}
-                              title={`${t.tacheLabel} — ${t.heureDebut} (${durMin}min)`}
+                              title={`${t.tacheLabel} — ${t.heureDebut}→${minToHeure(s + durMin)} (${durMin}min)`}
                               style={{
                                 position:"absolute", left:pct(s), width:w(durMin), minWidth:isShort?6:undefined,
                                 top:3, bottom:3,
@@ -649,7 +655,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                     const isShort = durMin < 45;
                     return (
                       <div key={t.id}
-                        title={`${t.tacheLabel} — ${t.heureDebut} (${durMin}min)`}
+                        title={`${t.tacheLabel} — ${t.heureDebut}→${minToHeure(s + durMin)} (${durMin}min)`}
                         style={{
                           position:"absolute", left:pct(s), width:w(durMin),
                           top:4, bottom:4,
