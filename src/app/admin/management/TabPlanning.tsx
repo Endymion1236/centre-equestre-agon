@@ -302,18 +302,18 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   // ── Vue tableau ──────────────────────────────────────────────────────────
   const TableauView = () => (
     <div style={{overflowX:"auto", margin:"0 -16px", padding:"0 16px"}}>
-      <table style={{width:"100%", borderCollapse:"collapse", tableLayout:"fixed", minWidth:950}}>
+      <table style={{width:"100%", borderCollapse:"collapse", tableLayout:"fixed"}}>
         <colgroup>
-          <col style={{width:"12%"}} />
-          {jourDates.slice(0,6).map(({jour}) => <col key={jour} style={{width:"14.6%"}} />)}
+          <col style={{width:"10%", minWidth:80}} />
+          {jourDates.slice(0,6).map(({jour}) => <col key={jour} style={{width:"15%"}} />)}
         </colgroup>
         <thead>
           <tr>
-            <th style={{padding:"8px 10px", textAlign:"left", fontSize:11, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0"}}>
+            <th style={{padding:"6px 6px", textAlign:"left", fontSize:10, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0"}}>
               Salarié
             </th>
             {jourDates.slice(0,6).map(({jour, label}) => (
-              <th key={jour} style={{padding:"8px 6px", textAlign:"center", fontSize:11, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>
+              <th key={jour} style={{padding:"6px 3px", textAlign:"center", fontSize:10, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>
                 {label}
               </th>
             ))}
@@ -322,10 +322,10 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
         <tbody>
           {salaries.filter(s=>s.actif).map((sal, si) => (
             <tr key={sal.id} style={{background: si%2===0?"#f8faff":"#fff"}}>
-              <td style={{padding:"8px 10px", borderBottom:"1px solid #eef2f7", verticalAlign:"top"}}>
-                <div style={{display:"flex", alignItems:"center", gap:5}}>
-                  <div style={{width:8, height:8, borderRadius:"50%", background:sal.couleur, flexShrink:0}}/>
-                  <span style={{fontFamily:"sans-serif", fontSize:12, fontWeight:700, color:"#1e293b", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{sal.nom}</span>
+              <td style={{padding:"6px 6px", borderBottom:"1px solid #eef2f7", verticalAlign:"top"}}>
+                <div style={{display:"flex", alignItems:"center", gap:4}}>
+                  <div style={{width:7, height:7, borderRadius:"50%", background:sal.couleur, flexShrink:0}}/>
+                  <span style={{fontFamily:"sans-serif", fontSize:11, fontWeight:700, color:"#1e293b", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{sal.nom}</span>
                 </div>
                 <div style={{fontFamily:"sans-serif", fontSize:9, color:"#94a3b8", marginTop:2}}>
                   {fmtDuree(chargeParSalarie[sal.id]||0)} cette sem.
@@ -334,7 +334,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
               {jourDates.slice(0,6).map(({jour}) => {
                 const cellTaches = taches.filter(t => t.salarieId===sal.id && t.jour===jour).sort((a,b) => a.heureDebut.localeCompare(b.heureDebut));
                 return (
-                  <td key={jour} style={{padding:"4px 5px", borderBottom:"1px solid #eef2f7", verticalAlign:"top"}}>
+                  <td key={jour} style={{padding:"3px 3px", borderBottom:"1px solid #eef2f7", verticalAlign:"top"}}>
                     <div style={{display:"flex", flexDirection:"column", gap:3}}>
                       {cellTaches.map(t => {
                         const cat = getCat(t.categorie);
