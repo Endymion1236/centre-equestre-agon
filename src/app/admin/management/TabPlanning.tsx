@@ -249,7 +249,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                 </div>
               </td>
               {jourDates.slice(0,5).map(({jour}) => {
-                const cellTaches = taches.filter(t => t.salarieId===sal.id && t.jour===jour);
+                const cellTaches = taches.filter(t => t.salarieId===sal.id && t.jour===jour).sort((a,b) => a.heureDebut.localeCompare(b.heureDebut));
                 return (
                   <td key={jour} style={{padding:"4px 5px", borderBottom:"1px solid #eef2f7", verticalAlign:"top"}}>
                     <div style={{display:"flex", flexDirection:"column", gap:3}}>
