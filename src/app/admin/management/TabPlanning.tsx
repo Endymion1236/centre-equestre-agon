@@ -31,7 +31,7 @@ const COULEURS_SALARIE = ["#2050A0","#16a34a","#dc2626","#d97706","#7c3aed","#08
 export default function TabPlanning({ semaine, setSemaine, taches, tachesType, salaries, creneaux, modeles, onRefresh }: Props) {
   const { toast } = useToast();
   const [addCell, setAddCell] = useState<{ salarieId: string; jour: JourSemaine } | null>(null);
-  const [addForm, setAddForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30 });
+  const [addForm, setAddForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30, touteLaSemaine: false });
   const [saving, setSaving] = useState(false);
   const [showApplyModele, setShowApplyModele] = useState(false);
   const [showSaveModele, setShowSaveModele] = useState(false);
@@ -75,6 +75,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       tacheTypeId: defaultTache?.id || (tachesType[0]?.id || ""),
       heureDebut: "08:00",
       dureeMinutes: defaultTache?.dureeMinutes || 30,
+      touteLaSemaine: false,
     });
     setAddCell({ salarieId, jour });
   };
@@ -84,20 +85,35 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     setSaving(true);
     const tt = tachesType.find(t => t.id === addForm.tacheTypeId)!;
     const sal = salaries.find(s => s.id === addCell.salarieId)!;
+    const joursToAdd: JourSemaine[] = addForm.touteLaSemaine
+      ? JOURS.filter(j => {
+          // Si la tâche a des jours par défaut, les utiliser ; sinon lun-ven
+          const defaults = tt.joursDefaut;
+          return defaults && defaults.length > 0 ? defaults.includes(j) : JOURS.indexOf(j) < 5;
+        })
+      : [addCell.jour];
+
     try {
-      await addDoc(collection(db, "taches-planifiees"), {
-        tacheTypeId: addForm.tacheTypeId,
-        tacheLabel: tt.label,
-        categorie: tt.categorie,
-        salarieId: addCell.salarieId,
-        salarieName: sal?.nom || "",
-        jour: addCell.jour,
-        heureDebut: addForm.heureDebut,
-        dureeMinutes: addForm.dureeMinutes || tt.dureeMinutes,
-        semaine,
-        done: false,
-        createdAt: serverTimestamp(),
-      });
+      const batch: Promise<any>[] = [];
+      for (const jour of joursToAdd) {
+        batch.push(addDoc(collection(db, "taches-planifiees"), {
+          tacheTypeId: addForm.tacheTypeId,
+          tacheLabel: tt.label,
+          categorie: tt.categorie,
+          salarieId: addCell.salarieId,
+          salarieName: sal?.nom || "",
+          jour,
+          heureDebut: addForm.heureDebut,
+          dureeMinutes: addForm.dureeMinutes || tt.dureeMinutes,
+          semaine,
+          done: false,
+          createdAt: serverTimestamp(),
+        }));
+      }
+      await Promise.all(batch);
+      if (joursToAdd.length > 1) {
+        toast(`${tt.label} ajoutée sur ${joursToAdd.length} jours`, "success");
+      }
       setAddCell(null);
       onRefresh();
     } catch(e:any) { toast(`Erreur : ${e.message}`, "error"); }
@@ -288,10 +304,27 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                               {addForm.heureDebut} → {minToHeure(heureToMin(addForm.heureDebut) + addForm.dureeMinutes)} ({addForm.dureeMinutes < 60 ? `${addForm.dureeMinutes}min` : `${Math.floor(addForm.dureeMinutes/60)}h${addForm.dureeMinutes%60>0?String(addForm.dureeMinutes%60).padStart(2,"0"):""}`})
                             </div>
                           )}
+                          {/* Option toute la semaine */}
+                          <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",fontFamily:"sans-serif",fontSize:10,color:"#475569"}}>
+                            <input type="checkbox" checked={addForm.touteLaSemaine}
+                              onChange={e=>setAddForm({...addForm,touteLaSemaine:e.target.checked})}
+                              style={{accentColor:"#3b82f6",width:13,height:13}} />
+                            Toute la semaine
+                            {addForm.touteLaSemaine && addForm.tacheTypeId && (
+                              <span style={{color:"#3b82f6",fontWeight:600}}>
+                                ({(() => {
+                                  const tt = tachesType.find(t=>t.id===addForm.tacheTypeId);
+                                  const defaults = tt?.joursDefaut;
+                                  const nbJours = defaults && defaults.length > 0 ? defaults.length : 5;
+                                  return `${nbJours}j`;
+                                })()})
+                              </span>
+                            )}
+                          </label>
                           <div style={{display:"flex",gap:4}}>
                             <button onClick={addTache} disabled={saving||!addForm.tacheTypeId}
-                              style={{flex:1,padding:"4px 0",borderRadius:6,border:"none",background:"#3b82f6",color:"white",fontFamily:"sans-serif",fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                              ✓ Ajouter
+                              style={{flex:1,padding:"4px 0",borderRadius:6,border:"none",background:addForm.touteLaSemaine?"#16a34a":"#3b82f6",color:"white",fontFamily:"sans-serif",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                              {saving ? "..." : addForm.touteLaSemaine ? "✓ Ajouter sur la semaine" : "✓ Ajouter"}
                             </button>
                             <button onClick={()=>setAddCell(null)}
                               style={{padding:"4px 8px",borderRadius:6,border:"none",background:"#f1f5f9",color:"#64748b",fontFamily:"sans-serif",fontSize:11,cursor:"pointer"}}>
