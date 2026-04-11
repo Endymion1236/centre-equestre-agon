@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, where, orderBy, addDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Loader2, BookOpen, Calendar, Users, Sparkles, LayoutTemplate } from "lucide-react";
 import type { TacheType, Salarie, TachePlanifiee, ModelePlanning } from "./types";
@@ -25,16 +25,55 @@ export default function ManagementPage() {
 
   const fetchData = async () => {
     try {
-      const [ttSnap, salSnap, crSnap, modSnap] = await Promise.all([
+      const [ttSnap, salSnap, crSnap, modSnap, monSnap] = await Promise.all([
         getDocs(query(collection(db,"taches-type"), orderBy("categorie"))),
         getDocs(collection(db,"salaries-management")),
         getDocs(collection(db,"creneaux")),
         getDocs(collection(db,"modeles-planning")),
+        getDocs(collection(db,"moniteurs")),
       ]);
       setTachesType(ttSnap.docs.map(d=>({id:d.id,...d.data()} as TacheType)));
-      setSalaries(salSnap.docs.map(d=>({id:d.id,...d.data()} as Salarie)).sort((a,b)=>a.nom.localeCompare(b.nom)));
       setCreneaux(crSnap.docs.map(d=>({id:d.id,...d.data()})));
       setModeles(modSnap.docs.map(d=>({id:d.id,...d.data()} as ModelePlanning)));
+
+      // ── Synchronisation moniteurs (paramètres) → salariés (management) ──
+      const existingSalaries = salSnap.docs.map(d=>({id:d.id,...d.data()} as Salarie));
+      const moniteurs = monSnap.docs.map(d=>({id:d.id,...d.data()} as any));
+      const COULEURS_AUTO = ["#2050A0","#16a34a","#dc2626","#d97706","#7c3aed","#0891b2","#be185d","#374151","#065f46","#92400e"];
+
+      // Ajouter les moniteurs qui n'ont pas de salarié correspondant
+      let needRefresh = false;
+      for (const mon of moniteurs) {
+        if (mon.status !== "active") continue;
+        const nameLC = (mon.name || "").toLowerCase().trim();
+        const exists = existingSalaries.some(s => s.nom.toLowerCase().trim() === nameLC);
+        if (!exists && nameLC) {
+          const couleur = COULEURS_AUTO[existingSalaries.length % COULEURS_AUTO.length];
+          const ref = await addDoc(collection(db, "salaries-management"), {
+            nom: mon.name.trim(),
+            couleur,
+            actif: true,
+            moniteurId: mon.id,
+            role: mon.role || "",
+            createdAt: serverTimestamp(),
+          });
+          existingSalaries.push({ id: ref.id, nom: mon.name.trim(), couleur, actif: true } as Salarie);
+          needRefresh = true;
+        }
+      }
+
+      // Désactiver les salariés dont le moniteur n'existe plus ou est inactif
+      for (const sal of existingSalaries) {
+        const nameLC = sal.nom.toLowerCase().trim();
+        const monMatch = moniteurs.find((m: any) => (m.name || "").toLowerCase().trim() === nameLC);
+        if (monMatch && monMatch.status !== "active" && sal.actif) {
+          await updateDoc(doc(db, "salaries-management", sal.id), { actif: false, updatedAt: serverTimestamp() });
+          sal.actif = false;
+          needRefresh = true;
+        }
+      }
+
+      setSalaries(existingSalaries.sort((a,b)=>a.nom.localeCompare(b.nom)));
     } catch(e) { console.error(e); }
     setLoading(false);
   };
