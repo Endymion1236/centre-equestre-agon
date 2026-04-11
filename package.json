@@ -17,10 +17,16 @@
     "test:headed": "playwright test --headed",
     "test:admin": "playwright test --project=admin",
     "test:public": "playwright test --project=public",
-    "test:smoke": "playwright test tests/e2e/admin/09-navigation-smoke.spec.ts",
+    "test:smoke": "./scripts/run-tests.sh smoke",
     "test:report": "playwright show-report",
     "test:debug": "playwright test --debug",
-    "audit": "node scripts/audit-validate.mjs"
+    "audit": "node scripts/audit-validate.mjs",
+    "test:e2e": "playwright test",
+    "test:securite": "./scripts/run-tests.sh securite",
+    "test:flows": "./scripts/run-tests.sh flows",
+    "test:api": "./scripts/run-tests.sh api",
+    "test:rapport": "./scripts/run-tests.sh rapport",
+    "test:all": "./scripts/run-tests.sh all"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
