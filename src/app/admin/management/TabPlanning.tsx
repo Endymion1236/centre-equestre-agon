@@ -31,7 +31,7 @@ const COULEURS_SALARIE = ["#2050A0","#16a34a","#dc2626","#d97706","#7c3aed","#08
 export default function TabPlanning({ semaine, setSemaine, taches, tachesType, salaries, creneaux, modeles, onRefresh }: Props) {
   const { toast } = useToast();
   const [addCell, setAddCell] = useState<{ salarieId: string; jour: JourSemaine } | null>(null);
-  const [addForm, setAddForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30, touteLaSemaine: false });
+  const [addForm, setAddForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30, joursSelectionnes: [] as JourSemaine[] });
   const [saving, setSaving] = useState(false);
   const [showApplyModele, setShowApplyModele] = useState(false);
   const [showSaveModele, setShowSaveModele] = useState(false);
@@ -75,7 +75,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       tacheTypeId: defaultTache?.id || (tachesType[0]?.id || ""),
       heureDebut: "08:00",
       dureeMinutes: defaultTache?.dureeMinutes || 30,
-      touteLaSemaine: false,
+      joursSelectionnes: [] as JourSemaine[],
     });
     setAddCell({ salarieId, jour });
   };
@@ -85,8 +85,8 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     setSaving(true);
     const tt = tachesType.find(t => t.id === addForm.tacheTypeId)!;
     const sal = salaries.find(s => s.id === addCell.salarieId)!;
-    const joursToAdd: JourSemaine[] = addForm.touteLaSemaine
-      ? JOURS.slice(0, 6) // Lundi → Vendredi, toujours
+    const joursToAdd: JourSemaine[] = addForm.joursSelectionnes.length > 0
+      ? addForm.joursSelectionnes
       : [addCell.jour];
 
     try {
@@ -415,20 +415,47 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                               {addForm.heureDebut} → {minToHeure(heureToMin(addForm.heureDebut) + addForm.dureeMinutes)} ({addForm.dureeMinutes < 60 ? `${addForm.dureeMinutes}min` : `${Math.floor(addForm.dureeMinutes/60)}h${addForm.dureeMinutes%60>0?String(addForm.dureeMinutes%60).padStart(2,"0"):""}`})
                             </div>
                           )}
-                          {/* Option toute la semaine */}
-                          <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",fontFamily:"sans-serif",fontSize:10,color:"#475569"}}>
-                            <input type="checkbox" checked={addForm.touteLaSemaine}
-                              onChange={e=>setAddForm({...addForm,touteLaSemaine:e.target.checked})}
-                              style={{accentColor:"#3b82f6",width:13,height:13}} />
-                            Toute la semaine
-                            {addForm.touteLaSemaine && (
-                              <span style={{color:"#3b82f6",fontWeight:600}}>(lun→ven)</span>
-                            )}
-                          </label>
+                          {/* Sélection des jours */}
+                          <div>
+                            <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:4}}>
+                              <span style={{fontFamily:"sans-serif",fontSize:9,color:"#475569",fontWeight:600}}>Jours :</span>
+                              <button onClick={() => {
+                                const allDays = JOURS.slice(0,6) as JourSemaine[];
+                                const allSelected = allDays.every(j => addForm.joursSelectionnes.includes(j));
+                                setAddForm({...addForm, joursSelectionnes: allSelected ? [] : [...allDays]});
+                              }}
+                                style={{fontFamily:"sans-serif",fontSize:8,color:"#3b82f6",background:"transparent",border:"none",cursor:"pointer",textDecoration:"underline",padding:0}}>
+                                {JOURS.slice(0,6).every(j => addForm.joursSelectionnes.includes(j as JourSemaine)) ? "Aucun" : "Tous"}
+                              </button>
+                            </div>
+                            <div style={{display:"flex",gap:2}}>
+                              {JOURS.slice(0,6).map(j => {
+                                const selected = addForm.joursSelectionnes.includes(j as JourSemaine);
+                                const isCurrent = j === addCell?.jour;
+                                return (
+                                  <button key={j} onClick={() => {
+                                    const curr = addForm.joursSelectionnes;
+                                    setAddForm({...addForm, joursSelectionnes: selected ? curr.filter(x => x !== j) : [...curr, j as JourSemaine]});
+                                  }}
+                                    style={{
+                                      padding:"3px 0", width:"100%", borderRadius:5, fontSize:9, fontWeight:selected?700:500,
+                                      fontFamily:"sans-serif", cursor:"pointer",
+                                      background: selected ? "#3b82f6" : isCurrent ? "#eff6ff" : "white",
+                                      color: selected ? "white" : isCurrent ? "#3b82f6" : "#94a3b8",
+                                      border: selected ? "1px solid #3b82f6" : isCurrent ? "1px solid #bfdbfe" : "1px solid #e5e7eb",
+                                    }}>
+                                    {JOURS_LABELS[j].slice(0,2)}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
                           <div style={{display:"flex",gap:4}}>
                             <button onClick={addTache} disabled={saving||!addForm.tacheTypeId}
-                              style={{flex:1,padding:"4px 0",borderRadius:6,border:"none",background:addForm.touteLaSemaine?"#16a34a":"#3b82f6",color:"white",fontFamily:"sans-serif",fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                              {saving ? "..." : addForm.touteLaSemaine ? "✓ Ajouter sur la semaine" : "✓ Ajouter"}
+                              style={{flex:1,padding:"4px 0",borderRadius:6,border:"none",
+                                background: addForm.joursSelectionnes.length > 1 ? "#16a34a" : "#3b82f6",
+                                color:"white",fontFamily:"sans-serif",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                              {saving ? "..." : addForm.joursSelectionnes.length > 1 ? `✓ Ajouter (${addForm.joursSelectionnes.length}j)` : "✓ Ajouter"}
                             </button>
                             <button onClick={()=>setAddCell(null)}
                               style={{padding:"4px 8px",borderRadius:6,border:"none",background:"#f1f5f9",color:"#64748b",fontFamily:"sans-serif",fontSize:11,cursor:"pointer"}}>
