@@ -339,15 +339,15 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                       {cellTaches.map(t => {
                         const cat = getCat(t.categorie);
                         return (
-                          <div key={t.id} style={{
-                            display:"flex", alignItems:"center", gap:3, padding:"3px 5px",
+                          <div key={t.id} title={`${t.tacheLabel}\n${t.heureDebut}→${minToHeure(heureToMin(t.heureDebut) + t.dureeMinutes)}${t.notes ? "\n" + t.notes : ""}`} style={{
+                            display:"flex", alignItems:"flex-start", gap:3, padding:"3px 5px",
                             borderRadius:6, background: t.done ? "#f0fdf4" : (cat?.color+"18" || "#f1f5f9"),
                             border:`1px solid ${cat?.color+"30" || "#e2e8f0"}`,
                             opacity: t.done ? 0.6 : 1,
                           }}>
-                            <span style={{fontSize:11}}>{cat?.emoji}</span>
+                            <span style={{fontSize:10, marginTop:1}}>{cat?.emoji}</span>
                             <div style={{flex:1, minWidth:0}}>
-                              <div style={{fontFamily:"sans-serif", fontSize:10, fontWeight:600, color: t.done?"#16a34a":cat?.color||"#1e293b", textDecoration:t.done?"line-through":"none", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>
+                              <div style={{fontFamily:"sans-serif", fontSize:10, fontWeight:600, color: t.done?"#16a34a":cat?.color||"#1e293b", textDecoration:t.done?"line-through":"none", lineHeight:"1.3", wordBreak:"break-word"}}>
                                 {t.tacheLabel}
                               </div>
                               <div style={{fontFamily:"sans-serif", fontSize:8, color:"#94a3b8"}}>
