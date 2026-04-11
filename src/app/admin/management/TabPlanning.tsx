@@ -86,11 +86,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     const tt = tachesType.find(t => t.id === addForm.tacheTypeId)!;
     const sal = salaries.find(s => s.id === addCell.salarieId)!;
     const joursToAdd: JourSemaine[] = addForm.touteLaSemaine
-      ? JOURS.filter(j => {
-          // Si la tâche a des jours par défaut, les utiliser ; sinon lun-ven
-          const defaults = tt.joursDefaut;
-          return defaults && defaults.length > 0 ? defaults.includes(j) : JOURS.indexOf(j) < 5;
-        })
+      ? JOURS.slice(0, 5) // Lundi → Vendredi, toujours
       : [addCell.jour];
 
     try {
@@ -314,15 +310,8 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                               onChange={e=>setAddForm({...addForm,touteLaSemaine:e.target.checked})}
                               style={{accentColor:"#3b82f6",width:13,height:13}} />
                             Toute la semaine
-                            {addForm.touteLaSemaine && addForm.tacheTypeId && (
-                              <span style={{color:"#3b82f6",fontWeight:600}}>
-                                ({(() => {
-                                  const tt = tachesType.find(t=>t.id===addForm.tacheTypeId);
-                                  const defaults = tt?.joursDefaut;
-                                  const nbJours = defaults && defaults.length > 0 ? defaults.length : 5;
-                                  return `${nbJours}j`;
-                                })()})
-                              </span>
+                            {addForm.touteLaSemaine && (
+                              <span style={{color:"#3b82f6",fontWeight:600}}>(lun→ven)</span>
                             )}
                           </label>
                           <div style={{display:"flex",gap:4}}>
