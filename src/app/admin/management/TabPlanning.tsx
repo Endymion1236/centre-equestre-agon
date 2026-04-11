@@ -222,15 +222,19 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
 
   // ── Vue tableau ──────────────────────────────────────────────────────────
   const TableauView = () => (
-    <div className="overflow-x-auto">
-      <table style={{width:"100%", borderCollapse:"collapse", minWidth: 700}}>
+    <div style={{overflowX:"auto", margin:"0 -16px", padding:"0 16px"}}>
+      <table style={{width:"100%", borderCollapse:"collapse", tableLayout:"fixed", minWidth:800}}>
+        <colgroup>
+          <col style={{width:"13%"}} />
+          {jourDates.slice(0,5).map(({jour}) => <col key={jour} style={{width:"17.4%"}} />)}
+        </colgroup>
         <thead>
           <tr>
-            <th style={{width:120, padding:"8px 12px", textAlign:"left", fontSize:11, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0"}}>
+            <th style={{padding:"8px 10px", textAlign:"left", fontSize:11, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0"}}>
               Salarié
             </th>
             {jourDates.slice(0,5).map(({jour, label}) => (
-              <th key={jour} style={{padding:"8px 10px", textAlign:"center", fontSize:11, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0", whiteSpace:"nowrap"}}>
+              <th key={jour} style={{padding:"8px 6px", textAlign:"center", fontSize:11, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>
                 {label}
               </th>
             ))}
@@ -239,35 +243,35 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
         <tbody>
           {salaries.filter(s=>s.actif).map((sal, si) => (
             <tr key={sal.id} style={{background: si%2===0?"#f8faff":"#fff"}}>
-              <td style={{padding:"8px 12px", borderBottom:"1px solid #eef2f7", verticalAlign:"top"}}>
-                <div style={{display:"flex", alignItems:"center", gap:6}}>
-                  <div style={{width:10, height:10, borderRadius:"50%", background:sal.couleur, flexShrink:0}}/>
-                  <span style={{fontFamily:"sans-serif", fontSize:13, fontWeight:700, color:"#1e293b"}}>{sal.nom}</span>
+              <td style={{padding:"8px 10px", borderBottom:"1px solid #eef2f7", verticalAlign:"top"}}>
+                <div style={{display:"flex", alignItems:"center", gap:5}}>
+                  <div style={{width:8, height:8, borderRadius:"50%", background:sal.couleur, flexShrink:0}}/>
+                  <span style={{fontFamily:"sans-serif", fontSize:12, fontWeight:700, color:"#1e293b", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{sal.nom}</span>
                 </div>
-                <div style={{fontFamily:"sans-serif", fontSize:10, color:"#94a3b8", marginTop:2}}>
-                  {fmtDuree(chargeParSalarie[sal.id]||0)} cette semaine
+                <div style={{fontFamily:"sans-serif", fontSize:9, color:"#94a3b8", marginTop:2}}>
+                  {fmtDuree(chargeParSalarie[sal.id]||0)} cette sem.
                 </div>
               </td>
               {jourDates.slice(0,5).map(({jour}) => {
                 const cellTaches = taches.filter(t => t.salarieId===sal.id && t.jour===jour);
                 return (
-                  <td key={jour} style={{padding:"6px 8px", borderBottom:"1px solid #eef2f7", verticalAlign:"top", minWidth:120}}>
+                  <td key={jour} style={{padding:"4px 5px", borderBottom:"1px solid #eef2f7", verticalAlign:"top"}}>
                     <div style={{display:"flex", flexDirection:"column", gap:3}}>
                       {cellTaches.map(t => {
                         const cat = getCat(t.categorie);
                         return (
                           <div key={t.id} style={{
-                            display:"flex", alignItems:"center", gap:4, padding:"4px 7px",
-                            borderRadius:8, background: t.done ? "#f0fdf4" : (cat?.color+"18" || "#f1f5f9"),
+                            display:"flex", alignItems:"center", gap:3, padding:"3px 5px",
+                            borderRadius:6, background: t.done ? "#f0fdf4" : (cat?.color+"18" || "#f1f5f9"),
                             border:`1px solid ${cat?.color+"30" || "#e2e8f0"}`,
                             opacity: t.done ? 0.6 : 1,
                           }}>
-                            <span style={{fontSize:12}}>{cat?.emoji}</span>
+                            <span style={{fontSize:11}}>{cat?.emoji}</span>
                             <div style={{flex:1, minWidth:0}}>
-                              <div style={{fontFamily:"sans-serif", fontSize:11, fontWeight:600, color: t.done?"#16a34a":cat?.color||"#1e293b", textDecoration:t.done?"line-through":"none", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>
+                              <div style={{fontFamily:"sans-serif", fontSize:10, fontWeight:600, color: t.done?"#16a34a":cat?.color||"#1e293b", textDecoration:t.done?"line-through":"none", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>
                                 {t.tacheLabel}
                               </div>
-                              <div style={{fontFamily:"sans-serif", fontSize:9, color:"#94a3b8"}}>
+                              <div style={{fontFamily:"sans-serif", fontSize:8, color:"#94a3b8"}}>
                                 {t.heureDebut}→{minToHeure(heureToMin(t.heureDebut) + t.dureeMinutes)} ({t.dureeMinutes<60?`${t.dureeMinutes}min`:`${Math.floor(t.dureeMinutes/60)}h${t.dureeMinutes%60>0?t.dureeMinutes%60:""}`})
                               </div>
                             </div>
