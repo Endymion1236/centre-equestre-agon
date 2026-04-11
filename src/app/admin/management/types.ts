@@ -23,6 +23,7 @@ export interface TacheType {
   recurrente: boolean;    // apparaît par défaut chaque semaine
   joursDefaut: JourSemaine[]; // jours où elle apparaît par défaut
   horairesDefaut?: string[];  // horaires de début standards ex: ["08:45","09:00","10:00"]
+  obligatoire?: boolean;      // tâche obligatoire — vérifiée par l'IA
   notes?: string;
   createdAt?: any;
 }

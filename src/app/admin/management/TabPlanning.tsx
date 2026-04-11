@@ -2,6 +2,7 @@
 import { useState, useMemo } from "react";
 import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { authFetch } from "@/lib/auth-fetch";
 import { Plus, Trash2, Check, ChevronLeft, ChevronRight, Printer, Save, LayoutTemplate } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import type { TacheType, TachePlanifiee, Salarie, JourSemaine, ModelePlanning, TacheModele } from "./types";
@@ -298,6 +299,87 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   };
 
   const getCat = (cat: string) => CATEGORIES.find(c => c.id === cat);
+
+  // ── Détection automatique des tâches obligatoires manquantes ───────────
+  const tachesObligatoires = tachesType.filter(t => t.obligatoire);
+  const joursActifs = JOURS.slice(0, 6) as JourSemaine[];
+
+  const tachesManquantes = useMemo(() => {
+    const manquantes: { tache: TacheType; jour: JourSemaine }[] = [];
+    for (const tt of tachesObligatoires) {
+      const joursAttendus = (tt.joursDefaut && tt.joursDefaut.length > 0)
+        ? tt.joursDefaut.filter(j => joursActifs.includes(j))
+        : joursActifs.slice(0, 5); // lun-ven par défaut
+      for (const jour of joursAttendus) {
+        const exists = taches.some(t => t.tacheTypeId === tt.id && t.jour === jour);
+        // Aussi matcher par label pour les tâches importées du planning
+        const existsByLabel = taches.some(t => t.tacheLabel === tt.label && t.jour === jour);
+        if (!exists && !existsByLabel) {
+          manquantes.push({ tache: tt, jour });
+        }
+      }
+    }
+    return manquantes;
+  }, [taches, tachesObligatoires]);
+
+  // ── Vérification IA complète ──────────────────────────────────────────
+  const [iaChecking, setIaChecking] = useState(false);
+  const [iaResult, setIaResult] = useState<string | null>(null);
+
+  const handleIACheck = async () => {
+    setIaChecking(true);
+    setIaResult(null);
+    try {
+      const planningResume = joursActifs.map(jour => {
+        const jourTaches = taches.filter(t => t.jour === jour);
+        return `${JOURS_LABELS[jour]} :\n` + (jourTaches.length === 0
+          ? "  (aucune tâche)"
+          : jourTaches.map(t => `  - ${t.tacheLabel} → ${t.salarieName} (${t.heureDebut}→${minToHeure(heureToMin(t.heureDebut) + t.dureeMinutes)})`).join("\n"));
+      }).join("\n");
+
+      const obligatoiresListe = tachesObligatoires.map(t =>
+        `- ${t.label} (${t.categorie}, ${fmtDuree(t.dureeMinutes)}, jours: ${(t.joursDefaut || []).map(j => JOURS_LABELS[j].slice(0, 3)).join(", ") || "lun-ven"})`
+      ).join("\n");
+
+      const salariesListe = salaries.filter(s => s.actif).map(s => s.nom).join(", ");
+
+      const res = await authFetch("/api/ia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "assistant",
+          question: `Tu es l'assistant de gestion du centre équestre. Vérifie ce planning hebdomadaire de l'équipe.
+
+SALARIÉS ACTIFS : ${salariesListe}
+
+TÂCHES OBLIGATOIRES (doivent être assignées chaque jour prévu) :
+${obligatoiresListe || "(aucune tâche marquée obligatoire)"}
+
+PLANNING DE LA SEMAINE ${semaine} :
+${planningResume}
+
+TÂCHES MANQUANTES DÉTECTÉES AUTOMATIQUEMENT : ${tachesManquantes.length === 0 ? "Aucune" : tachesManquantes.map(m => `${m.tache.label} le ${JOURS_LABELS[m.jour]}`).join(", ")}
+
+Analyse ce planning et donne :
+1. ✅ Ce qui est bien couvert
+2. ⚠️ Les tâches obligatoires manquantes ou incomplètes
+3. 💡 Des suggestions d'amélioration (charge équilibrée, tâches oubliées, surcharge d'un salarié)
+
+Réponds de façon concise et pratique, en français.`,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setIaResult(data.response || data.text || "Pas de réponse");
+      } else {
+        setIaResult("Erreur lors de la vérification IA");
+      }
+    } catch (e) {
+      setIaResult("Erreur de connexion à l'IA");
+    }
+    setIaChecking(false);
+  };
 
   // ── Vue tableau ──────────────────────────────────────────────────────────
   const TableauView = () => (
@@ -1150,6 +1232,62 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
           )}
         </div>
       </div>
+
+      {/* Bandeau tâches obligatoires manquantes */}
+      {tachesManquantes.length > 0 && (
+        <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:12,padding:"12px 16px",display:"flex",alignItems:"flex-start",gap:10}}>
+          <span style={{fontSize:18,flexShrink:0}}>⚠️</span>
+          <div style={{flex:1}}>
+            <div style={{fontFamily:"sans-serif",fontSize:12,fontWeight:700,color:"#991b1b",marginBottom:4}}>
+              {tachesManquantes.length} tâche{tachesManquantes.length > 1 ? "s" : ""} obligatoire{tachesManquantes.length > 1 ? "s" : ""} manquante{tachesManquantes.length > 1 ? "s" : ""}
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+              {tachesManquantes.slice(0, 12).map((m, i) => (
+                <span key={i} style={{fontFamily:"sans-serif",fontSize:10,background:"#fee2e2",color:"#dc2626",padding:"2px 8px",borderRadius:6,fontWeight:600}}>
+                  {m.tache.label} · {JOURS_LABELS[m.jour].slice(0, 3)}
+                </span>
+              ))}
+              {tachesManquantes.length > 12 && (
+                <span style={{fontFamily:"sans-serif",fontSize:10,color:"#991b1b"}}>+{tachesManquantes.length - 12} autres</span>
+              )}
+            </div>
+          </div>
+          <button onClick={handleIACheck} disabled={iaChecking}
+            style={{flexShrink:0,padding:"6px 14px",borderRadius:8,border:"none",background:"#7c3aed",color:"white",fontFamily:"sans-serif",fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+            {iaChecking ? <div style={{width:12,height:12,border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"white",borderRadius:"50%",animation:"spin 0.8s linear infinite"}} /> : <span>🤖</span>}
+            {iaChecking ? "Analyse…" : "Vérifier avec l'IA"}
+          </button>
+        </div>
+      )}
+
+      {/* Bandeau tout OK si aucune manquante et qu'il y a des obligatoires */}
+      {tachesManquantes.length === 0 && tachesObligatoires.length > 0 && taches.length > 0 && (
+        <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:12,padding:"10px 16px",display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:16}}>✅</span>
+          <span style={{fontFamily:"sans-serif",fontSize:12,color:"#166534",fontWeight:600}}>
+            Toutes les tâches obligatoires sont assignées cette semaine
+          </span>
+          <div style={{flex:1}} />
+          <button onClick={handleIACheck} disabled={iaChecking}
+            style={{padding:"5px 12px",borderRadius:8,border:"1px solid #d4d4d8",background:"white",color:"#7c3aed",fontFamily:"sans-serif",fontSize:10,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+            {iaChecking ? "Analyse…" : "🤖 Check complet IA"}
+          </button>
+        </div>
+      )}
+
+      {/* Résultat de la vérification IA */}
+      {iaResult && (
+        <div style={{background:"#faf5ff",border:"1px solid #e9d5ff",borderRadius:12,padding:"14px 18px",position:"relative"}}>
+          <button onClick={() => setIaResult(null)}
+            style={{position:"absolute",top:8,right:10,background:"transparent",border:"none",cursor:"pointer",color:"#a78bfa",fontSize:16}}>✕</button>
+          <div style={{fontFamily:"sans-serif",fontSize:12,fontWeight:700,color:"#7c3aed",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+            🤖 Analyse IA du planning
+          </div>
+          <div style={{fontFamily:"sans-serif",fontSize:12,color:"#374151",lineHeight:1.6,whiteSpace:"pre-wrap"}}>
+            {iaResult}
+          </div>
+        </div>
+      )}
 
       {/* Vue */}
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden p-4">

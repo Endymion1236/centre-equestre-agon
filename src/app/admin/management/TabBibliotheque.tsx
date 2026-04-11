@@ -13,7 +13,7 @@ const DUREES = [15,30,45,60,90,120,180,240];
 
 const emptyForm = (): Partial<TacheType> => ({
   label: "", categorie: "ecuries", dureeMinutes: 30,
-  recurrente: true, joursDefaut: ["lundi","mardi","mercredi","jeudi","vendredi"], horairesDefaut: [], notes: "",
+  recurrente: true, joursDefaut: ["lundi","mardi","mercredi","jeudi","vendredi"], horairesDefaut: [], obligatoire: false, notes: "",
 });
 
 // ── Formulaire extrait en composant stable (hors du render parent) ────────────
@@ -123,10 +123,14 @@ function TacheForm({ form, editId, saving, onChange, onSave, onCancel }: FormPro
           className="w-full px-3 py-2 rounded-lg border border-blue-200 font-body text-sm bg-white focus:outline-none"
         />
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-4 flex-wrap">
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={!!form.recurrente} onChange={e => onChange({ ...form, recurrente: e.target.checked })} className="accent-blue-500 w-4 h-4" />
-          <span className="font-body text-xs text-slate-600">Tâche récurrente (proposée chaque semaine)</span>
+          <span className="font-body text-xs text-slate-600">Récurrente (chaque semaine)</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={!!form.obligatoire} onChange={e => onChange({ ...form, obligatoire: e.target.checked })} className="accent-red-500 w-4 h-4" />
+          <span className="font-body text-xs text-slate-600">Obligatoire <span className="text-red-400">(vérifiée par l'IA)</span></span>
         </label>
       </div>
       <div className="flex gap-2">
@@ -225,6 +229,7 @@ export default function TabBibliotheque({ taches, onRefresh }: Props) {
                       ))}
                     </div>
                     {t.recurrente && <span className="font-body text-[9px] bg-green-50 text-green-600 px-1.5 py-0.5 rounded-full">récurrente</span>}
+                    {t.obligatoire && <span className="font-body text-[9px] bg-red-50 text-red-500 px-1.5 py-0.5 rounded-full font-semibold">obligatoire</span>}
                     {(t.horairesDefaut && t.horairesDefaut.length > 0) && (
                       <div className="flex flex-wrap gap-0.5">
                         {t.horairesDefaut.sort().map(h => (
