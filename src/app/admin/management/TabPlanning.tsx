@@ -214,6 +214,89 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     return map;
   }, [taches]);
 
+  // ── Importer les cours/stages du planning dans les tâches ───────────────
+  const [importing, setImporting] = useState(false);
+
+  const handleImportCreneaux = async () => {
+    // Calculer les dates de la semaine
+    const dates = jourDates.slice(0, 6).map(({ jour, date }) => ({
+      jour,
+      dateStr: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,
+    }));
+
+    // Trouver les créneaux de la semaine qui ont un moniteur correspondant à un salarié
+    const matchedCreneaux: { creneau: any; salarieId: string; salarieName: string; jour: JourSemaine }[] = [];
+
+    for (const { jour, dateStr } of dates) {
+      const dayCr = creneaux.filter(c => c.date === dateStr && c.monitor);
+      for (const c of dayCr) {
+        // Matcher le moniteur du créneau avec un salarié (comparaison souple)
+        const monitorLower = (c.monitor || "").toLowerCase().trim();
+        const sal = salaries.find(s =>
+          s.actif && s.nom.toLowerCase().trim() === monitorLower
+        );
+        if (sal) {
+          // Vérifier qu'il n'existe pas déjà une tâche identique
+          const alreadyExists = taches.some(t =>
+            t.salarieId === sal.id &&
+            t.jour === jour &&
+            t.heureDebut === c.startTime &&
+            t.tacheLabel === c.activityTitle
+          );
+          if (!alreadyExists) {
+            matchedCreneaux.push({ creneau: c, salarieId: sal.id, salarieName: sal.nom, jour });
+          }
+        }
+      }
+    }
+
+    if (matchedCreneaux.length === 0) {
+      toast("Aucun nouveau cours/stage à importer cette semaine (déjà importés ou aucun moniteur correspondant)", "info");
+      return;
+    }
+
+    const confirmed = confirm(
+      `Importer ${matchedCreneaux.length} cours/stages du planning ?\n\n` +
+      matchedCreneaux.slice(0, 8).map(m =>
+        `• ${JOURS_LABELS[m.jour]} ${m.creneau.startTime}→${m.creneau.endTime} : ${m.creneau.activityTitle} (${m.salarieName})`
+      ).join("\n") +
+      (matchedCreneaux.length > 8 ? `\n… et ${matchedCreneaux.length - 8} autres` : "")
+    );
+    if (!confirmed) return;
+
+    setImporting(true);
+    try {
+      const batch: Promise<any>[] = [];
+      for (const { creneau, salarieId, salarieName, jour } of matchedCreneaux) {
+        const startMin = heureToMin(creneau.startTime);
+        const endMin = heureToMin(creneau.endTime);
+        const duree = endMin - startMin;
+
+        batch.push(addDoc(collection(db, "taches-planifiees"), {
+          tacheTypeId: "__planning__",
+          tacheLabel: creneau.activityTitle,
+          categorie: "animation" as any,
+          salarieId,
+          salarieName,
+          jour,
+          heureDebut: creneau.startTime,
+          dureeMinutes: duree > 0 ? duree : 60,
+          semaine,
+          done: false,
+          notes: `${creneau.activityType || ""} · ${(creneau.enrolled || []).length}/${creneau.maxPlaces || "?"} inscrits`,
+          createdAt: serverTimestamp(),
+        }));
+      }
+      await Promise.all(batch);
+      toast(`${matchedCreneaux.length} cours/stages importés du planning`, "success");
+      onRefresh();
+    } catch (e: any) {
+      console.error(e);
+      toast("Erreur lors de l'import", "error");
+    }
+    setImporting(false);
+  };
+
   const getCat = (cat: string) => CATEGORIES.find(c => c.id === cat);
 
   // ── Vue tableau ──────────────────────────────────────────────────────────
@@ -973,6 +1056,12 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
           </button>
         ))}
         <div className="flex-1" />
+        {/* Bouton Importer cours/stages */}
+        <button onClick={handleImportCreneaux} disabled={importing}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer border border-purple-200 bg-white text-purple-700 hover:bg-purple-50 disabled:opacity-50">
+          {importing ? <div className="w-3 h-3 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" /> : <span>📅</span>}
+          {importing ? "Import…" : "Importer cours/stages"}
+        </button>
         {/* Bouton Appliquer un modèle */}
         <div className="relative">
           <button onClick={() => setShowApplyModele(!showApplyModele)}
