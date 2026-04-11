@@ -86,7 +86,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     const tt = tachesType.find(t => t.id === addForm.tacheTypeId)!;
     const sal = salaries.find(s => s.id === addCell.salarieId)!;
     const joursToAdd: JourSemaine[] = addForm.touteLaSemaine
-      ? JOURS.slice(0, 5) // Lundi → Vendredi, toujours
+      ? JOURS.slice(0, 6) // Lundi → Vendredi, toujours
       : [addCell.jour];
 
     try {
@@ -219,17 +219,17 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   // ── Vue tableau ──────────────────────────────────────────────────────────
   const TableauView = () => (
     <div style={{overflowX:"auto", margin:"0 -16px", padding:"0 16px"}}>
-      <table style={{width:"100%", borderCollapse:"collapse", tableLayout:"fixed", minWidth:800}}>
+      <table style={{width:"100%", borderCollapse:"collapse", tableLayout:"fixed", minWidth:950}}>
         <colgroup>
-          <col style={{width:"13%"}} />
-          {jourDates.slice(0,5).map(({jour}) => <col key={jour} style={{width:"17.4%"}} />)}
+          <col style={{width:"12%"}} />
+          {jourDates.slice(0,6).map(({jour}) => <col key={jour} style={{width:"14.6%"}} />)}
         </colgroup>
         <thead>
           <tr>
             <th style={{padding:"8px 10px", textAlign:"left", fontSize:11, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0"}}>
               Salarié
             </th>
-            {jourDates.slice(0,5).map(({jour, label}) => (
+            {jourDates.slice(0,6).map(({jour, label}) => (
               <th key={jour} style={{padding:"8px 6px", textAlign:"center", fontSize:11, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>
                 {label}
               </th>
@@ -248,7 +248,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                   {fmtDuree(chargeParSalarie[sal.id]||0)} cette sem.
                 </div>
               </td>
-              {jourDates.slice(0,5).map(({jour}) => {
+              {jourDates.slice(0,6).map(({jour}) => {
                 const cellTaches = taches.filter(t => t.salarieId===sal.id && t.jour===jour).sort((a,b) => a.heureDebut.localeCompare(b.heureDebut));
                 return (
                   <td key={jour} style={{padding:"4px 5px", borderBottom:"1px solid #eef2f7", verticalAlign:"top"}}>
@@ -414,7 +414,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
           @media print { body { padding: 8px; } .salarie-block { page-break-inside: avoid; } }
         </style></head><body>
         <h1>Planning équipe — Semaine ${semaine.split("-W")[1]} · ${semaine.split("-W")[0]}</h1>
-        <div class="subtitle">${formatDateCourte(lundi)} → ${formatDateCourte(new Date(lundi.getTime()+4*86400000))} · Généré le ${new Date().toLocaleDateString("fr-FR")}</div>
+        <div class="subtitle">${formatDateCourte(lundi)} → ${formatDateCourte(new Date(lundi.getTime()+5*86400000))} · Généré le ${new Date().toLocaleDateString("fr-FR")}</div>
         ${printContent.innerHTML}
         </body></html>
       `);
@@ -461,7 +461,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
                 </div>
 
                 {/* Lignes par jour */}
-                {jourDates.slice(0,5).map(({jour, date}) => {
+                {jourDates.slice(0,6).map(({jour, date}) => {
                   const cellTaches = taches.filter(t=>t.salarieId===sal.id&&t.jour===jour);
                   const dateStr = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
                   const actCreneau = creneaux.filter(c=>c.date===dateStr&&c.monitor===sal.nom);
@@ -614,7 +614,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       <div className="flex flex-col gap-3">
         {/* Sélecteur de jour */}
         <div className="flex items-center gap-2 flex-wrap">
-          {jourDates.slice(0,5).map(({jour, date}) => {
+          {jourDates.slice(0,6).map(({jour, date}) => {
             const isToday = new Date().toDateString() === date.toDateString();
             return (
               <button key={jour} onClick={() => setSelectedDay(jour)}
@@ -809,7 +809,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
           @media print { body { padding: 10px; } .day-section { page-break-inside: avoid; } }
         </style></head><body>
         <h1>Planning — ${sal.nom}</h1>
-        <div class="subtitle">Semaine ${semaine.split("-W")[1]} · ${semaine.split("-W")[0]} · ${formatDateCourte(lundi)} → ${formatDateCourte(new Date(lundi.getTime()+4*86400000))}</div>
+        <div class="subtitle">Semaine ${semaine.split("-W")[1]} · ${semaine.split("-W")[0]} · ${formatDateCourte(lundi)} → ${formatDateCourte(new Date(lundi.getTime()+5*86400000))}</div>
         ${el.innerHTML}
       </body></html>`);
       win.document.close();
@@ -845,7 +845,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
         </div>
 
         <div id="management-fiche-print">
-          {jourDates.slice(0,5).map(({jour, date}) => {
+          {jourDates.slice(0,6).map(({jour, date}) => {
             const dateStr = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
             const dayTaches = taches.filter(t => t.salarieId === sal.id && t.jour === jour)
               .sort((a,b) => heureToMin(a.heureDebut) - heureToMin(b.heureDebut));
@@ -938,7 +938,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
         <div className="text-center">
           <div className="font-display text-base font-bold text-blue-800">Semaine {semaine.split("-W")[1]} — {semaine.split("-W")[0]}</div>
           <div className="font-body text-xs text-slate-500">
-            {formatDateCourte(lundi)} → {formatDateCourte(new Date(lundi.getTime()+4*86400000))}
+            {formatDateCourte(lundi)} → {formatDateCourte(new Date(lundi.getTime()+5*86400000))}
           </div>
         </div>
         <button onClick={nextWeek} className="flex items-center gap-1 font-body text-sm text-slate-500 bg-transparent border-none cursor-pointer hover:text-blue-500">
