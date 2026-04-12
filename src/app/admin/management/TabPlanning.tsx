@@ -247,6 +247,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
 
   // Calcul charge par salarié (minutes totales / semaine)
   // Charge par salarié = temps effectif (début première tâche → fin dernière tâche) - pauses
+  const joursActifs = JOURS.slice(0, 6) as JourSemaine[];
   const chargeParSalarie = useMemo(() => {
     const map: Record<string, number> = {};
     const salIds = [...new Set(taches.map(t => t.salarieId))];
@@ -366,7 +367,6 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
 
   // ── Détection automatique des tâches obligatoires manquantes ───────────
   const tachesObligatoires = tachesType.filter(t => t.obligatoire);
-  const joursActifs = JOURS.slice(0, 6) as JourSemaine[];
 
   const tachesManquantes = useMemo(() => {
     const manquantes: { tache: TacheType; jour: JourSemaine; attendu: number; present: number }[] = [];
