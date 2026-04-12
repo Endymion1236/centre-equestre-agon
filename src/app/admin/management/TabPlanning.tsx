@@ -160,7 +160,39 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   };
 
   const delTache = async (t: TachePlanifiee) => {
-    await deleteDoc(doc(db, "taches-planifiees", t.id));
+    // Trouver les tâches similaires de la même personne cette semaine
+    const similaires = taches.filter(
+      other => other.id !== t.id &&
+        other.salarieId === t.salarieId &&
+        other.tacheLabel === t.tacheLabel &&
+        other.heureDebut === t.heureDebut
+    );
+
+    if (similaires.length === 0) {
+      // Seule occurrence → supprimer directement
+      if (!confirm(`Supprimer "${t.tacheLabel}" (${JOURS_LABELS[t.jour]}) ?`)) return;
+      await deleteDoc(doc(db, "taches-planifiees", t.id));
+    } else {
+      // Plusieurs occurrences → proposer le choix
+      const choix = prompt(
+        `"${t.tacheLabel}" est assignée à ${t.salarieName} sur ${similaires.length + 1} jours.\n\n` +
+        `Tapez :\n` +
+        `  1 → Supprimer uniquement ${JOURS_LABELS[t.jour]}\n` +
+        `  2 → Supprimer les ${similaires.length + 1} jours (${[t, ...similaires].map(x => JOURS_LABELS[x.jour].slice(0,3)).join(", ")})`,
+        "1"
+      );
+      if (!choix) return;
+
+      if (choix.trim() === "2") {
+        // Supprimer toutes les similaires + celle-ci
+        const toDelete = [t, ...similaires];
+        await Promise.all(toDelete.map(d => deleteDoc(doc(db, "taches-planifiees", d.id))));
+        toast(`${toDelete.length} tâches "${t.tacheLabel}" supprimées pour ${t.salarieName}`, "success");
+      } else {
+        await deleteDoc(doc(db, "taches-planifiees", t.id));
+        toast(`"${t.tacheLabel}" supprimée (${JOURS_LABELS[t.jour]})`, "success");
+      }
+    }
     onRefresh();
   };
 
