@@ -39,7 +39,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   const [saveModeleName, setSaveModeleName] = useState("");
   const [saveModeleType, setSaveModeleType] = useState<"scolaire" | "vacances" | "autre">("scolaire");
   const [applyingModele, setApplyingModele] = useState(false);
-  const [view, setView] = useState<"tableau" | "timeline" | "journalier" | "fiche">("tableau");
+  const [view, setView] = useState<"tableau" | "timeline" | "journalier" | "fiche" | "horaire">("tableau");
   const [selectedDay, setSelectedDay] = useState<JourSemaine>(() => {
     const dayIndex = (new Date().getDay() + 6) % 7; // 0=lundi
     return JOURS[Math.min(dayIndex, 4)] as JourSemaine; // cap à vendredi
@@ -1115,6 +1115,90 @@ Réponds de façon concise et pratique, en français.`,
     );
   };
 
+  // ── Vue Horaire (grille heures × jours, alignée) ──────────────────────────
+  const HoraireView = () => {
+    // Collecter tous les créneaux horaires uniques de la semaine
+    const allSlots = new Set<string>();
+    taches.forEach(t => allSlots.add(t.heureDebut));
+    const slots = [...allSlots].sort();
+
+    if (slots.length === 0) {
+      return <div className="text-center py-8 text-slate-400 font-body text-sm">Aucune tâche cette semaine.</div>;
+    }
+
+    const activeSals = salaries.filter(s => s.actif);
+
+    return (
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%", borderCollapse:"collapse", tableLayout:"fixed"}}>
+          <colgroup>
+            <col style={{width:"7%"}} />
+            {jourDates.slice(0,6).map(({jour}) => <col key={jour} style={{width:"15.5%"}} />)}
+          </colgroup>
+          <thead>
+            <tr>
+              <th style={{padding:"6px 4px", textAlign:"center", fontSize:10, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0"}}>
+                Heure
+              </th>
+              {jourDates.slice(0,6).map(({jour, label}) => (
+                <th key={jour} style={{padding:"6px 3px", textAlign:"center", fontSize:10, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0"}}>
+                  {label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {slots.map((slot, si) => {
+              return (
+                <tr key={slot} style={{background: si % 2 === 0 ? "#fafbff" : "#fff"}}>
+                  <td style={{padding:"4px 4px", borderBottom:"1px solid #eef2f7", verticalAlign:"top", textAlign:"center"}}>
+                    <span style={{fontFamily:"sans-serif", fontSize:12, fontWeight:700, color:"#1e3a5f"}}>{slot}</span>
+                  </td>
+                  {jourDates.slice(0,6).map(({jour}) => {
+                    const slotTaches = taches.filter(t => t.jour === jour && t.heureDebut === slot)
+                      .sort((a, b) => a.salarieName.localeCompare(b.salarieName));
+                    return (
+                      <td key={jour} style={{padding:"2px 3px", borderBottom:"1px solid #eef2f7", verticalAlign:"top"}}>
+                        <div style={{display:"flex", flexDirection:"column", gap:2}}>
+                          {slotTaches.map(t => {
+                            const cat = getCat(t.categorie);
+                            const sal = activeSals.find(s => s.id === t.salarieId);
+                            const color = getTaskColor(t);
+                            return (
+                              <div key={t.id} title={`${t.tacheLabel} — ${t.salarieName}\n${t.heureDebut}→${minToHeure(heureToMin(t.heureDebut) + t.dureeMinutes)}${t.notes ? "\n" + t.notes : ""}`}
+                                style={{
+                                  display:"flex", alignItems:"center", gap:3, padding:"2px 4px",
+                                  borderRadius:5, background: t.done ? "#f0fdf4" : (color + "15"),
+                                  borderLeft: `3px solid ${sal?.couleur || color}`,
+                                  opacity: t.done ? 0.5 : 1,
+                                }}>
+                                <div style={{flex:1, minWidth:0}}>
+                                  <div style={{fontFamily:"sans-serif", fontSize:9, fontWeight:700, color: color, lineHeight:"1.2", wordBreak:"break-word"}}>
+                                    {t.tacheLabel}
+                                  </div>
+                                  <div style={{fontFamily:"sans-serif", fontSize:8, color:"#64748b"}}>
+                                    {t.salarieName} · {fmtDuree(t.dureeMinutes)}
+                                  </div>
+                                </div>
+                                <button onClick={()=>toggleDone(t)} style={{width:14,height:14,borderRadius:3,border:"1px solid "+(t.done?"#16a34a":"#d1d5db"),background:t.done?"#16a34a":"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,padding:0}}>
+                                  {t.done && <Check size={8} color="white"/>}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   // ── Vue Fiche individuelle (lisible + imprimable) ────────────────────────
   const FicheView = () => {
     const activeSalaries = salaries.filter(s => s.actif);
@@ -1381,10 +1465,10 @@ Réponds de façon concise et pratique, en français.`,
 
       {/* Toggle vue + actions modèles */}
       <div className="flex gap-2 flex-wrap items-center">
-        {(["tableau","timeline","journalier","fiche"] as const).map(v => (
+        {(["tableau","horaire","timeline","journalier","fiche"] as const).map(v => (
           <button key={v} onClick={()=>setView(v)}
             className={`px-4 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${view===v?"bg-blue-500 text-white":"bg-white text-slate-500 border border-gray-200"}`}>
-            {v === "tableau" ? "📊 Tableau" : v === "timeline" ? "📅 Timeline" : v === "journalier" ? "👤 Journalier" : "📋 Fiche"}
+            {v === "tableau" ? "📊 Tableau" : v === "horaire" ? "🕐 Horaire" : v === "timeline" ? "📅 Timeline" : v === "journalier" ? "👤 Journalier" : "📋 Fiche"}
           </button>
         ))}
         <div className="flex-1" />
@@ -1546,6 +1630,7 @@ Réponds de façon concise et pratique, en français.`,
         {salaries.filter(s=>s.actif).length === 0 ? (
           <div className="text-center py-8 text-slate-400 font-body text-sm">Ajoutez des salariés dans l'onglet Équipe.</div>
         ) : view === "tableau" ? <TableauView/>
+          : view === "horaire" ? <HoraireView/>
           : view === "timeline" ? <TimelineView/>
           : view === "journalier" ? <JournalierView/>
           : <FicheView/>}
