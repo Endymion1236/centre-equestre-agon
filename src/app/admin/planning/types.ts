@@ -53,6 +53,7 @@ export const typeColors: Record<string, string> = {
   competition: "#7c3aed",
   anniversaire: "#D63031",
   ponyride: "#16a085",
+  animation: "#e84393",
 };
 
 export const payModes = [

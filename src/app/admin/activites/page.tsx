@@ -18,6 +18,7 @@ const activityTypes = [
   { id: "balade",        label: "Promenade" },
   { id: "competition",   label: "Compétition" },
   { id: "anniversaire",  label: "Anniversaire" },
+  { id: "animation",     label: "Animation" },
 ];
 
 // Valeurs par défaut initiales (si Firestore vide)

@@ -42,7 +42,7 @@ export interface SanitaryForm {
 }
 
 // ─── Activités ───
-export type ActivityType = "stage" | "stage_journee" | "balade" | "cours" | "competition" | "anniversaire" | "ponyride";
+export type ActivityType = "stage" | "stage_journee" | "balade" | "cours" | "competition" | "anniversaire" | "ponyride" | "animation";
 
 export interface Activity {
   id: string;
