@@ -686,7 +686,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         const dow = creneauDate.getDay();
         const mon = new Date(creneauDate); mon.setDate(mon.getDate() - ((dow + 6) % 7));
         const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
-        const autresJours = allCreneaux.filter(c =>
+        // Utiliser weekCreneaux (chargé depuis Firestore) plutôt qu'allCreneaux (limité à la vue)
+        const source = weekCreneaux.length > 0 ? weekCreneaux : allCreneaux;
+        const autresJours = source.filter(c =>
           c.activityTitle === creneau.activityTitle &&
           (c.activityType === "stage" || c.activityType === "stage_journee") &&
           new Date(c.date) >= mon && new Date(c.date) <= sun &&
