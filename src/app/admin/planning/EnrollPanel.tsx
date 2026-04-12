@@ -167,6 +167,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [stageMode, setStageMode] = useState<"semaine" | "jour">("semaine");
   const [stageDaysCount, setStageDaysCount] = useState<number>(0);
+  const [stagePayChoice, setStagePayChoice] = useState<"acompte" | "total">("total");
   const [showAddDays, setShowAddDays] = useState<{ familyId: string; enfants: { childId: string; childName: string }[]; joursRestants: { id: string; date: string; label: string }[]; totalJoursStage: number; joursInscrits: number; stageTitle: string; creneauRef: any } | null>(null);
   const isStage = creneau.activityType === "stage" || creneau.activityType === "stage_journee";
 
@@ -481,7 +482,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
   const stageTotalTTC = stageLines.reduce((s, l) => s + l.prixReduit, 0);
   const ACOMPTE_PAR_ENFANT = 30; // 30€ par enfant
-  const showAcompte = stageMode === "semaine" && stageTotalTTC > ACOMPTE_PAR_ENFANT * stageLines.length;
+  const showAcompte = stageMode === "semaine" && stagePayChoice === "acompte" && stageTotalTTC > ACOMPTE_PAR_ENFANT * stageLines.length;
   const stageAcompte = showAcompte ? Math.min(ACOMPTE_PAR_ENFANT * stageLines.length, stageTotalTTC) : stageTotalTTC;
   const stageSolde = showAcompte ? Math.round((stageTotalTTC - stageAcompte) * 100) / 100 : 0;
 
@@ -1430,10 +1431,25 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       <span className="text-sm font-bold text-blue-800">Total à régler</span>
                       <span className="text-2xl font-bold text-green-600">{stageTotalTTC.toFixed(2)}€</span>
                     </div>
+                    {stageMode === "semaine" && stageTotalTTC > ACOMPTE_PAR_ENFANT * stageLines.length && (
+                      <div className="mt-1">
+                        <div className="font-body text-xs font-semibold text-slate-600 mb-1.5">Mode de paiement :</div>
+                        <div className="flex gap-2">
+                          <button onClick={() => setStagePayChoice("total")}
+                            className={`flex-1 py-2 rounded-lg font-body text-xs font-semibold border cursor-pointer ${stagePayChoice === "total" ? "bg-green-600 text-white border-green-600" : "bg-white text-slate-600 border-gray-200"}`}>
+                            💶 Paiement total ({stageTotalTTC.toFixed(0)}€)
+                          </button>
+                          <button onClick={() => setStagePayChoice("acompte")}
+                            className={`flex-1 py-2 rounded-lg font-body text-xs font-semibold border cursor-pointer ${stagePayChoice === "acompte" ? "bg-orange-500 text-white border-orange-500" : "bg-white text-slate-600 border-gray-200"}`}>
+                            💳 Acompte ({stageAcompte}€ + solde J-7)
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     {showAcompte && (
                       <div className="bg-blue-50 rounded-lg p-3 mt-1">
                         <div className="flex justify-between font-body text-xs text-blue-800 mb-1">
-                          <span>💳 Acompte à l'inscription ({selectedChildren.length} × {ACOMPTE_PAR_ENFANT}€)</span>
+                          <span>💳 Acompte ({selectedChildren.length} × {ACOMPTE_PAR_ENFANT}€)</span>
                           <span className="font-bold">{stageAcompte.toFixed(2)}€</span>
                         </div>
                         <div className="flex justify-between font-body text-xs text-slate-500">
@@ -1444,8 +1460,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     )}
                     <div className="bg-white rounded-lg p-3">
                       <div className="font-body text-xs text-slate-600 text-center">
-                        Un email avec le lien de paiement pour l'acompte sera envoyé à la famille.<br/>
-                        Le solde sera demandé automatiquement 7 jours avant le stage.
+                        {showAcompte
+                          ? <>Un email avec le lien de paiement pour l'acompte sera envoyé à la famille.<br/>Le solde sera demandé automatiquement 7 jours avant le stage.</>
+                          : <>La commande sera ajoutée aux impayés.<br/>Encaissement possible depuis <strong>Paiements → Encaisser</strong>.</>
+                        }
                       </div>
                     </div>
                   </div>
