@@ -198,7 +198,8 @@ export default function CavaleriePage() {
           showForm={showEquideForm} editingEquide={editingEquide}
           onCloseForm={() => { setShowEquideForm(false); setEditingEquide(null); }}
           onRefresh={fetchData}
-          onOpenSoinForm={equideId => { setSoinDefaultEquideId(equideId); setShowSoinForm(true); }}
+          onOpenSoinForm={equideId => { setSoinDefaultEquideId(equideId); setShowSoinForm(true); setTab("soins"); }}
+          onEdit={equide => { setEditingEquide(equide); setShowEquideForm(true); }}
         />
       )}
       {tab === "registre" && <TabRegistre mouvements={mouvements}/>}

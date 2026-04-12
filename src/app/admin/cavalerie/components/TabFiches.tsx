@@ -80,11 +80,12 @@ interface Props {
   onCloseForm: () => void;
   onRefresh: () => void;
   onOpenSoinForm: (equideId: string) => void;
+  onEdit: (equide: Equide) => void;
 }
 
 export default function TabFiches({
   equides, soins, documents, mouvements,
-  showForm, editingEquide, onCloseForm, onRefresh, onOpenSoinForm,
+  showForm, editingEquide, onCloseForm, onRefresh, onOpenSoinForm, onEdit,
 }: Props) {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<EquideStatus | "all">("all");
@@ -406,7 +407,7 @@ export default function TabFiches({
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <button onClick={ev => { ev.stopPropagation(); /* handled by parent via onEdit */ }}
+                    <button onClick={ev => { ev.stopPropagation(); onEdit(e); }}
                       className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 hover:text-blue-500 hover:bg-blue-50 cursor-pointer border-none transition-colors">
                       <Edit3 size={14}/>
                     </button>
