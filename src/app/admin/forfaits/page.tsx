@@ -2,7 +2,7 @@
 import { useAgentContext } from "@/hooks/useAgentContext";
 
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, doc, getDoc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import {
@@ -126,13 +126,17 @@ export default function ForfaitsPage() {
   const [slotChange, setSlotChange] = useState<{ forfait: Forfait; newSlotSearch: string } | null>(null);
   const [slotChanging, setSlotChanging] = useState(false);
 
+  // Réductions famille (chargées depuis settings/degressivite)
+  const [familyDiscountRules, setFamilyDiscountRules] = useState<{ nth: number; discount: number }[]>([]);
+
   const fetchData = async () => {
     try {
-      const [fSnap, pSnap, famSnap, cSnap] = await Promise.all([
+      const [fSnap, pSnap, famSnap, cSnap, degSnap] = await Promise.all([
         getDocs(collection(db, "forfaits")),
         getDocs(collection(db, "payments")),
         getDocs(collection(db, "families")),
         getDocs(query(collection(db, "creneaux"), where("activityType", "==", "cours"))),
+        getDoc(doc(db, "settings", "degressivite")),
       ]);
       setForfaits(fSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Forfait[]);
       setPayments(pSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Payment[]);
@@ -142,6 +146,9 @@ export default function ForfaitsPage() {
         (cSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Creneau[])
           .filter(c => c.date >= today)
       );
+      if (degSnap.exists() && degSnap.data().familyDiscount) {
+        setFamilyDiscountRules(degSnap.data().familyDiscount);
+      }
     } catch (e) { console.error(e); }
     setLoading(false);
   };
@@ -222,7 +229,18 @@ export default function ForfaitsPage() {
     const forfaitPrice = price > 100 ? price : price * slot.totalSessions;
     return { slot, forfaitPrice, sessions: slot.totalSessions };
   });
-  const totalForfait = slotsPrices.reduce((sum, s) => sum + s.forfaitPrice, 0);
+  const totalForfaitBrut = slotsPrices.reduce((sum, s) => sum + s.forfaitPrice, 0);
+
+  // ── Réduction famille : compter les autres enfants de la même famille déjà inscrits ──
+  const existingChildIds = selFamily
+    ? [...new Set(forfaits.filter(f => f.familyId === selFamily && (f.status === "active" || f.status === "actif") && f.childId !== selChild).map(f => f.childId))]
+    : [];
+  const childRank = existingChildIds.length + 1; // 1er enfant = rang 1, 2ème = rang 2, etc.
+  const familyRule = familyDiscountRules.find(r => r.nth === childRank);
+  const familyDiscountPercent = familyRule?.discount || 0;
+  const familyDiscountAmount = familyDiscountPercent > 0 ? Math.round(totalForfaitBrut * familyDiscountPercent / 100 * 100) / 100 : 0;
+  const totalForfait = totalForfaitBrut - familyDiscountAmount;
+
   const licencePrice = licenceFFE ? (licenceType === "moins18" ? LICENCE_FFE_MOINS18 : LICENCE_FFE_PLUS18) : 0;
   const adhesionPrice = adhesion ? ADHESION_PRICE : 0;
   const grandTotal = totalForfait + licencePrice + adhesionPrice;
@@ -319,6 +337,7 @@ export default function ForfaitsPage() {
             activityTitle: `Forfait ${sp.slot.activityTitle} — ${sp.slot.dayLabel} ${sp.slot.startTime}`,
             priceTTC: sp.forfaitPrice,
           })),
+          ...(familyDiscountAmount > 0 ? [{ activityTitle: `Réduction famille (${childRank}ème enfant, -${familyDiscountPercent}%)`, priceTTC: -familyDiscountAmount }] : []),
         ],
         totalTTC: grandTotal,
         paidAmount: 0,
@@ -532,6 +551,11 @@ export default function ForfaitsPage() {
                     </button>
                   ))}
                 </div>
+                {selChild && familyDiscountPercent > 0 && (
+                  <div className="mt-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg font-body text-xs text-green-700">
+                    👨‍👩‍👧‍👦 {childRank}ème enfant de la famille → réduction de {familyDiscountPercent}% sur le forfait
+                  </div>
+                )}
               </div>
             )}
 
@@ -667,7 +691,13 @@ export default function ForfaitsPage() {
                   {slotsPrices.map(sp => `${sp.slot.dayLabel} ${sp.slot.startTime} (${sp.sessions} séances)`).join(" + ")}
                   {licenceFFE ? ` + Licence ${licencePrice}€` : ""}
                   {adhesion ? ` + Adhésion ${adhesionPrice}€` : ""}
+                  {familyDiscountAmount > 0 ? ` − Réduction famille ${familyDiscountPercent}%` : ""}
                 </div>
+                {familyDiscountAmount > 0 && (
+                  <div className="font-body text-xs text-green-600 font-semibold mt-1">
+                    👨‍👩‍👧‍👦 {childRank}ème enfant : −{familyDiscountAmount.toFixed(2)}€ sur le forfait
+                  </div>
+                )}
               </div>
               <button onClick={handleCreate} disabled={!selFamily || !selChild || !slotsComplete || creating}
                 className={`px-6 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${

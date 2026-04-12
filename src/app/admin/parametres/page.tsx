@@ -153,6 +153,19 @@ export default function ParametresPage() {
   ]);
   const [cancellation, setCancellation] = useState({ hours: 72, retention: 50 });
   const [saved, setSaved] = useState(false);
+  const [savingDegress, setSavingDegress] = useState(false);
+
+  // Charger dégressivité depuis Firestore
+  useEffect(() => {
+    getDoc(doc(db, "settings", "degressivite")).then(snap => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.multiStage) setMultiStage(data.multiStage);
+        if (data.familyDiscount) setFamilyDiscount(data.familyDiscount);
+        if (data.cancellation) setCancellation(data.cancellation);
+      }
+    }).catch(console.error);
+  }, []);
   const [loadingTarifs, setLoadingTarifs] = useState(true);
 
   // ─── Réductions & codes promo ───
@@ -278,9 +291,22 @@ export default function ParametresPage() {
     } catch (e) { console.error(e); alert("Erreur sauvegarde"); }
   };
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleSave = async () => {
+    setSavingDegress(true);
+    try {
+      await setDoc(doc(db, "settings", "degressivite"), {
+        multiStage,
+        familyDiscount,
+        cancellation,
+        updatedAt: new Date(),
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      console.error("Erreur sauvegarde dégressivité:", e);
+      alert("Erreur lors de la sauvegarde.");
+    }
+    setSavingDegress(false);
   };
 
   const inputCls = "px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none text-center";
@@ -758,8 +784,8 @@ export default function ParametresPage() {
             </div>
           </Card>
 
-          <button onClick={handleSave} className="self-start flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-6 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400">
-            <Save size={16} /> Enregistrer
+          <button onClick={handleSave} disabled={savingDegress} className="self-start flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-6 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400 disabled:opacity-50">
+            {savingDegress ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {savingDegress ? "Enregistrement..." : "Enregistrer"}
           </button>
         </div>
       )}
