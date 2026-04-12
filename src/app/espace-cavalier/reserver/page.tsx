@@ -278,6 +278,10 @@ export default function ReserverPage() {
   const removeFromCart = (idx: number) => setCart(cart.filter((_, i) => i !== idx));
   const cartTotal = cart.reduce((s, i) => s + i.prixFinal, 0);
   const cartTotalReductions = cart.reduce((s, i) => s + i.remiseEuros, 0);
+  const ACOMPTE_PAR_ENFANT = 30;
+  const nbEnfantsStage = cart.filter(i => i.isStage).length;
+  const acompteFixe = Math.min(ACOMPTE_PAR_ENFANT * nbEnfantsStage, cartTotal);
+  const soldeFixe = Math.round((cartTotal - acompteFixe) * 100) / 100;
 
   // Paiement
   const handlePay = async () => {
@@ -372,8 +376,19 @@ export default function ReserverPage() {
       }
       const hasStage = cart.some(i => i.isStage);
       const isDeposit = hasStage && depositMode === "deposit";
-      const stageDate = hasStage ? cart.find(i => i.isStage)?.dates || "" : "";
+      const firstStageCreneau = hasStage ? creneaux.find(c => c.id === cart.find(i => i.isStage)?.creneauIds[0]) : null;
+      const stageDate = firstStageCreneau?.date || "";
       
+      // Stocker les infos stage/acompte dans le paiement
+      if (hasStage) {
+        await updateDoc(doc(db, "payments", newPaymentId), {
+          stageDate: stageDate,
+          stageTitle: cart.find(i => i.isStage)?.activityTitle || "",
+          acompteAmount: acompteFixe,
+          soldeAmount: soldeFixe,
+        });
+      }
+
       try {
         const res = await authFetch("/api/cawl/checkout", {
           method: "POST",
@@ -383,7 +398,8 @@ export default function ReserverPage() {
             familyEmail: family.parentEmail || user.email,
             familyName: family.parentName,
             paymentId: newPaymentId,
-            depositPercent: isDeposit ? 30 : null,
+            totalTTC: isDeposit ? acompteFixe : cartTotal,
+            depositPercent: isDeposit ? Math.round(acompteFixe / cartTotal * 100) : null,
             stageDate,
             items: cart.map(i => ({
               name: `${i.activityTitle} — ${i.childName}`,
@@ -948,9 +964,14 @@ export default function ReserverPage() {
                         </button>
                         <button onClick={() => setDepositMode("deposit")}
                           className={`flex-1 py-2 px-3 rounded-lg font-body text-xs font-semibold border cursor-pointer ${depositMode === "deposit" ? "bg-orange-500 text-white border-orange-500" : "bg-white text-gray-600 border-gray-200"}`}>
-                          Acompte 30% ({(cartTotal * 0.3).toFixed(0)}€)
+                          Acompte ({acompteFixe}€)
                         </button>
                       </div>
+                      {depositMode === "deposit" && (
+                        <div className="font-body text-[10px] text-slate-500 mt-2 text-center">
+                          {nbEnfantsStage} enfant{nbEnfantsStage > 1 ? "s" : ""} × {ACOMPTE_PAR_ENFANT}€ = {acompteFixe}€ maintenant · solde {soldeFixe}€ à régler J-7
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -988,7 +1009,7 @@ export default function ReserverPage() {
                       <button onClick={handlePay} disabled={paying}
                         className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying ? "bg-gray-200 text-gray-600" : depositMode === "deposit" ? "bg-orange-500 text-white hover:bg-orange-400" : "bg-green-600 text-white hover:bg-green-500"}`}>
                         {paying ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
-                        {paying ? "Paiement en cours..." : depositMode === "deposit" ? `Payer l'acompte ${(cartTotal * 0.3).toFixed(2)}€` : `Payer ${cartTotal.toFixed(2)}€`}
+                        {paying ? "Paiement en cours..." : depositMode === "deposit" ? `Payer l'acompte ${acompteFixe.toFixed(2)}€` : `Payer ${cartTotal.toFixed(2)}€`}
                       </button>
                       <p className="font-body text-[10px] text-gray-600 text-center mt-2">Paiement sécurisé par CAWL / Crédit Agricole</p>
                     </>
