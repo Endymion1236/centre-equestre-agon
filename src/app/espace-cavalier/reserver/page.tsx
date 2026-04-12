@@ -190,7 +190,7 @@ export default function ReserverPage() {
     if (selectedChildren.length === 0) return;
     const first = stageCreneaux[0];
     const prixSemaine = (first as any).priceTTC || first.priceHT * (1 + (first.tvaTaux || 5.5) / 100);
-    const allowDay = (first as any).allowDayBooking;
+    const allowDay = stageCreneaux.some((c: any) => c.allowDayBooking);
     const isJourMode = allowDay && stageBookingMode === "jour";
 
     // Calculer le prix effectif
@@ -680,15 +680,21 @@ export default function ReserverPage() {
                         </div>
                         <div className="text-right">
                           <div className="font-body text-lg font-bold text-green-600">{prix.toFixed(0)}€</div>
-                          <div className="font-body text-[10px] text-gray-600">{joursUniques.length} jour{joursUniques.length > 1 ? "s" : ""}</div>
+                          <div className="font-body text-[10px] text-gray-600">
+                            {joursUniques.length} {(() => {
+                              const dur = parseInt(first.endTime) - parseInt(first.startTime);
+                              return dur <= 4 ? "demi-journée" : "journée";
+                            })()}{joursUniques.length > 1 ? "s" : ""}
+                          </div>
+                          <div className="font-body text-[10px] text-gray-500">{first.startTime}–{first.endTime}</div>
                           <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>{spots} place{spots > 1 ? "s" : ""}</Badge>
                         </div>
                       </div>
 
                       {/* Sélection enfants pour ce stage */}
                       {isSelected && spots > 0 && (() => {
-                        const allowDay = (first as any).allowDayBooking;
-                        const prixJour = (first as any).priceTTCDay || Math.round(prix / joursUniques.length * 100) / 100;
+                        const allowDay = stageCreneaux.some((c: any) => c.allowDayBooking);
+                        const prixJour = (first as any).priceTTCDay || (stageCreneaux.find((c: any) => (c as any).priceTTCDay) as any)?.priceTTCDay || Math.round(prix / joursUniques.length * 100) / 100;
                         // State local pour le mode et les jours sélectionnés
                         // On utilise un key basé sur le stage pour réinitialiser
                         return (
