@@ -1305,20 +1305,63 @@ Réponds de façon concise et pratique, en français.`,
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Navigation semaine */}
-      <div className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-gray-100">
-        <button onClick={prevWeek} className="flex items-center gap-1 font-body text-sm text-slate-500 bg-transparent border-none cursor-pointer hover:text-blue-500">
-          <ChevronLeft size={16}/> Semaine préc.
-        </button>
-        <div className="text-center">
-          <div className="font-display text-base font-bold text-blue-800">Semaine {semaine.split("-W")[1]} — {semaine.split("-W")[0]}</div>
-          <div className="font-body text-xs text-slate-500">
-            {formatDateCourte(lundi)} → {formatDateCourte(new Date(lundi.getTime()+5*86400000))}
+      {/* Navigation semaine — style planning */}
+      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        {/* Ligne 1 : Mois + navigation */}
+        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
+          <button onClick={prevWeek} className="flex items-center gap-1 font-body text-sm text-slate-500 bg-transparent border-none cursor-pointer hover:text-blue-500">
+            <ChevronLeft size={16}/> Sem. préc.
+          </button>
+          <div className="text-center">
+            <div className="font-display text-base font-bold text-blue-800 capitalize">
+              {lundi.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
+            </div>
+            <div className="font-body text-[10px] text-slate-400">
+              Semaine {semaine.split("-W")[1]}
+            </div>
           </div>
+          <button onClick={nextWeek} className="flex items-center gap-1 font-body text-sm text-slate-500 bg-transparent border-none cursor-pointer hover:text-blue-500">
+            Sem. suiv. <ChevronRight size={16}/>
+          </button>
         </div>
-        <button onClick={nextWeek} className="flex items-center gap-1 font-body text-sm text-slate-500 bg-transparent border-none cursor-pointer hover:text-blue-500">
-          Semaine suiv. <ChevronRight size={16}/>
-        </button>
+        {/* Ligne 2 : Jours de la semaine cliquables */}
+        <div className="flex">
+          {jourDates.slice(0, 6).map(({ jour, date }) => {
+            const isToday = (() => {
+              const now = new Date();
+              return date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+            })();
+            const hasTaches = taches.some(t => t.jour === jour);
+            const dayNum = date.getDate();
+            const dayLabel = JOURS_LABELS[jour].slice(0, 3);
+            return (
+              <button key={jour}
+                onClick={() => { setView("journalier"); setSelectedDay(jour); }}
+                style={{
+                  flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+                  padding: "8px 0", border: "none", cursor: "pointer",
+                  background: isToday ? "#eff6ff" : "transparent",
+                  borderBottom: isToday ? "2px solid #3b82f6" : "2px solid transparent",
+                }}>
+                <span style={{ fontFamily: "sans-serif", fontSize: 10, fontWeight: 600, color: isToday ? "#3b82f6" : "#94a3b8", textTransform: "uppercase" }}>
+                  {dayLabel}
+                </span>
+                <span style={{
+                  fontFamily: "sans-serif", fontSize: 16, fontWeight: 800,
+                  color: isToday ? "#3b82f6" : "#1e293b",
+                  width: 32, height: 32, borderRadius: "50%",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: isToday ? "#dbeafe" : "transparent",
+                }}>
+                  {dayNum}
+                </span>
+                {hasTaches && (
+                  <div style={{ width: 5, height: 5, borderRadius: "50%", background: isToday ? "#3b82f6" : "#94a3b8" }} />
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Jours travaillés cette semaine */}
