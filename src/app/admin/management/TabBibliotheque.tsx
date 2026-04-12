@@ -134,9 +134,27 @@ function TacheForm({ form, editId, saving, onChange, onSave, onCancel }: FormPro
         </label>
       </div>
       {form.obligatoire && (
-        <div>
-          <label className="font-body text-xs font-semibold text-red-600 block mb-1.5">Jours où cette tâche est obligatoire</label>
-          <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-4 flex-wrap">
+            <div>
+              <label className="font-body text-xs font-semibold text-red-600 block mb-1.5">Nombre minimum par jour</label>
+              <div className="flex items-center gap-2">
+                {[1, 2, 3, 4, 5].map(n => (
+                  <button key={n} onClick={() => onChange({ ...form, nbObligatoire: n })}
+                    className={`w-8 h-8 rounded-lg font-body text-sm font-bold border-none cursor-pointer transition-all
+                      ${(form.nbObligatoire || 1) === n ? "bg-red-500 text-white" : "bg-white text-slate-400 border border-gray-200"}`}>
+                    {n}
+                  </button>
+                ))}
+                <span className="font-body text-[10px] text-slate-400 ml-1">
+                  {(form.nbObligatoire || 1) === 1 ? "personne" : "personnes"} minimum
+                </span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="font-body text-xs font-semibold text-red-600 block mb-1.5">Jours obligatoires</label>
+            <div className="flex flex-wrap gap-1.5">
             {JOURS.map(j => {
               const selected = (form.joursObligatoires || []).includes(j);
               return (
@@ -151,6 +169,7 @@ function TacheForm({ form, editId, saving, onChange, onSave, onCancel }: FormPro
               );
             })}
           </div>
+        </div>
         </div>
       )}
       <div className="flex gap-2">
@@ -250,7 +269,7 @@ export default function TabBibliotheque({ taches, onRefresh }: Props) {
                     </div>
                     {t.recurrente && <span className="font-body text-[9px] bg-green-50 text-green-600 px-1.5 py-0.5 rounded-full">récurrente</span>}
                     {t.obligatoire && <span className="font-body text-[9px] bg-red-50 text-red-500 px-1.5 py-0.5 rounded-full font-semibold">
-                      obligatoire {(t.joursObligatoires || []).length > 0 && (t.joursObligatoires || []).length < 6 ? `(${(t.joursObligatoires || []).map(j => JOURS_LABELS[j].slice(0,2)).join(" ")})` : ""}
+                      obligatoire ×{t.nbObligatoire || 1}/j {(t.joursObligatoires || []).length > 0 && (t.joursObligatoires || []).length < 6 ? `(${(t.joursObligatoires || []).map(j => JOURS_LABELS[j].slice(0,2)).join(" ")})` : ""}
                     </span>}
                     {(t.horairesDefaut && t.horairesDefaut.length > 0) && (
                       <div className="flex flex-wrap gap-0.5">
