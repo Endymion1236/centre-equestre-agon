@@ -391,7 +391,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   }, [creneau.date]);
 
   const prorata = sessionsRestantes / (inscParams.totalSessionsSaison || 35);
-  const prixForfait = Math.round(prixForfaitAnnuel * prorata);
+  const prixForfaitBrut = Math.round(prixForfaitAnnuel * prorata);
 
   // Adhésion dégressive : compter enfants déjà inscrits en forfait annuel cette saison
   const rangEnfantFamille = useMemo(() => {
@@ -403,6 +403,21 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     });
     return enfantsInscrits.size + 1; // rang = nb déjà inscrits + 1
   }, [fam, allForfaits, selChild]);
+
+  // Réduction famille sur le forfait (chargée depuis settings/degressivite)
+  const [familyDiscountRules, setFamilyDiscountRules] = useState<{ nth: number; discount: number }[]>([]);
+  useEffect(() => {
+    getDoc(doc(db, "settings", "degressivite")).then(snap => {
+      if (snap.exists() && snap.data().familyDiscount) {
+        setFamilyDiscountRules(snap.data().familyDiscount);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const familyRule = familyDiscountRules.find(r => r.nth === rangEnfantFamille);
+  const familyDiscountPercent = familyRule?.discount || 0;
+  const familyDiscountAmount = familyDiscountPercent > 0 ? Math.round(prixForfaitBrut * familyDiscountPercent / 100 * 100) / 100 : 0;
+  const prixForfait = prixForfaitBrut - familyDiscountAmount;
 
   const prixAdhesionDegressif =
     rangEnfantFamille === 1 ? inscParams.adhesion1 :
@@ -736,6 +751,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           const esTitle = esKey.substring(secondDash + 1);
           const esSlotLabel = `${esTitle} — ${dayNames[esDow]} ${esTime}`;
           items.push({ activityTitle: `Forfait ${esTitle} (${esSlotLabel})`, childId: selChild, childName, activityType: creneau.activityType, priceHT: 0, tva: 5.5, priceTTC: 0 });
+        }
+        // Ligne de réduction famille si applicable
+        if (familyDiscountAmount > 0) {
+          items.push({ activityTitle: `Réduction famille (${rangEnfantFamille}ème enfant, -${familyDiscountPercent}%)`, childId: selChild, childName, priceHT: -familyDiscountAmount / 1.055, tva: 5.5, priceTTC: -familyDiscountAmount });
         }
 
         // Chercher un paiement annuel pending existant pour cette famille (pour regrouper la fratrie)
@@ -1765,6 +1784,13 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         {prorata >= 1 && <> · Tarif plein (début de saison)</>}
                       </div>
                     </div>
+                    {/* Réduction famille */}
+                    {familyDiscountAmount > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="font-body text-sm text-green-700">👨‍👩‍👧‍👦 Réduction famille ({rangEnfantFamille}ème enfant, -{familyDiscountPercent}%)</span>
+                        <span className="font-body text-sm font-semibold text-green-600">-{familyDiscountAmount.toFixed(2)}€</span>
+                      </div>
+                    )}
                     {/* Total */}
                     <div className="flex items-center justify-between pt-2 border-t border-gray-200">
                       <span className="font-body text-sm font-bold text-blue-800">Total</span>
