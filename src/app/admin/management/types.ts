@@ -28,7 +28,6 @@ export interface TacheType {
   horairesDefaut?: string[];  // horaires de début standards ex: ["08:45","09:00","10:00"]
   obligatoire?: boolean;      // tâche obligatoire — vérifiée par l'IA
   joursObligatoires?: JourSemaine[]; // jours où la tâche est obligatoire
-  nbObligatoire?: number;    // nombre de fois minimum par jour (défaut: 1)
   notes?: string;
   createdAt?: any;
 }

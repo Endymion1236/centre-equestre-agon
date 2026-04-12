@@ -369,9 +369,8 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   const tachesObligatoires = tachesType.filter(t => t.obligatoire);
 
   const tachesManquantes = useMemo(() => {
-    const manquantes: { tache: TacheType; jour: JourSemaine; attendu: number; present: number }[] = [];
+    const manquantes: { tache: TacheType; jour: JourSemaine }[] = [];
     for (const tt of tachesObligatoires) {
-      const nbMin = tt.nbObligatoire || 1;
       // Jours attendus : joursObligatoires > joursDefaut > lun-ven
       const joursConfig = (tt.joursObligatoires && tt.joursObligatoires.length > 0)
         ? tt.joursObligatoires
@@ -381,11 +380,10 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       // Filtrer par les jours réellement travaillés cette semaine
       const joursAttendus = joursConfig.filter(j => joursTravailles.includes(j));
       for (const jour of joursAttendus) {
-        const countById = taches.filter(t => t.tacheTypeId === tt.id && t.jour === jour).length;
-        const countByLabel = taches.filter(t => t.tacheLabel === tt.label && t.jour === jour).length;
-        const present = Math.max(countById, countByLabel);
-        if (present < nbMin) {
-          manquantes.push({ tache: tt, jour, attendu: nbMin, present });
+        const exists = taches.some(t => t.tacheTypeId === tt.id && t.jour === jour);
+        const existsByLabel = taches.some(t => t.tacheLabel === tt.label && t.jour === jour);
+        if (!exists && !existsByLabel) {
+          manquantes.push({ tache: tt, jour });
         }
       }
     }
@@ -468,7 +466,7 @@ ${obligatoiresListe || "(aucune tâche marquée obligatoire)"}
 PLANNING DE LA SEMAINE ${semaine} :
 ${planningResume}
 
-TÂCHES MANQUANTES DÉTECTÉES AUTOMATIQUEMENT : ${tachesManquantes.length === 0 ? "Aucune" : tachesManquantes.map(m => `${m.tache.label} le ${JOURS_LABELS[m.jour]}${m.attendu > 1 ? ` (${m.present}/${m.attendu} assignées)` : ""}`).join(", ")}
+TÂCHES MANQUANTES DÉTECTÉES AUTOMATIQUEMENT : ${tachesManquantes.length === 0 ? "Aucune" : tachesManquantes.map(m => `${m.tache.label} le ${JOURS_LABELS[m.jour]}`).join(", ")}
 
 Analyse ce planning et donne :
 1. ✅ Ce qui est bien couvert
@@ -1526,7 +1524,7 @@ Réponds de façon concise et pratique, en français.`,
             <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
               {tachesManquantes.slice(0, 12).map((m, i) => (
                 <span key={i} style={{fontFamily:"sans-serif",fontSize:10,background:"#fee2e2",color:"#dc2626",padding:"2px 8px",borderRadius:6,fontWeight:600}}>
-                  {m.tache.label} · {JOURS_LABELS[m.jour].slice(0, 3)}{m.attendu > 1 ? ` (${m.present}/${m.attendu})` : ""}
+                  {m.tache.label} · {JOURS_LABELS[m.jour].slice(0, 3)}
                 </span>
               ))}
               {tachesManquantes.length > 12 && (
