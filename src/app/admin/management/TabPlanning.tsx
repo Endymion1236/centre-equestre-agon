@@ -313,6 +313,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
           tacheTypeId: "__planning__",
           tacheLabel: creneau.activityTitle,
           categorie: "animation" as any,
+          color: creneau.color || "",
           salarieId,
           salarieName,
           jour,
@@ -335,6 +336,8 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   };
 
   const getCat = (cat: string) => CATEGORIES.find(c => c.id === cat);
+  // Couleur de la tâche : couleur custom (import planning) > couleur catégorie > fallback
+  const getTaskColor = (t: TachePlanifiee) => (t as any).color || getCat(t.categorie)?.color || "#64748b";
 
   // ── Détection automatique des tâches obligatoires manquantes ───────────
   const tachesObligatoires = tachesType.filter(t => t.obligatoire);
@@ -499,13 +502,13 @@ Réponds de façon concise et pratique, en français.`,
                         return (
                           <div key={t.id} title={`${t.tacheLabel}\n${t.heureDebut}→${minToHeure(heureToMin(t.heureDebut) + t.dureeMinutes)}${t.notes ? "\n" + t.notes : ""}`} style={{
                             display:"flex", alignItems:"flex-start", gap:3, padding:"3px 5px",
-                            borderRadius:6, background: t.done ? "#f0fdf4" : (cat?.color+"18" || "#f1f5f9"),
-                            border:`1px solid ${cat?.color+"30" || "#e2e8f0"}`,
+                            borderRadius:6, background: t.done ? "#f0fdf4" : (getTaskColor(t)+"18"),
+                            border:`1px solid ${getTaskColor(t)+"30"}`,
                             opacity: t.done ? 0.6 : 1,
                           }}>
                             <span style={{fontSize:10, marginTop:1}}>{cat?.emoji}</span>
                             <div style={{flex:1, minWidth:0}}>
-                              <div style={{fontFamily:"sans-serif", fontSize:10, fontWeight:600, color: t.done?"#16a34a":cat?.color||"#1e293b", textDecoration:t.done?"line-through":"none", lineHeight:"1.3", wordBreak:"break-word"}}>
+                              <div style={{fontFamily:"sans-serif", fontSize:10, fontWeight:600, color: t.done?"#16a34a":getTaskColor(t), textDecoration:t.done?"line-through":"none", lineHeight:"1.3", wordBreak:"break-word"}}>
                                 {t.tacheLabel}
                               </div>
                               <div style={{fontFamily:"sans-serif", fontSize:8, color:"#94a3b8"}}>
@@ -821,7 +824,7 @@ Réponds de façon concise et pratique, en français.`,
                               style={{
                                 position:"absolute", left:pct(s), width:w(durMin), minWidth:isShort?6:undefined,
                                 top:3, bottom:3,
-                                background: t.done ? "#94a3b8" : (cat?.color||"#64748b"),
+                                background: t.done ? "#94a3b8" : getTaskColor(t),
                                 borderRadius:5,
                                 opacity: t.done ? 0.5 : 1,
                                 cursor:"pointer",
@@ -1030,7 +1033,7 @@ Réponds de façon concise et pratique, en français.`,
                         style={{
                           position:"absolute", left:pct(s), width:w(durMin),
                           top:4, bottom:4,
-                          background: t.done ? "#94a3b8" : (cat?.color || "#64748b"),
+                          background: t.done ? "#94a3b8" : getTaskColor(t),
                           borderRadius:5,
                           opacity: t.done ? 0.5 : 1,
                           cursor:"pointer",
@@ -1206,7 +1209,7 @@ Réponds de façon concise et pratique, en français.`,
                           <div style={{width:70, fontSize:13, fontWeight:700, color:"#475569", flexShrink:0}}>{t.heureDebut}</div>
                           <div style={{flex:1, display:"flex", alignItems:"center", gap:6}}>
                             <span style={{fontSize:14}}>{cat?.emoji}</span>
-                            <span style={{fontSize:13, fontWeight:600, color: t.done ? "#94a3b8" : (cat?.color || "#1e293b"), textDecoration: t.done ? "line-through" : "none"}}>
+                            <span style={{fontSize:13, fontWeight:600, color: t.done ? "#94a3b8" : getTaskColor(t), textDecoration: t.done ? "line-through" : "none"}}>
                               {t.tacheLabel}
                             </span>
                             <span style={{fontSize:10, color:"#94a3b8"}}>{cat?.label}</span>

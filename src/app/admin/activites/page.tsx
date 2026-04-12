@@ -7,6 +7,7 @@ import { db } from "@/lib/firebase";
 import { Card, Badge, Button } from "@/components/ui";
 import { Plus, Pencil, Trash2, Copy, X, Check, Loader2, Settings2 } from "lucide-react";
 import type { Activity, ActivityType } from "@/types";
+import { typeColors } from "@/app/admin/planning/types";
 
 // ── Types d'activités ─────────────────────────────────────────────────────────
 
@@ -217,7 +218,7 @@ function ActivityForm({ initial, subcatOptions, onSave, onCancel }: {
           </div>
         )}
 
-        {/* Titre + Horaires */}
+        {/* Titre + Horaires + Couleur */}
         <div className="flex gap-3">
           <div className="flex-1">
             <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Titre *</label>
@@ -226,6 +227,14 @@ function ActivityForm({ initial, subcatOptions, onSave, onCancel }: {
           <div className="flex-1">
             <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Horaires</label>
             <input value={form.schedule || ""} onChange={e => update("schedule", e.target.value)} className={inp} placeholder="Ex: Mer · 14h–16h" />
+          </div>
+          <div style={{width: 90}}>
+            <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Couleur</label>
+            <div className="flex items-center gap-2">
+              <input type="color" value={form.color || "#27ae60"} onChange={e => update("color", e.target.value)}
+                style={{width:32, height:32, border:"none", borderRadius:6, cursor:"pointer", padding:0}} />
+              <span className="font-body text-[10px] text-slate-400">{form.color || "auto"}</span>
+            </div>
           </div>
         </div>
 
@@ -448,7 +457,10 @@ export default function ActivitesPage() {
           {filtered.map(act => (
             <div key={act.firestoreId} className="px-5 py-3.5 border-b border-blue-500/8 last:border-0 grid grid-cols-12 gap-4 items-center hover:bg-blue-50/30">
               <div className="col-span-5">
-                <div className="font-body text-sm font-semibold text-blue-800">{act.title}</div>
+                <div className="flex items-center gap-2">
+                  <div style={{width:10, height:10, borderRadius:"50%", background: (act as any).color || typeColors[act.type] || "#666", flexShrink:0}} />
+                  <span className="font-body text-sm font-semibold text-blue-800">{act.title}</span>
+                </div>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="font-body text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{typeLabel(act.type)}</span>
                   <Badge color={act.active !== false ? "green" : "gray"}>{act.active !== false ? "Actif" : "Inactif"}</Badge>

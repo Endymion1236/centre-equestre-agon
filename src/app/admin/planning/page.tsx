@@ -173,7 +173,11 @@ export default function PlanningPage() {
         ex.date === c.date && ex.startTime === c.startTime && ex.activityTitle === c.activityTitle
       );
       if (isDuplicate) { skipped++; continue; }
-      await addDoc(collection(db, "creneaux"), { ...c, createdAt: serverTimestamp() });
+      // Injecter la couleur de l'activité si elle n'est pas déjà sur le créneau
+      const actColor = activities.find(a => a.title === c.activityTitle)?.color;
+      const creneauData: any = { ...c, createdAt: serverTimestamp() };
+      if (actColor && !creneauData.color) creneauData.color = actColor;
+      await addDoc(collection(db, "creneaux"), creneauData);
       created++;
     }
     setShowSimple(false); setShowGenerator(false);

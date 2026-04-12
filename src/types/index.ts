@@ -49,6 +49,7 @@ export interface Activity {
   type: ActivityType;
   title: string;
   description: string;
+  color?: string; // Couleur personnalisée (hex) — utilisée dans planning et management
   ageMin: number;
   ageMax: number | null;
   galopRequired: string | null;
