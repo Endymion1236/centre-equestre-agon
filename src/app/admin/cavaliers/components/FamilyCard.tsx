@@ -236,6 +236,7 @@ export default function FamilyCard({
 
   // ── Creneaux pour l'enroll ─────────────────────────────────────────────
   const [creneauxLoaded, setCreneauxLoaded] = useState<any[]>([]);
+  const [expandedReservations, setExpandedReservations] = useState<Record<string, boolean>>({});
   const loadCreneaux = async () => {
     if (creneauxLoaded.length > 0) return;
     const today = new Date().toISOString().split("T")[0];
@@ -574,17 +575,26 @@ export default function FamilyCard({
                           const lastNotes = (peda.notes || []).slice(0, 3);
                           return (
                             <div className="pl-11 mt-2 flex flex-col gap-1.5">
-                              {childReservations.length > 0 && (
+                              {childReservations.length > 0 && (() => {
+                                const [expanded, setExpanded] = [expandedReservations[child.id] || false, (v: boolean) => setExpandedReservations(prev => ({ ...prev, [child.id]: v }))];
+                                const shown = expanded ? childReservations : childReservations.slice(0, 3);
+                                return (
                                 <div className="bg-blue-50/50 rounded-lg px-3 py-2">
-                                  <div className="font-body text-[10px] font-semibold text-blue-500 uppercase mb-1">Prochaines séances</div>
-                                  {childReservations.slice(0, 3).map((r: any, ri: number) => (
+                                  <div className="font-body text-[10px] font-semibold text-blue-500 uppercase mb-1">Prochaines séances ({childReservations.length})</div>
+                                  {shown.map((r: any, ri: number) => (
                                     <div key={ri} className="font-body text-xs text-gray-600">
                                       {new Date(r.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} — {r.activityTitle || "Séance"}
                                     </div>
                                   ))}
-                                  {childReservations.length > 3 && <div className="font-body text-[10px] text-slate-600">+{childReservations.length - 3} autres</div>}
+                                  {childReservations.length > 3 && (
+                                    <button onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+                                      className="font-body text-[10px] text-blue-500 bg-transparent border-none cursor-pointer hover:underline mt-0.5 p-0">
+                                      {expanded ? "▲ Réduire" : `▼ Voir les ${childReservations.length - 3} autres`}
+                                    </button>
+                                  )}
                                 </div>
-                              )}
+                                );
+                              })()}
                               {lastNotes.length > 0 && (
                                 <div className="bg-green-50/50 rounded-lg px-3 py-2">
                                   <div className="font-body text-[10px] font-semibold text-green-600 uppercase mb-1">Dernières notes péda</div>
