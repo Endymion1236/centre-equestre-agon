@@ -569,7 +569,7 @@ export default function FamilyCard({
 
                         {/* Réservations + notes péda */}
                         {(() => {
-                          const childReservations = allReservations.filter((r: any) => r.childId === child.id && r.date >= new Date().toISOString().split("T")[0]);
+                          const childReservations = allReservations.filter((r: any) => r.childId === child.id && r.date >= new Date().toISOString().split("T")[0]).sort((a: any, b: any) => (a.date || "").localeCompare(b.date || ""));
                           const peda = child.peda || { notes: [], objectifs: [] };
                           const lastNotes = (peda.notes || []).slice(0, 3);
                           return (
