@@ -1087,11 +1087,30 @@ Réponds de façon concise et pratique, en français.`,
             {activeSalaries.map(sal => {
               const dayTaches = taches.filter(t => t.salarieId === sal.id && t.jour === selectedDay).sort((a,b) => a.heureDebut.localeCompare(b.heureDebut));
               if (dayTaches.length === 0) return null;
-              const charge = dayTaches.reduce((sum, t) => sum + t.dureeMinutes, 0);
+              const charge = dayTaches.filter(t => t.categorie !== "pause").reduce((sum, t) => sum + t.dureeMinutes, 0);
               return (
-                <div key={sal.id} style={{fontFamily:"sans-serif", fontSize:10, color:"#475569", marginBottom:3, display:"flex", alignItems:"center", gap:6}}>
-                  <div style={{width:8, height:8, borderRadius:"50%", background:sal.couleur}}/>
-                  <strong>{sal.nom}</strong> — {fmtDuree(charge)} — {dayTaches.map(t => t.tacheLabel).join(", ")}
+                <div key={sal.id} style={{marginBottom:10, paddingBottom:10, borderBottom:"1px solid #e8ecf2"}}>
+                  <div style={{display:"flex", alignItems:"center", gap:6, marginBottom:4}}>
+                    <div style={{width:9, height:9, borderRadius:"50%", background:sal.couleur, flexShrink:0}}/>
+                    <span style={{fontFamily:"sans-serif", fontSize:11, fontWeight:800, color:"#1e293b"}}>{sal.nom}</span>
+                    <span style={{fontFamily:"sans-serif", fontSize:10, color:"#94a3b8"}}>— {fmtDuree(charge)}</span>
+                  </div>
+                  <div style={{paddingLeft:15, display:"flex", flexWrap:"wrap", gap:4}}>
+                    {dayTaches.map(t => {
+                      const color = getTaskColor(t);
+                      return (
+                        <span key={t.id} style={{
+                          fontFamily:"sans-serif", fontSize:9, fontWeight:600,
+                          color: color, background: color + "12",
+                          border: `1px solid ${color}25`,
+                          padding:"2px 7px", borderRadius:5,
+                          whiteSpace:"nowrap",
+                        }}>
+                          {t.tacheLabel} <span style={{fontWeight:400, color:"#94a3b8"}}>{t.heureDebut}</span>
+                        </span>
+                      );
+                    })}
+                  </div>
                 </div>
               );
             })}
