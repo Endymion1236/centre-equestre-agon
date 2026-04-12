@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { collection, getDocs, query, where, orderBy, addDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Loader2, BookOpen, Calendar, Users, Sparkles, LayoutTemplate } from "lucide-react";
+import { Loader2, BookOpen, Calendar, Users, Sparkles, LayoutTemplate, ClipboardList } from "lucide-react";
 import type { TacheType, Salarie, TachePlanifiee, ModelePlanning } from "./types";
 import { getISOWeek } from "./types";
 import TabBibliotheque from "./TabBibliotheque";
@@ -10,8 +10,9 @@ import TabPlanning from "./TabPlanning";
 import TabEquipe from "./TabEquipe";
 import TabAgentIA from "./TabAgentIA";
 import TabModeles from "./TabModeles";
+import TabResume from "./TabResume";
 
-type TabId = "planning" | "bibliotheque" | "equipe" | "ia" | "modeles";
+type TabId = "planning" | "resume" | "bibliotheque" | "equipe" | "ia" | "modeles";
 
 export default function ManagementPage() {
   const [tab, setTab] = useState<TabId>("planning");
@@ -92,6 +93,7 @@ export default function ManagementPage() {
 
   const TABS = [
     { id: "planning" as TabId, label: "Planning", icon: Calendar },
+    { id: "resume" as TabId, label: "Résumé", icon: ClipboardList },
     { id: "modeles" as TabId, label: "Modèles", icon: LayoutTemplate },
     { id: "bibliotheque" as TabId, label: "Bibliothèque", icon: BookOpen },
     { id: "equipe" as TabId, label: "Équipe", icon: Users },
@@ -136,6 +138,11 @@ export default function ManagementPage() {
               salaries={salaries} creneaux={creneaux}
               modeles={modeles}
               onRefresh={refresh}/>
+          )}
+          {tab==="resume" && (
+            <TabResume
+              semaine={semaine} setSemaine={s=>{setSemaine(s);}}
+              taches={tachesPlanifiees} salaries={salaries}/>
           )}
           {tab==="modeles" && (
             <TabModeles
