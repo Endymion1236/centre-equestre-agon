@@ -6,7 +6,7 @@ import { authFetch } from "@/lib/auth-fetch";
 import { Plus, Trash2, Check, ChevronLeft, ChevronRight, Printer, Save, LayoutTemplate } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import type { TacheType, TachePlanifiee, Salarie, JourSemaine, ModelePlanning, TacheModele } from "./types";
-import { CATEGORIES, JOURS, JOURS_LABELS, getLundideSemaine, formatDateCourte, fmtDuree } from "./types";
+import { CATEGORIES, JOURS, JOURS_LABELS, getLundideSemaine, getISOWeek, formatDateCourte, fmtDuree } from "./types";
 
 interface Props {
   semaine: string;
@@ -1274,63 +1274,64 @@ Réponds de façon concise et pratique, en français.`,
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Navigation semaine — style planning */}
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        {/* Ligne 1 : Mois + navigation */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
-          <button onClick={prevWeek} className="flex items-center gap-1 font-body text-sm text-slate-500 bg-transparent border-none cursor-pointer hover:text-blue-500">
-            <ChevronLeft size={16}/> Sem. préc.
-          </button>
-          <div className="text-center">
-            <div className="font-display text-base font-bold text-blue-800 capitalize">
-              {lundi.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
-            </div>
-            <div className="font-body text-[10px] text-slate-400">
-              Semaine {semaine.split("-W")[1]}
-            </div>
+      {/* Navigation semaine — style identique au planning */}
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={prevWeek} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300">
+          <ChevronLeft size={16}/>Préc.
+        </button>
+        <div className="flex flex-col items-center gap-1">
+          <div className="font-display text-lg font-bold text-blue-800 capitalize">
+            {lundi.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
           </div>
-          <button onClick={nextWeek} className="flex items-center gap-1 font-body text-sm text-slate-500 bg-transparent border-none cursor-pointer hover:text-blue-500">
-            Sem. suiv. <ChevronRight size={16}/>
+          <div className="font-body text-xs text-slate-500">
+            Du {formatDateCourte(lundi)} au {formatDateCourte(new Date(lundi.getTime() + 5 * 86400000))} · Semaine {semaine.split("-W")[1]}
+          </div>
+          <input type="date" title="Aller à cette date"
+            className="font-body text-xs px-2 py-1 rounded-lg border border-gray-200 bg-white cursor-pointer focus:border-blue-400 focus:outline-none text-slate-500"
+            onChange={e => {
+              if (!e.target.value) return;
+              const [py, pm, pd] = e.target.value.split("-").map(Number);
+              const picked = new Date(py, pm - 1, pd, 12);
+              const pickedDow = (picked.getDay() + 6) % 7;
+              const pickedMon = new Date(picked); pickedMon.setDate(picked.getDate() - pickedDow);
+              const today = new Date(); today.setHours(12, 0, 0, 0);
+              const todayDow = (today.getDay() + 6) % 7;
+              const todayMon = new Date(today); todayMon.setDate(today.getDate() - todayDow);
+              const diffWeeks = Math.round((pickedMon.getTime() - todayMon.getTime()) / (7 * 86400000));
+              const currentIso = getISOWeek(new Date());
+              const [cy, cw] = currentIso.split("-W").map(Number);
+              const baseDate = new Date(); baseDate.setHours(12,0,0,0);
+              // Calculer la semaine ISO cible
+              const targetIso = getISOWeek(picked);
+              setSemaine(targetIso);
+              e.target.value = "";
+            }}/>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => setSemaine(getISOWeek(new Date()))} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-100">Auj.</button>
+          <button onClick={nextWeek} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300">
+            Suiv.<ChevronRight size={16}/>
           </button>
         </div>
-        {/* Ligne 2 : Jours de la semaine cliquables */}
-        <div className="flex">
-          {jourDates.slice(0, 6).map(({ jour, date }) => {
-            const isToday = (() => {
-              const now = new Date();
-              return date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-            })();
-            const hasTaches = taches.some(t => t.jour === jour);
-            const dayNum = date.getDate();
-            const dayLabel = JOURS_LABELS[jour].slice(0, 3);
-            return (
-              <button key={jour}
-                onClick={() => { setView("journalier"); setSelectedDay(jour); }}
-                style={{
-                  flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
-                  padding: "8px 0", border: "none", cursor: "pointer",
-                  background: isToday ? "#eff6ff" : "transparent",
-                  borderBottom: isToday ? "2px solid #3b82f6" : "2px solid transparent",
-                }}>
-                <span style={{ fontFamily: "sans-serif", fontSize: 10, fontWeight: 600, color: isToday ? "#3b82f6" : "#94a3b8", textTransform: "uppercase" }}>
-                  {dayLabel}
-                </span>
-                <span style={{
-                  fontFamily: "sans-serif", fontSize: 16, fontWeight: 800,
-                  color: isToday ? "#3b82f6" : "#1e293b",
-                  width: 32, height: 32, borderRadius: "50%",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: isToday ? "#dbeafe" : "transparent",
-                }}>
-                  {dayNum}
-                </span>
-                {hasTaches && (
-                  <div style={{ width: 5, height: 5, borderRadius: "50%", background: isToday ? "#3b82f6" : "#94a3b8" }} />
-                )}
-              </button>
-            );
-          })}
-        </div>
+      </div>
+
+      {/* En-têtes jours cliquables */}
+      <div className="grid grid-cols-6 gap-1.5 mb-4">
+        {jourDates.slice(0, 6).map(({ jour, date }) => {
+          const isToday = (() => {
+            const now = new Date();
+            return date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+          })();
+          const hasTaches = taches.some(t => t.jour === jour);
+          return (
+            <div key={jour}
+              onClick={() => { setView("journalier"); setSelectedDay(jour); }}
+              className={`text-center py-2 rounded-lg font-body text-xs font-semibold cursor-pointer hover:ring-2 hover:ring-blue-300 transition-all ${isToday ? "bg-blue-500 text-white" : hasTaches ? "bg-sand text-slate-700" : "bg-sand text-slate-400"}`}>
+              {JOURS_LABELS[jour].slice(0, 3)} {date.getDate()}{date.getMonth() !== lundi.getMonth() ? `/${date.getMonth() + 1}` : ""}
+              {hasTaches && !isToday && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-blue-400 align-middle" />}
+            </div>
+          );
+        })}
       </div>
 
       {/* Jours travaillés cette semaine */}
