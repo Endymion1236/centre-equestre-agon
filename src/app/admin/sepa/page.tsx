@@ -317,56 +317,87 @@ export default function SepaPage() {
   // ─── Marquer une remise comme déposée ───
   const markDeposited = async (remiseId: string) => {
     await updateDoc(doc(db, "remises-sepa", remiseId), { status: "deposited" });
-    // Marquer les échéances comme prélevées
     const remiseEcheances = echeances.filter(e => e.remiseId === remiseId);
     for (const ech of remiseEcheances) {
       await updateDoc(doc(db, "echeances-sepa", ech.id), { status: "preleve" });
     }
 
-    // ── Mettre à jour les paiements de référence (sepa_scheduled → paid si tout est prélevé) ──
+    // ── Créer les encaissements (1 par échéance = 1 mouvement dans le journal) ──
+    const remiseDoc = remises.find(r => r.id === remiseId);
+    for (const ech of remiseEcheances) {
+      let linkedPaymentId = ech.paymentId || null;
+      if (!linkedPaymentId && ech.orderId) {
+        const payDoc = payments.find((p: any) => p.orderId === ech.orderId);
+        if (payDoc) linkedPaymentId = payDoc.id;
+      }
+      await addDoc(collection(db, "encaissements"), {
+        paymentId: linkedPaymentId,
+        familyId: ech.familyId,
+        familyName: ech.familyName,
+        montant: ech.montant,
+        mode: "prelevement_sepa",
+        modeLabel: "Prélèvement SEPA",
+        ref: `Remise n°${remiseDoc?.numero || "?"} — ${ech.mandatId}`,
+        activityTitle: ech.description || `Échéance SEPA ${ech.mandatId}`,
+        date: serverTimestamp(),
+      });
+    }
+
+    // ── Mettre à jour les paiements de référence ──
     const orderIds = [...new Set(remiseEcheances.map(e => e.orderId).filter(Boolean))];
     for (const orderId of orderIds) {
       const allForOrder = echeances.filter(e => e.orderId === orderId);
       const allPreleve = allForOrder.every(e => e.remiseId === remiseId || e.status === "preleve");
-      if (allPreleve) {
-        // Chercher le paiement de référence
-        try {
-          const paySnap = await getDocs(query(
-            collection(db, "payments"),
-            where("orderId", "==", orderId),
-            where("status", "==", "sepa_scheduled")
-          ));
-          const totalPreleve = allForOrder.reduce((s, e) => s + (e.montant || 0), 0);
-          for (const payDoc of paySnap.docs) {
-            await updateDoc(doc(db, "payments", payDoc.id), {
-              status: "paid",
-              paidAmount: Math.round(totalPreleve * 100) / 100,
-              paidAt: serverTimestamp(),
-              paymentRef: `SEPA prélevé — remise ${remiseId.slice(-6)}`,
-            });
-          }
-        } catch (e) { console.error("Mise à jour paiement SEPA:", e); }
-      } else {
-        // Mise à jour partielle : calculer le montant prélevé
-        try {
-          const paySnap = await getDocs(query(
-            collection(db, "payments"),
-            where("orderId", "==", orderId),
-            where("status", "==", "sepa_scheduled")
-          ));
-          const totalPreleve = allForOrder
-            .filter(e => e.remiseId === remiseId || e.status === "preleve")
-            .reduce((s, e) => s + (e.montant || 0), 0);
-          for (const payDoc of paySnap.docs) {
-            await updateDoc(doc(db, "payments", payDoc.id), {
-              paidAmount: Math.round(totalPreleve * 100) / 100,
-            });
-          }
-        } catch (e) { console.error("Mise à jour partielle paiement SEPA:", e); }
-      }
+      const totalPreleve = allForOrder
+        .filter(e => e.remiseId === remiseId || e.status === "preleve")
+        .reduce((s, e) => s + (e.montant || 0), 0);
+      try {
+        const paySnap = await getDocs(query(
+          collection(db, "payments"),
+          where("orderId", "==", orderId),
+        ));
+        for (const payDoc of paySnap.docs) {
+          const payData = payDoc.data();
+          if (payData.status === "cancelled") continue;
+          await updateDoc(doc(db, "payments", payDoc.id), allPreleve ? {
+            status: "paid",
+            paidAmount: Math.round(totalPreleve * 100) / 100,
+            paidAt: serverTimestamp(),
+            paymentMode: "prelevement_sepa",
+            paymentRef: `SEPA prélevé — remise n°${remiseDoc?.numero || remiseId.slice(-6)}`,
+          } : {
+            status: "partial",
+            paidAmount: Math.round(totalPreleve * 100) / 100,
+          });
+        }
+      } catch (e) { console.error("Mise à jour paiement SEPA:", e); }
     }
 
-    toast("Remise marquée comme déposée", "success");
+    // Échéances manuelles sans orderId mais avec paymentId
+    const directPayIds = [...new Set(
+      remiseEcheances.filter(e => !e.orderId && e.paymentId).map(e => e.paymentId!)
+    )];
+    for (const payId of directPayIds) {
+      const allForPay = echeances.filter(e => e.paymentId === payId);
+      const allPreleve = allForPay.every(e => e.remiseId === remiseId || e.status === "preleve");
+      const totalPreleve = allForPay
+        .filter(e => e.remiseId === remiseId || e.status === "preleve")
+        .reduce((s, e) => s + (e.montant || 0), 0);
+      try {
+        await updateDoc(doc(db, "payments", payId), allPreleve ? {
+          status: "paid",
+          paidAmount: Math.round(totalPreleve * 100) / 100,
+          paidAt: serverTimestamp(),
+          paymentMode: "prelevement_sepa",
+          paymentRef: `SEPA prélevé — remise n°${remiseDoc?.numero || remiseId.slice(-6)}`,
+        } : {
+          status: "partial",
+          paidAmount: Math.round(totalPreleve * 100) / 100,
+        });
+      } catch (e) { console.error("Mise à jour directe paiement SEPA:", e); }
+    }
+
+    toast("Remise marquée comme déposée — encaissements enregistrés", "success");
     fetchAll();
   };
 

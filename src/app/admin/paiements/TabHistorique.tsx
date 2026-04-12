@@ -43,8 +43,8 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
       // Les pending/draft sont des proformas → visibles dans Impayés, pas ici
       // SAUF si une proforma a été convertie en facture définitive (invoiceNumber présent)
       let filtered = payments.filter(p => 
-        p.status === "paid" || p.status === "partial" || p.status === "cancelled" ||
-        ((p as any).invoiceNumber && p.status !== "sepa_scheduled")
+        p.status === "paid" || p.status === "partial" || p.status === "cancelled" || p.status === "sepa_scheduled" ||
+        ((p as any).invoiceNumber)
       );
       // Inclure aussi les encaissements "avoir" qui n'ont pas de payment lié dans payments
       const avoirEncaissements = encaissements
@@ -107,7 +107,7 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
           {/* Filtres : statut + recherche + période */}
           <div className="flex flex-wrap gap-3 mb-4 items-center">
             <div className="flex gap-1.5">
-              {([["all", "Tous"], ["paid", "Réglés"], ["pending", "À régler"], ["partial", "Partiels"], ["cancelled", "Annulés"]] as const).map(([val, label]) => (
+              {([["all", "Tous"], ["paid", "Réglés"], ["pending", "À régler"], ["partial", "Partiels"], ["sepa_scheduled", "SEPA en cours"], ["cancelled", "Annulés"]] as const).map(([val, label]) => (
                 <button key={val} onClick={() => setHistStatusFilter(val as any)}
                   className={`font-body text-xs px-3 py-1.5 rounded-lg border-none cursor-pointer transition-all ${histStatusFilter === val ? "bg-blue-500 text-white" : "bg-white text-slate-600 border border-gray-200"}`}>
                   {label}
@@ -206,7 +206,7 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                     <span className="w-32 font-body text-xs text-slate-600 truncate">{(p.items || []).map((i: any) => i.activityTitle).join(", ")}</span>
                     <span className={`w-20 text-right font-body text-sm font-bold ${p.status === "cancelled" ? "text-red-500 line-through" : "text-blue-500"}`}>{displayTTC.toFixed(2)}€</span>
                     <span className="w-20 text-center"><Badge color={p.status === "cancelled" ? "red" : "blue"}>{(p.paymentMode as string) === "mixte" && (p as any).paymentModes ? (p as any).paymentModes.map((m: string) => paymentModes.find(pm => pm.id === m)?.label?.replace("(CAWL)", "").trim() || m).join(" + ") : mode?.label || p.paymentMode}</Badge></span>
-                    <span className="w-16 text-center"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "cancelled" ? "red" : p.status === "draft" ? "blue" : "gray"}>{p.status === "paid" ? "Réglé" : p.status === "partial" ? "Partiel" : p.status === "cancelled" ? "Annulé" : p.status === "draft" ? "Brouillon" : "À régler"}</Badge></span>
+                    <span className="w-16 text-center"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "cancelled" ? "red" : p.status === "sepa_scheduled" ? "blue" : p.status === "draft" ? "blue" : "gray"}>{p.status === "paid" ? "Réglé" : p.status === "partial" ? "Partiel" : p.status === "cancelled" ? "Annulé" : p.status === "sepa_scheduled" ? "SEPA" : p.status === "draft" ? "Brouillon" : "À régler"}</Badge></span>
                     <span className="w-16 text-center">
                       {p.status === "cancelled" && printAllAvoirs ? (
                         <button onClick={printAllAvoirs} title={`Télécharger ${linkedAvoirs.length} avoir(s) PDF`} className="font-body text-xs text-red-500 bg-red-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-red-100 flex items-center gap-0.5 justify-center"><Receipt size={12} />{linkedAvoirs.length > 1 ? <span className="text-[9px]">×{linkedAvoirs.length}</span> : null}</button>
