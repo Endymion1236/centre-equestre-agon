@@ -148,6 +148,11 @@ export default function ReserverPage() {
   // Grouper les stages par titre + semaine
   const stageGroups = useMemo(() => {
     const stages = available.filter(c => c.activityType === "stage" || c.activityType === "stage_journee");
+    console.log(`[STAGE DEBUG] ${creneaux.length} créneaux chargés, ${available.length} disponibles, ${stages.length} stages`);
+    if (stages.length > 0) {
+      console.log(`[STAGE DEBUG] Types trouvés:`, [...new Set(available.map(c => c.activityType))]);
+      console.log(`[STAGE DEBUG] Stages:`, stages.map(c => `${c.date} ${c.activityTitle} (${c.activityType})`));
+    }
     const groups: Record<string, Creneau[]> = {};
     stages.forEach(c => {
       const d = new Date(c.date);
@@ -156,6 +161,7 @@ export default function ReserverPage() {
       if (!groups[key]) groups[key] = [];
       groups[key].push(c);
     });
+    console.log(`[STAGE DEBUG] Groupes:`, Object.entries(groups).map(([k, v]) => `${k}: ${v.length} jours`));
     return groups;
   }, [available]);
 
