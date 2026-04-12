@@ -802,7 +802,7 @@ Réponds de façon concise et pratique, en français.`,
 
                 {/* Lignes par jour */}
                 {jourDates.slice(0,6).map(({jour, date}) => {
-                  const cellTaches = taches.filter(t=>t.salarieId===sal.id&&t.jour===jour);
+                  const cellTaches = taches.filter(t=>t.salarieId===sal.id&&t.jour===jour).sort((a,b)=>a.heureDebut.localeCompare(b.heureDebut));
                   const dateStr = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
                   const actCreneau = creneaux.filter(c=>c.date===dateStr&&c.monitor===sal.nom);
                   const jourLabel = `${JOURS_LABELS[jour].slice(0,3)} ${formatDateCourte(date)}`;
@@ -1001,7 +1001,7 @@ Réponds de façon concise et pratique, en français.`,
 
           {/* Une ligne par salarié */}
           {activeSalaries.map(sal => {
-            const dayTaches = taches.filter(t => t.salarieId === sal.id && t.jour === selectedDay);
+            const dayTaches = taches.filter(t => t.salarieId === sal.id && t.jour === selectedDay).sort((a,b) => a.heureDebut.localeCompare(b.heureDebut));
             const dayActivities = creneaux.filter(c => c.date === dateStr && c.monitor === sal.nom);
             const dayCharge = dayTaches
               .filter(t => t.categorie !== "pause")
@@ -1085,7 +1085,7 @@ Réponds de façon concise et pratique, en français.`,
           <div style={{marginTop:16, padding:"10px 14px", background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:8}}>
             <div style={{fontFamily:"sans-serif", fontSize:11, fontWeight:700, color:"#1e293b", marginBottom:6}}>Résumé de la journée</div>
             {activeSalaries.map(sal => {
-              const dayTaches = taches.filter(t => t.salarieId === sal.id && t.jour === selectedDay);
+              const dayTaches = taches.filter(t => t.salarieId === sal.id && t.jour === selectedDay).sort((a,b) => a.heureDebut.localeCompare(b.heureDebut));
               if (dayTaches.length === 0) return null;
               const charge = dayTaches.reduce((sum, t) => sum + t.dureeMinutes, 0);
               return (
