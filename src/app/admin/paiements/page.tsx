@@ -1053,6 +1053,7 @@ export default function PaiementsPage() {
           encaissements={encaissements} families={families}
           toast={toast} setPayments={setPayments}
           setDuplicateTarget={setDuplicateTarget}
+          deletePaymentCommand={deletePaymentCommand}
         />
       )}
       {/* ─── Échéances Tab ─── */}

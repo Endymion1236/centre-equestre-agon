@@ -19,9 +19,10 @@ interface TabHistoriqueProps {
   toast: (message: string, type?: "error" | "success" | "warning" | "info", duration?: number) => void;
   setPayments: React.Dispatch<React.SetStateAction<any[]>>;
   setDuplicateTarget: (val: any) => void;
+  deletePaymentCommand: (payment: any) => Promise<void>;
 }
 
-export function TabHistorique({ loading, payments, avoirs, encaissements, families, toast, setPayments, setDuplicateTarget }: TabHistoriqueProps) {
+export function TabHistorique({ loading, payments, avoirs, encaissements, families, toast, setPayments, setDuplicateTarget, deletePaymentCommand }: TabHistoriqueProps) {
   const [histSearch, setHistSearch] = useState("");
   const [histModeFilter, setHistModeFilter] = useState("all");
   const [histStatusFilter, setHistStatusFilter] = useState("all");
@@ -149,6 +150,7 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                 <span className="w-16 text-center">Statut</span>
                 <span className="w-16 text-center">PDF</span>
                 <span className="w-16 text-center">Copier</span>
+                <span className="w-16 text-center"></span>
               </div>
               {filtered.map((p, idx) => {
                 const date = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
@@ -215,6 +217,11 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                       )}
                     </span>
                     <span className="w-16 text-center"><button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} title="Dupliquer cette commande" className="font-body text-xs text-purple-500 bg-purple-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-purple-100"><Copy size={12} /></button></span>
+                    <span className="w-16 text-center">
+                      {p.status !== "cancelled" && !(p as any)._fromEncaissement && (
+                        <button onClick={() => deletePaymentCommand(p)} title="Annuler + avoir" className="font-body text-xs text-red-500 bg-red-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-red-100"><Trash2 size={12} /></button>
+                      )}
+                    </span>
                   </div>
                 );
               })}
