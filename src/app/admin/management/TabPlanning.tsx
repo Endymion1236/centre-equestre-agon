@@ -322,6 +322,46 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     return manquantes;
   }, [taches, tachesObligatoires]);
 
+  // ── Détection des conflits horaires (même salarié, même jour, chevauchement) ─
+  interface Conflit {
+    salarieName: string;
+    salarieId: string;
+    jour: JourSemaine;
+    tache1: TachePlanifiee;
+    tache2: TachePlanifiee;
+  }
+
+  const conflits = useMemo(() => {
+    const result: Conflit[] = [];
+    const salIds = [...new Set(taches.map(t => t.salarieId))];
+    for (const salId of salIds) {
+      for (const jour of joursActifs) {
+        const jourTaches = taches
+          .filter(t => t.salarieId === salId && t.jour === jour)
+          .sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
+        for (let i = 0; i < jourTaches.length; i++) {
+          const t1 = jourTaches[i];
+          const fin1 = heureToMin(t1.heureDebut) + t1.dureeMinutes;
+          for (let j = i + 1; j < jourTaches.length; j++) {
+            const t2 = jourTaches[j];
+            const debut2 = heureToMin(t2.heureDebut);
+            if (debut2 < fin1) {
+              // Chevauchement détecté
+              result.push({
+                salarieName: t1.salarieName,
+                salarieId: salId,
+                jour,
+                tache1: t1,
+                tache2: t2,
+              });
+            }
+          }
+        }
+      }
+    }
+    return result;
+  }, [taches]);
+
   // ── Vérification IA complète ──────────────────────────────────────────
   const [iaChecking, setIaChecking] = useState(false);
   const [iaResult, setIaResult] = useState<string | null>(null);
@@ -1232,6 +1272,35 @@ Réponds de façon concise et pratique, en français.`,
           )}
         </div>
       </div>
+
+      {/* Bandeau conflits horaires */}
+      {conflits.length > 0 && (
+        <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:12,padding:"12px 16px",display:"flex",alignItems:"flex-start",gap:10}}>
+          <span style={{fontSize:18,flexShrink:0}}>🔴</span>
+          <div style={{flex:1}}>
+            <div style={{fontFamily:"sans-serif",fontSize:12,fontWeight:700,color:"#92400e",marginBottom:6}}>
+              {conflits.length} conflit{conflits.length > 1 ? "s" : ""} horaire{conflits.length > 1 ? "s" : ""} détecté{conflits.length > 1 ? "s" : ""}
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+              {conflits.map((c, i) => (
+                <div key={i} style={{fontFamily:"sans-serif",fontSize:11,color:"#78350f",display:"flex",alignItems:"center",gap:6,background:"#fef3c7",padding:"4px 10px",borderRadius:6}}>
+                  <span style={{fontWeight:700}}>{c.salarieName}</span>
+                  <span style={{color:"#a16207"}}>·</span>
+                  <span>{JOURS_LABELS[c.jour].slice(0, 3)}</span>
+                  <span style={{color:"#a16207"}}>·</span>
+                  <span style={{fontWeight:600,color:"#dc2626"}}>
+                    {c.tache1.tacheLabel} ({c.tache1.heureDebut}→{minToHeure(heureToMin(c.tache1.heureDebut) + c.tache1.dureeMinutes)})
+                  </span>
+                  <span style={{color:"#a16207"}}>↔</span>
+                  <span style={{fontWeight:600,color:"#dc2626"}}>
+                    {c.tache2.tacheLabel} ({c.tache2.heureDebut}→{minToHeure(heureToMin(c.tache2.heureDebut) + c.tache2.dureeMinutes)})
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bandeau tâches obligatoires manquantes */}
       {tachesManquantes.length > 0 && (
