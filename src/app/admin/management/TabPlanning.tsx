@@ -346,12 +346,14 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   const tachesManquantes = useMemo(() => {
     const manquantes: { tache: TacheType; jour: JourSemaine }[] = [];
     for (const tt of tachesObligatoires) {
-      const joursAttendus = (tt.joursDefaut && tt.joursDefaut.length > 0)
-        ? tt.joursDefaut.filter(j => joursActifs.includes(j))
-        : joursActifs.slice(0, 5); // lun-ven par défaut
+      // Priorité : joursObligatoires > joursDefaut > lun-ven
+      const joursAttendus = (tt.joursObligatoires && tt.joursObligatoires.length > 0)
+        ? tt.joursObligatoires.filter(j => joursActifs.includes(j))
+        : (tt.joursDefaut && tt.joursDefaut.length > 0)
+          ? tt.joursDefaut.filter(j => joursActifs.includes(j))
+          : joursActifs.slice(0, 5); // lun-ven par défaut
       for (const jour of joursAttendus) {
         const exists = taches.some(t => t.tacheTypeId === tt.id && t.jour === jour);
-        // Aussi matcher par label pour les tâches importées du planning
         const existsByLabel = taches.some(t => t.tacheLabel === tt.label && t.jour === jour);
         if (!exists && !existsByLabel) {
           manquantes.push({ tache: tt, jour });
