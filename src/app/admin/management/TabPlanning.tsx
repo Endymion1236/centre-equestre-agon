@@ -203,15 +203,15 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     setSaving(true);
     try {
       const tachesModele: TacheModele[] = taches.map(t => ({
-        tacheTypeId: t.tacheTypeId,
-        tacheLabel: t.tacheLabel,
-        categorie: t.categorie,
-        salarieId: t.salarieId,
-        salarieName: t.salarieName,
+        tacheTypeId: t.tacheTypeId || "",
+        tacheLabel: t.tacheLabel || "",
+        categorie: t.categorie || "autre",
+        salarieId: t.salarieId || "",
+        salarieName: t.salarieName || "",
         jour: t.jour,
-        heureDebut: t.heureDebut,
-        dureeMinutes: t.dureeMinutes,
-        notes: t.notes,
+        heureDebut: t.heureDebut || "08:00",
+        dureeMinutes: t.dureeMinutes || 30,
+        ...(t.notes ? { notes: t.notes } : {}),
       }));
 
       const COULEURS_TYPE = { scolaire: "#2050A0", vacances: "#d97706", autre: "#6b7280" };
@@ -230,7 +230,8 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       setSaveModeleName("");
       onRefresh();
     } catch (e: any) {
-      toast("Erreur lors de la sauvegarde", "error");
+      console.error("Erreur sauvegarde modèle:", e);
+      toast(`Erreur : ${e.message || "Échec sauvegarde"}`, "error");
     }
     setSaving(false);
   };
@@ -491,12 +492,15 @@ Analyse ce planning et donne :
 3. 💡 Des suggestions d'amélioration (charge équilibrée, tâches oubliées, surcharge d'un salarié)
 
 Réponds de façon concise et pratique, en français.`,
+          context: {
+            _systemOverride: `Tu es l'assistant de gestion du Centre Équestre d'Agon-Coutainville. Analyse le planning management de l'équipe.`,
+          },
         }),
       });
 
       if (res.ok) {
         const data = await res.json();
-        setIaResult(data.response || data.text || "Pas de réponse");
+        setIaResult(data.answer || data.response || data.text || "Pas de réponse");
       } else {
         setIaResult("Erreur lors de la vérification IA");
       }
