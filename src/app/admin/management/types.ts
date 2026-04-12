@@ -5,14 +5,16 @@ export const JOURS_LABELS: Record<JourSemaine, string> = {
   jeudi: "Jeudi", vendredi: "Vendredi", samedi: "Samedi", dimanche: "Dimanche",
 };
 
-export type CategorieTache = "ecuries" | "soins" | "menage" | "animation" | "admin" | "autre";
+export type CategorieTache = "ecuries" | "soins" | "menage" | "animation" | "preparation" | "checklist" | "admin" | "autre";
 export const CATEGORIES: { id: CategorieTache; label: string; color: string; emoji: string }[] = [
-  { id: "ecuries",   label: "Écuries",    color: "#92400e", emoji: "🐴" },
-  { id: "soins",     label: "Soins",      color: "#065f46", emoji: "💊" },
-  { id: "menage",    label: "Ménage",     color: "#1e40af", emoji: "🧹" },
-  { id: "animation", label: "Animation",  color: "#7c3aed", emoji: "🎠" },
-  { id: "admin",     label: "Admin",      color: "#374151", emoji: "📋" },
-  { id: "autre",     label: "Autre",      color: "#6b7280", emoji: "📌" },
+  { id: "ecuries",     label: "Écuries",      color: "#92400e", emoji: "🐴" },
+  { id: "soins",       label: "Soins",        color: "#065f46", emoji: "💊" },
+  { id: "menage",      label: "Ménage",       color: "#1e40af", emoji: "🧹" },
+  { id: "animation",   label: "Animation",    color: "#7c3aed", emoji: "🎠" },
+  { id: "preparation", label: "Préparation",  color: "#b45309", emoji: "🔧" },
+  { id: "checklist",   label: "Check-listes", color: "#0e7490", emoji: "✅" },
+  { id: "admin",       label: "Admin",        color: "#374151", emoji: "📋" },
+  { id: "autre",       label: "Autre",        color: "#6b7280", emoji: "📌" },
 ];
 
 export interface TacheType {
