@@ -530,8 +530,16 @@ Réponds de façon concise et pratique, en français.`,
                             const firstHoraire = tt?.horairesDefaut?.sort()[0];
                             setAddForm({...addForm, tacheTypeId:e.target.value, dureeMinutes:tt?.dureeMinutes||30, heureDebut: firstHoraire || addForm.heureDebut});
                           }} style={{width:"100%",padding:"4px 6px",borderRadius:6,border:"1px solid #bfdbfe",fontFamily:"sans-serif",fontSize:11,background:"white"}}>
-                            <option value="">— Choisir —</option>
-                            {tachesType.map(t=><option key={t.id} value={t.id}>{t.label} ({t.dureeMinutes < 60 ? `${t.dureeMinutes}min` : `${Math.floor(t.dureeMinutes/60)}h${t.dureeMinutes%60>0?t.dureeMinutes%60:""}`})</option>)}
+                            <option value="">— Choisir une tâche —</option>
+                            {CATEGORIES.map(cat => {
+                              const items = tachesType.filter(t => t.categorie === cat.id);
+                              if (!items.length) return null;
+                              return (
+                                <optgroup key={cat.id} label={`${cat.emoji} ${cat.label}`}>
+                                  {items.map(t => <option key={t.id} value={t.id}>{cat.emoji} {t.label} ({t.dureeMinutes < 60 ? `${t.dureeMinutes}min` : `${Math.floor(t.dureeMinutes/60)}h${t.dureeMinutes%60>0?t.dureeMinutes%60:""}`})</option>)}
+                                </optgroup>
+                              );
+                            })}
                           </select>
                           {/* Horaires standards en raccourcis */}
                           {(() => {
