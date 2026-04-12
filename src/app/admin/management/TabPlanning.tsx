@@ -32,7 +32,7 @@ const COULEURS_SALARIE = ["#2050A0","#16a34a","#dc2626","#d97706","#7c3aed","#08
 export default function TabPlanning({ semaine, setSemaine, taches, tachesType, salaries, creneaux, modeles, onRefresh }: Props) {
   const { toast } = useToast();
   const [addCell, setAddCell] = useState<{ salarieId: string; jour: JourSemaine } | null>(null);
-  const [addForm, setAddForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30, joursSelectionnes: [] as JourSemaine[] });
+  const [addForm, setAddForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30, joursSelectionnes: [] as JourSemaine[], enchainer: false });
   const [saving, setSaving] = useState(false);
   const [showApplyModele, setShowApplyModele] = useState(false);
   const [showSaveModele, setShowSaveModele] = useState(false);
@@ -97,6 +97,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       heureDebut,
       dureeMinutes: defaultTache?.dureeMinutes || 30,
       joursSelectionnes: [] as JourSemaine[],
+      enchainer: false,
     });
     setAddCell({ salarieId, jour });
   };
@@ -112,7 +113,22 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
 
     try {
       const batch: Promise<any>[] = [];
+      const details: string[] = [];
       for (const jour of joursToAdd) {
+        // Calculer l'heure de début pour ce jour
+        let heureDebut = addForm.heureDebut;
+        if (addForm.enchainer && joursToAdd.length > 1) {
+          const jourTaches = taches
+            .filter(t => t.salarieId === addCell.salarieId && t.jour === jour)
+            .sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
+          if (jourTaches.length > 0) {
+            const last = jourTaches[jourTaches.length - 1];
+            heureDebut = minToHeure(heureToMin(last.heureDebut) + last.dureeMinutes);
+          }
+        }
+
+        details.push(`${JOURS_LABELS[jour].slice(0, 3)} ${heureDebut}`);
+
         batch.push(addDoc(collection(db, "taches-planifiees"), {
           tacheTypeId: addForm.tacheTypeId,
           tacheLabel: tt.label,
@@ -120,7 +136,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
           salarieId: addCell.salarieId,
           salarieName: sal?.nom || "",
           jour,
-          heureDebut: addForm.heureDebut,
+          heureDebut,
           dureeMinutes: addForm.dureeMinutes || tt.dureeMinutes,
           semaine,
           done: false,
@@ -129,7 +145,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       }
       await Promise.all(batch);
       if (joursToAdd.length > 1) {
-        toast(`${tt.label} ajoutée sur ${joursToAdd.length} jours`, "success");
+        toast(`${tt.label} ajoutée : ${details.join(", ")}`, "success");
       }
       setAddCell(null);
       onRefresh();
@@ -610,6 +626,37 @@ Réponds de façon concise et pratique, en français.`,
                               })}
                             </div>
                           </div>
+                          {/* Option enchaîner + aperçu par jour */}
+                          {addForm.joursSelectionnes.length > 1 && (
+                            <div>
+                              <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",fontFamily:"sans-serif",fontSize:10,color:"#475569",marginBottom:4}}>
+                                <input type="checkbox" checked={addForm.enchainer}
+                                  onChange={e => setAddForm({...addForm, enchainer: e.target.checked})}
+                                  style={{accentColor:"#7c3aed",width:12,height:12}} />
+                                <span style={{fontWeight:600}}>⏩ Après les tâches existantes</span>
+                                <span style={{color:"#94a3b8",fontWeight:400}}>(heure auto par jour)</span>
+                              </label>
+                              {addForm.enchainer && addCell && (
+                                <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+                                  {addForm.joursSelectionnes.sort((a,b) => JOURS.indexOf(a) - JOURS.indexOf(b)).map(j => {
+                                    const jourTaches = taches
+                                      .filter(t => t.salarieId === addCell.salarieId && t.jour === j)
+                                      .sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
+                                    let h = addForm.heureDebut;
+                                    if (jourTaches.length > 0) {
+                                      const last = jourTaches[jourTaches.length - 1];
+                                      h = minToHeure(heureToMin(last.heureDebut) + last.dureeMinutes);
+                                    }
+                                    return (
+                                      <span key={j} style={{fontFamily:"sans-serif",fontSize:9,background:"#f3f0ff",color:"#7c3aed",padding:"2px 6px",borderRadius:5,fontWeight:600}}>
+                                        {JOURS_LABELS[j].slice(0,2)} {h}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )}
                           <div style={{display:"flex",gap:4}}>
                             <button onClick={addTache} disabled={saving||!addForm.tacheTypeId}
                               style={{flex:1,padding:"4px 0",borderRadius:6,border:"none",
