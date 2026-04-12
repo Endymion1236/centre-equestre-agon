@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { CheckCircle2, XCircle, AlertCircle, Clock, RotateCcw, Download, Filter } from "lucide-react";
+import { CheckCircle2, XCircle, AlertCircle, Clock, RotateCcw, Download, Filter, Trash2 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Status = "ok" | "ko" | "remarque" | "non_teste";
@@ -924,6 +924,14 @@ export default function TestsPage() {
             {lastSaved && !saving && <span className="font-body text-[10px] text-slate-400">Sauvegardé {lastSaved}</span>}
             <button onClick={exportCSV} className="flex items-center gap-1 font-body text-xs text-slate-600 bg-white border border-gray-200 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-gray-50">
               <Download size={13}/> Export CSV
+            </button>
+            <button onClick={async () => {
+              if (!confirm(`Réinitialiser les ${TESTS.length} tests ?\n\nTous les statuts (OK/KO/Remarque) seront effacés.`)) return;
+              setResults({});
+              await setDoc(doc(db, "settings", "testMatrix"), { results: {}, updatedAt: new Date().toISOString() });
+              setLastSaved(new Date().toLocaleString("fr-FR"));
+            }} className="flex items-center gap-1 font-body text-xs text-red-500 bg-red-50 border border-red-200 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-red-100">
+              <Trash2 size={13}/> Réinitialiser
             </button>
           </div>
         </div>
