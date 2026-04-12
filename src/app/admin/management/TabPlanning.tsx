@@ -72,9 +72,29 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   // Ouvrir le formulaire d'ajout
   const openAdd = (salarieId: string, jour: JourSemaine) => {
     const defaultTache = tachesType.find(t => t.joursDefaut?.includes(jour));
+
+    // Calculer l'heure de début = fin de la dernière tâche de ce salarié ce jour
+    const existingTaches = taches
+      .filter(t => t.salarieId === salarieId && t.jour === jour)
+      .sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
+    
+    let heureDebut = "08:00";
+    if (existingTaches.length > 0) {
+      const last = existingTaches[existingTaches.length - 1];
+      heureDebut = minToHeure(heureToMin(last.heureDebut) + last.dureeMinutes);
+    }
+
+    // Si la tâche a des horaires standards, prendre le premier qui est >= heureDebut calculée
+    const horairesStd = defaultTache?.horairesDefaut?.sort() || [];
+    if (horairesStd.length > 0) {
+      const debutMin = heureToMin(heureDebut);
+      const nextHoraire = horairesStd.find(h => heureToMin(h) >= debutMin);
+      if (nextHoraire) heureDebut = nextHoraire;
+    }
+
     setAddForm({
       tacheTypeId: defaultTache?.id || (tachesType[0]?.id || ""),
-      heureDebut: "08:00",
+      heureDebut,
       dureeMinutes: defaultTache?.dureeMinutes || 30,
       joursSelectionnes: [] as JourSemaine[],
     });
@@ -520,7 +540,7 @@ Réponds de façon concise et pratique, en français.`,
                               </div>
                             );
                           })()}
-                          <div style={{display:"flex",gap:4}}>
+                          <div style={{display:"flex",gap:4,alignItems:"center"}}>
                             <select id="_custom_hour_select" value={addForm.heureDebut} onChange={e=>setAddForm({...addForm,heureDebut:e.target.value})}
                               style={{flex:1,padding:"3px 4px",borderRadius:6,border:"1px solid #bfdbfe",fontFamily:"sans-serif",fontSize:10,background:"white",
                                 display: (tachesType.find(t=>t.id===addForm.tacheTypeId)?.horairesDefaut?.length || 0) > 0 ? "none" : "block"}}>
@@ -530,6 +550,24 @@ Réponds de façon concise et pratique, en français.`,
                               style={{flex:1,padding:"3px 4px",borderRadius:6,border:"1px solid #bfdbfe",fontFamily:"sans-serif",fontSize:10,background:"white"}}>
                               {[15,30,45,60,90,120,180,240].map(d=><option key={d} value={d}>{d<60?`${d}m`:`${d/60}h`}</option>)}
                             </select>
+                            {/* Bouton enchaîner après la précédente */}
+                            {(() => {
+                              if (!addCell) return null;
+                              const prev = taches
+                                .filter(t => t.salarieId === addCell.salarieId && t.jour === addCell.jour)
+                                .sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
+                              if (prev.length === 0) return null;
+                              const last = prev[prev.length - 1];
+                              const finLast = minToHeure(heureToMin(last.heureDebut) + last.dureeMinutes);
+                              return (
+                                <button onClick={() => setAddForm({...addForm, heureDebut: finLast})}
+                                  title={`Démarrer à ${finLast} (après ${last.tacheLabel})`}
+                                  style={{padding:"3px 6px",borderRadius:6,border:"1px solid #c4b5fd",background: addForm.heureDebut === finLast ? "#ede9fe" : "white",
+                                    fontFamily:"sans-serif",fontSize:9,color:"#7c3aed",cursor:"pointer",whiteSpace:"nowrap",fontWeight:600}}>
+                                  ⏩ {finLast}
+                                </button>
+                              );
+                            })()}
                           </div>
                           {/* Heure de fin calculée */}
                           {addForm.heureDebut && addForm.dureeMinutes > 0 && (
