@@ -182,7 +182,6 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                     <th style={{ padding: "6px 8px", textAlign: "center", fontWeight: 700, color: "#475569", borderBottom: "2px solid #e2e8f0", width: "8%" }}>Début</th>
                     <th style={{ padding: "6px 8px", textAlign: "center", fontWeight: 700, color: "#475569", borderBottom: "2px solid #e2e8f0", width: "8%" }}>Fin</th>
                     <th style={{ padding: "6px 8px", textAlign: "center", fontWeight: 700, color: "#475569", borderBottom: "2px solid #e2e8f0", width: "8%" }}>Durée</th>
-                    <th style={{ padding: "6px 8px", textAlign: "left", fontWeight: 700, color: "#475569", borderBottom: "2px solid #e2e8f0" }}>Tâches</th>
                     <th style={{ padding: "6px 8px", textAlign: "center", fontWeight: 700, color: "#475569", borderBottom: "2px solid #e2e8f0", width: "12%" }}>Signature</th>
                   </tr>
                 </thead>
@@ -211,9 +210,6 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                         <td style={{ padding: "5px 8px", borderBottom: "1px solid #eef2f7", textAlign: "center", fontWeight: 700, color: row.duree > 0 ? "#1e3a5f" : "#d1d5db" }}>
                           {row.duree > 0 ? fmtDuree(row.duree) : "—"}
                         </td>
-                        <td style={{ padding: "5px 8px", borderBottom: "1px solid #eef2f7", color: "#475569", fontSize: 10, maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {row.taches || ""}
-                        </td>
                         <td style={{ padding: "5px 8px", borderBottom: "1px solid #eef2f7", textAlign: "center" }}>
                           {row.duree > 0 && (
                             <div style={{ borderBottom: "1px solid #cbd5e1", width: "80%", margin: "0 auto", height: 16 }} />
@@ -231,7 +227,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                     <td style={{ padding: "8px", fontWeight: 800, color: "#1e3a5f", textAlign: "center", borderTop: "2px solid #e2e8f0", fontSize: 13 }}>
                       {fmtDuree(totalMois)}
                     </td>
-                    <td colSpan={2} style={{ borderTop: "2px solid #e2e8f0" }}></td>
+                    <td colSpan={1} style={{ borderTop: "2px solid #e2e8f0" }}></td>
                   </tr>
                 </tfoot>
               </table>
