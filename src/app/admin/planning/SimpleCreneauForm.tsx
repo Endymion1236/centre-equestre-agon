@@ -245,23 +245,36 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
                       {isDateCustom && <span className="ml-1.5 bg-orange-200 text-orange-700 px-1.5 py-0.5 rounded text-[9px]">modifié</span>}
                     </span>
                   </div>
-                  {/* Moniteur par jour */}
-                  <div className="flex items-center gap-2 pl-7">
-                    <span className="font-body text-[10px] text-slate-400 w-16 flex-shrink-0">Moniteur</span>
-                    <select value={customMonitors[idx] ?? mon}
-                      onChange={e => setCustomMonitors(prev => ({ ...prev, [idx]: e.target.value }))}
-                      className={`flex-1 px-2 py-1 rounded-lg border font-body text-xs bg-white focus:outline-none focus:border-blue-500 ${isMonitorCustom ? "border-orange-300 text-orange-700 font-semibold" : "border-blue-200 text-blue-700"}`}>
-                      {moniteurs.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
+                  {/* Moniteur(s) par jour */}
+                  <div className="flex items-start gap-2 pl-7">
+                    <span className="font-body text-[10px] text-slate-400 w-16 flex-shrink-0 pt-1">Moniteur(s)</span>
+                    <div className="flex-1">
+                      <div className="flex flex-wrap gap-1">
+                        {moniteurs.map(m => {
+                          const currentVal = customMonitors[idx] ?? mon;
+                          const selected = currentVal.split(",").map(s => s.trim()).filter(Boolean);
+                          const isSelected = selected.includes(m);
+                          return (
+                            <button key={m} type="button" onClick={() => {
+                              const curr = (customMonitors[idx] ?? mon).split(",").map(s => s.trim()).filter(Boolean);
+                              const newList = isSelected ? curr.filter(s => s !== m) : [...curr, m];
+                              setCustomMonitors(prev => ({ ...prev, [idx]: newList.join(", ") }));
+                            }}
+                              className={`px-2 py-0.5 rounded font-body text-[10px] font-semibold border-none cursor-pointer
+                                ${isSelected ? "bg-blue-500 text-white" : "bg-gray-100 text-slate-400"}`}>
+                              {isSelected ? "✓" : ""}{m}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                     <button onClick={() => {
                       const monValue = customMonitors[idx] ?? mon;
-                      // Appliquer ce moniteur à tous les jours
                       const newMonitors: Record<number, string> = {};
                       previewDates.forEach((_, i) => { newMonitors[i] = monValue; });
                       setCustomMonitors(newMonitors);
-                      // Aussi mettre à jour le moniteur principal
                       setMon(monValue);
-                    }} title="Appliquer ce moniteur à tous les jours"
+                    }} title="Appliquer ces moniteurs à tous les jours"
                       className="font-body text-[9px] text-blue-500 bg-blue-50 px-1.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 whitespace-nowrap flex-shrink-0">
                       ↓ Tous
                     </button>
