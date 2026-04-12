@@ -116,10 +116,23 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
                 </select>
                 <input type="time" value={s.startTime} onChange={e => updateSlot(i, "startTime", e.target.value)} className={`${inp} w-24`}/>
                 <input type="time" value={s.endTime} onChange={e => updateSlot(i, "endTime", e.target.value)} className={`${inp} w-24`}/>
-                <select value={s.monitor} onChange={e => updateSlot(i, "monitor", e.target.value)} className={`${inp} w-28`}>
-                  <option value="">— Moniteur —</option>
-                  {moniteurs.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
+                <div className="flex flex-wrap gap-1 flex-1">
+                  {moniteurs.map(m => {
+                    const selected = (s.monitor || "").split(",").map(x => x.trim()).filter(Boolean);
+                    const isSelected = selected.includes(m);
+                    return (
+                      <button key={m} type="button" onClick={() => {
+                        const curr = (s.monitor || "").split(",").map(x => x.trim()).filter(Boolean);
+                        const newList = isSelected ? curr.filter(x => x !== m) : [...curr, m];
+                        updateSlot(i, "monitor", newList.join(", "));
+                      }}
+                        className={`px-2 py-0.5 rounded font-body text-[10px] font-semibold border-none cursor-pointer
+                          ${isSelected ? "bg-blue-500 text-white" : "bg-gray-100 text-slate-500"}`}>
+                        {isSelected ? "✓" : ""}{m}
+                      </button>
+                    );
+                  })}
+                </div>
                 <input type="number" value={s.maxPlaces} onChange={e => updateSlot(i, "maxPlaces", parseInt(e.target.value))} className={`${inp} w-16`} title="Places"/>
               </div>
             </div>

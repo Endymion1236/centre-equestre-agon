@@ -308,21 +308,23 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     for (const { jour, dateStr } of dates) {
       const dayCr = creneaux.filter(c => c.date === dateStr && c.monitor);
       for (const c of dayCr) {
-        // Matcher le moniteur du créneau avec un salarié (comparaison souple)
-        const monitorLower = (c.monitor || "").toLowerCase().trim();
-        const sal = salaries.find(s =>
-          s.actif && s.nom.toLowerCase().trim() === monitorLower
-        );
-        if (sal) {
-          // Vérifier qu'il n'existe pas déjà une tâche identique
-          const alreadyExists = taches.some(t =>
-            t.salarieId === sal.id &&
-            t.jour === jour &&
-            t.heureDebut === c.startTime &&
-            t.tacheLabel === c.activityTitle
+        // Supporter plusieurs moniteurs séparés par virgule
+        const monitorNames = (c.monitor || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+        for (const monitorName of monitorNames) {
+          const monitorLower = monitorName.toLowerCase();
+          const sal = salaries.find(s =>
+            s.actif && s.nom.toLowerCase().trim() === monitorLower
           );
-          if (!alreadyExists) {
-            matchedCreneaux.push({ creneau: c, salarieId: sal.id, salarieName: sal.nom, jour });
+          if (sal) {
+            const alreadyExists = taches.some(t =>
+              t.salarieId === sal.id &&
+              t.jour === jour &&
+              t.heureDebut === c.startTime &&
+              t.tacheLabel === c.activityTitle
+            );
+            if (!alreadyExists) {
+              matchedCreneaux.push({ creneau: c, salarieId: sal.id, salarieName: sal.nom, jour });
+            }
           }
         }
       }

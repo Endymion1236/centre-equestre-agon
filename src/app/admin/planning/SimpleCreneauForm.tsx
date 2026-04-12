@@ -160,12 +160,29 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
           </div>
         </div>
 
-        <div className="flex gap-2">
-          <select value={mon} onChange={e => setMon(e.target.value)} className={`${inp} flex-1`}>
-            <option value="">— Moniteur —</option>
-            {moniteurs.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-          <input type="number" value={mp} onChange={e => setMp(parseInt(e.target.value))} className={`${inp} w-20`} placeholder="Places"/>
+        <div>
+          <label className="font-body text-[10px] font-semibold text-blue-800 block mb-1.5">Moniteur(s)</label>
+          <div className="flex flex-wrap gap-1.5">
+            {moniteurs.map(m => {
+              const selected = (mon || "").split(",").map(s => s.trim()).filter(Boolean);
+              const isSelected = selected.includes(m);
+              return (
+                <button key={m} type="button" onClick={() => {
+                  const curr = (mon || "").split(",").map(s => s.trim()).filter(Boolean);
+                  const newList = isSelected ? curr.filter(s => s !== m) : [...curr, m];
+                  setMon(newList.join(", "));
+                }}
+                  className={`px-2.5 py-1 rounded-lg font-body text-[11px] font-semibold border-none cursor-pointer transition-all
+                    ${isSelected ? "bg-blue-500 text-white" : "bg-gray-100 text-slate-500 hover:bg-blue-50"}`}>
+                  {isSelected ? "✓ " : ""}{m}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <input type="number" value={mp} onChange={e => setMp(parseInt(e.target.value))} className={`${inp} w-full`} placeholder="Places max"/>
         </div>
 
         <div>

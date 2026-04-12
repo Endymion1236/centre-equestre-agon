@@ -90,17 +90,36 @@ export default function EditCreneauModal({
             </div>
           </div>
           <div>
-            <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Moniteur</label>
-            <select value={form.monitor}
-              onChange={e => onFormChange({...form, monitor: e.target.value})}
-              className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none cursor-pointer">
-              <option value="">— Choisir un moniteur —</option>
-              {moniteurs.map(m => <option key={m} value={m}>{m}</option>)}
-              {/* Si valeur actuelle pas dans la liste, l'ajouter */}
-              {form.monitor && !moniteurs.includes(form.monitor) && (
-                <option value={form.monitor}>{form.monitor}</option>
-              )}
-            </select>
+            <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Moniteur(s)</label>
+            {(() => {
+              const selected = (form.monitor || "").split(",").map(s => s.trim()).filter(Boolean);
+              const toggleMoniteur = (name: string) => {
+                const newList = selected.includes(name)
+                  ? selected.filter(s => s !== name)
+                  : [...selected, name];
+                onFormChange({ ...form, monitor: newList.join(", ") });
+              };
+              return (
+                <div className="flex flex-wrap gap-1.5">
+                  {moniteurs.map(m => {
+                    const isSelected = selected.includes(m);
+                    return (
+                      <button key={m} onClick={() => toggleMoniteur(m)}
+                        className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer transition-all
+                          ${isSelected ? "bg-blue-500 text-white" : "bg-gray-100 text-slate-500 hover:bg-blue-50"}`}>
+                        {isSelected ? "✓ " : ""}{m}
+                      </button>
+                    );
+                  })}
+                  {selected.filter(s => !moniteurs.includes(s)).map(m => (
+                    <button key={m} onClick={() => toggleMoniteur(m)}
+                      className="px-3 py-1.5 rounded-lg font-body text-xs font-semibold bg-orange-100 text-orange-600 border-none cursor-pointer">
+                      ✓ {m}
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
