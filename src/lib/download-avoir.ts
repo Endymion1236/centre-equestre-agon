@@ -1,3 +1,4 @@
+import { authFetch } from "@/lib/auth-fetch";
 
 // Helper — télécharger un avoir / note de crédit en PDF
 export async function downloadAvoirPdf(params: {
@@ -15,7 +16,7 @@ export async function downloadAvoirPdf(params: {
   type?: "avoir" | "avance";
   expiryDate?: string;
 }) {
-  const res = await fetch("/api/avoir-pdf", {
+  const res = await authFetch("/api/avoir-pdf", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),

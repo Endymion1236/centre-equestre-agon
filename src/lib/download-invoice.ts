@@ -1,3 +1,4 @@
+import { authFetch } from "@/lib/auth-fetch";
 
 // Helper — télécharger une facture en PDF
 export async function downloadInvoicePdf(params: {
@@ -13,7 +14,7 @@ export async function downloadInvoicePdf(params: {
   paymentMode: string;
   paymentDate: string;
 }) {
-  const res = await fetch("/api/invoice-pdf", {
+  const res = await authFetch("/api/invoice-pdf", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
