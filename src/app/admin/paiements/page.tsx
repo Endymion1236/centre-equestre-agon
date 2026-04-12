@@ -405,10 +405,22 @@ export default function PaiementsPage() {
     };
 
     try {
-      // Cas 1 : créneau lié directement par ID (le plus fiable)
+      // Cas 1 : stage avec creneauIds array → désinscrire de TOUS les jours
+      if (item.creneauIds && item.creneauIds.length > 0) {
+        for (const cid of item.creneauIds) {
+          await removeFromCreneau(cid, item.childId);
+          // Supprimer les réservations liées à chaque jour
+          try {
+            const resSnap = await getDocs(query(collection(db, "reservations"), where("creneauId", "==", cid), where("childId", "==", item.childId)));
+            for (const d of resSnap.docs) await deleteDoc(doc(db, "reservations", d.id));
+          } catch (e) { console.error("Erreur suppression réservation:", e); }
+        }
+        return;
+      }
+
+      // Cas 2 : créneau unique lié directement par ID
       if (item.creneauId) {
         await removeFromCreneau(item.creneauId, item.childId);
-        // Supprimer les réservations liées
         try {
           const resSnap = await getDocs(query(collection(db, "reservations"), where("creneauId", "==", item.creneauId), where("childId", "==", item.childId)));
           for (const d of resSnap.docs) await deleteDoc(doc(db, "reservations", d.id));
@@ -416,11 +428,10 @@ export default function PaiementsPage() {
         return;
       }
 
-      // Cas 2 : pas de creneauId → chercher les réservations par IDs puis fallback texte
+      // Cas 3 : pas de creneauId → chercher les réservations par familyId + childId + matching texte
       const resSnap = await getDocs(query(collection(db, "reservations"), where("familyId", "==", payment.familyId), where("childId", "==", item.childId)));
       for (const d of resSnap.docs) {
         const r = d.data();
-        // Matching par priorité : IDs d'abord, texte en fallback
         const matchById = (item.activityId && r.activityId === item.activityId) ||
                           (item.stageKey && r.stageKey === item.stageKey);
         const matchByTitle = !matchById && item.activityTitle && r.activityTitle &&

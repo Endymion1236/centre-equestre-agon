@@ -361,6 +361,7 @@ export default function ReserverPage() {
             childId: i.childId,
             childName: i.childName,
             creneauId: i.creneauIds[0],
+            creneauIds: i.isStage ? i.creneauIds : undefined,
             stageKey: i.isStage ? `${i.activityTitle}_${i.dates}` : null,
             activityType: i.isStage ? "stage" : "cours",
             priceHT: i.prixFinal / 1.055, tva: 5.5, priceTTC: i.prixFinal,
