@@ -451,6 +451,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   // ── Vérification IA complète ──────────────────────────────────────────
   const [iaChecking, setIaChecking] = useState(false);
   const [iaResult, setIaResult] = useState<string | null>(null);
+  const [showConflits, setShowConflits] = useState(true);
 
   const handleIACheck = async () => {
     setIaChecking(true);
@@ -1175,30 +1176,40 @@ Réponds de façon concise et pratique, en français.`,
 
       {/* Bandeau conflits horaires */}
       {conflits.length > 0 && (
-        <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:12,padding:"12px 16px",display:"flex",alignItems:"flex-start",gap:10}}>
-          <span style={{fontSize:18,flexShrink:0}}>🔴</span>
-          <div style={{flex:1}}>
-            <div style={{fontFamily:"sans-serif",fontSize:12,fontWeight:700,color:"#92400e",marginBottom:6}}>
-              {conflits.length} conflit{conflits.length > 1 ? "s" : ""} horaire{conflits.length > 1 ? "s" : ""} détecté{conflits.length > 1 ? "s" : ""}
+        <div style={{background: showConflits ? "#fffbeb" : "#f8fafc", border: showConflits ? "1px solid #fde68a" : "1px solid #e2e8f0", borderRadius:12, padding: showConflits ? "12px 16px" : "8px 16px", display:"flex", alignItems:"center", gap:10}}>
+          <span style={{fontSize: showConflits ? 18 : 14, flexShrink:0}}>{showConflits ? "🔴" : "⚪"}</span>
+          {showConflits ? (
+            <div style={{flex:1}}>
+              <div style={{fontFamily:"sans-serif",fontSize:12,fontWeight:700,color:"#92400e",marginBottom:6}}>
+                {conflits.length} conflit{conflits.length > 1 ? "s" : ""} horaire{conflits.length > 1 ? "s" : ""} détecté{conflits.length > 1 ? "s" : ""}
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                {conflits.map((c, i) => (
+                  <div key={i} style={{fontFamily:"sans-serif",fontSize:11,color:"#78350f",display:"flex",alignItems:"center",gap:6,background:"#fef3c7",padding:"4px 10px",borderRadius:6,flexWrap:"wrap"}}>
+                    <span style={{fontWeight:700}}>{c.salarieName}</span>
+                    <span style={{color:"#a16207"}}>·</span>
+                    <span>{JOURS_LABELS[c.jour].slice(0, 3)}</span>
+                    <span style={{color:"#a16207"}}>·</span>
+                    <span style={{fontWeight:600,color:"#dc2626"}}>
+                      {c.tache1.tacheLabel} ({c.tache1.heureDebut}→{minToHeure(heureToMin(c.tache1.heureDebut) + c.tache1.dureeMinutes)})
+                    </span>
+                    <span style={{color:"#a16207"}}>↔</span>
+                    <span style={{fontWeight:600,color:"#dc2626"}}>
+                      {c.tache2.tacheLabel} ({c.tache2.heureDebut}→{minToHeure(heureToMin(c.tache2.heureDebut) + c.tache2.dureeMinutes)})
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div style={{display:"flex",flexDirection:"column",gap:4}}>
-              {conflits.map((c, i) => (
-                <div key={i} style={{fontFamily:"sans-serif",fontSize:11,color:"#78350f",display:"flex",alignItems:"center",gap:6,background:"#fef3c7",padding:"4px 10px",borderRadius:6}}>
-                  <span style={{fontWeight:700}}>{c.salarieName}</span>
-                  <span style={{color:"#a16207"}}>·</span>
-                  <span>{JOURS_LABELS[c.jour].slice(0, 3)}</span>
-                  <span style={{color:"#a16207"}}>·</span>
-                  <span style={{fontWeight:600,color:"#dc2626"}}>
-                    {c.tache1.tacheLabel} ({c.tache1.heureDebut}→{minToHeure(heureToMin(c.tache1.heureDebut) + c.tache1.dureeMinutes)})
-                  </span>
-                  <span style={{color:"#a16207"}}>↔</span>
-                  <span style={{fontWeight:600,color:"#dc2626"}}>
-                    {c.tache2.tacheLabel} ({c.tache2.heureDebut}→{minToHeure(heureToMin(c.tache2.heureDebut) + c.tache2.dureeMinutes)})
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
+          ) : (
+            <span style={{fontFamily:"sans-serif",fontSize:11,color:"#94a3b8",flex:1}}>
+              {conflits.length} conflit{conflits.length > 1 ? "s" : ""} masqué{conflits.length > 1 ? "s" : ""}
+            </span>
+          )}
+          <button onClick={() => setShowConflits(!showConflits)}
+            style={{flexShrink:0,padding:"4px 10px",borderRadius:6,border:"1px solid #e2e8f0",background:"white",fontFamily:"sans-serif",fontSize:10,color:"#64748b",cursor:"pointer",fontWeight:600}}>
+            {showConflits ? "Masquer" : "Afficher"}
+          </button>
         </div>
       )}
 
