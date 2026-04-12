@@ -85,6 +85,8 @@ export default function ReserverPage() {
     const d = new Date(currentMonth);
     d.setMonth(d.getMonth() + 1);
     d.setDate(0); // dernier jour du mois
+    // Ajouter 7 jours pour couvrir les stages à cheval sur 2 mois
+    d.setDate(d.getDate() + 7);
     return d;
   }, [currentMonth]);
 
@@ -288,9 +290,13 @@ export default function ReserverPage() {
     if (cart.length === 0 || !family || !user) return;
     setPaying(true);
     try {
-      // 1. Inscrire chaque enfant dans chaque créneau (relire depuis Firestore à chaque fois)
+      // 1. Inscrire chaque enfant dans chaque créneau
       for (const item of cart) {
-        for (const cid of item.creneauIds) {
+        // Pour les stages multi-jours, recharger les créneaux depuis Firestore
+        // car le client peut n'avoir chargé qu'un seul mois
+        const creneauIdsToEnroll = [...item.creneauIds];
+        
+        for (const cid of creneauIdsToEnroll) {
           // Relire le créneau depuis Firestore pour avoir l'état à jour
           const creneauSnap = await getDoc(doc(db, "creneaux", cid));
           if (!creneauSnap.exists()) continue;
@@ -307,21 +313,41 @@ export default function ReserverPage() {
             enrolledCount: enrolled.length + 1,
           });
         }
-        // Réservation — stocker la date correctement
-        const firstCreneau = creneaux.find(c => c.id === item.creneauIds[0]);
-        await addDoc(collection(db, "reservations"), {
-          familyId: user.uid, familyName: family.parentName,
-          // Pour les cavaliers liés, ajouter aussi sourceFamilyId pour que les parents voient la réservation
-          ...((item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
-          childId: item.childId, childName: item.childName,
-          activityTitle: item.activityTitle, activityType: item.isStage ? "stage" : "cours",
-          creneauId: item.creneauIds[0],
-          date: firstCreneau?.date || new Date().toISOString().split("T")[0],
-          startTime: firstCreneau?.startTime || "",
-          endTime: firstCreneau?.endTime || "",
-          priceTTC: item.prixFinal, status: "confirmed", source: "client",
-          createdAt: serverTimestamp(),
-        });
+
+        // Réservations — une par jour pour les stages, une seule pour les cours
+        if (item.isStage) {
+          for (const cid of creneauIdsToEnroll) {
+            const crSnap = await getDoc(doc(db, "creneaux", cid));
+            const crData = crSnap.exists() ? crSnap.data() : null;
+            await addDoc(collection(db, "reservations"), {
+              familyId: user.uid, familyName: family.parentName,
+              ...((item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
+              childId: item.childId, childName: item.childName,
+              activityTitle: item.activityTitle, activityType: "stage",
+              creneauId: cid,
+              date: crData?.date || new Date().toISOString().split("T")[0],
+              startTime: crData?.startTime || "",
+              endTime: crData?.endTime || "",
+              priceTTC: 0, // prix global sur la 1ère réservation uniquement
+              status: "confirmed", source: "client",
+              createdAt: serverTimestamp(),
+            });
+          }
+        } else {
+          const firstCreneau = creneaux.find(c => c.id === item.creneauIds[0]);
+          await addDoc(collection(db, "reservations"), {
+            familyId: user.uid, familyName: family.parentName,
+            ...((item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
+            childId: item.childId, childName: item.childName,
+            activityTitle: item.activityTitle, activityType: "cours",
+            creneauId: item.creneauIds[0],
+            date: firstCreneau?.date || new Date().toISOString().split("T")[0],
+            startTime: firstCreneau?.startTime || "",
+            endTime: firstCreneau?.endTime || "",
+            priceTTC: item.prixFinal, status: "confirmed", source: "client",
+            createdAt: serverTimestamp(),
+          });
+        }
       }
 
       // 2. Créer le paiement pending
