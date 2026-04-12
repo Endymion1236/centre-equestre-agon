@@ -45,6 +45,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     return JOURS[Math.min(dayIndex, 4)] as JourSemaine; // cap à vendredi
   });
   const [selectedSalarieId, setSelectedSalarieId] = useState<string>("");
+  const [joursTravailles, setJoursTravailles] = useState<JourSemaine[]>(["lundi","mardi","mercredi","jeudi","vendredi"]);
 
   const lundi = getLundideSemaine(semaine);
 
@@ -346,12 +347,14 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   const tachesManquantes = useMemo(() => {
     const manquantes: { tache: TacheType; jour: JourSemaine }[] = [];
     for (const tt of tachesObligatoires) {
-      // Priorité : joursObligatoires > joursDefaut > lun-ven
-      const joursAttendus = (tt.joursObligatoires && tt.joursObligatoires.length > 0)
-        ? tt.joursObligatoires.filter(j => joursActifs.includes(j))
+      // Jours attendus : joursObligatoires > joursDefaut > lun-ven
+      const joursConfig = (tt.joursObligatoires && tt.joursObligatoires.length > 0)
+        ? tt.joursObligatoires
         : (tt.joursDefaut && tt.joursDefaut.length > 0)
-          ? tt.joursDefaut.filter(j => joursActifs.includes(j))
-          : joursActifs.slice(0, 5); // lun-ven par défaut
+          ? tt.joursDefaut
+          : JOURS.slice(0, 5) as JourSemaine[];
+      // Filtrer par les jours réellement travaillés cette semaine
+      const joursAttendus = joursConfig.filter(j => joursTravailles.includes(j));
       for (const jour of joursAttendus) {
         const exists = taches.some(t => t.tacheTypeId === tt.id && t.jour === jour);
         const existsByLabel = taches.some(t => t.tacheLabel === tt.label && t.jour === jour);
@@ -361,7 +364,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       }
     }
     return manquantes;
-  }, [taches, tachesObligatoires]);
+  }, [taches, tachesObligatoires, joursTravailles]);
 
   // ── Détection des conflits horaires (même salarié, même jour, chevauchement) ─
   interface Conflit {
@@ -1274,6 +1277,33 @@ Réponds de façon concise et pratique, en français.`,
         <button onClick={nextWeek} className="flex items-center gap-1 font-body text-sm text-slate-500 bg-transparent border-none cursor-pointer hover:text-blue-500">
           Semaine suiv. <ChevronRight size={16}/>
         </button>
+      </div>
+
+      {/* Jours travaillés cette semaine */}
+      <div className="flex items-center gap-3 bg-white rounded-xl px-4 py-2 border border-gray-100">
+        <span className="font-body text-xs font-semibold text-slate-500">Jours travaillés :</span>
+        <div className="flex gap-1">
+          {JOURS.slice(0, 6).map(j => {
+            const active = joursTravailles.includes(j as JourSemaine);
+            return (
+              <button key={j} onClick={() => {
+                setJoursTravailles(prev => active ? prev.filter(x => x !== j) : [...prev, j as JourSemaine]);
+              }}
+                className={`px-2 py-1 rounded-md font-body text-[10px] font-semibold border-none cursor-pointer transition-all
+                  ${active ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-400"}`}>
+                {JOURS_LABELS[j as JourSemaine].slice(0, 3)}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex gap-1 ml-1">
+          <button onClick={() => setJoursTravailles(["lundi","mardi","mercredi","jeudi","vendredi"])}
+            className="font-body text-[9px] text-blue-500 bg-transparent border-none cursor-pointer underline">Lun-Ven</button>
+          <button onClick={() => setJoursTravailles(["mardi","mercredi","jeudi","vendredi","samedi"])}
+            className="font-body text-[9px] text-blue-500 bg-transparent border-none cursor-pointer underline">Mar-Sam</button>
+          <button onClick={() => setJoursTravailles(["lundi","mardi","mercredi","jeudi","vendredi","samedi"])}
+            className="font-body text-[9px] text-blue-500 bg-transparent border-none cursor-pointer underline">Lun-Sam</button>
+        </div>
       </div>
 
       {/* Résumé charge */}
