@@ -252,27 +252,10 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     const map: Record<string, number> = {};
     const salIds = [...new Set(taches.map(t => t.salarieId))];
     for (const salId of salIds) {
-      let totalEffectif = 0;
-      for (const jour of joursActifs) {
-        const jourTaches = taches
-          .filter(t => t.salarieId === salId && t.jour === jour)
-          .sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
-        if (jourTaches.length === 0) continue;
-
-        // Amplitude = début première → fin dernière
-        const debutJour = heureToMin(jourTaches[0].heureDebut);
-        const lastTache = jourTaches[jourTaches.length - 1];
-        const finJour = heureToMin(lastTache.heureDebut) + lastTache.dureeMinutes;
-        const amplitude = finJour - debutJour;
-
-        // Soustraire les pauses
-        const pausesMinutes = jourTaches
-          .filter(t => t.categorie === "pause")
-          .reduce((s, t) => s + t.dureeMinutes, 0);
-
-        totalEffectif += Math.max(0, amplitude - pausesMinutes);
-      }
-      map[salId] = totalEffectif;
+      // Somme des durées de toutes les tâches sauf les pauses
+      map[salId] = taches
+        .filter(t => t.salarieId === salId && t.categorie !== "pause")
+        .reduce((sum, t) => sum + t.dureeMinutes, 0);
     }
     return map;
   }, [taches]);
@@ -1020,15 +1003,9 @@ Réponds de façon concise et pratique, en français.`,
           {activeSalaries.map(sal => {
             const dayTaches = taches.filter(t => t.salarieId === sal.id && t.jour === selectedDay);
             const dayActivities = creneaux.filter(c => c.date === dateStr && c.monitor === sal.nom);
-            const dayCharge = (() => {
-              if (dayTaches.length === 0) return 0;
-              const sorted = [...dayTaches].sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
-              const debut = heureToMin(sorted[0].heureDebut);
-              const last = sorted[sorted.length - 1];
-              const fin = heureToMin(last.heureDebut) + last.dureeMinutes;
-              const pauses = sorted.filter(t => t.categorie === "pause").reduce((s, t) => s + t.dureeMinutes, 0);
-              return Math.max(0, fin - debut - pauses);
-            })();
+            const dayCharge = dayTaches
+              .filter(t => t.categorie !== "pause")
+              .reduce((s, t) => s + t.dureeMinutes, 0);
             const dayDone = dayTaches.filter(t => t.done).length;
 
             return (
@@ -1216,15 +1193,9 @@ Réponds de façon concise et pratique, en français.`,
               .sort((a,b) => heureToMin(a.heureDebut) - heureToMin(b.heureDebut));
             const dayActivities = creneaux.filter(c => c.date === dateStr && c.monitor === sal.nom)
               .sort((a: any, b: any) => heureToMin(a.startTime) - heureToMin(b.startTime));
-            const dayCharge = (() => {
-              if (dayTaches.length === 0) return 0;
-              const sorted = [...dayTaches].sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
-              const debut = heureToMin(sorted[0].heureDebut);
-              const last = sorted[sorted.length - 1];
-              const fin = heureToMin(last.heureDebut) + last.dureeMinutes;
-              const pauses = sorted.filter(t => t.categorie === "pause").reduce((s, t) => s + t.dureeMinutes, 0);
-              return Math.max(0, fin - debut - pauses);
-            })();
+            const dayCharge = dayTaches
+              .filter(t => t.categorie !== "pause")
+              .reduce((s, t) => s + t.dureeMinutes, 0);
             const jourComplet = date.toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" });
             const isEmpty = dayTaches.length === 0 && dayActivities.length === 0;
 
