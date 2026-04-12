@@ -481,8 +481,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
   const stageTotalTTC = stageLines.reduce((s, l) => s + l.prixReduit, 0);
   const ACOMPTE_PAR_ENFANT = 30; // 30€ par enfant
-  const stageAcompte = Math.min(ACOMPTE_PAR_ENFANT * stageLines.length, stageTotalTTC);
-  const stageSolde = Math.round((stageTotalTTC - stageAcompte) * 100) / 100;
+  const showAcompte = stageMode === "semaine" && stageTotalTTC > ACOMPTE_PAR_ENFANT * stageLines.length;
+  const stageAcompte = showAcompte ? Math.min(ACOMPTE_PAR_ENFANT * stageLines.length, stageTotalTTC) : stageTotalTTC;
+  const stageSolde = showAcompte ? Math.round((stageTotalTTC - stageAcompte) * 100) / 100 : 0;
 
   const handleEnroll = async () => {
     // Mode stage : inscription multi-enfants
@@ -631,14 +632,13 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             paidAmount: 0,
             stageDate: creneauxAInscrire[0]?.date || creneau.date,
             stageTitle: creneau.activityTitle,
-            acompteAmount: stageAcompte,
-            soldeAmount: stageSolde,
+            ...(showAcompte ? { acompteAmount: stageAcompte, soldeAmount: stageSolde } : {}),
             date: serverTimestamp(),
           });
         }
 
         const noms = stageLines.map(l => l.childName).join(", ");
-        setJustEnrolled(`${noms} inscrit(s) dans ${creneauxAInscrire.length} jour(s) — ${stageTotalTTC.toFixed(2)}€ (acompte ${stageAcompte}€ + solde ${stageSolde}€ J-7)`);
+        setJustEnrolled(`${noms} inscrit(s) dans ${creneauxAInscrire.length} jour(s) — ${stageTotalTTC.toFixed(2)}€${showAcompte ? ` (acompte ${stageAcompte}€ + solde ${stageSolde}€ J-7)` : ""}`);
 
         // Envoyer email de confirmation stage automatiquement
         if (fam.parentEmail) {
@@ -673,7 +673,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           } catch (e) { console.error("Email confirmation stage:", e); }
         }
 
-        panelToast(`${noms} inscrit(s) — acompte ${stageAcompte}€ + solde ${stageSolde}€ J-7`, "success");
+        panelToast(`${noms} inscrit(s) — ${stageTotalTTC.toFixed(2)}€${showAcompte ? ` (acompte ${stageAcompte}€ + solde J-7)` : " — paiement en attente"}`, "success");
       } catch (e) { console.error(e); panelToast("Erreur lors de l'inscription", "error"); }
       setSelectedChildren([]);
       setSelFam(""); setSearch(""); setEnrolling(false);
@@ -1430,7 +1430,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       <span className="text-sm font-bold text-blue-800">Total à régler</span>
                       <span className="text-2xl font-bold text-green-600">{stageTotalTTC.toFixed(2)}€</span>
                     </div>
-                    {stageTotalTTC > stageAcompte && (
+                    {showAcompte && (
                       <div className="bg-blue-50 rounded-lg p-3 mt-1">
                         <div className="flex justify-between font-body text-xs text-blue-800 mb-1">
                           <span>💳 Acompte à l'inscription ({selectedChildren.length} × {ACOMPTE_PAR_ENFANT}€)</span>
