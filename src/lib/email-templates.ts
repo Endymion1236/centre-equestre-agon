@@ -47,6 +47,8 @@ export const emailTemplates = {
     stageTitle: string;
     dates: string;
     totalTTC: number;
+    acompte?: number;
+    solde?: number;
   }) => ({
     subject: `Inscription confirmée — ${vars.stageTitle}`,
     html: wrap(`
@@ -65,6 +67,14 @@ export const emailTemplates = {
           </tr>
         </table>
       </div>
+      ${vars.acompte && vars.solde && vars.solde > 0 ? `
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:16px 0;">
+        <p style="margin:0 0 6px;color:#1e40af;font-weight:600;font-size:13px;">💳 Modalités de paiement</p>
+        <p style="margin:0;color:#555;font-size:13px;">Acompte à régler maintenant : <strong style="color:#1e3a5f;">${vars.acompte.toFixed(2)}€</strong></p>
+        <p style="margin:4px 0 0;color:#555;font-size:13px;">Solde à régler 7 jours avant le stage : <strong style="color:#1e3a5f;">${vars.solde.toFixed(2)}€</strong></p>
+        <p style="margin:6px 0 0;color:#888;font-size:11px;">Un rappel avec le lien de paiement vous sera envoyé automatiquement.</p>
+      </div>
+      ` : ""}
       <p style="color:#555;font-size:13px;">À bientôt au centre équestre !</p>
     `),
   }),

@@ -480,7 +480,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   }, [isStage, selectedChildren, children, priceTTC, existingStageCount, stageMode, stageDaysCount, creneau]);
 
   const stageTotalTTC = stageLines.reduce((s, l) => s + l.prixReduit, 0);
-  const stageAcompte = Math.round(stageTotalTTC * 0.3 * 100) / 100;
+  const ACOMPTE_PAR_ENFANT = 30; // 30€ par enfant
+  const stageAcompte = Math.min(ACOMPTE_PAR_ENFANT * stageLines.length, stageTotalTTC);
   const stageSolde = Math.round((stageTotalTTC - stageAcompte) * 100) / 100;
 
   const handleEnroll = async () => {
@@ -609,25 +610,35 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           await updateDoc(doc(db, "payments", openOrder.id), {
             items: mergedItems,
             totalTTC: Math.round(mergedTotal * 100) / 100,
+            stageDate: existingData.stageDate || creneauxAInscrire[0]?.date || creneau.date,
+            stageTitle: existingData.stageTitle || creneau.activityTitle,
+            familyEmail: existingData.familyEmail || fam.parentEmail || "",
+            acompteAmount: ACOMPTE_PAR_ENFANT * (mergedItems.filter((i: any) => i.activityType === "stage" || i.activityType === "stage_journee").length || stageLines.length),
+            soldeAmount: Math.round((mergedTotal - ACOMPTE_PAR_ENFANT * (mergedItems.filter((i: any) => i.activityType === "stage" || i.activityType === "stage_journee").length || stageLines.length)) * 100) / 100,
             updatedAt: serverTimestamp(),
           });
         } else {
-          // Créer une nouvelle commande
+          // Créer une nouvelle commande stage avec infos acompte
           await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
             familyId: fam.firestoreId,
             familyName: fam.parentName || "",
+            familyEmail: fam.parentEmail || "",
             items: newItems,
             totalTTC: stageTotalTTC,
             paymentMode: "",
             paymentRef: "",
             status: "pending",
             paidAmount: 0,
+            stageDate: creneauxAInscrire[0]?.date || creneau.date,
+            stageTitle: creneau.activityTitle,
+            acompteAmount: stageAcompte,
+            soldeAmount: stageSolde,
             date: serverTimestamp(),
           });
         }
 
         const noms = stageLines.map(l => l.childName).join(", ");
-        setJustEnrolled(`${noms} inscrit(s) dans ${creneauxAInscrire.length} jour(s) — ${stageTotalTTC.toFixed(2)}€ — paiement en attente`);
+        setJustEnrolled(`${noms} inscrit(s) dans ${creneauxAInscrire.length} jour(s) — ${stageTotalTTC.toFixed(2)}€ (acompte ${stageAcompte}€ + solde ${stageSolde}€ J-7)`);
 
         // Envoyer email de confirmation stage automatiquement
         if (fam.parentEmail) {
@@ -639,6 +650,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               stageTitle: creneau.activityTitle,
               dates: stageMode === "jour" ? new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : dates,
               totalTTC: stageTotalTTC,
+              acompte: stageAcompte,
+              solde: stageSolde,
             });
             authFetch("/api/send-email", {
               method: "POST",
@@ -660,7 +673,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           } catch (e) { console.error("Email confirmation stage:", e); }
         }
 
-        panelToast(`${noms} inscrit(s) — ${stageTotalTTC.toFixed(2)}€ — paiement en attente`, "success");
+        panelToast(`${noms} inscrit(s) — acompte ${stageAcompte}€ + solde ${stageSolde}€ J-7`, "success");
       } catch (e) { console.error(e); panelToast("Erreur lors de l'inscription", "error"); }
       setSelectedChildren([]);
       setSelFam(""); setSearch(""); setEnrolling(false);
@@ -1417,10 +1430,22 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       <span className="text-sm font-bold text-blue-800">Total à régler</span>
                       <span className="text-2xl font-bold text-green-600">{stageTotalTTC.toFixed(2)}€</span>
                     </div>
+                    {stageTotalTTC > stageAcompte && (
+                      <div className="bg-blue-50 rounded-lg p-3 mt-1">
+                        <div className="flex justify-between font-body text-xs text-blue-800 mb-1">
+                          <span>💳 Acompte à l'inscription ({selectedChildren.length} × {ACOMPTE_PAR_ENFANT}€)</span>
+                          <span className="font-bold">{stageAcompte.toFixed(2)}€</span>
+                        </div>
+                        <div className="flex justify-between font-body text-xs text-slate-500">
+                          <span>Solde à régler J-7 avant le stage</span>
+                          <span className="font-semibold">{stageSolde.toFixed(2)}€</span>
+                        </div>
+                      </div>
+                    )}
                     <div className="bg-white rounded-lg p-3">
                       <div className="font-body text-xs text-slate-600 text-center">
-                        La commande sera ajoutée aux impayés.<br/>
-                        Encaissement possible depuis <strong>Paiements → Encaisser</strong>.
+                        Un email avec le lien de paiement pour l'acompte sera envoyé à la famille.<br/>
+                        Le solde sera demandé automatiquement 7 jours avant le stage.
                       </div>
                     </div>
                   </div>
