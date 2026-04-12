@@ -781,7 +781,231 @@ const TESTS: TestCase[] = [
     etapes: "Installer l'app depuis Chrome (Add to Home Screen)",
     resultat_attendu: "App installée, icône sur l'écran d'accueil",
     priorite: "normale",
-  }
+  },
+  // ══════════════════════════════════════════
+  // BONS CADEAUX
+  // ══════════════════════════════════════════
+  {
+    id: "BC-01", module: "Bons cadeaux", sous_module: "Création",
+    description: "Créer un bon cadeau",
+    etapes: "Admin → Bons cadeaux → Créer → Montant + destinataire → Valider",
+    resultat_attendu: "Bon créé avec code unique et montant",
+    priorite: "haute",
+  },
+  {
+    id: "BC-02", module: "Bons cadeaux", sous_module: "Utilisation",
+    description: "Utiliser un bon cadeau pour payer",
+    etapes: "Encaisser → Mode bon cadeau → Saisir code → Valider",
+    resultat_attendu: "Montant du bon déduit du paiement",
+    priorite: "haute",
+  },
+  // ══════════════════════════════════════════
+  // BONS RÉCUPÉRATION
+  // ══════════════════════════════════════════
+  {
+    id: "BR-01", module: "Bons récup", sous_module: "Création",
+    description: "Créer un bon de récupération",
+    etapes: "Admin → Bons récup → Créer → Sélectionner cavalier + séance manquée",
+    resultat_attendu: "Bon créé avec séance de rattrapage attribuée",
+    priorite: "haute",
+  },
+  {
+    id: "BR-02", module: "Bons récup", sous_module: "Utilisation",
+    description: "Utiliser un bon de récupération",
+    etapes: "Inscrire un enfant → Utiliser un bon récup existant",
+    resultat_attendu: "Inscription gratuite, bon marqué comme utilisé",
+    priorite: "haute",
+  },
+  // ══════════════════════════════════════════
+  // COMMUNICATION
+  // ══════════════════════════════════════════
+  {
+    id: "CM-01", module: "Communication", sous_module: "Email groupé",
+    description: "Envoyer un email à toutes les familles",
+    etapes: "Communication → Nouveau message → Sélectionner destinataires → Envoyer",
+    resultat_attendu: "Email envoyé à toutes les familles sélectionnées",
+    priorite: "haute",
+  },
+  {
+    id: "CM-02", module: "Communication", sous_module: "Filtres",
+    description: "Filtrer les destinataires par activité/statut",
+    etapes: "Communication → Filtrer par activité ou statut d'inscription",
+    resultat_attendu: "Liste de destinataires filtrée correctement",
+    priorite: "normale",
+  },
+  // ══════════════════════════════════════════
+  // COMPÉTITIONS
+  // ══════════════════════════════════════════
+  {
+    id: "CP-01", module: "Compétitions", sous_module: "Création",
+    description: "Créer une compétition",
+    etapes: "Compétitions → Nouvelle → Nom + date + lieu + épreuves → Enregistrer",
+    resultat_attendu: "Compétition créée avec épreuves listées",
+    priorite: "haute",
+  },
+  {
+    id: "CP-02", module: "Compétitions", sous_module: "Inscription",
+    description: "Inscrire un cavalier à une compétition",
+    etapes: "Compétitions → Sélectionner → Inscrire cavalier → Choisir épreuves",
+    resultat_attendu: "Cavalier inscrit aux épreuves sélectionnées",
+    priorite: "haute",
+  },
+  // ══════════════════════════════════════════
+  // DEVIS
+  // ══════════════════════════════════════════
+  {
+    id: "DV-01", module: "Devis", sous_module: "Création",
+    description: "Créer un devis",
+    etapes: "Devis → Nouveau → Sélectionner famille + prestations → Générer",
+    resultat_attendu: "Devis créé avec numéro séquentiel et PDF",
+    priorite: "haute",
+  },
+  {
+    id: "DV-02", module: "Devis", sous_module: "Conversion",
+    description: "Convertir un devis en facture",
+    etapes: "Devis → Sélectionner → Convertir en facture",
+    resultat_attendu: "Paiement créé à partir des items du devis",
+    priorite: "haute",
+  },
+  // ══════════════════════════════════════════
+  // DOCUMENTS
+  // ══════════════════════════════════════════
+  {
+    id: "DC-01", module: "Documents", sous_module: "Upload",
+    description: "Uploader un document pour un cavalier",
+    etapes: "Cavaliers → Fiche famille → Documents → Uploader",
+    resultat_attendu: "Document stocké dans Firebase Storage, visible dans la fiche",
+    priorite: "haute",
+  },
+  // ══════════════════════════════════════════
+  // EMAIL TEMPLATES
+  // ══════════════════════════════════════════
+  {
+    id: "ET-01", module: "Email templates", sous_module: "Édition",
+    description: "Modifier un template email",
+    etapes: "Email templates → Sélectionner template → Modifier contenu → Sauvegarder",
+    resultat_attendu: "Template sauvegardé dans Firestore, utilisé pour les envois",
+    priorite: "haute",
+  },
+  {
+    id: "ET-02", module: "Email templates", sous_module: "Prévisualisation",
+    description: "Prévisualiser un template email",
+    etapes: "Email templates → Sélectionner → Aperçu",
+    resultat_attendu: "Email affiché avec les variables de test remplies",
+    priorite: "normale",
+  },
+  // ══════════════════════════════════════════
+  // EMAIL REPRISE
+  // ══════════════════════════════════════════
+  {
+    id: "ER-01", module: "Email reprise", sous_module: "Envoi",
+    description: "Envoyer un email de reprise de saison",
+    etapes: "Email reprise → Sélectionner les familles → Envoyer",
+    resultat_attendu: "Emails envoyés avec infos de reprise et lien d'inscription",
+    priorite: "haute",
+  },
+  // ══════════════════════════════════════════
+  // ÉQUIPE / MONITEURS
+  // ══════════════════════════════════════════
+  {
+    id: "EQ-01", module: "Équipe", sous_module: "Gestion",
+    description: "Ajouter un moniteur",
+    etapes: "Équipe → Ajouter → Nom + email + rôle → Enregistrer",
+    resultat_attendu: "Moniteur créé, visible dans les sélecteurs de créneaux",
+    priorite: "haute",
+  },
+  {
+    id: "EQ-02", module: "Équipe", sous_module: "Accès",
+    description: "Configurer les accès moniteur",
+    etapes: "Équipe → Sélectionner moniteur → Configurer accès",
+    resultat_attendu: "Moniteur connecté voit uniquement ses créneaux",
+    priorite: "haute",
+  },
+  // ══════════════════════════════════════════
+  // MANAGEMENT
+  // ══════════════════════════════════════════
+  {
+    id: "MG-01", module: "Management", sous_module: "Planning staff",
+    description: "Planning des moniteurs",
+    etapes: "Management → Voir le planning par moniteur",
+    resultat_attendu: "Planning affiché avec les créneaux de chaque moniteur",
+    priorite: "normale",
+  },
+  {
+    id: "MG-02", module: "Management", sous_module: "Horaires",
+    description: "Gérer les horaires des moniteurs",
+    etapes: "Management → Horaires → Saisir les disponibilités",
+    resultat_attendu: "Horaires sauvegardés et visibles dans le planning",
+    priorite: "normale",
+  },
+  // ══════════════════════════════════════════
+  // SUIVI PÉDAGOGIQUE
+  // ══════════════════════════════════════════
+  {
+    id: "PD-01", module: "Pédagogie", sous_module: "Notes",
+    description: "Ajouter une note pédagogique",
+    etapes: "Suivi péda → Sélectionner cavalier → Ajouter note",
+    resultat_attendu: "Note sauvegardée, visible dans la fiche cavalier",
+    priorite: "haute",
+  },
+  {
+    id: "PD-02", module: "Pédagogie", sous_module: "Objectifs",
+    description: "Définir des objectifs pour un cavalier",
+    etapes: "Suivi péda → Sélectionner cavalier → Ajouter objectif galop",
+    resultat_attendu: "Objectif visible dans la progression du cavalier",
+    priorite: "haute",
+  },
+  // ══════════════════════════════════════════
+  // PASSAGE (Présence)
+  // ══════════════════════════════════════════
+  {
+    id: "PS-01", module: "Passage", sous_module: "Pointage",
+    description: "Pointer la présence d'un cavalier",
+    etapes: "Passage → Sélectionner créneau → Cocher présent/absent",
+    resultat_attendu: "Présence enregistrée, compteur de séances mis à jour",
+    priorite: "haute",
+  },
+  {
+    id: "PS-02", module: "Passage", sous_module: "Historique",
+    description: "Consulter l'historique de présence",
+    etapes: "Passage → Historique → Filtrer par cavalier ou période",
+    resultat_attendu: "Liste des présences/absences affichée",
+    priorite: "normale",
+  },
+  // ══════════════════════════════════════════
+  // ACTIVITÉS (Catalogue)
+  // ══════════════════════════════════════════
+  {
+    id: "AC-01", module: "Activités", sous_module: "Catalogue",
+    description: "Créer une activité dans le catalogue",
+    etapes: "Activités → Nouvelle → Titre + type + tarif + TVA → Enregistrer",
+    resultat_attendu: "Activité disponible dans les sélecteurs de créneaux",
+    priorite: "critique",
+  },
+  {
+    id: "AC-02", module: "Activités", sous_module: "Catalogue",
+    description: "Modifier une activité existante",
+    etapes: "Activités → Sélectionner → Modifier titre/tarif → Enregistrer",
+    resultat_attendu: "Modifications sauvegardées, reflétées dans les nouveaux créneaux",
+    priorite: "haute",
+  },
+  // ══════════════════════════════════════════
+  // DASHBOARD ADMIN
+  // ══════════════════════════════════════════
+  {
+    id: "DB-01", module: "Dashboard", sous_module: "KPIs",
+    description: "Tableau de bord — KPIs principaux",
+    etapes: "Admin → Tableau de bord",
+    resultat_attendu: "CA, nb inscrits, taux remplissage, impayés affichés",
+    priorite: "haute",
+  },
+  {
+    id: "DB-02", module: "Dashboard", sous_module: "Alertes",
+    description: "Alertes et notifications admin",
+    etapes: "Tableau de bord → Vérifier les alertes",
+    resultat_attendu: "Badge impayés, fiches manquantes, échéances à venir",
+    priorite: "normale",
+  },
 ];
 
 
