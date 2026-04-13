@@ -9,7 +9,7 @@ const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
 
 // Mode test : si pas de domaine vérifié, tous les emails vont vers l'email du compte Resend
 const TEST_MODE = !process.env.RESEND_FROM_EMAIL || process.env.RESEND_TEST_MODE === "true";
-const TEST_EMAIL = process.env.RESEND_OWNER_EMAIL || "nicolasrichard16@hotmail.com";
+const TEST_EMAIL = process.env.RESEND_OWNER_EMAIL || "";
 
 export async function POST(request: NextRequest) {
   // 🔒 Auth obligatoire — route admin
@@ -54,6 +54,12 @@ export async function POST(request: NextRequest) {
     const bccList = bccEmail ? (Array.isArray(bccEmail) ? bccEmail : [bccEmail]).filter((e: string) => e.includes("@")) : [];
 
     // En mode test : rediriger vers l'email admin avec le vrai destinataire dans l'objet
+    if (TEST_MODE && !TEST_EMAIL) {
+      return NextResponse.json(
+        { error: "RESEND_OWNER_EMAIL non configurée. Requise en mode test." },
+        { status: 500 }
+      );
+    }
     const finalTo = TEST_MODE ? [TEST_EMAIL] : validRecipients;
     const finalSubject = TEST_MODE
       ? `[TEST → ${validRecipients.join(", ")}] ${subject}`
@@ -69,7 +75,7 @@ export async function POST(request: NextRequest) {
             <strong>⚠️ MODE TEST</strong> — Cet email aurait été envoyé à : <strong>${validRecipients.join(", ")}</strong>
           </div>${html}`
         : html,
-      replyTo: replyTo || process.env.RESEND_OWNER_EMAIL || "ceagon@orange.fr",
+      replyTo: replyTo || process.env.RESEND_OWNER_EMAIL || process.env.RESEND_FROM_EMAIL || "",
     });
 
     if (error) {

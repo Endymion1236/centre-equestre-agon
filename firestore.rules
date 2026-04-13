@@ -188,9 +188,10 @@ service cloud.firestore {
     }
 
     // ── Bons cadeaux ──────────────────────────────────────────────────────
+    // Admin-only : la vérification de code par les cavaliers passe par
+    // l'API route /api/verify-bon-cadeau (admin SDK, bypass rules)
     match /bons-cadeaux/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.code != null);
-      allow write: if isAdmin();
+      allow read, write: if isAdmin();
     }
 
     // ── Bons récupération ─────────────────────────────────────────────────
