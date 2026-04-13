@@ -586,7 +586,11 @@ export default function FamilyCard({
 
                         {/* Progression editor inline */}
                         {showProgression === child.id && (
-                          <div className="mt-3 bg-white rounded-xl border border-purple-100 p-4">
+                          <div className="mt-3 bg-white rounded-xl border border-purple-100 p-4" ref={el => {
+                            if (el && hasTargetChild && child.id === initialProgressionChildId) {
+                              setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 300);
+                            }
+                          }}>
                             <div className="font-body text-xs font-semibold text-purple-600 uppercase tracking-wider mb-3">📈 Progression — {child.firstName}</div>
                             <ProgressionEditor childId={child.id} familyId={fid} childName={child.firstName} galopLevel={child.galopLevel}/>
                           </div>
