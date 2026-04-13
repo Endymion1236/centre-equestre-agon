@@ -91,7 +91,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // ── Création famille inline ──
   const [showNewFamily, setShowNewFamily] = useState(false);
   const [newFam, setNewFam] = useState({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
-  const [newChild, setNewChild] = useState({ firstName: "", birthDate: "", galopLevel: "—" });
+  const [newChildren, setNewChildren] = useState([{ firstName: "", lastName: "", birthDate: "", galopLevel: "—" }]);
   const [localFamilies, setLocalFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const allFamilies = useMemo(() => [...families, ...localFamilies], [families, localFamilies]);
   const [creatingFamily, setCreatingFamily] = useState(false);
@@ -1296,29 +1296,42 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       placeholder="Ville" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
                   </div>
                   <div className="border-t border-gray-100 pt-2.5">
-                    <div className="font-body text-[10px] text-slate-400 uppercase mb-1.5">Premier cavalier</div>
-                    <div className="flex gap-2">
-                      <input value={newChild.firstName} onChange={e => setNewChild({...newChild, firstName: e.target.value})}
-                        placeholder="Prénom *" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
-                      <input value={newChild.birthDate} onChange={e => setNewChild({...newChild, birthDate: e.target.value})}
-                        type="date" className="w-36 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
-                    </div>
+                    <div className="font-body text-[10px] text-slate-400 uppercase mb-1.5">Cavaliers</div>
+                    {newChildren.map((child, idx) => (
+                      <div key={idx} className="flex gap-2 mb-2 items-center">
+                        <input value={child.firstName} onChange={e => { const u = [...newChildren]; u[idx].firstName = e.target.value; setNewChildren(u); }}
+                          placeholder="Prénom *" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+                        <input value={child.lastName} onChange={e => { const u = [...newChildren]; u[idx].lastName = e.target.value; setNewChildren(u); }}
+                          placeholder="Nom" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+                        <input value={child.birthDate} onChange={e => { const u = [...newChildren]; u[idx].birthDate = e.target.value; setNewChildren(u); }}
+                          type="date" className="w-36 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+                        {newChildren.length > 1 && (
+                          <button onClick={() => setNewChildren(newChildren.filter((_, i) => i !== idx))}
+                            className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1"><X size={14} /></button>
+                        )}
+                      </div>
+                    ))}
+                    <button onClick={() => setNewChildren([...newChildren, { firstName: "", lastName: "", birthDate: "", galopLevel: "—" }])}
+                      className="font-body text-xs text-green-600 bg-transparent border-none cursor-pointer hover:underline p-0">
+                      + Ajouter un cavalier
+                    </button>
                   </div>
                   <button onClick={async () => {
-                    if (!newFam.parentName.trim() || !newChild.firstName.trim()) {
-                      panelToast("Nom du parent et prénom du cavalier requis", "error");
+                    const validChildren = newChildren.filter(c => c.firstName.trim());
+                    if (!newFam.parentName.trim() || validChildren.length === 0) {
+                      panelToast("Nom du parent et prénom d'au moins un cavalier requis", "error");
                       return;
                     }
                     setCreatingFamily(true);
                     try {
-                      const childId = `child_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-                      const children = [{
-                        id: childId,
-                        firstName: newChild.firstName.trim(),
-                        birthDate: newChild.birthDate ? new Date(newChild.birthDate) : null,
-                        galopLevel: newChild.galopLevel || "—",
+                      const children = validChildren.map(c => ({
+                        id: `child_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                        firstName: c.firstName.trim(),
+                        lastName: c.lastName.trim(),
+                        birthDate: c.birthDate ? new Date(c.birthDate) : null,
+                        galopLevel: c.galopLevel || "—",
                         sanitaryForm: null,
-                      }];
+                      }));
                       const famRef = await addDoc(collection(db, "families"), {
                         parentName: newFam.parentName.trim(),
                         parentEmail: newFam.parentEmail.trim(),
@@ -1346,19 +1359,20 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         parentPhone: newFam.parentPhone.trim(),
                         children,
                       } as any]);
-                      // Sélectionner automatiquement la nouvelle famille + enfant
+                      // Sélectionner automatiquement la nouvelle famille + premier enfant
                       setSelFam(famRef.id);
-                      setSelChild(childId);
+                      setSelChild(children[0].id);
                       setShowNewFamily(false);
                       setSearch(newFam.parentName.trim());
-                      panelToast(`✅ Famille ${newFam.parentName} créée — sélectionnez le mode d'inscription`, "success");
+                      const noms = children.map(c => c.firstName).join(", ");
+                      panelToast(`✅ Famille ${newFam.parentName} créée (${noms}) — sélectionnez le mode d'inscription`, "success");
                       setNewFam({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
-                      setNewChild({ firstName: "", birthDate: "", galopLevel: "—" });
+                      setNewChildren([{ firstName: "", lastName: "", birthDate: "", galopLevel: "—" }]);
                     } catch (e: any) {
                       panelToast("Erreur : " + e.message, "error");
                     }
                     setCreatingFamily(false);
-                  }} disabled={creatingFamily || !newFam.parentName.trim() || !newChild.firstName.trim()}
+                  }} disabled={creatingFamily || !newFam.parentName.trim() || !newChildren.some(c => c.firstName.trim())}
                     className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-body text-sm font-semibold text-white bg-green-600 border-none cursor-pointer hover:bg-green-500 disabled:opacity-50">
                     {creatingFamily ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                     Créer la famille
