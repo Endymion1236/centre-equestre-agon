@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifyAuth } from "@/lib/api-auth";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { getClubInfo } from "@/lib/club-info";
@@ -18,6 +19,8 @@ try {
 
 
 export async function POST(request: NextRequest) {
+  const auth = await verifyAuth(request);
+  if (auth instanceof NextResponse) return auth;
   try {
     const CLUB = await getClubInfo();
     const body = await request.json();

@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifyAuth } from "@/lib/api-auth";
 import { adminDb, adminMessaging } from "@/lib/firebase-admin";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  // Auth: secret OU token admin
   const secret = req.nextUrl.searchParams.get("secret");
-  if (secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const isSecretValid = secret && secret === process.env.CRON_SECRET;
+  if (!isSecretValid) {
+    const auth = await verifyAuth(req, { adminOnly: true });
+    if (auth instanceof NextResponse) return auth;
   }
 
   const snap = await adminDb.collection("push_tokens").get();
@@ -29,9 +33,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // Auth: secret OU token admin
   const secret = req.nextUrl.searchParams.get("secret");
-  if (secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const isSecretValid = secret && secret === process.env.CRON_SECRET;
+  if (!isSecretValid) {
+    const auth = await verifyAuth(req, { adminOnly: true });
+    if (auth instanceof NextResponse) return auth;
   }
 
   const { familyId } = await req.json();

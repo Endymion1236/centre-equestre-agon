@@ -5,6 +5,8 @@ import { verifyAuth } from "@/lib/api-auth";
 // GET /api/challenges — liste tous les challenges
 // GET /api/challenges?id=xxx — charge un challenge précis
 export async function GET(req: NextRequest) {
+  const auth = await verifyAuth(req);
+  if (auth instanceof NextResponse) return auth;
   const id = req.nextUrl.searchParams.get("id");
   try {
     if (id) {
@@ -56,6 +58,8 @@ export async function POST(req: NextRequest) {
 
 // PUT /api/challenges — sauvegarde les données d'un challenge (riders + results)
 export async function PUT(req: NextRequest) {
+  const auth = await verifyAuth(req, { staffOnly: true });
+  if (auth instanceof NextResponse) return auth;
   try {
     const body = await req.json();
     const { id, riders, results, nextId, status } = body;

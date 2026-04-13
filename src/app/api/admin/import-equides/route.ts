@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifyAuth } from "@/lib/api-auth";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -50,9 +51,12 @@ const EQUIDES_PRESENTS = [
 ];
 
 export async function GET(req: NextRequest) {
+  // Auth: secret OU token admin
   const secret = req.nextUrl.searchParams.get("secret");
-  if (!secret || secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const isSecretValid = secret && secret === process.env.CRON_SECRET;
+  if (!isSecretValid) {
+    const auth = await verifyAuth(req, { adminOnly: true });
+    if (auth instanceof NextResponse) return auth;
   }
 
   const dryRun = req.nextUrl.searchParams.get("dry") === "1";

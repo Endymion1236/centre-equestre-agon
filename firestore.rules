@@ -15,12 +15,13 @@ service cloud.firestore {
     function isStaff() {
       return isAdmin() || isMoniteur();
     }
-    function isOwner(familyId) {
-      return isAuth() && resource.data.uid == request.auth.uid;
+    // Vérifie que le familyId du document appartient à l'utilisateur connecté
+    function isFamilyOwner(familyId) {
+      return isAuth() && exists(/databases/$(database)/documents/families/$(familyId))
+        && get(/databases/$(database)/documents/families/$(familyId)).data.uid == request.auth.uid;
     }
 
     // ── Familles ──────────────────────────────────────────────────────────
-    // Les cavaliers peuvent lire leur propre famille, l'admin peut tout faire
     match /families/{familyId} {
       allow read: if isStaff() || (isAuth() && resource.data.uid == request.auth.uid);
       allow create: if isAuth();
@@ -35,7 +36,7 @@ service cloud.firestore {
 
     // ── Paiements / Encaissements ─────────────────────────────────────────
     match /payments/{docId} {
-      allow read: if isStaff() || (isAuth() && resource.data.familyId != null);
+      allow read: if isStaff() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
       allow write: if isAdmin();
     }
     match /encaissements/{docId} {
@@ -58,9 +59,19 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // ── Documents équidés ─────────────────────────────────────────────────
+    match /documents-equides/{docId} {
+      allow read, write: if isStaff();
+    }
+
+    // ── Indisponibilités équidés ──────────────────────────────────────────
+    match /indisponibilites/{docId} {
+      allow read, write: if isStaff();
+    }
+
     // ── SEPA ──────────────────────────────────────────────────────────────
     match /mandats-sepa/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null);
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
       allow write: if isAdmin();
     }
     match /echeances-sepa/{docId} {
@@ -83,7 +94,7 @@ service cloud.firestore {
 
     // ── Fidélité ──────────────────────────────────────────────────────────
     match /loyalty/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null);
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
       allow write: if isAdmin();
     }
 
@@ -101,8 +112,8 @@ service cloud.firestore {
     }
 
     // ── Progression pédagogique ───────────────────────────────────────────
-    match /progression/{docId} {
-      allow read: if isStaff() || (isAuth() && resource.data.familyId != null);
+    match /progressions/{docId} {
+      allow read: if isStaff() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
       allow write: if isStaff();
     }
 
@@ -113,13 +124,37 @@ service cloud.firestore {
 
     // ── Avoirs ────────────────────────────────────────────────────────────
     match /avoirs/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null);
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
       allow write: if isAdmin();
     }
 
     // ── Cartes de séances ─────────────────────────────────────────────────
     match /cartes/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null);
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow write: if isAdmin();
+    }
+
+    // ── Forfaits ──────────────────────────────────────────────────────────
+    match /forfaits/{docId} {
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow write: if isAdmin();
+    }
+
+    // ── Activités (catalogue) ─────────────────────────────────────────────
+    match /activities/{docId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // ── Moniteurs ─────────────────────────────────────────────────────────
+    match /moniteurs/{docId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // ── Thèmes de stage ───────────────────────────────────────────────────
+    match /themes-stage/{docId} {
+      allow read: if isAuth();
       allow write: if isAdmin();
     }
 
@@ -138,6 +173,30 @@ service cloud.firestore {
     match /satisfaction/{docId} {
       allow read: if isAdmin();
       allow create: if isAuth();
+    }
+
+    // ── Réservations (espace cavalier) ────────────────────────────────────
+    match /reservations/{docId} {
+      allow read: if isStaff() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow create: if isAuth();
+      allow update, delete: if isStaff() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+    }
+
+    // ── Email templates ───────────────────────────────────────────────────
+    match /email-templates/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Bons cadeaux ──────────────────────────────────────────────────────
+    match /bons-cadeaux/{docId} {
+      allow read: if isAdmin() || (isAuth() && resource.data.code != null);
+      allow write: if isAdmin();
+    }
+
+    // ── Bons récupération ─────────────────────────────────────────────────
+    match /bons-recup/{docId} {
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow write: if isAdmin();
     }
 
     // ── Bloc par défaut — DENY ALL ────────────────────────────────────────

@@ -39,9 +39,10 @@ export async function POST(req: NextRequest) {
 
     // 2. Générer le lien CAWL
     const origin = req.nextUrl.origin;
+    const authHeader = req.headers.get("authorization") || "";
     const cawlRes = await fetch(`${origin}/api/cawl/checkout`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Authorization": authHeader },
       body: JSON.stringify({
         items: (payData.items || []).map((i: any) => ({
           name: i.activityTitle || i.description || "Prestation",
