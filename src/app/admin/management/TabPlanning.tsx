@@ -541,8 +541,8 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
 
   <!-- Bouton -->
   <div style="padding:0 28px 24px;text-align:center;">
-    <a href="${siteUrl}/admin/management" style="display:inline-block;background:#2050A0;color:#ffffff;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:700;text-decoration:none;">
-      📋 Voir le planning complet
+    <a href="${siteUrl}/espace-moniteur/planning" style="display:inline-block;background:#2050A0;color:#ffffff;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:700;text-decoration:none;">
+      📋 Voir mon planning
     </a>
   </div>
 
