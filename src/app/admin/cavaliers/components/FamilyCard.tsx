@@ -13,6 +13,7 @@ import FamilyDetailTabs from "../FamilyDetailTabs";
 import ProgressionEditor from "@/components/ProgressionEditor";
 import EnrollModal from "./EnrollModal";
 import MergeFamilyModal from "./MergeFamilyModal";
+import { authFetch } from "@/lib/auth-fetch";
 import LinkChildrenModal from "./LinkChildrenModal";
 import EmailModal from "./EmailModal";
 
@@ -546,7 +547,15 @@ export default function FamilyCard({
                             className="font-body text-xs text-purple-600 bg-purple-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-purple-100 flex items-center gap-1">
                             📈 Progression
                           </button>
-                          <button onClick={() => window.open(`/api/progression-pdf?childId=${child.id}&familyId=${fid}&childName=${encodeURIComponent(child.firstName)}`, "_blank")}
+                          <button onClick={async () => {
+                            try {
+                              const res = await authFetch(`/api/progression-pdf?childId=${child.id}&familyId=${fid}&childName=${encodeURIComponent(child.firstName)}`);
+                              if (!res.ok) throw new Error("Erreur PDF");
+                              const blob = await res.blob();
+                              const url = URL.createObjectURL(blob);
+                              window.open(url, "_blank");
+                            } catch (e) { console.error("Bilan PDF:", e); }
+                          }}
                             className="font-body text-xs text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-indigo-100 flex items-center gap-1">
                             🖨 Bilan PDF
                           </button>
