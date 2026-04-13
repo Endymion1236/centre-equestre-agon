@@ -52,7 +52,7 @@ export default function TimelineView({
             const allTimes = creneaux.flatMap(c => [c.startTime, c.endTime]).filter(Boolean);
             const hours = allTimes.map(t => parseInt(t.split(":")[0]));
             const minHour = Math.max(7, Math.min(...(hours.length ? hours : [8])));
-            const maxHour = Math.min(21, Math.max(...(hours.length ? hours : [18])) + 1);
+            const maxHour = Math.min(23, Math.max(...(hours.length ? hours : [18])) + 1);
             const gridHours = Array.from({ length: maxHour - minHour + 1 }, (_, i) => minHour + i);
             const totalHeight = gridHours.length * HOUR_HEIGHT;
 

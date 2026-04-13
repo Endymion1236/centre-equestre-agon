@@ -5,8 +5,8 @@ import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Creneau } from "./types";
 
-// Créneaux horaires disponibles de 7h à 21h par tranches de 15min
-const TIME_OPTIONS = Array.from({ length: (21 - 7) * 4 + 1 }, (_, i) => {
+// Créneaux horaires disponibles de 7h à 23h par tranches de 15min
+const TIME_OPTIONS = Array.from({ length: (23 - 7) * 4 + 1 }, (_, i) => {
   const totalMinutes = 7 * 60 + i * 15;
   const h = Math.floor(totalMinutes / 60).toString().padStart(2, "0");
   const m = (totalMinutes % 60).toString().padStart(2, "0");
