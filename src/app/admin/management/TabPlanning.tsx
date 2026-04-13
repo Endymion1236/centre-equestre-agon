@@ -1250,45 +1250,6 @@ Réponds de façon concise et pratique, en français.`,
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer border border-gray-200 bg-white text-slate-600 hover:bg-gray-50 disabled:opacity-40">
           <Printer size={13}/> Imprimer
         </button>
-        {/* Bouton SMS planning */}
-        <button onClick={() => {
-          // Construire le résumé texte du planning
-          const activeSals = salaries.filter(s => s.actif);
-          const lines = [`Planning sem. ${semaine.split("-W")[1]} (${formatDateCourte(lundi)} → ${formatDateCourte(new Date(lundi.getTime() + 5 * 86400000))})`];
-          activeSals.forEach(sal => {
-            const salTaches = taches.filter(t => t.salarieId === sal.id)
-              .sort((a, b) => JOURS.indexOf(a.jour) - JOURS.indexOf(b.jour) || a.heureDebut.localeCompare(b.heureDebut));
-            if (salTaches.length === 0) return;
-            const charge = salTaches.filter(t => t.categorie !== "pause").reduce((s, t) => s + t.dureeMinutes, 0);
-            lines.push(`\n${sal.nom} (${fmtDuree(charge)}):`);
-            const joursVus = new Set<string>();
-            salTaches.forEach(t => {
-              const prefix = joursVus.has(t.jour) ? "" : `${JOURS_LABELS[t.jour].slice(0, 3)}: `;
-              joursVus.add(t.jour);
-              lines.push(`${prefix}${t.heureDebut} ${t.tacheLabel}`);
-            });
-          });
-          const body = encodeURIComponent(lines.join("\n"));
-
-          // Récupérer les numéros depuis Firestore (moniteurs)
-          getDocs(collection(db, "moniteurs")).then(snap => {
-            const phones = snap.docs
-              .map(d => (d.data() as any))
-              .filter((m: any) => m.status === "active" && m.phone)
-              .map((m: any) => m.phone.replace(/\s/g, ""));
-            
-            if (phones.length === 0) {
-              toast("Aucun moniteur avec numéro de téléphone dans Paramètres → Moniteurs", "error");
-              return;
-            }
-            // sms: avec plusieurs destinataires séparés par virgule
-            const recipients = phones.join(",");
-            window.open(`sms:${recipients}?body=${body}`, "_self");
-          });
-        }} disabled={taches.length === 0}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer border border-green-200 bg-white text-green-700 hover:bg-green-50 disabled:opacity-40">
-          <span>💬</span> SMS
-        </button>
         {/* Bouton Email planning */}
         <button onClick={handleNotifyEquipe} disabled={notifying || taches.length === 0}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer border border-blue-200 bg-white text-blue-600 hover:bg-blue-50 disabled:opacity-40">
