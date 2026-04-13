@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { collection, getDocs, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAgentContext } from "@/hooks/useAgentContext";
@@ -28,7 +29,8 @@ export default function CavaliersPage() {
   const [loading, setLoading] = useState(true);
 
   // ── UI ────────────────────────────────────────────────────────────────────
-  const [search, setSearch] = useState("");
+  const searchParams = useSearchParams();
+  const [search, setSearch] = useState(searchParams.get("search") || "");
   const [filterTag, setFilterTag] = useState<string>("");
   const [showCreateFamily, setShowCreateFamily] = useState(false);
   const { toast } = useToast();

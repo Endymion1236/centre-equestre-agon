@@ -1228,7 +1228,37 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             const isCard = e.paymentSource === "card";
             const hasPaid = isCard || payments.some((p: any) => p.familyId === e.familyId && p.status === "paid" && (p.items||[]).some((i:any) => i.childId === e.childId));
             const hasPending = !hasPaid && payments.some((p: any) => p.familyId === e.familyId && (p.status === "pending" || p.status === "partial") && (p.items||[]).some((i:any) => i.childId === e.childId));
-            return (<div key={e.childId} className="flex items-center justify-between bg-sand rounded-lg px-4 py-2.5"><div className="flex items-center gap-3"><div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center"><Users size={12} className="text-blue-500" /></div><div><div className="font-body text-sm font-semibold text-blue-800 flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${isCard ? "bg-blue-500" : hasPaid ? "bg-green-500" : hasPending ? "bg-orange-400" : "bg-gray-300"}`}></span>{e.childName}{(() => { const fam = families.find(f => f.firestoreId === e.familyId); const child = (fam?.children || []).find((c: any) => c.id === e.childId); const age = calcAge(child?.birthDate); return age ? <span className="font-body text-[10px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">{age}</span> : null; })()}</div><div className="font-body text-xs text-slate-500">{e.familyName}{isCard ? " · carte" : hasPaid ? " · réglé" : hasPending ? " · en attente" : ""}</div></div></div><button onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId} className="flex items-center gap-1 font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-red-50">{unenrolling===e.childId ? <Loader2 size={12} className="animate-spin"/> : <Trash2 size={12}/>} Désinscrire</button></div>);
+            const enrolledFam = families.find(f => f.firestoreId === e.familyId);
+            const enrolledChild = (enrolledFam?.children || []).find((c: any) => c.id === e.childId);
+            const age = calcAge(enrolledChild?.birthDate);
+            return (
+              <div key={e.childId} className="flex items-center justify-between bg-sand rounded-lg px-4 py-2.5">
+                <div className="flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center"><Users size={12} className="text-blue-500" /></div>
+                  <div>
+                    <div className="font-body text-sm font-semibold text-blue-800 flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full ${isCard ? "bg-blue-500" : hasPaid ? "bg-green-500" : hasPending ? "bg-orange-400" : "bg-gray-300"}`}></span>
+                      <a href={`/admin/cavaliers?search=${encodeURIComponent(e.familyName || e.childName)}`} target="_blank" rel="noopener noreferrer"
+                        className="text-blue-800 hover:text-blue-500 hover:underline no-underline cursor-pointer" title="Ouvrir la fiche cavalier">
+                        {e.childName}
+                      </a>
+                      {age && <span className="font-body text-[10px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">{age}</span>}
+                    </div>
+                    <div className="font-body text-xs text-slate-500">
+                      <a href={`/admin/cavaliers?search=${encodeURIComponent(e.familyName)}`} target="_blank" rel="noopener noreferrer"
+                        className="text-slate-500 hover:text-blue-500 hover:underline no-underline cursor-pointer" title="Ouvrir la fiche famille">
+                        {e.familyName}
+                      </a>
+                      {isCard ? " · carte" : hasPaid ? " · réglé" : hasPending ? " · en attente" : ""}
+                    </div>
+                  </div>
+                </div>
+                <button onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId}
+                  className="flex items-center gap-1 font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-red-50">
+                  {unenrolling===e.childId ? <Loader2 size={12} className="animate-spin"/> : <Trash2 size={12}/>} Désinscrire
+                </button>
+              </div>
+            );
           })}</div>}
 
           {/* ── Liste d'attente ── */}
