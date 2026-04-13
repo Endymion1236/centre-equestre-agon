@@ -1065,6 +1065,7 @@ Réponds de façon concise et pratique, en français.`,
   return (
     <div className="flex flex-col gap-4">
       {/* Navigation semaine — style identique au planning */}
+      <div className="print-hide">
       <div className="flex items-center justify-between mb-4">
         <button onClick={prevWeek} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300">
           <ChevronLeft size={16}/>Préc.
@@ -1125,7 +1126,7 @@ Réponds de façon concise et pratique, en français.`,
       </div>
 
       {/* Jours travaillés cette semaine */}
-      <div className="flex items-center gap-3 bg-white rounded-xl px-4 py-2 border border-gray-100">
+      <div className="flex items-center gap-3 bg-white rounded-xl px-4 py-2 border border-gray-100 no-print">
         <span className="font-body text-xs font-semibold text-slate-500">Jours travaillés :</span>
         <div className="flex gap-1">
           {JOURS.slice(0, 6).map(j => {
@@ -1152,7 +1153,7 @@ Réponds de façon concise et pratique, en français.`,
       </div>
 
       {/* Résumé charge */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 no-print">
         {salaries.filter(s=>s.actif).map(sal => {
           const charge = chargeParSalarie[sal.id]||0;
           const heures = fmtDuree(charge);
@@ -1170,7 +1171,7 @@ Réponds de façon concise et pratique, en français.`,
       </div>
 
       {/* Toggle vue + actions modèles */}
-      <div className="flex gap-2 flex-wrap items-center">
+      <div className="flex gap-2 flex-wrap items-center no-print">
         {(["tableau","horaire","fiche"] as const).map(v => (
           <button key={v} onClick={()=>setView(v)}
             className={`px-4 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${view===v?"bg-blue-500 text-white":"bg-white text-slate-500 border border-gray-200"}`}>
@@ -1389,8 +1390,10 @@ Réponds de façon concise et pratique, en français.`,
         </div>
       )}
 
+      </div>{/* fin print-hide */}
+
       {/* Vue */}
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden p-4">
+      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden p-4 print-keep">
         {salaries.filter(s=>s.actif).length === 0 ? (
           <div className="text-center py-8 text-slate-400 font-body text-sm">Ajoutez des salariés dans l'onglet Équipe.</div>
         ) : view === "tableau" ? <TableauView/>
@@ -1398,10 +1401,66 @@ Réponds de façon concise et pratique, en français.`,
           : <FicheView/>}
       </div>
 
+      {/* En-tête visible uniquement à l'impression */}
+      <div className="print-header" style={{display:"none"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",borderBottom:"2px solid #1e3a5f",paddingBottom:8,marginBottom:12}}>
+          <div>
+            <div style={{fontFamily:"sans-serif",fontSize:18,fontWeight:800,color:"#1e3a5f"}}>
+              Planning équipe — {lundi.toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}
+            </div>
+            <div style={{fontFamily:"sans-serif",fontSize:12,color:"#64748b",marginTop:2}}>
+              Semaine {semaine.split("-W")[1]} · {formatDateCourte(lundi)} → {formatDateCourte(new Date(lundi.getTime()+5*86400000))}
+            </div>
+          </div>
+          <div style={{fontFamily:"sans-serif",fontSize:11,color:"#64748b",textAlign:"right"}}>
+            Centre Équestre<br/>d'Agon-Coutainville
+          </div>
+        </div>
+      </div>
+
       <style>{`
         @media print {
-          .no-print, nav, header, [data-sidebar], [data-header] { display: none !important; }
-          body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          /* Masquer TOUT sauf le planning */
+          nav, header, aside, footer,
+          [data-sidebar], [data-header],
+          .no-print { display: none !important; }
+          
+          /* Masquer les boutons, bandeaux, navigation, résumé charge */
+          .print-header ~ * button,
+          [class*="flex-wrap"][class*="gap-2"]:not(.print-keep),
+          [style*="borderRadius"]:not(.print-keep) { }
+
+          /* Le parent doit tout montrer */
+          body, body > div, main, [role="main"] {
+            background: white !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+
+          /* Afficher l'en-tête print */
+          .print-header { display: block !important; }
+
+          /* Le contenu du planning */
+          .print-keep {
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            padding: 0 !important;
+          }
+
+          /* Cacher la toolbar, bandeaux, résumé charge à l'impression */
+          .print-keep ~ div,
+          .print-hide { display: none !important; }
+
+          /* Taille texte tableaux */
+          table { font-size: 10px !important; }
+          td, th { padding: 3px 4px !important; }
+
+          /* Cacher les boutons checkbox et ✕ dans les cellules */
+          .print-keep button { display: none !important; }
+
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
           @page { size: A4 landscape; margin: 8mm; }
         }
       `}</style>

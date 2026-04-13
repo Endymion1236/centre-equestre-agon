@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
+import InlineSuiviPeda from "./InlineSuiviPeda";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { emailTemplates } from "@/lib/email-templates";
@@ -69,6 +70,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [search, setSearch] = useState(""); const [selFam, setSelFam] = useState(""); const [selChild, setSelChild] = useState("");
   const [enrolling, setEnrolling] = useState(false); const [justEnrolled, setJustEnrolled] = useState("");
   const [showPay, setShowPay] = useState(false); const [payMode, setPayMode] = useState("cb_terminal"); const [unenrolling, setUnenrolling] = useState("");
+  const [pedaChild, setPedaChild] = useState<{ childId: string; childName: string; familyId: string; activityTitle: string; date: string; horseName: string } | null>(null);
   const [avoirSolde, setAvoirSolde] = useState<Record<string, number>>({});
   const [freeEnroll, setFreeEnroll] = useState(false);
   const [freeReason, setFreeReason] = useState("Rattrapage");
@@ -1232,7 +1234,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             const enrolledChild = (enrolledFam?.children || []).find((c: any) => c.id === e.childId);
             const age = calcAge(enrolledChild?.birthDate);
             return (
-              <div key={e.childId} className="flex items-center justify-between bg-sand rounded-lg px-4 py-2.5">
+              <div key={e.childId}>
+              <div className="flex items-center justify-between bg-sand rounded-lg px-4 py-2.5">
                 <div className="flex items-center gap-3">
                   <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center"><Users size={12} className="text-blue-500" /></div>
                   <div>
@@ -1253,10 +1256,36 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     </div>
                   </div>
                 </div>
-                <button onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId}
-                  className="flex items-center gap-1 font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-red-50">
-                  {unenrolling===e.childId ? <Loader2 size={12} className="animate-spin"/> : <Trash2 size={12}/>} Désinscrire
-                </button>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => {
+                    setPedaChild(pedaChild?.childId === e.childId ? null : {
+                      childId: e.childId, childName: e.childName, familyId: e.familyId,
+                      activityTitle: creneau.activityTitle, date: creneau.date,
+                      horseName: (e as any).horseName || "",
+                    });
+                  }}
+                    className={`flex items-center gap-1 font-body text-xs ${pedaChild?.childId === e.childId ? "text-white bg-purple-500" : "text-purple-500 hover:text-purple-700 bg-transparent hover:bg-purple-50"} border-none cursor-pointer px-2 py-1 rounded`}
+                    title={`Suivi pédagogique de ${e.childName}`}>
+                    <span>📝</span> Suivi
+                  </button>
+                  <button onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId}
+                    className="flex items-center gap-1 font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-red-50">
+                    {unenrolling===e.childId ? <Loader2 size={12} className="animate-spin"/> : <Trash2 size={12}/>} Désinscrire
+                  </button>
+                </div>
+              </div>
+              {/* Suivi péda inline */}
+              {pedaChild?.childId === e.childId && (
+                <InlineSuiviPeda
+                  childId={e.childId}
+                  childName={e.childName}
+                  familyId={e.familyId}
+                  activityTitle={creneau.activityTitle}
+                  date={creneau.date}
+                  horseName={(e as any).horseName || ""}
+                  onClose={() => setPedaChild(null)}
+                />
+              )}
               </div>
             );
           })}</div>}
