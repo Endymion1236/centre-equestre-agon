@@ -92,6 +92,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [showNewFamily, setShowNewFamily] = useState(false);
   const [newFam, setNewFam] = useState({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
   const [newChild, setNewChild] = useState({ firstName: "", birthDate: "", galopLevel: "—" });
+  const [localFamilies, setLocalFamilies] = useState<(Family & { firestoreId: string })[]>([]);
+  const allFamilies = useMemo(() => [...families, ...localFamilies], [families, localFamilies]);
   const [creatingFamily, setCreatingFamily] = useState(false);
 
   // Plan de séance
@@ -216,7 +218,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     if (cr.price4days) prices[4] = cr.price4days;
     return prices[nbJours] || priceTTC;
   }, [isStage, priceTTC, creneau, stageDaysCount]);
-  const filteredFamilies = useMemo(() => { if (!search) return families; const terms = search.toLowerCase().trim().split(/\s+/); return families.filter(f => { const childText = (f.children || []).map((c: any) => `${c.firstName || ""} ${c.lastName || ""}`).join(" "); const searchable = `${f.parentName || ""} ${f.parentEmail || ""} ${childText}`.toLowerCase(); return terms.every(t => searchable.includes(t)); }); }, [families, search]);
+  const filteredFamilies = useMemo(() => { if (!search) return allFamilies; const terms = search.toLowerCase().trim().split(/\s+/); return allFamilies.filter(f => { const childText = (f.children || []).map((c: any) => `${c.firstName || ""} ${c.lastName || ""}`).join(" "); const searchable = `${f.parentName || ""} ${f.parentEmail || ""} ${childText}`.toLowerCase(); return terms.every(t => searchable.includes(t)); }); }, [allFamilies, search]);
 
   const acceptWaitlist = async (entry: any) => {
     if (spots <= 0) { alert("Toujours pas de place disponible."); return; }
@@ -314,7 +316,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     setPlanUrl(null);
     setPlanType(null);
   };
-  const fam = families.find(f => f.firestoreId === selFam); const children = fam?.children || [];
+  const fam = allFamilies.find(f => f.firestoreId === selFam); const children = fam?.children || [];
   const available = children.filter((c: any) => {
     if (enrolledIds.includes(c.id)) return false;
     // Vérifier si l'enfant est déjà inscrit sur un autre créneau qui chevauche cet horaire
@@ -1336,21 +1338,20 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         const emailData = emailTemplates.bienvenueNouvelleFamille({ parentName: newFam.parentName.trim() });
                         authFetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: newFam.parentEmail.trim(), ...emailData }) }).catch(() => {});
                       }
-                      // ── Inscrire directement le cavalier dans le créneau ──
-                      await onEnroll(
-                        creneau.id!,
-                        {
-                          childId,
-                          childName: newChild.firstName.trim(),
-                          familyId: famRef.id,
-                          familyName: newFam.parentName.trim(),
-                          enrolledAt: new Date().toISOString(),
-                        },
-                        undefined,
-                        { skipPayment: true, skipEmail: false }
-                      );
-                      panelToast(`✅ Famille ${newFam.parentName} créée et ${newChild.firstName} inscrit(e) !`, "success");
+                      // Ajouter la famille au state local pour qu'elle soit sélectionnable
+                      setLocalFamilies(prev => [...prev, {
+                        firestoreId: famRef.id,
+                        parentName: newFam.parentName.trim(),
+                        parentEmail: newFam.parentEmail.trim(),
+                        parentPhone: newFam.parentPhone.trim(),
+                        children,
+                      } as any]);
+                      // Sélectionner automatiquement la nouvelle famille + enfant
+                      setSelFam(famRef.id);
+                      setSelChild(childId);
                       setShowNewFamily(false);
+                      setSearch(newFam.parentName.trim());
+                      panelToast(`✅ Famille ${newFam.parentName} créée — sélectionnez le mode d'inscription`, "success");
                       setNewFam({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
                       setNewChild({ firstName: "", birthDate: "", galopLevel: "—" });
                     } catch (e: any) {
@@ -1360,7 +1361,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   }} disabled={creatingFamily || !newFam.parentName.trim() || !newChild.firstName.trim()}
                     className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-body text-sm font-semibold text-white bg-green-600 border-none cursor-pointer hover:bg-green-500 disabled:opacity-50">
                     {creatingFamily ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                    Créer et inscrire
+                    Créer la famille
                   </button>
                 </div>
               </div>
