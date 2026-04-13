@@ -452,6 +452,79 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   const [iaChecking, setIaChecking] = useState(false);
   const [iaResult, setIaResult] = useState<string | null>(null);
   const [showConflits, setShowConflits] = useState(true);
+  const [notifying, setNotifying] = useState(false);
+
+  // ── Notifier l'équipe par email ───────────────────────────────────────
+  const handleNotifyEquipe = async () => {
+    // Récupérer les emails des moniteurs depuis Firestore
+    setNotifying(true);
+    try {
+      const { getDocs: gd, collection: col } = await import("firebase/firestore");
+      const snap = await gd(col(db, "moniteurs"));
+      const moniteurs = snap.docs.map(d => ({ ...(d.data() as any), id: d.id }))
+        .filter((m: any) => m.status === "active" && m.email);
+
+      if (moniteurs.length === 0) {
+        toast("Aucun moniteur avec email trouvé dans Paramètres → Moniteurs", "error");
+        setNotifying(false);
+        return;
+      }
+
+      // Construire le résumé du planning par salarié
+      const activeSals = salaries.filter(s => s.actif);
+      const joursLabels = jourDates.slice(0, 6);
+      const planningHtml = activeSals.map(sal => {
+        const salTaches = taches.filter(t => t.salarieId === sal.id)
+          .sort((a, b) => JOURS.indexOf(a.jour) - JOURS.indexOf(b.jour) || a.heureDebut.localeCompare(b.heureDebut));
+        if (salTaches.length === 0) return "";
+        const lignes = joursLabels.map(({ jour }) => {
+          const dayT = salTaches.filter(t => t.jour === jour);
+          if (dayT.length === 0) return `<span style="color:#ccc">—</span>`;
+          return dayT.map(t => `${t.heureDebut} ${t.tacheLabel}`).join(" · ");
+        });
+        return `<tr><td style="padding:4px 8px;font-weight:700;color:#1e3a5f;vertical-align:top">${sal.nom}</td>${lignes.map(l => `<td style="padding:4px 6px;font-size:11px;color:#475569">${l}</td>`).join("")}</tr>`;
+      }).filter(Boolean).join("");
+
+      const jourHeaders = joursLabels.map(({ jour, date }) =>
+        `<th style="padding:4px 6px;font-size:11px;color:#475569;text-align:left">${JOURS_LABELS[jour].slice(0, 3)} ${date.getDate()}</th>`
+      ).join("");
+
+      const html = `<div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:20px;">
+        <h2 style="color:#1e3a5f;margin-bottom:4px;">📋 Planning équipe — Semaine ${semaine.split("-W")[1]}</h2>
+        <p style="color:#64748b;font-size:13px;margin-top:0;">${formatDateCourte(lundi)} → ${formatDateCourte(new Date(lundi.getTime() + 5 * 86400000))}</p>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:12px;">
+          <thead><tr style="background:#f1f5f9"><th style="padding:4px 8px;text-align:left">Salarié</th>${jourHeaders}</tr></thead>
+          <tbody>${planningHtml}</tbody>
+        </table>
+        <p style="color:#94a3b8;font-size:11px;margin-top:16px;">Ce planning peut être modifié. Connectez-vous à l'espace admin pour le consulter en détail.</p>
+      </div>`;
+
+      // Envoyer à chaque moniteur qui a un email
+      let sent = 0;
+      for (const mon of moniteurs) {
+        try {
+          await authFetch("/api/send-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              to: mon.email,
+              subject: `📋 Planning semaine ${semaine.split("-W")[1]} — ${formatDateCourte(lundi)} → ${formatDateCourte(new Date(lundi.getTime() + 5 * 86400000))}`,
+              html,
+            }),
+          });
+          sent++;
+        } catch (e) {
+          console.error(`Erreur envoi à ${mon.name}:`, e);
+        }
+      }
+
+      toast(`Planning envoyé à ${sent} moniteur${sent > 1 ? "s" : ""} par email`, "success");
+    } catch (e: any) {
+      console.error("Erreur notification:", e);
+      toast(`Erreur : ${e.message || "Échec envoi"}`, "error");
+    }
+    setNotifying(false);
+  };
 
   const handleIACheck = async () => {
     setIaChecking(true);
@@ -1172,9 +1245,18 @@ Réponds de façon concise et pratique, en français.`,
             </div>
           )}
         </div>
+        {/* Bouton Imprimer / PDF */}
+        <button onClick={() => window.print()} disabled={taches.length === 0}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer border border-gray-200 bg-white text-slate-600 hover:bg-gray-50 disabled:opacity-40">
+          <Printer size={13}/> Imprimer
+        </button>
+        {/* Bouton Notifier l'équipe */}
+        <button onClick={handleNotifyEquipe} disabled={notifying || taches.length === 0}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer border border-green-200 bg-white text-green-700 hover:bg-green-50 disabled:opacity-40">
+          {notifying ? <div className="w-3 h-3 border-2 border-green-300 border-t-green-600 rounded-full animate-spin" /> : <span>📧</span>}
+          {notifying ? "Envoi…" : "Notifier l'équipe"}
+        </button>
       </div>
-
-      {/* Bandeau conflits horaires */}
       {conflits.length > 0 && (
         <div style={{background: showConflits ? "#fffbeb" : "#f8fafc", border: showConflits ? "1px solid #fde68a" : "1px solid #e2e8f0", borderRadius:12, padding: showConflits ? "12px 16px" : "8px 16px", display:"flex", alignItems:"center", gap:10}}>
           <span style={{fontSize: showConflits ? 18 : 14, flexShrink:0}}>{showConflits ? "🔴" : "⚪"}</span>
@@ -1277,6 +1359,14 @@ Réponds de façon concise et pratique, en français.`,
           : view === "horaire" ? <HoraireView/>
           : <FicheView/>}
       </div>
+
+      <style>{`
+        @media print {
+          .no-print, nav, header, [data-sidebar], [data-header] { display: none !important; }
+          body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          @page { size: A4 landscape; margin: 8mm; }
+        }
+      `}</style>
     </div>
   );
 }
