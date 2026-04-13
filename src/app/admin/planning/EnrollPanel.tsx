@@ -3,7 +3,6 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
-import InlineSuiviPeda from "./InlineSuiviPeda";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { emailTemplates } from "@/lib/email-templates";
@@ -70,7 +69,6 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [search, setSearch] = useState(""); const [selFam, setSelFam] = useState(""); const [selChild, setSelChild] = useState("");
   const [enrolling, setEnrolling] = useState(false); const [justEnrolled, setJustEnrolled] = useState("");
   const [showPay, setShowPay] = useState(false); const [payMode, setPayMode] = useState("cb_terminal"); const [unenrolling, setUnenrolling] = useState("");
-  const [pedaChild, setPedaChild] = useState<{ childId: string; childName: string; familyId: string; activityTitle: string; date: string; horseName: string } | null>(null);
   const [avoirSolde, setAvoirSolde] = useState<Record<string, number>>({});
   const [freeEnroll, setFreeEnroll] = useState(false);
   const [freeReason, setFreeReason] = useState("Rattrapage");
@@ -1237,8 +1235,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             const statusLabel = isCard ? "carte" : hasPaid ? "réglé" : hasPending ? "en attente" : "";
             const statusColor = isCard ? "bg-blue-500" : hasPaid ? "bg-green-500" : hasPending ? "bg-orange-400" : "bg-gray-300";
             return (
-              <div key={e.childId}>
-              <div className="flex items-center justify-between bg-sand rounded-lg px-3 py-2">
+              <div key={e.childId} className="flex items-center justify-between bg-sand rounded-lg px-3 py-2">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColor}`}></span>
                   <a href={`/admin/cavaliers?search=${encodeURIComponent(e.familyName || e.childName)}`} target="_blank" rel="noopener noreferrer"
@@ -1250,34 +1247,16 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   {statusLabel && <span className={`font-body text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${hasPaid ? "text-green-700 bg-green-50" : "text-orange-600 bg-orange-50"}`}>{statusLabel}</span>}
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  <button onClick={() => {
-                    setPedaChild(pedaChild?.childId === e.childId ? null : {
-                      childId: e.childId, childName: e.childName, familyId: e.familyId,
-                      activityTitle: creneau.activityTitle, date: creneau.date,
-                      horseName: (e as any).horseName || "",
-                    });
-                  }}
-                    className={`flex items-center gap-1 font-body text-xs ${pedaChild?.childId === e.childId ? "text-white bg-purple-500" : "text-purple-500 hover:text-purple-700 bg-transparent hover:bg-purple-50"} border-none cursor-pointer px-2 py-1 rounded`}
-                    title={`Suivi pédagogique de ${e.childName}`}>
-                    <span>📝</span>
-                  </button>
+                  <a href={`/admin/cavaliers?search=${encodeURIComponent(e.childName)}&tab=progression`} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 font-body text-xs text-purple-500 hover:text-purple-700 bg-transparent no-underline px-2 py-1 rounded hover:bg-purple-50"
+                    title={`Progression de ${e.childName}`}>
+                    <span>📊</span>
+                  </a>
                   <button onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId}
                     className="flex items-center gap-1 font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-red-50 flex-shrink-0">
                     {unenrolling===e.childId ? <Loader2 size={12} className="animate-spin"/> : <Trash2 size={12}/>}
                   </button>
                 </div>
-              </div>
-              {pedaChild?.childId === e.childId && (
-                <InlineSuiviPeda
-                  childId={e.childId}
-                  childName={e.childName}
-                  familyId={e.familyId}
-                  activityTitle={creneau.activityTitle}
-                  date={creneau.date}
-                  horseName={(e as any).horseName || ""}
-                  onClose={() => setPedaChild(null)}
-                />
-              )}
               </div>
             );
           })}</div>}
