@@ -105,7 +105,7 @@ export default function ManagementPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 print-hide">
         <div>
           <h1 className="font-display text-2xl font-bold text-blue-800">Management</h1>
           <p className="font-body text-xs text-slate-500">Planning équipe · Répartition des tâches · Agent IA</p>
@@ -113,7 +113,7 @@ export default function ManagementPage() {
       </div>
 
       {/* Onglets */}
-      <div className="flex gap-2 mb-6 flex-wrap">
+      <div className="flex gap-2 mb-6 flex-wrap print-hide">
         {TABS.map(({id, label, icon: Icon}) => (
           <button key={id} onClick={()=>setTab(id)}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl border font-body text-sm font-medium cursor-pointer transition-all

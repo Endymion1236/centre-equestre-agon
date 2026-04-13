@@ -1449,22 +1449,41 @@ Réponds de façon concise et pratique, en français.`,
 
       <style>{`
         @media print {
-          /* Masquer TOUT sauf le planning */
-          nav, header, aside, footer,
+          /* Masquer la sidebar, header mobile, navigation admin */
+          aside, nav, header,
           [data-sidebar], [data-header],
-          .no-print { display: none !important; }
-          
-          /* Masquer les boutons, bandeaux, navigation, résumé charge */
-          .print-header ~ * button,
-          [class*="flex-wrap"][class*="gap-2"]:not(.print-keep),
-          [style*="borderRadius"]:not(.print-keep) { }
+          .no-print, .print-hide,
+          .md\\:hidden, .sticky {
+            display: none !important;
+          }
 
-          /* Le parent doit tout montrer */
-          body, body > div, main, [role="main"] {
-            background: white !important;
+          /* Masquer la sidebar du layout admin (flex enfant à gauche) */
+          .min-h-screen.bg-cream.flex > :first-child {
+            display: none !important;
+          }
+
+          /* Le contenu principal prend toute la largeur */
+          .min-h-screen.bg-cream.flex {
+            display: block !important;
+          }
+          .min-h-screen.bg-cream.flex > .flex-1 {
+            width: 100% !important;
+            max-width: 100% !important;
             padding: 0 !important;
             margin: 0 !important;
           }
+
+          /* Masquer le titre "Management" et les onglets de la page */
+          h1, .flex.flex-col.sm\\:flex-row,
+          .flex.flex-wrap.gap-2:not(.print-keep) {
+            display: none !important;
+          }
+
+          /* Fond blanc partout */
+          body, body > div, main, [role="main"], div {
+            background: white !important;
+          }
+          body { padding: 0 !important; margin: 0 !important; }
 
           /* Afficher l'en-tête print */
           .print-header { display: block !important; }
@@ -1477,16 +1496,12 @@ Réponds de façon concise et pratique, en français.`,
             padding: 0 !important;
           }
 
-          /* Cacher la toolbar, bandeaux, résumé charge à l'impression */
-          .print-keep ~ div,
-          .print-hide { display: none !important; }
-
-          /* Taille texte tableaux */
-          table { font-size: 10px !important; }
-          td, th { padding: 3px 4px !important; }
-
           /* Cacher les boutons checkbox et ✕ dans les cellules */
           .print-keep button { display: none !important; }
+
+          /* Taille texte */
+          table { font-size: 10px !important; }
+          td, th { padding: 3px 4px !important; }
 
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
