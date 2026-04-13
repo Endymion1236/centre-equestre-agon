@@ -1247,7 +1247,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   {statusLabel && <span className={`font-body text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${hasPaid ? "text-green-700 bg-green-50" : "text-orange-600 bg-orange-50"}`}>{statusLabel}</span>}
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  <a href={`/admin/cavaliers?search=${encodeURIComponent(e.childName)}&tab=progression`} target="_blank" rel="noopener noreferrer"
+                  <a href={`/admin/cavaliers?search=${encodeURIComponent(e.familyName || e.childName)}&showProgression=${e.childId}`} target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-1 font-body text-xs text-purple-500 hover:text-purple-700 bg-transparent no-underline px-2 py-1 rounded hover:bg-purple-50"
                     title={`Progression de ${e.childName}`}>
                     <span>📊</span>

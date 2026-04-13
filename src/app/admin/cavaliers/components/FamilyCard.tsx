@@ -47,14 +47,17 @@ interface Props {
   allCreneaux: any[];
   onRefresh: () => void;
   autoOpenProgressionChildName?: string;
+  initialProgressionChildId?: string;
 }
 
 export default function FamilyCard({
   family, families, allReservations, allPayments, allAvoirs,
   allCartes, allMandats, allFidelite, allCreneaux, onRefresh,
-  autoOpenProgressionChildName,
+  autoOpenProgressionChildName, initialProgressionChildId,
 }: Props) {
-  const [isExpanded, setIsExpanded] = useState(!!autoOpenProgressionChildName);
+  // Auto-expand si cette famille contient l'enfant ciblé par ID
+  const hasTargetChild = initialProgressionChildId && (family.children || []).some((c: any) => c.id === initialProgressionChildId);
+  const [isExpanded, setIsExpanded] = useState(!!autoOpenProgressionChildName || !!hasTargetChild);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
@@ -64,6 +67,9 @@ export default function FamilyCard({
   const [emailModal, setEmailModal] = useState(false);
   const [showEnroll, setShowEnroll] = useState<{ childId: string; childName: string } | null>(null);
   const [showProgression, setShowProgression] = useState<string | null>(() => {
+    // Priorité 1: par childId exact
+    if (hasTargetChild) return initialProgressionChildId!;
+    // Priorité 2: par nom (ancien mécanisme)
     if (!autoOpenProgressionChildName) return null;
     const child = (family.children || []).find((c: any) =>
       c.firstName?.toLowerCase().includes(autoOpenProgressionChildName.toLowerCase()) ||

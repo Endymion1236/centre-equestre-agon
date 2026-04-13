@@ -183,6 +183,7 @@ export default function CavaliersPage() {
               allCreneaux={allCreneaux}
               onRefresh={fetchFamilies}
               autoOpenProgressionChildName={tabParam === "progression" ? search : undefined}
+              initialProgressionChildId={searchParams.get("showProgression") || undefined}
             />
           ))}
         </div>
