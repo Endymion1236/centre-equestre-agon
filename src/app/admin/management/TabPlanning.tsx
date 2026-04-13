@@ -456,7 +456,6 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
 
   // ── Notifier l'équipe par email ───────────────────────────────────────
   const handleNotifyEquipe = async () => {
-    // Récupérer les emails des moniteurs depuis Firestore
     setNotifying(true);
     try {
       const snap = await getDocs(collection(db, "moniteurs"));
@@ -469,45 +468,100 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
         return;
       }
 
-      // Construire le résumé du planning par salarié
       const activeSals = salaries.filter(s => s.actif);
       const joursLabels = jourDates.slice(0, 6);
-      const planningHtml = activeSals.map(sal => {
-        const salTaches = taches.filter(t => t.salarieId === sal.id)
-          .sort((a, b) => JOURS.indexOf(a.jour) - JOURS.indexOf(b.jour) || a.heureDebut.localeCompare(b.heureDebut));
-        if (salTaches.length === 0) return "";
-        const lignes = joursLabels.map(({ jour }) => {
-          const dayT = salTaches.filter(t => t.jour === jour);
-          if (dayT.length === 0) return `<span style="color:#ccc">—</span>`;
-          return dayT.map(t => `${t.heureDebut} ${t.tacheLabel}`).join(" · ");
-        });
-        return `<tr><td style="padding:4px 8px;font-weight:700;color:#1e3a5f;vertical-align:top">${sal.nom}</td>${lignes.map(l => `<td style="padding:4px 6px;font-size:11px;color:#475569">${l}</td>`).join("")}</tr>`;
-      }).filter(Boolean).join("");
+      const semaineNum = semaine.split("-W")[1];
+      const dateDebut = formatDateCourte(lundi);
+      const dateFin = formatDateCourte(new Date(lundi.getTime() + 5 * 86400000));
+      const siteUrl = "https://centre-equestre-agon.vercel.app";
 
-      const jourHeaders = joursLabels.map(({ jour, date }) =>
-        `<th style="padding:4px 6px;font-size:11px;color:#475569;text-align:left">${JOURS_LABELS[jour].slice(0, 3)} ${date.getDate()}</th>`
-      ).join("");
-
-      const html = `<div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:20px;">
-        <h2 style="color:#1e3a5f;margin-bottom:4px;">📋 Planning équipe — Semaine ${semaine.split("-W")[1]}</h2>
-        <p style="color:#64748b;font-size:13px;margin-top:0;">${formatDateCourte(lundi)} → ${formatDateCourte(new Date(lundi.getTime() + 5 * 86400000))}</p>
-        <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:12px;">
-          <thead><tr style="background:#f1f5f9"><th style="padding:4px 8px;text-align:left">Salarié</th>${jourHeaders}</tr></thead>
-          <tbody>${planningHtml}</tbody>
-        </table>
-        <p style="color:#94a3b8;font-size:11px;margin-top:16px;">Ce planning peut être modifié. Connectez-vous à l'espace admin pour le consulter en détail.</p>
-      </div>`;
-
-      // Envoyer à chaque moniteur qui a un email
       let sent = 0;
       for (const mon of moniteurs) {
+        // Trouver le salarié correspondant
+        const sal = activeSals.find(s => s.nom.toLowerCase().trim() === (mon.name || "").toLowerCase().trim());
+        const salTaches = sal
+          ? taches.filter(t => t.salarieId === sal.id).sort((a, b) => JOURS.indexOf(a.jour) - JOURS.indexOf(b.jour) || a.heureDebut.localeCompare(b.heureDebut))
+          : [];
+        const totalCharge = salTaches.filter(t => t.categorie !== "pause").reduce((s, t) => s + t.dureeMinutes, 0);
+
+        // Tableau personnel du moniteur
+        const jourRows = joursLabels.map(({ jour, date }) => {
+          const dayT = salTaches.filter(t => t.jour === jour);
+          const jourLabel = `${JOURS_LABELS[jour]} ${date.getDate()}`;
+          if (dayT.length === 0) {
+            return `<tr><td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#94a3b8;font-size:13px;">${jourLabel}</td><td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;color:#d1d5db;font-size:13px;">—</td><td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;color:#d1d5db;text-align:center;font-size:13px;">—</td></tr>`;
+          }
+          const debut = dayT[0].heureDebut;
+          const lastT = dayT[dayT.length - 1];
+          const fin = minToHeure(heureToMin(lastT.heureDebut) + lastT.dureeMinutes);
+          const dayCharge = dayT.filter(t => t.categorie !== "pause").reduce((s, t) => s + t.dureeMinutes, 0);
+          const tachesHtml = dayT.map(t => {
+            const color = (t as any).color || getCat(t.categorie)?.color || "#64748b";
+            return `<span style="display:inline-block;background:${color}15;color:${color};border:1px solid ${color}30;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;margin:1px 2px;">${t.heureDebut} ${t.tacheLabel}</span>`;
+          }).join(" ");
+          return `<tr><td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;font-weight:700;color:#1e3a5f;font-size:13px;white-space:nowrap;vertical-align:top;">${jourLabel}<br><span style="font-size:11px;font-weight:400;color:#94a3b8;">${debut}→${fin}</span></td><td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;vertical-align:top;">${tachesHtml}</td><td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:center;font-weight:700;color:#1e3a5f;font-size:13px;vertical-align:top;">${fmtDuree(dayCharge)}</td></tr>`;
+        }).join("");
+
+        const html = `
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;">
+  <!-- Header -->
+  <div style="background:linear-gradient(135deg,#1e3a5f,#2050A0);padding:24px 28px;border-radius:12px 12px 0 0;">
+    <div style="font-size:11px;color:rgba(255,255,255,0.7);margin-bottom:4px;">🐴 Centre Équestre d'Agon-Coutainville</div>
+    <div style="font-size:22px;font-weight:800;color:#ffffff;">Planning Semaine ${semaineNum}</div>
+    <div style="font-size:13px;color:rgba(255,255,255,0.8);margin-top:4px;">${dateDebut} → ${dateFin}</div>
+  </div>
+  
+  <!-- Salutation -->
+  <div style="padding:20px 28px 8px;">
+    <div style="font-size:15px;color:#1e293b;">Bonjour <strong>${mon.name}</strong>,</div>
+    <div style="font-size:13px;color:#64748b;margin-top:6px;">Voici votre planning pour la semaine. ${totalCharge > 0 ? `<strong style="color:#1e3a5f;">${fmtDuree(totalCharge)}</strong> de travail prévues.` : "Aucune tâche assignée cette semaine."}</div>
+  </div>
+
+  <!-- Tableau -->
+  ${totalCharge > 0 ? `
+  <div style="padding:12px 28px 20px;">
+    <table style="width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;">
+      <thead>
+        <tr style="background:#f1f5f9;">
+          <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Jour</th>
+          <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Tâches</th>
+          <th style="padding:8px 12px;text-align:center;font-size:11px;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Durée</th>
+        </tr>
+      </thead>
+      <tbody>${jourRows}</tbody>
+      <tfoot>
+        <tr style="background:#f8fafc;">
+          <td colspan="2" style="padding:10px 12px;text-align:right;font-weight:800;color:#1e3a5f;font-size:13px;border-top:2px solid #e2e8f0;">Total semaine</td>
+          <td style="padding:10px 12px;text-align:center;font-weight:800;color:#1e3a5f;font-size:15px;border-top:2px solid #e2e8f0;">${fmtDuree(totalCharge)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  ` : ""}
+
+  <!-- Bouton -->
+  <div style="padding:0 28px 24px;text-align:center;">
+    <a href="${siteUrl}/admin/management" style="display:inline-block;background:#2050A0;color:#ffffff;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:700;text-decoration:none;">
+      📋 Voir le planning complet
+    </a>
+  </div>
+
+  <!-- Footer -->
+  <div style="background:#f8fafc;padding:16px 28px;border-radius:0 0 12px 12px;border-top:1px solid #e2e8f0;">
+    <div style="font-size:11px;color:#94a3b8;text-align:center;">
+      Ce planning peut être modifié. En cas de question, contactez Nicolas.
+      <br>Centre Équestre d'Agon-Coutainville · <a href="${siteUrl}" style="color:#2050A0;text-decoration:none;">centreequestreagon.com</a>
+    </div>
+  </div>
+</div>`;
+
         try {
           await authFetch("/api/send-email", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               to: mon.email,
-              subject: `📋 Planning semaine ${semaine.split("-W")[1]} — ${formatDateCourte(lundi)} → ${formatDateCourte(new Date(lundi.getTime() + 5 * 86400000))}`,
+              subject: `📋 Votre planning semaine ${semaineNum} — ${dateDebut} → ${dateFin}`,
               html,
             }),
           });
