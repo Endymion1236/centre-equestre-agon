@@ -484,55 +484,69 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
           : [];
         const totalCharge = salTaches.filter(t => t.categorie !== "pause").reduce((s, t) => s + t.dureeMinutes, 0);
 
-        // Tableau personnel du moniteur
-        const jourRows = joursLabels.map(({ jour, date }) => {
+        // Construire le tableau style management (jours en colonnes, tâches en cartes)
+        const jourHeaders = joursLabels.map(({ jour, date }) =>
+          `<th style="padding:6px 4px;text-align:center;font-size:10px;font-weight:700;color:#475569;background:#f1f5f9;border-bottom:2px solid #e2e8f0;width:${Math.floor(85/6)}%;">${JOURS_LABELS[jour].slice(0,3)} ${date.getDate()}</th>`
+        ).join("");
+
+        const jourCells = joursLabels.map(({ jour }) => {
           const dayT = salTaches.filter(t => t.jour === jour);
-          const jourLabel = `${JOURS_LABELS[jour]} ${date.getDate()}`;
           if (dayT.length === 0) {
-            return `<tr><td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#94a3b8;font-size:13px;">${jourLabel}</td><td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;color:#d1d5db;font-size:13px;">—</td><td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;color:#d1d5db;text-align:center;font-size:13px;">—</td></tr>`;
+            return `<td style="padding:4px;border-bottom:1px solid #f1f5f9;vertical-align:top;text-align:center;"><span style="color:#d1d5db;font-size:11px;">—</span></td>`;
           }
-          const debut = dayT[0].heureDebut;
-          const lastT = dayT[dayT.length - 1];
-          const fin = minToHeure(heureToMin(lastT.heureDebut) + lastT.dureeMinutes);
-          const dayCharge = dayT.filter(t => t.categorie !== "pause").reduce((s, t) => s + t.dureeMinutes, 0);
-          const tachesHtml = dayT.map(t => {
+          const cards = dayT.map(t => {
             const color = (t as any).color || getCat(t.categorie)?.color || "#64748b";
-            return `<span style="display:inline-block;background:${color}15;color:${color};border:1px solid ${color}30;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;margin:1px 2px;">${t.heureDebut} ${t.tacheLabel}</span>`;
-          }).join(" ");
-          return `<tr><td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;font-weight:700;color:#1e3a5f;font-size:13px;white-space:nowrap;vertical-align:top;">${jourLabel}<br><span style="font-size:11px;font-weight:400;color:#94a3b8;">${debut}→${fin}</span></td><td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;vertical-align:top;">${tachesHtml}</td><td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:center;font-weight:700;color:#1e3a5f;font-size:13px;vertical-align:top;">${fmtDuree(dayCharge)}</td></tr>`;
+            const cat = getCat(t.categorie);
+            return `<div style="background:${color}12;border:1px solid ${color}25;border-radius:6px;padding:4px 6px;margin-bottom:3px;">
+              <div style="font-size:10px;font-weight:600;color:${color};line-height:1.3;">${t.tacheLabel}</div>
+              <div style="font-size:9px;color:#94a3b8;">${t.heureDebut}→${minToHeure(heureToMin(t.heureDebut) + t.dureeMinutes)}</div>
+            </div>`;
+          }).join("");
+          return `<td style="padding:3px;border-bottom:1px solid #f1f5f9;vertical-align:top;">${cards}</td>`;
+        }).join("");
+
+        // Résumé charge par jour
+        const chargeCells = joursLabels.map(({ jour }) => {
+          const dayT = salTaches.filter(t => t.jour === jour && t.categorie !== "pause");
+          const charge = dayT.reduce((s, t) => s + t.dureeMinutes, 0);
+          return `<td style="padding:4px;text-align:center;font-size:9px;font-weight:700;color:${charge > 0 ? "#1e3a5f" : "#d1d5db"};border-top:1px solid #e2e8f0;">${charge > 0 ? fmtDuree(charge) : "—"}</td>`;
         }).join("");
 
         const html = `
-<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;">
+<div style="font-family:Arial,sans-serif;max-width:650px;margin:0 auto;background:#ffffff;">
   <!-- Header -->
-  <div style="background:linear-gradient(135deg,#1e3a5f,#2050A0);padding:24px 28px;border-radius:12px 12px 0 0;">
-    <div style="font-size:11px;color:rgba(255,255,255,0.7);margin-bottom:4px;">🐴 Centre Équestre d'Agon-Coutainville</div>
-    <div style="font-size:22px;font-weight:800;color:#ffffff;">Planning Semaine ${semaineNum}</div>
-    <div style="font-size:13px;color:rgba(255,255,255,0.8);margin-top:4px;">${dateDebut} → ${dateFin}</div>
+  <div style="background:linear-gradient(135deg,#1e3a5f,#2050A0);padding:20px 24px;border-radius:12px 12px 0 0;">
+    <div style="font-size:10px;color:rgba(255,255,255,0.6);margin-bottom:2px;">🐴 Centre Équestre d'Agon-Coutainville</div>
+    <div style="font-size:20px;font-weight:800;color:#ffffff;">Planning Semaine ${semaineNum}</div>
+    <div style="font-size:12px;color:rgba(255,255,255,0.8);margin-top:3px;">${dateDebut} → ${dateFin}</div>
   </div>
   
   <!-- Salutation -->
-  <div style="padding:20px 28px 8px;">
-    <div style="font-size:15px;color:#1e293b;">Bonjour <strong>${mon.name}</strong>,</div>
-    <div style="font-size:13px;color:#64748b;margin-top:6px;">Voici votre planning pour la semaine. ${totalCharge > 0 ? `<strong style="color:#1e3a5f;">${fmtDuree(totalCharge)}</strong> de travail prévues.` : "Aucune tâche assignée cette semaine."}</div>
+  <div style="padding:16px 24px 10px;">
+    <div style="font-size:14px;color:#1e293b;">Bonjour <strong>${mon.name}</strong>,</div>
+    <div style="font-size:12px;color:#64748b;margin-top:4px;">
+      ${totalCharge > 0 ? `Votre semaine : <strong style="color:#1e3a5f;">${fmtDuree(totalCharge)}</strong> de travail.` : "Aucune tâche assignée cette semaine."}
+    </div>
   </div>
 
-  <!-- Tableau -->
+  <!-- Tableau style management -->
   ${totalCharge > 0 ? `
-  <div style="padding:12px 28px 20px;">
-    <table style="width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;">
+  <div style="padding:8px 24px 16px;">
+    <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
       <thead>
-        <tr style="background:#f1f5f9;">
-          <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Jour</th>
-          <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Tâches</th>
-          <th style="padding:8px 12px;text-align:center;font-size:11px;font-weight:700;color:#475569;border-bottom:2px solid #e2e8f0;">Durée</th>
+        <tr>
+          ${jourHeaders}
         </tr>
       </thead>
-      <tbody>${jourRows}</tbody>
+      <tbody>
+        <tr>${jourCells}</tr>
+      </tbody>
       <tfoot>
-        <tr style="background:#f8fafc;">
-          <td colspan="2" style="padding:10px 12px;text-align:right;font-weight:800;color:#1e3a5f;font-size:13px;border-top:2px solid #e2e8f0;">Total semaine</td>
-          <td style="padding:10px 12px;text-align:center;font-weight:800;color:#1e3a5f;font-size:15px;border-top:2px solid #e2e8f0;">${fmtDuree(totalCharge)}</td>
+        <tr style="background:#f8fafc;">${chargeCells}</tr>
+        <tr style="background:#f1f5f9;">
+          <td colspan="${joursLabels.length}" style="padding:8px 12px;text-align:center;font-weight:800;color:#1e3a5f;font-size:13px;border-top:2px solid #e2e8f0;">
+            Total : ${fmtDuree(totalCharge)}
+          </td>
         </tr>
       </tfoot>
     </table>
@@ -540,15 +554,15 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   ` : ""}
 
   <!-- Bouton -->
-  <div style="padding:0 28px 24px;text-align:center;">
-    <a href="${siteUrl}/espace-moniteur/planning" style="display:inline-block;background:#2050A0;color:#ffffff;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:700;text-decoration:none;">
+  <div style="padding:4px 24px 20px;text-align:center;">
+    <a href="${siteUrl}/espace-moniteur/planning" style="display:inline-block;background:#2050A0;color:#ffffff;padding:10px 28px;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;">
       📋 Voir mon planning
     </a>
   </div>
 
   <!-- Footer -->
-  <div style="background:#f8fafc;padding:16px 28px;border-radius:0 0 12px 12px;border-top:1px solid #e2e8f0;">
-    <div style="font-size:11px;color:#94a3b8;text-align:center;">
+  <div style="background:#f8fafc;padding:12px 24px;border-radius:0 0 12px 12px;border-top:1px solid #e2e8f0;">
+    <div style="font-size:10px;color:#94a3b8;text-align:center;">
       Ce planning peut être modifié. En cas de question, contactez Nicolas.
       <br>Centre Équestre d'Agon-Coutainville · <a href="${siteUrl}" style="color:#2050A0;text-decoration:none;">centreequestreagon.com</a>
     </div>
