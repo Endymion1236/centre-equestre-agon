@@ -31,6 +31,7 @@ export default function CavaliersPage() {
   // ── UI ────────────────────────────────────────────────────────────────────
   const searchParams = useSearchParams();
   const [search, setSearch] = useState(searchParams.get("search") || "");
+  const tabParam = searchParams.get("tab");
   const [filterTag, setFilterTag] = useState<string>("");
   const [showCreateFamily, setShowCreateFamily] = useState(false);
   const { toast } = useToast();
@@ -181,6 +182,7 @@ export default function CavaliersPage() {
               allFidelite={allFidelite}
               allCreneaux={allCreneaux}
               onRefresh={fetchFamilies}
+              autoOpenProgressionChildName={tabParam === "progression" ? search : undefined}
             />
           ))}
         </div>

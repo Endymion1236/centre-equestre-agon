@@ -46,13 +46,15 @@ interface Props {
   allFidelite: any[];
   allCreneaux: any[];
   onRefresh: () => void;
+  autoOpenProgressionChildName?: string;
 }
 
 export default function FamilyCard({
   family, families, allReservations, allPayments, allAvoirs,
   allCartes, allMandats, allFidelite, allCreneaux, onRefresh,
+  autoOpenProgressionChildName,
 }: Props) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(!!autoOpenProgressionChildName);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
@@ -61,7 +63,14 @@ export default function FamilyCard({
   const [showLinkChildren, setShowLinkChildren] = useState(false);
   const [emailModal, setEmailModal] = useState(false);
   const [showEnroll, setShowEnroll] = useState<{ childId: string; childName: string } | null>(null);
-  const [showProgression, setShowProgression] = useState<string | null>(null); // childId
+  const [showProgression, setShowProgression] = useState<string | null>(() => {
+    if (!autoOpenProgressionChildName) return null;
+    const child = (family.children || []).find((c: any) =>
+      c.firstName?.toLowerCase().includes(autoOpenProgressionChildName.toLowerCase()) ||
+      `${c.firstName} ${c.lastName || ""}`.toLowerCase().includes(autoOpenProgressionChildName.toLowerCase())
+    );
+    return child?.id || null;
+  });
   // ── Édition famille ────────────────────────────────────────────────────────
   const [editingFamily, setEditingFamily] = useState(false);
   const [editForm, setEditForm] = useState({ parentName: "", lastName: "", firstName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
