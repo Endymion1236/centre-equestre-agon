@@ -280,7 +280,9 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
 
   // Calcul charge par salarié (minutes totales / semaine)
   // Charge par salarié = temps effectif (début première tâche → fin dernière tâche) - pauses
-  const joursActifs = JOURS.slice(0, 6) as JourSemaine[];
+  const [inclureDimanche, setInclureDimanche] = useState(false);
+  const nbJours = inclureDimanche ? 7 : 6;
+  const joursActifs = JOURS.slice(0, nbJours) as JourSemaine[];
   const chargeParSalarie = useMemo(() => {
     const map: Record<string, number> = {};
     const salIds = [...new Set(taches.map(t => t.salarieId))];
@@ -298,7 +300,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
 
   const handleImportCreneaux = async () => {
     // Calculer les dates de la semaine
-    const dates = jourDates.slice(0, 6).map(({ jour, date }) => ({
+    const dates = jourDates.slice(0, nbJours).map(({ jour, date }) => ({
       jour,
       dateStr: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,
     }));
@@ -469,7 +471,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       }
 
       const activeSals = salaries.filter(s => s.actif);
-      const joursLabels = jourDates.slice(0, 6);
+      const joursLabels = jourDates.slice(0, nbJours);
       const semaineNum = semaine.split("-W")[1];
       const dateDebut = formatDateCourte(lundi);
       const dateFin = formatDateCourte(new Date(lundi.getTime() + 5 * 86400000));
@@ -657,14 +659,14 @@ Réponds de façon concise et pratique, en français.`,
       <table style={{width:"100%", borderCollapse:"collapse", tableLayout:"fixed"}}>
         <colgroup>
           <col style={{width:"10%", minWidth:80}} />
-          {jourDates.slice(0,6).map(({jour}) => <col key={jour} style={{width:"15%"}} />)}
+          {jourDates.slice(0, nbJours).map(({jour}) => <col key={jour} style={{width:`${Math.floor(90/nbJours)}%`}} />)}
         </colgroup>
         <thead>
           <tr>
             <th style={{padding:"6px 6px", textAlign:"left", fontSize:10, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0"}}>
               Salarié
             </th>
-            {jourDates.slice(0,6).map(({jour, label}) => (
+            {jourDates.slice(0, nbJours).map(({jour, label}) => (
               <th key={jour} style={{padding:"6px 3px", textAlign:"center", fontSize:10, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>
                 {label}
               </th>
@@ -683,7 +685,7 @@ Réponds de façon concise et pratique, en français.`,
                   {fmtDuree(chargeParSalarie[sal.id]||0)} cette sem.
                 </div>
               </td>
-              {jourDates.slice(0,6).map(({jour}) => {
+              {jourDates.slice(0, nbJours).map(({jour}) => {
                 const cellTaches = taches.filter(t => t.salarieId===sal.id && t.jour===jour).sort((a,b) => a.heureDebut.localeCompare(b.heureDebut));
                 return (
                   <td key={jour} style={{padding:"3px 3px", borderBottom:"1px solid #eef2f7", verticalAlign:"top"}}>
@@ -798,16 +800,16 @@ Réponds de façon concise et pratique, en français.`,
                             <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:4}}>
                               <span style={{fontFamily:"sans-serif",fontSize:9,color:"#475569",fontWeight:600}}>Jours :</span>
                               <button onClick={() => {
-                                const allDays = JOURS.slice(0,6) as JourSemaine[];
+                                const allDays = JOURS.slice(0, nbJours) as JourSemaine[];
                                 const allSelected = allDays.every(j => addForm.joursSelectionnes.includes(j));
                                 setAddForm({...addForm, joursSelectionnes: allSelected ? [] : [...allDays]});
                               }}
                                 style={{fontFamily:"sans-serif",fontSize:8,color:"#3b82f6",background:"transparent",border:"none",cursor:"pointer",textDecoration:"underline",padding:0}}>
-                                {JOURS.slice(0,6).every(j => addForm.joursSelectionnes.includes(j as JourSemaine)) ? "Aucun" : "Tous"}
+                                {JOURS.slice(0, nbJours).every(j => addForm.joursSelectionnes.includes(j as JourSemaine)) ? "Aucun" : "Tous"}
                               </button>
                             </div>
                             <div style={{display:"flex",gap:2}}>
-                              {JOURS.slice(0,6).map(j => {
+                              {JOURS.slice(0, nbJours).map(j => {
                                 const selected = addForm.joursSelectionnes.includes(j as JourSemaine);
                                 const isCurrent = j === addCell?.jour;
                                 return (
@@ -907,14 +909,14 @@ Réponds de façon concise et pratique, en français.`,
         <table style={{width:"100%", borderCollapse:"collapse", tableLayout:"fixed"}}>
           <colgroup>
             <col style={{width:"7%"}} />
-            {jourDates.slice(0,6).map(({jour}) => <col key={jour} style={{width:"15.5%"}} />)}
+            {jourDates.slice(0, nbJours).map(({jour}) => <col key={jour} style={{width:`${Math.floor(93/nbJours)}%`}} />)}
           </colgroup>
           <thead>
             <tr>
               <th style={{padding:"6px 4px", textAlign:"center", fontSize:10, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0"}}>
                 Heure
               </th>
-              {jourDates.slice(0,6).map(({jour, label}) => (
+              {jourDates.slice(0, nbJours).map(({jour, label}) => (
                 <th key={jour} style={{padding:"6px 3px", textAlign:"center", fontSize:10, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0"}}>
                   {label}
                 </th>
@@ -928,7 +930,7 @@ Réponds de façon concise et pratique, en français.`,
                   <td style={{padding:"4px 4px", borderBottom:"1px solid #eef2f7", verticalAlign:"top", textAlign:"center"}}>
                     <span style={{fontFamily:"sans-serif", fontSize:12, fontWeight:700, color:"#1e3a5f"}}>{slot}</span>
                   </td>
-                  {jourDates.slice(0,6).map(({jour}) => {
+                  {jourDates.slice(0, nbJours).map(({jour}) => {
                     const slotTaches = taches.filter(t => t.jour === jour && t.heureDebut === slot)
                       .sort((a, b) => a.salarieName.localeCompare(b.salarieName));
                     return (
@@ -1045,7 +1047,7 @@ Réponds de façon concise et pratique, en français.`,
         </div>
 
         <div id="management-fiche-print">
-          {jourDates.slice(0,6).map(({jour, date}) => {
+          {jourDates.slice(0, nbJours).map(({jour, date}) => {
             const dateStr = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
             const dayTaches = taches.filter(t => t.salarieId === sal.id && t.jour === jour)
               .sort((a,b) => heureToMin(a.heureDebut) - heureToMin(b.heureDebut));
@@ -1176,7 +1178,7 @@ Réponds de façon concise et pratique, en français.`,
 
       {/* En-têtes jours cliquables */}
       <div className="grid grid-cols-6 gap-1.5 mb-4">
-        {jourDates.slice(0, 6).map(({ jour, date }) => {
+        {jourDates.slice(0, nbJours).map(({ jour, date }) => {
           const isToday = (() => {
             const now = new Date();
             return date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
@@ -1197,7 +1199,7 @@ Réponds de façon concise et pratique, en français.`,
       <div className="flex items-center gap-3 bg-white rounded-xl px-4 py-2 border border-gray-100 no-print">
         <span className="font-body text-xs font-semibold text-slate-500">Jours travaillés :</span>
         <div className="flex gap-1">
-          {JOURS.slice(0, 6).map(j => {
+          {JOURS.slice(0, nbJours).map(j => {
             const active = joursTravailles.includes(j as JourSemaine);
             return (
               <button key={j} onClick={() => {
@@ -1218,6 +1220,11 @@ Réponds de façon concise et pratique, en français.`,
           <button onClick={() => setJoursTravailles(["lundi","mardi","mercredi","jeudi","vendredi","samedi"])}
             className="font-body text-[9px] text-blue-500 bg-transparent border-none cursor-pointer underline">Lun-Sam</button>
         </div>
+        <label className="flex items-center gap-1.5 ml-2 cursor-pointer">
+          <input type="checkbox" checked={inclureDimanche} onChange={e => setInclureDimanche(e.target.checked)}
+            className="accent-blue-500 w-3 h-3" />
+          <span className="font-body text-[9px] text-slate-400">+Dim</span>
+        </label>
       </div>
 
       {/* Résumé charge */}

@@ -78,7 +78,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
     const rows: RowData[] = [];
     joursduMois.forEach(date => {
       const dow = (date.getDay() + 6) % 7;
-      if (dow >= 6) return; // dimanche
+      if (dow > 6) return; // skip invalid
       const jour = JOURS[dow] as JourSemaine;
       const isoWeek = getISOWeek(date);
       const dayTaches = salTaches.filter(t => t.semaine === isoWeek && t.jour === jour && t.categorie !== "pause")
