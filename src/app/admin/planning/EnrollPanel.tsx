@@ -55,7 +55,7 @@ import {
   findStageCreneaux, countExistingStageInscriptions, computeStageReductions,
   enrollChildInCreneau, createReservation, removeChildFromCreneau, deleteReservations,
 } from "@/lib/planning-services";
-import { X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera, FileImage, Mail, Sparkles, Send } from "lucide-react";
+import { X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera, FileImage, Mail, Sparkles, Send, FileText, Printer } from "lucide-react";
 import type { Activity, Family } from "@/types";
 import { Creneau, EnrolledChild, payModes, typeColors, fmtDate } from "./types";
 import { authFetch } from "@/lib/auth-fetch";
@@ -179,6 +179,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [emailBody, setEmailBody] = useState("");
   const [emailSending, setEmailSending] = useState(false);
   const [emailGenerating, setEmailGenerating] = useState(false);
+  const [progressionSending, setProgressionSending] = useState(false);
 
   // Charger le nombre réel de jours du stage depuis Firestore (pas allCreneaux qui est limité à la vue)
   useEffect(() => {
@@ -1098,6 +1099,44 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     setEmailSending(false);
   };
 
+  // ── Fiches de progression (stage) ──────────────────────────────────
+  const handlePrintProgressions = () => {
+    if (enrolled.length === 0) return;
+    for (const e of enrolled) {
+      window.open(`/api/progression-pdf?childId=${e.childId}&familyId=${e.familyId}&childName=${encodeURIComponent(e.childName)}`, "_blank");
+    }
+  };
+
+  const handleEmailProgressions = async () => {
+    if (enrolled.length === 0) return;
+    setProgressionSending(true);
+    let sent = 0;
+    for (const e of enrolled) {
+      const fam = families.find((f: any) => f.firestoreId === e.familyId);
+      const email = fam?.parentEmail;
+      if (!email) continue;
+      try {
+        // Récupérer le HTML de la fiche progression
+        const pdfRes = await authFetch(`/api/progression-pdf?childId=${e.childId}&familyId=${e.familyId}&childName=${encodeURIComponent(e.childName)}`);
+        const progressionHtml = await pdfRes.text();
+        // Retirer les éléments no-print (barre d'impression)
+        const cleanHtml = progressionHtml.replace(/<div class="no-print"[\s\S]*?<\/div>\s*<div class="no-print"[\s\S]*?<\/div>/g, "");
+        await authFetch("/api/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: email,
+            subject: `Bilan de progression — ${e.childName} — ${creneau.activityTitle}`,
+            html: cleanHtml,
+          }),
+        });
+        sent++;
+      } catch {}
+    }
+    panelToast(`Fiches envoyées à ${sent} famille${sent > 1 ? "s" : ""}`, "success");
+    setProgressionSending(false);
+  };
+
   return (
     <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
@@ -1186,10 +1225,22 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-body text-sm font-semibold text-blue-800"><Users size={16} className="inline mr-1"/>Inscrits ({enrolled.length})</h3>
             {enrolled.length > 0 && (
-              <button onClick={() => { setShowEmailForm(!showEmailForm); if (!showEmailForm && !emailSubject) setEmailSubject(`${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}`); }}
-                className="flex items-center gap-1 font-body text-xs text-blue-500 bg-blue-50 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
-                <Mail size={12} /> Email
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button onClick={handlePrintProgressions}
+                  className="flex items-center gap-1 font-body text-xs text-purple-500 bg-purple-50 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-purple-100"
+                  title="Imprimer les fiches de progression">
+                  <Printer size={12} /> Fiches
+                </button>
+                <button onClick={handleEmailProgressions} disabled={progressionSending}
+                  className="flex items-center gap-1 font-body text-xs text-green-600 bg-green-50 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-green-100 disabled:opacity-50"
+                  title="Envoyer les fiches de progression par email">
+                  {progressionSending ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />} Envoyer fiches
+                </button>
+                <button onClick={() => { setShowEmailForm(!showEmailForm); if (!showEmailForm && !emailSubject) setEmailSubject(`${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}`); }}
+                  className="flex items-center gap-1 font-body text-xs text-blue-500 bg-blue-50 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
+                  <Mail size={12} /> Email
+                </button>
+              </div>
             )}
           </div>
 
