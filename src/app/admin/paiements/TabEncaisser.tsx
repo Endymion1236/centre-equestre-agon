@@ -195,6 +195,10 @@ export function TabEncaisser({
         );
         if (familyPending.length === 0) return null;
         const totalPending = familyPending.reduce((s, p) => s + (p.totalTTC || 0) - (p.paidAmount || 0), 0);
+        const pendingDiscount = appliedPromo
+          ? (appliedPromo.discountMode === "percent" ? totalPending * appliedPromo.discountValue / 100 : appliedPromo.discountValue)
+          : safeNumber(manualDiscount);
+        const totalPendingAfterDiscount = Math.max(0, totalPending - pendingDiscount);
 
         return (
           <Card padding="md" className="mb-4 border-orange-200 bg-orange-50/30">
@@ -290,19 +294,49 @@ export function TabEncaisser({
                 );
               })()}
 
+              {/* Réduction / Code promo */}
+              <div className="mb-3 border border-blue-500/8 rounded-lg p-2.5">
+                <div className="font-body text-[10px] font-semibold text-slate-600 uppercase tracking-wider mb-2">Réduction</div>
+                {appliedPromo && (
+                  <div className="bg-green-50 rounded-lg px-3 py-2 mb-2 flex items-center justify-between">
+                    <span className="font-body text-xs text-green-800">{appliedPromo.label} ({appliedPromo.discountMode === "percent" ? `-${appliedPromo.discountValue}%` : `-${appliedPromo.discountValue}€`})</span>
+                    <button onClick={() => setAppliedPromo(null)} className="font-body text-[10px] text-red-500 bg-transparent border-none cursor-pointer">Retirer</button>
+                  </div>
+                )}
+                <div className="flex gap-1.5 mb-1.5">
+                  <input value={promoCode} onChange={e => setPromoCode(e.target.value.toUpperCase())} placeholder="Code promo"
+                    className="flex-1 px-2 py-1.5 rounded border border-blue-500/8 font-body text-xs bg-cream font-mono uppercase focus:border-blue-500 focus:outline-none" />
+                  <button onClick={applyPromoCode} disabled={!promoCode}
+                    className={`px-3 py-1.5 rounded font-body text-xs font-semibold border-none cursor-pointer ${!promoCode ? "bg-gray-200 text-slate-600" : "bg-blue-500 text-white"}`}>
+                    OK
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-body text-[10px] text-slate-600">ou remise :</span>
+                  <input type="number" value={manualDiscount} onChange={e => { setManualDiscount(e.target.value); setAppliedPromo(null); }}
+                    placeholder="0" className="w-16 px-2 py-1.5 rounded border border-blue-500/8 font-body text-xs bg-cream text-center focus:border-blue-500 focus:outline-none" />
+                  <span className="font-body text-[10px] text-slate-600">€</span>
+                </div>
+              </div>
+
               {/* Montant à encaisser */}
               <div className="mb-3">
                 <div className="font-body text-xs font-semibold text-slate-600 mb-1">Montant encaissé</div>
                 <div className="flex gap-2 items-center">
                   <input type="number" step="0.01" value={paidAmount} onChange={e => setPaidAmount(e.target.value)}
-                    placeholder={totalPending.toFixed(2)}
+                    placeholder={totalPendingAfterDiscount.toFixed(2)}
                     className={`${inputCls} w-32`} />
                   <span className="font-body text-xs text-slate-600">€</span>
                   {!paidAmount && <span className="font-body text-[10px] text-slate-600">(vide = tout encaisser)</span>}
                 </div>
-                {paidAmount && safeNumber(paidAmount) < totalPending && safeNumber(paidAmount) > 0 && (
+                {pendingDiscount > 0 && (
+                  <div className="font-body text-xs text-green-600 mt-1">
+                    Réduction : -{pendingDiscount.toFixed(2)}€ → {totalPendingAfterDiscount.toFixed(2)}€ à encaisser
+                  </div>
+                )}
+                {paidAmount && safeNumber(paidAmount) < totalPendingAfterDiscount && safeNumber(paidAmount) > 0 && (
                   <div className="font-body text-xs text-orange-500 mt-1">
-                    Paiement partiel — reste dû après : {(totalPending - safeNumber(paidAmount)).toFixed(2)}€
+                    Paiement partiel — reste dû après : {(totalPendingAfterDiscount - safeNumber(paidAmount)).toFixed(2)}€
                   </div>
                 )}
               </div>
@@ -330,18 +364,32 @@ export function TabEncaisser({
               )}
 
               <button onClick={async () => {
-                const montant = paidAmount ? safeNumber(paidAmount) : totalPending;
+                const montant = paidAmount ? safeNumber(paidAmount) : totalPendingAfterDiscount;
                 if (montant <= 0) return;
                 try {
+                  // Si réduction appliquée, d'abord réduire le totalTTC du premier impayé
+                  if (pendingDiscount > 0) {
+                    const firstP = familyPending[0];
+                    const newTotal = Math.max(0, (firstP.totalTTC || 0) - pendingDiscount);
+                    await updateDoc(doc(db, "payments", firstP.id), {
+                      totalTTC: newTotal,
+                      originalTotalTTC: firstP.totalTTC,
+                      discountApplied: pendingDiscount,
+                      discountLabel: appliedPromo?.label || `Remise ${pendingDiscount}€`,
+                      updatedAt: serverTimestamp(),
+                    });
+                  }
                   let resteARegler = montant;
                   for (const p of familyPending) {
                     if (resteARegler <= 0) break;
-                    const du = (p.totalTTC || 0) - (p.paidAmount || 0);
+                    const du = pendingDiscount > 0 && p.id === familyPending[0].id
+                      ? Math.max(0, (p.totalTTC || 0) - pendingDiscount) - (p.paidAmount || 0)
+                      : (p.totalTTC || 0) - (p.paidAmount || 0);
                     const paye = Math.min(du, resteARegler);
                     await enregistrerEncaissement(p.id!, p, paye, paymentMode, paymentRef);
                     resteARegler -= paye;
                   }
-                  const resteFinal = totalPending - montant;
+                  const resteFinal = totalPendingAfterDiscount - montant;
                   toast(`${montant.toFixed(2)}€ encaissé (${paymentModes.find(m => m.id === paymentMode)?.label || paymentMode}) pour ${selectedFam.parentName} !${resteFinal > 0 ? `\nReste dû : ${resteFinal.toFixed(2)}€` : "\nTout est réglé !"}`);
                   // Email confirmation paiement
                   if (selectedFam.parentEmail && montant > 0) {

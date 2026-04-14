@@ -791,8 +791,22 @@ export default function SepaPage() {
                         <div className="font-body text-sm font-semibold text-blue-800 truncate">{ech.familyName}</div>
                         <div className="font-body text-[10px] text-gray-400 font-mono">{ech.mandatId}</div>
                       </div>
-                      <div className="w-28 font-body text-sm text-gray-600">
-                        {new Date(ech.dateEcheance).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}
+                      <div className="w-28">
+                        <input
+                          type="date"
+                          defaultValue={ech.dateEcheance}
+                          onBlur={async (ev) => {
+                            const newDate = ev.target.value;
+                            if (newDate && newDate !== ech.dateEcheance) {
+                              await updateDoc(doc(db, "echeances-sepa", ech.id), { dateEcheance: newDate });
+                              toast("Date de prélèvement mise à jour", "success");
+                              // Refresh les données
+                              const snap = await getDocs(collection(db, "echeances-sepa"));
+                              setEcheances(snap.docs.map(d => ({ id: d.id, ...d.data() } as EcheanceSepa)));
+                            }
+                          }}
+                          className="font-body text-xs text-gray-600 border border-gray-200 rounded px-1.5 py-1 bg-white focus:outline-none focus:border-blue-400 cursor-pointer w-full"
+                        />
                       </div>
                       <div className="w-24 text-right font-body text-sm font-semibold text-blue-800">{ech.montant.toFixed(2)}€</div>
                       <div className="w-36 font-body text-xs text-gray-500 truncate pl-3">{ech.description}</div>
