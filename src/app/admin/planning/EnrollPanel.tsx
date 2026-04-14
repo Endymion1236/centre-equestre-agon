@@ -624,7 +624,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           });
         } else {
           // Créer une nouvelle commande stage avec infos acompte
-          await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
+          const newPayRef = await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
             familyId: fam.firestoreId,
             familyName: fam.parentName || "",
             familyEmail: fam.parentEmail || "",
@@ -639,6 +639,22 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             ...(showAcompte ? { acompteAmount: stageAcompte, soldeAmount: stageSolde } : {}),
             date: serverTimestamp(),
           });
+
+          // Envoyer automatiquement le lien de paiement pour l'acompte
+          if (showAcompte && fam.parentEmail) {
+            authFetch("/api/send-payment-link", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                paymentId: newPayRef.id,
+                recipientEmail: fam.parentEmail,
+                amount: stageAcompte,
+                familyId: fam.firestoreId,
+                familyName: fam.parentName || "",
+                message: `Bonjour,\n\nVoici le lien de paiement pour l'acompte du stage "${creneau.activityTitle}" (${stageAcompte}€).\n\nLe solde de ${stageSolde}€ vous sera demandé 7 jours avant le stage.`,
+              }),
+            }).catch(e => console.warn("Lien paiement acompte:", e));
+          }
         }
 
         const noms = stageLines.map(l => l.childName).join(", ");

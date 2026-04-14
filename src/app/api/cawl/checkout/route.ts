@@ -25,16 +25,17 @@ export async function POST(req: NextRequest) {
     }
 
     // Calcul du montant total en centimes
-    // Accepte : priceInCents (panier client), priceTTC (admin), ou totalTTC global
+    // Si totalTTC est fourni, c'est le montant exact à facturer (y compris pour les acomptes)
+    // depositPercent sert uniquement pour le libellé et le suivi, pas pour recalculer le montant
     const isDeposit = depositPercent && depositPercent > 0 && depositPercent < 100;
-    const multiplier = isDeposit ? depositPercent / 100 : 1;
 
     let totalCents: number;
     if (totalTTC && totalTTC > 0) {
-      // Montant fourni directement (depuis admin — lien impayé)
-      totalCents = Math.round(totalTTC * 100 * multiplier);
+      // Montant fourni directement — c'est le montant final (acompte ou total)
+      totalCents = Math.round(totalTTC * 100);
     } else {
-      // Calculer depuis les items — accepte priceInCents ou priceTTC
+      // Calculer depuis les items
+      const multiplier = isDeposit ? depositPercent / 100 : 1;
       totalCents = items.reduce((sum: number, item: any) => {
         const cents = item.priceInCents
           ? Math.round(item.priceInCents * multiplier)
