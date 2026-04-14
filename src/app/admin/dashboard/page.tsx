@@ -8,9 +8,10 @@ import { Card, Badge } from "@/components/ui";
 import Link from "next/link";
 import {
   Plus, Users, CalendarDays, CreditCard, TrendingUp,
-  ClipboardList, BookOpen, Mail, Settings, Camera, Heart, BarChart3,
+  ClipboardList, BookOpen, Mail, Settings, Camera, Heart, BarChart3, Cpu,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { authFetch } from "@/lib/auth-fetch";
 
 export default function AdminDashboard() {
   const { setAgentContext } = useAgentContext("dashboard");
@@ -21,6 +22,7 @@ export default function AdminDashboard() {
   }, []);
   const [familyCount, setFamilyCount] = useState(0);
   const [activityCount, setActivityCount] = useState(0);
+  const [billing, setBilling] = useState<any>(null);
 
   useEffect(() => {
     async function fetchStats() {
@@ -34,6 +36,8 @@ export default function AdminDashboard() {
       }
     }
     fetchStats();
+    // Billing IA
+    authFetch("/api/billing").then(r => r.json()).then(setBilling).catch(() => {});
   }, []);
 
   const quickActions: { href: string; icon: LucideIcon; label: string; color: string }[] = [
@@ -106,6 +110,72 @@ export default function AdminDashboard() {
           );
         })}
       </div>
+
+      {/* Coûts IA du mois */}
+      {billing && (
+        <>
+          <h2 className="font-display text-lg font-bold text-blue-800 mb-4 mt-10 flex items-center gap-2">
+            <Cpu size={20} className="text-purple-500" /> Consommation IA
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+            {/* Anthropic */}
+            <Card padding="md">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center">
+                  <span className="text-sm">🧠</span>
+                </div>
+                <span className="font-body text-sm font-semibold text-blue-800">Claude (Anthropic)</span>
+              </div>
+              {billing.anthropic?.cost !== null ? (
+                <div className="font-body text-2xl font-bold text-orange-500">{billing.anthropic.cost.toFixed(2)}€</div>
+              ) : (
+                <div className="font-body text-xs text-gray-500">{billing.anthropic?.error || "—"}</div>
+              )}
+              <div className="font-body text-[10px] text-gray-400 mt-1">Génération emails, assistant IA</div>
+            </Card>
+
+            {/* OpenAI Whisper */}
+            <Card padding="md">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center">
+                  <span className="text-sm">🎤</span>
+                </div>
+                <span className="font-body text-sm font-semibold text-blue-800">Whisper (OpenAI)</span>
+              </div>
+              {billing.openai?.cost !== null ? (
+                <div className="font-body text-2xl font-bold text-green-500">{billing.openai.cost.toFixed(2)}$</div>
+              ) : (
+                <div className="font-body text-xs text-gray-500">{billing.openai?.error || "—"}</div>
+              )}
+              <div className="font-body text-[10px] text-gray-400 mt-1">Transcription vocale</div>
+            </Card>
+
+            {/* ElevenLabs */}
+            <Card padding="md">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
+                  <span className="text-sm">🔊</span>
+                </div>
+                <span className="font-body text-sm font-semibold text-blue-800">ElevenLabs</span>
+              </div>
+              {billing.elevenlabs?.used !== null ? (
+                <>
+                  <div className="font-body text-2xl font-bold text-purple-500">
+                    {Math.round((billing.elevenlabs.used / 1000))}k
+                    <span className="text-sm font-normal text-gray-400"> / {Math.round((billing.elevenlabs.limit / 1000))}k car.</span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden mt-2">
+                    <div className="h-full bg-purple-400 rounded-full" style={{ width: `${Math.min(100, (billing.elevenlabs.used / billing.elevenlabs.limit) * 100)}%` }} />
+                  </div>
+                  <div className="font-body text-[10px] text-gray-400 mt-1">Plan {billing.elevenlabs.plan} · Synthèse vocale</div>
+                </>
+              ) : (
+                <div className="font-body text-xs text-gray-500">{billing.elevenlabs?.error || "—"}</div>
+              )}
+            </Card>
+          </div>
+        </>
+      )}
 
       {/* Placeholder for today's schedule */}
       <h2 className="font-display text-lg font-bold text-blue-800 mb-4 mt-10">Aujourd&apos;hui</h2>
