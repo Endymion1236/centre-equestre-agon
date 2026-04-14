@@ -6,6 +6,7 @@ export async function downloadInvoicePdf(params: {
   date: string;
   familyName: string;
   familyEmail: string;
+  familyAddress?: string;
   items: any[];
   totalHT: number;
   totalTVA: number;

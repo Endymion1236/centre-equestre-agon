@@ -78,6 +78,7 @@ export default function FacturesPage() {
   const [fidelite, setFidelite] = useState<any>(null);
   const [fideliteSettings, setFideliteSettings] = useState<{ taux: number; minPoints: number; enabled: boolean } | null>(null);
   const [convertingPoints, setConvertingPoints] = useState(false);
+  const [familyData, setFamilyData] = useState<any>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -136,6 +137,12 @@ export default function FacturesPage() {
         if (fidSnap.exists()) setFidelite({ id: fidSnap.id, ...fidSnap.data() });
         if (settingsSnap.exists()) setFideliteSettings(settingsSnap.data() as any);
       } catch { /* pas de fidélité */ }
+
+      // Famille (pour adresse facture)
+      try {
+        const famSnap = await getDocs(query(collection(db, "families"), where("uid", "==", user.uid)));
+        if (!famSnap.empty) setFamilyData({ id: famSnap.docs[0].id, ...famSnap.docs[0].data() });
+      } catch { /* pas grave */ }
 
       setLoading(false);
     };
@@ -292,12 +299,15 @@ export default function FacturesPage() {
                               const totalTTC = p.totalTTC || 0;
                               const totalTVA = totalTTC - totalHT;
                               const invoiceNumber = (p as any).orderId || `F-${d2.getFullYear()}${String(d2.getMonth()+1).padStart(2,"0")}-${(p.id || "").slice(-4).toUpperCase()}`;
+                              const civilite = familyData?.civilite ? `${familyData.civilite} ` : "";
+                              const adresseLines = [familyData?.address, [familyData?.zipCode, familyData?.city].filter(Boolean).join(" ")].filter(Boolean).join("\n");
                               try {
                                 await downloadInvoicePdf({
                                     invoiceNumber,
                                     date: d2.toLocaleDateString("fr-FR"),
-                                    familyName: p.familyName,
+                                    familyName: `${civilite}${p.familyName}`,
                                     familyEmail: "",
+                                    familyAddress: adresseLines,
                                     items: items.map((i: any) => ({ ...i, childName: i.childName || "" })),
                                     totalHT, totalTVA, totalTTC,
                                     paidAmount: p.paidAmount || 0,

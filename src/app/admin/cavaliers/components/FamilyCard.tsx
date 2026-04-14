@@ -79,12 +79,13 @@ export default function FamilyCard({
   });
   // ── Édition famille ────────────────────────────────────────────────────────
   const [editingFamily, setEditingFamily] = useState(false);
-  const [editForm, setEditForm] = useState({ parentName: "", lastName: "", firstName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
+  const [editForm, setEditForm] = useState({ civilite: "", parentName: "", lastName: "", firstName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
   const [editTags, setEditTags] = useState<string[]>([]);
 
   const startEditFamily = () => {
     setEditingFamily(true);
     setEditForm({
+      civilite: (family as any).civilite || "",
       parentName: family.parentName || "",
       lastName: (family as any).lastName || "",
       firstName: (family as any).firstName || "",
@@ -104,6 +105,7 @@ export default function FamilyCard({
         ? `${lastName} ${firstName}`
         : lastName || firstName || editForm.parentName.trim();
       await updateDoc(doc(db, "families", family.firestoreId), {
+        civilite: editForm.civilite || null,
         parentName: computedName,
         lastName: lastName || null,
         firstName: firstName || null,
@@ -312,6 +314,17 @@ export default function FamilyCard({
             {editingFamily ? (
               <div className="bg-blue-50 rounded-lg p-4 mb-5">
                 <div className="font-body text-xs font-semibold text-blue-500 uppercase tracking-wider mb-3">Modifier les informations</div>
+                <div className="mb-3">
+                  <label className={labelStyle}>Civilité</label>
+                  <div className="flex gap-2">
+                    {(["M.", "Mme"] as const).map(c => (
+                      <button key={c} type="button" onClick={() => setEditForm(f => ({ ...f, civilite: f.civilite === c ? "" : c }))}
+                        className={`font-body text-xs px-4 py-2 rounded-lg border cursor-pointer ${editForm.civilite === c ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"}`}>
+                        {c === "M." ? "Monsieur" : "Madame"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className={labelStyle}>Nom de famille</label>

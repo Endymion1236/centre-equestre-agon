@@ -159,9 +159,13 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                 const ht = (p.items || []).reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
                 const displayTTC = (p as any).originalTotalTTC || p.totalTTC || 0;
                 const printInvoice = async () => {
+                  const fam = families.find(f => f.firestoreId === p.familyId);
+                  const civilite = fam?.civilite ? `${fam.civilite} ` : "";
+                  const adresseLines = [fam?.address, [fam?.zipCode, fam?.city].filter(Boolean).join(" ")].filter(Boolean).join("\n");
                   await downloadInvoicePdf({
                     invoiceNumber: invoiceNum, date: date.toLocaleDateString("fr-FR"),
-                    familyName: p.familyName, familyEmail: families.find(f => f.firestoreId === p.familyId)?.parentEmail || "",
+                    familyName: `${civilite}${p.familyName}`, familyEmail: fam?.parentEmail || "",
+                    familyAddress: adresseLines,
                     items: p.items || [], totalHT: ht,
                     totalTVA: (p.totalTTC || 0) - ht, totalTTC: p.totalTTC || 0,
                     paymentMode: mode?.label || p.paymentMode || "",

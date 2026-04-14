@@ -41,6 +41,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
   const { toast } = useToast();
 
   const [newFamily, setNewFamily] = useState({
+    civilite: "" as "" | "M." | "Mme",
     parentName: "", parentEmail: "", parentPhone: "",
     lastName: "", firstName: "",
     address: "", zipCode: "", city: "",
@@ -77,6 +78,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
           : newFamily.raisonSociale.trim() || newFamily.parentName.trim();
 
       await addDoc(collection(db, "families"), {
+        civilite: newFamily.civilite || null,
         parentName: computedName,
         lastName: lastName || null,
         firstName: firstName || null,
@@ -147,6 +149,17 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
             <div className="grid grid-cols-1 gap-3">
               {newFamily.accountType === "particulier" ? (
                 <div>
+                  <div className="mb-3">
+                    <label className={labelStyle}>Civilité</label>
+                    <div className="flex gap-2">
+                      {(["M.", "Mme"] as const).map(c => (
+                        <button key={c} type="button" onClick={() => setNewFamily({ ...newFamily, civilite: newFamily.civilite === c ? "" : c })}
+                          className={`font-body text-xs px-4 py-2 rounded-lg border cursor-pointer ${newFamily.civilite === c ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"}`}>
+                          {c === "M." ? "Monsieur" : "Madame"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className={labelStyle}>Nom de famille *</label>

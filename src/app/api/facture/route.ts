@@ -8,6 +8,7 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   try {
+    const CLUB = await getClubInfo();
     const { invoiceNumber, date, familyName, familyAddress, items, totalHT, totalTVA, totalTTC, paymentMode, paymentRef, paidAmount, status } = await req.json();
 
     const html = `<!DOCTYPE html>
@@ -59,10 +60,9 @@ export async function POST(req: NextRequest) {
         <h1>Centre Equestre</h1>
         <h1 style="color:#F0A010;font-size:16px;">d'Agon-Coutainville</h1>
         <p style="margin-top:8px;">
-          56 Charriere du Commerce<br>
-          50230 Agon-Coutainville<br>
-          Tel : 02 44 84 99 96<br>
-          ceagon@orange.fr
+          ${CLUB.address}<br>
+          Tel : ${CLUB.tel}<br>
+          ${CLUB.email}
         </p>
       </div>
       <div class="invoice-info">
@@ -78,10 +78,10 @@ export async function POST(req: NextRequest) {
     <div class="parties">
       <div class="party">
         <div class="party-label">Emetteur</div>
-        <div class="party-name">Centre Equestre Poney Club</div>
+        <div class="party-name">${CLUB.legalName}</div>
         <div class="party-detail">
-          SIRET : [A completer]<br>
-          TVA intracommunautaire : [A completer]
+          SIRET : ${CLUB.siret}<br>
+          ${CLUB.tvaIntra ? `TVA intracommunautaire : ${CLUB.tvaIntra}` : "TVA non applicable — art. 293B CGI"}
         </div>
       </div>
       <div class="party" style="text-align:right;">
@@ -130,8 +130,8 @@ export async function POST(req: NextRequest) {
     </div>
 
     <div class="footer">
-      Centre Equestre Poney Club d'Agon-Coutainville — 56 Charriere du Commerce, 50230 Agon-Coutainville<br>
-      SIRET : [A completer] — TVA : [A completer] — Tel : 02 44 84 99 96 — ceagon@orange.fr
+      ${CLUB.legalName} — ${CLUB.address}<br>
+      SIRET : ${CLUB.siret}${CLUB.tvaIntra ? ` — TVA : ${CLUB.tvaIntra}` : ""} — Tel : ${CLUB.tel} — ${CLUB.email}
     </div>
   </div>
 </body>
