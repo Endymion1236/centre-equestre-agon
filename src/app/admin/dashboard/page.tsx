@@ -119,7 +119,8 @@ export default function AdminDashboard() {
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
             {/* Anthropic */}
-            <Card padding="md">
+            <a href="https://console.anthropic.com/settings/billing" target="_blank" rel="noopener noreferrer" className="no-underline">
+            <Card padding="md" hover>
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center">
                   <span className="text-sm">🧠</span>
@@ -132,10 +133,13 @@ export default function AdminDashboard() {
                 <div className="font-body text-xs text-gray-500">{billing.anthropic?.error || "—"}</div>
               )}
               <div className="font-body text-[10px] text-gray-400 mt-1">Génération emails, assistant IA</div>
+              <div className="font-body text-[10px] text-blue-500 mt-2">Voir le détail →</div>
             </Card>
+            </a>
 
             {/* OpenAI Whisper */}
-            <Card padding="md">
+            <a href="https://platform.openai.com/usage" target="_blank" rel="noopener noreferrer" className="no-underline">
+            <Card padding="md" hover>
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center">
                   <span className="text-sm">🎤</span>
@@ -148,10 +152,13 @@ export default function AdminDashboard() {
                 <div className="font-body text-xs text-gray-500">{billing.openai?.error || "—"}</div>
               )}
               <div className="font-body text-[10px] text-gray-400 mt-1">Transcription vocale</div>
+              <div className="font-body text-[10px] text-blue-500 mt-2">Voir le détail →</div>
             </Card>
+            </a>
 
             {/* ElevenLabs */}
-            <Card padding="md">
+            <a href="https://elevenlabs.io/app/subscription" target="_blank" rel="noopener noreferrer" className="no-underline">
+            <Card padding="md" hover>
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
                   <span className="text-sm">🔊</span>
@@ -172,7 +179,9 @@ export default function AdminDashboard() {
               ) : (
                 <div className="font-body text-xs text-gray-500">{billing.elevenlabs?.error || "—"}</div>
               )}
+              <div className="font-body text-[10px] text-blue-500 mt-2">Voir le détail →</div>
             </Card>
+            </a>
           </div>
         </>
       )}
