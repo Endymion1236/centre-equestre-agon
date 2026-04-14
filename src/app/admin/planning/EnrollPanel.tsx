@@ -1100,10 +1100,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   };
 
   // ── Fiches de progression (stage) ──────────────────────────────────
-  const handlePrintProgressions = () => {
+  const handlePrintProgressions = async () => {
     if (enrolled.length === 0) return;
     for (const e of enrolled) {
-      window.open(`/api/progression-pdf?childId=${e.childId}&familyId=${e.familyId}&childName=${encodeURIComponent(e.childName)}`, "_blank");
+      try {
+        const res = await authFetch(`/api/progression-pdf?childId=${e.childId}&familyId=${e.familyId}&childName=${encodeURIComponent(e.childName)}`);
+        const html = await res.text();
+        const w = window.open("", "_blank");
+        if (w) { w.document.write(html); w.document.close(); }
+      } catch {}
     }
   };
 
