@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
@@ -151,7 +151,25 @@ export default function FacturesPage() {
 
   const totalPaid = payments.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
   const sortedPayments = [...payments].sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
-  const sortedReservations = [...reservations].sort((a, b) => b.date?.localeCompare(a.date) || 0);
+  const sortedReservations = [...reservations].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+
+  // Regrouper les réservations de stage par titre + enfant
+  const { stageReservationGroups, soloReservations } = useMemo(() => {
+    const groups: Record<string, Reservation[]> = {};
+    const solo: Reservation[] = [];
+    for (const r of sortedReservations) {
+      if ((r as any).activityType === "stage") {
+        const key = `${r.activityTitle}__${r.childName}`;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(r);
+      } else {
+        solo.push(r);
+      }
+    }
+    // Trier solo par date décroissante
+    solo.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    return { stageReservationGroups: Object.values(groups), soloReservations: solo };
+  }, [sortedReservations]);
 
   return (
     <div>
@@ -344,7 +362,7 @@ export default function FacturesPage() {
           {/* ─── Réservations ─── */}
           {tab === "reservations" && (
             <div>
-              {sortedReservations.length === 0 ? (
+              {reservations.length === 0 ? (
                 <Card padding="lg" className="text-center">
                   <span className="text-4xl block mb-3">📋</span>
                   <p className="font-body text-sm text-gray-500 mb-3">Aucune réservation.</p>
@@ -352,7 +370,52 @@ export default function FacturesPage() {
                 </Card>
               ) : (
                 <div className="flex flex-col gap-3">
-                  {sortedReservations.map(r => (
+                  {/* Stages regroupés */}
+                  {stageReservationGroups.map((group, gi) => {
+                    const first = group[0];
+                    const sorted = [...group].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+                    const firstDate = sorted[0]?.date ? new Date(sorted[0].date) : null;
+                    const lastDate = sorted[sorted.length - 1]?.date ? new Date(sorted[sorted.length - 1].date) : null;
+                    return (
+                      <Card key={`stage-${gi}`} padding="md">
+                        <div className="flex items-start justify-between flex-wrap gap-3">
+                          <div className="flex items-start gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-green-50 flex flex-col items-center justify-center flex-shrink-0">
+                              <div className="font-body text-[10px] font-bold text-green-600">Stage</div>
+                              <div className="font-body text-base font-bold text-green-800">{sorted.length}j</div>
+                            </div>
+                            <div>
+                              <div className="font-body text-sm font-semibold text-blue-800">{first.activityTitle}</div>
+                              <div className="font-body text-xs text-gray-600 mt-0.5">
+                                🧒 {first.childName}
+                                {firstDate && lastDate && (
+                                  <span className="ml-1">· du {firstDate.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} au {lastDate.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap gap-1.5 mt-2">
+                                {sorted.map((r, ri) => {
+                                  const d = r.date ? new Date(r.date) : null;
+                                  return (
+                                    <div key={ri} className="font-body text-[10px] bg-green-50 text-green-700 px-2 py-1 rounded-lg">
+                                      {d ? d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" }) : "—"}
+                                      <span className="text-green-500 ml-1">{r.startTime}–{r.endTime}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge color={first.status === "confirmed" ? "green" : first.status === "cancelled" ? "red" : "orange"}>
+                              {first.status === "confirmed" ? "Confirmé" : first.status === "cancelled" ? "Annulé" : "En attente"}
+                            </Badge>
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                  {/* Réservations individuelles (cours, balades, etc.) */}
+                  {soloReservations.map(r => (
                     <Card key={r.id} padding="md">
                       <div className="flex items-center justify-between flex-wrap gap-3">
                         <div className="flex items-center gap-4">
