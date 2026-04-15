@@ -62,36 +62,38 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
 
   return (
     <div className="mt-3 pt-3 border-t border-blue-500/8">
-      {/* KPIs */}
-      <div className="grid grid-cols-3 gap-2 mb-3">
-        <div className="bg-sand rounded-xl px-3 py-2 text-center">
-          <div className="font-body text-[10px] text-slate-500 uppercase tracking-wider">Facturé</div>
-          <div className="font-display text-sm font-bold text-blue-800">{totalFacture.toFixed(2)}€</div>
-        </div>
-        <div className="bg-green-50 rounded-xl px-3 py-2 text-center">
-          <div className="font-body text-[10px] text-slate-500 uppercase tracking-wider">Payé</div>
-          <div className="font-display text-sm font-bold text-green-600">{totalPaid.toFixed(2)}€</div>
-        </div>
-        <div className={`rounded-xl px-3 py-2 text-center ${totalDue > 0 ? "bg-red-50" : "bg-green-50"}`}>
-          <div className="font-body text-[10px] text-slate-500 uppercase tracking-wider">Reste dû</div>
-          <div className={`font-display text-sm font-bold ${totalDue > 0 ? "text-red-500" : "text-green-600"}`}>{totalDue.toFixed(2)}€</div>
+      {/* Nav onglets — enfants */}
+      <div className="mb-1">
+        <div className="font-body text-[9px] text-slate-400 uppercase tracking-widest mb-1.5">Cavaliers</div>
+        <div className="flex gap-1.5 flex-wrap">
+          {childTabs.map(({ id, label }) => {
+            const cid = id.replace("child_", "");
+            const childBadge = reservations.filter((r: any) => r.childId === cid && r.date >= today && r.status !== "cancelled").length;
+            return (
+              <button key={id} onClick={() => setTab(id)}
+                className={`font-body text-xs px-4 py-2 rounded-xl border-none cursor-pointer transition-all flex items-center gap-1.5 ${tab === id ? "bg-blue-500 text-white font-semibold shadow-sm" : "text-blue-800 bg-blue-50 hover:bg-blue-100"}`}>
+                {label}
+                {childBadge > 0 && <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${tab === id ? "bg-white/20" : "bg-blue-200/60 text-blue-600"}`}>{childBadge}</span>}
+              </button>
+            );
+          })}
         </div>
       </div>
-
-      {/* Nav onglets */}
-      <div className="flex gap-1 mb-3 border-b border-gray-100 pb-2 flex-wrap">
-        {allTabs.map(({ id, label }) => {
-          const badge = id === "paiements" ? payments.length : 0;
-          const cid = id.startsWith("child_") ? id.replace("child_", "") : null;
-          const childBadge = cid ? reservations.filter((r: any) => r.childId === cid && r.date >= today && r.status !== "cancelled").length : 0;
-          return (
-            <button key={id} onClick={() => setTab(id)}
-              className={`font-body text-xs px-3 py-1.5 rounded-lg border-none cursor-pointer transition-all flex items-center gap-1 ${tab === id ? "bg-blue-500 text-white font-semibold" : "text-slate-600 hover:bg-sand bg-transparent"}`}>
-              {label}
-              {(badge > 0 || childBadge > 0) && <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${tab === id ? "bg-white/20" : "bg-gray-100"}`}>{badge || childBadge}</span>}
-            </button>
-          );
-        })}
+      {/* Nav onglets — famille */}
+      <div className="mb-3 pb-2 border-b border-gray-100">
+        <div className="font-body text-[9px] text-slate-400 uppercase tracking-widest mb-1.5 mt-2">Famille</div>
+        <div className="flex gap-1.5 flex-wrap">
+          {familyTabs.map(({ id, label }) => {
+            const badge = id === "paiements" ? payments.length : 0;
+            return (
+              <button key={id} onClick={() => setTab(id)}
+                className={`font-body text-xs px-3 py-1.5 rounded-lg border-none cursor-pointer transition-all flex items-center gap-1 ${tab === id ? "bg-slate-700 text-white font-semibold" : "text-slate-500 bg-sand hover:bg-gray-200"}`}>
+                {label}
+                {badge > 0 && <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${tab === id ? "bg-white/20" : "bg-gray-200"}`}>{badge}</span>}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* ── Onglet enfant ── */}
