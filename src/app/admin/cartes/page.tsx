@@ -57,8 +57,9 @@ export default function CartesPage() {
   const [selFamily, setSelFamily] = useState("");
   const [selChild, setSelChild] = useState("");
   const [selTemplate, setSelTemplate] = useState(1); // index
-  const [unitPriceHT, setUnitPriceHT] = useState("15");
+  const [unitPriceTTC, setUnitPriceTTC] = useState("15.83");
   const [payMode, setPayMode] = useState("cb_terminal");
+  const [encaisserMaintenant, setEncaisserMaintenant] = useState(true);
   const [selActivityType, setSelActivityType] = useState<"cours" | "balade">("cours");
   const [carteFamiliale, setCarteFamiliale] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -91,9 +92,10 @@ export default function CartesPage() {
   const family = families.find(f => f.firestoreId === selFamily);
   const children = family?.children || [];
   const template = cardTemplates[selTemplate];
-  const unitPrice = Number.isFinite(Number(unitPriceHT)) ? Number(unitPriceHT) : 0;
-  const totalHT = unitPrice * template.sessions * (1 - template.discount / 100);
-  const totalTTC = totalHT * 1.055;
+  const unitPriceTTCNum = Number.isFinite(Number(unitPriceTTC)) ? Number(unitPriceTTC) : 0;
+  const unitPrice = unitPriceTTCNum / 1.055; // HT calculé depuis TTC
+  const totalTTC = unitPriceTTCNum * template.sessions * (1 - template.discount / 100);
+  const totalHT = totalTTC / 1.055;
 
   const filteredFamilies = familySearch
     ? families.filter(f => f.parentName?.toLowerCase().includes(familySearch.toLowerCase()) || (f.children || []).some((c: any) => `${c.firstName || ""} ${c.lastName || ""}`.toLowerCase().includes(familySearch.toLowerCase()) || `${c.lastName || ""} ${c.firstName || ""}`.toLowerCase().includes(familySearch.toLowerCase())))
@@ -130,7 +132,7 @@ export default function CartesPage() {
       createdAt: serverTimestamp(),
     });
 
-    // Créer paiement avec lien carte
+    // Créer paiement
     const payRef = await addDoc(collection(db, "payments"), {
       familyId: selFamily,
       familyName: family.parentName || "—",
@@ -144,26 +146,28 @@ export default function CartesPage() {
         priceTTC: Math.round(totalTTC * 100) / 100,
       }],
       totalTTC: Math.round(totalTTC * 100) / 100,
-      paymentMode: payMode,
+      paymentMode: encaisserMaintenant ? payMode : "impaye",
       paymentRef: "",
-      status: "paid",
-      paidAmount: Math.round(totalTTC * 100) / 100,
+      status: encaisserMaintenant ? "paid" : "pending",
+      paidAmount: encaisserMaintenant ? Math.round(totalTTC * 100) / 100 : 0,
       cardId: cardRef.id,
       date: serverTimestamp(),
     });
 
-    // Créer l'encaissement dans le journal
-    await addDoc(collection(db, "encaissements"), {
-      paymentId: payRef.id,
-      familyId: selFamily,
-      familyName: family.parentName || "—",
-      montant: Math.round(totalTTC * 100) / 100,
-      mode: payMode,
-      modeLabel: payMode === "cb_terminal" ? "CB (terminal)" : payMode === "especes" ? "Espèces" : payMode === "cheque" ? "Chèque" : payMode,
-      ref: "",
-      activityTitle: `${template.label} — ${(child as any)?.firstName}`,
-      date: serverTimestamp(),
-    });
+    // Créer l'encaissement uniquement si paiement immédiat
+    if (encaisserMaintenant) {
+      await addDoc(collection(db, "encaissements"), {
+        paymentId: payRef.id,
+        familyId: selFamily,
+        familyName: family.parentName || "—",
+        montant: Math.round(totalTTC * 100) / 100,
+        mode: payMode,
+        modeLabel: payMode === "cb_terminal" ? "CB (terminal)" : payMode === "especes" ? "Espèces" : payMode === "cheque" ? "Chèque" : payMode,
+        ref: "",
+        activityTitle: `${template.label} — ${(child as any)?.firstName}`,
+        date: serverTimestamp(),
+      });
+    }
 
     setSelFamily(""); setSelChild(""); setCreating(false);
     setTab("active");
@@ -429,16 +433,33 @@ export default function CartesPage() {
             {/* Unit price */}
             <div className="flex gap-3">
               <div className="flex-1">
-                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Prix unitaire HT (€/séance)</label>
-                <input type="number" step="0.01" value={unitPriceHT} onChange={e => setUnitPriceHT(e.target.value)} className={inp} />
+                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Prix unitaire TTC (€/séance)</label>
+                <input type="number" step="0.01" value={unitPriceTTC} onChange={e => setUnitPriceTTC(e.target.value)} className={inp} />
               </div>
               <div className="flex-1">
+                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Encaissement</label>
+                <div className="flex gap-2">
+                  <button onClick={() => setEncaisserMaintenant(true)}
+                    className={`flex-1 py-2.5 rounded-lg border font-body text-sm cursor-pointer transition-all ${encaisserMaintenant ? "border-green-500 bg-green-50 text-green-800 font-semibold" : "border-gray-200 bg-white text-slate-600"}`}>
+                    ✅ Encaisser
+                  </button>
+                  <button onClick={() => setEncaisserMaintenant(false)}
+                    className={`flex-1 py-2.5 rounded-lg border font-body text-sm cursor-pointer transition-all ${!encaisserMaintenant ? "border-orange-400 bg-orange-50 text-orange-800 font-semibold" : "border-gray-200 bg-white text-slate-600"}`}>
+                    ⏳ Impayé
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Mode de paiement — visible uniquement si encaissement immédiat */}
+            {encaisserMaintenant && (
+              <div>
                 <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Mode de paiement</label>
                 <select value={payMode} onChange={e => setPayMode(e.target.value)} className={inp}>
                   {payModes.map(m => <option key={m.id} value={m.id}>{m.icon} {m.label}</option>)}
                 </select>
               </div>
-            </div>
+            )}
 
             {/* Price summary */}
             <div className="bg-blue-50 rounded-lg p-4">
@@ -465,7 +486,7 @@ export default function CartesPage() {
             <button onClick={handleCreate} disabled={!selFamily || (!carteFamiliale && !selChild) || creating}
               className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer
                 ${!selFamily || !selChild || creating ? "bg-gray-200 text-slate-500" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
-              {creating ? "Création..." : `Créer la carte ${template.sessions} séances + Encaisser ${totalTTC.toFixed(2)}€`}
+              {creating ? "Création..." : encaisserMaintenant ? `Créer la carte ${template.sessions} séances + Encaisser ${totalTTC.toFixed(2)}€` : `Créer la carte ${template.sessions} séances (impayé ${totalTTC.toFixed(2)}€)`}
             </button>
           </div>
         </Card>
