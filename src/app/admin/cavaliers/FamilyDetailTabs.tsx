@@ -100,7 +100,8 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
         const childRes = reservations.filter((r: any) => r.childId === child.id);
         const upcoming = childRes.filter((r: any) => r.date >= today && r.status !== "cancelled").sort((a: any, b: any) => a.date.localeCompare(b.date));
         const past = childRes.filter((r: any) => r.date < today).sort((a: any, b: any) => b.date.localeCompare(a.date)).slice(0, 5);
-        const age = child.birthDate ? Math.floor((Date.now() - new Date(child.birthDate).getTime()) / 31557600000) : null;
+        const bd = child.birthDate?.toDate ? child.birthDate.toDate() : child.birthDate ? new Date(child.birthDate) : null;
+        const age = bd && !isNaN(bd.getTime()) ? Math.floor((Date.now() - bd.getTime()) / 31557600000) : null;
 
         return (
           <div className="flex flex-col gap-5">
@@ -110,8 +111,8 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
               <div className="flex-1">
                 <div className="font-body text-base font-semibold text-blue-800">{child.firstName}{child.lastName ? ` ${child.lastName}` : ""}</div>
                 <div className="font-body text-xs text-slate-500 flex items-center gap-2 flex-wrap">
-                  {child.birthDate && <span>Né(e) le {new Date(child.birthDate).toLocaleDateString("fr-FR")}</span>}
-                  {age !== null && <span className="text-blue-500 font-semibold">{age} ans</span>}
+                  {bd && !isNaN(bd.getTime()) && <span>Né(e) le {bd.toLocaleDateString("fr-FR")}</span>}
+                  {age !== null && age >= 0 && <span className="text-blue-500 font-semibold">{age} ans</span>}
                 </div>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
