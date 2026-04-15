@@ -208,6 +208,11 @@ Pas de markdown ni de listes — texte simple uniquement.`;
   // ── TTS ElevenLabs streaming ──────────────────────────────────────────────
   const speakText = async (text: string) => {
     setSpeaking(true);
+    // Arrêter l'audio précédent
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
     try {
       const res = await authFetch("/api/tts", {
         method: "POST",
@@ -216,18 +221,56 @@ Pas de markdown ni de listes — texte simple uniquement.`;
       });
       if (!res.ok) throw new Error("TTS error");
 
-      // Streaming : lire le flux audio dès les premiers octets reçus
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      if (audioRef.current) {
-        audioRef.current.pause();
-        URL.revokeObjectURL(audioRef.current.src);
-      }
+      // Streaming via MediaSource — démarre la lecture dès les premiers octets
+      const mediaSource = new MediaSource();
+      const url = URL.createObjectURL(mediaSource);
       const audio = new Audio(url);
       audioRef.current = audio;
-      audio.onended = () => { setSpeaking(false); URL.revokeObjectURL(url); };
-      audio.onerror = () => setSpeaking(false);
-      await audio.play();
+
+      await new Promise<void>((resolve, reject) => {
+        mediaSource.addEventListener("sourceopen", async () => {
+          const sourceBuffer = mediaSource.addSourceBuffer("audio/mpeg");
+          const reader = res.body!.getReader();
+          let playStarted = false;
+
+          const pump = async () => {
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) {
+                  // Attendre que le sourceBuffer soit libre avant de clore
+                  if (!sourceBuffer.updating) {
+                    mediaSource.endOfStream();
+                  } else {
+                    sourceBuffer.addEventListener("updateend", () => mediaSource.endOfStream(), { once: true });
+                  }
+                  break;
+                }
+                // Attendre que le buffer soit prêt avant d'ajouter
+                if (sourceBuffer.updating) {
+                  await new Promise<void>(r => sourceBuffer.addEventListener("updateend", () => r(), { once: true }));
+                }
+                sourceBuffer.appendBuffer(value);
+                // Démarrer la lecture dès qu'on a assez de données
+                if (!playStarted && audio.readyState >= 2) {
+                  playStarted = true;
+                  audio.play().catch(() => {});
+                } else if (!playStarted) {
+                  await new Promise<void>(r => audio.addEventListener("canplay", () => r(), { once: true }));
+                  playStarted = true;
+                  audio.play().catch(() => {});
+                }
+              }
+            } catch (e) {
+              reject(e);
+            }
+          };
+
+          pump();
+          audio.onended = () => { setSpeaking(false); URL.revokeObjectURL(url); resolve(); };
+          audio.onerror = () => { setSpeaking(false); URL.revokeObjectURL(url); resolve(); };
+        }, { once: true });
+      });
     } catch {
       setSpeaking(false);
     }
