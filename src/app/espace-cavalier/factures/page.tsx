@@ -388,10 +388,20 @@ export default function FacturesPage() {
                               <div className="font-body text-sm font-semibold text-blue-800">{first.activityTitle}</div>
                               <div className="font-body text-xs text-gray-600 mt-0.5">
                                 🧒 {first.childName}
-                                {firstDate && lastDate && (
-                                  <span className="ml-1">· du {firstDate.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} au {lastDate.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span>
-                                )}
                               </div>
+                              {(() => {
+                                // Vérifier si tous les horaires sont identiques
+                                const horaires = [...new Set(sorted.map(r => `${r.startTime}–${r.endTime}`))];
+                                const allSame = horaires.length === 1;
+                                if (allSame && firstDate && lastDate) {
+                                  return (
+                                    <div className="font-body text-xs text-green-700 mt-1">
+                                      du {firstDate.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })} au {lastDate.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })} · {horaires[0]}
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
                               <div className="flex flex-wrap gap-1.5 mt-2">
                                 {sorted.map((r, ri) => {
                                   const d = r.date ? new Date(r.date) : null;

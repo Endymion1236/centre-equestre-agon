@@ -125,8 +125,9 @@ export async function GET(req: NextRequest) {
 
     if (payRef && pData && pData.status !== "paid") {
       const totalTTC = pData.totalTTC || 0;
+      // Utiliser acompteAmount stocké (montant exact) plutôt que recalculer depuis le %
       const paidAmount = isDeposit
-        ? Math.round(totalTTC * depositPercent / 100 * 100) / 100
+        ? (pData.acompteAmount || Math.round(totalTTC * depositPercent / 100 * 100) / 100)
         : totalEuros || totalTTC;
 
       await payRef.update({

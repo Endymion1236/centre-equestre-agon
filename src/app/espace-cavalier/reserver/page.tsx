@@ -9,6 +9,7 @@ import { Calendar, Clock, Users, Loader2, ShoppingCart, ChevronLeft, ChevronRigh
 import TimelineReservation from "./TimelineReservation";
 import { useSearchParams } from "next/navigation";
 import { authFetch } from "@/lib/auth-fetch";
+import { formatStageSchedule } from "@/lib/format-stage";
 
 interface Creneau { id: string; activityId: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolled: any[]; enrolledCount: number; priceHT: number; priceTTC?: number; tvaTaux: number; }
 
@@ -362,6 +363,7 @@ export default function ReserverPage() {
         familyEmail: family.parentEmail || user.email || "",
         items: cart.map(i => {
           const firstCr = creneaux.find(c => c.id === i.creneauIds[0]);
+          const stageCrs = i.isStage ? i.creneauIds.map(id => creneaux.find(c => c.id === id)).filter(Boolean) : [];
           return {
             activityTitle: `${i.activityTitle} — ${i.childName}${i.remiseEuros > 0 ? ` (-${i.remiseEuros}€)` : ""}`,
             childId: i.childId,
@@ -370,6 +372,8 @@ export default function ReserverPage() {
             creneauIds: i.isStage ? i.creneauIds : undefined,
             stageKey: i.isStage ? `${i.activityTitle}_${i.dates}` : null,
             activityType: i.isStage ? "stage" : "cours",
+            stageSchedule: i.isStage ? formatStageSchedule(stageCrs as any) : undefined,
+            stageDates: i.isStage ? stageCrs.map((c: any) => ({ date: c.date, startTime: c.startTime, endTime: c.endTime })) : undefined,
             priceHT: i.prixFinal / 1.055, tva: 5.5, priceTTC: i.prixFinal,
             date: firstCr?.date || null,
             startTime: firstCr?.startTime || null,

@@ -7,6 +7,7 @@ import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { emailTemplates } from "@/lib/email-templates";
 import { generateOrderId } from "@/lib/utils";
+import { formatStageSchedule } from "@/lib/format-stage";
 
 // ── Composant warning mandat SEPA ─────────────────────────────────────────────
 function SepaWarning({ familyId }: { familyId: string }) {
@@ -564,11 +565,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         }
 
         // Ajouter les lignes au panier de la famille (1 seul paiement pending)
+        const scheduleDesc = formatStageSchedule(creneauxAInscrire);
         const newItems = stageLines.map(l => ({
-          activityTitle: `${creneau.activityTitle} (${creneauxAInscrire.length}j) — ${l.childName} (-${l.remiseEuros}€ réd. ${l.rang}${l.rang === 1 ? "ère" : "ème"})`,
+          activityTitle: `${creneau.activityTitle} (${creneauxAInscrire.length}j) — ${l.childName}${l.remiseEuros > 0 ? ` (-${l.remiseEuros}€)` : ""}`,
           childId: l.childId, childName: l.childName,
           stageKey: `${creneau.activityTitle}_${creneau.date}`,
           activityType: creneau.activityType,
+          stageSchedule: scheduleDesc,
+          stageDates: creneauxAInscrire.map(c => ({ date: c.date, startTime: c.startTime, endTime: c.endTime })),
           priceHT: l.prixReduit / 1.055, tva: 5.5, priceTTC: l.prixReduit,
         }));
 
@@ -580,6 +584,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               childId: line.childId, childName: line.childName,
               stageKey: `${creneau.activityTitle}_${creneau.date}`,
               activityType: "option",
+              stageSchedule: "",
+              stageDates: [],
               priceHT: inscParams.assuranceOccasionnelle / 1.2, tva: 20,
               priceTTC: inscParams.assuranceOccasionnelle,
             });
