@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import ProgressionEditor from "@/components/ProgressionEditor";
+import PedaSuiviCard from "@/components/PedaSuiviCard";
 import { doc, updateDoc, addDoc, collection, getDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Badge } from "@/components/ui";
@@ -190,6 +191,11 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                   familyId={fid}
                   childName={child.firstName}
                   galopLevel={child.galopLevel}
+                />
+                <PedaSuiviCard
+                  child={child}
+                  familyId={fid}
+                  onRefresh={fetchFamilies}
                 />
               </div>
             ))
