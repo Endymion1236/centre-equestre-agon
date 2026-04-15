@@ -41,6 +41,7 @@ export default function ThemeSuggestion({ creneau, families }: Props) {
   const [addingTheme, setAddingTheme] = useState(false);
   const [themeChoisi, setThemeChoisi] = useState<string>("");
   const [tab, setTab] = useState<"suggestion" | "detail" | "themes">("suggestion");
+  const [allCreneaux, setAllCreneaux] = useState<any[]>([]);
 
   // Charger les thèmes depuis Firestore
   const loadThemes = async () => {
@@ -57,6 +58,9 @@ export default function ThemeSuggestion({ creneau, families }: Props) {
       } else {
         setThemes(snap.docs.map(d => ({ id: d.id, ...d.data() } as Theme)));
       }
+      // Charger tous les créneaux de type stage pour vérifier les thèmes assignés
+      const crSnap = await getDocs(collection(db, "creneaux"));
+      setAllCreneaux(crSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (e) { console.error(e); }
     setLoading(false);
   };
@@ -64,16 +68,26 @@ export default function ThemeSuggestion({ creneau, families }: Props) {
   useEffect(() => { if (open) loadThemes(); }, [open]);
 
   // Récupérer l'historique des thèmes de chaque enfant
+  // Cherche dans : 1) les notes péda avec themeStage 2) les créneaux passés où l'enfant était inscrit
   const getThemesVus = (childId: string): string[] => {
     const seen: string[] = [];
+    // 1. Notes pédagogiques
     for (const fam of families) {
       const child = (fam.children || []).find((c: any) => c.id === childId);
       if (!child) continue;
       const notes = child.peda?.notes || [];
       notes.forEach((n: any) => {
-        // Les notes de type "seance" ont un activityTitle — si c'est un stage, on cherche le thème associé
         if (n.themeStage) seen.push(n.themeStage);
       });
+    }
+    // 2. Créneaux passés avec themeStage assigné
+    for (const cr of allCreneaux) {
+      if (!cr.themeStage) continue;
+      if (cr.id === creneau.id) continue; // ignorer le créneau actuel
+      const enrolled = cr.enrolled || [];
+      if (enrolled.some((e: any) => e.childId === childId)) {
+        seen.push(cr.themeStage);
+      }
     }
     return [...new Set(seen)];
   };
