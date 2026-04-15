@@ -8,6 +8,7 @@ interface Message {
   role: "user" | "assistant";
   text: string;
   audioUrl?: string;
+  actionLink?: { label: string; href: string };
 }
 
 interface VoiceAssistantProps {
@@ -143,10 +144,18 @@ export default function VoiceAssistant({
 
     const defaultSystemFamille = `Tu es l'assistant vocal du Centre Équestre d'Agon-Coutainville.
 Tu réponds aux questions des familles sur les cours, tarifs, disponibilités et activités.
-Réponds en français, chaleureusement, de façon concise (max 3 phrases) — la réponse sera lue à voix haute.
+Réponds UNIQUEMENT en JSON valide, sans markdown ni backticks, avec cette structure :
+{ "text": "ta réponse en 1-3 phrases", "action": null }
+
+Si la famille exprime une intention de réserver, s'inscrire ou payer, utilise :
+{ "text": "ta réponse", "action": { "label": "Réserver maintenant", "href": "/espace-cavalier/reserver" } }
+
+Si elle demande à voir son profil ou ses informations : href = "/espace-cavalier/profil"
+Si elle veut voir ses paiements : href = "/espace-cavalier/paiements"
+
+Réponds toujours chaleureusement, en français. La réponse "text" sera lue à voix haute — pas de listes ni markdown.
 Données disponibles :
-${JSON.stringify(context, null, 2)}
-Pas de markdown ni de listes — texte simple uniquement.`;
+${JSON.stringify(context, null, 2)}`;
 
     try {
       if (mode === "admin") {
@@ -194,8 +203,19 @@ Pas de markdown ni de listes — texte simple uniquement.`;
           }),
         });
         const data = await res.json();
-        const answer = data.answer || data.error || "Je n'ai pas pu répondre.";
-        addMessage("assistant", answer);
+        let answer = data.answer || data.error || "Je n'ai pas pu répondre.";
+        let actionLink: { label: string; href: string } | undefined;
+        // Tenter de parser le JSON structuré retourné par le system prompt famille
+        try {
+          const parsed = JSON.parse(answer);
+          if (parsed.text) {
+            answer = parsed.text;
+            if (parsed.action?.href) actionLink = parsed.action;
+          }
+        } catch {
+          // Réponse en texte brut — on garde telle quelle
+        }
+        addMessage("assistant", answer, actionLink);
         if (!muted) await speakText(answer);
       }
     } catch (e: any) {
@@ -281,8 +301,8 @@ Pas de markdown ni de listes — texte simple uniquement.`;
     setSpeaking(false);
   };
 
-  const addMessage = (role: "user" | "assistant", text: string) => {
-    setMessages(prev => [...prev, { role, text }]);
+  const addMessage = (role: "user" | "assistant", text: string, actionLink?: { label: string; href: string }) => {
+    setMessages(prev => [...prev, { role, text, actionLink }]);
   };
 
   // ── UI ────────────────────────────────────────────────────────────────────
@@ -380,6 +400,14 @@ Pas de markdown ni de listes — texte simple uniquement.`;
                   {m.text}
                 </div>
               </div>
+              {/* Bouton action famille (ex: Réserver) */}
+              {m.actionLink && mode === "famille" && (
+                <a href={m.actionLink.href}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-body text-sm font-bold text-white no-underline hover:opacity-90 transition-opacity"
+                  style={{ background: gradientBg }}>
+                  → {m.actionLink.label}
+                </a>
+              )}
               {/* Boutons confirmation directement sous le message */}
               {needsConfirm && !loading && mode === "admin" && (
                 <div className="flex gap-2">
