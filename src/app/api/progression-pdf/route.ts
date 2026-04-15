@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
     const barColor = pct === 100 ? "#22c55e" : niveau.color;
 
     return `
-      <div style="margin-bottom:24px;page-break-inside:avoid;">
+      <div style="margin-bottom:16px;page-break-inside:avoid;">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
           <div style="width:36px;height:36px;border-radius:8px;background:${niveau.color};display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:12px;flex-shrink:0;">
             ${niveau.labelCourt}
@@ -101,9 +101,12 @@ export async function GET(req: NextRequest) {
     @media print {
       body { margin: 0; }
       .no-print { display: none !important; }
-      @page { margin: 15mm; size: A4; }
+      @page { margin: 10mm 15mm; size: A4; }
+      .page { padding: 0 !important; }
     }
-    .page { max-width: 794px; margin: 0 auto; padding: 32px; }
+    @media screen {
+      .page { max-width: 794px; margin: 0 auto; padding: 24px; }
+    }
   </style>
 </head>
 <body>
@@ -117,11 +120,11 @@ export async function GET(req: NextRequest) {
   <div class="no-print" style="height:50px;"></div>
 
   <!-- En-tête -->
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:3px solid #1e3a5f;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:3px solid #1e3a5f;">
     <div>
       <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Centre Équestre d'Agon-Coutainville</div>
-      <h1 style="font-size:26px;font-weight:800;color:#1e3a5f;margin-bottom:4px;">Bilan de progression</h1>
-      <div style="font-size:20px;font-weight:600;color:#2050A0;">${childName}</div>
+      <h1 style="font-size:22px;font-weight:800;color:#1e3a5f;margin-bottom:2px;">Bilan de progression</h1>
+      <div style="font-size:17px;font-weight:600;color:#2050A0;">${childName}</div>
       ${niveauEnCours ? `<div style="margin-top:8px;display:inline-block;background:${niveauEnCours.color};color:white;font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px;">${niveauEnCours.label}</div>` : ""}
     </div>
     <div style="text-align:right;color:#9ca3af;font-size:11px;">
@@ -138,7 +141,7 @@ export async function GET(req: NextRequest) {
   `}
 
   <!-- Signature -->
-  <div style="margin-top:40px;padding-top:20px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;">
+  <div style="margin-top:20px;padding-top:12px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;">
     <div>
       <div style="font-size:11px;color:#6b7280;margin-bottom:24px;">Validé par le moniteur</div>
       <div style="width:160px;border-top:1px solid #374151;padding-top:4px;font-size:10px;color:#9ca3af;">Signature</div>
