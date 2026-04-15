@@ -69,14 +69,17 @@ export default function DashboardPage() {
           }
         } catch { setCards([]); }
 
-        // Fidélité
+        // Fidélité — chercher par uid puis par familyId
         try {
-          const [fDoc, sDoc] = await Promise.all([
-            getDoc(doc(db, "fidelite", user.uid)),
-            getDoc(doc(db, "settings", "fidelite")),
-          ]);
-          if (fDoc.exists()) setFidelite(fDoc.data());
+          const sDoc = await getDoc(doc(db, "settings", "fidelite"));
           if (sDoc.exists()) setFideliteSettings(sDoc.data() as any);
+
+          let fDoc = await getDoc(doc(db, "fidelite", user.uid));
+          if (!fDoc.exists()) {
+            const fidQuery = await getDocs(query(collection(db, "fidelite"), where("familyId", "==", user.uid)));
+            if (!fidQuery.empty) fDoc = fidQuery.docs[0] as any;
+          }
+          if (fDoc.exists()) setFidelite(fDoc.data());
         } catch {}
 
       } catch (e) { console.error(e); }

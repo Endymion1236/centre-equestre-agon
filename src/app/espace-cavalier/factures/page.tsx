@@ -128,14 +128,31 @@ export default function FacturesPage() {
         } catch { setClientAvoirs([]); }
       }
 
-      // Fidélité
+      // Fidélité — chercher par uid puis par familyId
       try {
-        const [fidSnap, settingsSnap] = await Promise.all([
-          getDoc(doc(db, "fidelite", user.uid)),
+        const [settingsSnap] = await Promise.all([
           getDoc(doc(db, "settings", "fidelite")),
         ]);
-        if (fidSnap.exists()) setFidelite({ id: fidSnap.id, ...fidSnap.data() });
         if (settingsSnap.exists()) setFideliteSettings(settingsSnap.data() as any);
+
+        // Essayer d'abord avec user.uid comme ID du document
+        let fidSnap = await getDoc(doc(db, "fidelite", user.uid));
+        if (!fidSnap.exists()) {
+          // Fallback : chercher par champ familyId (cas admin a créé les points avec l'ancien ID)
+          const fidQuery = await getDocs(query(collection(db, "fidelite"), where("familyId", "==", user.uid)));
+          if (!fidQuery.empty) {
+            fidSnap = fidQuery.docs[0] as any;
+          } else {
+            // Dernier recours : chercher via la famille liée
+            const famSnap2 = await getDocs(collection(db, "fidelite"));
+            const match = famSnap2.docs.find(d => {
+              const data = d.data();
+              return data.familyId === user.uid || d.id === user.uid;
+            });
+            if (match) fidSnap = match as any;
+          }
+        }
+        if (fidSnap.exists()) setFidelite({ id: fidSnap.id, ...fidSnap.data() });
       } catch { /* pas de fidélité */ }
 
       // Famille (pour adresse facture)
