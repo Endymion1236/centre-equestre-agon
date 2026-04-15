@@ -53,11 +53,11 @@ export default function MiniFermeAnimals() {
       {animals.map((animal, i) => (
         <Card key={i} hover className="!p-0 overflow-hidden">
           {animal.photo ? (
-            <div className="h-48 overflow-hidden">
+            <div className="h-56 overflow-hidden rounded-t-xl">
               <img
                 src={animal.photo}
                 alt={animal.name}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover object-center"
               />
             </div>
           ) : (
