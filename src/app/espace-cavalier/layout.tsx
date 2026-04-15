@@ -440,8 +440,10 @@ export default function EspaceCavalierLayout({
 
   // Redirection admin ou moniteur → back-office
   useEffect(() => {
-    if (user && (isAdmin || isMoniteur) && !loading) {
+    if (user && isAdmin && !loading) {
       router.replace("/admin/dashboard");
+    } else if (user && isMoniteur && !loading) {
+      router.replace("/espace-moniteur/planning");
     }
   }, [user, isAdmin, isMoniteur, loading, router]);
 
@@ -463,7 +465,9 @@ export default function EspaceCavalierLayout({
       <div className="min-h-screen bg-cream flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-3" />
-          <p className="font-body text-sm text-gray-600">Redirection vers l&apos;administration...</p>
+          <p className="font-body text-sm text-gray-600">
+            {isAdmin ? "Redirection vers l'administration..." : "Redirection vers l'espace collaborateur..."}
+          </p>
         </div>
       </div>
     );
