@@ -66,6 +66,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(firebaseUser);
 
       if (firebaseUser) {
+        // Vérifier les custom claims pour ne pas créer de fiche famille pour admin/moniteur
+        const tokenResult = await firebaseUser.getIdTokenResult();
+        const isStaff = tokenResult.claims.admin === true || tokenResult.claims.moniteur === true;
+
+        if (isStaff) {
+          // Admin ou moniteur : pas de fiche famille
+          setFamily(null);
+        } else {
         // 1. Chercher une fiche famille par uid (cas normal : déjà lié)
         const familyRef = doc(db, "families", firebaseUser.uid);
         const familySnap = await getDoc(familyRef);
@@ -134,6 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setFamily({ id: firebaseUser.uid, ...newFamily } as Family);
           }
         }
+        } // fin else !isStaff
       } else {
         setFamily(null);
       }
