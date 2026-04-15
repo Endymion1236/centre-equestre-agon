@@ -557,13 +557,13 @@ export default function ReserverPage() {
       {viewMode === "timeline" && initialFilter === "all" && (<>
         {/* Bandeau stages */}
         {Object.keys(stageGroups).length > 0 && (
-          <div className="mb-4 bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-green-100 transition-colors"
+          <div className="mb-4 bg-white border-l-4 border-l-green-500 border border-green-200 rounded-xl px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-green-50 transition-colors"
             onClick={() => setViewMode("liste")}>
             <div className="flex items-center gap-2">
               <span className="text-lg">🏇</span>
               <div>
-                <div className="font-body text-sm font-semibold text-green-800">{Object.keys(stageGroups).length} stage{Object.keys(stageGroups).length > 1 ? "s" : ""} disponible{Object.keys(stageGroups).length > 1 ? "s" : ""}</div>
-                <div className="font-body text-xs text-green-600">Inscriptions semaine ou à la journée</div>
+                <div className="font-body text-sm font-semibold text-blue-800">{Object.keys(stageGroups).length} stage{Object.keys(stageGroups).length > 1 ? "s" : ""} disponible{Object.keys(stageGroups).length > 1 ? "s" : ""}</div>
+                <div className="font-body text-xs text-gray-500">Inscriptions semaine ou à la journée</div>
               </div>
             </div>
             <span className="font-body text-sm font-semibold text-green-600">Voir les stages →</span>

@@ -213,9 +213,9 @@ ${JSON.stringify(context, null, 2)}`;
         // L'IA entoure parfois le JSON de backticks markdown — on nettoie avant de parser
         try {
           const cleaned = answer
-            .replace(/^```json\s*/i, "")
-            .replace(/^```\s*/i, "")
-            .replace(/\s*```$/i, "")
+            .replace(/^\s*```json\s*/i, "")
+            .replace(/^\s*```\s*/i, "")
+            .replace(/\s*```\s*$/i, "")
             .trim();
           const parsed = JSON.parse(cleaned);
           if (parsed.text) {
