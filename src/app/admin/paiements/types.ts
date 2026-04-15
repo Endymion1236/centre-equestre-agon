@@ -15,6 +15,8 @@ export interface BasketItem {
   priceHT: number;
   tva: number;
   priceTTC: number;
+  category?: string;
+  compteComptable?: string;
 }
 
 export interface Payment {

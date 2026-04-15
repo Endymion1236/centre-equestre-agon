@@ -38,6 +38,8 @@ export function TabEncaisser({
   const [selectedFamily, setSelectedFamily] = useState("");
   const [customLabel, setCustomLabel] = useState("");
   const [customPrice, setCustomPrice] = useState("");
+  const [customTva, setCustomTva] = useState("5.5");
+  const [customCategory, setCustomCategory] = useState("enseignement");
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("cb_terminal");
   const [paymentRef, setPaymentRef] = useState("");
   const [paidAmount, setPaidAmount] = useState("");
@@ -62,18 +64,33 @@ export function TabEncaisser({
     : families;
 
 
+  const CATEGORIES = [
+    { id: "enseignement", label: "Enseignement", compte: "706100", tvaDefault: "5.5" },
+    { id: "pension", label: "Pension / Hébergement", compte: "706200", tvaDefault: "10" },
+    { id: "location", label: "Location (box, matériel)", compte: "706300", tvaDefault: "20" },
+    { id: "vente", label: "Vente (équipement, produits)", compte: "707000", tvaDefault: "20" },
+    { id: "licence", label: "Licence / Cotisation FFE", compte: "706400", tvaDefault: "0" },
+    { id: "transport", label: "Transport", compte: "706500", tvaDefault: "10" },
+    { id: "evenement", label: "Événement / Animation", compte: "706600", tvaDefault: "5.5" },
+    { id: "autre", label: "Autre", compte: "708000", tvaDefault: "20" },
+  ];
+
   const addToBasket = () => {
     if (customLabel && customPrice) {
       const price = safeNumber(customPrice);
+      const tvaRate = safeNumber(customTva);
+      const cat = CATEGORIES.find(c => c.id === customCategory);
       setBasket([...basket, {
         id: Date.now().toString(),
         activityTitle: customLabel,
         childId: selectedChild || "",
         childName: selectedChild || "—",
         description: "Saisie manuelle",
-        priceHT: price / 1.055,
-        tva: 5.5,
+        priceHT: tvaRate > 0 ? Math.round(price / (1 + tvaRate / 100) * 100) / 100 : price,
+        tva: tvaRate,
         priceTTC: price,
+        category: customCategory,
+        compteComptable: cat?.compte || "708000",
       }]);
       setCustomLabel(""); setCustomPrice(""); return;
     }
@@ -440,14 +457,32 @@ export function TabEncaisser({
 
         {/* Custom item */}
         <div className="font-body text-xs text-slate-600 mb-2">— ou saisie libre —</div>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <input value={customLabel} onChange={(e) => setCustomLabel(e.target.value)} placeholder="Libellé (ex: Licence FFE)" className={`${inputCls} flex-1`} />
-          <div className="flex gap-2">
-            <input value={customPrice} onChange={(e) => setCustomPrice(e.target.value)} placeholder="Prix TTC" type="number" step="0.01" className={`${inputCls} w-24`} />
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input value={customLabel} onChange={(e) => setCustomLabel(e.target.value)} placeholder="Libellé (ex: Location box avril)" className={`${inputCls} flex-1`} />
+            <input value={customPrice} onChange={(e) => setCustomPrice(e.target.value)} placeholder="Prix TTC" type="number" step="0.01" className={`${inputCls} w-28`} />
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 items-end">
+            <div className="flex-1">
+              <div className="font-body text-[10px] text-slate-400 mb-1">Catégorie</div>
+              <select value={customCategory} onChange={e => { setCustomCategory(e.target.value); const cat = CATEGORIES.find(c => c.id === e.target.value); if (cat) setCustomTva(cat.tvaDefault); }}
+                className={`${inputCls} !py-2`}>
+                {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label} (cpt {c.compte})</option>)}
+              </select>
+            </div>
+            <div className="w-24">
+              <div className="font-body text-[10px] text-slate-400 mb-1">TVA</div>
+              <select value={customTva} onChange={e => setCustomTva(e.target.value)} className={`${inputCls} !py-2`}>
+                <option value="0">0%</option>
+                <option value="5.5">5,5%</option>
+                <option value="10">10%</option>
+                <option value="20">20%</option>
+              </select>
+            </div>
             <button onClick={addToBasket} disabled={!customLabel || !customPrice}
-              className={`px-3 py-2 rounded-lg font-body text-sm font-semibold border-none cursor-pointer flex-shrink-0
+              className={`px-4 py-2 rounded-lg font-body text-sm font-semibold border-none cursor-pointer flex-shrink-0
                 ${customLabel && customPrice ? "bg-gold-400 text-blue-800" : "bg-gray-200 text-slate-600"}`}>
-              <Plus size={16} />
+              <Plus size={16} className="inline mr-1" /> Ajouter
             </button>
           </div>
         </div>
