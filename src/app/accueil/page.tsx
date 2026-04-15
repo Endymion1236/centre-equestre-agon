@@ -12,6 +12,7 @@ import {
   Heart,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import ActusBanner from "@/components/ActusBanner";
 
 export default function HomePage() {
   return (
@@ -72,6 +73,9 @@ export default function HomePage() {
           </div>
         </div>
       </HeroEditable>
+
+      {/* ═══ ACTUS & ÉVÉNEMENTS ═══ */}
+      <ActusBanner />
 
       {/* ═══ POURQUOI NOUS CHOISIR ═══ */}
       <section className="py-20 px-6 bg-cream">

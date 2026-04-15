@@ -12,7 +12,7 @@ const inp = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body te
 const ta = `${inp} resize-none`;
 const label = "font-body text-xs font-semibold text-slate-600 block mb-1";
 
-type Tab = "activites" | "tarifs" | "infos" | "miniferme";
+type Tab = "activites" | "tarifs" | "infos" | "miniferme" | "actus";
 
 export default function ContenuPage() {
   const { toast } = useToast();
@@ -30,6 +30,7 @@ export default function ContenuPage() {
     ],
   });
   const [uploading, setUploading] = useState<string | null>(null);
+  const [actus, setActus] = useState<{ id: string; type: "event" | "news"; title: string; date: string; description: string; emoji: string; active: boolean }[]>([]);
 
   useEffect(() => {
     getDoc(doc(db, "settings", "vitrine")).then(snap => {
@@ -56,6 +57,13 @@ export default function ContenuPage() {
         if (d.animals) setMiniferme({ animals: d.animals });
       }
     });
+    // Actus
+    getDoc(doc(db, "settings", "actus")).then(snap => {
+      if (snap.exists()) {
+        const d = snap.data() as any;
+        if (d.items) setActus(d.items);
+      }
+    });
   }, []);
 
   const save = async () => {
@@ -63,6 +71,7 @@ export default function ContenuPage() {
     try {
       await setDoc(doc(db, "settings", "vitrine"), { ...data, updatedAt: serverTimestamp() }, { merge: true });
       await setDoc(doc(db, "settings", "miniferme"), { ...miniferme, updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(doc(db, "settings", "actus"), { items: actus, updatedAt: serverTimestamp() }, { merge: true });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
       toast("✅ Contenu enregistré — visible sur le site dans quelques secondes", "success");
@@ -107,6 +116,7 @@ export default function ContenuPage() {
     { id: "tarifs", label: "Tarifs", icon: "💶" },
     { id: "infos", label: "Infos pratiques", icon: "ℹ️" },
     { id: "miniferme", label: "Mini-ferme", icon: "🐷" },
+    { id: "actus", label: "Actus & événements", icon: "📣" },
   ];
 
   return (
@@ -350,6 +360,71 @@ export default function ContenuPage() {
                 {/* Supprimer */}
                 <button onClick={() => { if (confirm(`Supprimer ${animal.name || "cet animal"} ?`)) { const a = miniferme.animals.filter((_, i) => i !== idx); setMiniferme({ ...miniferme, animals: a }); } }}
                   className="text-red-300 hover:text-red-500 bg-transparent border-none cursor-pointer mt-6"><Trash2 size={16} /></button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* ── Actus & événements ── */}
+      {tab === "actus" && (
+        <div className="flex flex-col gap-4">
+          <div className="flex justify-between items-center">
+            <p className="font-body text-xs text-slate-500">Gérez les actualités et événements affichés sur la page d&apos;accueil.</p>
+            <button onClick={() => setActus([...actus, { id: Date.now().toString(), type: "event", title: "", date: new Date().toISOString().split("T")[0], description: "", emoji: "📅", active: true }])}
+              className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
+              + Ajouter
+            </button>
+          </div>
+          {actus.length === 0 ? (
+            <Card padding="lg" className="text-center">
+              <p className="font-body text-sm text-slate-500">Aucune actualité. Cliquez sur &quot;+ Ajouter&quot; pour créer.</p>
+            </Card>
+          ) : actus.map((actu, idx) => (
+            <Card key={actu.id} padding="md" className={!actu.active ? "opacity-50" : ""}>
+              <div className="flex items-start gap-3">
+                <div className="flex-1">
+                  <div className="flex gap-2 mb-2">
+                    <div className="w-16">
+                      <label className={label}>Emoji</label>
+                      <input value={actu.emoji} onChange={e => { const a = [...actus]; a[idx] = { ...a[idx], emoji: e.target.value }; setActus(a); }}
+                        className={`${inp} text-center text-lg`} maxLength={4} />
+                    </div>
+                    <div className="w-24">
+                      <label className={label}>Type</label>
+                      <select value={actu.type} onChange={e => { const a = [...actus]; a[idx] = { ...a[idx], type: e.target.value as any }; setActus(a); }}
+                        className={inp}>
+                        <option value="event">Événement</option>
+                        <option value="news">Actualité</option>
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label className={label}>Titre *</label>
+                      <input value={actu.title} onChange={e => { const a = [...actus]; a[idx] = { ...a[idx], title: e.target.value }; setActus(a); }}
+                        placeholder="Ex: Stage Pâques 2026, Portes ouvertes..." className={inp} />
+                    </div>
+                    <div className="w-36">
+                      <label className={label}>Date</label>
+                      <input type="date" value={actu.date} onChange={e => { const a = [...actus]; a[idx] = { ...a[idx], date: e.target.value }; setActus(a); }}
+                        className={inp} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className={label}>Description</label>
+                    <textarea value={actu.description} onChange={e => { const a = [...actus]; a[idx] = { ...a[idx], description: e.target.value }; setActus(a); }}
+                      rows={2} placeholder="Détail de l'événement ou de l'actualité..." className={ta} />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5 pt-5">
+                  <button onClick={() => { const a = [...actus]; a[idx] = { ...a[idx], active: !a[idx].active }; setActus(a); }}
+                    className={`font-body text-[10px] px-2.5 py-1 rounded-lg border-none cursor-pointer ${actu.active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                    {actu.active ? "Visible" : "Masqué"}
+                  </button>
+                  <button onClick={() => { if (confirm("Supprimer cette actu ?")) setActus(actus.filter((_, i) => i !== idx)); }}
+                    className="font-body text-[10px] text-red-400 bg-red-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-red-100">
+                    Supprimer
+                  </button>
+                </div>
               </div>
             </Card>
           ))}
