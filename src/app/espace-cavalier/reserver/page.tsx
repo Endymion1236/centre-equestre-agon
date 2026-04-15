@@ -25,6 +25,7 @@ export default function ReserverPage() {
   const { user, family } = useAuth();
   const searchParams = useSearchParams();
   const initialFilter = searchParams.get("filter") || "all";
+  const initialDate = searchParams.get("date") || null; // date ISO depuis l'assistant vocal
 
   const [creneaux, setCreneaux] = useState<Creneau[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
@@ -67,7 +68,7 @@ export default function ReserverPage() {
   const familyId = user?.uid || "";
 
   const [monthOffset, setMonthOffset] = useState(0);
-  const [viewMode, setViewMode] = useState<"timeline" | "liste">("timeline");
+  const [viewMode, setViewMode] = useState<"timeline" | "liste">(initialDate ? "liste" : "timeline");
 
   // Mois courant affiché
   const currentMonth = useMemo(() => {

@@ -152,6 +152,9 @@ Réponds UNIQUEMENT en JSON valide, sans markdown ni backticks, avec cette struc
 { "text": "ta réponse en 1-3 phrases", "action": null }
 
 Si la famille parle d'inscription, de réservation, de paiement, ou confirme vouloir s'inscrire (oui, ok, go, je veux, inscris-moi...) :
+— Si tu connais la date ISO du créneau mentionné (format [date_iso:YYYY-MM-DD] dans les données) et son type (format [type:balade|cours|stage...]), construis le lien ainsi :
+  href = "/espace-cavalier/reserver?filter=TYPE&date=DATE_ISO"  (ex: "/espace-cavalier/reserver?filter=balade&date=2026-04-20")
+— Sinon : href = "/espace-cavalier/reserver"
 { "text": "Pour vous inscrire, utilisez le bouton ci-dessous — c'est rapide et sécurisé !", "action": { "label": "Réserver maintenant", "href": "/espace-cavalier/reserver" } }
 
 Si elle demande à voir son profil ou ses informations : href = "/espace-cavalier/profil"

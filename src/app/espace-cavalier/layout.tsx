@@ -410,7 +410,7 @@ export default function EspaceCavalierLayout({
           const d = new Date(c.date);
           const dLabel = d.toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" });
           const places = c.maxPlaces - (c.enrolled?.length || 0);
-          return `${dLabel} à ${c.startTime} — ${c.activityTitle} — ${places} place${places>1?"s":""} disponible${places>1?"s":""}`;
+          return `${dLabel} à ${c.startTime} — ${c.activityTitle} — ${places} place${places>1?"s":""} disponible${places>1?"s":""} [date_iso:${c.date}][type:${c.activityType}]`;
         };
 
         setVoiceContext({
