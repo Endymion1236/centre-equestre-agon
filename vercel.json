@@ -7,6 +7,14 @@
     {
       "path": "/api/cron/charge-stage-balances",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/daily-monitor-recap",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/rappels-j1",
+      "schedule": "0 7 * * *"
     }
   ]
 }
