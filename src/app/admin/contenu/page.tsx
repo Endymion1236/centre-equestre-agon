@@ -1,9 +1,10 @@
 "use client";
 import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, storage } from "@/lib/firebase";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { Card } from "@/components/ui";
-import { Loader2, Save, RefreshCw, ExternalLink, CheckCircle2 } from "lucide-react";
+import { Loader2, Save, RefreshCw, ExternalLink, CheckCircle2, Upload, Trash2, Image as ImageIcon } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { vitrineDefaults } from "@/lib/vitrine-defaults";
 
@@ -11,7 +12,7 @@ const inp = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body te
 const ta = `${inp} resize-none`;
 const label = "font-body text-xs font-semibold text-slate-600 block mb-1";
 
-type Tab = "activites" | "tarifs" | "infos";
+type Tab = "activites" | "tarifs" | "infos" | "miniferme";
 
 export default function ContenuPage() {
   const { toast } = useToast();
@@ -20,6 +21,15 @@ export default function ContenuPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [data, setData] = useState(vitrineDefaults);
+  const [miniferme, setMiniferme] = useState<{ animals: { name: string; type: string; color: string; description: string; photo: string }[] }>({
+    animals: [
+      { name: "Pépita", type: "Cochon Kune Kune", color: "Roux", description: "", photo: "" },
+      { name: "Ronron", type: "Cochon Kune Kune", color: "Blanc", description: "", photo: "" },
+      { name: "Les chèvres", type: "Chèvres naines", color: "", description: "", photo: "" },
+      { name: "Les poules", type: "Poules pondeuses", color: "", description: "", photo: "" },
+    ],
+  });
+  const [uploading, setUploading] = useState<string | null>(null);
 
   useEffect(() => {
     getDoc(doc(db, "settings", "vitrine")).then(snap => {
@@ -39,12 +49,20 @@ export default function ContenuPage() {
         }));
       }
     }).finally(() => setLoading(false));
+    // Mini-ferme
+    getDoc(doc(db, "settings", "miniferme")).then(snap => {
+      if (snap.exists()) {
+        const d = snap.data() as any;
+        if (d.animals) setMiniferme({ animals: d.animals });
+      }
+    });
   }, []);
 
   const save = async () => {
     setSaving(true);
     try {
       await setDoc(doc(db, "settings", "vitrine"), { ...data, updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(doc(db, "settings", "miniferme"), { ...miniferme, updatedAt: serverTimestamp() }, { merge: true });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
       toast("✅ Contenu enregistré — visible sur le site dans quelques secondes", "success");
@@ -88,6 +106,7 @@ export default function ContenuPage() {
     { id: "activites", label: "Activités", icon: "🏇" },
     { id: "tarifs", label: "Tarifs", icon: "💶" },
     { id: "infos", label: "Infos pratiques", icon: "ℹ️" },
+    { id: "miniferme", label: "Mini-ferme", icon: "🐷" },
   ];
 
   return (
@@ -256,6 +275,85 @@ export default function ContenuPage() {
             </div>
           </div>
         </Card>
+      )}
+
+      {/* ── Mini-ferme ── */}
+      {tab === "miniferme" && (
+        <div className="flex flex-col gap-4">
+          <div className="flex justify-between items-center">
+            <p className="font-body text-xs text-slate-500">Gérez les animaux et leurs photos. Ajoutez ou supprimez des animaux.</p>
+            <button onClick={() => setMiniferme(prev => ({ ...prev, animals: [...prev.animals, { name: "", type: "", color: "", description: "", photo: "" }] }))}
+              className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
+              + Ajouter un animal
+            </button>
+          </div>
+          {miniferme.animals.map((animal, idx) => (
+            <Card key={idx} padding="md">
+              <div className="flex items-start gap-4">
+                {/* Photo */}
+                <div className="flex-shrink-0">
+                  {animal.photo ? (
+                    <div className="relative group">
+                      <img src={animal.photo} alt={animal.name} className="w-32 h-32 rounded-xl object-cover" />
+                      <button onClick={() => {
+                        const updated = [...miniferme.animals];
+                        updated[idx] = { ...updated[idx], photo: "" };
+                        setMiniferme({ ...miniferme, animals: updated });
+                      }}
+                        className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="w-32 h-32 rounded-xl bg-sand border-2 border-dashed border-gray-300 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all">
+                      {uploading === `animal-${idx}` ? (
+                        <Loader2 size={20} className="animate-spin text-blue-400" />
+                      ) : (
+                        <>
+                          <Upload size={20} className="text-gray-400 mb-1" />
+                          <span className="font-body text-[10px] text-gray-400">Photo</span>
+                        </>
+                      )}
+                      <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setUploading(`animal-${idx}`);
+                        try {
+                          const storageRef = ref(storage, `miniferme/${Date.now()}_${file.name}`);
+                          const task = uploadBytesResumable(storageRef, file);
+                          await new Promise<void>((resolve, reject) => {
+                            task.on("state_changed", null, reject, () => resolve());
+                          });
+                          const url = await getDownloadURL(task.snapshot.ref);
+                          const updated = [...miniferme.animals];
+                          updated[idx] = { ...updated[idx], photo: url };
+                          setMiniferme({ ...miniferme, animals: updated });
+                        } catch (err) { console.error(err); toast("Erreur upload", "error"); }
+                        setUploading(null);
+                      }} />
+                    </label>
+                  )}
+                </div>
+                {/* Champs */}
+                <div className="flex-1">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-2">
+                    <div><label className={label}>Nom</label>
+                      <input value={animal.name} onChange={e => { const a = [...miniferme.animals]; a[idx] = { ...a[idx], name: e.target.value }; setMiniferme({ ...miniferme, animals: a }); }} className={inp} /></div>
+                    <div><label className={label}>Type</label>
+                      <input value={animal.type} onChange={e => { const a = [...miniferme.animals]; a[idx] = { ...a[idx], type: e.target.value }; setMiniferme({ ...miniferme, animals: a }); }} placeholder="Ex: Cochon Kune Kune" className={inp} /></div>
+                    <div><label className={label}>Couleur</label>
+                      <input value={animal.color} onChange={e => { const a = [...miniferme.animals]; a[idx] = { ...a[idx], color: e.target.value }; setMiniferme({ ...miniferme, animals: a }); }} className={inp} /></div>
+                  </div>
+                  <div><label className={label}>Description</label>
+                    <textarea value={animal.description} onChange={e => { const a = [...miniferme.animals]; a[idx] = { ...a[idx], description: e.target.value }; setMiniferme({ ...miniferme, animals: a }); }} rows={2} className={ta} /></div>
+                </div>
+                {/* Supprimer */}
+                <button onClick={() => { if (confirm(`Supprimer ${animal.name || "cet animal"} ?`)) { const a = miniferme.animals.filter((_, i) => i !== idx); setMiniferme({ ...miniferme, animals: a }); } }}
+                  className="text-red-300 hover:text-red-500 bg-transparent border-none cursor-pointer mt-6"><Trash2 size={16} /></button>
+              </div>
+            </Card>
+          ))}
+        </div>
       )}
 
       <div className="mt-6 p-4 rounded-xl bg-amber-50 border border-amber-100">
