@@ -608,48 +608,6 @@ export default function FamilyCard({
                             <ProgressionEditor childId={child.id} familyId={fid} childName={child.firstName} galopLevel={child.galopLevel}/>
                           </div>
                         )}
-
-                        {/* Réservations + notes péda */}
-                        {(() => {
-                          const childReservations = allReservations.filter((r: any) => r.childId === child.id && r.date >= new Date().toISOString().split("T")[0]).sort((a: any, b: any) => (a.date || "").localeCompare(b.date || ""));
-                          const peda = child.peda || { notes: [], objectifs: [] };
-                          const lastNotes = (peda.notes || []).slice(0, 3);
-                          return (
-                            <div className="pl-11 mt-2 flex flex-col gap-1.5">
-                              {childReservations.length > 0 && (() => {
-                                const [expanded, setExpanded] = [expandedReservations[child.id] || false, (v: boolean) => setExpandedReservations(prev => ({ ...prev, [child.id]: v }))];
-                                const shown = expanded ? childReservations : childReservations.slice(0, 3);
-                                return (
-                                <div className="bg-blue-50/50 rounded-lg px-3 py-2">
-                                  <div className="font-body text-[10px] font-semibold text-blue-500 uppercase mb-1">Prochaines séances ({childReservations.length})</div>
-                                  {shown.map((r: any, ri: number) => (
-                                    <div key={ri} className="font-body text-xs text-gray-600">
-                                      {new Date(r.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} — {r.activityTitle || "Séance"}
-                                    </div>
-                                  ))}
-                                  {childReservations.length > 3 && (
-                                    <button onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
-                                      className="font-body text-[10px] text-blue-500 bg-transparent border-none cursor-pointer hover:underline mt-0.5 p-0">
-                                      {expanded ? "▲ Réduire" : `▼ Voir les ${childReservations.length - 3} autres`}
-                                    </button>
-                                  )}
-                                </div>
-                                );
-                              })()}
-                              {lastNotes.length > 0 && (
-                                <div className="bg-green-50/50 rounded-lg px-3 py-2">
-                                  <div className="font-body text-[10px] font-semibold text-green-600 uppercase mb-1">Dernières notes péda</div>
-                                  {lastNotes.map((n: any, ni: number) => (
-                                    <div key={ni} className="font-body text-xs text-gray-600 flex gap-2">
-                                      <span className="text-slate-600 flex-shrink-0">{new Date(n.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span>
-                                      <span className="truncate">{n.text}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
                       </>
                     )}
                   </div>
