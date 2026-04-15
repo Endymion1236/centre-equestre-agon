@@ -413,9 +413,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
 
         {/* ── Assistant vocal admin flottant ── */}
-        <div className="fixed bottom-6 left-4 right-4 sm:left-6 sm:right-auto z-[100] flex flex-col items-start gap-3">
+        <div className="fixed bottom-6 left-4 sm:left-6 z-[100] flex flex-col items-start gap-3">
           {showVoice && (
-            <div className="w-full sm:w-[420px]" style={{ maxHeight: "75vh" }}>
+            <div className="w-[calc(100vw-2rem)] sm:w-[420px]" style={{ maxHeight: "75vh" }}>
               <VoiceAssistant
                 mode="admin"
                 voiceId="FvmvwvObRqIHojkEGh5N"
@@ -429,8 +429,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             onClick={() => setShowVoice(!showVoice)}
             className="w-14 h-14 rounded-full flex items-center justify-center text-white shadow-lg border-none cursor-pointer hover:scale-105 transition-transform"
             style={{ background: "linear-gradient(135deg,#0C1A2E,#122A5A)" }}
-            title="Assistant vocal admin">
-            {showVoice ? <span className="text-xl">✕</span> : <span className="text-2xl">🎙️</span>}
+            title="Assistant IA">
+            {showVoice
+              ? <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 4L16 16M16 4L4 16" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>
+              : <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" fill="white" fillOpacity="0.25" stroke="white" strokeWidth="1.5" strokeLinejoin="round"/>
+                  <path d="M12 7v1m0 0l-1.5 3h3L12 8zm-1.5 3L9 13h6l-1.5-3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M10.5 10L9 13h6l-1.5-3" fill="white" fillOpacity="0.9"/>
+                </svg>
+            }
           </button>
         </div>
       </div>

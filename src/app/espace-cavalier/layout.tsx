@@ -537,9 +537,9 @@ export default function EspaceCavalierLayout({
       </div>
 
       {/* ─── Assistant vocal famille ─── */}
-      <div className="fixed bottom-20 right-4 z-[100] flex flex-col items-end gap-3 md:bottom-6">
+      <div className="fixed bottom-20 left-4 z-[100] flex flex-col items-start gap-3 md:bottom-6">
         {showVoice && (
-          <div className="w-[320px] sm:w-[380px]">
+          <div className="w-[calc(100vw-2rem)] sm:w-[380px]">
             <VoiceAssistant
               mode="famille"
               voiceId="FvmvwvObRqIHojkEGh5N"
@@ -551,10 +551,16 @@ export default function EspaceCavalierLayout({
         )}
         <button
           onClick={() => setShowVoice(!showVoice)}
-          className="w-12 h-12 rounded-full flex items-center justify-center text-white shadow-lg border-none cursor-pointer hover:scale-105 transition-transform"
+          className="w-14 h-14 rounded-full flex items-center justify-center text-white shadow-lg border-none cursor-pointer hover:scale-105 transition-transform"
           style={{ background: "linear-gradient(135deg,#1a6b3c,#0C1A2E)" }}
-          title="Assistant vocal">
-          {showVoice ? <span className="text-lg">✕</span> : <span className="text-xl">🎙️</span>}
+          title="Assistant IA">
+          {showVoice
+            ? <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 4L16 16M16 4L4 16" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>
+            : <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" fill="white" fillOpacity="0.25" stroke="white" strokeWidth="1.5" strokeLinejoin="round"/>
+                <path d="M10.5 10L9 13h6l-1.5-3" fill="white" fillOpacity="0.9"/>
+              </svg>
+          }
         </button>
       </div>
 
