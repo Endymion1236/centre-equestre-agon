@@ -1051,8 +1051,17 @@ Réponds de façon concise et pratique, en français.`,
             const dateStr = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
             const dayTaches = taches.filter(t => t.salarieId === sal.id && t.jour === jour)
               .sort((a,b) => heureToMin(a.heureDebut) - heureToMin(b.heureDebut));
-            const dayActivities = creneaux.filter(c => c.date === dateStr && c.monitor === sal.nom)
-              .sort((a: any, b: any) => heureToMin(a.startTime) - heureToMin(b.startTime));
+            const dayActivities = creneaux.filter(c => {
+              if (c.date !== dateStr) return false;
+              // Support multi-moniteurs (séparés par virgule)
+              const monitors = (c.monitor || "").split(",").map((s: string) => s.trim().toLowerCase());
+              if (!monitors.includes(sal.nom.toLowerCase().trim())) return false;
+              // Ne pas afficher si déjà importé comme tâche management
+              const alreadyImported = dayTaches.some(t =>
+                t.tacheLabel === c.activityTitle && t.heureDebut === c.startTime
+              );
+              return !alreadyImported;
+            }).sort((a: any, b: any) => heureToMin(a.startTime) - heureToMin(b.startTime));
             const dayCharge = dayTaches
               .filter(t => t.categorie !== "pause")
               .reduce((s, t) => s + t.dureeMinutes, 0);
