@@ -960,7 +960,7 @@ export default function ReserverPage() {
       {/* PANIER MODAL */}
       {showCart && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onClick={() => setShowCart(false)}>
-          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[85vh] overflow-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[78vh] overflow-auto shadow-2xl pb-6" onClick={e => e.stopPropagation()}>
             <div className="p-5 border-b border-gray-100">
               <div className="flex justify-between items-center mb-3">
                 <h2 className="font-display text-lg font-bold text-blue-800"><ShoppingCart size={18} className="inline mr-2" />Mon panier</h2>
