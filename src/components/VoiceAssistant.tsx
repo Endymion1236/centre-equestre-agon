@@ -23,7 +23,7 @@ export default function VoiceAssistant({
   mode,
   context = {},
   systemPrompt,
-  voiceId = "XB0fDUnXU5powFXDhCwa", // Charlotte par défaut
+  voiceId = "FvmvwvObRqIHojkEGh5N", // Voix custom par défaut
   placeholder = "Posez votre question...",
   onClose,
 }: VoiceAssistantProps) {
