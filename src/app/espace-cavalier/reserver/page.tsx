@@ -48,6 +48,7 @@ export default function ReserverPage() {
   const [familyAvoirs, setFamilyAvoirs] = useState<any[]>([]);
   const [stageBookingMode, setStageBookingMode] = useState<"semaine" | "jour">("semaine");
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
+  const [expandedStageDetail, setExpandedStageDetail] = useState<string | null>(null); // key du stage dont le détail est ouvert
 
   // Tous les cavaliers disponibles = propres + liés
   const ownChildren = family?.children || [];
@@ -714,6 +715,30 @@ export default function ReserverPage() {
                           <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>{spots} place{spots > 1 ? "s" : ""}</Badge>
                         </div>
                       </div>
+
+                      {/* Bouton détail dépliable */}
+                      {(() => {
+                        const act = activities.find((a: any) => a.id === first.activityId);
+                        const desc = act?.description?.trim();
+                        if (!desc) return null;
+                        const isOpen = expandedStageDetail === key;
+                        return (
+                          <div className="mt-2">
+                            <button
+                              onClick={e => { e.stopPropagation(); setExpandedStageDetail(isOpen ? null : key); }}
+                              className="flex items-center gap-1.5 font-body text-xs text-green-700 font-semibold bg-transparent border-none cursor-pointer px-0 py-1 hover:text-green-900"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2a5 5 0 100 10A5 5 0 007 2zm0 2.5a.75.75 0 110 1.5.75.75 0 010-1.5zM6.25 6.5h1.5v3h-1.5v-3z" fill="currentColor"/></svg>
+                              {isOpen ? "Masquer le détail" : "Voir le détail du stage"}
+                            </button>
+                            {isOpen && (
+                              <div className="mt-2 p-3 bg-green-50 rounded-xl border border-green-100">
+                                <p className="font-body text-xs text-gray-700 leading-relaxed whitespace-pre-line">{desc}</p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* Sélection enfants pour ce stage */}
                       {isSelected && spots > 0 && (() => {
