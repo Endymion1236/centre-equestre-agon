@@ -445,175 +445,101 @@ export default function FamilyCard({
               </div>
             )}
 
-            {/* Tabs (réservations, paiements, SEPA, notes...) */}
+            {/* Tabs — onglets enfant + famille */}
             <FamilyDetailTabs
               family={family} children={children}
               allReservations={allReservations} allPayments={allPayments}
               allAvoirs={allAvoirs} allCartes={allCartes}
               allMandats={allMandats} allFidelite={allFidelite}
               fetchFamilies={onRefresh}
+              onEditChild={(child) => startEditChild(child)}
+              onDeleteChild={(childId, childName) => handleDeleteChild(childId, childName)}
+              onEditSanitary={(child) => startEditSanitary(child)}
+              onEditGalop={(childId) => setEditingGalop(childId)}
+              onInscribe={(childId, childName) => { setShowEnroll({ childId, childName }); loadCreneaux(); }}
+              onBilanPdf={async (child) => {
+                try {
+                  const res = await authFetch(`/api/progression-pdf?childId=${child.id}&familyId=${fid}&childName=${encodeURIComponent(child.firstName)}`);
+                  if (!res.ok) throw new Error("Erreur PDF");
+                  const html = await res.text();
+                  const w = window.open("", "_blank");
+                  if (w) { w.document.write(html); w.document.close(); }
+                } catch (e) { console.error("Bilan PDF:", e); }
+              }}
             />
 
-            {/* ── Cavaliers ─────────────────────────────────────────────── */}
-            <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2 mt-4">
-              Cavaliers ({children.length})
-            </div>
-            {children.length === 0 ? (
-              <p className="font-body text-sm text-slate-600 italic mb-3">Aucun cavalier.</p>
-            ) : (
-              <div className="flex flex-col gap-2 mb-3">
-                {children.map((child: any) => (
-                  <div key={child.id} className="bg-gray-50 rounded-lg px-4 py-3">
-                    {/* Mode édition */}
-                    {editingChild === child.id ? (
-                      <div className="flex flex-col gap-2">
-                        <div className="font-body text-xs font-semibold text-blue-500 uppercase">Modifier le cavalier</div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                          <input value={editChildForm.firstName} onChange={e => setEditChildForm(f => ({ ...f, firstName: e.target.value }))} className={inputStyle} placeholder="Prénom"/>
-                          <input value={editChildForm.lastName} onChange={e => setEditChildForm(f => ({ ...f, lastName: e.target.value }))} className={inputStyle} placeholder="Nom"/>
-                          <input type="date" value={editChildForm.birthDate} onChange={e => setEditChildForm(f => ({ ...f, birthDate: e.target.value }))} className={inputStyle}/>
-                          <select value={editChildForm.galopLevel} onChange={e => setEditChildForm(f => ({ ...f, galopLevel: e.target.value }))} className={inputStyle}>
-                            {galopLevels.map(g => <option key={g} value={g}>{g === "—" ? "Débutant" : g}</option>)}
-                          </select>
-                        </div>
-                        <div className="flex gap-2">
-                          <button onClick={() => handleSaveChild(child.id)} disabled={saving}
-                            className="flex items-center gap-1 font-body text-xs font-semibold text-white bg-blue-500 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
-                            {saving ? <Loader2 size={12} className="animate-spin"/> : <Save size={12}/>} Enregistrer
-                          </button>
-                          <button onClick={() => setEditingChild(null)} className="font-body text-xs text-slate-600 bg-white px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-                        </div>
-                      </div>
-                    ) : editingSanitary === child.id ? (
-                      /* Fiche sanitaire */
-                      <div className="flex flex-col gap-2">
-                        <div className="font-body text-xs font-semibold text-green-600 uppercase">Fiche sanitaire — {child.firstName}</div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {[["Allergies / Régime", "allergies", "Aucune"], ["Notes médicales", "medicalNotes", "Asthme, lunettes..."], ["Contact urgence (nom)", "emergencyContactName", "Maman, Papa..."], ["Téléphone urgence", "emergencyContactPhone", "06 00 00 00 00"]].map(([label, key, placeholder]) => (
-                            <div key={key}>
-                              <label className="font-body text-[10px] text-slate-600 block mb-0.5">{label}</label>
-                              <input value={(sanitaryForm as any)[key]} onChange={e => setSanitaryForm(f => ({ ...f, [key]: e.target.value }))} className={inputStyle} placeholder={placeholder}/>
-                            </div>
-                          ))}
-                        </div>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox" checked={sanitaryForm.authorization} onChange={e => setSanitaryForm(f => ({ ...f, authorization: e.target.checked }))} className="w-4 h-4 accent-blue-500"/>
-                          <span className="font-body text-xs text-gray-600">Autorisation parentale de transport en cas d'urgence</span>
-                        </label>
-                        <div className="flex gap-2">
-                          <button onClick={() => handleSaveSanitary(child.id)} disabled={saving}
-                            className="flex items-center gap-1 font-body text-xs font-semibold text-white bg-green-600 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
-                            {saving ? <Loader2 size={12} className="animate-spin"/> : <Save size={12}/>} Enregistrer
-                          </button>
-                          <button onClick={() => setEditingSanitary(null)} className="font-body text-xs text-slate-600 bg-white px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-                        </div>
-                      </div>
-                    ) : (
-                      /* Mode lecture */
-                      <>
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-                            <Users size={14} className="text-blue-500"/>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <div className="font-body text-sm font-semibold text-blue-800">{child.firstName}{child.lastName ? ` ${child.lastName}` : ""}</div>
-                              {!child.lastName && (
-                                <span title="Nom de famille manquant" className="font-body text-[10px] font-semibold text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded cursor-default">⚠️ nom manquant</span>
-                              )}
-                            </div>
-                            <div className="font-body text-xs text-slate-600">
-                              {child.birthDate ? (
-                                <>
-                                  {`Né(e) le ${new Date(typeof child.birthDate === "string" ? child.birthDate : child.birthDate?.seconds ? child.birthDate.seconds * 1000 : child.birthDate).toLocaleDateString("fr-FR")}`}
-                                  <span className="ml-2 font-semibold text-blue-500">{calcAge(child.birthDate)}</span>
-                                </>
-                              ) : ""}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap pl-11">
-                          {/* Badge galop */}
-                          {editingGalop === child.id ? (
-                            <select defaultValue={child.galopLevel || "—"} autoFocus
-                              onChange={e => handleUpdateGalop(child.id, e.target.value)}
-                              onBlur={() => setEditingGalop(null)}
-                              className="px-2 py-1 rounded border border-blue-500 font-body text-xs bg-white focus:outline-none">
-                              {galopLevels.map(g => <option key={g} value={g}>{g}</option>)}
-                            </select>
-                          ) : (
-                            <button onClick={() => setEditingGalop(child.id)} className="bg-transparent border-none cursor-pointer" title="Modifier le niveau">
-                              <Badge color={child.galopLevel && child.galopLevel !== "—" ? "blue" : "gray"}>
-                                {child.galopLevel && child.galopLevel !== "—" ? `Galop ${child.galopLevel}` : "Débutant"}
-                              </Badge>
-                            </button>
-                          )}
-                          {/* Badge sanitaire */}
-                          <button onClick={() => startEditSanitary(child)} className="bg-transparent border-none cursor-pointer">
-                            <Badge color={child.sanitaryForm ? "green" : "red"}>{child.sanitaryForm ? "Fiche OK" : "Fiche manquante"}</Badge>
-                          </button>
-                          {/* Badge inscription */}
-                          {(() => {
-                            const status = getEnrollmentStatus(child.id);
-                            return (
-                              <span className={`inline-flex items-center gap-1 font-body text-[11px] px-2 py-0.5 rounded-full border ${
-                                status.color === "green" ? "bg-green-50 border-green-200 text-green-700" :
-                                status.color === "orange" ? "bg-orange-50 border-orange-200 text-orange-700" :
-                                "bg-gray-50 border-gray-200 text-gray-500"
-                              }`}>
-                                <span className={`w-2 h-2 rounded-full ${status.color === "green" ? "bg-green-500" : status.color === "orange" ? "bg-orange-400" : "bg-gray-300"}`}/>
-                                {status.label}
-                              </span>
-                            );
-                          })()}
-                          {/* Actions */}
-                          <button onClick={() => { setShowEnroll({ childId: child.id, childName: child.firstName }); loadCreneaux(); }}
-                            className="font-body text-xs text-blue-500 bg-blue-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
-                            <CalendarDays size={12}/> Inscrire
-                          </button>
-                          <button onClick={() => setShowProgression(showProgression === child.id ? null : child.id)}
-                            className="font-body text-xs text-purple-600 bg-purple-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-purple-100 flex items-center gap-1">
-                            📈 Progression
-                          </button>
-                          <button onClick={async () => {
-                            try {
-                              const res = await authFetch(`/api/progression-pdf?childId=${child.id}&familyId=${fid}&childName=${encodeURIComponent(child.firstName)}`);
-                              if (!res.ok) throw new Error("Erreur PDF");
-                              const blob = await res.blob();
-                              const url = URL.createObjectURL(blob);
-                              window.open(url, "_blank");
-                            } catch (e) { console.error("Bilan PDF:", e); }
-                          }}
-                            className="font-body text-xs text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-indigo-100 flex items-center gap-1">
-                            🖨 Bilan PDF
-                          </button>
-                          <button onClick={() => startEditChild(child)}
-                            className="font-body text-xs text-slate-600 bg-gray-100 px-2 py-1 rounded-lg border-none cursor-pointer hover:bg-gray-200 flex items-center gap-1">
-                            <Edit3 size={10}/> Modifier
-                          </button>
-                          <button onClick={() => handleDeleteChild(child.id, child.firstName)}
-                            className="font-body text-xs text-red-400 bg-red-50 px-2 py-1 rounded-lg border-none cursor-pointer hover:bg-red-100 flex items-center gap-1">
-                            <Trash2 size={10}/> Suppr.
-                          </button>
-                        </div>
+            {/* Galop inline editor */}
+            {editingGalop && (() => {
+              const child = children.find((c: any) => c.id === editingGalop);
+              if (!child) return null;
+              return (
+                <div className="mt-2 p-3 bg-purple-50 rounded-lg border border-purple-100">
+                  <div className="font-body text-xs font-semibold text-purple-600 mb-2">Changer le niveau de {child.firstName}</div>
+                  <select defaultValue={child.galopLevel || "\u2014"} autoFocus
+                    onChange={e => { handleUpdateGalop(child.id, e.target.value); setEditingGalop(null); }}
+                    onBlur={() => setEditingGalop(null)}
+                    className="px-3 py-2 rounded-lg border border-purple-200 font-body text-sm bg-white focus:outline-none">
+                    {galopLevels.map(g => <option key={g} value={g}>{g === "\u2014" ? "Débutant" : g}</option>)}
+                  </select>
+                </div>
+              );
+            })()}
 
-                        {/* Progression editor inline */}
-                        {showProgression === child.id && (
-                          <div className="mt-3 bg-white rounded-xl border border-purple-100 p-4" ref={el => {
-                            if (el && hasTargetChild && child.id === initialProgressionChildId) {
-                              setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 300);
-                            }
-                          }}>
-                            <div className="font-body text-xs font-semibold text-purple-600 uppercase tracking-wider mb-3">📈 Progression — {child.firstName}</div>
-                            <ProgressionEditor childId={child.id} familyId={fid} childName={child.firstName} galopLevel={child.galopLevel}/>
-                          </div>
-                        )}
-                      </>
-                    )}
+            {/* Fiche sanitaire inline */}
+            {editingSanitary && (() => {
+              const child = children.find((c: any) => c.id === editingSanitary);
+              if (!child) return null;
+              return (
+                <div className="mt-2 p-4 bg-green-50 rounded-lg border border-green-100">
+                  <div className="font-body text-xs font-semibold text-green-600 uppercase mb-2">Fiche sanitaire — {child.firstName}</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {[["Allergies / Régime", "allergies", "Aucune"], ["Notes médicales", "medicalNotes", "Asthme, lunettes..."], ["Contact urgence (nom)", "emergencyContactName", "Maman, Papa..."], ["Téléphone urgence", "emergencyContactPhone", "06 00 00 00 00"]].map(([label, key, placeholder]) => (
+                      <div key={key}>
+                        <label className="font-body text-[10px] text-slate-600 block mb-0.5">{label}</label>
+                        <input value={(sanitaryForm as any)[key]} onChange={e => setSanitaryForm(f => ({ ...f, [key]: e.target.value }))} className={inputStyle} placeholder={placeholder}/>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
+                  <label className="flex items-center gap-2 cursor-pointer mt-2">
+                    <input type="checkbox" checked={sanitaryForm.authorization} onChange={e => setSanitaryForm(f => ({ ...f, authorization: e.target.checked }))} className="w-4 h-4 accent-blue-500"/>
+                    <span className="font-body text-xs text-gray-600">Autorisation parentale de transport en cas d&apos;urgence</span>
+                  </label>
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={() => handleSaveSanitary(child.id)} disabled={saving}
+                      className="flex items-center gap-1 font-body text-xs font-semibold text-white bg-green-600 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                      {saving ? <Loader2 size={12} className="animate-spin"/> : <Save size={12}/>} Enregistrer
+                    </button>
+                    <button onClick={() => setEditingSanitary(null)} className="font-body text-xs text-slate-600 bg-white px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Édition enfant inline */}
+            {editingChild && (() => {
+              const child = children.find((c: any) => c.id === editingChild);
+              if (!child) return null;
+              return (
+                <div className="mt-2 p-4 bg-blue-50 rounded-lg border border-blue-100">
+                  <div className="font-body text-xs font-semibold text-blue-500 uppercase mb-2">Modifier — {child.firstName}</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <input value={editChildForm.firstName} onChange={e => setEditChildForm(f => ({ ...f, firstName: e.target.value }))} className={inputStyle} placeholder="Prénom"/>
+                    <input value={editChildForm.lastName} onChange={e => setEditChildForm(f => ({ ...f, lastName: e.target.value }))} className={inputStyle} placeholder="Nom"/>
+                    <input type="date" value={editChildForm.birthDate} onChange={e => setEditChildForm(f => ({ ...f, birthDate: e.target.value }))} className={inputStyle}/>
+                    <select value={editChildForm.galopLevel} onChange={e => setEditChildForm(f => ({ ...f, galopLevel: e.target.value }))} className={inputStyle}>
+                      {galopLevels.map(g => <option key={g} value={g}>{g === "\u2014" ? "Débutant" : g}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={() => handleSaveChild(editingChild)} disabled={saving}
+                      className="flex items-center gap-1 font-body text-xs font-semibold text-white bg-blue-500 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                      {saving ? <Loader2 size={12} className="animate-spin"/> : <Save size={12}/>} Enregistrer
+                    </button>
+                    <button onClick={() => setEditingChild(null)} className="font-body text-xs text-slate-600 bg-white px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* ── Ajouter un enfant ────────────────────────────────────── */}
             {addingChild ? (

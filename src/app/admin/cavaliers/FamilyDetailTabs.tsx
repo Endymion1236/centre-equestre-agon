@@ -14,10 +14,16 @@ const modeLabels: Record<string, string> = {
   ancv: "ANCV", virement: "Virement", avoir: "Avoir", prelevement_sepa: "SEPA",
 };
 
-export default function FamilyDetailTabs({ family, children, allReservations, allPayments, allAvoirs, allCartes, allMandats, allFidelite, fetchFamilies }: {
+export default function FamilyDetailTabs({ family, children, allReservations, allPayments, allAvoirs, allCartes, allMandats, allFidelite, fetchFamilies, onEditChild, onDeleteChild, onEditSanitary, onEditGalop, onInscribe, onBilanPdf }: {
   family: any; children: any[]; allReservations: any[]; allPayments: any[];
   allAvoirs: any[]; allCartes: any[]; allMandats: any[]; allFidelite: any[];
   fetchFamilies: () => void;
+  onEditChild?: (child: any) => void;
+  onDeleteChild?: (childId: string, childName: string) => void;
+  onEditSanitary?: (child: any) => void;
+  onEditGalop?: (childId: string) => void;
+  onInscribe?: (childId: string, childName: string) => void;
+  onBilanPdf?: (child: any) => void;
 }) {
   const childTabs = children.map((c: any) => ({ id: `child_${c.id}`, label: `🧒 ${c.firstName || "?"}`, childId: c.id }));
   const familyTabs = [
@@ -121,6 +127,15 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                 <Badge color={child.galopLevel && child.galopLevel !== "—" ? "blue" : "gray"}>{child.galopLevel && child.galopLevel !== "—" ? child.galopLevel : "Débutant"}</Badge>
                 {child.sanitaryForm ? <Badge color="green">Fiche OK</Badge> : <Badge color="red">Fiche manquante</Badge>}
               </div>
+            </div>
+            {/* Actions */}
+            <div className="flex items-center gap-1.5 flex-wrap -mt-2 pb-3 border-b border-blue-500/8">
+              {onInscribe && <button onClick={() => onInscribe(child.id, child.firstName)} className="font-body text-[11px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1"><CalendarDays size={11}/> Inscrire</button>}
+              {onEditSanitary && <button onClick={() => onEditSanitary(child)} className="font-body text-[11px] text-green-600 bg-green-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-green-100">Fiche sanitaire</button>}
+              {onEditGalop && <button onClick={() => onEditGalop(child.id)} className="font-body text-[11px] text-purple-600 bg-purple-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-purple-100">Changer niveau</button>}
+              {onBilanPdf && <button onClick={() => onBilanPdf(child)} className="font-body text-[11px] text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-indigo-100">🖨 Bilan PDF</button>}
+              {onEditChild && <button onClick={() => onEditChild(child)} className="font-body text-[11px] text-slate-600 bg-gray-100 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-gray-200">✏️ Modifier</button>}
+              {onDeleteChild && <button onClick={() => onDeleteChild(child.id, child.firstName)} className="font-body text-[11px] text-red-400 bg-red-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-red-100">🗑 Suppr.</button>}
             </div>
 
             {/* Fiche sanitaire */}
