@@ -5,7 +5,7 @@ import { verifyAuth } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-const DEFAULT_VOICE_ID = "XB0fDUnXU5powFXDhCwa"; // Charlotte
+const DEFAULT_VOICE_ID = "FvmvwvObRqIHojkEGh5N"; // Voix custom
 
 export async function POST(request: NextRequest) {
   // 🔒 Auth obligatoire

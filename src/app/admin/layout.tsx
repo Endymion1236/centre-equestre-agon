@@ -418,7 +418,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <div className="w-full sm:w-[420px]" style={{ maxHeight: "75vh" }}>
               <VoiceAssistant
                 mode="admin"
-                voiceId="XB0fDUnXU5powFXDhCwa"
+                voiceId="FvmvwvObRqIHojkEGh5N"
                 placeholder="Posez votre question..."
                 onClose={() => setShowVoice(false)}
                 context={voiceContext}
