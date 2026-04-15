@@ -210,8 +210,14 @@ ${JSON.stringify(context, null, 2)}`;
         let answer = data.answer || data.error || "Je n'ai pas pu répondre.";
         let actionLink: { label: string; href: string } | undefined;
         // Tenter de parser le JSON structuré retourné par le system prompt famille
+        // L'IA entoure parfois le JSON de backticks markdown — on nettoie avant de parser
         try {
-          const parsed = JSON.parse(answer);
+          const cleaned = answer
+            .replace(/^```json\s*/i, "")
+            .replace(/^```\s*/i, "")
+            .replace(/\s*```$/i, "")
+            .trim();
+          const parsed = JSON.parse(cleaned);
           if (parsed.text) {
             answer = parsed.text;
             if (parsed.action?.href) actionLink = parsed.action;
