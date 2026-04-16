@@ -39,8 +39,10 @@ export async function GET(req: NextRequest) {
   try {
     const famSnap = await adminDb.collection("families").doc(familyId).get();
     if (famSnap.exists) {
-      const child = ((famSnap.data() as any).children || []).find((c: any) => c.id === childId);
+      const famData = famSnap.data() as any;
+      const child = (famData.children || []).find((c: any) => c.id === childId);
       const notes = child?.peda?.notes || [];
+      console.log(`[PDF] familyId=${familyId}, childId=${childId}, nbNotes=${notes.length}, featured=${notes.filter((n:any) => n.featured).length}`);
       const featuredNote = notes.find((n: any) => n.featured);
       if (featuredNote) {
         const dateStr = new Date(featuredNote.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
@@ -55,6 +57,7 @@ export async function GET(req: NextRequest) {
       }
     }
   } catch (e) { console.error("Notes PDF:", e); }
+  if (!notesHtml) console.log(`[PDF] Pas de note featured pour familyId=${familyId} childId=${childId}`);
 
   const renderNiveau = (niveau: typeof GALOPS_PROGRAMME[0], isCurrent: boolean) => {
     const total = niveau.competences.length;
