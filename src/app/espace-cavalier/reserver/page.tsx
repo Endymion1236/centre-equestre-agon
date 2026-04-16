@@ -558,16 +558,22 @@ export default function ReserverPage() {
       {viewMode === "timeline" && filter === "all" && (<>
         {/* Bandeau stages */}
         {Object.keys(stageGroups).length > 0 && (
-          <div className="mb-4 bg-white border-l-4 border-l-green-500 border border-green-200 rounded-xl px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-green-50 transition-colors"
+          <div className="mb-5 bg-green-600 rounded-2xl px-5 py-4 cursor-pointer hover:bg-green-700 transition-colors shadow-sm"
             onClick={() => setViewMode("liste")}>
-            <div className="flex items-center gap-2">
-              <span className="text-lg">🏇</span>
-              <div>
-                <div className="font-body text-sm font-semibold text-blue-800">{Object.keys(stageGroups).length} stage{Object.keys(stageGroups).length > 1 ? "s" : ""} disponible{Object.keys(stageGroups).length > 1 ? "s" : ""}</div>
-                <div className="font-body text-xs text-gray-500">Inscriptions semaine ou à la journée</div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-xl flex-shrink-0">🏇</div>
+                <div>
+                  <div className="font-body text-base font-bold text-white">
+                    {Object.keys(stageGroups).length} stage{Object.keys(stageGroups).length > 1 ? "s" : ""} disponible{Object.keys(stageGroups).length > 1 ? "s" : ""}
+                  </div>
+                  <div className="font-body text-xs text-green-100 mt-0.5">Vacances de Pâques · Inscriptions semaine ou à la journée</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 bg-white text-green-700 font-body text-sm font-bold px-4 py-2 rounded-xl flex-shrink-0">
+                Voir <span className="text-base">→</span>
               </div>
             </div>
-            <span className="font-body text-sm font-semibold text-green-600">Voir les stages →</span>
           </div>
         )}
         <TimelineReservation
