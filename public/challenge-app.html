@@ -48,20 +48,28 @@ const defaultData = () => ({ riders: [], results: {}, nextId: 1 });
 // ── Firebase sync ─────────────────────────────────────────────
 // challengeId est passé en paramètre URL: ?id=challenge-2026-03-15-...
 const getChallengeId = () => new URLSearchParams(window.location.search).get("id") || null;
+const getAuthToken = () => {
+  const hash = window.location.hash;
+  const match = hash.match(/token=([^&]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+};
 const API_BASE = window.location.origin;
 
 const saveData = async (data) => {
   const id = getChallengeId();
-  if (!id) { // fallback localStorage si pas d'ID
+  const token = getAuthToken();
+  if (!id) {
     try { localStorage.setItem("challenge-local", JSON.stringify(data)); } catch {}
     return;
   }
   try {
-    await fetch(`${API_BASE}/api/challenges`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE}/api/challenges`, {
+      method: "PUT", headers,
       body: JSON.stringify({ id, riders: data.riders, results: data.results, nextId: data.nextId }),
     });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
   } catch(e) {
     console.warn("Sauvegarde Firebase échouée, fallback local:", e);
     try { localStorage.setItem(`challenge-${id}`, JSON.stringify(data)); } catch {}
@@ -70,6 +78,7 @@ const saveData = async (data) => {
 
 const loadData = async () => {
   const id = getChallengeId();
+  const token = getAuthToken();
   if (!id) {
     try {
       const raw = localStorage.getItem("challenge-local");
@@ -77,7 +86,9 @@ const loadData = async () => {
     } catch { return null; }
   }
   try {
-    const res = await fetch(`${API_BASE}/api/challenges?id=${encodeURIComponent(id)}`);
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE}/api/challenges?id=${encodeURIComponent(id)}`, { headers });
     if (!res.ok) return null;
     const d = await res.json();
     return { riders: d.riders || [], results: d.results || {}, nextId: d.nextId || 1, title: d.title };

@@ -9,6 +9,14 @@ import { useEffect, useState } from "react";
 export default function ChallengeClientPage() {
   const params = useSearchParams();
   const id = params.get("id");
+  const [token, setToken] = useState<string>("");
+
+  useEffect(() => {
+    import("firebase/auth").then(({ getAuth }) => {
+      const user = getAuth().currentUser;
+      if (user) user.getIdToken().then(t => setToken(t));
+    });
+  }, []);
 
   if (!id) {
     return (
@@ -21,9 +29,17 @@ export default function ChallengeClientPage() {
     );
   }
 
+  if (!token) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", fontFamily: "sans-serif" }}>
+        <div>Chargement...</div>
+      </div>
+    );
+  }
+
   return (
     <iframe
-      src={`/challenge-app.html?id=${encodeURIComponent(id)}`}
+      src={`/challenge-app.html?id=${encodeURIComponent(id)}#token=${encodeURIComponent(token)}`}
       style={{ width: "100%", height: "100vh", border: "none", display: "block" }}
       title="Challenge Équestre"
     />
