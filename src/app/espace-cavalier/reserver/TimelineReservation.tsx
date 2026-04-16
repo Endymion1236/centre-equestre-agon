@@ -317,15 +317,14 @@ export default function TimelineReservation({ creneaux, children, familyId, onBo
           </div>
         </div>
         <div className="relative flex-shrink-0">
-          <label className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 bg-white cursor-pointer hover:border-blue-300 transition-colors">
-            <Star size={13} className="text-blue-400"/>
-            <span className="font-body text-xs font-semibold text-slate-600">Choisir une date</span>
-            <input type="date" min={todayStr}
-              value={currentDayStr}
-              onChange={e => { if (e.target.value) { const d = new Date(e.target.value + "T00:00:00"); goToDay(d); } }}
-              className="absolute inset-0 opacity-0 w-full cursor-pointer"
-            />
-          </label>
+          <input
+            type="date"
+            min={todayStr}
+            value={currentDayStr}
+            onChange={e => { if (e.target.value) { const d = new Date(e.target.value + "T00:00:00"); goToDay(d); } }}
+            className="font-body text-xs font-semibold text-blue-600 px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 cursor-pointer focus:outline-none focus:border-blue-400"
+            style={{ colorScheme: "light" }}
+          />
         </div>
       </div>
 
