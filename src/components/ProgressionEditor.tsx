@@ -253,12 +253,10 @@ function NoteMoniteur({ childId, familyId, childName }: { childId: string; famil
     try {
       // 1. Transcrire avec Whisper
       const formData = new FormData();
-      formData.append("file", blob, "note.webm");
-      formData.append("model", "whisper-1");
-      formData.append("language", "fr");
+      formData.append("audio", blob, "note.webm");
 
       const token = await (await import("firebase/auth")).getAuth().currentUser?.getIdToken();
-      const transRes = await fetch("/api/transcribe", {
+      const transRes = await fetch("/api/whisper", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
