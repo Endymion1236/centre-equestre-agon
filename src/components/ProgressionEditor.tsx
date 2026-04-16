@@ -334,6 +334,23 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
     } catch (e) { console.error(e); }
   };
 
+  const deleteNote = async (idx: number) => {
+    if (!confirm("Supprimer cette note ?")) return;
+    try {
+      const famDoc = await getDoc(doc(db, "families", familyId));
+      if (!famDoc.exists()) return;
+      const famData = famDoc.data() as any;
+      const updatedChildren = (famData.children || []).map((c: any) => {
+        if (c.id !== childId) return c;
+        const peda = c.peda || { objectifs: [], notes: [] };
+        const updatedNotes = peda.notes.filter((_: any, i: number) => i !== idx);
+        return { ...c, peda: { ...peda, notes: updatedNotes } };
+      });
+      await setDoc(doc(db, "families", familyId), { ...famData, children: updatedChildren, updatedAt: serverTimestamp() }, { merge: true });
+      setRecentNotes(prev => prev.filter((_, i) => i !== idx));
+    } catch (e) { console.error(e); }
+  };
+
   const saveNote = async () => {
     if (!noteText.trim()) return;
     setSaving(true);
@@ -418,6 +435,11 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
                 <span className="text-purple-400">{new Date(n.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}</span>
                 {" — "}{n.text}
               </div>
+              <button onClick={() => deleteNote(i)}
+                className="bg-transparent border-none cursor-pointer p-0 text-red-300 hover:text-red-500 flex-shrink-0 mt-0.5 text-sm"
+                title="Supprimer cette note">
+                ✕
+              </button>
             </div>
           ))}
         </div>
