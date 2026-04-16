@@ -9,12 +9,22 @@ import { useEffect, useState } from "react";
 export default function ChallengeClientPage() {
   const params = useSearchParams();
   const id = params.get("id");
-  const [token, setToken] = useState<string>("");
+  const [token, setToken] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
-    import("firebase/auth").then(({ getAuth }) => {
-      const user = getAuth().currentUser;
-      if (user) user.getIdToken().then(t => setToken(t));
+    import("firebase/auth").then(({ getAuth, onAuthStateChanged }) => {
+      const auth = getAuth();
+      const unsub = onAuthStateChanged(auth, async (user) => {
+        if (user) {
+          const t = await user.getIdToken();
+          setToken(t);
+        }
+        setAuthReady(true);
+        unsub();
+      });
+      // Timeout: si l'auth ne répond pas en 3s, continuer sans token
+      setTimeout(() => setAuthReady(true), 3000);
     });
   }, []);
 
@@ -29,7 +39,7 @@ export default function ChallengeClientPage() {
     );
   }
 
-  if (!token) {
+  if (!authReady) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", fontFamily: "sans-serif" }}>
         <div>Chargement...</div>
@@ -37,9 +47,13 @@ export default function ChallengeClientPage() {
     );
   }
 
+  const iframeSrc = token
+    ? `/challenge-app.html?id=${encodeURIComponent(id)}#token=${encodeURIComponent(token)}`
+    : `/challenge-app.html?id=${encodeURIComponent(id)}`;
+
   return (
     <iframe
-      src={`/challenge-app.html?id=${encodeURIComponent(id)}#token=${encodeURIComponent(token)}`}
+      src={iframeSrc}
       style={{ width: "100%", height: "100vh", border: "none", display: "block" }}
       title="Challenge Équestre"
     />
