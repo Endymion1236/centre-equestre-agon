@@ -36,9 +36,9 @@ export default function CompetitionsPage() {
     try {
       const text = await file.text();
       const json = JSON.parse(text);
-      if (!json.riders || !json.results) { toast("Fichier JSON invalide (riders/results manquants)", "error"); return; }
+      if (!json.riders || !json.results) { toast("Fichier JSON invalide (riders/results manquants)", "error"); setImporting(false); return; }
       // Titre par défaut depuis le nom du fichier
-      const titleFromFile = file.name.replace(/challenge-equestre-?/, "").replace(/\.json$/, "").replace(/-/g, " ").trim();
+      const titleFromFile = file.name.replace(/challenge-equestre-?/, "").replace(/\s*\(\d+\)\s*/, "").replace(/\.json$/, "").replace(/-/g, " ").trim();
       const dateMatch = file.name.match(/\d{4}-\d{2}-\d{2}/);
       const date = dateMatch ? dateMatch[0] : new Date().toISOString().slice(0, 10);
       const title = titleFromFile || `Challenge ${date}`;
@@ -48,12 +48,25 @@ export default function CompetitionsPage() {
         body: JSON.stringify({ title, date, disciplines: ["cso50", "cso70", "equifun"] }),
       });
       const created = await res.json();
-      if (!res.ok) { toast(created.error || "Erreur création", "error"); return; }
+      let challengeId = created.id;
+      if (!res.ok) {
+        if (res.status === 409) {
+          // Challenge existe déjà → écraser les données
+          const expectedId = `challenge-${date}-${title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 20)}`;
+          challengeId = expectedId;
+        } else {
+          toast(created.error || "Erreur création", "error"); setImporting(false); return;
+        }
+      }
       // Uploader les données
-      await authFetch("/api/challenges", {
+      const putRes = await authFetch("/api/challenges", {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: created.id, riders: json.riders, results: json.results, nextId: json.nextId || 1 }),
+        body: JSON.stringify({ id: challengeId, riders: json.riders, results: json.results, nextId: json.nextId || 1 }),
       });
+      if (!putRes.ok) {
+        const putErr = await putRes.json().catch(() => ({}));
+        toast(putErr.error || "Erreur sauvegarde des données", "error"); setImporting(false); return;
+      }
       toast(`✅ Challenge "${title}" importé — ${json.riders.length} cavaliers`, "success");
       fetchChallenges();
     } catch (err: any) {
