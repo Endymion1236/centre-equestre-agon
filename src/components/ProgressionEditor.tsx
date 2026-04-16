@@ -305,6 +305,27 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
     setProcessing(false);
   };
 
+  const toggleFeatured = async (idx: number) => {
+    try {
+      const famDoc = await getDoc(doc(db, "families", familyId));
+      if (!famDoc.exists()) return;
+      const famData = famDoc.data() as any;
+      const updatedChildren = (famData.children || []).map((c: any) => {
+        if (c.id !== childId) return c;
+        const peda = c.peda || { objectifs: [], notes: [] };
+        // Retirer featured de toutes les notes, mettre sur celle cliquée (toggle)
+        const updatedNotes = peda.notes.map((n: any, i: number) => ({
+          ...n,
+          featured: i === idx ? !n.featured : false,
+        }));
+        return { ...c, peda: { ...peda, notes: updatedNotes } };
+      });
+      await setDoc(doc(db, "families", familyId), { ...famData, children: updatedChildren, updatedAt: serverTimestamp() }, { merge: true });
+      // Mettre à jour localement
+      setRecentNotes(prev => prev.map((n, i) => ({ ...n, featured: i === idx ? !n.featured : false })));
+    } catch (e) { console.error(e); }
+  };
+
   const saveNote = async () => {
     if (!noteText.trim()) return;
     setSaving(true);
@@ -374,14 +395,21 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
         </button>
       </div>
 
-      {/* Notes récentes */}
+      {/* Notes récentes — sélectionner celle qui apparaît dans le bilan */}
       {recentNotes.length > 0 && (
         <div>
-          <div className="font-body text-[10px] text-purple-400 font-semibold mb-1.5">Notes précédentes</div>
+          <div className="font-body text-[10px] text-purple-400 font-semibold mb-1.5">Notes précédentes — cliquez sur ⭐ pour choisir celle du bilan PDF</div>
           {recentNotes.map((n: any, i: number) => (
-            <div key={i} className="font-body text-[10px] text-slate-500 bg-white rounded px-2 py-1.5 mb-1 border border-purple-100">
-              <span className="text-purple-400">{new Date(n.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}</span>
-              {" — "}{n.text}
+            <div key={i} className={`flex items-start gap-2 font-body text-[10px] text-slate-500 rounded px-2 py-1.5 mb-1 border ${n.featured ? "bg-purple-50 border-purple-300" : "bg-white border-purple-100"}`}>
+              <button onClick={() => toggleFeatured(i)}
+                className="bg-transparent border-none cursor-pointer p-0 text-sm flex-shrink-0 mt-0.5"
+                title={n.featured ? "Retirer du bilan" : "Afficher dans le bilan PDF"}>
+                {n.featured ? "⭐" : "☆"}
+              </button>
+              <div className="flex-1">
+                <span className="text-purple-400">{new Date(n.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}</span>
+                {" — "}{n.text}
+              </div>
             </div>
           ))}
         </div>

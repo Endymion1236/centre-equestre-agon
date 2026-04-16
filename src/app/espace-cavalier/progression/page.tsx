@@ -87,27 +87,25 @@ export default function ProgressionPage() {
                   </div>
                 </div>
 
-                {/* Notes du moniteur */}
-                {child.peda?.notes?.length > 0 && (
+                {/* Note du moniteur (celle sélectionnée pour le bilan) */}
+                {child.peda?.notes?.some((n: any) => n.featured) && (
                   <div className="mb-4 bg-purple-50 border border-purple-100 rounded-xl p-4">
                     <div className="font-body text-xs font-semibold text-purple-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                      💬 Messages du moniteur
+                      💬 Message du moniteur
                     </div>
-                    <div className="flex flex-col gap-2">
-                      {child.peda.notes.slice(0, 5).map((note: any, i: number) => (
-                        <div key={i} className="bg-white rounded-lg p-3 border border-purple-100">
-                          <div className="font-body text-sm text-slate-700 leading-relaxed">{note.text}</div>
-                          <div className="flex items-center gap-2 mt-2">
-                            <span className="font-body text-[10px] text-purple-400">
-                              {new Date(note.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
-                            </span>
-                            {note.activity && (
-                              <span className="font-body text-[10px] text-purple-300">· {note.activity}</span>
-                            )}
-                          </div>
+                    {child.peda.notes.filter((n: any) => n.featured).map((note: any, i: number) => (
+                      <div key={i} className="bg-white rounded-lg p-3 border border-purple-100">
+                        <div className="font-body text-sm text-slate-700 leading-relaxed">{note.text}</div>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="font-body text-[10px] text-purple-400">
+                            {new Date(note.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+                          </span>
+                          {note.activity && (
+                            <span className="font-body text-[10px] text-purple-300">· {note.activity}</span>
+                          )}
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    ))}
                   </div>
                 )}
 

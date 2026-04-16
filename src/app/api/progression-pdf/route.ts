@@ -41,18 +41,16 @@ export async function GET(req: NextRequest) {
     if (famSnap.exists) {
       const child = ((famSnap.data() as any).children || []).find((c: any) => c.id === childId);
       const notes = child?.peda?.notes || [];
-      if (notes.length > 0) {
-        const notesItems = notes.slice(0, 5).map((n: any) => {
-          const dateStr = new Date(n.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
-          return `<div style="background:#f8f5ff;border-left:3px solid #7c3aed;padding:8px 12px;margin-bottom:6px;border-radius:0 6px 6px 0;">
-            <div style="font-size:12px;color:#374151;line-height:1.5;">${n.text}</div>
-            <div style="font-size:9px;color:#9ca3af;margin-top:4px;">${dateStr}${n.activity ? ` · ${n.activity}` : ""}</div>
-          </div>`;
-        }).join("");
+      const featuredNote = notes.find((n: any) => n.featured);
+      if (featuredNote) {
+        const dateStr = new Date(featuredNote.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
         notesHtml = `
           <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;">
-            <div style="font-size:13px;font-weight:700;color:#7c3aed;margin-bottom:8px;">💬 Commentaires du moniteur</div>
-            ${notesItems}
+            <div style="font-size:13px;font-weight:700;color:#7c3aed;margin-bottom:8px;">💬 Commentaire du moniteur</div>
+            <div style="background:#f8f5ff;border-left:3px solid #7c3aed;padding:10px 14px;border-radius:0 6px 6px 0;">
+              <div style="font-size:12px;color:#374151;line-height:1.6;">${featuredNote.text}</div>
+              <div style="font-size:9px;color:#9ca3af;margin-top:6px;">${dateStr}${featuredNote.activity ? ` · ${featuredNote.activity}` : ""}</div>
+            </div>
           </div>`;
       }
     }
