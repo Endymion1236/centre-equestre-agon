@@ -41,7 +41,10 @@ export async function POST(req: NextRequest) {
     if (!title) return NextResponse.json({ error: "title requis" }, { status: 400 });
     const id = `challenge-${date || new Date().toISOString().slice(0, 10)}-${title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 20)}`;
     const existing = await adminDb.collection("challenges").doc(id).get();
-    if (existing.exists) return NextResponse.json({ error: "Un challenge avec cet identifiant existe déjà" }, { status: 409 });
+    if (existing.exists) {
+      // Retourner l'ID existant pour permettre l'écrasement des données via PUT
+      return NextResponse.json({ error: "existe", id, status: existing.data()?.status || "active" }, { status: 409 });
+    }
     const data = {
       title, date: date || new Date().toISOString().slice(0, 10),
       disciplines: disciplines || ["cso50", "cso70", "equifun"],

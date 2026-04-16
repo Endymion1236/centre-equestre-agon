@@ -50,18 +50,17 @@ export default function CompetitionsPage() {
       const created = await res.json();
       let challengeId = created.id;
       if (!res.ok) {
-        if (res.status === 409) {
-          // Challenge existe déjà → écraser les données
-          const expectedId = `challenge-${date}-${title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 20)}`;
-          challengeId = expectedId;
+        if (res.status === 409 && created.id) {
+          // Challenge existe déjà → on écrase les données et on réactive
+          challengeId = created.id;
         } else {
           toast(created.error || "Erreur création", "error"); setImporting(false); return;
         }
       }
-      // Uploader les données
+      // Uploader les données (+ réactiver si archivé)
       const putRes = await authFetch("/api/challenges", {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: challengeId, riders: json.riders, results: json.results, nextId: json.nextId || 1 }),
+        body: JSON.stringify({ id: challengeId, riders: json.riders, results: json.results, nextId: json.nextId || 1, status: "active" }),
       });
       if (!putRes.ok) {
         const putErr = await putRes.json().catch(() => ({}));
