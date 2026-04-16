@@ -113,30 +113,55 @@ function isRelevantForFamily(creneau: Creneau, children: Child[]): "perfect" | "
 }
 
 export default function TimelineReservation({ creneaux, children, familyId, onBook }: Props) {
-  const [dayOffset, setDayOffset] = useState(0);
+  const [selectedDate, setSelectedDate] = useState<Date>(() => { const d = new Date(); d.setHours(0,0,0,0); return d; });
+  const [weekStart, setWeekStart] = useState<Date>(() => { const d = new Date(); d.setHours(0,0,0,0); return d; });
   const [filter, setFilter] = useState<"tous" | "pour_moi" | "cours" | "stage" | "balade">("pour_moi");
   const [selectedChild, setSelectedChild] = useState<string>("tous");
-
-  // Jour courant
-  const currentDay = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    d.setDate(d.getDate() + dayOffset);
-    return d;
-  }, [dayOffset]);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const todayStr = fmtDate(new Date());
-  const currentDayStr = fmtDate(currentDay);
+  const currentDayStr = fmtDate(selectedDate);
+  const currentDay = selectedDate;
 
-  // Semaine (7 jours depuis aujourd'hui)
+  // 7 jours glissants depuis weekStart
   const weekDays = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date();
-      d.setHours(0, 0, 0, 0);
+      const d = new Date(weekStart);
       d.setDate(d.getDate() + i);
       return d;
     });
-  }, []);
+  }, [weekStart]);
+
+  const goToDay = (d: Date) => {
+    setSelectedDate(new Date(d));
+    const ds = fmtDate(d);
+    const weekStrs = Array.from({ length: 7 }, (_, i) => {
+      const wd = new Date(weekStart); wd.setDate(wd.getDate() + i); return fmtDate(wd);
+    });
+    if (!weekStrs.includes(ds)) {
+      const newStart = new Date(d);
+      newStart.setDate(newStart.getDate() - 3);
+      const today = new Date(); today.setHours(0,0,0,0);
+      if (newStart < today) newStart.setTime(today.getTime());
+      setWeekStart(newStart);
+    }
+  };
+
+  const prevDay = () => {
+    const d = new Date(selectedDate); d.setDate(d.getDate() - 1);
+    if (fmtDate(d) >= todayStr) goToDay(d);
+  };
+  const nextDay = () => { const d = new Date(selectedDate); d.setDate(d.getDate() + 1); goToDay(d); };
+  const prevWeek = () => {
+    const d = new Date(weekStart); d.setDate(d.getDate() - 7);
+    const today = new Date(); today.setHours(0,0,0,0);
+    if (d < today) d.setTime(today.getTime());
+    setWeekStart(d); setSelectedDate(new Date(d));
+  };
+  const nextWeek = () => {
+    const d = new Date(weekStart); d.setDate(d.getDate() + 7);
+    setWeekStart(d); setSelectedDate(new Date(d));
+  };
 
   // Enfants sélectionnés pour le filtre
   const activeChildren = useMemo(() => {
@@ -231,30 +256,28 @@ export default function TimelineReservation({ creneaux, children, familyId, onBo
         ))}
       </div>
 
-      {/* ── Navigation semaine (scroll horizontal) ── */}
-      <div className="flex items-center gap-2 mb-4">
-        <button onClick={() => setDayOffset(d => Math.max(0, d - 1))}
-          disabled={dayOffset === 0}
-          className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center cursor-pointer disabled:opacity-30 flex-shrink-0 border-solid">
+      {/* ── Navigation semaine + sélecteur de date ── */}
+      <div className="flex items-center gap-1.5 mb-1">
+        <button onClick={prevWeek}
+          disabled={fmtDate(weekStart) <= todayStr}
+          className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center cursor-pointer disabled:opacity-30 flex-shrink-0">
           <ChevronLeft size={16} className="text-slate-600"/>
         </button>
-
-        <div className="flex gap-1.5 overflow-x-auto flex-1 pb-1">
+        <div className="flex gap-1 overflow-x-auto flex-1 pb-1">
           {weekDays.map((d, i) => {
             const ds = fmtDate(d);
             const isActive = ds === currentDayStr;
             const isToday = ds === todayStr;
             const count = creneauxByDay[ds] || 0;
-
             return (
-              <button key={i} onClick={() => setDayOffset(i)}
-                className={`flex-shrink-0 flex flex-col items-center py-2 px-3 rounded-xl cursor-pointer border transition-all min-w-[52px] ${
+              <button key={i} onClick={() => goToDay(d)}
+                className={`flex-shrink-0 flex flex-col items-center py-2 px-2.5 rounded-xl cursor-pointer border transition-all min-w-[46px] ${
                   isActive ? "bg-blue-500 text-white border-blue-500 shadow-md" :
                   isToday ? "bg-blue-50 text-blue-600 border-blue-200" :
                   "bg-white text-slate-600 border-gray-200"
                 }`}>
                 <span className="font-body text-[9px] uppercase tracking-wide opacity-70">{DAYS_FR[d.getDay()]}</span>
-                <span className={`font-body text-base font-bold ${isActive ? "text-white" : ""}`}>{d.getDate()}</span>
+                <span className={`font-body text-sm font-bold ${isActive ? "text-white" : ""}`}>{d.getDate()}</span>
                 <div className="flex gap-0.5 mt-0.5 h-1.5">
                   {count > 0 && Array.from({ length: Math.min(count, 4) }, (_, j) => (
                     <span key={j} className={`w-1.5 h-1.5 rounded-full ${isActive ? "bg-white/70" : "bg-blue-400"}`}/>
@@ -264,23 +287,45 @@ export default function TimelineReservation({ creneaux, children, familyId, onBo
             );
           })}
         </div>
-
-        <button onClick={() => setDayOffset(d => d + 1)}
-          className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center cursor-pointer flex-shrink-0 border-solid">
+        <button onClick={nextWeek}
+          className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center cursor-pointer flex-shrink-0">
           <ChevronRight size={16} className="text-slate-600"/>
         </button>
       </div>
 
-      {/* ── Titre du jour ── */}
-      <div className="mb-4">
-        <div className="font-display text-lg font-bold text-blue-800 capitalize">
-          {DAYS_FULL_FR[currentDay.getDay()]} {currentDay.getDate()} {currentDay.toLocaleDateString("fr-FR", { month: "long" })}
+      {/* ── Titre du jour + sélecteur de date ── */}
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <button onClick={prevDay} disabled={currentDayStr <= todayStr}
+              className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center cursor-pointer disabled:opacity-30 border-none">
+              <ChevronLeft size={12} className="text-slate-600"/>
+            </button>
+            <div className="font-display text-base font-bold text-blue-800 capitalize">
+              {DAYS_FULL_FR[currentDay.getDay()]} {currentDay.getDate()} {currentDay.toLocaleDateString("fr-FR", { month: "long" })}
+            </div>
+            <button onClick={nextDay}
+              className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center cursor-pointer border-none">
+              <ChevronRight size={12} className="text-slate-600"/>
+            </button>
+          </div>
+          <div className="font-body text-xs text-slate-500 mt-0.5">
+            {dayCreneaux.length === 0 ? "Aucun créneau ce jour" : `${dayCreneaux.length} créneau${dayCreneaux.length > 1 ? "x" : ""} disponible${dayCreneaux.length > 1 ? "s" : ""}`}
+            {filter === "pour_moi" && children.length > 0 && (
+              <span className="ml-1 text-blue-500">· filtrés pour {selectedChild === "tous" ? "votre famille" : children.find(c => c.id === selectedChild)?.firstName}</span>
+            )}
+          </div>
         </div>
-        <div className="font-body text-xs text-slate-500">
-          {dayCreneaux.length === 0 ? "Aucun créneau disponible ce jour" : `${dayCreneaux.length} créneau${dayCreneaux.length > 1 ? "x" : ""} disponible${dayCreneaux.length > 1 ? "s" : ""}`}
-          {filter === "pour_moi" && children.length > 0 && (
-            <span className="ml-1 text-blue-500">· filtrés pour {selectedChild === "tous" ? "votre famille" : children.find(c => c.id === selectedChild)?.firstName}</span>
-          )}
+        <div className="relative flex-shrink-0">
+          <label className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 bg-white cursor-pointer hover:border-blue-300 transition-colors">
+            <Star size={13} className="text-blue-400"/>
+            <span className="font-body text-xs font-semibold text-slate-600">Choisir une date</span>
+            <input type="date" min={todayStr}
+              value={currentDayStr}
+              onChange={e => { if (e.target.value) { const d = new Date(e.target.value + "T00:00:00"); goToDay(d); } }}
+              className="absolute inset-0 opacity-0 w-full cursor-pointer"
+            />
+          </label>
         </div>
       </div>
 
