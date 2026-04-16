@@ -517,10 +517,10 @@ export default function ReserverPage() {
       <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="font-display text-2xl font-bold text-blue-800">
-            {initialFilter === "balade" ? "Promenades" : "Réserver"}
+            {filter === "balade" ? "Promenades" : "Réserver"}
           </h1>
           <p className="font-body text-xs text-gray-600">
-            {initialFilter === "balade" ? "Balades et promenades à cheval" : "Stages, cours ponctuels et activités"}
+            {filter === "balade" ? "Balades et promenades à cheval" : "Stages, cours ponctuels et activités"}
           </p>
         </div>
         <button onClick={async () => {
@@ -541,7 +541,7 @@ export default function ReserverPage() {
       {success && <Card padding="md" className="mb-4 bg-green-50 border-green-200"><p className="font-body text-sm text-green-700"><Check size={16} className="inline mr-1" /> Inscription confirmée ! Rendez-vous au centre équestre.</p></Card>}
 
       {/* ── Switcher Timeline / Liste ── */}
-      {initialFilter === "all" && (
+      {filter === "all" && (
         <div className="flex bg-sand rounded-xl p-1 mb-5">
           <button onClick={() => setViewMode("timeline")}
             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-body text-sm font-semibold border-none cursor-pointer transition-all ${viewMode === "timeline" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 bg-transparent"}`}>
@@ -555,7 +555,7 @@ export default function ReserverPage() {
       )}
 
       {/* ── VUE TIMELINE ── */}
-      {viewMode === "timeline" && initialFilter === "all" && (<>
+      {viewMode === "timeline" && filter === "all" && (<>
         {/* Bandeau stages */}
         {Object.keys(stageGroups).length > 0 && (
           <div className="mb-4 bg-white border-l-4 border-l-green-500 border border-green-200 rounded-xl px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-green-50 transition-colors"
@@ -579,10 +579,10 @@ export default function ReserverPage() {
       </>)}
 
       {/* ── VUE LISTE ── */}
-      {(viewMode === "liste" || initialFilter !== "all") && (<>
+      {(viewMode === "liste" || filter !== "all") && (<>
 
       {/* Filtres catégorie — masqués si filtre imposé par l'URL */}
-      {initialFilter === "all" && (
+      {filter === "all" && (
         <div className="flex flex-wrap gap-2 mb-2">
           {[
             ["all", "Tout"],
@@ -605,7 +605,7 @@ export default function ReserverPage() {
         <div className="flex flex-wrap gap-1.5 mb-4 pl-1">
           <button onClick={() => setSubfilter("all")}
             className={`px-3 py-1 rounded-full border font-body text-xs cursor-pointer transition-all ${subfilter === "all" ? "bg-gold-400 text-blue-800 border-gold-400 font-semibold" : "bg-white text-slate-600 border-gray-200"}`}>
-            {initialFilter === "balade" ? "Toutes les promenades" : "Tous niveaux"}
+            {filter === "balade" ? "Toutes les promenades" : "Tous niveaux"}
           </button>
           {availableSubcats.map(s => (
             <button key={s} onClick={() => setSubfilter(s)}
