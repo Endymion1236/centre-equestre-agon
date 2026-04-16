@@ -1124,14 +1124,36 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // ── Fiches de progression (stage) ──────────────────────────────────
   const handlePrintProgressions = async () => {
     if (enrolled.length === 0) return;
+    // Ouvrir la fenêtre immédiatement (geste utilisateur) pour Safari/iOS
+    const w = window.open("", "_blank");
+    if (!w) { panelToast("Le navigateur a bloqué l'ouverture. Autorisez les popups.", "error"); return; }
+    w.document.write('<html><body style="font-family:sans-serif;padding:20px;"><p>Chargement des bilans...</p></body></html>');
+    // Collecter tous les bilans HTML
+    const allHtml: string[] = [];
     for (const e of enrolled) {
       try {
         const res = await authFetch(`/api/progression-pdf?childId=${e.childId}&familyId=${e.familyId}&childName=${encodeURIComponent(e.childName)}`);
-        const html = await res.text();
-        const w = window.open("", "_blank");
-        if (w) { w.document.write(html); w.document.close(); }
+        if (res.ok) {
+          let html = await res.text();
+          const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+          if (bodyMatch) allHtml.push(bodyMatch[1]);
+          else allHtml.push(html);
+        }
       } catch {}
     }
+    if (allHtml.length === 0) { w.document.write('<p>Aucun bilan disponible.</p>'); w.document.close(); return; }
+    const combined = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bilans de progression</title>
+      <style>
+        @media print { .page-break { page-break-before: always; } }
+        @page { size: A4 portrait; margin: 10mm; }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+      </style>
+    </head><body>
+      ${allHtml.map((h, i) => i === 0 ? h : `<div class="page-break"></div>${h}`).join("\n")}
+    </body></html>`;
+    w.document.open();
+    w.document.write(combined);
+    w.document.close();
   };
 
   const handleEmailProgressions = async () => {

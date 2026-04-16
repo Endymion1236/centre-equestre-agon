@@ -458,13 +458,17 @@ export default function FamilyCard({
               onEditGalop={(childId) => setEditingGalop(childId)}
               onInscribe={(childId, childName) => { setShowEnroll({ childId, childName }); loadCreneaux(); }}
               onBilanPdf={async (child) => {
+                // Ouvrir la fenêtre immédiatement (geste utilisateur) pour éviter le blocage Safari
+                const w = window.open("", "_blank");
                 try {
                   const res = await authFetch(`/api/progression-pdf?childId=${child.id}&familyId=${fid}&childName=${encodeURIComponent(child.firstName)}`);
                   if (!res.ok) throw new Error("Erreur PDF");
                   const html = await res.text();
-                  const w = window.open("", "_blank");
                   if (w) { w.document.write(html); w.document.close(); }
-                } catch (e) { console.error("Bilan PDF:", e); }
+                } catch (e) {
+                  console.error("Bilan PDF:", e);
+                  if (w) { w.document.write("<p style='font-family:sans-serif;padding:20px;'>Erreur lors du chargement du bilan.</p>"); w.document.close(); }
+                }
               }}
             />
 
