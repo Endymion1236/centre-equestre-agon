@@ -224,13 +224,20 @@ function NoteMoniteur({ childId, familyId, childName }: { childId: string; famil
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      // Choisir un format supporté
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm"
+        : MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4"
+        : "";
+      const mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       const chunks: Blob[] = [];
       mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
-        const blob = new Blob(chunks, { type: "audio/webm" });
-        await transcribeAndProcess(blob);
+        const actualType = mediaRecorder.mimeType || "audio/webm";
+        const ext = actualType.includes("mp4") ? "m4a" : "webm";
+        const blob = new Blob(chunks, { type: actualType });
+        await transcribeAndProcess(blob, ext);
       };
       mediaRecorder.start();
       mediaRecorderRef[1](mediaRecorder);
@@ -248,12 +255,12 @@ function NoteMoniteur({ childId, familyId, childName }: { childId: string; famil
     }
   };
 
-  const transcribeAndProcess = async (blob: Blob) => {
+  const transcribeAndProcess = async (blob: Blob, ext: string = "webm") => {
     setProcessing(true);
     try {
       // 1. Transcrire avec Whisper
       const formData = new FormData();
-      formData.append("audio", blob, "note.webm");
+      formData.append("audio", blob, `note.${ext}`);
 
       const token = await (await import("firebase/auth")).getAuth().currentUser?.getIdToken();
       const transRes = await fetch("/api/whisper", {
@@ -263,11 +270,14 @@ function NoteMoniteur({ childId, familyId, childName }: { childId: string; famil
       });
 
       if (!transRes.ok) {
-        setNoteText(prev => prev + " [Erreur transcription]");
+        const errData = await transRes.json().catch(() => ({}));
+        console.error("Whisper error:", transRes.status, errData);
+        setNoteText(prev => prev + ` [Erreur: ${errData.error || transRes.status}]`);
         setProcessing(false);
         return;
       }
-      const { text: transcript } = await transRes.json();
+      const transData = await transRes.json();
+      const transcript = transData.text;
 
       // 2. Reformuler avec l'IA pour que ce soit un joli commentaire
       const iaRes = await fetch("/api/ia", {
