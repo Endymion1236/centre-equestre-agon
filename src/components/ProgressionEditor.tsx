@@ -177,9 +177,6 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
         );
       })}
 
-      {/* ── Note / commentaire du moniteur ── */}
-      <NoteMoniteur childId={childId} familyId={familyId} childName={childName} />
-
       {/* Bouton sauvegarder */}
       <button
         onClick={save}
@@ -193,6 +190,9 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
         <Save size={15} />
         {saved ? "✅ Sauvegardé !" : saving ? "Sauvegarde..." : "Enregistrer la progression"}
       </button>
+
+      {/* ── Note / commentaire du moniteur (en fin de bilan, inclus dans le PDF) ── */}
+      <NoteMoniteur childId={childId} familyId={familyId} childName={childName} />
     </div>
   );
 }

@@ -34,6 +34,30 @@ export async function GET(req: NextRequest) {
 
   const today = new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 
+  // Charger les notes péda du cavalier
+  let notesHtml = "";
+  try {
+    const famSnap = await adminDb.collection("families").doc(familyId).get();
+    if (famSnap.exists) {
+      const child = ((famSnap.data() as any).children || []).find((c: any) => c.id === childId);
+      const notes = child?.peda?.notes || [];
+      if (notes.length > 0) {
+        const notesItems = notes.slice(0, 5).map((n: any) => {
+          const dateStr = new Date(n.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+          return `<div style="background:#f8f5ff;border-left:3px solid #7c3aed;padding:8px 12px;margin-bottom:6px;border-radius:0 6px 6px 0;">
+            <div style="font-size:12px;color:#374151;line-height:1.5;">${n.text}</div>
+            <div style="font-size:9px;color:#9ca3af;margin-top:4px;">${dateStr}${n.activity ? ` · ${n.activity}` : ""}</div>
+          </div>`;
+        }).join("");
+        notesHtml = `
+          <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;">
+            <div style="font-size:13px;font-weight:700;color:#7c3aed;margin-bottom:8px;">💬 Commentaires du moniteur</div>
+            ${notesItems}
+          </div>`;
+      }
+    }
+  } catch (e) { console.error("Notes PDF:", e); }
+
   const renderNiveau = (niveau: typeof GALOPS_PROGRAMME[0], isCurrent: boolean) => {
     const total = niveau.competences.length;
     const totalAcquis = niveau.competences.filter(c => acquis[c.id]).length;
@@ -139,6 +163,9 @@ export async function GET(req: NextRequest) {
   ${renderNiveau(niveauEnCours, true)}
 
   `}
+
+  <!-- Notes du moniteur -->
+  ${notesHtml}
 
   <!-- Signature -->
   <div style="margin-top:20px;padding-top:12px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;">
