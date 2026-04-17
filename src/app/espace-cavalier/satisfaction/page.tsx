@@ -57,18 +57,22 @@ export default function SatisfactionPage() {
       dateLimit.setDate(dateLimit.getDate() - 30);
       const dateLimitStr = dateLimit.toISOString().split("T")[0];
 
-      const [resSnap, avisSnap] = await Promise.all([
-        getDocs(query(
+      let resSnap: any = { docs: [] };
+      let avisSnap: any = { docs: [] };
+      try {
+        resSnap = await getDocs(query(
           collection(db, "reservations"),
           where("familyId", "==", user.uid),
           limit(50)
-        )),
-        getDocs(query(
+        ));
+      } catch(e) { console.error("[satisfaction] reservations error:", e); }
+      try {
+        avisSnap = await getDocs(query(
           collection(db, "avis-satisfaction"),
           where("familyId", "==", user.uid),
           limit(20)
-        )),
-      ]);
+        ));
+      } catch(e) { console.error("[satisfaction] avis-satisfaction error:", e); }
 
       // Filtrer les 30 derniers jours + dédupliquer par activité (côté client)
       const res = resSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
