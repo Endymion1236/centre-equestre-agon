@@ -456,6 +456,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   const [iaResult, setIaResult] = useState<string | null>(null);
   const [showConflits, setShowConflits] = useState(true);
   const [notifying, setNotifying] = useState(false);
+  const [openPanel, setOpenPanel] = useState<"planning" | "partager" | null>(null);
 
   // ── Notifier l'équipe par email ───────────────────────────────────────
   const handleNotifyEquipe = async () => {
@@ -1279,105 +1280,175 @@ Réponds de façon concise et pratique, en français.`,
           </div>
         </Card>
 
-        {/* ── BARRE D'ACTIONS ── */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Switcher de vue */}
-          <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
+        {/* ── BARRE D'ACTIONS — 3 gros boutons ── */}
+        <div className="flex gap-3 items-stretch">
+
+          {/* ① Switcher de vue — toujours visible */}
+          <div className="flex bg-gray-100 rounded-2xl p-1.5 gap-1 flex-shrink-0">
             {(["tableau","horaire","fiche"] as const).map(v => (
               <button key={v} onClick={()=>setView(v)}
-                className={`px-4 py-2 rounded-lg font-body text-xs font-semibold border-none cursor-pointer transition-all
-                  ${view===v ? "bg-white text-blue-700 shadow-sm" : "bg-transparent text-gray-400 hover:text-blue-700"}`}>
-                {v === "tableau" ? "📊 Tableau" : v === "horaire" ? "🕐 Horaire" : "📋 Fiche"}
+                className={`flex flex-col items-center gap-1 px-4 py-3 rounded-xl font-body text-xs font-semibold border-none cursor-pointer transition-all min-w-[72px]
+                  ${view===v ? "bg-white text-blue-700 shadow-sm" : "bg-transparent text-gray-400 hover:text-blue-700 hover:bg-white/60"}`}>
+                <span className="text-lg">{v === "tableau" ? "📊" : v === "horaire" ? "🕐" : "📋"}</span>
+                <span>{v === "tableau" ? "Tableau" : v === "horaire" ? "Horaire" : "Fiche"}</span>
               </button>
             ))}
           </div>
 
-          <div className="w-px h-6 bg-gray-200" />
-
-          {/* Import cours/stages */}
-          <button onClick={handleImportCreneaux} disabled={importing}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-body text-xs font-semibold cursor-pointer bg-white text-purple-700 border border-purple-200 hover:bg-purple-50 disabled:opacity-50 transition-colors shadow-sm">
-            {importing ? <div className="w-3 h-3 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" /> : <span>📅</span>}
-            {importing ? "Import…" : "Importer cours/stages"}
+          {/* ② Bouton Planning */}
+          <button
+            onClick={() => setOpenPanel(openPanel === "planning" ? null : "planning")}
+            className={`flex-1 flex items-center gap-4 px-5 py-4 rounded-2xl border-2 cursor-pointer transition-all text-left
+              ${openPanel === "planning"
+                ? "bg-blue-500 border-blue-500 text-white shadow-lg shadow-blue-500/25"
+                : "bg-white border-gray-200 text-blue-800 hover:border-blue-300 hover:bg-blue-50 shadow-sm"}`}>
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl
+              ${openPanel === "planning" ? "bg-white/20" : "bg-blue-50"}`}>
+              📅
+            </div>
+            <div className="min-w-0">
+              <div className="font-display text-sm font-bold">Planning</div>
+              <div className={`font-body text-xs mt-0.5 ${openPanel === "planning" ? "text-white/70" : "text-gray-400"}`}>
+                Importer, modèles, organisation
+              </div>
+            </div>
+            <div className={`ml-auto text-lg transition-transform ${openPanel === "planning" ? "rotate-180" : ""}`}>⌄</div>
           </button>
 
-          {/* Appliquer un modèle */}
-          <div className="relative">
-            <button onClick={() => setShowApplyModele(!showApplyModele)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-body text-xs font-semibold cursor-pointer bg-white text-green-700 border border-green-200 hover:bg-green-50 transition-colors shadow-sm">
-              <LayoutTemplate size={13}/> Appliquer un modèle
-            </button>
-            {showApplyModele && (
-              <div className="absolute left-0 top-full mt-2 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-3 min-w-[280px]">
-                <div className="font-body text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Appliquer sur la semaine {semaine}</div>
+          {/* ③ Bouton Partager */}
+          <button
+            onClick={() => setOpenPanel(openPanel === "partager" ? null : "partager")}
+            className={`flex-1 flex items-center gap-4 px-5 py-4 rounded-2xl border-2 cursor-pointer transition-all text-left
+              ${openPanel === "partager"
+                ? "bg-blue-500 border-blue-500 text-white shadow-lg shadow-blue-500/25"
+                : "bg-white border-gray-200 text-blue-800 hover:border-blue-300 hover:bg-blue-50 shadow-sm"}`}>
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl
+              ${openPanel === "partager" ? "bg-white/20" : "bg-blue-50"}`}>
+              📤
+            </div>
+            <div className="min-w-0">
+              <div className="font-display text-sm font-bold">Partager</div>
+              <div className={`font-body text-xs mt-0.5 ${openPanel === "partager" ? "text-white/70" : "text-gray-400"}`}>
+                Imprimer, envoyer par email
+              </div>
+            </div>
+            <div className={`ml-auto text-lg transition-transform ${openPanel === "partager" ? "rotate-180" : ""}`}>⌄</div>
+          </button>
+        </div>
+
+        {/* ── PANEL PLANNING ── */}
+        {openPanel === "planning" && (
+          <Card padding="md">
+            <div className="grid grid-cols-3 gap-4">
+
+              {/* Importer cours/stages */}
+              <button onClick={() => { handleImportCreneaux(); setOpenPanel(null); }} disabled={importing}
+                className="flex flex-col gap-3 p-4 rounded-2xl border-2 border-purple-100 bg-purple-50 hover:border-purple-300 hover:bg-purple-100 cursor-pointer text-left transition-all disabled:opacity-50 group">
+                <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-xl shadow-sm group-hover:shadow">
+                  {importing ? <div className="w-5 h-5 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" /> : "📅"}
+                </div>
+                <div>
+                  <div className="font-display text-sm font-bold text-purple-800">{importing ? "Import en cours…" : "Importer cours/stages"}</div>
+                  <div className="font-body text-xs text-purple-500 mt-0.5">Récupère automatiquement les créneaux du planning de la semaine</div>
+                </div>
+              </button>
+
+              {/* Appliquer un modèle */}
+              <div className="flex flex-col gap-3 p-4 rounded-2xl border-2 border-green-100 bg-green-50 hover:border-green-300 hover:bg-green-100 transition-all">
+                <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-xl shadow-sm">
+                  <LayoutTemplate size={20} className="text-green-600" />
+                </div>
+                <div>
+                  <div className="font-display text-sm font-bold text-green-800">Appliquer un modèle</div>
+                  <div className="font-body text-xs text-green-600 mt-0.5">Charge une semaine type enregistrée</div>
+                </div>
                 {modeles.length === 0 ? (
-                  <p className="font-body text-xs text-gray-400 py-3 text-center">Aucun modèle. Créez-en dans l'onglet Modèles.</p>
+                  <p className="font-body text-xs text-green-500 italic">Aucun modèle. Créez-en ci-dessous.</p>
                 ) : (
-                  <div className="space-y-1 max-h-[250px] overflow-y-auto">
+                  <div className="flex flex-col gap-1 max-h-[140px] overflow-y-auto">
                     {modeles.map(m => (
-                      <button key={m.id} onClick={() => handleApplyModele(m)}
-                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-blue-50 cursor-pointer border-none bg-transparent text-left transition-colors">
-                        <span>{m.type === "scolaire" ? "📚" : m.type === "vacances" ? "☀️" : "📌"}</span>
+                      <button key={m.id} onClick={() => { handleApplyModele(m); }}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white hover:bg-green-50 cursor-pointer border border-green-200 hover:border-green-400 text-left transition-colors">
+                        <span className="text-sm">{m.type === "scolaire" ? "📚" : m.type === "vacances" ? "☀️" : "📌"}</span>
                         <div className="flex-1 min-w-0">
-                          <div className="font-body text-xs font-semibold text-blue-800 truncate">{m.nom}</div>
-                          <div className="font-body text-[10px] text-gray-400">{m.taches.length} tâches · {fmtDuree(m.taches.reduce((s,t)=>s+t.dureeMinutes,0))}</div>
+                          <div className="font-body text-xs font-semibold text-green-800 truncate">{m.nom}</div>
+                          <div className="font-body text-[9px] text-gray-400">{m.taches.length} tâches</div>
                         </div>
                       </button>
                     ))}
                   </div>
                 )}
-                <button onClick={() => setShowApplyModele(false)}
-                  className="mt-2 w-full text-center font-body text-[10px] text-gray-400 bg-transparent border-none cursor-pointer hover:text-gray-600">Fermer</button>
               </div>
-            )}
-          </div>
 
-          {/* Sauvegarder comme modèle */}
-          <div className="relative">
-            <button onClick={() => setShowSaveModele(!showSaveModele)} disabled={taches.length === 0}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-body text-xs font-semibold cursor-pointer bg-white text-blue-600 border border-blue-200 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm">
-              <Save size={13}/> Sauvegarder modèle
-            </button>
-            {showSaveModele && (
-              <div className="absolute left-0 top-full mt-2 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-4 min-w-[300px]">
-                <div className="font-body text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Sauvegarder {taches.length} tâches</div>
-                <input value={saveModeleName} onChange={e => setSaveModeleName(e.target.value)} placeholder="Nom du modèle (ex: Semaine scolaire)"
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200 font-body text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-blue-800" />
-                <div className="flex gap-2 mb-3">
-                  {([["scolaire","📚","Scolaire"],["vacances","☀️","Vacances"],["autre","📌","Autre"]] as const).map(([id, emoji, label]) => (
-                    <button key={id} onClick={() => setSaveModeleType(id)}
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded-xl border font-body text-xs font-semibold cursor-pointer transition-all ${saveModeleType === id ? "bg-blue-500 text-white border-blue-500 shadow-sm" : "bg-white text-blue-800 border-gray-200 hover:border-blue-300"}`}>
-                      {emoji} {label}
+              {/* Sauvegarder comme modèle */}
+              <div className="flex flex-col gap-3 p-4 rounded-2xl border-2 border-blue-100 bg-blue-50 hover:border-blue-200 transition-all">
+                <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm">
+                  <Save size={20} className="text-blue-500" />
+                </div>
+                <div>
+                  <div className="font-display text-sm font-bold text-blue-800">Sauvegarder modèle</div>
+                  <div className="font-body text-xs text-blue-500 mt-0.5">Enregistre la semaine actuelle comme template</div>
+                </div>
+                {taches.length === 0 ? (
+                  <p className="font-body text-xs text-blue-400 italic">Aucune tâche cette semaine.</p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    <input value={saveModeleName} onChange={e => setSaveModeleName(e.target.value)}
+                      placeholder="Nom du modèle…"
+                      className="w-full px-3 py-2 rounded-xl border border-blue-200 font-body text-xs focus:outline-none focus:ring-2 focus:ring-blue-400/30 text-blue-800 bg-white" />
+                    <div className="flex gap-1">
+                      {([["scolaire","📚","Scolaire"],["vacances","☀️","Vacances"],["autre","📌","Autre"]] as const).map(([id, emoji, label]) => (
+                        <button key={id} onClick={() => setSaveModeleType(id)}
+                          className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-xl border font-body text-[10px] font-semibold cursor-pointer transition-all
+                            ${saveModeleType === id ? "bg-blue-500 text-white border-blue-500 shadow-sm" : "bg-white text-blue-800 border-blue-200 hover:border-blue-400"}`}>
+                          {emoji} {label}
+                        </button>
+                      ))}
+                    </div>
+                    <button onClick={handleSaveAsModele}
+                      className="w-full py-2 rounded-xl bg-blue-500 text-white font-body text-xs font-semibold cursor-pointer border-none hover:bg-blue-400 shadow-md shadow-blue-500/20 transition-colors">
+                      Créer le modèle ({taches.length} tâches)
                     </button>
-                  ))}
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <button onClick={() => setShowSaveModele(false)}
-                    className="px-3 py-1.5 rounded-xl border border-gray-200 font-body text-xs font-semibold text-gray-500 cursor-pointer bg-white hover:bg-gray-50">Annuler</button>
-                  <button onClick={handleSaveAsModele}
-                    className="px-4 py-1.5 rounded-xl bg-blue-500 text-white font-body text-xs font-semibold cursor-pointer border-none hover:bg-blue-400 shadow-md shadow-blue-500/25">
-                    Créer le modèle
-                  </button>
-                </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          <div className="flex-1" />
+            </div>
+          </Card>
+        )}
 
-          {/* Imprimer */}
-          <button onClick={() => window.print()} disabled={taches.length === 0}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-body text-xs font-semibold cursor-pointer bg-white text-blue-800 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 transition-colors shadow-sm">
-            <Printer size={13}/> Imprimer
-          </button>
+        {/* ── PANEL PARTAGER ── */}
+        {openPanel === "partager" && (
+          <Card padding="md">
+            <div className="grid grid-cols-2 gap-4">
 
-          {/* Email équipe */}
-          <button onClick={handleNotifyEquipe} disabled={notifying || taches.length === 0}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-body text-xs font-semibold cursor-pointer bg-blue-500 text-white border-none hover:bg-blue-400 disabled:opacity-40 transition-colors shadow-md shadow-blue-500/25">
-            {notifying ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <span>📧</span>}
-            {notifying ? "Envoi…" : "Email"}
-          </button>
-        </div>
+              {/* Imprimer */}
+              <button onClick={() => { window.print(); setOpenPanel(null); }} disabled={taches.length === 0}
+                className="flex flex-col gap-3 p-4 rounded-2xl border-2 border-gray-200 bg-gray-50 hover:border-blue-300 hover:bg-blue-50 cursor-pointer text-left transition-all disabled:opacity-40 group">
+                <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm group-hover:shadow">
+                  <Printer size={20} className="text-blue-800" />
+                </div>
+                <div>
+                  <div className="font-display text-sm font-bold text-blue-800">Imprimer</div>
+                  <div className="font-body text-xs text-gray-400 mt-0.5">Format A4 paysage, optimisé pour l'impression</div>
+                </div>
+              </button>
+
+              {/* Email équipe */}
+              <button onClick={() => { handleNotifyEquipe(); setOpenPanel(null); }} disabled={notifying || taches.length === 0}
+                className="flex flex-col gap-3 p-4 rounded-2xl border-2 border-blue-100 bg-blue-50 hover:border-blue-400 hover:bg-blue-100 cursor-pointer text-left transition-all disabled:opacity-40 group">
+                <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-xl shadow-sm group-hover:shadow">
+                  {notifying ? <div className="w-5 h-5 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin" /> : "📧"}
+                </div>
+                <div>
+                  <div className="font-display text-sm font-bold text-blue-800">{notifying ? "Envoi en cours…" : "Email à l'équipe"}</div>
+                  <div className="font-body text-xs text-blue-500 mt-0.5">Envoie le planning personnalisé à chaque moniteur</div>
+                </div>
+              </button>
+
+            </div>
+          </Card>
+        )}
 
         {/* ── ALERTES ── */}
         {conflits.length > 0 && (
