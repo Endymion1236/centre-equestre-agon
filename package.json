@@ -26,7 +26,8 @@
     "test:flows": "./scripts/run-tests.sh flows",
     "test:api": "./scripts/run-tests.sh api",
     "test:rapport": "./scripts/run-tests.sh rapport",
-    "test:all": "./scripts/run-tests.sh all"
+    "test:all": "./scripts/run-tests.sh all",
+    "validate:rules": "node scripts/validate-rules.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
