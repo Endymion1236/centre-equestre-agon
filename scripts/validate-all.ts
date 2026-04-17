@@ -12,48 +12,32 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import * as fs from "fs";
 import * as path from "path";
 
-// Lecture manuelle du .env.local — contourne dotenvx v17
-function loadEnvLocal() {
-  const envPath = path.resolve(process.cwd(), ".env.local");
-  if (!fs.existsSync(envPath)) {
-    console.error("❌ Fichier .env.local introuvable dans", process.cwd());
+// Initialisation Firebase — priorité : fichier JSON service account > variables env
+function initFirebase() {
+  // 1. Chercher le fichier JSON service account dans le dossier courant
+  const cwd = process.cwd();
+  const jsonFiles = fs.readdirSync(cwd).filter(f => f.endsWith(".json") && f.includes("firebase-adminsdk"));
+  if (jsonFiles.length > 0) {
+    const jsonPath = path.join(cwd, jsonFiles[0]);
+    console.log(`🔑 Service account: ${jsonFiles[0]}`);
+    const sa = JSON.parse(fs.readFileSync(jsonPath, "utf-8"));
+    return { projectId: sa.project_id, clientEmail: sa.client_email, privateKey: sa.private_key };
+  }
+  // 2. Fallback : variables d'environnement
+  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || "";
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL || "";
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY || "";
+  if (privateKey.includes("\\n")) privateKey = privateKey.replace(/\\n/g, "\n");
+  if (!projectId || !clientEmail || !privateKey) {
+    console.error("❌ Impossible d'initialiser Firebase.");
+    console.error("   Placez le fichier JSON du compte de service dans:", cwd);
+    console.error("   (ex: gestion-2026-firebase-adminsdk-xxxx.json)");
     process.exit(1);
   }
-  const raw = fs.readFileSync(envPath, "utf-8");
-
-  // Regex robuste : capture KEY="valeur multi-ligne" ou KEY=valeur simple
-  // Gère les valeurs entre guillemets doubles qui peuvent contenir des \n littéraux
-  const re = /^([A-Z0-9_]+)=("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\r\n]*)$/gm;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(raw)) !== null) {
-    const key = match[1];
-    let val = match[2] || "";
-    // Retirer les guillemets englobants
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("\'"))) {
-      val = val.slice(1, -1);
-    }
-    // Ne pas écraser les variables déjà définies dans l'environnement
-    if (!process.env[key]) {
-      process.env[key] = val;
-    }
-  }
+  return { projectId, clientEmail, privateKey };
 }
 
-loadEnvLocal();
-
-const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
-const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-let privateKey = process.env.FIREBASE_PRIVATE_KEY || "";
-// Remplacer les \n littéraux par de vrais sauts de ligne
-if (privateKey.includes("\\n")) privateKey = privateKey.replace(/\\n/g, "\n");
-
-if (!projectId || !clientEmail || !privateKey) {
-  console.error("❌ Variables Firebase manquantes.");
-  console.error("   projectId:", projectId ? "✅" : "❌ manquant (NEXT_PUBLIC_FIREBASE_PROJECT_ID)");
-  console.error("   clientEmail:", clientEmail ? "✅" : "❌ manquant (FIREBASE_CLIENT_EMAIL)");
-  console.error("   privateKey:", privateKey ? "✅" : "❌ manquant (FIREBASE_PRIVATE_KEY)");
-  process.exit(1);
-}
+const { projectId, clientEmail, privateKey } = initFirebase();
 
 if (getApps().length === 0) {
   initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) });
