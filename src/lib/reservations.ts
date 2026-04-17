@@ -6,10 +6,15 @@ import { FieldValue } from "firebase-admin/firestore";
  * toutes les réservations associées qui étaient encore en "pending_payment".
  *
  * Stratégie de matching (la résa ne référence pas le paymentId directement) :
- *   - familyId identique
- *   - childId identique
- *   - creneauId identique
- *   - status actuel == "pending_payment"
+ *   - Query Firestore sur (creneauId, childId) — index composite déjà défini
+ *     dans firestore.indexes.json
+ *   - Filtrage en mémoire sur familyId (pour tolérer sourceFamilyId sur les
+ *     réservations liées) ET status == "pending_payment"
+ *
+ * Pourquoi pas un where(...).where(...).where(...).where(...) ?
+ * Firestore exige un index composite pour chaque combinaison de where, et
+ * rejette la query sinon. L'approche query+filter garantit que ça marche
+ * sans déploiement d'index supplémentaire.
  *
  * Pour un stage multi-jours, chaque item.creneauIds est parcouru (un stage
  * crée une résa par jour).
@@ -41,37 +46,55 @@ export async function confirmReservationsForPayment(params: {
       }
     }
 
-    if (pairs.length === 0) return 0;
+    if (pairs.length === 0) {
+      console.log(
+        `confirmReservationsForPayment: aucun pair à traiter pour family ${familyId} (items sans creneauId ?)`
+      );
+      return 0;
+    }
 
-    // Pour chaque pair, chercher et mettre à jour les résas matchantes
-    // (Firestore n'a pas de requête `IN` sur plusieurs champs combinés,
-    //  donc on fait une requête par pair — acceptable pour quelques items)
+    // Pour chaque pair : query sur l'index (creneauId, childId) existant,
+    // puis filtrage en mémoire sur familyId + status
     for (const pair of pairs) {
-      const snap = await adminDb
-        .collection("reservations")
-        .where("familyId", "==", familyId)
-        .where("childId", "==", pair.childId)
-        .where("creneauId", "==", pair.creneauId)
-        .where("status", "==", "pending_payment")
-        .get();
+      try {
+        const snap = await adminDb
+          .collection("reservations")
+          .where("creneauId", "==", pair.creneauId)
+          .where("childId", "==", pair.childId)
+          .get();
 
-      for (const doc of snap.docs) {
-        await doc.ref.update({
-          status: "confirmed",
-          confirmedAt: FieldValue.serverTimestamp(),
-        });
-        updated++;
+        for (const doc of snap.docs) {
+          const data = doc.data();
+          // On tolère familyId direct ou sourceFamilyId (résa liée)
+          const matchesFamily =
+            data.familyId === familyId || data.sourceFamilyId === familyId;
+          const isPending = data.status === "pending_payment";
+
+          if (matchesFamily && isPending) {
+            await doc.ref.update({
+              status: "confirmed",
+              confirmedAt: FieldValue.serverTimestamp(),
+            });
+            updated++;
+          }
+        }
+      } catch (innerErr) {
+        console.error(
+          `confirmReservationsForPayment: erreur query pour pair ${JSON.stringify(pair)}:`,
+          innerErr
+        );
+        // On continue avec les autres pairs — un échec isolé ne doit pas
+        // bloquer la confirmation des autres réservations
       }
     }
 
-    if (updated > 0) {
-      console.log(
-        `✅ ${updated} réservation(s) confirmée(s) pour family ${familyId}`
-      );
-    }
+    console.log(
+      `confirmReservationsForPayment: ${updated}/${pairs.length} résa(s) confirmée(s) pour family ${familyId}`
+    );
   } catch (e) {
     console.error("confirmReservationsForPayment error:", e);
   }
 
   return updated;
 }
+
