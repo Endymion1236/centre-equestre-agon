@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { loadTemplate } from "@/lib/email-template-loader";
+import { awardLoyaltyPointsServer } from "@/lib/fidelite";
 import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -152,6 +153,15 @@ export async function GET(req: NextRequest) {
       });
 
       console.log(`✅ Payment ${payRef.id} mis à jour: ${isDeposit ? "partial" : "paid"} — ${paidAmount}€`);
+
+      // ── Attribution des points de fidélité ────────────────────────
+      // Attribuer sur le montant effectivement encaissé (acompte OU solde)
+      await awardLoyaltyPointsServer({
+        familyId: familyId || pData.familyId,
+        familyName: pData.familyName,
+        montant: paidAmount,
+        label: (pData.items || []).map((i: any) => i.activityTitle).join(", ") || "Paiement en ligne",
+      });
 
       // ── Email confirmation ───────────────────────────────────────────────
       const parentEmail = pData.familyEmail || "";

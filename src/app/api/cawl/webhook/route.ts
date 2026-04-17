@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { loadTemplate } from "@/lib/email-template-loader";
+import { awardLoyaltyPointsServer } from "@/lib/fidelite";
 
 export const dynamic = "force-dynamic";
 
@@ -110,6 +111,15 @@ export async function POST(req: NextRequest) {
           });
 
           console.log(`✅ CAWL webhook payment confirmé: ${merchantRef} — ${totalTTC}€`);
+
+          // ── Attribution des points de fidélité ────────────────────────
+          // Non-bloquant : erreurs loggées mais n'interrompent pas le flow
+          await awardLoyaltyPointsServer({
+            familyId: pData.familyId,
+            familyName: pData.familyName,
+            montant: totalTTC,
+            label: (pData.items || []).map((i: any) => i.activityTitle).join(", ") || "Paiement en ligne",
+          });
 
           // ── Email de confirmation ─────────────────────────────────────
           const parentEmail = pData.familyEmail || "";
