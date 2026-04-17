@@ -22,10 +22,11 @@ interface Reservation {
   createdAt: any;
 }
 
-const statusConfig = {
-  confirmed: { label: "Confirmée", color: "green" as const, icon: Check },
-  pending: { label: "En attente de paiement", color: "orange" as const, icon: Clock },
-  cancelled: { label: "Annulée", color: "red" as const, icon: XCircle },
+const statusConfig: Record<string, { label: string; color: "green" | "orange" | "red" | "gray"; icon: any }> = {
+  confirmed: { label: "Confirmée", color: "green", icon: Check },
+  pending: { label: "En attente de paiement", color: "orange", icon: Clock },
+  pending_payment: { label: "Paiement non finalisé", color: "orange", icon: Clock },
+  cancelled: { label: "Annulée", color: "red", icon: XCircle },
 };
 
 export default function ReservationsPage() {
@@ -68,11 +69,58 @@ export default function ReservationsPage() {
   const today = new Date().toISOString().split("T")[0];
   const upcoming = reservations.filter((r) => r.date >= today).sort((a, b) => a.date.localeCompare(b.date));
   const past = reservations.filter((r) => r.date < today).sort((a, b) => b.date.localeCompare(a.date));
+  const pendingPayment = reservations.filter((r) => (r.status as string) === "pending_payment");
 
   return (
     <div>
       <h1 className="font-display text-2xl font-bold text-blue-800 mb-2">Mes réservations</h1>
       <p className="font-body text-sm text-gray-600 mb-6">Retrouvez ici toutes vos réservations passées et à venir.</p>
+
+      {/* Bandeau paiement non finalisé */}
+      {pendingPayment.length > 0 && (
+        <Card className="!bg-orange-50 !border-orange-300 mb-5" padding="sm">
+          <div className="flex items-start gap-3">
+            <Clock size={20} className="text-orange-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-body text-sm font-bold text-orange-800">
+                {pendingPayment.length} réservation{pendingPayment.length > 1 ? "s" : ""} en attente de paiement
+              </p>
+              <p className="font-body text-xs text-orange-600 mt-0.5">
+                Votre place est réservée mais le paiement n&apos;a pas été finalisé.
+                Réglez votre inscription pour la confirmer définitivement.
+              </p>
+              <a href="/espace-cavalier/reserver">
+                <button className="mt-2 font-body text-xs font-semibold text-white bg-orange-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-orange-400">
+                  Finaliser le paiement →
+                </button>
+              </a>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Bandeau paiement non finalisé */}
+      {pendingPayment.length > 0 && (
+        <Card className="!bg-orange-50 !border-orange-300 mb-5" padding="sm">
+          <div className="flex items-start gap-3">
+            <Clock size={20} className="text-orange-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-body text-sm font-bold text-orange-800">
+                {pendingPayment.length} réservation{pendingPayment.length > 1 ? "s" : ""} en attente de paiement
+              </p>
+              <p className="font-body text-xs text-orange-600 mt-0.5">
+                Votre place est réservée mais le paiement n&apos;a pas été finalisé.
+                Réglez votre inscription pour la confirmer définitivement.
+              </p>
+              <a href="/espace-cavalier/reserver">
+                <button className="mt-2 font-body text-xs font-semibold text-white bg-orange-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-orange-400">
+                  Finaliser le paiement →
+                </button>
+              </a>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Success message */}
       {success === "true" && (

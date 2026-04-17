@@ -338,7 +338,7 @@ export default function ReserverPage() {
               startTime: crData?.startTime || "",
               endTime: crData?.endTime || "",
               priceTTC: 0, // prix global sur la 1ère réservation uniquement
-              status: "confirmed", source: "client",
+              status: "pending_payment", source: "client",
               createdAt: serverTimestamp(),
             });
           }
@@ -353,7 +353,7 @@ export default function ReserverPage() {
             date: firstCreneau?.date || new Date().toISOString().split("T")[0],
             startTime: firstCreneau?.startTime || "",
             endTime: firstCreneau?.endTime || "",
-            priceTTC: item.prixFinal, status: "confirmed", source: "client",
+            priceTTC: item.prixFinal, status: "pending_payment", source: "client",
             createdAt: serverTimestamp(),
           });
         }
@@ -1264,7 +1264,7 @@ export default function ReserverPage() {
                                 creneauId: item.creneauIds[0],
                                 date: firstCr?.date || new Date().toISOString().split("T")[0],
                                 startTime: firstCr?.startTime || "", endTime: firstCr?.endTime || "",
-                                priceTTC: item.prixFinal, status: "confirmed", source: "client",
+                                priceTTC: item.prixFinal, status: "pending_payment", source: "client",
                                 createdAt: serverTimestamp(),
                               });
                             }
