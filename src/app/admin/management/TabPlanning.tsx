@@ -1222,61 +1222,36 @@ Réponds de façon concise et pratique, en français.`,
           </div>
         </Card>
 
-        {/* ── JOURS TRAVAILLÉS + RÉSUMÉ CHARGE ── */}
-        <Card padding="sm">
-          <div className="flex items-center gap-3 flex-wrap px-2">
-            {/* Jours travaillés */}
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <span className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wide">Jours :</span>
-              <div className="flex gap-1">
-                {JOURS.slice(0, nbJours).map(j => {
-                  const active = joursTravailles.includes(j as JourSemaine);
-                  return (
-                    <button key={j} onClick={() => {
-                      setJoursTravailles(prev => active ? prev.filter(x => x !== j) : [...prev, j as JourSemaine]);
-                    }}
-                      className={`px-2 py-1 rounded-lg font-body text-[10px] font-semibold border-none cursor-pointer transition-all
-                        ${active ? "bg-blue-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-blue-50 hover:text-blue-500"}`}>
-                      {JOURS_LABELS[j as JourSemaine].slice(0, 3)}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="flex gap-1">
-                <button onClick={() => setJoursTravailles(["lundi","mardi","mercredi","jeudi","vendredi"])}
-                  className="font-body text-[9px] text-blue-400 bg-transparent border-none cursor-pointer hover:text-blue-600 underline">Lun-Ven</button>
-                <button onClick={() => setJoursTravailles(["mardi","mercredi","jeudi","vendredi","samedi"])}
-                  className="font-body text-[9px] text-blue-400 bg-transparent border-none cursor-pointer hover:text-blue-600 underline">Mar-Sam</button>
-                <button onClick={() => setJoursTravailles(["lundi","mardi","mercredi","jeudi","vendredi","samedi"])}
-                  className="font-body text-[9px] text-blue-400 bg-transparent border-none cursor-pointer hover:text-blue-600 underline">Lun-Sam</button>
-              </div>
-              <label className="flex items-center gap-1 cursor-pointer">
-                <input type="checkbox" checked={inclureDimanche} onChange={e => setInclureDimanche(e.target.checked)}
-                  className="accent-blue-500 w-3 h-3" />
-                <span className="font-body text-[9px] text-gray-400">+Dim</span>
-              </label>
-            </div>
-
-            <div className="w-px h-6 bg-gray-200 flex-shrink-0" />
-
-            {/* Résumé charge */}
-            <div className="flex flex-wrap gap-2 flex-1">
-              {salaries.filter(s=>s.actif).map(sal => {
-                const charge = chargeParSalarie[sal.id]||0;
-                const done = taches.filter(t=>t.salarieId===sal.id&&t.done).length;
-                const total = taches.filter(t=>t.salarieId===sal.id).length;
-                return (
-                  <div key={sal.id} className="flex items-center gap-2 bg-blue-50 rounded-xl px-3 py-1.5">
-                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{background:sal.couleur}}/>
-                    <span className="font-body text-xs font-semibold text-blue-800">{sal.nom}</span>
-                    <span className="font-body text-xs text-gray-400">{fmtDuree(charge)}</span>
-                    {total > 0 && <span className="font-body text-[10px] text-green-600">{done}/{total} ✓</span>}
+        {/* ── CARDS MONITEURS ── */}
+        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+          {salaries.filter(s=>s.actif).map(sal => {
+            const charge = chargeParSalarie[sal.id]||0;
+            const done = taches.filter(t=>t.salarieId===sal.id&&t.done).length;
+            const total = taches.filter(t=>t.salarieId===sal.id).length;
+            const pct = total > 0 ? Math.round((done/total)*100) : 0;
+            return (
+              <Card key={sal.id} padding="sm">
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{background:sal.couleur}}/>
+                    <span className="font-display text-sm font-bold text-blue-800 truncate">{sal.nom}</span>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        </Card>
+                  <div className="font-body text-lg font-bold text-blue-800">{fmtDuree(charge)}</div>
+                  {total > 0 ? (
+                    <>
+                      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all" style={{width:`${pct}%`, background:sal.couleur}}/>
+                      </div>
+                      <div className="font-body text-[10px] text-gray-400">{done}/{total} tâches ✓</div>
+                    </>
+                  ) : (
+                    <div className="font-body text-[10px] text-gray-300">Aucune tâche</div>
+                  )}
+                </div>
+              </Card>
+            );
+          })}
+        </div>
 
         {/* ── BARRE D'ACTIONS — 3 gros boutons ── */}
         <div className="flex gap-3 items-stretch">
