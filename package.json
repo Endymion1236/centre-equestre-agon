@@ -10,6 +10,7 @@
     "lint": "next lint",
     "validate": "node scripts/validate.mjs",
     "validate:all": "node scripts/validate-all.mjs",
+    "validate:v2": "npx tsx scripts/validate-all.ts",
     "seed": "node scripts/seed.mjs",
     "seed:clean": "node scripts/seed.mjs --clean",
     "test": "playwright test",
