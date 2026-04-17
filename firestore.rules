@@ -23,9 +23,13 @@ service cloud.firestore {
 
     // ── Familles ──────────────────────────────────────────────────────────
     match /families/{familyId} {
-      allow read: if isStaff() || (isAuth() && resource.data.uid == request.auth.uid);
+      allow read: if isStaff()
+        || (isAuth() && resource.data.uid == request.auth.uid)
+        || (isAuth() && resource.data.parentEmail == request.auth.token.email);
       allow create: if isAuth();
-      allow update, delete: if isStaff() || (isAuth() && resource.data.uid == request.auth.uid);
+      allow update, delete: if isStaff()
+        || (isAuth() && resource.data.uid == request.auth.uid)
+        || (isAuth() && resource.data.parentEmail == request.auth.token.email);
     }
 
     // ── Planning (créneaux) ───────────────────────────────────────────────
