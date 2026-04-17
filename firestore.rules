@@ -38,14 +38,16 @@ service cloud.firestore {
     // ── Planning (créneaux) ───────────────────────────────────────────────
     match /creneaux/{docId} {
       allow read: if isAuth();
-      allow write: if isStaff();
+      allow create, delete: if isStaff();
+      allow update: if isStaff() || isAuth();
     }
 
     // ── Paiements / Encaissements ─────────────────────────────────────────
     match /payments/{docId} {
-      allow read: if isStaff() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow read: if isStaff() || (isAuth() && resource.data.familyId == request.auth.uid);
       allow create: if isAuth();
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
+      allow delete: if isAdmin();
     }
     match /encaissements/{docId} {
       allow read: if isAdmin();
@@ -136,8 +138,9 @@ service cloud.firestore {
 
     // ── Avoirs ────────────────────────────────────────────────────────────
     match /avoirs/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
-      allow write: if isAdmin();
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
     }
 
     // ── Cartes de séances ─────────────────────────────────────────────────
