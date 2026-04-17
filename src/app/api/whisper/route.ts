@@ -45,8 +45,8 @@ export async function POST(request: NextRequest) {
       text: transcription.text,
     });
   } catch (error: any) {
-    console.error("Whisper error:", error);
-    console.error("API error:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    console.error("Whisper error:", error?.message || error);
+    const msg = error?.message || "Erreur interne";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

@@ -223,28 +223,39 @@ function NoteMoniteur({ childId, familyId, childName }: { childId: string; famil
 
   const startRecording = async () => {
     try {
+      // Vérifier que MediaRecorder est disponible
+      if (typeof MediaRecorder === "undefined") {
+        setNoteText(prev => prev + " [Enregistrement non supporté sur ce navigateur]");
+        return;
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Choisir un format supporté
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm"
-        : MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4"
-        : "";
+      // Choisir un format supporté (ordre de préférence pour compatibilité Whisper)
+      let mimeType = "";
+      for (const mt of ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/aac", "audio/wav", ""]) {
+        if (!mt || MediaRecorder.isTypeSupported(mt)) { mimeType = mt; break; }
+      }
       const mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       const chunks: Blob[] = [];
       mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
-        const actualType = mediaRecorder.mimeType || "audio/webm";
-        const ext = actualType.includes("mp4") ? "m4a" : "webm";
+        const actualType = mediaRecorder.mimeType || mimeType || "audio/mp4";
+        // Déterminer l'extension correcte pour Whisper
+        let ext = "webm";
+        if (actualType.includes("mp4") || actualType.includes("aac") || actualType.includes("m4a")) ext = "m4a";
+        else if (actualType.includes("wav")) ext = "wav";
+        else if (actualType.includes("webm")) ext = "webm";
+        else ext = "mp4"; // fallback safe pour iOS
         const blob = new Blob(chunks, { type: actualType });
         await transcribeAndProcess(blob, ext);
       };
-      mediaRecorder.start();
+      mediaRecorder.start(1000); // chunks every second for reliability
       mediaRecorderRef[1](mediaRecorder);
       chunksRef[1](chunks);
       setRecording(true);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Micro non disponible:", e);
+      setNoteText(prev => prev + ` [Micro: ${e.message || "non disponible"}]`);
     }
   };
 
