@@ -5,6 +5,7 @@ import { db } from "@/lib/firebase";
 import { authFetch } from "@/lib/auth-fetch";
 import { Plus, Trash2, Check, ChevronLeft, ChevronRight, Printer, Save, LayoutTemplate } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
+import { Card } from "@/components/ui";
 import type { TacheType, TachePlanifiee, Salarie, JourSemaine, ModelePlanning, TacheModele } from "./types";
 import { CATEGORIES, JOURS, JOURS_LABELS, getLundideSemaine, getISOWeek, formatDateCourte, fmtDuree } from "./types";
 
@@ -1161,41 +1162,44 @@ Réponds de façon concise et pratique, en français.`,
         </div>
       </div>
 
-      <div className="print-hide flex flex-col gap-3">
+      <div className="print-hide flex flex-col gap-4">
 
         {/* ── NAVIGATION SEMAINE ── */}
-        <div className="flex items-center justify-between bg-white rounded-xl border border-gray-100 px-4 py-2.5">
-          <button onClick={prevWeek} className="flex items-center gap-1 font-body text-sm text-slate-500 bg-transparent border-none cursor-pointer hover:text-blue-600 transition-colors">
-            <ChevronLeft size={16}/>Préc.
-          </button>
-          <div className="flex flex-col items-center gap-0.5">
-            <div className="font-display text-base font-bold text-blue-800 capitalize">
-              {lundi.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
-            </div>
-            <div className="font-body text-[11px] text-slate-400">
-              Du {formatDateCourte(lundi)} au {formatDateCourte(new Date(lundi.getTime() + 5 * 86400000))} · Semaine {semaine.split("-W")[1]}
-            </div>
-            <input type="date" title="Aller à cette date"
-              className="font-body text-[10px] px-2 py-0.5 rounded-lg border border-gray-200 bg-white cursor-pointer focus:border-blue-400 focus:outline-none text-slate-400 mt-0.5"
-              onChange={e => {
-                if (!e.target.value) return;
-                const [py, pm, pd] = e.target.value.split("-").map(Number);
-                const picked = new Date(py, pm - 1, pd, 12);
-                const targetIso = getISOWeek(picked);
-                setSemaine(targetIso);
-                e.target.value = "";
-              }}/>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => setSemaine(getISOWeek(new Date()))} className="font-body text-xs font-semibold text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">Auj.</button>
-            <button onClick={nextWeek} className="flex items-center gap-1 font-body text-sm text-slate-500 bg-transparent border-none cursor-pointer hover:text-blue-600 transition-colors">
-              Suiv.<ChevronRight size={16}/>
+        <Card padding="sm">
+          <div className="flex items-center justify-between px-2">
+            <button onClick={prevWeek} className="flex items-center gap-1 font-body text-sm font-semibold text-blue-800 bg-transparent border-none cursor-pointer hover:text-blue-500 transition-colors px-2 py-1">
+              <ChevronLeft size={16}/>Préc.
             </button>
+            <div className="flex flex-col items-center gap-0.5">
+              <div className="font-display text-lg font-bold text-blue-800 capitalize">
+                {lundi.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
+              </div>
+              <div className="font-body text-xs text-gray-400">
+                Du {formatDateCourte(lundi)} au {formatDateCourte(new Date(lundi.getTime() + 5 * 86400000))} · Semaine {semaine.split("-W")[1]}
+              </div>
+              <input type="date" title="Aller à cette date"
+                className="font-body text-[10px] px-2 py-0.5 rounded-lg border border-gray-200 bg-white cursor-pointer focus:border-blue-400 focus:outline-none text-gray-400 mt-0.5"
+                onChange={e => {
+                  if (!e.target.value) return;
+                  const [py, pm, pd] = e.target.value.split("-").map(Number);
+                  const picked = new Date(py, pm - 1, pd, 12);
+                  const targetIso = getISOWeek(picked);
+                  setSemaine(targetIso);
+                  e.target.value = "";
+                }}/>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setSemaine(getISOWeek(new Date()))}
+                className="font-body text-xs font-semibold text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 transition-colors">Auj.</button>
+              <button onClick={nextWeek} className="flex items-center gap-1 font-body text-sm font-semibold text-blue-800 bg-transparent border-none cursor-pointer hover:text-blue-500 transition-colors px-2 py-1">
+                Suiv.<ChevronRight size={16}/>
+              </button>
+            </div>
           </div>
-        </div>
+        </Card>
 
         {/* ── JOURS DE LA SEMAINE ── */}
-        <div className="grid grid-cols-6 gap-1.5">
+        <div className="grid grid-cols-6 gap-2">
           {jourDates.slice(0, nbJours).map(({ jour, date }) => {
             const isToday = (() => {
               const now = new Date();
@@ -1205,7 +1209,13 @@ Réponds de façon concise et pratique, en français.`,
             return (
               <div key={jour}
                 onClick={() => { setView("fiche"); setSelectedDay(jour); }}
-                className={`text-center py-2 rounded-xl font-body text-xs font-semibold cursor-pointer hover:ring-2 hover:ring-blue-300 transition-all ${isToday ? "bg-blue-500 text-white shadow-sm" : hasTaches ? "bg-blue-50 text-slate-700 border border-blue-100" : "bg-white text-slate-400 border border-gray-100"}`}>
+                className={`text-center py-2.5 rounded-xl font-body text-xs font-semibold cursor-pointer transition-all
+                  ${isToday
+                    ? "bg-blue-500 text-white shadow-md shadow-blue-500/25"
+                    : hasTaches
+                      ? "card text-blue-800 border border-blue-100"
+                      : "card text-gray-400"
+                  } hover:shadow-md`}>
                 {JOURS_LABELS[jour].slice(0, 3)} {date.getDate()}{date.getMonth() !== lundi.getMonth() ? `/${date.getMonth() + 1}` : ""}
                 {hasTaches && !isToday && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-blue-400 align-middle" />}
               </div>
@@ -1213,69 +1223,70 @@ Réponds de façon concise et pratique, en français.`,
           })}
         </div>
 
-        {/* ── JOURS TRAVAILLÉS + RÉSUMÉ CHARGE (même ligne) ── */}
-        <div className="flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 border border-gray-100 flex-wrap">
-          {/* Jours travaillés */}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="font-body text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Jours :</span>
-            <div className="flex gap-1">
-              {JOURS.slice(0, nbJours).map(j => {
-                const active = joursTravailles.includes(j as JourSemaine);
+        {/* ── JOURS TRAVAILLÉS + RÉSUMÉ CHARGE ── */}
+        <Card padding="sm">
+          <div className="flex items-center gap-3 flex-wrap px-2">
+            {/* Jours travaillés */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wide">Jours :</span>
+              <div className="flex gap-1">
+                {JOURS.slice(0, nbJours).map(j => {
+                  const active = joursTravailles.includes(j as JourSemaine);
+                  return (
+                    <button key={j} onClick={() => {
+                      setJoursTravailles(prev => active ? prev.filter(x => x !== j) : [...prev, j as JourSemaine]);
+                    }}
+                      className={`px-2 py-1 rounded-lg font-body text-[10px] font-semibold border-none cursor-pointer transition-all
+                        ${active ? "bg-blue-500 text-white shadow-sm" : "bg-gray-100 text-gray-400 hover:bg-blue-50 hover:text-blue-500"}`}>
+                      {JOURS_LABELS[j as JourSemaine].slice(0, 3)}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex gap-1">
+                <button onClick={() => setJoursTravailles(["lundi","mardi","mercredi","jeudi","vendredi"])}
+                  className="font-body text-[9px] text-blue-400 bg-transparent border-none cursor-pointer hover:text-blue-600 underline">Lun-Ven</button>
+                <button onClick={() => setJoursTravailles(["mardi","mercredi","jeudi","vendredi","samedi"])}
+                  className="font-body text-[9px] text-blue-400 bg-transparent border-none cursor-pointer hover:text-blue-600 underline">Mar-Sam</button>
+                <button onClick={() => setJoursTravailles(["lundi","mardi","mercredi","jeudi","vendredi","samedi"])}
+                  className="font-body text-[9px] text-blue-400 bg-transparent border-none cursor-pointer hover:text-blue-600 underline">Lun-Sam</button>
+              </div>
+              <label className="flex items-center gap-1 cursor-pointer">
+                <input type="checkbox" checked={inclureDimanche} onChange={e => setInclureDimanche(e.target.checked)}
+                  className="accent-blue-500 w-3 h-3" />
+                <span className="font-body text-[9px] text-gray-400">+Dim</span>
+              </label>
+            </div>
+
+            <div className="w-px h-6 bg-gray-200 flex-shrink-0" />
+
+            {/* Résumé charge */}
+            <div className="flex flex-wrap gap-2 flex-1">
+              {salaries.filter(s=>s.actif).map(sal => {
+                const charge = chargeParSalarie[sal.id]||0;
+                const done = taches.filter(t=>t.salarieId===sal.id&&t.done).length;
+                const total = taches.filter(t=>t.salarieId===sal.id).length;
                 return (
-                  <button key={j} onClick={() => {
-                    setJoursTravailles(prev => active ? prev.filter(x => x !== j) : [...prev, j as JourSemaine]);
-                  }}
-                    className={`px-2 py-1 rounded-md font-body text-[10px] font-semibold border-none cursor-pointer transition-all
-                      ${active ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-400"}`}>
-                    {JOURS_LABELS[j as JourSemaine].slice(0, 3)}
-                  </button>
+                  <div key={sal.id} className="flex items-center gap-2 bg-blue-50 rounded-xl px-3 py-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{background:sal.couleur}}/>
+                    <span className="font-body text-xs font-semibold text-blue-800">{sal.nom}</span>
+                    <span className="font-body text-xs text-gray-400">{fmtDuree(charge)}</span>
+                    {total > 0 && <span className="font-body text-[10px] text-green-600">{done}/{total} ✓</span>}
+                  </div>
                 );
               })}
             </div>
-            <div className="flex gap-1">
-              <button onClick={() => setJoursTravailles(["lundi","mardi","mercredi","jeudi","vendredi"])}
-                className="font-body text-[9px] text-blue-400 bg-transparent border-none cursor-pointer hover:text-blue-600 underline">Lun-Ven</button>
-              <button onClick={() => setJoursTravailles(["mardi","mercredi","jeudi","vendredi","samedi"])}
-                className="font-body text-[9px] text-blue-400 bg-transparent border-none cursor-pointer hover:text-blue-600 underline">Mar-Sam</button>
-              <button onClick={() => setJoursTravailles(["lundi","mardi","mercredi","jeudi","vendredi","samedi"])}
-                className="font-body text-[9px] text-blue-400 bg-transparent border-none cursor-pointer hover:text-blue-600 underline">Lun-Sam</button>
-            </div>
-            <label className="flex items-center gap-1 cursor-pointer">
-              <input type="checkbox" checked={inclureDimanche} onChange={e => setInclureDimanche(e.target.checked)}
-                className="accent-blue-500 w-3 h-3" />
-              <span className="font-body text-[9px] text-slate-400">+Dim</span>
-            </label>
           </div>
+        </Card>
 
-          {/* Séparateur */}
-          <div className="w-px h-6 bg-gray-200 flex-shrink-0" />
-
-          {/* Résumé charge — salariés */}
-          <div className="flex flex-wrap gap-1.5 flex-1">
-            {salaries.filter(s=>s.actif).map(sal => {
-              const charge = chargeParSalarie[sal.id]||0;
-              const done = taches.filter(t=>t.salarieId===sal.id&&t.done).length;
-              const total = taches.filter(t=>t.salarieId===sal.id).length;
-              return (
-                <div key={sal.id} className="flex items-center gap-1.5 bg-gray-50 rounded-lg px-2.5 py-1 border border-gray-100">
-                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:sal.couleur}}/>
-                  <span className="font-body text-[11px] font-semibold text-slate-700">{sal.nom}</span>
-                  <span className="font-body text-[10px] text-slate-400">{fmtDuree(charge)}</span>
-                  {total > 0 && <span className="font-body text-[9px] text-green-500">{done}/{total}✓</span>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* ── BARRE D'ACTIONS (vue + boutons) ── */}
+        {/* ── BARRE D'ACTIONS ── */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* Switcher de vue */}
           <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
             {(["tableau","horaire","fiche"] as const).map(v => (
               <button key={v} onClick={()=>setView(v)}
-                className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer transition-all
-                  ${view===v ? "bg-white text-blue-700 shadow-sm" : "bg-transparent text-slate-500 hover:text-slate-700"}`}>
+                className={`px-4 py-2 rounded-lg font-body text-xs font-semibold border-none cursor-pointer transition-all
+                  ${view===v ? "bg-white text-blue-700 shadow-sm" : "bg-transparent text-gray-400 hover:text-blue-700"}`}>
                 {v === "tableau" ? "📊 Tableau" : v === "horaire" ? "🕐 Horaire" : "📋 Fiche"}
               </button>
             ))}
@@ -1285,7 +1296,7 @@ Réponds de façon concise et pratique, en français.`,
 
           {/* Import cours/stages */}
           <button onClick={handleImportCreneaux} disabled={importing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 disabled:opacity-50 transition-colors">
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-body text-xs font-semibold cursor-pointer bg-white text-purple-700 border border-purple-200 hover:bg-purple-50 disabled:opacity-50 transition-colors shadow-sm">
             {importing ? <div className="w-3 h-3 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" /> : <span>📅</span>}
             {importing ? "Import…" : "Importer cours/stages"}
           </button>
@@ -1293,19 +1304,19 @@ Réponds de façon concise et pratique, en français.`,
           {/* Appliquer un modèle */}
           <div className="relative">
             <button onClick={() => setShowApplyModele(!showApplyModele)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors">
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-body text-xs font-semibold cursor-pointer bg-white text-green-700 border border-green-200 hover:bg-green-50 transition-colors shadow-sm">
               <LayoutTemplate size={13}/> Appliquer un modèle
             </button>
             {showApplyModele && (
-              <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-3 min-w-[280px]">
-                <div className="font-body text-xs font-bold text-gray-500 mb-2">Appliquer sur la semaine {semaine}</div>
+              <div className="absolute left-0 top-full mt-2 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-3 min-w-[280px]">
+                <div className="font-body text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Appliquer sur la semaine {semaine}</div>
                 {modeles.length === 0 ? (
                   <p className="font-body text-xs text-gray-400 py-3 text-center">Aucun modèle. Créez-en dans l'onglet Modèles.</p>
                 ) : (
                   <div className="space-y-1 max-h-[250px] overflow-y-auto">
                     {modeles.map(m => (
                       <button key={m.id} onClick={() => handleApplyModele(m)}
-                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-blue-50 cursor-pointer border-none bg-transparent text-left">
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-blue-50 cursor-pointer border-none bg-transparent text-left transition-colors">
                         <span>{m.type === "scolaire" ? "📚" : m.type === "vacances" ? "☀️" : "📌"}</span>
                         <div className="flex-1 min-w-0">
                           <div className="font-body text-xs font-semibold text-blue-800 truncate">{m.nom}</div>
@@ -1324,27 +1335,27 @@ Réponds de façon concise et pratique, en français.`,
           {/* Sauvegarder comme modèle */}
           <div className="relative">
             <button onClick={() => setShowSaveModele(!showSaveModele)} disabled={taches.length === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-body text-xs font-semibold cursor-pointer bg-white text-blue-600 border border-blue-200 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm">
               <Save size={13}/> Sauvegarder modèle
             </button>
             {showSaveModele && (
-              <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-4 min-w-[300px]">
-                <div className="font-body text-xs font-bold text-gray-500 mb-3">Sauvegarder les {taches.length} tâches comme modèle</div>
+              <div className="absolute left-0 top-full mt-2 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-4 min-w-[300px]">
+                <div className="font-body text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Sauvegarder {taches.length} tâches</div>
                 <input value={saveModeleName} onChange={e => setSaveModeleName(e.target.value)} placeholder="Nom du modèle (ex: Semaine scolaire)"
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 font-body text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-blue-800" />
                 <div className="flex gap-2 mb-3">
                   {([["scolaire","📚","Scolaire"],["vacances","☀️","Vacances"],["autre","📌","Autre"]] as const).map(([id, emoji, label]) => (
                     <button key={id} onClick={() => setSaveModeleType(id)}
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border font-body text-xs cursor-pointer ${saveModeleType === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-600 border-gray-200"}`}>
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-xl border font-body text-xs font-semibold cursor-pointer transition-all ${saveModeleType === id ? "bg-blue-500 text-white border-blue-500 shadow-sm" : "bg-white text-blue-800 border-gray-200 hover:border-blue-300"}`}>
                       {emoji} {label}
                     </button>
                   ))}
                 </div>
                 <div className="flex gap-2 justify-end">
                   <button onClick={() => setShowSaveModele(false)}
-                    className="px-3 py-1.5 rounded-lg border border-gray-200 font-body text-xs text-gray-500 cursor-pointer bg-white">Annuler</button>
+                    className="px-3 py-1.5 rounded-xl border border-gray-200 font-body text-xs font-semibold text-gray-500 cursor-pointer bg-white hover:bg-gray-50">Annuler</button>
                   <button onClick={handleSaveAsModele}
-                    className="px-4 py-1.5 rounded-lg bg-blue-500 text-white font-body text-xs font-semibold cursor-pointer border-none hover:bg-blue-400">
+                    className="px-4 py-1.5 rounded-xl bg-blue-500 text-white font-body text-xs font-semibold cursor-pointer border-none hover:bg-blue-400 shadow-md shadow-blue-500/25">
                     Créer le modèle
                   </button>
                 </div>
@@ -1356,14 +1367,14 @@ Réponds de façon concise et pratique, en français.`,
 
           {/* Imprimer */}
           <button onClick={() => window.print()} disabled={taches.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer bg-white text-slate-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 transition-colors">
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-body text-xs font-semibold cursor-pointer bg-white text-blue-800 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 transition-colors shadow-sm">
             <Printer size={13}/> Imprimer
           </button>
 
           {/* Email équipe */}
           <button onClick={handleNotifyEquipe} disabled={notifying || taches.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 disabled:opacity-40 transition-colors">
-            {notifying ? <div className="w-3 h-3 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin" /> : <span>📧</span>}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-body text-xs font-semibold cursor-pointer bg-blue-500 text-white border-none hover:bg-blue-400 disabled:opacity-40 transition-colors shadow-md shadow-blue-500/25">
+            {notifying ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <span>📧</span>}
             {notifying ? "Envoi…" : "Email"}
           </button>
         </div>
@@ -1463,13 +1474,13 @@ Réponds de façon concise et pratique, en français.`,
       </div>{/* fin print-hide */}
 
       {/* ── VUE PRINCIPALE ── */}
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden p-4 print-keep">
+      <Card padding="md" className="overflow-hidden print-keep">
         {salaries.filter(s=>s.actif).length === 0 ? (
           <div className="text-center py-8 text-slate-400 font-body text-sm">Ajoutez des salariés dans l'onglet Équipe.</div>
         ) : view === "tableau" ? <TableauView/>
           : view === "horaire" ? <HoraireView/>
           : <FicheView/>}
-      </div>
+      </Card>
 
       <style>{`
         @media print {

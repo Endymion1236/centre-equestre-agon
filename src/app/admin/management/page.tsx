@@ -105,26 +105,26 @@ export default function ManagementPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6 print-hide">
+      <div className="flex justify-between items-center mb-6 print-hide">
         <div>
           <h1 className="font-display text-2xl font-bold text-blue-800">Management</h1>
-          <p className="font-body text-xs text-slate-500">Planning équipe · Répartition des tâches · Agent IA</p>
+          <p className="font-body text-sm text-gray-400">Planning équipe · Répartition des tâches · Agent IA</p>
         </div>
       </div>
 
-      {/* Onglets */}
+      {/* Onglets style dashboard */}
       <div className="flex gap-2 mb-6 flex-wrap print-hide">
         {TABS.map(({id, label, icon: Icon}) => (
           <button key={id} onClick={()=>setTab(id)}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl border font-body text-sm font-medium cursor-pointer transition-all
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl border font-body text-sm font-semibold cursor-pointer transition-all
               ${tab===id
-                ? id==="ia" ? "text-white border-transparent" : "bg-blue-500 text-white border-blue-500"
-                : "bg-white text-slate-600 border-gray-200 hover:border-gray-300"}`}
+                ? id==="ia" ? "text-white border-transparent shadow-lg" : "bg-blue-500 text-white border-blue-500 shadow-md shadow-blue-500/25"
+                : "bg-white text-blue-800 border-gray-200 hover:border-blue-300 hover:bg-blue-50"}`}
             style={tab===id&&id==="ia"?{background:"linear-gradient(135deg,#7c3aed,#2050A0)"}:{}}>
             <Icon size={15}/>
             {label}
-            {id==="bibliotheque"&&<span className={`text-xs px-2 py-0.5 rounded-full ${tab===id?"bg-white/20 text-white":"bg-gray-100 text-gray-500"}`}>{tachesType.length}</span>}
-            {id==="equipe"&&<span className={`text-xs px-2 py-0.5 rounded-full ${tab===id?"bg-white/20 text-white":"bg-gray-100 text-gray-500"}`}>{salaries.filter(s=>s.actif).length}</span>}
+            {id==="bibliotheque"&&<span className={`text-xs px-2 py-0.5 rounded-full font-body ${tab===id?"bg-white/20 text-white":"bg-blue-50 text-blue-500"}`}>{tachesType.length}</span>}
+            {id==="equipe"&&<span className={`text-xs px-2 py-0.5 rounded-full font-body ${tab===id?"bg-white/20 text-white":"bg-blue-50 text-blue-500"}`}>{salaries.filter(s=>s.actif).length}</span>}
           </button>
         ))}
       </div>
