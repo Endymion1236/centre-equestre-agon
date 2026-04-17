@@ -24,13 +24,21 @@ service cloud.firestore {
     //  plus performant et compatible avec les queries filtrées côté client)
 
     // ── Familles ──────────────────────────────────────────────────────────
+    // Le docId est toujours l'uid du user (pattern : doc(db, "families", user.uid)).
+    // On vérifie donc d'abord familyId == auth.uid (le plus fiable, ne dépend
+    // pas du contenu). On garde les fallbacks sur des champs internes pour
+    // compatibilité avec d'anciens docs (uid, authUid, parentEmail).
     match /families/{familyId} {
       allow read: if isStaff()
+        || (isAuth() && familyId == request.auth.uid)
         || (isAuth() && resource.data.uid == request.auth.uid)
+        || (isAuth() && resource.data.authUid == request.auth.uid)
         || (isAuth() && resource.data.parentEmail == request.auth.token.email);
       allow create: if isAuth();
       allow update, delete: if isStaff()
+        || (isAuth() && familyId == request.auth.uid)
         || (isAuth() && resource.data.uid == request.auth.uid)
+        || (isAuth() && resource.data.authUid == request.auth.uid)
         || (isAuth() && resource.data.parentEmail == request.auth.token.email);
     }
 
