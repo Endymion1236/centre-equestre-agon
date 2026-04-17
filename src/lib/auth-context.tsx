@@ -122,8 +122,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
                 console.log(`Compte lié : ${firebaseUser.email} → uid ${firebaseUser.uid}`);
               }
-            } catch (e) {
-              console.error("Erreur recherche email:", e);
+            } catch (e: any) {
+              // Firebase Security Rules peuvent refuser la query list quand la
+              // collection contient des docs dont `parentEmail` ne matche pas
+              // `request.auth.token.email`. C'est un cas edge — la query ne
+              // sert qu'à lier un compte Google à une fiche pré-créée par
+              // l'admin. Si elle échoue, on bascule simplement en création de
+              // nouvelle fiche (étape 3).
+              if (e?.code === "permission-denied") {
+                console.info(
+                  "Query families par email non autorisée (cas normal si aucune fiche pré-existante). Bascule en création."
+                );
+              } else {
+                console.error("Erreur recherche email:", e);
+              }
             }
           }
 

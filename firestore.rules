@@ -117,10 +117,13 @@ service cloud.firestore {
     }
 
     // ── Push tokens ───────────────────────────────────────────────────────
+    // Le docId est le familyId (l'uid). Un user peut lire/écrire son propre
+    // token (nécessaire pour le hook usePushNotifications qui vérifie s'il
+    // doit se réinscrire aux notifications).
     match /push_tokens/{docId} {
-      allow read: if isAdmin();
-      allow create, update: if isAuth();
-      allow delete: if isAdmin() || (isAuth() && resource.data.uid == request.auth.uid);
+      allow read: if isAdmin() || (isAuth() && docId == request.auth.uid);
+      allow create, update: if isAuth() && docId == request.auth.uid;
+      allow delete: if isAdmin() || (isAuth() && docId == request.auth.uid);
     }
 
     // ── Settings (paramètres globaux) ─────────────────────────────────────
