@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { GALOPS_PROGRAMME, DOMAINE_LABELS, getNiveauById, type Domaine } from "@/lib/galops-programme";
@@ -205,8 +205,8 @@ function NoteMoniteur({ childId, familyId, childName }: { childId: string; famil
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [recentNotes, setRecentNotes] = useState<any[]>([]);
-  const mediaRecorderRef = useState<MediaRecorder | null>(null);
-  const chunksRef = useState<Blob[]>([]);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
   // Charger les notes récentes
   useEffect(() => {
@@ -250,8 +250,8 @@ function NoteMoniteur({ childId, familyId, childName }: { childId: string; famil
         await transcribeAndProcess(blob, ext);
       };
       mediaRecorder.start(1000); // chunks every second for reliability
-      mediaRecorderRef[1](mediaRecorder);
-      chunksRef[1](chunks);
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = chunks;
       setRecording(true);
     } catch (e: any) {
       console.error("Micro non disponible:", e);
@@ -260,8 +260,8 @@ function NoteMoniteur({ childId, familyId, childName }: { childId: string; famil
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef[0]) {
-      mediaRecorderRef[0].stop();
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
       setRecording(false);
     }
   };
