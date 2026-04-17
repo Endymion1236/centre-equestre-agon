@@ -7,7 +7,10 @@ service cloud.firestore {
       return request.auth != null;
     }
     function isAdmin() {
-      return isAuth() && request.auth.token.admin == true;
+      return isAuth() && (
+        request.auth.token.admin == true
+        || request.auth.token.email in ['ceagon@orange.fr', 'ceagon50@gmail.com', 'emmelinelagy@gmail.com']
+      );
     }
     function isMoniteur() {
       return isAuth() && request.auth.token.moniteur == true;
