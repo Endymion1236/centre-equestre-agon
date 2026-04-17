@@ -1143,310 +1143,8 @@ Réponds de façon concise et pratique, en français.`,
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Navigation semaine — style identique au planning */}
-      <div className="print-hide">
-      <div className="flex items-center justify-between mb-4">
-        <button onClick={prevWeek} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300">
-          <ChevronLeft size={16}/>Préc.
-        </button>
-        <div className="flex flex-col items-center gap-1">
-          <div className="font-display text-lg font-bold text-blue-800 capitalize">
-            {lundi.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
-          </div>
-          <div className="font-body text-xs text-slate-500">
-            Du {formatDateCourte(lundi)} au {formatDateCourte(new Date(lundi.getTime() + 5 * 86400000))} · Semaine {semaine.split("-W")[1]}
-          </div>
-          <input type="date" title="Aller à cette date"
-            className="font-body text-xs px-2 py-1 rounded-lg border border-gray-200 bg-white cursor-pointer focus:border-blue-400 focus:outline-none text-slate-500"
-            onChange={e => {
-              if (!e.target.value) return;
-              const [py, pm, pd] = e.target.value.split("-").map(Number);
-              const picked = new Date(py, pm - 1, pd, 12);
-              const pickedDow = (picked.getDay() + 6) % 7;
-              const pickedMon = new Date(picked); pickedMon.setDate(picked.getDate() - pickedDow);
-              const today = new Date(); today.setHours(12, 0, 0, 0);
-              const todayDow = (today.getDay() + 6) % 7;
-              const todayMon = new Date(today); todayMon.setDate(today.getDate() - todayDow);
-              const diffWeeks = Math.round((pickedMon.getTime() - todayMon.getTime()) / (7 * 86400000));
-              const currentIso = getISOWeek(new Date());
-              const [cy, cw] = currentIso.split("-W").map(Number);
-              const baseDate = new Date(); baseDate.setHours(12,0,0,0);
-              // Calculer la semaine ISO cible
-              const targetIso = getISOWeek(picked);
-              setSemaine(targetIso);
-              e.target.value = "";
-            }}/>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => setSemaine(getISOWeek(new Date()))} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-100">Auj.</button>
-          <button onClick={nextWeek} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300">
-            Suiv.<ChevronRight size={16}/>
-          </button>
-        </div>
-      </div>
 
-      {/* En-têtes jours cliquables */}
-      <div className="grid grid-cols-6 gap-1.5 mb-4">
-        {jourDates.slice(0, nbJours).map(({ jour, date }) => {
-          const isToday = (() => {
-            const now = new Date();
-            return date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-          })();
-          const hasTaches = taches.some(t => t.jour === jour);
-          return (
-            <div key={jour}
-              onClick={() => { setView("fiche"); setSelectedDay(jour); }}
-              className={`text-center py-2 rounded-lg font-body text-xs font-semibold cursor-pointer hover:ring-2 hover:ring-blue-300 transition-all ${isToday ? "bg-blue-500 text-white" : hasTaches ? "bg-sand text-slate-700" : "bg-sand text-slate-400"}`}>
-              {JOURS_LABELS[jour].slice(0, 3)} {date.getDate()}{date.getMonth() !== lundi.getMonth() ? `/${date.getMonth() + 1}` : ""}
-              {hasTaches && !isToday && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-blue-400 align-middle" />}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Jours travaillés cette semaine */}
-      <div className="flex items-center gap-3 bg-white rounded-xl px-4 py-2 border border-gray-100 no-print">
-        <span className="font-body text-xs font-semibold text-slate-500">Jours travaillés :</span>
-        <div className="flex gap-1">
-          {JOURS.slice(0, nbJours).map(j => {
-            const active = joursTravailles.includes(j as JourSemaine);
-            return (
-              <button key={j} onClick={() => {
-                setJoursTravailles(prev => active ? prev.filter(x => x !== j) : [...prev, j as JourSemaine]);
-              }}
-                className={`px-2 py-1 rounded-md font-body text-[10px] font-semibold border-none cursor-pointer transition-all
-                  ${active ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-400"}`}>
-                {JOURS_LABELS[j as JourSemaine].slice(0, 3)}
-              </button>
-            );
-          })}
-        </div>
-        <div className="flex gap-1 ml-1">
-          <button onClick={() => setJoursTravailles(["lundi","mardi","mercredi","jeudi","vendredi"])}
-            className="font-body text-[9px] text-blue-500 bg-transparent border-none cursor-pointer underline">Lun-Ven</button>
-          <button onClick={() => setJoursTravailles(["mardi","mercredi","jeudi","vendredi","samedi"])}
-            className="font-body text-[9px] text-blue-500 bg-transparent border-none cursor-pointer underline">Mar-Sam</button>
-          <button onClick={() => setJoursTravailles(["lundi","mardi","mercredi","jeudi","vendredi","samedi"])}
-            className="font-body text-[9px] text-blue-500 bg-transparent border-none cursor-pointer underline">Lun-Sam</button>
-        </div>
-        <label className="flex items-center gap-1.5 ml-2 cursor-pointer">
-          <input type="checkbox" checked={inclureDimanche} onChange={e => setInclureDimanche(e.target.checked)}
-            className="accent-blue-500 w-3 h-3" />
-          <span className="font-body text-[9px] text-slate-400">+Dim</span>
-        </label>
-      </div>
-
-      {/* Résumé charge */}
-      <div className="flex flex-wrap gap-2 no-print">
-        {salaries.filter(s=>s.actif).map(sal => {
-          const charge = chargeParSalarie[sal.id]||0;
-          const heures = fmtDuree(charge);
-          const done = taches.filter(t=>t.salarieId===sal.id&&t.done).length;
-          const total = taches.filter(t=>t.salarieId===sal.id).length;
-          return (
-            <div key={sal.id} className="flex items-center gap-2 bg-white border border-gray-100 rounded-xl px-3 py-2">
-              <div className="w-2.5 h-2.5 rounded-full" style={{background:sal.couleur}}/>
-              <span className="font-body text-xs font-semibold text-blue-800">{sal.nom}</span>
-              <span className="font-body text-xs text-slate-500">{heures}</span>
-              {total > 0 && <span className="font-body text-[10px] text-green-600">{done}/{total} ✓</span>}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Toggle vue + actions modèles */}
-      <div className="flex gap-2 flex-wrap items-center no-print">
-        {(["tableau","horaire","fiche"] as const).map(v => (
-          <button key={v} onClick={()=>setView(v)}
-            className={`px-4 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${view===v?"bg-blue-500 text-white":"bg-white text-slate-500 border border-gray-200"}`}>
-            {v === "tableau" ? "📊 Tableau" : v === "horaire" ? "🕐 Horaire" : "📋 Fiche"}
-          </button>
-        ))}
-        <div className="flex-1" />
-        {/* Bouton Importer cours/stages */}
-        <button onClick={handleImportCreneaux} disabled={importing}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer border border-purple-200 bg-white text-purple-700 hover:bg-purple-50 disabled:opacity-50">
-          {importing ? <div className="w-3 h-3 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" /> : <span>📅</span>}
-          {importing ? "Import…" : "Importer cours/stages"}
-        </button>
-        {/* Bouton Appliquer un modèle */}
-        <div className="relative">
-          <button onClick={() => setShowApplyModele(!showApplyModele)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer border border-green-200 bg-white text-green-700 hover:bg-green-50">
-            <LayoutTemplate size={13}/> Appliquer un modèle
-          </button>
-          {showApplyModele && (
-            <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg p-3 min-w-[280px]">
-              <div className="font-body text-xs font-bold text-gray-500 mb-2">Appliquer sur la semaine {semaine}</div>
-              {modeles.length === 0 ? (
-                <p className="font-body text-xs text-gray-400 py-3 text-center">Aucun modèle. Créez-en dans l'onglet Modèles.</p>
-              ) : (
-                <div className="space-y-1 max-h-[250px] overflow-y-auto">
-                  {modeles.map(m => (
-                    <button key={m.id} onClick={() => handleApplyModele(m)}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-blue-50 cursor-pointer border-none bg-transparent text-left">
-                      <span>{m.type === "scolaire" ? "📚" : m.type === "vacances" ? "☀️" : "📌"}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-body text-xs font-semibold text-blue-800 truncate">{m.nom}</div>
-                        <div className="font-body text-[10px] text-gray-400">{m.taches.length} tâches · {fmtDuree(m.taches.reduce((s,t)=>s+t.dureeMinutes,0))}</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-              <button onClick={() => setShowApplyModele(false)}
-                className="mt-2 w-full text-center font-body text-[10px] text-gray-400 bg-transparent border-none cursor-pointer hover:text-gray-600">Fermer</button>
-            </div>
-          )}
-        </div>
-        {/* Bouton Sauvegarder comme modèle */}
-        <div className="relative">
-          <button onClick={() => setShowSaveModele(!showSaveModele)} disabled={taches.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer border border-blue-200 bg-white text-blue-600 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed">
-            <Save size={13}/> Sauvegarder comme modèle
-          </button>
-          {showSaveModele && (
-            <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg p-4 min-w-[300px]">
-              <div className="font-body text-xs font-bold text-gray-500 mb-3">Sauvegarder les {taches.length} tâches comme modèle</div>
-              <input value={saveModeleName} onChange={e => setSaveModeleName(e.target.value)} placeholder="Nom du modèle (ex: Semaine scolaire)"
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
-              <div className="flex gap-2 mb-3">
-                {([["scolaire","📚","Scolaire"],["vacances","☀️","Vacances"],["autre","📌","Autre"]] as const).map(([id, emoji, label]) => (
-                  <button key={id} onClick={() => setSaveModeleType(id)}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border font-body text-xs cursor-pointer ${saveModeleType === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-600 border-gray-200"}`}>
-                    {emoji} {label}
-                  </button>
-                ))}
-              </div>
-              <div className="flex gap-2 justify-end">
-                <button onClick={() => setShowSaveModele(false)}
-                  className="px-3 py-1.5 rounded-lg border border-gray-200 font-body text-xs text-gray-500 cursor-pointer bg-white">Annuler</button>
-                <button onClick={handleSaveAsModele}
-                  className="px-4 py-1.5 rounded-lg bg-blue-500 text-white font-body text-xs font-semibold cursor-pointer border-none hover:bg-blue-400">
-                  Créer le modèle
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-        {/* Bouton Imprimer / PDF */}
-        <button onClick={() => window.print()} disabled={taches.length === 0}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer border border-gray-200 bg-white text-slate-600 hover:bg-gray-50 disabled:opacity-40">
-          <Printer size={13}/> Imprimer
-        </button>
-        {/* Bouton Email planning */}
-        <button onClick={handleNotifyEquipe} disabled={notifying || taches.length === 0}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer border border-blue-200 bg-white text-blue-600 hover:bg-blue-50 disabled:opacity-40">
-          {notifying ? <div className="w-3 h-3 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin" /> : <span>📧</span>}
-          {notifying ? "Envoi…" : "Email"}
-        </button>
-      </div>
-      {conflits.length > 0 && (
-        <div style={{background: showConflits ? "#fffbeb" : "#f8fafc", border: showConflits ? "1px solid #fde68a" : "1px solid #e2e8f0", borderRadius:12, padding: showConflits ? "12px 16px" : "8px 16px", display:"flex", alignItems:"center", gap:10}}>
-          <span style={{fontSize: showConflits ? 18 : 14, flexShrink:0}}>{showConflits ? "🔴" : "⚪"}</span>
-          {showConflits ? (
-            <div style={{flex:1}}>
-              <div style={{fontFamily:"sans-serif",fontSize:12,fontWeight:700,color:"#92400e",marginBottom:6}}>
-                {conflits.length} conflit{conflits.length > 1 ? "s" : ""} horaire{conflits.length > 1 ? "s" : ""} détecté{conflits.length > 1 ? "s" : ""}
-              </div>
-              <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                {conflits.map((c, i) => (
-                  <div key={i} style={{fontFamily:"sans-serif",fontSize:11,color:"#78350f",display:"flex",alignItems:"center",gap:6,background:"#fef3c7",padding:"4px 10px",borderRadius:6,flexWrap:"wrap"}}>
-                    <span style={{fontWeight:700}}>{c.salarieName}</span>
-                    <span style={{color:"#a16207"}}>·</span>
-                    <span>{JOURS_LABELS[c.jour].slice(0, 3)}</span>
-                    <span style={{color:"#a16207"}}>·</span>
-                    <span style={{fontWeight:600,color:"#dc2626"}}>
-                      {c.tache1.tacheLabel} ({c.tache1.heureDebut}→{minToHeure(heureToMin(c.tache1.heureDebut) + c.tache1.dureeMinutes)})
-                    </span>
-                    <span style={{color:"#a16207"}}>↔</span>
-                    <span style={{fontWeight:600,color:"#dc2626"}}>
-                      {c.tache2.tacheLabel} ({c.tache2.heureDebut}→{minToHeure(heureToMin(c.tache2.heureDebut) + c.tache2.dureeMinutes)})
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <span style={{fontFamily:"sans-serif",fontSize:11,color:"#94a3b8",flex:1}}>
-              {conflits.length} conflit{conflits.length > 1 ? "s" : ""} masqué{conflits.length > 1 ? "s" : ""}
-            </span>
-          )}
-          <button onClick={() => setShowConflits(!showConflits)}
-            style={{flexShrink:0,padding:"4px 10px",borderRadius:6,border:"1px solid #e2e8f0",background:"white",fontFamily:"sans-serif",fontSize:10,color:"#64748b",cursor:"pointer",fontWeight:600}}>
-            {showConflits ? "Masquer" : "Afficher"}
-          </button>
-        </div>
-      )}
-
-      {/* Bandeau tâches obligatoires manquantes */}
-      {tachesManquantes.length > 0 && (
-        <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:12,padding:"12px 16px",display:"flex",alignItems:"flex-start",gap:10}}>
-          <span style={{fontSize:18,flexShrink:0}}>⚠️</span>
-          <div style={{flex:1}}>
-            <div style={{fontFamily:"sans-serif",fontSize:12,fontWeight:700,color:"#991b1b",marginBottom:4}}>
-              {tachesManquantes.length} tâche{tachesManquantes.length > 1 ? "s" : ""} obligatoire{tachesManquantes.length > 1 ? "s" : ""} manquante{tachesManquantes.length > 1 ? "s" : ""}
-            </div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-              {tachesManquantes.slice(0, 12).map((m, i) => (
-                <span key={i} style={{fontFamily:"sans-serif",fontSize:10,background:"#fee2e2",color:"#dc2626",padding:"2px 8px",borderRadius:6,fontWeight:600}}>
-                  {m.tache.label} · {JOURS_LABELS[m.jour].slice(0, 3)}
-                </span>
-              ))}
-              {tachesManquantes.length > 12 && (
-                <span style={{fontFamily:"sans-serif",fontSize:10,color:"#991b1b"}}>+{tachesManquantes.length - 12} autres</span>
-              )}
-            </div>
-          </div>
-          <button onClick={handleIACheck} disabled={iaChecking}
-            style={{flexShrink:0,padding:"6px 14px",borderRadius:8,border:"none",background:"#7c3aed",color:"white",fontFamily:"sans-serif",fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-            {iaChecking ? <div style={{width:12,height:12,border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"white",borderRadius:"50%",animation:"spin 0.8s linear infinite"}} /> : <span>🤖</span>}
-            {iaChecking ? "Analyse…" : "Vérifier avec l'IA"}
-          </button>
-        </div>
-      )}
-
-      {/* Bandeau tout OK si aucune manquante et qu'il y a des obligatoires */}
-      {tachesManquantes.length === 0 && tachesObligatoires.length > 0 && taches.length > 0 && (
-        <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:12,padding:"10px 16px",display:"flex",alignItems:"center",gap:10}}>
-          <span style={{fontSize:16}}>✅</span>
-          <span style={{fontFamily:"sans-serif",fontSize:12,color:"#166534",fontWeight:600}}>
-            Toutes les tâches obligatoires sont assignées cette semaine
-          </span>
-          <div style={{flex:1}} />
-          <button onClick={handleIACheck} disabled={iaChecking}
-            style={{padding:"5px 12px",borderRadius:8,border:"1px solid #d4d4d8",background:"white",color:"#7c3aed",fontFamily:"sans-serif",fontSize:10,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
-            {iaChecking ? "Analyse…" : "🤖 Check complet IA"}
-          </button>
-        </div>
-      )}
-
-      {/* Résultat de la vérification IA */}
-      {iaResult && (
-        <div style={{background:"#faf5ff",border:"1px solid #e9d5ff",borderRadius:12,padding:"14px 18px",position:"relative"}}>
-          <button onClick={() => setIaResult(null)}
-            style={{position:"absolute",top:8,right:10,background:"transparent",border:"none",cursor:"pointer",color:"#a78bfa",fontSize:16}}>✕</button>
-          <div style={{fontFamily:"sans-serif",fontSize:12,fontWeight:700,color:"#7c3aed",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
-            🤖 Analyse IA du planning
-          </div>
-          <div style={{fontFamily:"sans-serif",fontSize:12,color:"#374151",lineHeight:1.6,whiteSpace:"pre-wrap"}}>
-            {iaResult}
-          </div>
-        </div>
-      )}
-
-      </div>{/* fin print-hide */}
-
-      {/* Vue */}
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden p-4 print-keep">
-        {salaries.filter(s=>s.actif).length === 0 ? (
-          <div className="text-center py-8 text-slate-400 font-body text-sm">Ajoutez des salariés dans l'onglet Équipe.</div>
-        ) : view === "tableau" ? <TableauView/>
-          : view === "horaire" ? <HoraireView/>
-          : <FicheView/>}
-      </div>
-
-      {/* En-tête visible uniquement à l'impression */}
+      {/* ── PRINT-ONLY HEADER ── */}
       <div className="print-header" style={{display:"none"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",borderBottom:"2px solid #1e3a5f",paddingBottom:8,marginBottom:12}}>
           <div>
@@ -1463,22 +1161,327 @@ Réponds de façon concise et pratique, en français.`,
         </div>
       </div>
 
+      <div className="print-hide flex flex-col gap-3">
+
+        {/* ── NAVIGATION SEMAINE ── */}
+        <div className="flex items-center justify-between bg-white rounded-xl border border-gray-100 px-4 py-2.5">
+          <button onClick={prevWeek} className="flex items-center gap-1 font-body text-sm text-slate-500 bg-transparent border-none cursor-pointer hover:text-blue-600 transition-colors">
+            <ChevronLeft size={16}/>Préc.
+          </button>
+          <div className="flex flex-col items-center gap-0.5">
+            <div className="font-display text-base font-bold text-blue-800 capitalize">
+              {lundi.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
+            </div>
+            <div className="font-body text-[11px] text-slate-400">
+              Du {formatDateCourte(lundi)} au {formatDateCourte(new Date(lundi.getTime() + 5 * 86400000))} · Semaine {semaine.split("-W")[1]}
+            </div>
+            <input type="date" title="Aller à cette date"
+              className="font-body text-[10px] px-2 py-0.5 rounded-lg border border-gray-200 bg-white cursor-pointer focus:border-blue-400 focus:outline-none text-slate-400 mt-0.5"
+              onChange={e => {
+                if (!e.target.value) return;
+                const [py, pm, pd] = e.target.value.split("-").map(Number);
+                const picked = new Date(py, pm - 1, pd, 12);
+                const targetIso = getISOWeek(picked);
+                setSemaine(targetIso);
+                e.target.value = "";
+              }}/>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setSemaine(getISOWeek(new Date()))} className="font-body text-xs font-semibold text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">Auj.</button>
+            <button onClick={nextWeek} className="flex items-center gap-1 font-body text-sm text-slate-500 bg-transparent border-none cursor-pointer hover:text-blue-600 transition-colors">
+              Suiv.<ChevronRight size={16}/>
+            </button>
+          </div>
+        </div>
+
+        {/* ── JOURS DE LA SEMAINE ── */}
+        <div className="grid grid-cols-6 gap-1.5">
+          {jourDates.slice(0, nbJours).map(({ jour, date }) => {
+            const isToday = (() => {
+              const now = new Date();
+              return date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+            })();
+            const hasTaches = taches.some(t => t.jour === jour);
+            return (
+              <div key={jour}
+                onClick={() => { setView("fiche"); setSelectedDay(jour); }}
+                className={`text-center py-2 rounded-xl font-body text-xs font-semibold cursor-pointer hover:ring-2 hover:ring-blue-300 transition-all ${isToday ? "bg-blue-500 text-white shadow-sm" : hasTaches ? "bg-blue-50 text-slate-700 border border-blue-100" : "bg-white text-slate-400 border border-gray-100"}`}>
+                {JOURS_LABELS[jour].slice(0, 3)} {date.getDate()}{date.getMonth() !== lundi.getMonth() ? `/${date.getMonth() + 1}` : ""}
+                {hasTaches && !isToday && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-blue-400 align-middle" />}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ── JOURS TRAVAILLÉS + RÉSUMÉ CHARGE (même ligne) ── */}
+        <div className="flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 border border-gray-100 flex-wrap">
+          {/* Jours travaillés */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="font-body text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Jours :</span>
+            <div className="flex gap-1">
+              {JOURS.slice(0, nbJours).map(j => {
+                const active = joursTravailles.includes(j as JourSemaine);
+                return (
+                  <button key={j} onClick={() => {
+                    setJoursTravailles(prev => active ? prev.filter(x => x !== j) : [...prev, j as JourSemaine]);
+                  }}
+                    className={`px-2 py-1 rounded-md font-body text-[10px] font-semibold border-none cursor-pointer transition-all
+                      ${active ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-400"}`}>
+                    {JOURS_LABELS[j as JourSemaine].slice(0, 3)}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex gap-1">
+              <button onClick={() => setJoursTravailles(["lundi","mardi","mercredi","jeudi","vendredi"])}
+                className="font-body text-[9px] text-blue-400 bg-transparent border-none cursor-pointer hover:text-blue-600 underline">Lun-Ven</button>
+              <button onClick={() => setJoursTravailles(["mardi","mercredi","jeudi","vendredi","samedi"])}
+                className="font-body text-[9px] text-blue-400 bg-transparent border-none cursor-pointer hover:text-blue-600 underline">Mar-Sam</button>
+              <button onClick={() => setJoursTravailles(["lundi","mardi","mercredi","jeudi","vendredi","samedi"])}
+                className="font-body text-[9px] text-blue-400 bg-transparent border-none cursor-pointer hover:text-blue-600 underline">Lun-Sam</button>
+            </div>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="checkbox" checked={inclureDimanche} onChange={e => setInclureDimanche(e.target.checked)}
+                className="accent-blue-500 w-3 h-3" />
+              <span className="font-body text-[9px] text-slate-400">+Dim</span>
+            </label>
+          </div>
+
+          {/* Séparateur */}
+          <div className="w-px h-6 bg-gray-200 flex-shrink-0" />
+
+          {/* Résumé charge — salariés */}
+          <div className="flex flex-wrap gap-1.5 flex-1">
+            {salaries.filter(s=>s.actif).map(sal => {
+              const charge = chargeParSalarie[sal.id]||0;
+              const done = taches.filter(t=>t.salarieId===sal.id&&t.done).length;
+              const total = taches.filter(t=>t.salarieId===sal.id).length;
+              return (
+                <div key={sal.id} className="flex items-center gap-1.5 bg-gray-50 rounded-lg px-2.5 py-1 border border-gray-100">
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:sal.couleur}}/>
+                  <span className="font-body text-[11px] font-semibold text-slate-700">{sal.nom}</span>
+                  <span className="font-body text-[10px] text-slate-400">{fmtDuree(charge)}</span>
+                  {total > 0 && <span className="font-body text-[9px] text-green-500">{done}/{total}✓</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── BARRE D'ACTIONS (vue + boutons) ── */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Switcher de vue */}
+          <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
+            {(["tableau","horaire","fiche"] as const).map(v => (
+              <button key={v} onClick={()=>setView(v)}
+                className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer transition-all
+                  ${view===v ? "bg-white text-blue-700 shadow-sm" : "bg-transparent text-slate-500 hover:text-slate-700"}`}>
+                {v === "tableau" ? "📊 Tableau" : v === "horaire" ? "🕐 Horaire" : "📋 Fiche"}
+              </button>
+            ))}
+          </div>
+
+          <div className="w-px h-6 bg-gray-200" />
+
+          {/* Import cours/stages */}
+          <button onClick={handleImportCreneaux} disabled={importing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 disabled:opacity-50 transition-colors">
+            {importing ? <div className="w-3 h-3 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" /> : <span>📅</span>}
+            {importing ? "Import…" : "Importer cours/stages"}
+          </button>
+
+          {/* Appliquer un modèle */}
+          <div className="relative">
+            <button onClick={() => setShowApplyModele(!showApplyModele)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors">
+              <LayoutTemplate size={13}/> Appliquer un modèle
+            </button>
+            {showApplyModele && (
+              <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-3 min-w-[280px]">
+                <div className="font-body text-xs font-bold text-gray-500 mb-2">Appliquer sur la semaine {semaine}</div>
+                {modeles.length === 0 ? (
+                  <p className="font-body text-xs text-gray-400 py-3 text-center">Aucun modèle. Créez-en dans l'onglet Modèles.</p>
+                ) : (
+                  <div className="space-y-1 max-h-[250px] overflow-y-auto">
+                    {modeles.map(m => (
+                      <button key={m.id} onClick={() => handleApplyModele(m)}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-blue-50 cursor-pointer border-none bg-transparent text-left">
+                        <span>{m.type === "scolaire" ? "📚" : m.type === "vacances" ? "☀️" : "📌"}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-body text-xs font-semibold text-blue-800 truncate">{m.nom}</div>
+                          <div className="font-body text-[10px] text-gray-400">{m.taches.length} tâches · {fmtDuree(m.taches.reduce((s,t)=>s+t.dureeMinutes,0))}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button onClick={() => setShowApplyModele(false)}
+                  className="mt-2 w-full text-center font-body text-[10px] text-gray-400 bg-transparent border-none cursor-pointer hover:text-gray-600">Fermer</button>
+              </div>
+            )}
+          </div>
+
+          {/* Sauvegarder comme modèle */}
+          <div className="relative">
+            <button onClick={() => setShowSaveModele(!showSaveModele)} disabled={taches.length === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+              <Save size={13}/> Sauvegarder modèle
+            </button>
+            {showSaveModele && (
+              <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-4 min-w-[300px]">
+                <div className="font-body text-xs font-bold text-gray-500 mb-3">Sauvegarder les {taches.length} tâches comme modèle</div>
+                <input value={saveModeleName} onChange={e => setSaveModeleName(e.target.value)} placeholder="Nom du modèle (ex: Semaine scolaire)"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                <div className="flex gap-2 mb-3">
+                  {([["scolaire","📚","Scolaire"],["vacances","☀️","Vacances"],["autre","📌","Autre"]] as const).map(([id, emoji, label]) => (
+                    <button key={id} onClick={() => setSaveModeleType(id)}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border font-body text-xs cursor-pointer ${saveModeleType === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-600 border-gray-200"}`}>
+                      {emoji} {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => setShowSaveModele(false)}
+                    className="px-3 py-1.5 rounded-lg border border-gray-200 font-body text-xs text-gray-500 cursor-pointer bg-white">Annuler</button>
+                  <button onClick={handleSaveAsModele}
+                    className="px-4 py-1.5 rounded-lg bg-blue-500 text-white font-body text-xs font-semibold cursor-pointer border-none hover:bg-blue-400">
+                    Créer le modèle
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex-1" />
+
+          {/* Imprimer */}
+          <button onClick={() => window.print()} disabled={taches.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer bg-white text-slate-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 transition-colors">
+            <Printer size={13}/> Imprimer
+          </button>
+
+          {/* Email équipe */}
+          <button onClick={handleNotifyEquipe} disabled={notifying || taches.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold cursor-pointer bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 disabled:opacity-40 transition-colors">
+            {notifying ? <div className="w-3 h-3 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin" /> : <span>📧</span>}
+            {notifying ? "Envoi…" : "Email"}
+          </button>
+        </div>
+
+        {/* ── ALERTES ── */}
+        {conflits.length > 0 && (
+          <div style={{background: showConflits ? "#fffbeb" : "#f8fafc", border: showConflits ? "1px solid #fde68a" : "1px solid #e2e8f0", borderRadius:12, padding: showConflits ? "12px 16px" : "8px 16px", display:"flex", alignItems:"center", gap:10}}>
+            <span style={{fontSize: showConflits ? 18 : 14, flexShrink:0}}>{showConflits ? "🔴" : "⚪"}</span>
+            {showConflits ? (
+              <div style={{flex:1}}>
+                <div style={{fontFamily:"sans-serif",fontSize:12,fontWeight:700,color:"#92400e",marginBottom:6}}>
+                  {conflits.length} conflit{conflits.length > 1 ? "s" : ""} horaire{conflits.length > 1 ? "s" : ""} détecté{conflits.length > 1 ? "s" : ""}
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                  {conflits.map((c, i) => (
+                    <div key={i} style={{fontFamily:"sans-serif",fontSize:11,color:"#78350f",display:"flex",alignItems:"center",gap:6,background:"#fef3c7",padding:"4px 10px",borderRadius:6,flexWrap:"wrap"}}>
+                      <span style={{fontWeight:700}}>{c.salarieName}</span>
+                      <span style={{color:"#a16207"}}>·</span>
+                      <span>{JOURS_LABELS[c.jour].slice(0, 3)}</span>
+                      <span style={{color:"#a16207"}}>·</span>
+                      <span style={{fontWeight:600,color:"#dc2626"}}>
+                        {c.tache1.tacheLabel} ({c.tache1.heureDebut}→{minToHeure(heureToMin(c.tache1.heureDebut) + c.tache1.dureeMinutes)})
+                      </span>
+                      <span style={{color:"#a16207"}}>↔</span>
+                      <span style={{fontWeight:600,color:"#dc2626"}}>
+                        {c.tache2.tacheLabel} ({c.tache2.heureDebut}→{minToHeure(heureToMin(c.tache2.heureDebut) + c.tache2.dureeMinutes)})
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <span style={{fontFamily:"sans-serif",fontSize:11,color:"#94a3b8",flex:1}}>
+                {conflits.length} conflit{conflits.length > 1 ? "s" : ""} masqué{conflits.length > 1 ? "s" : ""}
+              </span>
+            )}
+            <button onClick={() => setShowConflits(!showConflits)}
+              style={{flexShrink:0,padding:"4px 10px",borderRadius:6,border:"1px solid #e2e8f0",background:"white",fontFamily:"sans-serif",fontSize:10,color:"#64748b",cursor:"pointer",fontWeight:600}}>
+              {showConflits ? "Masquer" : "Afficher"}
+            </button>
+          </div>
+        )}
+
+        {tachesManquantes.length > 0 && (
+          <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:12,padding:"12px 16px",display:"flex",alignItems:"flex-start",gap:10}}>
+            <span style={{fontSize:18,flexShrink:0}}>⚠️</span>
+            <div style={{flex:1}}>
+              <div style={{fontFamily:"sans-serif",fontSize:12,fontWeight:700,color:"#991b1b",marginBottom:4}}>
+                {tachesManquantes.length} tâche{tachesManquantes.length > 1 ? "s" : ""} obligatoire{tachesManquantes.length > 1 ? "s" : ""} manquante{tachesManquantes.length > 1 ? "s" : ""}
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                {tachesManquantes.slice(0, 12).map((m, i) => (
+                  <span key={i} style={{fontFamily:"sans-serif",fontSize:10,background:"#fee2e2",color:"#dc2626",padding:"2px 8px",borderRadius:6,fontWeight:600}}>
+                    {m.tache.label} · {JOURS_LABELS[m.jour].slice(0, 3)}
+                  </span>
+                ))}
+                {tachesManquantes.length > 12 && (
+                  <span style={{fontFamily:"sans-serif",fontSize:10,color:"#991b1b"}}>+{tachesManquantes.length - 12} autres</span>
+                )}
+              </div>
+            </div>
+            <button onClick={handleIACheck} disabled={iaChecking}
+              style={{flexShrink:0,padding:"6px 14px",borderRadius:8,border:"none",background:"#7c3aed",color:"white",fontFamily:"sans-serif",fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+              {iaChecking ? <div style={{width:12,height:12,border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"white",borderRadius:"50%",animation:"spin 0.8s linear infinite"}} /> : <span>🤖</span>}
+              {iaChecking ? "Analyse…" : "Vérifier avec l'IA"}
+            </button>
+          </div>
+        )}
+
+        {tachesManquantes.length === 0 && tachesObligatoires.length > 0 && taches.length > 0 && (
+          <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:12,padding:"10px 16px",display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:16}}>✅</span>
+            <span style={{fontFamily:"sans-serif",fontSize:12,color:"#166534",fontWeight:600}}>
+              Toutes les tâches obligatoires sont assignées cette semaine
+            </span>
+            <div style={{flex:1}} />
+            <button onClick={handleIACheck} disabled={iaChecking}
+              style={{padding:"5px 12px",borderRadius:8,border:"1px solid #d4d4d8",background:"white",color:"#7c3aed",fontFamily:"sans-serif",fontSize:10,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+              {iaChecking ? "Analyse…" : "🤖 Check complet IA"}
+            </button>
+          </div>
+        )}
+
+        {iaResult && (
+          <div style={{background:"#faf5ff",border:"1px solid #e9d5ff",borderRadius:12,padding:"14px 18px",position:"relative"}}>
+            <button onClick={() => setIaResult(null)}
+              style={{position:"absolute",top:8,right:10,background:"transparent",border:"none",cursor:"pointer",color:"#a78bfa",fontSize:16}}>✕</button>
+            <div style={{fontFamily:"sans-serif",fontSize:12,fontWeight:700,color:"#7c3aed",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+              🤖 Analyse IA du planning
+            </div>
+            <div style={{fontFamily:"sans-serif",fontSize:12,color:"#374151",lineHeight:1.6,whiteSpace:"pre-wrap"}}>
+              {iaResult}
+            </div>
+          </div>
+        )}
+
+      </div>{/* fin print-hide */}
+
+      {/* ── VUE PRINCIPALE ── */}
+      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden p-4 print-keep">
+        {salaries.filter(s=>s.actif).length === 0 ? (
+          <div className="text-center py-8 text-slate-400 font-body text-sm">Ajoutez des salariés dans l'onglet Équipe.</div>
+        ) : view === "tableau" ? <TableauView/>
+          : view === "horaire" ? <HoraireView/>
+          : <FicheView/>}
+      </div>
+
       <style>{`
         @media print {
-          /* Masquer la sidebar, header mobile, navigation admin */
           aside, nav, header,
           [data-sidebar], [data-header],
           .no-print, .print-hide,
           .md\\:hidden, .sticky {
             display: none !important;
           }
-
-          /* Masquer la sidebar du layout admin (flex enfant à gauche) */
           .min-h-screen.bg-cream.flex > :first-child {
             display: none !important;
           }
-
-          /* Le contenu principal prend toute la largeur */
           .min-h-screen.bg-cream.flex {
             display: block !important;
           }
@@ -1488,37 +1491,24 @@ Réponds de façon concise et pratique, en français.`,
             padding: 0 !important;
             margin: 0 !important;
           }
-
-          /* Masquer le titre "Management" et les onglets de la page */
           h1, .flex.flex-col.sm\\:flex-row,
           .flex.flex-wrap.gap-2:not(.print-keep) {
             display: none !important;
           }
-
-          /* Fond blanc partout */
           body, body > div, main, [role="main"], div {
             background: white !important;
           }
           body { padding: 0 !important; margin: 0 !important; }
-
-          /* Afficher l'en-tête print */
           .print-header { display: block !important; }
-
-          /* Le contenu du planning */
           .print-keep {
             border: none !important;
             box-shadow: none !important;
             border-radius: 0 !important;
             padding: 0 !important;
           }
-
-          /* Cacher les boutons checkbox et ✕ dans les cellules */
           .print-keep button { display: none !important; }
-
-          /* Taille texte */
           table { font-size: 10px !important; }
           td, th { padding: 3px 4px !important; }
-
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
           @page { size: A4 landscape; margin: 8mm; }
