@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ElevenLabsClient } from "elevenlabs";
 import { verifyAuth } from "@/lib/api-auth";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -11,6 +12,17 @@ export async function POST(request: NextRequest) {
   // 🔒 Auth obligatoire
   const auth = await verifyAuth(request);
   if (auth instanceof NextResponse) return auth;
+
+  // 🚦 Rate limit : 20 synthèses / minute par utilisateur
+  // (ElevenLabs facture au caractère, le texte est capé à 500 chars par
+  //  appel, 20/min laisse largement de la marge pour l'assistant vocal)
+  const rl = await checkRateLimit({
+    uid: auth.uid,
+    routeKey: "tts",
+    limit: 20,
+    windowMs: 60_000,
+  });
+  if (!rl.allowed) return rateLimitResponse(rl);
 
   if (!process.env.ELEVENLABS_API_KEY) {
     return NextResponse.json({ error: "ELEVENLABS_API_KEY non configurée" }, { status: 500 });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { verifyAuth } from "@/lib/api-auth";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 // Augmenter la limite de taille pour les fichiers audio
@@ -10,6 +11,18 @@ export async function POST(request: NextRequest) {
   // 🔒 Auth obligatoire
   const auth = await verifyAuth(request);
   if (auth instanceof NextResponse) return auth;
+
+  // 🚦 Rate limit : 15 transcriptions / minute par utilisateur
+  // (Whisper facturé à la minute d'audio — limite plus basse que /ia car
+  //  chaque appel peut coûter plusieurs cents, et l'usage normal est
+  //  dicté-et-j'attends pas un flux continu)
+  const rl = await checkRateLimit({
+    uid: auth.uid,
+    routeKey: "whisper",
+    limit: 15,
+    windowMs: 60_000,
+  });
+  if (!rl.allowed) return rateLimitResponse(rl);
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {

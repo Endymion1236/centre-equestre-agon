@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { verifyAuth } from "@/lib/api-auth";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -129,6 +130,18 @@ export async function POST(request: NextRequest) {
   // 🔒 Auth obligatoire
   const auth = await verifyAuth(request);
   if (auth instanceof NextResponse) return auth;
+
+  // 🚦 Rate limit : 30 requêtes / minute par utilisateur
+  // (usage normal ≈ 1-2 requêtes par action admin, 30/min laisse une marge
+  //  largement suffisante pour le workflow humain tout en bloquant les
+  //  boucles et les abus)
+  const rl = await checkRateLimit({
+    uid: auth.uid,
+    routeKey: "ia",
+    limit: 30,
+    windowMs: 60_000,
+  });
+  if (!rl.allowed) return rateLimitResponse(rl);
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
