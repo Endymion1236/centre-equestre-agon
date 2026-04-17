@@ -75,13 +75,13 @@ export default function SatisfactionPage() {
       } catch(e) { console.error("[satisfaction] avis-satisfaction error:", e); }
 
       // Filtrer les 30 derniers jours + dédupliquer par activité (côté client)
-      const res = resSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+      const res = resSnap.docs.map((d: any) => ({ id: d.id, ...d.data() })) as any[];
       const filtered = res
         .filter((r: any) => r.date >= dateLimitStr && r.date < today)
         .sort((a: any, b: any) => b.date.localeCompare(a.date));
       const unique = Array.from(new Map(filtered.map((r: any) => [r.activityTitle, r])).values());
       setPastReservations(unique);
-      setMyAvis(avisSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).slice(0, 10));
+      setMyAvis(avisSnap.docs.map((d: any) => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).slice(0, 10));
       setLoading(false);
     })();
   }, [user]);
