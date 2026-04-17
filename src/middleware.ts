@@ -17,6 +17,13 @@ import { NextRequest, NextResponse } from "next/server";
  * pour les routes admin classiques est faite dans chaque route via
  * `verifyAuth()` de `@/lib/api-auth.ts`. La vérification du CRON_SECRET
  * côté route est faite dans chaque route de maintenance.
+ *
+ * Note sur les pages /admin/* : la protection se fait côté React dans
+ * src/app/admin/layout.tsx (vérification isAdmin via custom claim Firebase).
+ * Le middleware ne peut pas vérifier Firebase Auth car le SDK Web stocke
+ * la session en IndexedDB (non accessible en edge). Pour une vraie
+ * protection middleware des pages, il faudrait implémenter un cookie de
+ * session côté serveur — chantier plus lourd, à faire si besoin futur.
  */
 
 // Routes admin accessibles via CRON_SECRET en query string.
