@@ -44,10 +44,13 @@ service cloud.firestore {
     // ── Paiements / Encaissements ─────────────────────────────────────────
     match /payments/{docId} {
       allow read: if isStaff() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
-      allow write: if isAdmin();
+      allow create: if isAuth();
+      allow update, delete: if isAdmin();
     }
     match /encaissements/{docId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin();
+      allow create: if isAuth();
+      allow update, delete: if isAdmin();
     }
 
     // ── Équidés ───────────────────────────────────────────────────────────
@@ -186,9 +189,9 @@ service cloud.firestore {
 
     // ── Réservations (espace cavalier) ────────────────────────────────────
     match /reservations/{docId} {
-      allow read: if isStaff() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow read: if isStaff() || (isAuth() && resource.data.familyId == request.auth.uid);
       allow create: if isAuth();
-      allow update, delete: if isStaff() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow update, delete: if isStaff() || (isAuth() && resource.data.familyId == request.auth.uid);
     }
 
     // ── Email templates ───────────────────────────────────────────────────
@@ -278,7 +281,9 @@ service cloud.firestore {
 
     // ── Payment declarations (CAWL webhooks) ──────────────────────────────
     match /payment_declarations/{docId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin();
+      allow create: if isAuth();
+      allow update, delete: if isAdmin();
     }
 
     // ── Pédagogie (progressions, niveaux) ────────────────────────────────
@@ -316,7 +321,7 @@ service cloud.firestore {
 
     // ── Avis satisfaction ─────────────────────────────────────────────────
     match /avis-satisfaction/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource != null && resource.data.familyId == request.auth.uid);
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
       allow create: if isAuth();
     }
 
