@@ -99,29 +99,6 @@ export default function ReservationsPage() {
         </Card>
       )}
 
-      {/* Bandeau paiement non finalisé */}
-      {pendingPayment.length > 0 && (
-        <Card className="!bg-orange-50 !border-orange-300 mb-5" padding="sm">
-          <div className="flex items-start gap-3">
-            <Clock size={20} className="text-orange-500 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="font-body text-sm font-bold text-orange-800">
-                {pendingPayment.length} réservation{pendingPayment.length > 1 ? "s" : ""} en attente de paiement
-              </p>
-              <p className="font-body text-xs text-orange-600 mt-0.5">
-                Votre place est réservée mais le paiement n&apos;a pas été finalisé.
-                Réglez votre inscription pour la confirmer définitivement.
-              </p>
-              <a href="/espace-cavalier/reserver">
-                <button className="mt-2 font-body text-xs font-semibold text-white bg-orange-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-orange-400">
-                  Finaliser le paiement →
-                </button>
-              </a>
-            </div>
-          </div>
-        </Card>
-      )}
-
       {/* Success message */}
       {success === "true" && (
         <Card className="!bg-green-50 !border-green-200 mb-5" padding="sm">
