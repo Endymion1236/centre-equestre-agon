@@ -168,8 +168,12 @@ async function handleDelete(req: NextRequest): Promise<NextResponse> {
   }
 
   // Le familyId utilisé dans les docs liés est soit l'uid, soit le firestoreId
-  // du doc families. On gère les deux cas.
-  const possibleFamilyIds = [uid, familyDocId].filter(Boolean) as string[];
+  // du doc families. On gère les deux cas, en dédupliquant : pour la majorité
+  // des comptes, uid === familyDocId (le doc families a pour id l'uid du user),
+  // donc sans dédup on compterait chaque doc deux fois au dry-run.
+  const possibleFamilyIds = Array.from(
+    new Set([uid, familyDocId].filter(Boolean) as string[])
+  );
   if (possibleFamilyIds.length === 0) {
     return NextResponse.json({
       ...report,
@@ -285,8 +289,11 @@ async function handleDelete(req: NextRequest): Promise<NextResponse> {
     try {
       if (apply) {
         await adminDb.collection("families").doc(familyDocId).delete();
+        report.familyDocDeleted = true;
       }
-      report.familyDocDeleted = true;
+      // En dry-run, on laisse le flag à false mais le rapport indique
+      // bien familyDocId (visible côté user), ce qui suffit à comprendre
+      // qu'il sera supprimé.
     } catch (e: any) {
       report.errors.push({ step: "families-delete", error: e.message });
     }
@@ -297,8 +304,8 @@ async function handleDelete(req: NextRequest): Promise<NextResponse> {
     try {
       if (apply) {
         await adminAuth.deleteUser(uid);
+        report.firebaseAuthDeleted = true;
       }
-      report.firebaseAuthDeleted = true;
     } catch (e: any) {
       report.errors.push({ step: "firebase-auth-delete", error: e.message });
     }
