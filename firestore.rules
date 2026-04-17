@@ -200,6 +200,124 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ── Bons récupération (nom alternatif sans tiret) ─────────────────────
+    match /bonsRecup/{docId} {
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow write: if isAdmin();
+    }
+
+    // ── Paiements (collection principale admin) ───────────────────────────
+    match /paiements/{docId} {
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow write: if isAdmin();
+    }
+
+    // ── Cartes de séances (alias) ─────────────────────────────────────────
+    match /cartes-seances/{docId} {
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow write: if isAdmin();
+    }
+
+    // ── Communications (historique emails/notifications) ──────────────────
+    match /communications/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Comptabilité (exports, journaux) ──────────────────────────────────
+    match /comptabilite/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Templates documents (modèles PDF, email) ──────────────────────────
+    match /doc_templates/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Documents équidés (nom alternatif sans tiret) ─────────────────────
+    match /documents_equide/{docId} {
+      allow read, write: if isStaff();
+    }
+
+    // ── Emails de reprise (templates email-reprise) ───────────────────────
+    match /emailsReprise/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Fidélité (alias de loyalty) ───────────────────────────────────────
+    match /fidelite/{docId} {
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow write: if isAdmin();
+    }
+
+    // ── Modèles de planning (reprises/horaires) ───────────────────────────
+    match /modeles/{docId} {
+      allow read, write: if isAdmin();
+    }
+    match /modeles-planning/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Mouvements registre (alias) ───────────────────────────────────────
+    match /mouvements_registre/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Passages (appel / feuille de présence) ────────────────────────────
+    match /passages/{docId} {
+      allow read, write: if isStaff();
+    }
+
+    // ── Payment declarations (CAWL webhooks) ──────────────────────────────
+    match /payment_declarations/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Pédagogie (progressions, niveaux) ────────────────────────────────
+    match /pedagogie/{docId} {
+      allow read: if isStaff() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow write: if isStaff();
+    }
+
+    // ── Rattrapages ───────────────────────────────────────────────────────
+    match /rattrapages/{docId} {
+      allow read: if isStaff() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow write: if isStaff();
+    }
+
+    // ── RDV Pro (vétérinaire, maréchal, dentiste…) ────────────────────────
+    match /rdv_pro/{docId} {
+      allow read, write: if isStaff();
+    }
+
+    // ── Remises (réductions, codes promo) ────────────────────────────────
+    match /remises/{docId} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+
+    // ── Salariés management (planning équipe) ─────────────────────────────
+    match /salaries-management/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Tâches planifiées (cron, rappels) ─────────────────────────────────
+    match /taches-planifiees/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Avis satisfaction (alias) ─────────────────────────────────────────
+    match /avis-satisfaction/{docId} {
+      allow read: if isAdmin();
+      allow create: if isAuth();
+    }
+
+    // ── Liste d'attente ───────────────────────────────────────────────────
+    match /waitlist/{docId} {
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow create: if isAuth();
+      allow update, delete: if isAdmin();
+    }
+
     // ── Bloc par défaut — DENY ALL ────────────────────────────────────────
     // Toute collection non listée ci-dessus est bloquée
     match /{document=**} {
