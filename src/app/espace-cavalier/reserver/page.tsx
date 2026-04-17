@@ -506,9 +506,34 @@ export default function ReserverPage() {
     setWaitlistLoading(null);
   };
 
-  if (!user || !family) return (
+  // Pas connecté
+  if (!user) return (
     <div className="text-center py-20">
-      <Card padding="lg"><p className="font-body text-sm text-gray-600">Connectez-vous et complétez votre profil pour réserver.</p></Card>
+      <Card padding="lg">
+        <p className="font-body text-sm text-gray-600">Connectez-vous pour accéder aux réservations.</p>
+      </Card>
+    </div>
+  );
+
+  // Connecté mais pas de fiche famille (nouveau compte)
+  if (!family) return (
+    <div className="flex flex-col items-center justify-center py-16 px-4">
+      <div className="text-5xl mb-4">🐴</div>
+      <h2 className="font-display text-xl font-bold text-blue-800 mb-2 text-center">
+        Bienvenue au centre équestre !
+      </h2>
+      <p className="font-body text-sm text-gray-500 text-center mb-6 max-w-xs">
+        Votre compte est créé. Il ne reste plus qu&apos;à compléter votre profil
+        (coordonnées + cavaliers) pour pouvoir réserver.
+      </p>
+      <a href="/espace-cavalier/profil">
+        <button className="font-body text-sm font-semibold text-white bg-blue-500 px-6 py-3 rounded-xl border-none cursor-pointer hover:bg-blue-400 transition-colors">
+          Compléter mon profil →
+        </button>
+      </a>
+      <p className="font-body text-xs text-gray-400 mt-4 text-center">
+        Si vous avez déjà un dossier au centre, contactez-nous pour lier votre compte.
+      </p>
     </div>
   );
 
