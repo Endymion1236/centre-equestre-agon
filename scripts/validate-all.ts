@@ -19,15 +19,16 @@ function loadEnvLocal() {
     console.error("❌ Fichier .env.local introuvable dans", process.cwd());
     process.exit(1);
   }
-  const lines = fs.readFileSync(envPath, "utf-8").split("\n");
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eqIdx = trimmed.indexOf("=");
-    if (eqIdx === -1) continue;
-    const key = trimmed.slice(0, eqIdx).trim();
-    let val = trimmed.slice(eqIdx + 1).trim();
-    // Retirer les guillemets englobants si présents
+  const raw = fs.readFileSync(envPath, "utf-8");
+
+  // Regex robuste : capture KEY="valeur multi-ligne" ou KEY=valeur simple
+  // Gère les valeurs entre guillemets doubles qui peuvent contenir des \n littéraux
+  const re = /^([A-Z0-9_]+)=("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\r\n]*)$/gm;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(raw)) !== null) {
+    const key = match[1];
+    let val = match[2] || "";
+    // Retirer les guillemets englobants
     if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("\'"))) {
       val = val.slice(1, -1);
     }
