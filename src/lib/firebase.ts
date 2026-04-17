@@ -2,8 +2,10 @@ import { initializeApp, getApps } from "firebase/app";
 import { getAuth, GoogleAuthProvider, FacebookAuthProvider, browserLocalPersistence, setPersistence } from "firebase/auth";
 import {
   initializeFirestore,
+  getFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
+  type Firestore,
 } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getMessaging, isSupported } from "firebase/messaging";
@@ -29,22 +31,40 @@ export const auth = getAuth(app);
 // persistentMultipleTabManager : gère proprement le cas où l'utilisateur
 // ouvre plusieurs onglets (sinon erreur "failed-precondition").
 //
-// On utilise initializeFirestore (au lieu de getFirestore) pour pouvoir
-// passer la config de cache au moment de l'initialisation.
-// Safe côté serveur (SSR) : IndexedDB n'existe pas en Node mais Firebase
-// détecte l'environnement et ne plante pas — il retombe sur un cache mémoire.
-export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager(),
-  }),
-});
+// Pourquoi ce try/catch ?
+// initializeFirestore ne peut être appelé qu'UNE SEULE FOIS par app. En
+// développement, Next.js fait du Hot Module Reload qui peut réévaluer ce
+// module → second appel → FirebaseError "Firestore has already been started".
+// Quand ça arrive, on retombe sur getFirestore(app) qui retourne l'instance
+// déjà initialisée. En prod, le try réussit toujours du premier coup.
+let _db: Firestore;
+try {
+  _db = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+    }),
+  });
+} catch (e: any) {
+  // En cas de réinit HMR, on récupère l'instance existante. En production
+  // ce cas ne se produit jamais (pas de hot-reload sur Vercel).
+  if (e?.code === "failed-precondition" || /already been/i.test(e?.message || "")) {
+    _db = getFirestore(app);
+  } else {
+    // Autre erreur (ex: IndexedDB bloqué par le navigateur, quota plein) :
+    // on retombe sur le mode par défaut sans cache persistant — l'app
+    // continue de fonctionner, juste sans bénéficier du speedup.
+    console.warn("Firestore persistent cache unavailable, using default:", e);
+    _db = getFirestore(app);
+  }
+}
+export const db = _db;
 
 export const storage = getStorage(app);
 
 // Persistance Auth locale (default déjà, mais on le rend explicite pour
 // éviter les regressions en cas de changement de version Firebase).
-// Browser : persistance via IndexedDB/localStorage.
-// Uniquement côté client (auth.setPersistence throw côté serveur).
+// Uniquement côté client : setPersistence throw côté serveur car pas
+// d'IndexedDB/localStorage en Node.
 if (typeof window !== "undefined") {
   setPersistence(auth, browserLocalPersistence).catch((err) => {
     console.warn("Firebase Auth persistence setup failed:", err);
