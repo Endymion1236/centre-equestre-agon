@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { collection, getDocs, getDoc, updateDoc, addDoc, doc, query, where, serverTimestamp, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { validateChildrenUpdate } from "@/lib/utils";
+import { compareCreneaux } from "@/lib/creneau-sort";
 
 const calcAge = (birthDate: any): string => {
   if (!birthDate) return "";
@@ -58,7 +59,7 @@ export default function MontoirPage() {
           heures: d.seuilPoneyHeures || 4,
         });
       }
-      const creneauxData = cSnap.docs.map(d=>({id:d.id,...d.data()})).sort((a:any,b:any)=>a.startTime.localeCompare(b.startTime)) as Creneau[];
+      const creneauxData = (cSnap.docs.map(d=>({id:d.id,...d.data()})) as Creneau[]).sort(compareCreneaux);
       setCreneaux(creneauxData);
       setEquides(eSnap.docs.map(d=>({id:d.id,...d.data()})));
       setIndisponibilites(iSnap.docs.map(d=>({id:d.id,...d.data()})));

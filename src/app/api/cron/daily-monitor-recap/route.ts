@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
+import { compareCreneaux } from "@/lib/creneau-sort";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -120,7 +121,7 @@ export async function GET(req: NextRequest) {
       if (monitorCreneaux.length > 0) {
         // Ce moniteur a des cours aujourd'hui
         const details = monitorCreneaux
-          .sort((a: any, b: any) => a.startTime.localeCompare(b.startTime))
+          .sort(compareCreneaux)
           .map((c: any) => `${c.startTime} ${c.activityTitle} (${(c.enrolled || []).length}/${c.maxPlaces})`)
           .join(" · ");
         body = `Tes ${monitorCreneaux.length} cours : ${details}`;
@@ -182,7 +183,7 @@ export async function GET(req: NextRequest) {
         const isPersonal = monitorCreneaux.length > 0;
 
         const lignes = coursToShow
-          .sort((a: any, b: any) => a.startTime.localeCompare(b.startTime))
+          .sort(compareCreneaux)
           .map((c: any) => {
             const enrolled = (c.enrolled || []).length;
             const cavaliers = (c.enrolled || []).map((e: any) => e.childName).join(", ");

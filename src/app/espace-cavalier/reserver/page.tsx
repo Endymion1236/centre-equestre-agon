@@ -10,6 +10,7 @@ import TimelineReservation from "./TimelineReservation";
 import { useSearchParams } from "next/navigation";
 import { authFetch } from "@/lib/auth-fetch";
 import { formatStageSchedule } from "@/lib/format-stage";
+import { compareCreneauxByDate } from "@/lib/creneau-sort";
 
 interface Creneau { id: string; activityId: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolled: any[]; enrolledCount: number; priceHT: number; priceTTC?: number; tvaTaux: number; }
 
@@ -145,7 +146,7 @@ export default function ReserverPage() {
         return act && (act.subcategories || []).includes(subfilter);
       });
     }
-    return result.sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+    return result.sort(compareCreneauxByDate);
   }, [creneaux, filter, subfilter, activities]);
 
   // Grouper les stages par titre + semaine

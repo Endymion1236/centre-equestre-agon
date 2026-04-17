@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useSearchParams } from "next/navigation";
+import { compareCreneaux } from "@/lib/creneau-sort";
 
 const toDateStr = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -39,7 +40,7 @@ export default function MontiorDisplayClient() {
       const cData = cSnap.docs
         .map(d => ({ id: d.id, ...d.data() } as Creneau))
         .filter(c => (c.enrolled || []).length > 0)
-        .sort((a, b) => a.startTime.localeCompare(b.startTime));
+        .sort(compareCreneaux);
       setCreneaux(cData);
       setEquides(
         eSnap.docs

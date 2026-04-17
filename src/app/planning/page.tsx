@@ -7,6 +7,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { CalendarDays, Clock, Users, ChevronLeft, ChevronRight, MapPin } from "lucide-react";
 import Link from "next/link";
+import { compareCreneaux } from "@/lib/creneau-sort";
 
 interface Creneau {
   id: string;
@@ -98,7 +99,7 @@ export default function PlanningPublic() {
     filtered.forEach(c => {
       if (map[c.date]) map[c.date].push(c);
     });
-    Object.values(map).forEach(arr => arr.sort((a, b) => a.startTime.localeCompare(b.startTime)));
+    Object.values(map).forEach(arr => arr.sort(compareCreneaux));
     return map;
   }, [filtered, days]);
 

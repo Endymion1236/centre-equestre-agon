@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { Family } from "@/types";
 import { authFetch } from "@/lib/auth-fetch";
+import { compareCreneauxByDow } from "@/lib/creneau-sort";
 
 interface Forfait {
   id: string;
@@ -180,7 +181,7 @@ export default function ForfaitsPage() {
     for (const slot of Object.values(map)) {
       slot.spotsAvailable = slot.maxPlaces - slot.avgEnrolled;
     }
-    return Object.values(map).sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.startTime.localeCompare(b.startTime));
+    return Object.values(map).sort(compareCreneauxByDow);
   }, [creneaux]);
 
   // ── Filtered slots for search ──
@@ -910,7 +911,7 @@ export default function ForfaitsPage() {
           if (!slotChange.newSlotSearch.trim()) return true;
           const q = slotChange.newSlotSearch.toLowerCase();
           return s.activityTitle.toLowerCase().includes(q) || s.dayLabel.toLowerCase().includes(q) || s.startTime.includes(q) || s.monitor.toLowerCase().includes(q);
-        }).sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.startTime.localeCompare(b.startTime));
+        }).sort(compareCreneauxByDow);
 
         return (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4" onClick={() => !slotChanging && setSlotChange(null)}>

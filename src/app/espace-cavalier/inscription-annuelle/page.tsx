@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
 import { Check, ChevronRight, AlertTriangle, Calculator, CreditCard, Loader2, Calendar, Plus, Search } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
+import { compareCreneauxByDow } from "@/lib/creneau-sort";
 
 interface Creneau {
   id: string;
@@ -114,7 +115,7 @@ export default function InscriptionAnnuellePage() {
     for (const slot of Object.values(map)) {
       slot.spotsAvailable = slot.maxPlaces - slot.avgEnrolled;
     }
-    return Object.values(map).sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.startTime.localeCompare(b.startTime));
+    return Object.values(map).sort(compareCreneauxByDow);
   }, [creneaux]);
 
   // Selected slots data

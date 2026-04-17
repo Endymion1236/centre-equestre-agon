@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { sendPush } from "@/lib/push";
 import { loadTemplate } from "@/lib/email-template-loader";
+import { compareCreneaux } from "@/lib/creneau-sort";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -85,7 +86,7 @@ export async function GET(req: NextRequest) {
         let body: string;
         if (monitorCreneaux.length > 0) {
           const details = monitorCreneaux
-            .sort((a: any, b: any) => a.startTime.localeCompare(b.startTime))
+            .sort(compareCreneaux)
             .map((c: any) => `${c.startTime} ${c.activityTitle} (${(c.enrolled || []).length}/${c.maxPlaces})`)
             .join(" · ");
           body = `Tes ${monitorCreneaux.length} cours : ${details}`;
@@ -109,7 +110,7 @@ export async function GET(req: NextRequest) {
           const isPersonal = monitorCreneaux.length > 0;
 
           const lignes = coursToShow
-            .sort((a: any, b: any) => a.startTime.localeCompare(b.startTime))
+            .sort(compareCreneaux)
             .map((c: any) => {
               const enrolled = (c.enrolled || []).length;
               const cavaliers = (c.enrolled || []).map((e: any) => e.childName).join(", ");

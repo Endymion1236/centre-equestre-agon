@@ -2,6 +2,7 @@
 import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Users, Clock, Star, Check, Sparkles } from "lucide-react";
 import { Card, Badge } from "@/components/ui";
+import { compareCreneaux } from "@/lib/creneau-sort";
 
 interface Creneau {
   id: string;
@@ -183,7 +184,7 @@ export default function TimelineReservation({ creneaux, children, familyId, onBo
       }
     }
 
-    return result.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    return result.sort(compareCreneaux);
   }, [creneaux, currentDayStr, filter, activeChildren, todayStr]);
 
   // Nb créneaux par jour (pour les points indicateurs)

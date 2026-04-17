@@ -4,6 +4,7 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { Plus, Loader2, Copy, Trash2, Play, Pause, Edit2 } from "lucide-react";
+import { compareCreneauxByDow } from "@/lib/creneau-sort";
 
 interface ModeleCreneau {
   dayOfWeek: number; // 0=lun, 1=mar, 2=mer, 3=jeu, 4=ven, 5=sam
@@ -317,7 +318,7 @@ export default function ModelesPage() {
               {/* Preview creneaux */}
               {m.creneaux.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  {m.creneaux.sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.startTime.localeCompare(b.startTime)).map((c, i) => (
+                  {m.creneaux.sort(compareCreneauxByDow).map((c, i) => (
                     <span key={i} className="font-body text-[11px] text-gray-500 bg-sand px-2.5 py-1 rounded-md">
                       {DAYS[c.dayOfWeek].slice(0, 3)} {c.startTime}–{c.endTime} · {c.activityTitle || "?"} · {c.monitor} · {c.maxPlaces}pl.
                     </span>
