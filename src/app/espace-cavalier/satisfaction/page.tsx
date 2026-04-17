@@ -69,8 +69,7 @@ export default function SatisfactionPage() {
         getDocs(query(
           collection(db, "avis-satisfaction"),
           where("familyId", "==", user.uid),
-          orderBy("createdAt", "desc"),
-          limit(10)
+          limit(20)
         )),
       ]);
 
@@ -78,7 +77,7 @@ export default function SatisfactionPage() {
       const res = resSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       const unique = Array.from(new Map(res.map((r: any) => [r.activityTitle, r])).values());
       setPastReservations(unique);
-      setMyAvis(avisSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setMyAvis(avisSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).slice(0, 10));
       setLoading(false);
     })();
   }, [user]);
