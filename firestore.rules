@@ -305,9 +305,9 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // ── Avis satisfaction (alias) ─────────────────────────────────────────
+    // ── Avis satisfaction ─────────────────────────────────────────────────
     match /avis-satisfaction/{docId} {
-      allow read: if isAdmin();
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
       allow create: if isAuth();
     }
 
