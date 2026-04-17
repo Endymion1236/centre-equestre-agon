@@ -18,11 +18,10 @@ service cloud.firestore {
     function isStaff() {
       return isAdmin() || isMoniteur();
     }
-    // Vérifie que le familyId du document appartient à l'utilisateur connecté
-    function isFamilyOwner(familyId) {
-      return isAuth() && exists(/databases/$(database)/documents/families/$(familyId))
-        && get(/databases/$(database)/documents/families/$(familyId)).data.uid == request.auth.uid;
-    }
+
+    // (Fonction isFamilyOwner retirée : toutes les rules utilisent maintenant
+    //  directement `resource.data.familyId == request.auth.uid` — plus simple,
+    //  plus performant et compatible avec les queries filtrées côté client)
 
     // ── Familles ──────────────────────────────────────────────────────────
     match /families/{familyId} {
@@ -89,7 +88,8 @@ service cloud.firestore {
 
     // ── SEPA ──────────────────────────────────────────────────────────────
     match /mandats-sepa/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow read: if isAdmin()
+        || (isAuth() && resource.data.familyId == request.auth.uid);
       allow write: if isAdmin();
     }
     match /echeances-sepa/{docId} {
@@ -112,7 +112,7 @@ service cloud.firestore {
 
     // ── Fidélité ──────────────────────────────────────────────────────────
     match /fidelite/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
       allow write: if isAdmin();
     }
 
@@ -133,7 +133,7 @@ service cloud.firestore {
     match /progressions/{docId} {
       allow read: if isStaff()
         || (isAuth() && docId.matches(request.auth.uid + '_.*'))
-        || (isAuth() && resource != null && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+        || (isAuth() && resource != null && resource.data.familyId == request.auth.uid);
       allow write: if isStaff();
     }
 
@@ -153,13 +153,13 @@ service cloud.firestore {
 
     // ── Cartes de séances ─────────────────────────────────────────────────
     match /cartes/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
       allow write: if isAdmin();
     }
 
     // ── Forfaits ──────────────────────────────────────────────────────────
     match /forfaits/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
       allow write: if isAdmin();
     }
 
@@ -223,7 +223,7 @@ service cloud.firestore {
 
     // ── Bons récupération ─────────────────────────────────────────────────
     match /bonsRecup/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
       allow write: if isAdmin();
     }
 
@@ -289,13 +289,13 @@ service cloud.firestore {
 
     // ── Pédagogie (progressions, niveaux) ────────────────────────────────
     match /pedagogie/{docId} {
-      allow read: if isStaff() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow read: if isStaff() || (isAuth() && resource.data.familyId == request.auth.uid);
       allow write: if isStaff();
     }
 
     // ── Rattrapages ───────────────────────────────────────────────────────
     match /rattrapages/{docId} {
-      allow read: if isStaff() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow read: if isStaff() || (isAuth() && resource.data.familyId == request.auth.uid);
       allow write: if isStaff();
     }
 
@@ -328,7 +328,7 @@ service cloud.firestore {
 
     // ── Liste d'attente ───────────────────────────────────────────────────
     match /waitlist/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
       allow create: if isAuth();
       allow update, delete: if isAdmin();
     }
