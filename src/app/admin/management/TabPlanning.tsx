@@ -1199,31 +1199,6 @@ Réponds de façon concise et pratique, en français.`,
           </div>
         </Card>
 
-        {/* ── JOURS DE LA SEMAINE ── */}
-        <div className="grid grid-cols-6 gap-2">
-          {jourDates.slice(0, nbJours).map(({ jour, date }) => {
-            const isToday = (() => {
-              const now = new Date();
-              return date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-            })();
-            const hasTaches = taches.some(t => t.jour === jour);
-            return (
-              <div key={jour}
-                onClick={() => { setView("fiche"); setSelectedDay(jour); }}
-                className={`text-center py-2.5 rounded-xl font-body text-xs font-semibold cursor-pointer transition-all
-                  ${isToday
-                    ? "bg-blue-500 text-white shadow-md shadow-blue-500/25"
-                    : hasTaches
-                      ? "card text-blue-800 border border-blue-100"
-                      : "card text-gray-400"
-                  } hover:shadow-md`}>
-                {JOURS_LABELS[jour].slice(0, 3)} {date.getDate()}{date.getMonth() !== lundi.getMonth() ? `/${date.getMonth() + 1}` : ""}
-                {hasTaches && !isToday && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-blue-400 align-middle" />}
-              </div>
-            );
-          })}
-        </div>
-
         {/* ── JOURS TRAVAILLÉS + RÉSUMÉ CHARGE ── */}
         <Card padding="sm">
           <div className="flex items-center gap-3 flex-wrap px-2">
