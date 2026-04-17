@@ -82,6 +82,49 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL(`/espace-cavalier/reserver?cancelled=true`, req.nextUrl.origin));
   }
 
+  // ── Vérification du RETURNMAC contre celui stocké au checkout ─────────
+  // Le RETURNMAC est un secret partagé entre nous et CAWL, généré par CAWL
+  // lors du createHostedCheckout. Sans cette vérification, n'importe qui
+  // connaissant un hostedCheckoutId pourrait déclencher la confirmation.
+  try {
+    const sessionSnap = await adminDb
+      .collection("cawl_sessions")
+      .doc(hostedCheckoutId)
+      .get();
+
+    if (!sessionSnap.exists) {
+      console.warn(`CAWL status: session ${hostedCheckoutId} introuvable → rejet`);
+      return NextResponse.redirect(new URL(`/espace-cavalier/reserver?cancelled=true`, req.nextUrl.origin));
+    }
+
+    const sessionData = sessionSnap.data() as any;
+    const storedReturnMac = sessionData?.returnMac || "";
+
+    // Comparaison en temps constant pour éviter les timing attacks
+    // (Node: timingSafeEqual nécessite des Buffers de même longueur)
+    const receivedBuf = Buffer.from(returnMac, "utf8");
+    const storedBuf = Buffer.from(storedReturnMac, "utf8");
+
+    const macValid =
+      receivedBuf.length === storedBuf.length &&
+      receivedBuf.length > 0 &&
+      crypto.timingSafeEqual(receivedBuf, storedBuf);
+
+    if (!macValid) {
+      console.warn(
+        `CAWL status: RETURNMAC invalide pour ${hostedCheckoutId} — possible tentative de forgery`
+      );
+      return NextResponse.redirect(
+        new URL(`/espace-cavalier/reserver?cancelled=true`, req.nextUrl.origin)
+      );
+    }
+  } catch (e) {
+    console.error("CAWL status: erreur vérification RETURNMAC:", e);
+    return NextResponse.redirect(
+      new URL(`/espace-cavalier/reserver?cancelled=true`, req.nextUrl.origin)
+    );
+  }
+
   try {
     const { status: httpStatus, body } = await getHostedCheckoutStatus(hostedCheckoutId);
 

@@ -109,6 +109,11 @@ export async function POST(req: NextRequest) {
 
     const hostedCheckoutId = response.body.hostedCheckoutId || "";
     const partialRedirectUrl = response.body.partialRedirectUrl || "";
+    const returnMac = response.body.RETURNMAC || "";
+
+    if (!returnMac) {
+      console.warn("CAWL: RETURNMAC absent de la réponse createHostedCheckout");
+    }
 
     // L'URL CAWL preprod correcte selon la doc
     const baseUrl = process.env.CAWL_ENV === "production"
@@ -122,6 +127,28 @@ export async function POST(req: NextRequest) {
     if (!redirectUrl) {
       console.error("CAWL: pas d'URL de redirection dans la réponse:", response.body);
       return NextResponse.json({ error: "CAWL n'a pas retourné d'URL de paiement" }, { status: 500 });
+    }
+
+    // ── Stocker RETURNMAC + metadata pour vérification au retour ─────────
+    // On stocke dans cawl_sessions (indépendant de payments, car certains
+    // flows comme l'inscription annuelle ne créent pas de payment préalable)
+    if (hostedCheckoutId) {
+      try {
+        await adminDb.collection("cawl_sessions").doc(hostedCheckoutId).set({
+          hostedCheckoutId,
+          returnMac,
+          merchantRef,
+          familyId: familyId || null,
+          paymentId: paymentId || null,
+          totalCents,
+          createdAt: FieldValue.serverTimestamp(),
+          // TTL : RETURNMAC a une durée de vie raisonnablement courte
+          // (session CAWL = 2h, redirectUrl = 3h)
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24h
+        });
+      } catch (e) {
+        console.error("CAWL: impossible de stocker cawl_sessions:", e);
+      }
     }
 
     // ── Sauvegarder la référence CAWL dans le payment Firestore ──────────

@@ -354,6 +354,14 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // ── Sessions CAWL (RETURNMAC + metadata checkout) ─────────────────────
+    // Collection critique : contient le secret RETURNMAC partagé avec CAWL.
+    // Aucun accès côté client — toutes les écritures/lectures passent par
+    // adminDb dans les routes /api/cawl/checkout et /api/cawl/status.
+    match /cawl_sessions/{docId} {
+      allow read, write: if false;
+    }
+
     // ── Bloc par défaut — DENY ALL ────────────────────────────────────────
     // Toute collection non listée ci-dessus est bloquée
     match /{document=**} {
