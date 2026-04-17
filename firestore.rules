@@ -117,7 +117,9 @@ service cloud.firestore {
 
     // ── Progression pédagogique ───────────────────────────────────────────
     match /progressions/{docId} {
-      allow read: if isStaff() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
+      allow read: if isStaff()
+        || (isAuth() && docId.matches(request.auth.uid + '_.*'))
+        || (isAuth() && resource != null && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
       allow write: if isStaff();
     }
 
@@ -311,7 +313,7 @@ service cloud.firestore {
 
     // ── Avis satisfaction ─────────────────────────────────────────────────
     match /avis-satisfaction/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
+      allow read: if isAdmin() || (isAuth() && resource != null && resource.data.familyId == request.auth.uid);
       allow create: if isAuth();
     }
 
