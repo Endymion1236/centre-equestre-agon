@@ -9,18 +9,48 @@
 
 import { initializeApp, cert, getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import * as dotenv from "dotenv";
+import * as fs from "fs";
 import * as path from "path";
 
-dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
+// Lecture manuelle du .env.local — contourne dotenvx v17
+function loadEnvLocal() {
+  const envPath = path.resolve(process.cwd(), ".env.local");
+  if (!fs.existsSync(envPath)) {
+    console.error("❌ Fichier .env.local introuvable dans", process.cwd());
+    process.exit(1);
+  }
+  const lines = fs.readFileSync(envPath, "utf-8").split("\n");
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx === -1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    let val = trimmed.slice(eqIdx + 1).trim();
+    // Retirer les guillemets englobants si présents
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("\'"))) {
+      val = val.slice(1, -1);
+    }
+    // Ne pas écraser les variables déjà définies dans l'environnement
+    if (!process.env[key]) {
+      process.env[key] = val;
+    }
+  }
+}
+
+loadEnvLocal();
 
 const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
 const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
 let privateKey = process.env.FIREBASE_PRIVATE_KEY || "";
+// Remplacer les \n littéraux par de vrais sauts de ligne
 if (privateKey.includes("\\n")) privateKey = privateKey.replace(/\\n/g, "\n");
 
 if (!projectId || !clientEmail || !privateKey) {
-  console.error("❌ Variables Firebase manquantes. Vérifiez .env.local");
+  console.error("❌ Variables Firebase manquantes.");
+  console.error("   projectId:", projectId ? "✅" : "❌ manquant (NEXT_PUBLIC_FIREBASE_PROJECT_ID)");
+  console.error("   clientEmail:", clientEmail ? "✅" : "❌ manquant (FIREBASE_CLIENT_EMAIL)");
+  console.error("   privateKey:", privateKey ? "✅" : "❌ manquant (FIREBASE_PRIVATE_KEY)");
   process.exit(1);
 }
 
