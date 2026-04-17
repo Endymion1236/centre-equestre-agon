@@ -39,20 +39,33 @@ service cloud.firestore {
     match /creneaux/{docId} {
       allow read: if isAuth();
       allow create, delete: if isStaff();
-      allow update: if isStaff() || isAuth();
+      // Le staff peut tout modifier. Un cavalier peut UNIQUEMENT modifier les
+      // champs `enrolled` et `enrolledCount` (pour s'inscrire/se désinscrire) —
+      // pas le prix, pas maxPlaces, pas la date, pas le moniteur, etc.
+      allow update: if isStaff()
+        || (isAuth()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['enrolled', 'enrolledCount']));
     }
 
     // ── Paiements / Encaissements ─────────────────────────────────────────
     match /payments/{docId} {
       allow read: if isStaff() || (isAuth() && resource.data.familyId == request.auth.uid);
-      allow create: if isAuth();
-      allow update: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
-      allow delete: if isAdmin();
+      // Cavalier peut créer UNIQUEMENT un paiement pending à son nom, non payé
+      allow create: if isStaff()
+        || (isAuth()
+            && request.resource.data.familyId == request.auth.uid
+            && request.resource.data.status == "pending"
+            && (request.resource.data.paidAmount == 0 || !('paidAmount' in request.resource.data)));
+      // Seul le staff peut modifier un paiement (statut, montant encaissé, etc.)
+      // Les confirmations CAWL passent par adminDb (bypass rules)
+      allow update, delete: if isAdmin();
     }
     match /encaissements/{docId} {
       allow read: if isAdmin();
-      allow create: if isAuth();
-      allow update, delete: if isAdmin();
+      // Plus aucune création côté client — toutes les écritures passent par
+      // adminDb (webhooks CAWL, API /pay-with-avoir, encaissements admin)
+      allow write: if isAdmin();
     }
 
     // ── Équidés ───────────────────────────────────────────────────────────
@@ -139,8 +152,10 @@ service cloud.firestore {
     // ── Avoirs ────────────────────────────────────────────────────────────
     match /avoirs/{docId} {
       allow read: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
-      allow create, delete: if isAdmin();
-      allow update: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
+      // Seul le staff peut créer/modifier/supprimer un avoir.
+      // L'utilisation d'un avoir par un cavalier passe par l'API
+      // /api/pay-with-avoir (adminDb bypass)
+      allow write: if isAdmin();
     }
 
     // ── Cartes de séances ─────────────────────────────────────────────────

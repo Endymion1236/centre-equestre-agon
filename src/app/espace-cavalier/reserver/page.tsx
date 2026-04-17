@@ -1154,65 +1154,34 @@ export default function ReserverPage() {
                           if (!user || !family) return;
                           setPaying(true);
                           try {
-                            // 1. Inscrire + créer réservations + paiement
-                            for (const item of cart) {
-                              for (const cid of item.creneauIds) {
-                                const crSnap = await getDoc(doc(db, "creneaux", cid));
-                                if (!crSnap.exists()) continue;
-                                const crData = crSnap.data();
-                                const enrolled = crData.enrolled || [];
-                                if (enrolled.some((e: any) => e.childId === item.childId)) continue;
-                                enrolled.push({ childId: item.childId, childName: item.childName, familyId: user.uid });
-                                await updateDoc(doc(db, "creneaux", cid), { enrolled, enrolledCount: enrolled.length });
-                                await addDoc(collection(db, "reservations"), {
-                                  creneauId: cid, childId: item.childId, childName: item.childName,
-                                  familyId: user.uid, familyName: family.parentName,
-                                  activityTitle: item.activityTitle, status: "confirmed", createdAt: serverTimestamp(),
-                                  ...((item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
-                                });
-                              }
-                            }
-                            // 2. Créer le paiement
-                            const toUse = Math.min(totalAvoir, cartTotal);
-                            const payRef = await addDoc(collection(db, "payments"), {
-                              familyId: user.uid, familyName: family.parentName,
-                              familyEmail: family.parentEmail || user.email || "",
-                              items: cart.map(i => ({
-                                activityTitle: i.activityTitle, childId: i.childId, childName: i.childName,
-                                priceTTC: i.prixFinal, priceHT: Math.round(i.prixFinal / 1.055 * 100) / 100,
-                                tva: 5.5, creneauId: i.creneauIds?.[0] || "",
-                              })),
-                              totalTTC: cartTotal, paidAmount: toUse,
-                              paymentMode: "avoir", paymentRef: "",
-                              status: toUse >= cartTotal ? "paid" : "partial",
-                              date: serverTimestamp(), createdAt: serverTimestamp(),
+                            // Tout passe par l'API serveur — les écritures Firestore
+                            // (payments, encaissements, avoirs, reservations, creneaux)
+                            // sont atomiques et sécurisées côté adminDb.
+                            const res = await authFetch("/api/pay-with-avoir", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                cart: cart.map(i => ({
+                                  activityTitle: i.activityTitle,
+                                  childId: i.childId,
+                                  childName: i.childName,
+                                  creneauIds: i.creneauIds,
+                                  prixFinal: i.prixFinal,
+                                  isStage: i.isStage,
+                                  ...((i as any).sourceFamilyId ? { sourceFamilyId: (i as any).sourceFamilyId } : {}),
+                                })),
+                              }),
                             });
-                            // 3. Déduire des avoirs
-                            let remaining = toUse;
-                            for (const a of familyAvoirs) {
-                              if (remaining <= 0) break;
-                              const deduction = Math.min(remaining, a.remainingAmount || 0);
-                              remaining -= deduction;
-                              await updateDoc(doc(db, "avoirs", a.id), {
-                                usedAmount: (a.usedAmount || 0) + deduction,
-                                remainingAmount: Math.max(0, (a.remainingAmount || 0) - deduction),
-                                status: (a.remainingAmount || 0) - deduction <= 0 ? "utilise" : "actif",
-                                usageHistory: [...(a.usageHistory || []), {
-                                  date: new Date().toISOString(), amount: deduction, invoiceRef: payRef.id.slice(-6).toUpperCase(),
-                                }],
-                                updatedAt: serverTimestamp(),
-                              });
+                            const data = await res.json();
+                            if (!res.ok) {
+                              throw new Error(data.error || "Erreur serveur");
                             }
-                            // 4. Encaissement avoir
-                            await addDoc(collection(db, "encaissements"), {
-                              paymentId: payRef.id, familyId: user.uid, familyName: family.parentName,
-                              montant: toUse, mode: "avoir", modeLabel: "Avoir",
-                              ref: "", activityTitle: cart.map(i => i.activityTitle).join(", "),
-                              date: serverTimestamp(),
-                            });
                             setCart([]);
                             setCartPaySuccess(true);
-                          } catch (e) { console.error(e); alert("Erreur lors du paiement par avoir."); }
+                          } catch (e: any) {
+                            console.error(e);
+                            alert(`Erreur lors du paiement par avoir${e?.message ? ` : ${e.message}` : ""}.`);
+                          }
                           setPaying(false);
                         }} disabled={paying}
                           className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying ? "bg-gray-200 text-gray-600" : "bg-purple-600 text-white hover:bg-purple-500"}`}>
