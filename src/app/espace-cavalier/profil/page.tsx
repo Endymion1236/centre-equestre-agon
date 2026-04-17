@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { doc, updateDoc, arrayUnion, serverTimestamp, collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge, Button } from "@/components/ui";
-import { Plus, ChevronDown, ChevronUp, Edit3, Save, Loader2, Users, Building2, AlertTriangle } from "lucide-react";
+import { Plus, ChevronDown, ChevronUp, Edit3, Save, Loader2, Users, Building2, AlertTriangle, AlertCircle } from "lucide-react";
 import type { Child, SanitaryForm } from "@/types";
 
 function AddChildForm({ onAdd }: { onAdd: () => void }) {
@@ -158,7 +158,14 @@ export default function ProfilPage() {
   const [showAddChild, setShowAddChild] = useState(false);
   const [expandedChild, setExpandedChild] = useState<string | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
-  const [editForm, setEditForm] = useState({ parentName: "", parentPhone: "" });
+  const [editForm, setEditForm] = useState({
+    firstName: "",
+    lastName: "",
+    parentPhone: "",
+    address: "",
+    zipCode: "",
+    city: "",
+  });
   const [savingProfile, setSavingProfile] = useState(false);
   const [editingChild, setEditingChild] = useState<string | null>(null);
   const [editingChildForm, setEditingChildForm] = useState({ firstName: "", lastName: "", birthDate: "" });
@@ -189,9 +196,23 @@ export default function ProfilPage() {
   };
 
   const startEdit = () => {
+    // Préremplir : priorité aux nouveaux champs firstName/lastName, fallback
+    // sur parentName pour les anciens comptes qui n'ont que ce champ (format
+    // libre ex: "Richard Nicolas"). On le met entièrement dans firstName pour
+    // que le cavalier puisse le redispatcher manuellement.
+    const existingFirst = (family as any)?.firstName || "";
+    const existingLast = (family as any)?.lastName || "";
+    const fallbackToFirstName = !existingFirst && !existingLast && family?.parentName
+      ? family.parentName
+      : "";
+
     setEditForm({
-      parentName: family?.parentName || "",
+      firstName: existingFirst || fallbackToFirstName,
+      lastName: existingLast,
       parentPhone: family?.parentPhone || "",
+      address: (family as any)?.address || "",
+      zipCode: (family as any)?.zipCode || "",
+      city: (family as any)?.city || "",
     });
     setEditingProfile(true);
   };
@@ -200,9 +221,23 @@ export default function ProfilPage() {
     if (!user) return;
     setSavingProfile(true);
     try {
+      // Normalisation (comme en admin) : nom en UPPERCASE, prénom en Title-ish
+      // (on garde la casse saisie). parentName est recalculé automatiquement
+      // pour maintenir la compatibilité avec le reste du code qui le lit.
+      const lastName = editForm.lastName.trim().toUpperCase();
+      const firstName = editForm.firstName.trim();
+      const computedName = lastName && firstName
+        ? `${lastName} ${firstName}`
+        : lastName || firstName || family?.parentName || "";
+
       await updateDoc(doc(db, "families", user.uid), {
-        parentName: editForm.parentName.trim(),
+        firstName: firstName || null,
+        lastName: lastName || null,
+        parentName: computedName,
         parentPhone: editForm.parentPhone.trim(),
+        address: editForm.address.trim(),
+        zipCode: editForm.zipCode.trim(),
+        city: editForm.city.trim(),
         updatedAt: serverTimestamp(),
       });
       setEditingProfile(false);
@@ -210,6 +245,19 @@ export default function ProfilPage() {
     } catch (e) { console.error(e); alert("Erreur de sauvegarde."); }
     setSavingProfile(false);
   };
+
+  // Détection des champs manquants pour la facturation
+  const missingBillingFields = (() => {
+    const fam: any = family || {};
+    const missing: string[] = [];
+    // Nom + prénom requis (soit les deux séparés, soit parentName en fallback)
+    const hasName = (fam.firstName && fam.lastName) || fam.parentName;
+    if (!hasName) missing.push("Nom et prénom");
+    if (!fam.address) missing.push("Adresse");
+    if (!fam.zipCode) missing.push("Code postal");
+    if (!fam.city) missing.push("Ville");
+    return missing;
+  })();
 
   const handleChildAdded = () => {
     setShowAddChild(false);
@@ -269,6 +317,29 @@ export default function ProfilPage() {
         Profil famille
       </h1>
 
+      {/* Bandeau alerte si champs de facturation manquants */}
+      {missingBillingFields.length > 0 && !editingProfile && (
+        <Card className="!bg-orange-50 !border-orange-300 mb-5" padding="sm">
+          <div className="flex items-start gap-3">
+            <AlertCircle size={20} className="text-orange-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-body text-sm font-bold text-orange-800">
+                Informations incomplètes pour la facturation
+              </p>
+              <p className="font-body text-xs text-orange-600 mt-0.5">
+                Il manque {missingBillingFields.length === 1 ? "un champ obligatoire" : "des champs obligatoires"} pour émettre vos factures :{" "}
+                <span className="font-semibold">{missingBillingFields.join(", ")}</span>.
+                Merci de compléter votre profil.
+              </p>
+              <button onClick={startEdit}
+                className="mt-2 font-body text-xs font-semibold text-white bg-orange-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-orange-400">
+                Compléter mes informations →
+              </button>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Parent info */}
       <Card padding="md" className="mb-5">
         <div className="flex justify-between items-start mb-4">
@@ -285,28 +356,80 @@ export default function ProfilPage() {
 
         {editingProfile ? (
           <div className="flex flex-col gap-3">
+            {/* Prénom + Nom */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">Nom</label>
-                <input value={editForm.parentName} onChange={e => setEditForm({ ...editForm, parentName: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400" />
+                <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">
+                  Prénom <span className="text-orange-500">*</span>
+                </label>
+                <input value={editForm.firstName} onChange={e => setEditForm({ ...editForm, firstName: e.target.value })}
+                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400"
+                  placeholder="Nicolas" />
               </div>
               <div>
-                <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">Téléphone</label>
-                <input type="tel" value={editForm.parentPhone} onChange={e => setEditForm({ ...editForm, parentPhone: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400" placeholder="06 00 00 00 00" />
+                <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">
+                  Nom <span className="text-orange-500">*</span>
+                </label>
+                <input value={editForm.lastName} onChange={e => setEditForm({ ...editForm, lastName: e.target.value })}
+                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400 uppercase"
+                  placeholder="RICHARD" />
               </div>
             </div>
+
+            {/* Téléphone */}
+            <div>
+              <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">Téléphone</label>
+              <input type="tel" value={editForm.parentPhone} onChange={e => setEditForm({ ...editForm, parentPhone: e.target.value })}
+                className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400"
+                placeholder="06 00 00 00 00" />
+            </div>
+
+            {/* Adresse */}
+            <div>
+              <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">
+                Adresse <span className="text-orange-500">*</span>
+              </label>
+              <input value={editForm.address} onChange={e => setEditForm({ ...editForm, address: e.target.value })}
+                className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400"
+                placeholder="12 rue de la Mer" />
+            </div>
+
+            {/* Code postal + Ville */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">
+                  Code postal <span className="text-orange-500">*</span>
+                </label>
+                <input value={editForm.zipCode} onChange={e => setEditForm({ ...editForm, zipCode: e.target.value })}
+                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400"
+                  placeholder="50230" inputMode="numeric" maxLength={5} />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">
+                  Ville <span className="text-orange-500">*</span>
+                </label>
+                <input value={editForm.city} onChange={e => setEditForm({ ...editForm, city: e.target.value })}
+                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400"
+                  placeholder="Agon-Coutainville" />
+              </div>
+            </div>
+
+            {/* Email + Connexion (non modifiables) */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">Email</label>
-                <div className="font-body text-sm text-gray-600 py-2.5">{family?.parentEmail || "—"} (non modifiable)</div>
+                <div className="font-body text-sm text-gray-600 py-2.5">{family?.parentEmail || "—"} <span className="text-xs text-gray-400">(non modifiable)</span></div>
               </div>
               <div>
                 <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">Connexion</label>
                 <div className="font-body text-sm text-gray-600 py-2.5">{family?.authProvider === "google" ? "Google" : "Facebook"}</div>
               </div>
             </div>
+
+            <p className="font-body text-xs text-gray-500">
+              <span className="text-orange-500">*</span> Champs obligatoires pour la facturation
+            </p>
+
             <div className="flex gap-2">
               <button onClick={handleSaveProfile} disabled={savingProfile}
                 className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-600 disabled:opacity-50">
@@ -317,11 +440,28 @@ export default function ProfilPage() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[
-              { label: "Nom", value: family?.parentName || "—" },
+              { label: "Nom et prénom", value: family?.parentName || "—" },
               { label: "Email", value: family?.parentEmail || "—" },
               { label: "Téléphone", value: family?.parentPhone || "Non renseigné" },
+              {
+                label: "Adresse",
+                value: (() => {
+                  const fam: any = family || {};
+                  const street = fam.address || "";
+                  const cp = fam.zipCode || "";
+                  const city = fam.city || "";
+                  const line2 = [cp, city].filter(Boolean).join(" ");
+                  if (!street && !line2) return "Non renseignée";
+                  return (
+                    <>
+                      {street && <div>{street}</div>}
+                      {line2 && <div>{line2}</div>}
+                    </>
+                  );
+                })(),
+              },
               { label: "Connexion", value: `${family?.authProvider === "google" ? "Google" : "Facebook"}` },
             ].map((field, i) => (
               <div key={i}>

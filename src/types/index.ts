@@ -3,9 +3,15 @@
 // ─── Utilisateurs & Familles ───
 export interface Family {
   id: string;
-  parentName: string;
+  parentName: string; // Champ dérivé : "NOM Prénom", recalculé à chaque écriture
+  firstName?: string; // Prénom du parent titulaire (nouveau, optionnel pour compat)
+  lastName?: string; // Nom du parent titulaire en MAJUSCULES (nouveau, optionnel pour compat)
+  civilite?: "M." | "Mme" | null; // Civilité (admin only, non exposé côté cavalier)
   parentEmail: string;
   parentPhone: string;
+  address?: string; // Adresse postale (rue, n°)
+  zipCode?: string; // Code postal
+  city?: string; // Ville
   authProvider: "google" | "facebook";
   authUid: string;
   children: Child[];
