@@ -295,19 +295,29 @@ export default function PaiementsPage() {
     };
 
     // 4b. Attribuer un numéro de facture séquentiel quand le paiement est soldé
+    //     via une transaction atomique côté serveur (évite doublons en cas de
+    //     paiements simultanés — conformité CGI art. 242 nonies A)
     if (newStatus === "paid" && !paymentData.invoiceNumber) {
       try {
-        const year = new Date().getFullYear();
-        const counterRef = doc(db, "settings", "invoiceCounter");
-        const counterSnap = await getDoc(counterRef);
-        const currentNum = counterSnap.exists() ? (counterSnap.data()?.[`year_${year}`] || 0) : 0;
-        const nextNum = currentNum + 1;
-        await setDoc(counterRef, { [`year_${year}`]: nextNum }, { merge: true });
-        updateData.invoiceNumber = `F-${year}-${String(nextNum).padStart(4, "0")}`;
+        const res = await authFetch("/api/invoice/next-number", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paymentId }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.invoiceNumber) {
+            updateData.invoiceNumber = data.invoiceNumber;
+          }
+        } else {
+          const errText = await res.text();
+          console.error("Attribution numéro facture — API error:", res.status, errText);
+          // Pas de fallback en local : on préfère un paiement sans numéro de
+          // facture (facile à régulariser en admin) plutôt qu'un numéro hors
+          // séquence qui casserait la continuité fiscale
+        }
       } catch (e) {
-        console.error("Erreur attribution numéro facture:", e);
-        // Fallback
-        updateData.invoiceNumber = `F-${new Date().getFullYear()}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+        console.error("Attribution numéro facture — erreur réseau:", e);
       }
     }
 

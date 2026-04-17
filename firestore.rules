@@ -362,6 +362,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ── Audit facturation (traçabilité attribution des numéros) ───────────
+    // Lecture admin seulement (pour audit fiscal), écriture bloquée côté
+    // client — les entrées sont créées par /api/invoice/next-number (adminDb)
+    match /invoice_audit/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // ── Bloc par défaut — DENY ALL ────────────────────────────────────────
     // Toute collection non listée ci-dessus est bloquée
     match /{document=**} {

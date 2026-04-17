@@ -564,19 +564,25 @@ export default function PlanningPage() {
 
       if (isPaid) {
         // Encaissement immédiat → toujours créer un payment séparé (pas de fusion)
-        // Attribuer un numéro de facture séquentiel
+        // Numéro de facture séquentiel via API atomique (évite doublons)
         let invoiceNumber = "";
         try {
-          const year = new Date().getFullYear();
-          const counterRef = doc(db, "settings", "invoiceCounter");
-          const counterSnap = await getDoc(counterRef);
-          const currentNum = counterSnap.exists() ? (counterSnap.data()?.[`year_${year}`] || 0) : 0;
-          const nextNum = currentNum + 1;
-          await setDoc(counterRef, { [`year_${year}`]: nextNum }, { merge: true });
-          invoiceNumber = `F-${year}-${String(nextNum).padStart(4, "0")}`;
+          const res = await authFetch("/api/invoice/next-number", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.invoiceNumber) invoiceNumber = data.invoiceNumber;
+          } else {
+            console.error("Numéro facture — API error:", res.status, await res.text());
+          }
         } catch (e) {
-          invoiceNumber = `F-${new Date().getFullYear()}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+          console.error("Numéro facture — erreur réseau:", e);
         }
+        // Si l'attribution a échoué, on crée quand même le paiement
+        // (sans invoiceNumber) — il pourra être régularisé plus tard en admin
         const payRef = await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
           familyId: child.familyId, familyName: child.familyName,
           items: [newItem],
@@ -585,7 +591,7 @@ export default function PlanningPage() {
           paymentRef: "",
           status: "paid",
           paidAmount: Math.round(priceTTC * 100) / 100,
-          invoiceNumber,
+          ...(invoiceNumber ? { invoiceNumber } : {}),
           date: serverTimestamp(),
         });
         payRefId = payRef.id;
