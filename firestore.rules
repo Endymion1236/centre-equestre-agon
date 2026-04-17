@@ -357,6 +357,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ── Audit log (traçabilité opérations sensibles) ──────────────────────
+    // Log append-only pour suppression de comptes, actions destructrices,
+    // etc. Lecture admin, écriture serveur-only.
+    match /audit_log/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // ── Audit facturation (traçabilité attribution des numéros) ───────────
     // Lecture admin seulement (pour audit fiscal), écriture bloquée côté
     // client — les entrées sont créées par /api/invoice/next-number (adminDb)
