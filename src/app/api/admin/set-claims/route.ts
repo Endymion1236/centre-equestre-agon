@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAuth } from "@/lib/api-auth";
 import { adminAuth } from "@/lib/firebase-admin";
 
 const ADMIN_EMAILS = ["ceagon@orange.fr", "ceagon50@gmail.com", "emmelinelagy@gmail.com"];
 
 // GET ?secret=xxx — initialiser les custom claims pour tous les admins
 export async function GET(req: NextRequest) {
-  // Auth: secret OU token admin
   const secret = req.nextUrl.searchParams.get("secret");
-  const isSecretValid = secret && (secret === process.env.CRON_SECRET || secret === "init-claims-2026");
-  if (!isSecretValid) {
-    const auth = await verifyAuth(req, { adminOnly: true });
-    if (auth instanceof NextResponse) return auth;
+
+  // Accepter le CRON_SECRET ou le secret de bootstrap
+  const validSecrets = [process.env.CRON_SECRET, "init-claims-2026"].filter(Boolean);
+  if (!secret || !validSecrets.includes(secret)) {
+    return NextResponse.json({ error: "Secret invalide" }, { status: 401 });
   }
+
   const results = [];
   for (const email of ADMIN_EMAILS) {
     try {

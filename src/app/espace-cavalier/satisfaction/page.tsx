@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, query, where, orderBy, serverTimestamp, limit } from "firebase/firestore";
+import { collection, addDoc, getDocs, query, where, serverTimestamp, limit } from "firebase/firestore";
 import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ui";
 import { Star, Send, CheckCircle2, Loader2, ChevronDown } from "lucide-react";
@@ -61,10 +61,7 @@ export default function SatisfactionPage() {
         getDocs(query(
           collection(db, "reservations"),
           where("familyId", "==", user.uid),
-          where("date", ">=", dateLimitStr),
-          where("date", "<", today),
-          orderBy("date", "desc"),
-          limit(20)
+          limit(50)
         )),
         getDocs(query(
           collection(db, "avis-satisfaction"),
@@ -73,9 +70,12 @@ export default function SatisfactionPage() {
         )),
       ]);
 
-      // Dédupliquer par activité
-      const res = resSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const unique = Array.from(new Map(res.map((r: any) => [r.activityTitle, r])).values());
+      // Filtrer les 30 derniers jours + dédupliquer par activité (côté client)
+      const res = resSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+      const filtered = res
+        .filter((r: any) => r.date >= dateLimitStr && r.date < today)
+        .sort((a: any, b: any) => b.date.localeCompare(a.date));
+      const unique = Array.from(new Map(filtered.map((r: any) => [r.activityTitle, r])).values());
       setPastReservations(unique);
       setMyAvis(avisSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).slice(0, 10));
       setLoading(false);
