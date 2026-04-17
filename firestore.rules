@@ -192,9 +192,13 @@ service cloud.firestore {
 
     // ── Réservations (espace cavalier) ────────────────────────────────────
     match /reservations/{docId} {
-      allow read: if isStaff() || (isAuth() && resource.data.familyId == request.auth.uid);
+      allow read: if isStaff()
+        || (isAuth() && resource.data.familyId == request.auth.uid)
+        || (isAuth() && resource.data.get("sourceFamilyId", "") == request.auth.uid);
       allow create: if isAuth();
-      allow update, delete: if isStaff() || (isAuth() && resource.data.familyId == request.auth.uid);
+      allow update, delete: if isStaff()
+        || (isAuth() && resource.data.familyId == request.auth.uid)
+        || (isAuth() && resource.data.get("sourceFamilyId", "") == request.auth.uid);
     }
 
     // ── Email templates ───────────────────────────────────────────────────
