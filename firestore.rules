@@ -362,6 +362,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ── Confirmations CAWL (verrou anti-doublon webhook/status) ───────────
+    // Utilisée par /api/cawl/webhook et /api/cawl/status pour garantir
+    // qu'une même confirmation de paiement n'est traitée qu'une seule fois.
+    // Aucun accès côté client.
+    match /cawl_confirmations/{docId} {
+      allow read, write: if false;
+    }
+
     // ── Audit facturation (traçabilité attribution des numéros) ───────────
     // Lecture admin seulement (pour audit fiscal), écriture bloquée côté
     // client — les entrées sont créées par /api/invoice/next-number (adminDb)

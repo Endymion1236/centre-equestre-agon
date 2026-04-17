@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { loadTemplate } from "@/lib/email-template-loader";
 import { awardLoyaltyPointsServer } from "@/lib/fidelite";
 import { confirmReservationsForPayment } from "@/lib/reservations";
+import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -174,6 +175,35 @@ export async function GET(req: NextRequest) {
       const paidAmount = isDeposit
         ? (pData.acompteAmount || Math.round(totalTTC * depositPercent / 100 * 100) / 100)
         : totalEuros || totalTTC;
+
+      // ── Verrou anti-doublon ──────────────────────────────────────────
+      // Empêche status + webhook d'écrire tous les deux si appelés en
+      // parallèle, et empêche aussi qu'un refresh navigateur déclenche un
+      // second traitement (cas des acomptes où status !== "paid" reste vrai).
+      // Le stage distingue deposit/full pour permettre les deux étapes
+      // successives d'un paiement en deux fois.
+      const stage: "deposit" | "full" = isDeposit ? "deposit" : "full";
+      const lockAcquired = await acquireCawlConfirmationLock({
+        hostedCheckoutId,
+        stage,
+        source: "status",
+        paymentId: payRef.id,
+        amountCents: Math.round(paidAmount * 100),
+      });
+
+      if (!lockAcquired) {
+        console.log(
+          `CAWL status: confirmation déjà traitée pour ${hostedCheckoutId} (stage=${stage}), redirect succès`
+        );
+        return NextResponse.redirect(
+          new URL(
+            isDeposit
+              ? `/espace-cavalier/reservations?success=true&deposit=true`
+              : `/espace-cavalier/reservations?success=true`,
+            req.nextUrl.origin
+          )
+        );
+      }
 
       await payRef.update({
         status: isDeposit ? "partial" : "paid",

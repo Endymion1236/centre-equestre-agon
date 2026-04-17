@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { loadTemplate } from "@/lib/email-template-loader";
 import { awardLoyaltyPointsServer } from "@/lib/fidelite";
 import { confirmReservationsForPayment } from "@/lib/reservations";
+import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 
 export const dynamic = "force-dynamic";
 
@@ -87,7 +88,24 @@ export async function POST(req: NextRequest) {
       }
 
       if (payRef && pData) {
-        // Éviter la double mise à jour (la route status a peut-être déjà mis à jour)
+        // ── Verrou anti-doublon ──────────────────────────────────────────
+        // Empêche webhook + status d'écrire tous les deux si appelés en
+        // parallèle. Le premier qui acquiert le lock procède, l'autre s'abstient.
+        const lockAcquired = await acquireCawlConfirmationLock({
+          hostedCheckoutId,
+          stage: "full",
+          source: "webhook",
+          paymentId: payRef.id,
+          amountCents: totalCents,
+        });
+
+        if (!lockAcquired) {
+          console.log(
+            `CAWL webhook: confirmation déjà traitée pour ${merchantRef}, skip`
+          );
+          return NextResponse.json({ received: true });
+        }
+
         if (pData.status !== "paid") {
           const totalTTC = pData.totalTTC || totalEuros;
 
