@@ -3,6 +3,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { loadTemplate } from "@/lib/email-template-loader";
 import { awardLoyaltyPointsServer } from "@/lib/fidelite";
+import { confirmReservationsForPayment } from "@/lib/reservations";
 import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -205,6 +206,17 @@ export async function GET(req: NextRequest) {
         montant: paidAmount,
         label: (pData.items || []).map((i: any) => i.activityTitle).join(", ") || "Paiement en ligne",
       });
+
+      // ── Confirmer les réservations associées ──────────────────────
+      // Uniquement si le paiement est soldé (pas pour un acompte, le cavalier
+      // doit encore régler le solde avant que la résa soit définitivement
+      // confirmée)
+      if (!isDeposit) {
+        await confirmReservationsForPayment({
+          familyId: familyId || pData.familyId,
+          items: pData.items || [],
+        });
+      }
 
       // ── Email confirmation ───────────────────────────────────────────────
       const parentEmail = pData.familyEmail || "";

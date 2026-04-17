@@ -3,6 +3,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { loadTemplate } from "@/lib/email-template-loader";
 import { awardLoyaltyPointsServer } from "@/lib/fidelite";
+import { confirmReservationsForPayment } from "@/lib/reservations";
 
 export const dynamic = "force-dynamic";
 
@@ -119,6 +120,14 @@ export async function POST(req: NextRequest) {
             familyName: pData.familyName,
             montant: totalTTC,
             label: (pData.items || []).map((i: any) => i.activityTitle).join(", ") || "Paiement en ligne",
+          });
+
+          // ── Confirmer les réservations associées ──────────────────────
+          // Les réservations créées en pending_payment au checkout doivent
+          // passer en confirmed maintenant que le paiement est confirmé
+          await confirmReservationsForPayment({
+            familyId: pData.familyId,
+            items: pData.items || [],
           });
 
           // ── Email de confirmation ─────────────────────────────────────
