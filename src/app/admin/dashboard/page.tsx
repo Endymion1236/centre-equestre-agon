@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
+import StagesImpayesAlert from "@/components/admin/StagesImpayesAlert";
 
 export default function AdminDashboard() {
   const { setAgentContext } = useAgentContext("dashboard");
@@ -69,6 +70,9 @@ export default function AdminDashboard() {
           </button>
         </Link>
       </div>
+
+      {/* Alertes stages impayés */}
+      <StagesImpayesAlert />
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
