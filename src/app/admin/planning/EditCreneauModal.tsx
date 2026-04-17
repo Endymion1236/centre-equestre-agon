@@ -45,6 +45,8 @@ export default function EditCreneauModal({
 }: Props) {
   const [moniteurs, setMoniteurs] = useState<string[]>([]);
   const [themes, setThemes] = useState<{ id: string; label: string }[]>([]);
+  const [moniteurPortee, setMoniteurPortee] = useState<"single" | "all">("single");
+  const initialMoniteurs = (creneau.monitor || "").split(",").map(s => s.trim()).filter(Boolean);
 
   useEffect(() => {
     getDocs(collection(db, "moniteurs")).then(snap => {
@@ -55,6 +57,9 @@ export default function EditCreneauModal({
         .sort((a, b) => a.label.localeCompare(b.label)));
     });
   }, []);
+
+  const currentMoniteurs = (form.monitor || "").split(",").map(s => s.trim()).filter(Boolean);
+  const moniteurChanged = JSON.stringify([...currentMoniteurs].sort()) !== JSON.stringify([...initialMoniteurs].sort());
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
       <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
@@ -89,8 +94,8 @@ export default function EditCreneauModal({
               </div>
             </div>
           </div>
-          <div>
-            <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Moniteur(s)</label>
+          <div className="flex flex-col gap-2">
+            <label className="font-body text-xs font-semibold text-blue-800 block">Moniteur(s)</label>
             {(() => {
               const selected = (form.monitor || "").split(",").map(s => s.trim()).filter(Boolean);
               const toggleMoniteur = (name: string) => {
@@ -103,10 +108,11 @@ export default function EditCreneauModal({
                 <div className="flex flex-wrap gap-1.5">
                   {moniteurs.map(m => {
                     const isSelected = selected.includes(m);
+                    const isNew = isSelected && !initialMoniteurs.includes(m);
                     return (
                       <button key={m} onClick={() => toggleMoniteur(m)}
                         className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer transition-all
-                          ${isSelected ? "bg-blue-500 text-white" : "bg-gray-100 text-slate-500 hover:bg-blue-50"}`}>
+                          ${isNew ? "bg-green-500 text-white ring-2 ring-green-300" : isSelected ? "bg-blue-500 text-white" : "bg-gray-100 text-slate-500 hover:bg-blue-50"}`}>
                         {isSelected ? "✓ " : ""}{m}
                       </button>
                     );
@@ -120,6 +126,39 @@ export default function EditCreneauModal({
                 </div>
               );
             })()}
+
+            {/* Portée du changement de moniteur — apparaît uniquement si changement détecté */}
+            {moniteurChanged && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex flex-col gap-2">
+                <div className="font-body text-xs font-semibold text-amber-800">
+                  📋 Appliquer ce changement de moniteur à…
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setMoniteurPortee("single"); onApplyAllChange(false); }}
+                    className={`flex-1 py-2.5 px-3 rounded-xl font-body text-xs font-semibold border-2 cursor-pointer transition-all text-left
+                      ${moniteurPortee === "single"
+                        ? "bg-amber-500 border-amber-500 text-white"
+                        : "bg-white border-amber-200 text-amber-700 hover:border-amber-400"}`}>
+                    <div className="font-semibold">Cette séance</div>
+                    <div className={`text-[10px] mt-0.5 ${moniteurPortee === "single" ? "text-white/70" : "text-amber-500"}`}>
+                      {creneau.date} · {creneau.startTime}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => { setMoniteurPortee("all"); onApplyAllChange(true); }}
+                    className={`flex-1 py-2.5 px-3 rounded-xl font-body text-xs font-semibold border-2 cursor-pointer transition-all text-left
+                      ${moniteurPortee === "all"
+                        ? "bg-blue-500 border-blue-500 text-white"
+                        : "bg-white border-blue-200 text-blue-700 hover:border-blue-400"}`}>
+                    <div className="font-semibold">Toutes les séances</div>
+                    <div className={`text-[10px] mt-0.5 ${moniteurPortee === "all" ? "text-white/70" : "text-blue-400"}`}>
+                      Même cours · même jour · même heure
+                    </div>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -194,14 +233,17 @@ export default function EditCreneauModal({
             </div>
           )}
 
-          <label className="flex items-start gap-3 bg-blue-50 rounded-xl p-3 cursor-pointer">
-            <input type="checkbox" checked={applyAll} onChange={e => onApplyAllChange(e.target.checked)}
-              className="accent-blue-500 w-4 h-4 mt-0.5"/>
-            <div>
-              <div className="font-body text-sm font-semibold text-blue-800">Appliquer à tous les créneaux similaires</div>
-              <div className="font-body text-xs text-slate-500 mt-0.5">Même titre · même jour de la semaine · même heure de départ</div>
-            </div>
-          </label>
+          {/* Case "appliquer à tous" — masquée si le changement moniteur gère déjà la portée */}
+          {!moniteurChanged && (
+            <label className="flex items-start gap-3 bg-blue-50 rounded-xl p-3 cursor-pointer">
+              <input type="checkbox" checked={applyAll} onChange={e => onApplyAllChange(e.target.checked)}
+                className="accent-blue-500 w-4 h-4 mt-0.5"/>
+              <div>
+                <div className="font-body text-sm font-semibold text-blue-800">Appliquer à tous les créneaux similaires</div>
+                <div className="font-body text-xs text-slate-500 mt-0.5">Même titre · même jour de la semaine · même heure de départ</div>
+              </div>
+            </label>
+          )}
         </div>
         {/* Footer fixe avec les boutons */}
         <div className="flex gap-3 p-5 border-t border-gray-100 flex-shrink-0">
