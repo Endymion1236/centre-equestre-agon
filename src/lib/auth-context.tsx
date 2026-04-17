@@ -97,7 +97,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const existingData = existingDoc.data();
                 const provider = firebaseUser.providerData[0]?.providerId === "google.com" ? "google" : "facebook";
 
-                // Copier la fiche vers l'ID = uid (document principal pour les accès futurs)
                 const familyData = {
                   ...existingData,
                   authUid: firebaseUser.uid,
@@ -105,17 +104,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   parentName: existingData.parentName || firebaseUser.displayName || "",
                   updatedAt: serverTimestamp(),
                 };
+
+                // 1. Créer/mettre à jour la fiche avec l'uid comme ID
                 await setDoc(familyRef, familyData);
-
-                // Supprimer l'ancienne fiche (ID auto-généré) pour éviter les doublons
-                // Seulement si l'ancien ID est différent du nouveau (uid)
-                if (existingDoc.id !== firebaseUser.uid) {
-                  await deleteDoc(doc(db, "families", existingDoc.id));
-                }
-
                 setFamily({ id: firebaseUser.uid, ...familyData } as unknown as Family);
                 linked = true;
-                console.log(`Compte lié : ${firebaseUser.email} → ancien ${existingDoc.id} supprimé → nouveau ${firebaseUser.uid}`);
+
+                // 2. Supprimer l'ancienne fiche SEULEMENT si différente et si le setDoc a réussi
+                // On ne bloque pas si cette suppression échoue (droits insuffisants = pas grave)
+                if (existingDoc.id !== firebaseUser.uid) {
+                  try {
+                    await deleteDoc(doc(db, "families", existingDoc.id));
+                  } catch (delErr) {
+                    // Pas critique : la fiche uid existe déjà, l'ancienne sera ignorée
+                    console.warn(`Ancienne fiche non supprimée (sera ignorée) : ${existingDoc.id}`);
+                  }
+                }
+                console.log(`Compte lié : ${firebaseUser.email} → uid ${firebaseUser.uid}`);
               }
             } catch (e) {
               console.error("Erreur recherche email:", e);
