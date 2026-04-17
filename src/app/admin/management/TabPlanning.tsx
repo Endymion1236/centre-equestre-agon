@@ -1165,9 +1165,9 @@ Réponds de façon concise et pratique, en français.`,
 
       <div className="print-hide flex flex-col gap-4">
 
-        {/* ── NAVIGATION SEMAINE ── */}
+        {/* ── NAVIGATION SEMAINE + JOURS ── */}
         <Card padding="sm">
-          <div className="flex items-center justify-between px-2">
+          <div className="flex items-center justify-between px-2 mb-3">
             <button onClick={prevWeek} className="flex items-center gap-1 font-body text-sm font-semibold text-blue-800 bg-transparent border-none cursor-pointer hover:text-blue-500 transition-colors px-2 py-1">
               <ChevronLeft size={16}/>Préc.
             </button>
@@ -1197,32 +1197,30 @@ Réponds de façon concise et pratique, en français.`,
               </button>
             </div>
           </div>
+          {/* Jours de la semaine */}
+          <div className="grid gap-1.5 px-2" style={{gridTemplateColumns: `repeat(${nbJours}, 1fr)`}}>
+            {jourDates.slice(0, nbJours).map(({ jour, date }) => {
+              const isToday = (() => {
+                const now = new Date();
+                return date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+              })();
+              const hasTaches = taches.some(t => t.jour === jour);
+              return (
+                <div key={jour}
+                  className={`text-center py-2 rounded-xl font-body text-xs font-semibold transition-all
+                    ${isToday
+                      ? "bg-blue-500 text-white shadow-md shadow-blue-500/25"
+                      : hasTaches
+                        ? "bg-blue-50 text-blue-800 border border-blue-100"
+                        : "bg-gray-50 text-gray-400 border border-gray-100"
+                    }`}>
+                  {JOURS_LABELS[jour].slice(0, 3)} {date.getDate()}{date.getMonth() !== lundi.getMonth() ? `/${date.getMonth() + 1}` : ""}
+                  {hasTaches && !isToday && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-blue-400 align-middle" />}
+                </div>
+              );
+            })}
+          </div>
         </Card>
-
-        {/* ── JOURS DE LA SEMAINE — raccourcis vers vue Fiche ── */}
-        <div className="grid grid-cols-6 gap-2">
-          {jourDates.slice(0, nbJours).map(({ jour, date }) => {
-            const isToday = (() => {
-              const now = new Date();
-              return date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-            })();
-            const hasTaches = taches.some(t => t.jour === jour);
-            return (
-              <div key={jour}
-                onClick={() => { setView("fiche"); setSelectedDay(jour); }}
-                className={`text-center py-2.5 rounded-xl font-body text-xs font-semibold cursor-pointer transition-all
-                  ${isToday
-                    ? "bg-blue-500 text-white shadow-md shadow-blue-500/25"
-                    : hasTaches
-                      ? "card text-blue-800 border border-blue-100"
-                      : "card text-gray-400"
-                  } hover:shadow-md`}>
-                {JOURS_LABELS[jour].slice(0, 3)} {date.getDate()}{date.getMonth() !== lundi.getMonth() ? `/${date.getMonth() + 1}` : ""}
-                {hasTaches && !isToday && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-blue-400 align-middle" />}
-              </div>
-            );
-          })}
-        </div>
 
         {/* ── JOURS TRAVAILLÉS + RÉSUMÉ CHARGE ── */}
         <Card padding="sm">
