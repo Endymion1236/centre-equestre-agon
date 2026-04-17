@@ -1,6 +1,6 @@
 "use client";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
-import { fmtDate, fmtDateFR, fmtMonthFR, typeColors } from "./types";
+import { fmtDate, fmtDateFR, fmtMonthFR, typeColors, compareCreneaux } from "./types";
 import type { Creneau } from "./types";
 
 interface Props {
@@ -78,7 +78,7 @@ export default function TimelineView({
                   {/* 7 colonnes jours */}
                   {weekDates.map((d, dayIdx) => {
                     const ds = fmtDate(d);
-                    const allDc = creneaux.filter(c => c.date === ds).sort((a, b) => a.startTime.localeCompare(b.startTime));
+                    const allDc = creneaux.filter(c => c.date === ds).sort(compareCreneaux);
 
                     const stages = allDc.filter(c => isStageType(c));
                     const dc = allDc.filter(c => !isStageType(c));

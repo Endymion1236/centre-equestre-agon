@@ -1,6 +1,6 @@
 "use client";
 import { ChevronLeft, ChevronRight, Loader2, Users, Trash2, Settings } from "lucide-react";
-import { fmtDate, fmtDateFR, fmtMonthFR, typeColors } from "./types";
+import { fmtDate, fmtDateFR, fmtMonthFR, typeColors, compareCreneaux } from "./types";
 import type { Creneau } from "./types";
 import type { EditForm } from "./EditCreneauModal";
 
@@ -237,7 +237,7 @@ export default function WeekView({
               {/* Colonnes jours */}
               {weekDates.map((d, i) => {
                 const ds = fmtDate(d);
-                const allDc = creneaux.filter(c => c.date === ds).sort((a, b) => a.startTime.localeCompare(b.startTime));
+                const allDc = creneaux.filter(c => c.date === ds).sort(compareCreneaux);
                 const dc = allDc.filter(c => !isStageType(c));
                 const stages = allDc.filter(c => isStageType(c));
 

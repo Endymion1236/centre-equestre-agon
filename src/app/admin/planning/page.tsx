@@ -14,7 +14,7 @@ import { emailTemplates } from "@/lib/email-templates";
 import { generateOrderId } from "@/lib/utils";
 import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Loader2, Trash2, Users, CalendarDays, Briefcase, Bell, Mail, Sparkles, Printer, Settings } from "lucide-react";
 import type { Activity, Family } from "@/types";
-import { Creneau, EnrolledChild, typeColors, dayNames, dayNamesFull, payModes, getWeekDates, fmtDate, fmtDateFR, fmtMonthFR } from "./types";
+import { Creneau, EnrolledChild, typeColors, dayNames, dayNamesFull, payModes, getWeekDates, fmtDate, fmtDateFR, fmtMonthFR, compareCreneaux } from "./types";
 import EnrollPanel from "./EnrollPanel";
 import PeriodGenerator from "./PeriodGenerator";
 import SimpleCreneauForm from "./SimpleCreneauForm";
@@ -363,7 +363,7 @@ export default function PlanningPage() {
       ? `Planning semaine du ${weekDates[0].toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} au ${weekDates[6].toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`
       : `Planning ${currentDay.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}`;
     const lignes = [...visibleCreneaux]
-      .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
+      .sort((a, b) => a.date.localeCompare(b.date) || compareCreneaux(a, b))
       .map(c => `<tr>
         <td>${new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</td>
         <td>${c.startTime}–${c.endTime}</td>
@@ -957,7 +957,7 @@ export default function PlanningPage() {
   };
 
   const isToday = (d: Date) => fmtDate(d) === fmtDate(new Date());
-  const dayCreneaux = creneaux.filter(c => c.date === fmtDate(currentDay)).sort((a,b) => a.startTime.localeCompare(b.startTime));
+  const dayCreneaux = creneaux.filter(c => c.date === fmtDate(currentDay)).sort(compareCreneaux);
 
   return (
     <div>
