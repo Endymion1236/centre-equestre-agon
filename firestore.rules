@@ -79,15 +79,8 @@ service cloud.firestore {
       allow read, write: if isStaff();
     }
 
-    // ── Mouvements (registre) ─────────────────────────────────────────────
-    match /mouvements/{docId} {
-      allow read, write: if isAdmin();
-    }
-
-    // ── Documents équidés ─────────────────────────────────────────────────
-    match /documents-equides/{docId} {
-      allow read, write: if isStaff();
-    }
+    // (Collections 'mouvements' et 'documents-equides' retirées :
+    //  seules 'mouvements_registre' et 'documents_equide' sont utilisées)
 
     // ── Indisponibilités équidés ──────────────────────────────────────────
     match /indisponibilites/{docId} {
@@ -118,7 +111,7 @@ service cloud.firestore {
     }
 
     // ── Fidélité ──────────────────────────────────────────────────────────
-    match /loyalty/{docId} {
+    match /fidelite/{docId} {
       allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
       allow write: if isAdmin();
     }
@@ -229,27 +222,17 @@ service cloud.firestore {
     }
 
     // ── Bons récupération ─────────────────────────────────────────────────
-    match /bons-recup/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
-      allow write: if isAdmin();
-    }
-
-    // ── Bons récupération (nom alternatif sans tiret) ─────────────────────
     match /bonsRecup/{docId} {
       allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
       allow write: if isAdmin();
     }
 
-    // ── Paiements (collection principale admin) ───────────────────────────
+    // ── Paiements FR (collection à migrer vers 'payments' EN) ─────────────
+    // ⚠️ Collection legacy utilisée par l'ancien code inscription-annuelle
+    // (avant le fix). Accès admin uniquement pour permettre la migration via
+    // /api/admin/migrate-paiements-collection. À retirer après migration.
     match /paiements/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
-      allow write: if isAdmin();
-    }
-
-    // ── Cartes de séances (alias) ─────────────────────────────────────────
-    match /cartes-seances/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
-      allow write: if isAdmin();
+      allow read, write: if isAdmin();
     }
 
     // ── Communications (historique emails/notifications) ──────────────────
@@ -277,11 +260,7 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // ── Fidélité (alias de loyalty) ───────────────────────────────────────
-    match /fidelite/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId != null && isFamilyOwner(resource.data.familyId));
-      allow write: if isAdmin();
-    }
+    // (Doublon 'fidelite' retiré — défini une seule fois plus haut)
 
     // ── Modèles de planning (reprises/horaires) ───────────────────────────
     match /modeles/{docId} {

@@ -47,7 +47,7 @@ export default function CavaliersPage() {
         getDocs(collection(db, "reservations")),
         getDocs(collection(db, "payments")),
         getDocs(collection(db, "avoirs")),
-        getDocs(collection(db, "cartes-seances")),
+        getDocs(collection(db, "cartes")),
         getDocs(query(collection(db, "creneaux"), orderBy("date"))),
         getDocs(collection(db, "mandats-sepa")),
         getDocs(collection(db, "fidelite")),

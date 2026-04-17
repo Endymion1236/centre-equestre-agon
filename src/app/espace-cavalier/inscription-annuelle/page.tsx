@@ -228,7 +228,7 @@ export default function InscriptionAnnuellePage() {
 
       // Create payment record
       if (mode === "annuel") {
-        await addDoc(collection(db, "paiements"), {
+        await addDoc(collection(db, "payments"), {
           familyId: user.uid,
           familyName: family.parentName,
           childId: selectedChild,
@@ -245,8 +245,14 @@ export default function InscriptionAnnuellePage() {
             })),
           ],
           totalTTC: grandTotal,
+          paidAmount: 0,
           paymentPlan,
-          status: paymentPlan === "1x" ? "pending" : "echeance",        skipPayment: true,
+          // Toujours créer en "pending" côté client — les règles Firestore
+          // durcies n'autorisent pas d'autres status à la création. Le passage
+          // en "echeance"/"paid" se fait ensuite via admin ou webhook CAWL.
+          status: "pending",
+          skipPayment: true,
+          source: "client",
           createdAt: serverTimestamp(),
         });
       }
