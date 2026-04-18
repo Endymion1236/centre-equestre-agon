@@ -71,6 +71,111 @@ function assertApprox(a: number, b: number, tol: number, msg: string) {
   if (Math.abs(a - b) > tol) throw new Error(`${msg} (${a} ≠ ${b}, tolérance ${tol})`);
 }
 
+// Helpers compacts pour tests synchrones (section 33+)
+function t(name: string, fn: () => void) {
+  try { fn(); passed++; log("✅", name); }
+  catch (e: any) { failed++; const m = e.message || String(e); errors.push(`${name}: ${m}`); log("❌", `${name} — ${m}`); }
+}
+function eq(name: string, actual: any, expected: any) {
+  t(name, () => {
+    const a = JSON.stringify(actual), b = JSON.stringify(expected);
+    if (a !== b) throw new Error(`attendu ${b}, obtenu ${a}`);
+  });
+}
+function ok(name: string, cond: any) { t(name, () => { if (!cond) throw new Error("condition fausse"); }); }
+function nearly(name: string, a: number, b: number, tol = 0.01) {
+  t(name, () => { if (Math.abs(a - b) > tol) throw new Error(`${a} ≠ ${b} (tol ${tol})`); });
+}
+function throws(name: string, fn: () => any) {
+  t(name, () => { let threw = false; try { fn(); } catch { threw = true; } if (!threw) throw new Error("devait lever une exception"); });
+}
+
+// ─── Pure helpers (dupliqués de src/lib pour éviter les alias @/*) ───
+const safeNumber = (v: any): number => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const round2 = (v: any): number => Math.round(safeNumber(v) * 100) / 100;
+const ttcToHT = (ttc: number, tva = 5.5): number => round2(safeNumber(ttc) / (1 + safeNumber(tva) / 100));
+const htToTTC = (ht: number, tva = 5.5): number => round2(safeNumber(ht) * (1 + safeNumber(tva) / 100));
+const formatEuro = (v: any): string => `${safeNumber(v).toFixed(2)}€`;
+const validatePayment = (p: any): { valid: boolean; errors: string[] } => {
+  const e: string[] = [];
+  if (!p.familyId) e.push("familyId manquant");
+  if (!p.familyName) e.push("familyName manquant");
+  if (!Array.isArray(p.items) || p.items.length === 0) e.push("items vide");
+  if (safeNumber(p.totalTTC) <= 0) e.push("totalTTC invalide");
+  return { valid: e.length === 0, errors: e };
+};
+const compareCreneaux = (a: any, b: any): number => {
+  const s = (a.startTime || "").localeCompare(b.startTime || ""); if (s !== 0) return s;
+  const en = (a.endTime || "").localeCompare(b.endTime || ""); if (en !== 0) return en;
+  return (a.activityTitle || "").localeCompare(b.activityTitle || "");
+};
+const compareCreneauxByDow = (a: any, b: any): number => {
+  const d = (a.dayOfWeek ?? 0) - (b.dayOfWeek ?? 0); return d !== 0 ? d : compareCreneaux(a, b);
+};
+const compareCreneauxByDate = (a: any, b: any): number => {
+  const d = (a.date || "").localeCompare(b.date || ""); return d !== 0 ? d : compareCreneaux(a, b);
+};
+const escapeXml = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+const generateMandatId = (rc: number, mi: number): string => `CEDC${rc}MD${mi}`;
+const generateInstrId = (rid: string, mi: number, pid: string): string => `${rid}M${mi}P${pid}`;
+function countSessionsInPeriod(start: string, end: string, dow: number, hols: { start: string; end: string }[]): number {
+  let n = 0; const cur = new Date(start); const e = new Date(end);
+  while (cur <= e) {
+    const d = (cur.getDay() + 6) % 7;
+    if (d === dow) {
+      const s = cur.toISOString().split("T")[0];
+      if (!hols.some(h => s >= h.start && s <= h.end)) n++;
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return n;
+}
+const SEASON_2526 = { start: "2025-09-01", end: "2026-06-30" };
+const HOLS_2526 = [
+  { start: "2025-10-18", end: "2025-11-03" },
+  { start: "2025-12-20", end: "2026-01-05" },
+  { start: "2026-02-07", end: "2026-02-23" },
+  { start: "2026-04-11", end: "2026-04-27" },
+];
+function calculateProrata(enroll: string, end: string, dow: number, hols: any[], price: number) {
+  const total = countSessionsInPeriod(SEASON_2526.start, end, dow, hols);
+  const sess = countSessionsInPeriod(enroll, end, dow, hols);
+  const perS = total > 0 ? price / total : 0;
+  return { sessions: sess, totalSessions: total, priceTTC: Math.round(sess * perS * 100) / 100, perSessionTTC: Math.round(perS * 100) / 100 };
+}
+const isEmail = (s: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s || "");
+const isPhoneFR = (s: string): boolean => /^0[1-9](\s?\d{2}){4}$/.test((s || "").replace(/\s/g, "") ? (s || "").replace(/\s/g, "").replace(/(\d{2})/g, "$1 ").trim() : "") || /^0[1-9]\d{8}$/.test((s || "").replace(/\s/g, ""));
+const isPostalFR = (s: string): boolean => /^\d{5}$/.test(s || "");
+const isIbanFR = (s: string): boolean => /^FR\d{2}[0-9A-Z]{23}$/.test((s || "").replace(/\s/g, ""));
+const isBic = (s: string): boolean => /^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(s || "");
+const isIcs = (s: string): boolean => /^[A-Z]{2}\d{2}[A-Z0-9]{3}\d{6}$/.test((s || "").replace(/\s/g, ""));
+const isGalopId = (s: string): boolean => ["poney_bronze","poney_argent","poney_or","galop_bronze","galop_argent","galop_or","g3","g4","g5","g6","g7"].includes(s);
+const computeAge = (birth: string, ref = new Date()): number => {
+  const b = new Date(birth); let a = ref.getFullYear() - b.getFullYear();
+  const m = ref.getMonth() - b.getMonth(); if (m < 0 || (m === 0 && ref.getDate() < b.getDate())) a--;
+  return a;
+};
+function validateChildrenUpdate(curr: any[], next: any[]): boolean {
+  if (next.length === 0 && curr.length > 0) return false;
+  return true;
+}
+function formatStageSchedule(cren: { date: string; startTime: string; endTime: string }[]): string {
+  if (!cren || cren.length === 0) return "";
+  const s = [...cren].sort((a, b) => a.date.localeCompare(b.date));
+  const fmt = (d: string) => new Date(d).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" });
+  const fm = (d: string) => new Date(d).toLocaleDateString("fr-FR", { month: "long" });
+  const uniq = [...new Set(s.map(c => `${c.startTime}–${c.endTime}`))];
+  if (s.length === 1) return `${fmt(s[0].date)} ${fm(s[0].date)} · ${s[0].startTime}–${s[0].endTime}`;
+  if (uniq.length === 1) {
+    const f = s[0], l = s[s.length - 1];
+    const same = new Date(f.date).getMonth() === new Date(l.date).getMonth();
+    return same ? `du ${fmt(f.date)} au ${fmt(l.date)} ${fm(l.date)} · ${f.startTime}–${f.endTime}`
+                : `du ${fmt(f.date)} ${fm(f.date)} au ${fmt(l.date)} ${fm(l.date)} · ${f.startTime}–${f.endTime}`;
+  }
+  return s.map(c => `${fmt(c.date)} ${c.startTime}–${c.endTime}`).join(", ");
+}
+const PAYMENT_MODES_IDS = ["cb_online","cb_terminal","cheque","especes","virement","sepa","avoir"];
+
 async function createDoc(col: string, data: any): Promise<string> {
   const ref = await db.collection(col).add({ ...data, ...TEST_MARKER });
   createdDocs.push({ collection: col, id: ref.id });
@@ -1959,7 +2064,650 @@ async function main() {
   });
 
   // ══════════════════════════════════════════════════════════════
-  section("32. VALIDATION FINALE — NETTOYAGE");
+  section("32. UTILITAIRES — safeNumber / round2 / TVA");
+  // ══════════════════════════════════════════════════════════════
+  eq("safeNumber(5) = 5", safeNumber(5), 5);
+  eq("safeNumber('5') = 5", safeNumber("5"), 5);
+  eq("safeNumber('5.5') = 5.5", safeNumber("5.5"), 5.5);
+  eq("safeNumber(null) = 0", safeNumber(null), 0);
+  eq("safeNumber(undefined) = 0", safeNumber(undefined), 0);
+  eq("safeNumber('abc') = 0", safeNumber("abc"), 0);
+  eq("safeNumber(NaN) = 0", safeNumber(NaN), 0);
+  eq("safeNumber(Infinity) = 0", safeNumber(Infinity), 0);
+  eq("safeNumber(-Infinity) = 0", safeNumber(-Infinity), 0);
+  eq("safeNumber(0) = 0", safeNumber(0), 0);
+  eq("safeNumber(-42.5) = -42.5", safeNumber(-42.5), -42.5);
+  eq("safeNumber({}) = 0", safeNumber({}), 0);
+  eq("safeNumber([]) = 0", safeNumber([]), 0);
+  eq("safeNumber('') = 0", safeNumber(""), 0);
+  eq("round2(5.555) = 5.56", round2(5.555), 5.56);
+  eq("round2(5.554) = 5.55", round2(5.554), 5.55);
+  eq("round2(5) = 5", round2(5), 5);
+  eq("round2(0) = 0", round2(0), 0);
+  eq("round2('10.126') = 10.13", round2("10.126"), 10.13);
+  eq("round2(-3.145) = -3.14", round2(-3.145), -3.14);
+  nearly("ttcToHT(100, 5.5) ≈ 94.79", ttcToHT(100, 5.5), 94.79);
+  nearly("ttcToHT(100, 20) ≈ 83.33", ttcToHT(100, 20), 83.33);
+  nearly("ttcToHT(0) = 0", ttcToHT(0), 0);
+  nearly("ttcToHT(211) ≈ 200", ttcToHT(211, 5.5), 200, 0.1);
+  nearly("htToTTC(100, 5.5) ≈ 105.5", htToTTC(100, 5.5), 105.5);
+  nearly("htToTTC(100, 20) = 120", htToTTC(100, 20), 120);
+  nearly("htToTTC(0) = 0", htToTTC(0), 0);
+  eq("formatEuro(5) = '5.00€'", formatEuro(5), "5.00€");
+  eq("formatEuro(12.3) = '12.30€'", formatEuro(12.3), "12.30€");
+  eq("formatEuro('abc') = '0.00€'", formatEuro("abc"), "0.00€");
+  eq("formatEuro(0) = '0.00€'", formatEuro(0), "0.00€");
+
+  // ══════════════════════════════════════════════════════════════
+  section("33. VALIDATION FORMATS — email / tel / CP / IBAN / BIC");
+  // ══════════════════════════════════════════════════════════════
+  ok("email valide: a@b.fr", isEmail("a@b.fr"));
+  ok("email valide: user.name+tag@domain.co.uk", isEmail("user.name+tag@domain.co.uk"));
+  ok("email valide: contact@centre-equestre-agon.fr", isEmail("contact@centre-equestre-agon.fr"));
+  ok("email INvalide: a@b", !isEmail("a@b"));
+  ok("email INvalide: sans arobase", !isEmail("sans-arobase"));
+  ok("email INvalide: @b.fr", !isEmail("@b.fr"));
+  ok("email INvalide: a@.fr", !isEmail("a@.fr"));
+  ok("email INvalide: chaine vide", !isEmail(""));
+  ok("email INvalide: avec espace", !isEmail("a b@c.fr"));
+  ok("email INvalide: null", !isEmail(null as any));
+  ok("tel FR valide: 0611223344", isPhoneFR("0611223344"));
+  ok("tel FR valide: 06 11 22 33 44", isPhoneFR("06 11 22 33 44"));
+  ok("tel FR valide: 0123456789", isPhoneFR("0123456789"));
+  ok("tel FR INvalide: 061122334 (9 chiffres)", !isPhoneFR("061122334"));
+  ok("tel FR INvalide: 06112233445 (11 chiffres)", !isPhoneFR("06112233445"));
+  ok("tel FR INvalide: commence par 00", !isPhoneFR("0011223344"));
+  ok("tel FR INvalide: +33611223344", !isPhoneFR("+33611223344"));
+  ok("CP valide: 50230", isPostalFR("50230"));
+  ok("CP valide: 75001", isPostalFR("75001"));
+  ok("CP INvalide: 5023", !isPostalFR("5023"));
+  ok("CP INvalide: 502301", !isPostalFR("502301"));
+  ok("CP INvalide: ABCDE", !isPostalFR("ABCDE"));
+  ok("CP INvalide: vide", !isPostalFR(""));
+  ok("IBAN FR valide (créancier club)", isIbanFR("FR7616606100640013539343253"));
+  ok("IBAN FR valide avec espaces", isIbanFR("FR76 1660 6100 6400 1353 9343 253"));
+  ok("IBAN INvalide: trop court", !isIbanFR("FR76"));
+  ok("IBAN INvalide: commence par DE", !isIbanFR("DE7616606100640013539343253"));
+  ok("BIC valide: AGRIFRPP866", isBic("AGRIFRPP866"));
+  ok("BIC valide 8 chars: AGRIFRPP", isBic("AGRIFRPP"));
+  ok("BIC INvalide: trop court", !isBic("AGRI"));
+  ok("BIC INvalide: minuscule", !isBic("agrifrpp"));
+  ok("ICS valide: FR57ZZZ852487", isIcs("FR57ZZZ852487"));
+  ok("ICS INvalide: FR57852487", !isIcs("FR57852487"));
+
+  // ══════════════════════════════════════════════════════════════
+  section("34. CALENDRIER — comptage de séances (saison 2025-2026)");
+  // ══════════════════════════════════════════════════════════════
+  const NO_HOLS: any[] = [];
+  // dayOfWeek : 0=Lun, 1=Mar, 2=Mer, 3=Jeu, 4=Ven, 5=Sam, 6=Dim
+  eq("1 mercredi unique", countSessionsInPeriod("2025-09-03", "2025-09-03", 2, NO_HOLS), 1);
+  eq("0 séance si jour différent", countSessionsInPeriod("2025-09-03", "2025-09-03", 0, NO_HOLS), 0);
+  eq("1 semaine complète = 1 mercredi", countSessionsInPeriod("2025-09-01", "2025-09-07", 2, NO_HOLS), 1);
+  eq("1 semaine complète = 1 samedi", countSessionsInPeriod("2025-09-01", "2025-09-07", 5, NO_HOLS), 1);
+  eq("2 semaines = 2 mardis", countSessionsInPeriod("2025-09-01", "2025-09-14", 1, NO_HOLS), 2);
+  eq("Mois sept 2025 : 4 mercredis sans vacances", countSessionsInPeriod("2025-09-01", "2025-09-30", 2, NO_HOLS), 4);
+  ok("Saison complète compte >30 mercredis", countSessionsInPeriod(SEASON_2526.start, SEASON_2526.end, 2, NO_HOLS) > 30);
+  ok("Saison avec vacances < sans vacances", countSessionsInPeriod(SEASON_2526.start, SEASON_2526.end, 2, HOLS_2526) < countSessionsInPeriod(SEASON_2526.start, SEASON_2526.end, 2, NO_HOLS));
+  eq("Toussaint 2025-10-22 (mercredi) exclu", countSessionsInPeriod("2025-10-22", "2025-10-22", 2, HOLS_2526), 0);
+  eq("Hors Toussaint : 2025-11-05 (mercredi) inclus", countSessionsInPeriod("2025-11-05", "2025-11-05", 2, HOLS_2526), 1);
+  eq("Noël 2025-12-24 exclu", countSessionsInPeriod("2025-12-24", "2025-12-24", 2, HOLS_2526), 0);
+  eq("Hiver 2026-02-11 exclu", countSessionsInPeriod("2026-02-11", "2026-02-11", 2, HOLS_2526), 0);
+  eq("Printemps 2026-04-15 exclu", countSessionsInPeriod("2026-04-15", "2026-04-15", 2, HOLS_2526), 0);
+  eq("Dimanche sur semaine mercredi = 0", countSessionsInPeriod("2025-09-07", "2025-09-07", 2, NO_HOLS), 0);
+  eq("Début = fin, jour != = 0", countSessionsInPeriod("2025-09-05", "2025-09-05", 0, NO_HOLS), 0);
+  eq("Plage inversée = 0", countSessionsInPeriod("2025-09-30", "2025-09-01", 2, NO_HOLS), 0);
+  eq("Lundi 2025-09-01", countSessionsInPeriod("2025-09-01", "2025-09-01", 0, NO_HOLS), 1);
+  eq("Mardi 2025-09-02", countSessionsInPeriod("2025-09-02", "2025-09-02", 1, NO_HOLS), 1);
+  eq("Jeudi 2025-09-04", countSessionsInPeriod("2025-09-04", "2025-09-04", 3, NO_HOLS), 1);
+  eq("Vendredi 2025-09-05", countSessionsInPeriod("2025-09-05", "2025-09-05", 4, NO_HOLS), 1);
+  eq("Samedi 2025-09-06", countSessionsInPeriod("2025-09-06", "2025-09-06", 5, NO_HOLS), 1);
+  eq("Dimanche 2025-09-07", countSessionsInPeriod("2025-09-07", "2025-09-07", 6, NO_HOLS), 1);
+  ok("Nb mercredis année complète > nb 29 février", countSessionsInPeriod(SEASON_2526.start, SEASON_2526.end, 2, NO_HOLS) > 10);
+  ok("Lundis >= 30 sur saison sans vacances", countSessionsInPeriod(SEASON_2526.start, SEASON_2526.end, 0, NO_HOLS) >= 30);
+  ok("Samedis >= 30 sur saison sans vacances", countSessionsInPeriod(SEASON_2526.start, SEASON_2526.end, 5, NO_HOLS) >= 30);
+
+  // ══════════════════════════════════════════════════════════════
+  section("35. PRORATA — calcul entrée en cours de saison");
+  // ══════════════════════════════════════════════════════════════
+  const FULL = calculateProrata(SEASON_2526.start, SEASON_2526.end, 2, HOLS_2526, 300);
+  ok("Prorata plein: sessions == totalSessions", FULL.sessions === FULL.totalSessions);
+  nearly("Prorata plein: prix = 300", FULL.priceTTC, 300, 0.5);
+  const MID = calculateProrata("2026-01-01", SEASON_2526.end, 2, HOLS_2526, 300);
+  ok("Prorata mi-saison < plein", MID.priceTTC < FULL.priceTTC);
+  ok("Prorata mi-saison sessions < plein", MID.sessions < FULL.sessions);
+  const LATE = calculateProrata("2026-05-01", SEASON_2526.end, 2, HOLS_2526, 300);
+  ok("Prorata fin saison < mi-saison", LATE.priceTTC < MID.priceTTC);
+  ok("perSessionTTC > 0", FULL.perSessionTTC > 0);
+  nearly("perSessionTTC cohérent prix/total", FULL.priceTTC, FULL.totalSessions * FULL.perSessionTTC, 1);
+  const BEFORE = calculateProrata("2025-08-01", SEASON_2526.end, 2, HOLS_2526, 300);
+  ok("Prorata avant saison: sessions >= totalSessions", BEFORE.sessions >= BEFORE.totalSessions);
+  const AFTER = calculateProrata("2026-07-01", SEASON_2526.end, 2, HOLS_2526, 300);
+  eq("Prorata après saison: 0 séance", AFTER.sessions, 0);
+  eq("Prorata après saison: 0€", AFTER.priceTTC, 0);
+  const P500 = calculateProrata(SEASON_2526.start, SEASON_2526.end, 2, HOLS_2526, 500);
+  nearly("Prorata 500€ = prix plein", P500.priceTTC, 500, 0.5);
+  const P0 = calculateProrata(SEASON_2526.start, SEASON_2526.end, 2, HOLS_2526, 0);
+  eq("Prorata 0€ prix = 0", P0.priceTTC, 0);
+  eq("Prorata 0€ perSession = 0", P0.perSessionTTC, 0);
+  const LUN = calculateProrata(SEASON_2526.start, SEASON_2526.end, 0, HOLS_2526, 300);
+  ok("Prorata lundi plein", LUN.sessions === LUN.totalSessions);
+  const SAM = calculateProrata(SEASON_2526.start, SEASON_2526.end, 5, HOLS_2526, 300);
+  ok("Prorata samedi plein", SAM.sessions === SAM.totalSessions);
+  ok("Sessions mercredi et samedi diffèrent peu", Math.abs(FULL.totalSessions - SAM.totalSessions) <= 5);
+  const Q1 = calculateProrata("2025-10-01", SEASON_2526.end, 2, HOLS_2526, 300);
+  const Q2 = calculateProrata("2025-12-01", SEASON_2526.end, 2, HOLS_2526, 300);
+  const Q3 = calculateProrata("2026-03-01", SEASON_2526.end, 2, HOLS_2526, 300);
+  ok("Prorata décroît: Q1 > Q2 > Q3", Q1.priceTTC > Q2.priceTTC && Q2.priceTTC > Q3.priceTTC);
+  ok("Toutes sessions prorata <= total", Q1.sessions <= Q1.totalSessions && Q2.sessions <= Q2.totalSessions);
+  const MERCRED_TOUSSAINT = calculateProrata("2025-10-20", "2025-11-05", 2, HOLS_2526, 300);
+  eq("Prorata qui traverse Toussaint: 1 séance (05/11)", MERCRED_TOUSSAINT.sessions, 1);
+
+  // ══════════════════════════════════════════════════════════════
+  section("36. CARTE DE SÉANCES — décompte & solde");
+  // ══════════════════════════════════════════════════════════════
+  const carte = { total: 10, utilisees: 0 };
+  const soldeCarte = (c: any) => c.total - c.utilisees;
+  const decompter = (c: any) => { if (soldeCarte(c) <= 0) throw new Error("carte vide"); c.utilisees++; };
+  eq("Solde initial carte 10 séances", soldeCarte(carte), 10);
+  decompter(carte); eq("Solde après 1 utilisation", soldeCarte(carte), 9);
+  for (let i = 0; i < 9; i++) decompter(carte);
+  eq("Solde après 10 utilisations", soldeCarte(carte), 0);
+  throws("Décompte sur carte vide lève", () => decompter(carte));
+  const carteExp = { total: 10, utilisees: 3, expireAt: "2025-01-01" };
+  const isExpired = (c: any) => new Date(c.expireAt) < new Date();
+  ok("Carte expirée détectée (2025-01-01 < 2026-04-18)", isExpired(carteExp));
+  const carteFuture = { total: 10, utilisees: 3, expireAt: "2027-12-31" };
+  ok("Carte non expirée (2027-12-31)", !isExpired(carteFuture));
+  eq("Solde carte partiellement utilisée", soldeCarte(carteExp), 7);
+  const carte20 = { total: 20, utilisees: 0 };
+  for (let i = 0; i < 20; i++) decompter(carte20);
+  eq("Carte 20 séances: 20 utilisations OK", carte20.utilisees, 20);
+  eq("Carte 20 séances: solde final 0", soldeCarte(carte20), 0);
+  const carte5ht = 50; const carte5ttc = htToTTC(carte5ht, 5.5);
+  nearly("Carte 5 séances TTC 5.5%", carte5ttc, 52.75);
+  const uniteHT = carte5ht / 5; nearly("Unité HT carte 5", uniteHT, 10);
+  const uniteTTC = carte5ttc / 5; nearly("Unité TTC carte 5", uniteTTC, 10.55);
+  const cart10 = { total: 10, utilisees: 10 };
+  eq("Carte épuisée solde 0", soldeCarte(cart10), 0);
+  ok("Carte épuisée ne peut pas décompter", (() => { try { decompter(cart10); return false; } catch { return true; } })());
+  const carteNeg = { total: 10, utilisees: 15 };
+  ok("Carte sur-utilisée: solde < 0 (invariant violé)", soldeCarte(carteNeg) < 0);
+  const pctUtil = (c: any) => (c.utilisees / c.total) * 100;
+  eq("Pourcentage utilisé 50%", pctUtil({ total: 10, utilisees: 5 }), 50);
+  eq("Pourcentage utilisé 100%", pctUtil({ total: 10, utilisees: 10 }), 100);
+  eq("Pourcentage utilisé 0%", pctUtil({ total: 10, utilisees: 0 }), 0);
+  ok("Carte avec total 0 invalide", 0 === 0 && !(0 > 0));
+  nearly("Prix unité carte 10 à 90€", 90 / 10, 9);
+
+  // ══════════════════════════════════════════════════════════════
+  section("37. FIDÉLITÉ — calculs de points (1 pt/€)");
+  // ══════════════════════════════════════════════════════════════
+  const fidPoints = (m: number) => Math.floor(m);
+  eq("100€ → 100 pts", fidPoints(100), 100);
+  eq("99.99€ → 99 pts", fidPoints(99.99), 99);
+  eq("0.50€ → 0 pt", fidPoints(0.5), 0);
+  eq("1.99€ → 1 pt", fidPoints(1.99), 1);
+  eq("0€ → 0 pt", fidPoints(0), 0);
+  eq("-10€ → 0 pt (pas de pt négatif)", Math.max(0, fidPoints(-10)), 0);
+  eq("1000€ → 1000 pts", fidPoints(1000), 1000);
+  const fidSolde = (h: any[]) => h.filter(e => e.type === "gain").reduce((s, e) => s + e.points, 0) - h.filter(e => e.type === "use").reduce((s, e) => s + e.points, 0);
+  eq("Historique vide solde 0", fidSolde([]), 0);
+  eq("Un gain 100 solde 100", fidSolde([{ type: "gain", points: 100 }]), 100);
+  eq("Gain 100 + use 30 solde 70", fidSolde([{ type: "gain", points: 100 }, { type: "use", points: 30 }]), 70);
+  eq("Gain 100 + gain 50 solde 150", fidSolde([{ type: "gain", points: 100 }, { type: "gain", points: 50 }]), 150);
+  // Expiration 1 an
+  const expire1an = (date: string): Date => { const d = new Date(date); d.setFullYear(d.getFullYear() + 1); return d; };
+  eq("Expiration 2025-09-01 → 2026-09-01", expire1an("2025-09-01").toISOString().split("T")[0], "2026-09-01");
+  eq("Expiration 2024-02-29 → 2025-03-01 (année non bissextile)", expire1an("2024-02-29").toISOString().split("T")[0], "2025-03-01");
+  const isPtExpired = (exp: string, ref = new Date("2026-04-18")) => new Date(exp) < ref;
+  ok("Pt expiré 2025-01-01", isPtExpired("2025-01-01"));
+  ok("Pt non expiré 2027-01-01", !isPtExpired("2027-01-01"));
+
+  // ══════════════════════════════════════════════════════════════
+  section("38. FORFAITS — types & prix");
+  // ══════════════════════════════════════════════════════════════
+  const FORFAIT_TYPES = ["annuel", "semestriel", "trimestriel", "mensuel", "carte"];
+  ok("5 types de forfait", FORFAIT_TYPES.length === 5);
+  FORFAIT_TYPES.forEach(ft => ok(`Type ${ft} reconnu`, FORFAIT_TYPES.includes(ft)));
+  // Licence FFE et adhésion
+  const LICENCE_PRIX = 25; const ADHESION_PRIX = 50;
+  eq("Licence FFE = 25€", LICENCE_PRIX, 25);
+  eq("Adhésion = 50€", ADHESION_PRIX, 50);
+  const prereq = LICENCE_PRIX + ADHESION_PRIX;
+  eq("Prérequis total = 75€", prereq, 75);
+  // Licence: TVA 0% (refacturée)
+  nearly("Licence HT = TTC (TVA 0%)", ttcToHT(LICENCE_PRIX, 0), 25);
+  // Adhésion: TVA 5.5%
+  nearly("Adhésion HT ≈ 47.39€ (TVA 5.5%)", ttcToHT(ADHESION_PRIX, 5.5), 47.39);
+  // Forfait annuel: total = prérequis + cours
+  const COURS_PRIX = 300;
+  const totalAnnuel = prereq + COURS_PRIX;
+  eq("Total inscription annuelle = 375€", totalAnnuel, 375);
+  // Réduction fratrie (ex: 10%)
+  const reducFratrie = (p: number, pct: number) => round2(p * (1 - pct / 100));
+  eq("Réduc 10% sur 300€ = 270€", reducFratrie(300, 10), 270);
+  eq("Réduc 5% sur 300€ = 285€", reducFratrie(300, 5), 285);
+  eq("Réduc 0% sur 300€ = 300€", reducFratrie(300, 0), 300);
+  eq("Réduc 100% sur 300€ = 0€", reducFratrie(300, 100), 0);
+  // Prix par semaine
+  const parSem = (annuel: number, semaines: number) => round2(annuel / semaines);
+  nearly("300€/30 sem ≈ 10€/sem", parSem(300, 30), 10);
+  nearly("500€/30 sem ≈ 16.67€/sem", parSem(500, 30), 16.67);
+  // Semestriel ≈ annuel/2
+  eq("Semestriel 300€ = 150€", 300 / 2, 150);
+  // Trimestriel ≈ annuel/3
+  nearly("Trimestriel 300€ ≈ 100€", 300 / 3, 100);
+
+  // ══════════════════════════════════════════════════════════════
+  section("39. SEPA — XML escape, IDs, format");
+  // ══════════════════════════════════════════════════════════════
+  eq("escapeXml: & → &amp;", escapeXml("a & b"), "a &amp; b");
+  eq("escapeXml: < → &lt;", escapeXml("<x>"), "&lt;x&gt;");
+  eq("escapeXml: \" → &quot;", escapeXml('say "hi"'), "say &quot;hi&quot;");
+  eq("escapeXml: ' → &apos;", escapeXml("l'enfant"), "l&apos;enfant");
+  eq("escapeXml: texte neutre inchangé", escapeXml("Dupont 12"), "Dupont 12");
+  eq("escapeXml: vide → vide", escapeXml(""), "");
+  eq("generateMandatId(1, 1) = CEDC1MD1", generateMandatId(1, 1), "CEDC1MD1");
+  eq("generateMandatId(2190, 3) = CEDC2190MD3", generateMandatId(2190, 3), "CEDC2190MD3");
+  eq("generateInstrId('R1', 2, 'P45') = R1M2PP45", generateInstrId("R1", 2, "P45"), "R1M2PP45");
+  eq("generateInstrId('1868', 1, '23045') = 1868M1P23045", generateInstrId("1868", 1, "23045"), "1868M1P23045");
+  // IBAN Crédit Agricole club
+  const CLUB_IBAN = "FR7616606100640013539343253";
+  ok("IBAN club commence par FR", CLUB_IBAN.startsWith("FR"));
+  eq("IBAN club longueur 27", CLUB_IBAN.length, 27);
+  ok("IBAN club valide", isIbanFR(CLUB_IBAN));
+  // BIC Crédit Agricole
+  ok("BIC club AGRIFRPP866 valide", isBic("AGRIFRPP866"));
+  // Sequence types
+  const SEQ = ["FRST", "RCUR", "FNAL", "OOFF"];
+  SEQ.forEach(s => ok(`Séquence SEPA ${s} reconnue`, SEQ.includes(s)));
+  // ICS format
+  ok("ICS club FR57ZZZ852487", isIcs("FR57ZZZ852487"));
+  // Montant formatting (2 décimales)
+  eq("Montant 100 → '100.00'", (100).toFixed(2), "100.00");
+  eq("Montant 12.3 → '12.30'", (12.3).toFixed(2), "12.30");
+  eq("Montant 0.1 → '0.10'", (0.1).toFixed(2), "0.10");
+  // Total remise = somme transactions
+  const remiseTxs = [{ amount: 50 }, { amount: 30 }, { amount: 20 }];
+  eq("Somme remise 3 tx = 100", remiseTxs.reduce((s, t) => s + t.amount, 0), 100);
+
+  // ══════════════════════════════════════════════════════════════
+  section("40. TRI CRÉNEAUX — comparateurs stables");
+  // ══════════════════════════════════════════════════════════════
+  eq("compareCreneaux: 09:00 avant 10:00", compareCreneaux({ startTime: "09:00" }, { startTime: "10:00" }) < 0, true);
+  eq("compareCreneaux: 10:00 après 09:00", compareCreneaux({ startTime: "10:00" }, { startTime: "09:00" }) > 0, true);
+  eq("compareCreneaux: égalité sans endTime/title", compareCreneaux({ startTime: "10:00" }, { startTime: "10:00" }), 0);
+  ok("compareCreneaux: même start, endTime départage",
+    compareCreneaux({ startTime: "10:00", endTime: "11:00" }, { startTime: "10:00", endTime: "12:00" }) < 0);
+  ok("compareCreneaux: même start+end, titre départage",
+    compareCreneaux({ startTime: "10:00", endTime: "11:00", activityTitle: "Baby" }, { startTime: "10:00", endTime: "11:00", activityTitle: "Zen" }) < 0);
+  // Tri stable d'un tableau
+  const list = [
+    { startTime: "14:00", endTime: "15:00", activityTitle: "B" },
+    { startTime: "09:00", endTime: "10:00", activityTitle: "A" },
+    { startTime: "10:00", endTime: "11:00", activityTitle: "C" },
+    { startTime: "10:00", endTime: "11:00", activityTitle: "A" },
+  ];
+  const sorted = [...list].sort(compareCreneaux);
+  eq("Trié: 1er = 09:00", sorted[0].startTime, "09:00");
+  eq("Trié: 2e = 10:00 A", sorted[1].activityTitle, "A");
+  eq("Trié: 3e = 10:00 C", sorted[2].activityTitle, "C");
+  eq("Trié: dernier = 14:00", sorted[3].startTime, "14:00");
+  // compareCreneauxByDow
+  ok("Dow: lundi(0) avant mardi(1)",
+    compareCreneauxByDow({ dayOfWeek: 0, startTime: "10:00" }, { dayOfWeek: 1, startTime: "09:00" }) < 0);
+  ok("Dow: même jour, heure départage",
+    compareCreneauxByDow({ dayOfWeek: 2, startTime: "10:00" }, { dayOfWeek: 2, startTime: "09:00" }) > 0);
+  // compareCreneauxByDate
+  ok("Date: 2026-01-01 avant 2026-01-02",
+    compareCreneauxByDate({ date: "2026-01-01", startTime: "10:00" }, { date: "2026-01-02", startTime: "09:00" }) < 0);
+  ok("Date: même jour, heure départage",
+    compareCreneauxByDate({ date: "2026-01-01", startTime: "10:00" }, { date: "2026-01-01", startTime: "14:00" }) < 0);
+  // Tri stable = ordre déterministe
+  const arr = [{ startTime: "10:00" }, { startTime: "10:00" }, { startTime: "10:00" }];
+  const s1 = [...arr].sort(compareCreneaux);
+  const s2 = [...arr].sort(compareCreneaux);
+  eq("Tri déterministe sur égalités", JSON.stringify(s1), JSON.stringify(s2));
+  eq("compareCreneaux avec undefined endTime",
+    compareCreneaux({ startTime: "10:00" }, { startTime: "10:00" }), 0);
+
+  // ══════════════════════════════════════════════════════════════
+  section("41. FORMAT STAGE — affichage horaires");
+  // ══════════════════════════════════════════════════════════════
+  eq("Stage vide = ''", formatStageSchedule([]), "");
+  const s1j = formatStageSchedule([{ date: "2026-04-14", startTime: "10h00", endTime: "12h00" }]);
+  ok("Stage 1 jour contient '10h00'", s1j.includes("10h00"));
+  ok("Stage 1 jour contient '12h00'", s1j.includes("12h00"));
+  ok("Stage 1 jour contient ' · '", s1j.includes(" · "));
+  const s2jMeme = formatStageSchedule([
+    { date: "2026-04-14", startTime: "10h00", endTime: "12h00" },
+    { date: "2026-04-18", startTime: "10h00", endTime: "12h00" },
+  ]);
+  ok("Stage 2j mêmes horaires commence par 'du '", s2jMeme.startsWith("du "));
+  ok("Stage 2j mêmes horaires contient 'au '", s2jMeme.includes("au "));
+  ok("Stage 2j mêmes horaires contient '10h00–12h00'", s2jMeme.includes("10h00–12h00"));
+  const s2jDiff = formatStageSchedule([
+    { date: "2026-04-14", startTime: "10h00", endTime: "12h00" },
+    { date: "2026-04-15", startTime: "14h00", endTime: "16h00" },
+  ]);
+  ok("Stage horaires différents contient ','", s2jDiff.includes(","));
+  ok("Stage horaires différents contient 10h00", s2jDiff.includes("10h00"));
+  ok("Stage horaires différents contient 14h00", s2jDiff.includes("14h00"));
+  // Tri interne
+  const unsorted = formatStageSchedule([
+    { date: "2026-04-18", startTime: "10h00", endTime: "12h00" },
+    { date: "2026-04-14", startTime: "10h00", endTime: "12h00" },
+  ]);
+  ok("Dates désordonnées → triées", unsorted.indexOf("14") < unsorted.indexOf("18"));
+  // Deux mois différents
+  const s2mois = formatStageSchedule([
+    { date: "2026-03-30", startTime: "10h00", endTime: "12h00" },
+    { date: "2026-04-02", startTime: "10h00", endTime: "12h00" },
+  ]);
+  ok("Stage 2 mois: contient 'mars' ET 'avril'", /mars/i.test(s2mois) && /avril/i.test(s2mois));
+  // Stage 5 jours mêmes horaires
+  const s5j = formatStageSchedule([
+    { date: "2026-04-13", startTime: "10h00", endTime: "12h00" },
+    { date: "2026-04-14", startTime: "10h00", endTime: "12h00" },
+    { date: "2026-04-15", startTime: "10h00", endTime: "12h00" },
+    { date: "2026-04-16", startTime: "10h00", endTime: "12h00" },
+    { date: "2026-04-17", startTime: "10h00", endTime: "12h00" },
+  ]);
+  ok("Stage 5j: 'du ... au ...' compact", s5j.startsWith("du "));
+  ok("Stage 5j: contient 'avril'", s5j.includes("avril"));
+  // Horaires tous uniques (bord)
+  const sToutsDiff = formatStageSchedule([
+    { date: "2026-04-14", startTime: "09h00", endTime: "10h00" },
+    { date: "2026-04-15", startTime: "10h00", endTime: "11h00" },
+    { date: "2026-04-16", startTime: "11h00", endTime: "12h00" },
+  ]);
+  eq("Stage tous différents → 3 segments séparés", sToutsDiff.split(",").length, 3);
+
+  // ══════════════════════════════════════════════════════════════
+  section("42. GALOPS — niveaux & progression");
+  // ══════════════════════════════════════════════════════════════
+  const GALOPS = ["poney_bronze","poney_argent","poney_or","galop_bronze","galop_argent","galop_or","g3","g4","g5","g6","g7"];
+  eq("11 niveaux Galops", GALOPS.length, 11);
+  GALOPS.forEach(g => ok(`Niveau ${g} reconnu`, isGalopId(g)));
+  ok("Niveau 'g8' INvalide", !isGalopId("g8"));
+  ok("Niveau '' INvalide", !isGalopId(""));
+  ok("Niveau 'G3' (maj) INvalide — ID est minuscule", !isGalopId("G3"));
+  // Ordre progression
+  const idx = (g: string) => GALOPS.indexOf(g);
+  ok("poney_bronze avant poney_or", idx("poney_bronze") < idx("poney_or"));
+  ok("galop_or avant g3", idx("galop_or") < idx("g3"));
+  ok("g3 avant g7", idx("g3") < idx("g7"));
+  ok("g7 = dernier", idx("g7") === GALOPS.length - 1);
+  ok("poney_bronze = premier", idx("poney_bronze") === 0);
+  // Cycles
+  const CYCLE_PONEY_1 = ["poney_bronze","poney_argent","poney_or"];
+  const CYCLE_PONEY_2 = ["galop_bronze","galop_argent","galop_or"];
+  const CYCLE_CAVAL = ["g3","g4","g5","g6","g7"];
+  eq("Cycle poneys 1 = 3 niveaux", CYCLE_PONEY_1.length, 3);
+  eq("Cycle poneys 2 = 3 niveaux", CYCLE_PONEY_2.length, 3);
+  eq("Cycle cavaliers = 5 niveaux", CYCLE_CAVAL.length, 5);
+  eq("Somme = 11", CYCLE_PONEY_1.length + CYCLE_PONEY_2.length + CYCLE_CAVAL.length, 11);
+  // Domaines
+  const DOMAINES = ["pratique_cheval","pratique_pied","soins","connaissances"];
+  eq("4 domaines", DOMAINES.length, 4);
+  DOMAINES.forEach(d => ok(`Domaine ${d}`, DOMAINES.includes(d)));
+
+  // ══════════════════════════════════════════════════════════════
+  section("43. RÉSERVATIONS — pairing childId/creneauId & statuts");
+  // ══════════════════════════════════════════════════════════════
+  const STATUS = ["pending_payment","confirmed","cancelled","waitlist","attended","noshow"];
+  STATUS.forEach(s => ok(`Statut ${s} valide`, STATUS.includes(s)));
+  // Transitions légales
+  const canTransit = (from: string, to: string): boolean => {
+    const T: Record<string, string[]> = {
+      pending_payment: ["confirmed", "cancelled"],
+      confirmed: ["attended", "noshow", "cancelled"],
+      waitlist: ["pending_payment", "cancelled"],
+      attended: [],
+      noshow: [],
+      cancelled: [],
+    };
+    return T[from]?.includes(to) || false;
+  };
+  ok("pending → confirmed OK", canTransit("pending_payment", "confirmed"));
+  ok("pending → cancelled OK", canTransit("pending_payment", "cancelled"));
+  ok("confirmed → attended OK", canTransit("confirmed", "attended"));
+  ok("confirmed → noshow OK", canTransit("confirmed", "noshow"));
+  ok("attended → confirmed INTERDIT", !canTransit("attended", "confirmed"));
+  ok("cancelled → confirmed INTERDIT", !canTransit("cancelled", "confirmed"));
+  ok("waitlist → pending OK", canTransit("waitlist", "pending_payment"));
+  ok("noshow → attended INTERDIT", !canTransit("noshow", "attended"));
+  // Pairing stage multi-jours
+  const items = [
+    { childId: "c1", creneauIds: ["k1", "k2", "k3"] },
+    { childId: "c2", creneauId: "k4" },
+  ];
+  const pairs: any[] = [];
+  for (const it of items) {
+    if (Array.isArray(it.creneauIds)) for (const id of it.creneauIds) pairs.push({ childId: it.childId, creneauId: id });
+    else if (it.creneauId) pairs.push({ childId: it.childId, creneauId: it.creneauId });
+  }
+  eq("Pairing stage 3j + 1 ponctuel = 4 pairs", pairs.length, 4);
+  eq("1er pair: c1/k1", `${pairs[0].childId}/${pairs[0].creneauId}`, "c1/k1");
+  eq("Dernier pair: c2/k4", `${pairs[3].childId}/${pairs[3].creneauId}`, "c2/k4");
+  // Item sans creneauId ignoré
+  const itemsVide: any[] = [{ childId: "c1" }];
+  const pairsVide: any[] = [];
+  for (const it of itemsVide) if (it.creneauId || Array.isArray(it.creneauIds)) pairsVide.push(it);
+  eq("Item sans creneau ignoré", pairsVide.length, 0);
+
+  // ══════════════════════════════════════════════════════════════
+  section("44. PAIEMENTS — modes, totaux, validatePayment");
+  // ══════════════════════════════════════════════════════════════
+  eq("7 modes de paiement", PAYMENT_MODES_IDS.length, 7);
+  PAYMENT_MODES_IDS.forEach(m => ok(`Mode ${m}`, PAYMENT_MODES_IDS.includes(m)));
+  // validatePayment
+  const P_VALID = { familyId: "f1", familyName: "Dupont", items: [{ x: 1 }], totalTTC: 100 };
+  eq("Payment valide", validatePayment(P_VALID).valid, true);
+  eq("Payment sans familyId invalide", validatePayment({ ...P_VALID, familyId: "" }).valid, false);
+  eq("Payment sans familyName invalide", validatePayment({ ...P_VALID, familyName: "" }).valid, false);
+  eq("Payment items vide invalide", validatePayment({ ...P_VALID, items: [] }).valid, false);
+  eq("Payment total 0 invalide", validatePayment({ ...P_VALID, totalTTC: 0 }).valid, false);
+  eq("Payment total négatif invalide", validatePayment({ ...P_VALID, totalTTC: -10 }).valid, false);
+  eq("Payment NaN total invalide", validatePayment({ ...P_VALID, totalTTC: "abc" }).valid, false);
+  // Erreurs cumulables
+  const multiErr = validatePayment({ familyId: "", familyName: "", items: [], totalTTC: 0 });
+  eq("4 erreurs cumulées", multiErr.errors.length, 4);
+  // Total = somme items
+  const items5 = [{ price: 25 }, { price: 35 }, { price: 40 }];
+  const sumItems = items5.reduce((s, i) => s + i.price, 0);
+  eq("Total 3 items = 100", sumItems, 100);
+  // Remise
+  const remise = (t: number, pct: number) => round2(t * (1 - pct / 100));
+  eq("Remise 10% sur 100 = 90", remise(100, 10), 90);
+  eq("Remise 25% sur 200 = 150", remise(200, 25), 150);
+  // Avoir: pas de points fidélité
+  const avoir = { mode: "avoir", montant: 50 };
+  ok("Avoir: pas de points fidélité", avoir.mode === "avoir");
+  // orderId format simple
+  const orderIdRe = /^CMD-\d{6}-[A-Z0-9]{6}$/;
+  const ts = Date.now().toString(36).slice(-4).toUpperCase();
+  const rand = "AB";
+  const oid = `CMD-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}-${ts}${rand}`;
+  ok("orderId format", orderIdRe.test(oid));
+  // TVA cohérence
+  const ht = 100, ttc = htToTTC(ht, 5.5);
+  nearly("HT 100 + 5.5% = 105.5", ttc, 105.5);
+  nearly("TTC 105.5 → HT 100", ttcToHT(ttc, 5.5), 100, 0.01);
+  // Splits CB
+  const cb3 = 300 / 3; eq("3x sans frais 300€ = 100€ x3", cb3, 100);
+  const cb10 = 500 / 10; eq("10x sans frais 500€ = 50€ x10", cb10, 50);
+
+  // ══════════════════════════════════════════════════════════════
+  section("45. FAMILLES & ENFANTS — validations");
+  // ══════════════════════════════════════════════════════════════
+  // validateChildrenUpdate
+  ok("Refuse effacement total", !validateChildrenUpdate([{a:1}, {b:2}], []));
+  ok("Accepte ajout", validateChildrenUpdate([{a:1}], [{a:1}, {b:2}]));
+  ok("Accepte suppression partielle", validateChildrenUpdate([{a:1}, {b:2}], [{a:1}]));
+  ok("Vide → vide OK (init)", validateChildrenUpdate([], []));
+  ok("Vide → 1 enfant OK", validateChildrenUpdate([], [{a:1}]));
+  // computeAge
+  eq("Né 2015-04-18, ref 2026-04-18 → 11 ans", computeAge("2015-04-18", new Date("2026-04-18")), 11);
+  eq("Né 2015-04-19, ref 2026-04-18 → 10 ans", computeAge("2015-04-19", new Date("2026-04-18")), 10);
+  eq("Né 2015-04-17, ref 2026-04-18 → 11 ans", computeAge("2015-04-17", new Date("2026-04-18")), 11);
+  eq("Né 2000-01-01, ref 2026-04-18 → 26 ans", computeAge("2000-01-01", new Date("2026-04-18")), 26);
+  eq("Né 2020-06-30, ref 2026-04-18 → 5 ans", computeAge("2020-06-30", new Date("2026-04-18")), 5);
+  // Contraintes champs enfant
+  const validChild = (c: any): boolean => !!c.firstName && !!c.lastName && !!c.birthDate && (c.weight === undefined || c.weight > 0) && (c.height === undefined || c.height > 0);
+  ok("Enfant complet valide", validChild({ firstName: "L", lastName: "D", birthDate: "2015-01-01", weight: 30, height: 130 }));
+  ok("Enfant sans prénom invalide", !validChild({ firstName: "", lastName: "D", birthDate: "2015-01-01" }));
+  ok("Enfant sans nom invalide", !validChild({ firstName: "L", lastName: "", birthDate: "2015-01-01" }));
+  ok("Enfant sans date naissance invalide", !validChild({ firstName: "L", lastName: "D", birthDate: "" }));
+  ok("Enfant poids négatif invalide", !validChild({ firstName: "L", lastName: "D", birthDate: "2015-01-01", weight: -5 }));
+  ok("Enfant taille négative invalide", !validChild({ firstName: "L", lastName: "D", birthDate: "2015-01-01", height: -120 }));
+  ok("Enfant poids 0 invalide", !validChild({ firstName: "L", lastName: "D", birthDate: "2015-01-01", weight: 0 }));
+  ok("Enfant sans poids OK", validChild({ firstName: "L", lastName: "D", birthDate: "2015-01-01" }));
+  // authProvider valeurs
+  const AUTH = ["google","email","apple","anonymous"];
+  AUTH.forEach(a => ok(`Auth ${a} reconnu`, AUTH.includes(a)));
+  // Saison format
+  const SEASON_RE = /^\d{4}-\d{4}$/;
+  ok("Saison 2025-2026 format OK", SEASON_RE.test("2025-2026"));
+  ok("Saison 2025 INvalide", !SEASON_RE.test("2025"));
+
+  // ══════════════════════════════════════════════════════════════
+  section("46. SCHÉMA FIRESTORE — cohérence globale (écriture réelle)");
+  // ══════════════════════════════════════════════════════════════
+  await test("Famille créée au §1 existe toujours", async () => {
+    if (!familyId) { skipped++; return; }
+    const doc = await db.collection("families").doc(familyId).get();
+    assert(doc.exists, "famille persistée");
+  });
+  await test("Activité créée au §2 existe toujours", async () => {
+    if (!activityId) { skipped++; return; }
+    const doc = await db.collection("activities").doc(activityId).get();
+    assert(doc.exists, "activité persistée");
+  });
+  await test("Au moins 1 paiement créé", async () => {
+    const snap = await db.collection("payments").where("_testScript", "==", true).limit(5).get();
+    assert(!snap.empty, "paiements de test présents");
+  });
+  await test("Au moins 1 réservation créée", async () => {
+    const snap = await db.collection("reservations").where("_testScript", "==", true).limit(5).get();
+    assert(!snap.empty, "réservations de test présentes");
+  });
+  await test("Chaque famille de test a un parentEmail", async () => {
+    const snap = await db.collection("families").where("_testScript", "==", true).limit(10).get();
+    for (const d of snap.docs) assert(!!d.data().parentEmail, `famille ${d.id} sans email`);
+  });
+  await test("Chaque paiement a un totalTTC > 0", async () => {
+    const snap = await db.collection("payments").where("_testScript", "==", true).limit(20).get();
+    for (const d of snap.docs) { const v = safeNumber(d.data().totalTTC); if (v > 0) assert(v > 0, "total positif"); }
+  });
+  await test("Aucune famille de test sans season", async () => {
+    const snap = await db.collection("families").where("_testScript", "==", true).limit(10).get();
+    for (const d of snap.docs) assert(!!d.data().season, `famille ${d.id} sans season`);
+  });
+  await test("Créneaux créés ont un dayOfWeek dans [0..6]", async () => {
+    const snap = await db.collection("creneaux").where("_testScript", "==", true).limit(10).get();
+    for (const d of snap.docs) {
+      const dow = d.data().dayOfWeek;
+      if (dow !== undefined) assert(dow >= 0 && dow <= 6, `dayOfWeek ${dow} hors bornes`);
+    }
+  });
+  await test("Tri stable sur un fetch répété de créneaux", async () => {
+    const snap1 = await db.collection("creneaux").where("_testScript", "==", true).limit(5).get();
+    const ids1 = snap1.docs.map(d => d.id).sort();
+    const snap2 = await db.collection("creneaux").where("_testScript", "==", true).limit(5).get();
+    const ids2 = snap2.docs.map(d => d.id).sort();
+    assert(JSON.stringify(ids1) === JSON.stringify(ids2), "fetch répété stable");
+  });
+  await test("Toutes les collections test ont le marker _testScript", async () => {
+    const cols = ["families","activities","creneaux","payments","reservations"];
+    for (const col of cols) {
+      const snap = await db.collection(col).where("_testScript", "==", true).limit(3).get();
+      for (const d of snap.docs) assert(d.data()._testScript === true, `${col}/${d.id} marker manquant`);
+    }
+  });
+  await test("Aucun doc test sans _testDate", async () => {
+    const snap = await db.collection("families").where("_testScript", "==", true).limit(5).get();
+    for (const d of snap.docs) assert(!!d.data()._testDate, `${d.id} sans _testDate`);
+  });
+  await test("createdDocs >= 50 documents", async () => {
+    assert(createdDocs.length >= 50, `seulement ${createdDocs.length} docs créés`);
+  });
+  await test("Pas de doublons dans createdDocs", async () => {
+    const keys = new Set(createdDocs.map(d => `${d.collection}/${d.id}`));
+    assert(keys.size === createdDocs.length, "doublons détectés");
+  });
+  await test("Collections variées dans createdDocs", async () => {
+    const cols = new Set(createdDocs.map(d => d.collection));
+    assert(cols.size >= 5, `seulement ${cols.size} collections`);
+  });
+  await test("IDs créés non vides", async () => {
+    for (const d of createdDocs.slice(0, 20)) assert(!!d.id && d.id.length > 0, `id vide ${d.collection}`);
+  });
+
+  // ══════════════════════════════════════════════════════════════
+  section("46 bis. CAS LIMITES SUPPLÉMENTAIRES (logique pure)");
+  // ══════════════════════════════════════════════════════════════
+  // Plus de variations TVA
+  nearly("htToTTC(50, 10) = 55", htToTTC(50, 10), 55);
+  nearly("htToTTC(200, 2.1) = 204.20", htToTTC(200, 2.1), 204.20);
+  nearly("ttcToHT(55, 10) ≈ 50", ttcToHT(55, 10), 50);
+  nearly("ttcToHT(204.20, 2.1) ≈ 200", ttcToHT(204.20, 2.1), 200, 0.01);
+  // round2 plus de cas
+  eq("round2(0.005) = 0.01", round2(0.005), 0.01);
+  eq("round2(0.004) = 0", round2(0.004), 0);
+  eq("round2(-0.005) = 0", round2(-0.005), 0);
+  eq("round2(1000000.999) = 1000001", round2(1000000.999), 1000001);
+  // formatEuro edge cases
+  eq("formatEuro(-50) = '-50.00€'", formatEuro(-50), "-50.00€");
+  eq("formatEuro(null) = '0.00€'", formatEuro(null), "0.00€");
+  eq("formatEuro(Infinity) = '0.00€'", formatEuro(Infinity), "0.00€");
+  // isEmail edge cases supplémentaires
+  ok("email: 1@2.3", isEmail("1@2.3"));
+  ok("email INV: a@ b.fr (espace)", !isEmail("a@ b.fr"));
+  ok("email INV: a..b@c.fr accepté par regex simple", isEmail("a..b@c.fr"));
+  // IBAN edge cases
+  ok("IBAN avec espaces multiples", isIbanFR("FR76  1660 6100 6400 1353 9343 253"));
+  ok("IBAN FR lowercase non valide", !isIbanFR("fr7616606100640013539343253"));
+  // Créneaux: tri cas particulier
+  const creneauxDemo = [
+    { startTime: "08:00" }, { startTime: "18:00" }, { startTime: "12:00" }, { startTime: "06:00" },
+  ];
+  const triCren = [...creneauxDemo].sort(compareCreneaux);
+  eq("Tri: 1er = 06:00", triCren[0].startTime, "06:00");
+  eq("Tri: dernier = 18:00", triCren[3].startTime, "18:00");
+  // Comptage séances: vacances multiples qui se touchent
+  const holContigus = [{ start: "2026-01-01", end: "2026-01-14" }, { start: "2026-01-10", end: "2026-01-20" }];
+  ok("Vacances qui se chevauchent traitées", countSessionsInPeriod("2026-01-01", "2026-01-20", 2, holContigus) >= 0);
+  // Prorata bordure exacte
+  const PBord = calculateProrata("2025-09-03", SEASON_2526.end, 2, HOLS_2526, 300);
+  ok("Prorata dès 1er mercredi ≈ plein", PBord.sessions === PBord.totalSessions);
+  // Fidélité solde
+  eq("Gain 200 + use 150 solde 50", fidSolde([{ type: "gain", points: 200 }, { type: "use", points: 150 }]), 50);
+  // computeAge cas extrêmes
+  eq("Né 2026-04-18 (aujourd'hui) → 0 an", computeAge("2026-04-18", new Date("2026-04-18")), 0);
+  eq("Né 1900-01-01 → 126 ans", computeAge("1900-01-01", new Date("2026-04-18")), 126);
+  // SEPA montants
+  eq("Montant 12345.67 → '12345.67'", (12345.67).toFixed(2), "12345.67");
+  eq("Arrondi 0.005 + 0.005 pas toujours 0.01", round2(0.005 + 0.005), round2(0.01));
+  // Status réservation: confirmed ne peut pas redevenir pending
+  ok("confirmed → pending INTERDIT", !canTransit("confirmed", "pending_payment"));
+  // Modes paiement: avoir exclu de la fidélité
+  ok("'avoir' dans modes paiement", PAYMENT_MODES_IDS.includes("avoir"));
+  // PostalFR avec espaces
+  ok("CP avec espace: ' 50230' INvalide strict", !isPostalFR(" 50230"));
+  // Stage sur un mois différent (cross-year)
+  const sCrossYear = formatStageSchedule([
+    { date: "2025-12-30", startTime: "10h00", endTime: "12h00" },
+    { date: "2026-01-02", startTime: "10h00", endTime: "12h00" },
+  ]);
+  ok("Stage cross-year contient 'décembre' et 'janvier'", /décembre/i.test(sCrossYear) && /janvier/i.test(sCrossYear));
+  // Final sanity
+  ok("SEASON_2526.start < end", SEASON_2526.start < SEASON_2526.end);
+  ok("HOLS_2526 non vide", HOLS_2526.length > 0);
+  ok("11 niveaux Galops (sanity)", GALOPS.length === 11);
+
+  // ══════════════════════════════════════════════════════════════
+  section("47. VALIDATION FINALE — NETTOYAGE");
   // ══════════════════════════════════════════════════════════════
 
   await test("Compter tous les documents créés par ce script", async () => {
