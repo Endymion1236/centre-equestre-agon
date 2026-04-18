@@ -20,7 +20,7 @@ import {
   type VacationPeriod,
   type DiscountSettings,
 } from "@/lib/discounts";
-import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Loader2, Trash2, Users, CalendarDays, Briefcase, Bell, Mail, Sparkles, Printer, Settings } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Loader2, Trash2, Users, CalendarDays, Briefcase, Bell, Mail, Sparkles, Printer, Settings, MoreHorizontal, Copy } from "lucide-react";
 import type { Activity, Family } from "@/types";
 import { Creneau, EnrolledChild, typeColors, dayNames, dayNamesFull, payModes, getWeekDates, fmtDate, fmtDateFR, fmtMonthFR, compareCreneaux } from "./types";
 import EnrollPanel from "./EnrollPanel";
@@ -67,6 +67,21 @@ export default function PlanningPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editApplyAll, setEditApplyAll] = useState(false);
   const [showDuplicate, setShowDuplicate] = useState(false); const [dupWeeks, setDupWeeks] = useState(1); const [duplicating, setDuplicating] = useState(false);
+  // ─── Menus déroulants barre d'actions (moderne) ───
+  const [menuAddOpen, setMenuAddOpen] = useState(false);
+  const [menuMoreOpen, setMenuMoreOpen] = useState(false);
+  useEffect(() => {
+    if (!menuAddOpen && !menuMoreOpen) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-menu='add']") && !target.closest("[data-menu='more']")) {
+        setMenuAddOpen(false);
+        setMenuMoreOpen(false);
+      }
+    };
+    document.addEventListener("click", handler);
+    return () => document.removeEventListener("click", handler);
+  }, [menuAddOpen, menuMoreOpen]);
   const [duplicateCreneau, setDuplicateCreneau] = useState<(Creneau & { id: string })|null>(null);
 
   // ─── RDV Pro ───
@@ -1032,21 +1047,121 @@ export default function PlanningPage() {
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <h1 className="font-display text-2xl font-bold text-blue-800">Planning</h1>
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex bg-sand rounded-lg p-0.5">{(["month","week","timeline","day"] as const).map(v=><button key={v} onClick={()=>setViewMode(v)} className={`px-3 sm:px-4 py-2 rounded-md font-body text-xs font-semibold cursor-pointer border-none ${viewMode===v?"bg-white text-blue-500 shadow-sm":"text-slate-600 bg-transparent"}`}>{v==="week"?"Semaine":v==="day"?"Jour":v==="timeline"?"Timeline":"Mois"}</button>)}</div>
-          <button onClick={()=>{setShowSimple(true);setShowGenerator(false);setSelectedDate(viewMode==="day"?fmtDate(currentDay):undefined);}} className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-white bg-blue-500 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-400"><Plus size={14}/>Créneau</button>
-          <button onClick={()=>setShowRdvForm(true)} className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-orange-700 bg-orange-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-orange-100"><Briefcase size={14}/>RDV Pro</button>
-          <button onClick={()=>{setShowGenerator(true);setShowSimple(false);}} className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-blue-800 bg-gold-400 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-gold-300"><Calendar size={14}/>Périodes</button>
-          {(viewMode==="week"||viewMode==="timeline")&&creneaux.length>0&&<button onClick={()=>setShowDuplicate(!showDuplicate)} className="font-body text-xs sm:text-sm font-semibold text-blue-500 bg-blue-50 px-3 py-2 rounded-lg border-none cursor-pointer">Dupliquer</button>}
-          <button onClick={exportPDF} disabled={(viewMode==="day"?dayCreneaux:creneaux).length===0}
-            className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-slate-600 bg-gray-100 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-gray-200 disabled:opacity-40">
-            <Printer size={14}/> PDF
-          </button>
-          <button onClick={analyserPlanning} disabled={iaLoading || (viewMode==="day"?dayCreneaux:creneaux).length===0}
-            className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-white px-3 py-2 rounded-lg border-none cursor-pointer disabled:opacity-40"
-            style={{ background: "linear-gradient(135deg,#7c3aed,#2050A0)" }}>
-            {iaLoading ? <Loader2 size={14} className="animate-spin"/> : <Sparkles size={14}/>}
-            {iaLoading ? "Analyse..." : "IA"}
-          </button>
+
+          {/* ─── Segmented control : Mois / Semaine / Timeline / Jour ─── */}
+          <div className="inline-flex bg-blue-500/[0.06] rounded-full p-[3px] gap-0.5">
+            {(["month","week","timeline","day"] as const).map(v => (
+              <button key={v} onClick={() => setViewMode(v)}
+                className={`px-3 sm:px-4 py-1.5 rounded-full font-body text-xs font-semibold cursor-pointer border-none transition-all whitespace-nowrap ${
+                  viewMode === v
+                    ? "bg-white text-blue-500 shadow-[0_2px_8px_rgba(32,80,160,0.12)]"
+                    : "text-slate-600 bg-transparent hover:text-blue-500"
+                }`}>
+                {v === "week" ? "Semaine" : v === "day" ? "Jour" : v === "timeline" ? "Timeline" : "Mois"}
+              </button>
+            ))}
+          </div>
+
+          {/* ─── Bouton + Ajouter (principal) avec menu ─── */}
+          <div className="relative" data-menu="add">
+            <button
+              onClick={(e) => { e.stopPropagation(); setMenuAddOpen(o => !o); setMenuMoreOpen(false); }}
+              className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-white px-4 py-2 rounded-full border-none cursor-pointer transition-all hover:-translate-y-px active:scale-[0.96]"
+              style={{
+                background: "linear-gradient(135deg, #2050A0 0%, #1a4590 100%)",
+                boxShadow: "0 4px 12px rgba(32, 80, 160, 0.28)",
+              }}
+              aria-label="Ajouter"
+              aria-expanded={menuAddOpen}>
+              <Plus size={16} strokeWidth={2.5} />
+              <span className="hidden sm:inline">Ajouter</span>
+            </button>
+            {menuAddOpen && (
+              <div className="absolute top-[calc(100%+8px)] right-0 bg-white rounded-2xl shadow-[0_12px_40px_rgba(12,26,46,0.18)] p-2 min-w-[240px] z-50 border border-black/[0.04]">
+                <div className="font-body text-[10px] font-bold text-slate-400 uppercase tracking-[0.8px] px-3.5 pt-2 pb-1">Créer</div>
+                <button
+                  onClick={() => { setMenuAddOpen(false); setShowSimple(true); setShowGenerator(false); setSelectedDate(viewMode === "day" ? fmtDate(currentDay) : undefined); }}
+                  className="w-full text-left px-3.5 py-2.5 rounded-xl bg-transparent border-none cursor-pointer flex items-center gap-3 hover:bg-sand transition-colors">
+                  <span className="w-8 h-8 rounded-xl bg-blue-50 text-blue-500 inline-flex items-center justify-center flex-shrink-0">
+                    <Calendar size={16} />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-body text-sm font-medium text-blue-800">Créneau unique</div>
+                    <div className="font-body text-[11px] text-slate-400">Un cours, une balade…</div>
+                  </div>
+                </button>
+                <button
+                  onClick={() => { setMenuAddOpen(false); setShowGenerator(true); setShowSimple(false); }}
+                  className="w-full text-left px-3.5 py-2.5 rounded-xl bg-transparent border-none cursor-pointer flex items-center gap-3 hover:bg-sand transition-colors">
+                  <span className="w-8 h-8 rounded-xl bg-gold-400/20 text-amber-700 inline-flex items-center justify-center flex-shrink-0">
+                    <CalendarDays size={16} />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-body text-sm font-medium text-blue-800">Générateur périodes</div>
+                    <div className="font-body text-[11px] text-slate-400">Toute une saison en 1 clic</div>
+                  </div>
+                </button>
+                <button
+                  onClick={() => { setMenuAddOpen(false); setShowRdvForm(true); }}
+                  className="w-full text-left px-3.5 py-2.5 rounded-xl bg-transparent border-none cursor-pointer flex items-center gap-3 hover:bg-sand transition-colors">
+                  <span className="w-8 h-8 rounded-xl bg-orange-50 text-orange-700 inline-flex items-center justify-center flex-shrink-0">
+                    <Briefcase size={16} />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-body text-sm font-medium text-blue-800">RDV Pro</div>
+                    <div className="font-body text-[11px] text-slate-400">Vétérinaire, maréchal…</div>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* ─── Dupliquer (visible en vue Semaine/Timeline uniquement) ─── */}
+          {(viewMode === "week" || viewMode === "timeline") && creneaux.length > 0 && (
+            <button
+              onClick={() => setShowDuplicate(!showDuplicate)}
+              className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-blue-500 bg-blue-500/[0.08] px-4 py-2 rounded-full border-none cursor-pointer transition-all hover:bg-blue-500/[0.14] active:scale-[0.96]">
+              <Copy size={14} />
+              Dupliquer
+            </button>
+          )}
+
+          {/* ─── Menu ⋯ (actions secondaires : PDF + IA) ─── */}
+          <div className="relative" data-menu="more">
+            <button
+              onClick={(e) => { e.stopPropagation(); setMenuMoreOpen(o => !o); setMenuAddOpen(false); }}
+              className="w-[38px] h-[38px] rounded-full border-none cursor-pointer flex items-center justify-center bg-gray-100 text-slate-600 transition-all hover:bg-gray-200 hover:text-blue-800 active:scale-[0.96]"
+              aria-label="Plus d'actions"
+              aria-expanded={menuMoreOpen}>
+              <MoreHorizontal size={18} />
+            </button>
+            {menuMoreOpen && (
+              <div className="absolute top-[calc(100%+8px)] right-0 bg-white rounded-2xl shadow-[0_12px_40px_rgba(12,26,46,0.18)] p-2 min-w-[200px] z-50 border border-black/[0.04]">
+                <button
+                  onClick={() => { setMenuMoreOpen(false); exportPDF(); }}
+                  disabled={(viewMode === "day" ? dayCreneaux : creneaux).length === 0}
+                  className="w-full text-left px-3.5 py-2.5 rounded-xl bg-transparent border-none cursor-pointer flex items-center gap-3 hover:bg-sand transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                  <span className="w-8 h-8 rounded-xl bg-gray-100 text-slate-600 inline-flex items-center justify-center flex-shrink-0">
+                    <Printer size={16} />
+                  </span>
+                  <span className="font-body text-sm font-medium text-blue-800">Export PDF</span>
+                </button>
+                <button
+                  onClick={() => { setMenuMoreOpen(false); analyserPlanning(); }}
+                  disabled={iaLoading || (viewMode === "day" ? dayCreneaux : creneaux).length === 0}
+                  className="w-full text-left px-3.5 py-2.5 rounded-xl bg-transparent border-none cursor-pointer flex items-center gap-3 hover:bg-sand transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                  <span className="w-8 h-8 rounded-xl inline-flex items-center justify-center flex-shrink-0"
+                    style={{ background: "linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%)", color: "#7c3aed" }}>
+                    {iaLoading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                  </span>
+                  <span className="font-body text-sm font-medium text-blue-800">
+                    {iaLoading ? "Analyse en cours..." : "Analyse IA"}
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
 
