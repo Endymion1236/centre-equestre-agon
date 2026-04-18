@@ -164,7 +164,7 @@ function AdminSidebar({ nbImpayes }: { nbImpayes: number }) {
           <ExternalLink size={15} />
           <span className="font-body text-[13px]">Retour au site</span>
         </Link>
-        <div className="px-3 pt-2 pb-1 font-body text-[11px] text-white/50 truncate" title={user?.email}>
+        <div className="px-3 pt-2 pb-1 font-body text-[11px] text-white/50 truncate" title={user?.email ?? undefined}>
           {user?.email}
         </div>
         <button
