@@ -138,24 +138,43 @@ export function getPeriodForDate(
  */
 export async function fetchFamilyStagesInPeriod(
   familyId: string,
-  period: VacationPeriod
+  period: VacationPeriod,
+  excludeCreneauId?: string
 ): Promise<StageInscription[]> {
   try {
-    // On filtre côté serveur sur familyId + intervalle de dates
-    // Les dates stockées sont des strings "YYYY-MM-DD" donc comparaison lexicographique OK
+    // Query simple sur familyId uniquement (index simple déjà présent).
+    // Filtrage des dates + activityType fait en mémoire : volume faible
+    // par famille (quelques dizaines de réservations max).
+    // NOTE : on évite ainsi d'avoir à créer un index composite
+    // familyId + date dans Firestore.
     const q1 = query(
       collection(db, "reservations"),
-      where("familyId", "==", familyId),
-      where("date", ">=", period.startDate),
-      where("date", "<=", period.endDate)
+      where("familyId", "==", familyId)
     );
     const snap = await getDocs(q1);
-    return snap.docs
-      .map((d: any) => ({ id: d.id, ...d.data() }) as any)
+    const allRes = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }) as any);
+
+    // Log de diagnostic (utile pour debug si réductions ne se déclenchent pas)
+    if (typeof window !== "undefined" && (window as any).__DEBUG_DISCOUNTS__) {
+      console.log("[discounts] fetchFamilyStagesInPeriod", {
+        familyId,
+        period: `${period.startDate} → ${period.endDate}`,
+        totalReservations: allRes.length,
+        types: Array.from(new Set(allRes.map((r: any) => r.activityType))),
+        excludeCreneauId,
+      });
+    }
+
+    return allRes
       .filter((r: any) => {
-        // Seulement les réservations confirmées + seulement les stages
         if (r.status === "cancelled") return false;
         if (!STAGE_TYPES.includes(r.activityType)) return false;
+        if (!r.date) return false;
+        // Comparaison lexicographique OK pour "YYYY-MM-DD"
+        if (r.date < period.startDate || r.date > period.endDate) return false;
+        // Exclure la réservation du créneau en cours de traitement
+        // (cas où handleEnroll appelle createReservation avant applyDiscounts)
+        if (excludeCreneauId && r.creneauId === excludeCreneauId) return false;
         return true;
       })
       .map((r: any) => ({
@@ -279,6 +298,7 @@ export async function applyDiscounts(params: {
   originalPriceTTC: number;
   settings: DiscountSettings;
   periods: VacationPeriod[];
+  excludeCreneauId?: string; // créneau en cours d'inscription à exclure du comptage
 }): Promise<DiscountResult> {
   const {
     familyId,
@@ -288,6 +308,7 @@ export async function applyDiscounts(params: {
     originalPriceTTC,
     settings,
     periods,
+    excludeCreneauId,
   } = params;
 
   // Par défaut : pas de réduction
@@ -310,7 +331,8 @@ export async function applyDiscounts(params: {
   if (!period) return noDiscount;
 
   // 3. Charger les inscriptions existantes de la famille dans la période
-  const existingStages = await fetchFamilyStagesInPeriod(familyId, period);
+  //    (en excluant la résa qu'on vient juste de créer pour le créneau courant)
+  const existingStages = await fetchFamilyStagesInPeriod(familyId, period, excludeCreneauId);
 
   // 4. Calculer les deux types de réduction
   const family = calculateFamilyDiscount(
@@ -415,22 +437,31 @@ export async function findMergeablePayment(
 export async function fetchDiscountSettings(): Promise<DiscountSettings> {
   const defaults: DiscountSettings = {
     familyDiscount: [
-      { nth: 2, discount: 10 },
-      { nth: 3, discount: 15 },
+      { nth: 2, discount: 5 },
+      { nth: 3, discount: 10 },
     ],
     multiStageDiscount: [
       { nth: 2, discount: 10 },
       { nth: 3, discount: 15 },
+      { nth: 4, discount: 20 },
     ],
   };
 
   try {
-    const snap = await getDoc(doc(db, "settings", "tarifs"));
+    // Source unique : /settings/degressivite (édité depuis /admin/parametres → onglet Dégressivité)
+    //   Champs : { multiStage: [...], familyDiscount: [...] }
+    const snap = await getDoc(doc(db, "settings", "degressivite"));
     if (!snap.exists()) return defaults;
     const data = snap.data() as any;
     return {
-      familyDiscount: data.familyDiscount || defaults.familyDiscount,
-      multiStageDiscount: data.multiStageDiscount || defaults.multiStageDiscount,
+      familyDiscount: Array.isArray(data.familyDiscount) && data.familyDiscount.length > 0
+        ? data.familyDiscount
+        : defaults.familyDiscount,
+      // Le champ est stocké sous le nom "multiStage" dans Firestore (legacy),
+      // on le mappe vers multiStageDiscount côté interne.
+      multiStageDiscount: Array.isArray(data.multiStage) && data.multiStage.length > 0
+        ? data.multiStage
+        : defaults.multiStageDiscount,
     };
   } catch (e) {
     console.error("[discounts] fetchDiscountSettings failed, using defaults:", e);

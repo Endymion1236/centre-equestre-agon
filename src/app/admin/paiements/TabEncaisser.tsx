@@ -180,6 +180,7 @@ export function TabEncaisser({
           originalPriceTTC: original,
           settings: discountSettings,
           periods: vacationPeriods,
+          excludeCreneauId: creneauId, // la résa existe déjà pour ce créneau
         });
         if (Math.abs(result.finalPriceTTC - item.priceTTC) > 0.01) {
           adjustments.push(`${item.activityTitle} (${item.childName}) : ${item.priceTTC.toFixed(2)}€ → ${result.finalPriceTTC.toFixed(2)}€`);

@@ -591,6 +591,7 @@ export default function PlanningPage() {
         originalPriceTTC: Math.round(priceTTC * 100) / 100,
         settings: discountSettings,
         periods: vacationPeriods,
+        excludeCreneauId: cid, // la résa vient juste d'être créée pour ce créneau
       });
       const finalPriceTTC = discountResult.finalPriceTTC;
       const finalPriceHT = finalPriceTTC / (1 + (c.tvaTaux || 5.5) / 100);
