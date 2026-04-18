@@ -48,6 +48,7 @@ const s = StyleSheet.create({
   cTVA:       { flex: 1, textAlign: "right" },
   cTTC:       { flex: 1.2, textAlign: "right" },
   cellTxt:    { fontSize: 8.5, color: "#374151" },
+  cellSubtitle: { fontSize: 7.5, color: "#6b7280", marginTop: 2 },
   cellGray:   { fontSize: 8.5, color: GRAY },
   cellBold:   { fontSize: 8.5, fontFamily: "Helvetica-Bold", color: BLUE },
   // Récap TVA
@@ -160,10 +161,34 @@ export async function POST(request: NextRequest) {
         ...(items).map((item: any, i: number) => {
           const taux = item.tva ?? item.tvaTaux ?? 5.5;
           const disc = item.remise || item.discount || 0;
+          // Construire le sous-titre : planning du stage (si présent) sinon vide
+          let subtitle = "";
+          if (item.stageSchedule) {
+            subtitle = item.stageSchedule;
+          } else if (Array.isArray(item.stageDates) && item.stageDates.length > 0) {
+            // Fallback : construire à partir des dates brutes
+            const formatDate = (d: string) => {
+              const dt = new Date(d);
+              return isNaN(dt.getTime()) ? d : dt.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+            };
+            const first = item.stageDates[0];
+            const last = item.stageDates[item.stageDates.length - 1];
+            const dateRange = item.stageDates.length === 1
+              ? formatDate(first.date)
+              : `${formatDate(first.date)} → ${formatDate(last.date)}`;
+            const hours = first.startTime && first.endTime ? ` · ${first.startTime}–${first.endTime}` : "";
+            subtitle = `${dateRange}${hours}`;
+          } else if (item.date && item.startTime) {
+            // Ancien format : date + startTime à la racine de l'item
+            const dt = new Date(item.date);
+            const d = isNaN(dt.getTime()) ? item.date : dt.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+            subtitle = `${d} · ${item.startTime}${item.endTime ? `–${item.endTime}` : ""}`;
+          }
           return React.createElement(View, { key: String(i), style: i % 2 === 0 ? s.trow : s.trowAlt },
             React.createElement(View, { style: s.cDesc },
               React.createElement(Text, { style: s.cellTxt },
                 `${item.activityTitle || item.description || "Prestation"}${item.childName ? ` — ${item.childName}` : ""}`),
+              subtitle ? React.createElement(Text, { style: s.cellSubtitle }, subtitle) : null,
             ),
             React.createElement(Text, { style: [s.cellGray, s.cQty] }, `${item.quantity || 1}`),
             React.createElement(Text, { style: [s.cellGray, s.cPUHT] }, `${(item.priceHT || 0).toFixed(2)} €`),

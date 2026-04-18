@@ -180,15 +180,41 @@ export function TabImpayes({
                         <button onClick={() => { setEditPayment(p); setEditItems((p.items || []).map((i: any) => ({ ...i }))); setEditRemisePct(""); setEditRemiseEuros(""); }}
                           className="font-body text-xs text-slate-600 bg-gray-100 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">✏️ Modifier</button>
                       </div>
-                      {(p.items || []).map((item: any, idx: number) => (
-                        <div key={idx} className="flex items-center justify-between py-1.5 font-body text-xs border-b border-gray-50 last:border-0">
-                          <span className="text-slate-600 flex-1 min-w-0 truncate">{item.childName ? `${item.childName} — ` : ""}{item.activityTitle}{item.startTime ? ` ${item.startTime}` : ""}</span>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <span className="text-blue-500 font-semibold">{(item.priceTTC || 0) === 0 ? <span className="text-slate-400 text-[10px]">Inclus</span> : `${(item.priceTTC || 0).toFixed(2)}€`}</span>
-                            <button onClick={() => { if (!confirm(`Retirer "${item.activityTitle}" ?\n\nL'enfant sera désinscrit.`)) return; removePaymentItem(p, idx); }} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-0.5"><X size={12}/></button>
+                      {(p.items || []).map((item: any, idx: number) => {
+                        // Construire le planning du stage si disponible
+                        let planning = "";
+                        if (item.stageSchedule) {
+                          planning = item.stageSchedule;
+                        } else if (Array.isArray(item.stageDates) && item.stageDates.length > 0) {
+                          const fmt = (d: string) => {
+                            const dt = new Date(d);
+                            return isNaN(dt.getTime()) ? d : dt.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+                          };
+                          const first = item.stageDates[0];
+                          const last = item.stageDates[item.stageDates.length - 1];
+                          const range = item.stageDates.length === 1 ? fmt(first.date) : `${fmt(first.date)} → ${fmt(last.date)}`;
+                          const hours = first.startTime && first.endTime ? ` · ${first.startTime}–${first.endTime}` : "";
+                          planning = `${range}${hours}`;
+                        } else if (item.date && item.startTime) {
+                          const dt = new Date(item.date);
+                          const d = isNaN(dt.getTime()) ? item.date : dt.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+                          planning = `${d} · ${item.startTime}${item.endTime ? `–${item.endTime}` : ""}`;
+                        }
+                        return (
+                          <div key={idx} className="py-1.5 font-body text-xs border-b border-gray-50 last:border-0">
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-600 flex-1 min-w-0 truncate">{item.childName ? `${item.childName} — ` : ""}{item.activityTitle}{item.startTime && !planning ? ` ${item.startTime}` : ""}</span>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <span className="text-blue-500 font-semibold">{(item.priceTTC || 0) === 0 ? <span className="text-slate-400 text-[10px]">Inclus</span> : `${(item.priceTTC || 0).toFixed(2)}€`}</span>
+                                <button onClick={() => { if (!confirm(`Retirer "${item.activityTitle}" ?\n\nL'enfant sera désinscrit.`)) return; removePaymentItem(p, idx); }} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-0.5"><X size={12}/></button>
+                              </div>
+                            </div>
+                            {planning && (
+                              <div className="text-[10px] text-slate-400 ml-0 mt-0.5">📅 {planning}</div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                       <div className="mt-2">
                         <NoteField paymentId={p.id} initialNote={(p as any).note || ""} onSave={(note) => setPayments(prev => prev.map(x => x.id === p.id ? { ...x, note } : x))} />
                       </div>
