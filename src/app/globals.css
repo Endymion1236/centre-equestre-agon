@@ -55,17 +55,12 @@ body {
   font-family: var(--font-body);
   color: #1C2A3E;
   background: var(--color-cream);
-  font-size: 15px;
+  font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Renforcer le contraste des labels et textes secondaires dans l'admin */
-.font-body {
-  -webkit-font-smoothing: antialiased;
-}
-
-/* Inputs plus lisibles */
+/* Inputs : densité formulaire, légèrement plus compact que le body */
 input, select, textarea {
   color: #1C2A3E;
   font-size: 14px;
@@ -146,24 +141,12 @@ h1, h2, h3, h4 {
 .animate-delay-500 { animation-delay: 0.5s; }
 
 
-/* ═══ Overrides contraste admin — grays renforcés sur fond crème ═══ */
+/* Les tokens @theme ci-dessus renforcent déjà gray-300→600 et slate-300→600
+   pour lisibilité sur fond crème — pas besoin de !important. */
 
-/* Sur fond crème/sable, gray-400/500 Tailwind sont illisibles.
-   On les remplace par des valeurs plus sombres globalement. */
-
-.text-gray-300 { color: #94A3B8 !important; }
-.text-gray-400 { color: #64748B !important; }
-.text-gray-500 { color: #475569 !important; }
-.text-gray-600 { color: #334155 !important; }
-
-/* Textes secondaires dans les listes et tableaux */
+/* Micro-typo : un peu d'espacement pour les textes très petits */
 .font-body.text-xs { letter-spacing: 0.01em; }
 
-/* Labels de colonnes uppercase */
-.uppercase.tracking-wider { color: #334155 !important; font-weight: 600; }
-
-/* Noms de famille dans les listes */
-span.text-gray-500 { color: #475569 !important; }
 @keyframes slide-up {
   from { transform: translateY(20px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
@@ -203,9 +186,3 @@ span.text-gray-500 { color: #475569 !important; }
 /* Hide scrollbar for horizontal scroll */
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-/* ═══ Forcer lisibilité textes secondaires espace famille ═══ */
-.text-slate-400, .text-slate-500, .text-slate-600,
-.text-gray-400, .text-gray-500, .text-gray-600 {
-  color: #334155 !important;
-}

@@ -75,7 +75,7 @@ const navItems = [
   { href: "/admin/tests", icon: CheckCircle2, label: "Plan de tests" },
 ] as any[];
 
-function AdminSidebar() {
+function AdminSidebar({ nbImpayes }: { nbImpayes: number }) {
   const { user, signOut, isMoniteur, userRole } = useAuth();
   const pathname = usePathname();
 
@@ -100,61 +100,78 @@ function AdminSidebar() {
     : navItems;
 
   return (
-    <div data-testid="admin-nav" className="w-[210px] bg-blue-800 p-2 flex flex-col gap-0.5 flex-shrink-0 min-h-screen hidden md:flex">
-      <div className="px-3 py-3 pb-5 flex items-center gap-2.5">
+    <div data-testid="admin-nav" className="w-[224px] bg-blue-800 border-r border-white/5 py-3 px-2.5 flex flex-col gap-0.5 flex-shrink-0 min-h-screen hidden md:flex">
+      {/* ─── Logo + rôle ─── */}
+      <div className="px-2.5 pt-2 pb-5 flex items-center gap-2.5">
         <img src="/images/logo-ce-agon.png" alt="Logo" className="w-9 h-9 rounded-lg object-contain" />
-        <div>
-          <div className="font-display text-sm font-bold text-white">Centre Equestre</div>
-          <div className="font-body text-[10px] text-white/40 uppercase tracking-widest mt-0.5">
-            {isMoniteur ? "Moniteur" : "Administration"}
+        <div className="min-w-0">
+          <div className="font-display text-[15px] font-bold text-white leading-tight">Centre Équestre</div>
+          <div className="font-body text-[10px] text-gold-400/90 uppercase tracking-[0.18em] font-semibold mt-0.5">
+            {isMoniteur ? "Espace moniteur" : "Administration"}
           </div>
         </div>
       </div>
 
+      {/* ─── Items ─── */}
       {filteredNavItems.map((item: any, idx: number) => {
         if (item.separator) {
           return (
-            <div key={`sep-${idx}`} className="px-3 pt-5 pb-1.5">
-              {idx > 0 && <div className="border-t border-white/10 mb-3"></div>}
-              <div className="font-body text-[10px] text-gold-400/80 uppercase tracking-widest font-bold">{item.label}</div>
+            <div key={`sep-${idx}`} className="px-2.5 pt-5 pb-1.5">
+              {idx > 0 && <div className="border-t border-white/10 mb-3" />}
+              <div className="font-body text-[10px] text-gold-400/80 uppercase tracking-[0.18em] font-bold">
+                {item.label}
+              </div>
             </div>
           );
         }
         const Icon = item.icon;
         const active = pathname?.startsWith(item.href);
+        const showImpayesBadge = item.href === "/admin/paiements" && nbImpayes > 0;
         return (
           <Link
             key={item.href}
             href={item.href}
             className={`
-              flex items-center gap-2.5 px-3 py-2 rounded-lg no-underline transition-all
-              ${active ? "bg-blue-500/30 text-white" : "text-white/50 hover:text-white/80 hover:bg-white/5"}
+              group relative flex items-center gap-3 pl-3 pr-2.5 py-2 rounded-lg no-underline transition-all duration-150
+              ${active
+                ? "bg-white/10 text-white font-semibold"
+                : "text-white/70 hover:text-white hover:bg-white/5"}
             `}
           >
-            <Icon size={15} />
-            <span className={`font-body text-[12px] ${active ? "font-semibold" : "font-normal"}`}>
+            {/* Barre d'accent gold à gauche quand actif */}
+            {active && (
+              <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-gold-400" />
+            )}
+            <Icon size={16} className={active ? "text-gold-400" : "text-white/60 group-hover:text-white/90 transition-colors"} />
+            <span className="font-body text-[13px] flex-1 truncate">
               {item.label}
             </span>
+            {showImpayesBadge && (
+              <span className="flex-shrink-0 bg-red-500 text-white font-body text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-tight">
+                {nbImpayes}
+              </span>
+            )}
           </Link>
         );
       })}
 
+      {/* ─── Footer ─── */}
       <div className="mt-auto pt-3 border-t border-white/10">
         <Link
           href="/"
-          className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-white/40 hover:text-gold-400 hover:bg-gold-400/10 transition-all no-underline mb-0.5"
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-white/70 hover:text-gold-300 hover:bg-gold-400/10 transition-all no-underline mb-0.5"
         >
-          <ExternalLink size={16} />
+          <ExternalLink size={15} />
           <span className="font-body text-[13px]">Retour au site</span>
         </Link>
-        <div className="px-3 py-2 font-body text-[11px] text-white/30 truncate">
+        <div className="px-3 pt-2 pb-1 font-body text-[11px] text-white/50 truncate" title={user?.email}>
           {user?.email}
         </div>
         <button
           onClick={signOut}
-          className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-white/40 hover:text-red-300 hover:bg-red-500/10 transition-all w-full bg-transparent border-none cursor-pointer"
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-white/60 hover:text-red-300 hover:bg-red-500/10 transition-all w-full bg-transparent border-none cursor-pointer"
         >
-          <LogOut size={16} />
+          <LogOut size={15} />
           <span className="font-body text-[13px]">Déconnexion</span>
         </button>
       </div>
@@ -334,7 +351,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <ToastProvider>
     <div className="min-h-screen bg-cream flex">
-      <AdminSidebar />
+      <AdminSidebar nbImpayes={nbImpayes} />
       <div className="flex-1 overflow-auto">
         {/* Top bar mobile */}
         <div className="md:hidden sticky top-0 z-50 bg-blue-800 px-4 py-3 flex items-center justify-between">
@@ -367,33 +384,40 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Menu mobile déroulant */}
         {mobileMenuOpen && (
           <div className="md:hidden fixed inset-0 top-[56px] z-40 bg-black/30" onClick={() => setMobileMenuOpen(false)}>
-            <div className="bg-blue-800 w-[260px] h-full overflow-y-auto p-3 flex flex-col gap-0.5 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="bg-blue-800 w-[260px] h-full overflow-y-auto py-3 px-2.5 flex flex-col gap-0.5 shadow-2xl" onClick={e => e.stopPropagation()}>
               {(isMoniteur && !isAdmin ? navItems.filter((item: any) => {
                 if (item.separator) return ["Terrain"].includes(item.label);
                 return ["/admin/dashboard","/admin/planning","/admin/montoir","/admin/cavalerie","/admin/pedagogie","/admin/management"].includes(item.href);
               }) : navItems).map((item: any, idx: number) => {
                 if (item.separator) {
                   return (
-                    <div key={`msep-${idx}`} className="px-3 pt-5 pb-1.5">
-                      {idx > 0 && <div className="border-t border-white/10 mb-3"></div>}
-                      <div className="font-body text-[10px] text-gold-400/80 uppercase tracking-widest font-bold">{item.label}</div>
+                    <div key={`msep-${idx}`} className="px-2.5 pt-5 pb-1.5">
+                      {idx > 0 && <div className="border-t border-white/10 mb-3" />}
+                      <div className="font-body text-[10px] text-gold-400/80 uppercase tracking-[0.18em] font-bold">{item.label}</div>
                     </div>
                   );
                 }
                 const Icon = item.icon;
                 const active = pathname?.startsWith(item.href);
+                const showImpayesBadge = item.href === "/admin/paiements" && nbImpayes > 0;
                 return (
                   <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg no-underline transition-all
-                      ${active ? "bg-blue-500/30 text-white" : "text-white/50 hover:text-white/80 hover:bg-white/5"}`}>
-                    <Icon size={15} />
-                    <span className={`font-body text-[12px] ${active ? "font-semibold" : "font-normal"}`}>{item.label}</span>
+                    className={`group relative flex items-center gap-3 pl-3 pr-2.5 py-2 rounded-lg no-underline transition-all duration-150
+                      ${active ? "bg-white/10 text-white font-semibold" : "text-white/70 hover:text-white hover:bg-white/5"}`}>
+                    {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-gold-400" />}
+                    <Icon size={16} className={active ? "text-gold-400" : "text-white/60"} />
+                    <span className="font-body text-[13px] flex-1 truncate">{item.label}</span>
+                    {showImpayesBadge && (
+                      <span className="flex-shrink-0 bg-red-500 text-white font-body text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-tight">
+                        {nbImpayes}
+                      </span>
+                    )}
                   </Link>
                 );
               })}
               <div className="mt-4 pt-3 border-t border-white/10">
-                <Link href="/" className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-white/40 hover:text-gold-400 no-underline">
-                  <ExternalLink size={16} />
+                <Link href="/" className="flex items-center gap-3 px-3 py-2 rounded-lg text-white/70 hover:text-gold-300 hover:bg-gold-400/10 no-underline">
+                  <ExternalLink size={15} />
                   <span className="font-body text-[13px]">Retour au site</span>
                 </Link>
               </div>
@@ -402,13 +426,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         )}
 
         <div className="p-4 md:p-8 max-w-[960px] relative">
-          {/* Badge impayés desktop */}
-          {nbImpayes > 0 && (
-            <Link href="/admin/paiements?tab=impayes" className="hidden md:flex fixed top-3 right-3 z-40 w-10 h-10 items-center justify-center no-underline" title={`${nbImpayes} impayé${nbImpayes > 1 ? "s" : ""}`}>
-              <CreditCard size={20} className="text-red-500" />
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white font-body text-[10px] font-bold rounded-full flex items-center justify-center">{nbImpayes}</span>
-            </Link>
-          )}
           {children}
         </div>
 

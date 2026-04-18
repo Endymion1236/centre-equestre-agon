@@ -41,17 +41,27 @@ export default function AdminDashboard() {
     authFetch("/api/billing").then(r => r.json()).then(setBilling).catch(() => {});
   }, []);
 
-  const quickActions: { href: string; icon: LucideIcon; label: string; color: string }[] = [
-    { href: "/admin/activites", icon: ClipboardList, label: "Gérer les activités", color: "text-blue-500" },
-    { href: "/admin/planning", icon: CalendarDays, label: "Planning", color: "text-blue-500" },
-    { href: "/admin/cavaliers", icon: Users, label: "Cavaliers", color: "text-blue-500" },
-    { href: "/admin/cavalerie", icon: Heart, label: "Cavalerie", color: "text-red-400" },
-    { href: "/admin/paiements", icon: CreditCard, label: "Paiements", color: "text-green-600" },
-    { href: "/admin/comptabilite", icon: BookOpen, label: "Comptabilité", color: "text-orange-500" },
-    { href: "/admin/statistiques", icon: BarChart3, label: "Statistiques", color: "text-purple-600" },
-    { href: "/admin/communication", icon: Mail, label: "Communication", color: "text-blue-500" },
-    { href: "/admin/parametres", icon: Settings, label: "Paramètres", color: "text-gray-500" },
-    { href: "/admin/galerie", icon: Camera, label: "Galerie", color: "text-blue-500" },
+  // Couleurs par section sémantique (alignées sur les séparateurs de la sidebar) :
+  //   Terrain       → blue   (activités opérationnelles, cavalerie, planning)
+  //   Commercial    → green  (ventes, cavaliers, paiements)
+  //   Gestion       → amber  (compta, stats, communication)
+  //   Configuration → slate  (paramètres, galerie, modèles)
+  const TERRAIN = "text-blue-500 bg-blue-50";
+  const COMMERCIAL = "text-green-600 bg-green-50";
+  const GESTION = "text-amber-600 bg-amber-50";
+  const CONFIG = "text-slate-500 bg-slate-50";
+
+  const quickActions: { href: string; icon: LucideIcon; label: string; tint: string }[] = [
+    { href: "/admin/planning", icon: CalendarDays, label: "Planning", tint: TERRAIN },
+    { href: "/admin/cavalerie", icon: Heart, label: "Cavalerie", tint: TERRAIN },
+    { href: "/admin/cavaliers", icon: Users, label: "Cavaliers", tint: COMMERCIAL },
+    { href: "/admin/paiements", icon: CreditCard, label: "Paiements", tint: COMMERCIAL },
+    { href: "/admin/comptabilite", icon: BookOpen, label: "Comptabilité", tint: GESTION },
+    { href: "/admin/statistiques", icon: BarChart3, label: "Statistiques", tint: GESTION },
+    { href: "/admin/communication", icon: Mail, label: "Communication", tint: GESTION },
+    { href: "/admin/activites", icon: ClipboardList, label: "Activités", tint: CONFIG },
+    { href: "/admin/parametres", icon: Settings, label: "Paramètres", tint: CONFIG },
+    { href: "/admin/galerie", icon: Camera, label: "Galerie", tint: CONFIG },
   ];
 
   return (
@@ -74,23 +84,25 @@ export default function AdminDashboard() {
       {/* Alertes stages impayés */}
       <StagesImpayesAlert />
 
-      {/* KPIs */}
+      {/* KPIs — toutes les valeurs sont en slate sombre (neutre) ; seule l'icône
+          porte la couleur sémantique. Évite l'effet "sapin de Noël". */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {[
-          { icon: Users, value: familyCount.toString(), label: "Familles inscrites", color: "text-blue-500", iconColor: "text-blue-500", bg: "bg-blue-50" },
-          { icon: CalendarDays, value: activityCount.toString(), label: "Activités créées", color: "text-blue-500", iconColor: "text-blue-500", bg: "bg-blue-50" },
-          { icon: CreditCard, value: "0€", label: "CA ce mois", color: "text-green-600", iconColor: "text-green-600", bg: "bg-green-50" },
-          { icon: TrendingUp, value: "—", label: "Taux de remplissage", color: "text-gold-400", iconColor: "text-amber-500", bg: "bg-amber-50" },
+          { icon: Users, value: familyCount.toString(), label: "Familles inscrites", tint: TERRAIN },
+          { icon: CalendarDays, value: activityCount.toString(), label: "Activités créées", tint: TERRAIN },
+          { icon: CreditCard, value: "0€", label: "CA ce mois", tint: COMMERCIAL },
+          { icon: TrendingUp, value: "—", label: "Taux de remplissage", tint: GESTION },
         ].map((kpi, i) => {
           const Icon = kpi.icon;
+          const [iconColor, bgColor] = kpi.tint.split(" ");
           return (
             <Card key={i} padding="md">
               <div className="flex items-center gap-3 mb-3">
-                <div className={`w-10 h-10 rounded-xl ${kpi.bg} flex items-center justify-center`}>
-                  <Icon size={20} className={kpi.iconColor} />
+                <div className={`w-10 h-10 rounded-xl ${bgColor} flex items-center justify-center`}>
+                  <Icon size={20} className={iconColor} />
                 </div>
               </div>
-              <div className={`font-body text-2xl font-bold ${kpi.color}`}>{kpi.value}</div>
+              <div className="font-body text-2xl font-bold text-blue-800">{kpi.value}</div>
               <div className="font-body text-xs text-gray-400">{kpi.label}</div>
             </Card>
           );
@@ -102,11 +114,12 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {quickActions.map((action, i) => {
           const Icon = action.icon;
+          const [iconColor, bgColor] = action.tint.split(" ");
           return (
             <Link key={i} href={action.href} className="no-underline">
               <Card hover padding="sm" className="text-center !py-5">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center mx-auto mb-2">
-                  <Icon size={20} className={action.color} />
+                <div className={`w-10 h-10 rounded-xl ${bgColor} flex items-center justify-center mx-auto mb-2`}>
+                  <Icon size={20} className={iconColor} />
                 </div>
                 <span className="font-body text-xs font-semibold text-blue-800">{action.label}</span>
               </Card>

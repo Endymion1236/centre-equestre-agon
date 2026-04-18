@@ -5,7 +5,6 @@ export default function SplitHomePage() {
     <div style={{ width: "100vw", height: "100vh", overflow: "hidden" }}>
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Raleway:wght@300;400;600;700;800&display=swap');
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
         .split-wrap {
@@ -57,8 +56,9 @@ export default function SplitHomePage() {
         .panel-lb .panel-logo { right: 2.2rem; flex-direction: row-reverse; }
         .logo-img { width: 38px; height: 38px; border-radius: 10px; object-fit: contain; }
         .logo-name {
-          font-family: 'Bebas Neue', sans-serif;
-          font-size: 1.05rem; letter-spacing: 0.1em;
+          font-family: var(--font-body);
+          font-size: 0.82rem; font-weight: 600;
+          letter-spacing: 0.22em; text-transform: uppercase;
           color: rgba(255,255,255,0.88);
           text-shadow: 0 2px 12px rgba(0,0,0,0.6);
         }
@@ -73,19 +73,20 @@ export default function SplitHomePage() {
 
         .tag {
           display: inline-block;
-          font-family: 'Raleway', sans-serif;
-          font-size: 0.61rem; font-weight: 700;
+          font-family: var(--font-body);
+          font-size: 0.68rem; font-weight: 600;
           letter-spacing: 0.22em; text-transform: uppercase;
-          padding: 0.38em 1em; border-radius: 100px;
+          padding: 0.4em 1em; border-radius: 100px;
           margin-bottom: 1.1rem; width: fit-content;
         }
         .tag-oe { background: rgba(240,160,16,0.18); border: 1px solid rgba(240,160,16,0.5); color: #F4C040; }
         .tag-lb { background: rgba(0,220,100,0.13); border: 1px solid rgba(0,220,100,0.42); color: #00e87a; }
 
         .panel-title {
-          font-family: 'Bebas Neue', sans-serif;
-          font-size: clamp(3.2rem, 4.5vw, 5.8rem);
-          line-height: 0.93; letter-spacing: 0.025em;
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: clamp(2.6rem, 4vw, 4.8rem);
+          line-height: 1.02; letter-spacing: -0.015em;
           color: #fff; margin-bottom: 1.1rem;
           text-shadow: 0 6px 40px rgba(0,0,0,0.5);
         }
@@ -93,19 +94,19 @@ export default function SplitHomePage() {
         .accent-lb { color: #00e87a; }
 
         .panel-desc {
-          font-family: 'Raleway', sans-serif;
-          font-size: 0.92rem; font-weight: 300;
-          color: rgba(255,255,255,0.72); line-height: 1.65;
-          max-width: 300px; margin-bottom: 2rem;
+          font-family: var(--font-body);
+          font-size: 0.95rem; font-weight: 400;
+          color: rgba(255,255,255,0.78); line-height: 1.6;
+          max-width: 320px; margin-bottom: 2rem;
         }
 
         .panel-cta {
           display: inline-flex; align-items: center; gap: 0.5rem;
-          font-family: 'Raleway', sans-serif;
-          font-size: 0.82rem; font-weight: 800;
-          letter-spacing: 0.06em; text-transform: uppercase;
+          font-family: var(--font-body);
+          font-size: 0.88rem; font-weight: 700;
+          letter-spacing: 0.05em; text-transform: uppercase;
           text-decoration: none;
-          padding: 0.9em 2em; border-radius: 10px; width: fit-content;
+          padding: 0.95em 2em; border-radius: 12px; width: fit-content;
           transition: transform 0.2s ease, box-shadow 0.25s ease, gap 0.2s ease;
         }
         .panel-cta:hover { transform: translateY(-3px); gap: 0.9rem; }
