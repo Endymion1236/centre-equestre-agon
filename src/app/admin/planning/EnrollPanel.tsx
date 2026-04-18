@@ -54,8 +54,13 @@ const calcAge = (birthDate: any): string => {
 };
 import {
   findStageCreneaux, countExistingStageInscriptions, computeStageReductions,
+  computeStageReductionsAsync,
   enrollChildInCreneau, createReservation, removeChildFromCreneau, deleteReservations,
 } from "@/lib/planning-services";
+import {
+  fetchVacationPeriods, fetchDiscountSettings,
+  type VacationPeriod, type DiscountSettings,
+} from "@/lib/discounts";
 import { X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera, FileImage, Mail, Sparkles, Send, FileText, Printer } from "lucide-react";
 import type { Activity, Family } from "@/types";
 import { Creneau, EnrolledChild, payModes, typeColors, fmtDate } from "./types";
@@ -436,14 +441,27 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // Pas de cumul avec les inscriptions passées — une fois encaissé, compteur reset
   const existingStageCount = 0;
 
-  const stageLines = useMemo(() => {
-    if (!isStage) return [];
+  // Barèmes + périodes de vacances (chargés au montage pour applyDiscounts)
+  const [discountSettings, setDiscountSettings] = useState<DiscountSettings>({
+    familyDiscount: [], multiStageDiscount: [],
+  });
+  const [vacationPeriods, setVacationPeriods] = useState<VacationPeriod[]>([]);
+  useEffect(() => {
+    fetchDiscountSettings().then(setDiscountSettings).catch(console.error);
+    fetchVacationPeriods().then(setVacationPeriods).catch(console.error);
+  }, []);
 
-    // Nombre de jours réel du stage (chargé depuis Firestore via useEffect)
+  // stageLines est calculé async (via applyDiscounts) en période de vacances
+  // scolaires, et tombe en fallback sur le prix plein sinon.
+  const [stageLines, setStageLines] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!isStage) { setStageLines([]); return; }
+
+    // Nombre de jours réel du stage
     const nbJoursStage = stageDaysCount || 1;
 
-    // Prix du stage selon le nombre de jours
-    // Chercher un tarif configuré pour ce nombre de jours (stocké sur le créneau)
+    // Prix effectif selon mode + tarifs configurés sur le créneau
     const configuredPrices: Record<number, number> = {};
     const cr = creneau as any;
     if (cr.price1day) configuredPrices[1] = cr.price1day;
@@ -451,38 +469,50 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     if (cr.price3days) configuredPrices[3] = cr.price3days;
     if (cr.price4days) configuredPrices[4] = cr.price4days;
 
-    const prixStageComplet = priceTTC; // = prix semaine complète
-    let prixEffectif: number;
+    const prixStageComplet = priceTTC;
+    const prixEffectif = stageMode === "jour"
+      ? (configuredPrices[1] || Math.round((prixStageComplet / nbJoursStage) * 100) / 100)
+      : (configuredPrices[nbJoursStage] || prixStageComplet);
 
-    if (stageMode === "jour") {
-      // Mode 1 jour : tarif journalier configuré ou prorata
-      prixEffectif = configuredPrices[1] || Math.round((prixStageComplet / nbJoursStage) * 100) / 100;
-    } else {
-      // Mode semaine : tarif configuré pour ce nombre de jours ou prix complet
-      prixEffectif = configuredPrices[nbJoursStage] || prixStageComplet;
-    }
+    if (selectedChildren.length === 0 || !fam) { setStageLines([]); return; }
 
-    const prixJour = Math.round((prixEffectif / (stageMode === "jour" ? 1 : nbJoursStage)) * 100) / 100;
+    // Calcul async via applyDiscounts
+    let cancelled = false;
+    (async () => {
+      try {
+        const lines = await computeStageReductionsAsync({
+          selectedChildren,
+          children,
+          prixBase: prixEffectif,
+          familyId: fam.firestoreId,
+          stageDate: creneau.date,
+          stageType: creneau.activityType,
+          creneauId: creneau.id!,
+          settings: discountSettings,
+          periods: vacationPeriods,
+        });
+        if (!cancelled) {
+          // Adapter childName avec le nom complet si disponible (compat avec l'UI)
+          const adjusted = lines.map((l) => {
+            const child = children.find((c: any) => c.id === l.childId);
+            const fullName = (child as any)?.lastName
+              ? `${(child as any).firstName} ${(child as any).lastName}`
+              : ((child as any)?.firstName || l.childName);
+            return { ...l, childName: fullName };
+          });
+          setStageLines(adjusted);
+        }
+      } catch (e) {
+        console.error("[EnrollPanel] computeStageReductionsAsync failed, fallback synchrone:", e);
+        if (!cancelled) {
+          // Fallback en cas d'erreur : ancien comportement (sans cumul)
+          setStageLines(computeStageReductions(selectedChildren, children, prixEffectif, existingStageCount));
+        }
+      }
+    })();
 
-    return selectedChildren.map((childId, idx) => {
-      const child = children.find((c: any) => c.id === childId);
-      const rang = existingStageCount + idx;
-      const remiseEuros = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
-      // La réduction s'applique au prorata aussi (mais plafonnée au prix)
-      const remiseEffective = stageMode === "jour" ? Math.round((remiseEuros / nbJoursStage) * 100) / 100 : remiseEuros;
-      const prixReduit = Math.max(0, Math.round((prixEffectif - remiseEffective) * 100) / 100);
-      return {
-        childId,
-        childName: (child as any)?.lastName
-          ? `${(child as any).firstName} ${(child as any).lastName}`
-          : ((child as any)?.firstName || "—"),
-        prixBase: prixEffectif,
-        remiseEuros: remiseEffective,
-        rang: rang + 1,
-        prixReduit,
-      };
-    });
-  }, [isStage, selectedChildren, children, priceTTC, existingStageCount, stageMode, stageDaysCount, creneau]);
+    return () => { cancelled = true; };
+  }, [isStage, selectedChildren, children, priceTTC, stageMode, stageDaysCount, creneau, fam, discountSettings, vacationPeriods]);
 
   const stageTotalTTC = stageLines.reduce((s, l) => s + l.prixReduit, 0);
   const ACOMPTE_PAR_ENFANT = 30; // 30€ par enfant

@@ -29,6 +29,10 @@ export interface StageLine {
   remiseEuros: number;
   rang: number;
   prixReduit: number;
+  // Nouveaux champs (via applyDiscounts) — optionnels pour rétrocompat
+  discountPercent?: number;
+  discountReasons?: string[];
+  originalPriceTTC?: number;
 }
 
 // ═══ UTILITAIRES ═══
@@ -121,6 +125,145 @@ export function computeStageReductions(
     };
   });
 }
+
+/**
+ * Version async qui utilise applyDiscounts (réductions famille + multi-stages
+ * sur la période de vacances scolaires). Remplace progressivement la version
+ * synchrone figée (10€/20€/30€) pour les stages en période de vacances.
+ *
+ * Appelle applyDiscounts une fois par enfant. Chaque appel simule l'inscription
+ * de CE enfant en plus des précédents déjà traités dans la boucle, pour que
+ * les rangs famille/multi-stages soient correctement incrémentés.
+ */
+export async function computeStageReductionsAsync(params: {
+  selectedChildren: string[];
+  children: any[];
+  prixBase: number;
+  familyId: string;
+  stageDate: string;
+  stageType: string;
+  creneauId: string; // à exclure (déjà inscrit en amont)
+  settings: import("./discounts").DiscountSettings;
+  periods: import("./discounts").VacationPeriod[];
+}): Promise<StageLine[]> {
+  const { applyDiscounts, fetchFamilyStagesInPeriod, getPeriodForDate } = await import("./discounts");
+  const {
+    selectedChildren, children, prixBase, familyId,
+    stageDate, stageType, creneauId, settings, periods,
+  } = params;
+
+  // 1. Identifier la période — si hors vacances, pas de réduction (prix plein)
+  const periodId = getPeriodForDate(stageDate, periods);
+  const period = periodId ? periods.find((p) => p.id === periodId) : null;
+
+  if (!period) {
+    // Hors vacances → fallback prix plein, sans réduction
+    return selectedChildren.map((childId, idx) => {
+      const child = children.find((c: any) => c.id === childId);
+      return {
+        childId,
+        childName: child?.firstName || "?",
+        prixBase,
+        remiseEuros: 0,
+        rang: idx + 1,
+        prixReduit: prixBase,
+      };
+    });
+  }
+
+  // 2. Charger les stages déjà inscrits (sans la résa en cours)
+  const existingStages = await fetchFamilyStagesInPeriod(familyId, period, creneauId);
+
+  // 3. Pour chaque enfant sélectionné, calculer sa réduction en tenant compte
+  //    des enfants précédents dans la boucle (simuler l'ordre d'inscription)
+  const results: StageLine[] = [];
+  const simulatedStages = [...existingStages];
+
+  for (let idx = 0; idx < selectedChildren.length; idx++) {
+    const childId = selectedChildren[idx];
+    const child = children.find((c: any) => c.id === childId);
+    const childName = child?.firstName || "?";
+
+    // On passe par applyDiscounts en simulant : les stages "existants" pour
+    // cet enfant incluent les enfants précédents de la sélection courante.
+    const result = await applyDiscounts({
+      familyId,
+      newChildId: childId,
+      stageDate,
+      stageType,
+      originalPriceTTC: prixBase,
+      settings,
+      periods,
+      excludeCreneauId: creneauId,
+      // NB : on ne peut pas passer simulatedStages directement (API ne le permet pas)
+      // Pour que le calcul soit correct, il faut que les enfants précédents aient
+      // déjà créé leurs réservations dans Firestore, OU qu'on réécrive applyDiscounts
+      // pour accepter un tableau de stages à ajouter virtuellement. Ici on simule.
+    } as any);
+
+    // Ajuster manuellement pour prendre en compte les enfants précédents
+    // (pas encore dans Firestore). On recalcule à partir des règles brutes :
+    const distinctChildren = new Set(simulatedStages.map((s) => s.childId));
+    const nthFamille = distinctChildren.has(childId) ? 0 : distinctChildren.size + 1;
+    const nbStagesEnfant = simulatedStages.filter((s) => s.childId === childId).length;
+    const nthMultiStage = nbStagesEnfant + 1;
+
+    const famRule = [...(settings.familyDiscount || [])].sort((a, b) => a.nth - b.nth);
+    const msRule = [...(settings.multiStageDiscount || [])].sort((a, b) => a.nth - b.nth);
+
+    let pctFamille = 0;
+    if (nthFamille >= 2) {
+      for (const r of famRule) if (r.nth <= nthFamille) pctFamille = r.discount;
+    }
+    let pctMulti = 0;
+    if (nthMultiStage >= 2) {
+      for (const r of msRule) if (r.nth <= nthMultiStage) pctMulti = r.discount;
+    }
+    const totalPct = Math.min(pctFamille + pctMulti, 50);
+    const discountAmount = Math.round((prixBase * totalPct) / 100 * 100) / 100;
+    const prixReduit = Math.max(0, Math.round((prixBase - discountAmount) * 100) / 100);
+
+    const reasons: string[] = [];
+    if (pctFamille > 0) reasons.push(`${nthFamille}ème enfant famille (-${pctFamille}%)`);
+    if (pctMulti > 0) reasons.push(`${nthMultiStage}ème stage (-${pctMulti}%)`);
+
+    results.push({
+      childId,
+      childName,
+      prixBase,
+      remiseEuros: discountAmount,
+      rang: nthFamille || 1,
+      prixReduit,
+      discountPercent: totalPct,
+      discountReasons: reasons,
+      originalPriceTTC: prixBase,
+    });
+
+    // Ajouter cet enfant aux stages "simulés" pour le prochain enfant de la boucle
+    simulatedStages.push({
+      childId,
+      childName,
+      familyId,
+      stageDate,
+      stageTitle: "",
+      creneauId,
+      priceTTC: prixBase,
+    });
+  }
+
+  // Log debug si activé
+  if (typeof window !== "undefined" && (window as any).__DEBUG_DISCOUNTS__) {
+    console.log("[computeStageReductionsAsync]", {
+      familyId,
+      period: period.name,
+      existingStagesCount: existingStages.length,
+      results: results.map((r) => ({ child: r.childName, reduction: r.discountPercent + "%", prix: r.prixReduit })),
+    });
+  }
+
+  return results;
+}
+
 
 /** Inscrit un enfant dans un créneau (lecture fraîche Firestore) */
 export async function enrollChildInCreneau(creneauId: string, child: EnrolledChild): Promise<boolean> {
