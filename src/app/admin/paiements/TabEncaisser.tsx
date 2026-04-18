@@ -1,9 +1,16 @@
 "use client";
-import React, { useState } from "react";
-import { updateDoc, addDoc, doc, collection, serverTimestamp, Timestamp } from "firebase/firestore";
+import React, { useState, useEffect } from "react";
+import { updateDoc, addDoc, doc, getDoc, collection, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { emailTemplates } from "@/lib/email-templates";
 import { safeNumber, generateOrderId } from "@/lib/utils";
+import {
+  applyDiscounts,
+  fetchVacationPeriods,
+  fetchDiscountSettings,
+  type VacationPeriod,
+  type DiscountSettings,
+} from "@/lib/discounts";
 import { Card, Badge } from "@/components/ui";
 import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle, Copy, ChevronDown, Gift } from "lucide-react";
 import type { Family, Activity } from "@/types";
@@ -49,6 +56,17 @@ export function TabEncaisser({
   const [promoCode, setPromoCode] = useState("");
   const [appliedPromo, setAppliedPromo] = useState<{ label: string; discountMode: string; discountValue: number } | null>(null);
   const [manualDiscount, setManualDiscount] = useState("");
+
+  // ─── Réductions famille/multi-stages (chargées au montage) ───
+  const [vacationPeriods, setVacationPeriods] = useState<VacationPeriod[]>([]);
+  const [discountSettings, setDiscountSettings] = useState<DiscountSettings>({
+    familyDiscount: [],
+    multiStageDiscount: [],
+  });
+  useEffect(() => {
+    fetchVacationPeriods().then(setVacationPeriods).catch(console.error);
+    fetchDiscountSettings().then(setDiscountSettings).catch(console.error);
+  }, []);
   const inputCls = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
 
   const selectedFam = families.find((f) => f.firestoreId === selectedFamily);
@@ -137,13 +155,76 @@ export function TabEncaisser({
   const handlePayment = async () => {
     if (!selectedFamily || basket.length === 0) return;
     setSaving(true);
-    const paid = paidAmount ? safeNumber(paidAmount) : basketTotal;
+
+    // ─── Revérification des réductions famille/multi-stages sur items "stage" ───
+    const revisedBasket: BasketItem[] = [];
+    const adjustments: string[] = [];
+    for (const item of basket) {
+      const creneauId = (item as any).creneauId;
+      if (!creneauId) { revisedBasket.push(item); continue; }
+      try {
+        const cSnap = await getDoc(doc(db, "creneaux", creneauId));
+        if (!cSnap.exists()) { revisedBasket.push(item); continue; }
+        const c = cSnap.data() as any;
+        if (!["stage", "stage_journee"].includes(c.activityType)) {
+          revisedBasket.push(item); continue;
+        }
+        const childId = (item as any).childId;
+        if (!childId) { revisedBasket.push(item); continue; }
+        const original = (item as any).originalPriceTTC || item.priceTTC;
+        const result = await applyDiscounts({
+          familyId: selectedFamily,
+          newChildId: childId,
+          stageDate: c.date,
+          stageType: c.activityType,
+          originalPriceTTC: original,
+          settings: discountSettings,
+          periods: vacationPeriods,
+        });
+        if (Math.abs(result.finalPriceTTC - item.priceTTC) > 0.01) {
+          adjustments.push(`${item.activityTitle} (${item.childName}) : ${item.priceTTC.toFixed(2)}€ → ${result.finalPriceTTC.toFixed(2)}€`);
+          const newPriceHT = Math.round((result.finalPriceTTC / (1 + item.tva / 100)) * 100) / 100;
+          const revised: any = { ...item, priceTTC: result.finalPriceTTC, priceHT: newPriceHT };
+          if (result.discountPercent > 0) {
+            revised.originalPriceTTC = result.originalPriceTTC;
+            revised.discountPercent = result.discountPercent;
+            revised.discountAmount = result.discountAmount;
+            revised.discountReasons = result.reasons;
+          }
+          revisedBasket.push(revised);
+        } else {
+          revisedBasket.push(item);
+        }
+      } catch (e) {
+        console.error("[paiements] revérif échouée pour item", item, e);
+        revisedBasket.push(item);
+      }
+    }
+    if (adjustments.length > 0) {
+      const msg = "Prix ajustés automatiquement (réductions famille/multi-stages) :\n\n" +
+        adjustments.join("\n") + "\n\nContinuer l'encaissement ?";
+      if (!confirm(msg)) {
+        setSaving(false);
+        setBasket(revisedBasket); // mettre à jour le panier affiché
+        return;
+      }
+    }
+    // ─── Fin revérification ───
+
+    // Recalculer le total après révision
+    const revisedSubtotal = revisedBasket.reduce((s, i) => s + i.priceTTC, 0);
+    const revisedPromoDiscount = appliedPromo
+      ? (appliedPromo.discountMode === "percent" ? revisedSubtotal * appliedPromo.discountValue / 100 : appliedPromo.discountValue)
+      : (safeNumber(manualDiscount));
+    const revisedTotal = Math.max(0, revisedSubtotal - revisedPromoDiscount);
+    const paid = paidAmount ? safeNumber(paidAmount) : revisedTotal;
+
     const payRef = await addDoc(collection(db, "payments"), {
       orderId: generateOrderId(),
       familyId: selectedFamily,
       familyName: selectedFam?.parentName || "—",
-      items: basket,
-      totalTTC: basketTotal,
+      items: revisedBasket,
+      totalTTC: revisedTotal,
       paymentMode: "",
       paymentRef: "",
       status: "pending",
@@ -154,9 +235,9 @@ export function TabEncaisser({
       await enregistrerEncaissement(payRef.id, {
         familyId: selectedFamily,
         familyName: selectedFam?.parentName || "—",
-        items: basket,
-        totalTTC: basketTotal,
-      }, paid, paymentMode, paymentRef, basket.map(i => i.activityTitle).join(", "), encaissementDate);
+        items: revisedBasket,
+        totalTTC: revisedTotal,
+      }, paid, paymentMode, paymentRef, revisedBasket.map(i => i.activityTitle).join(", "), encaissementDate);
     }
     setBasket([]); setPaymentRef(""); setPaidAmount("");
     setEncaissementDate(new Date().toISOString().split("T")[0]);

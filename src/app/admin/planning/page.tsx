@@ -12,6 +12,14 @@ import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { emailTemplates } from "@/lib/email-templates";
 import { generateOrderId } from "@/lib/utils";
+import {
+  applyDiscounts,
+  findMergeablePayment,
+  fetchVacationPeriods,
+  fetchDiscountSettings,
+  type VacationPeriod,
+  type DiscountSettings,
+} from "@/lib/discounts";
 import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Loader2, Trash2, Users, CalendarDays, Briefcase, Bell, Mail, Sparkles, Printer, Settings } from "lucide-react";
 import type { Activity, Family } from "@/types";
 import { Creneau, EnrolledChild, typeColors, dayNames, dayNamesFull, payModes, getWeekDates, fmtDate, fmtDateFR, fmtMonthFR, compareCreneaux } from "./types";
@@ -39,6 +47,11 @@ export default function PlanningPage() {
   const [payments, setPayments] = useState<any[]>([]);
   const [allCartes, setAllCartes] = useState<any[]>([]);
   const [allForfaits, setAllForfaits] = useState<any[]>([]);
+  const [vacationPeriods, setVacationPeriods] = useState<VacationPeriod[]>([]);
+  const [discountSettings, setDiscountSettings] = useState<DiscountSettings>({
+    familyDiscount: [],
+    multiStageDiscount: [],
+  });
 
   // ── IA Planning ───────────────────────────────────────────────────────────
   const [iaLoading, setIaLoading] = useState(false);
@@ -91,6 +104,16 @@ export default function PlanningPage() {
       setPayments(pS.docs.map(d => ({ id: d.id, ...d.data() })));
       setAllCartes(cartesS.docs.map(d => ({ id: d.id, ...d.data() })));
       setAllForfaits(forfaitsS.docs.map(d => ({ id: d.id, ...d.data() })));
+
+      // Charger périodes de vacances + barèmes de réduction (une fois par fetch)
+      try {
+        const [periods, settings] = await Promise.all([
+          fetchVacationPeriods(),
+          fetchDiscountSettings(),
+        ]);
+        setVacationPeriods(periods);
+        setDiscountSettings(settings);
+      } catch (e) { console.error("[planning] chargement discounts failed:", e); }
 
       let s: string, e: string;
       if (viewMode === "day") { s = fmtDate(currentDay); e = s; }
@@ -556,9 +579,44 @@ export default function PlanningPage() {
         } catch (e) { console.error("Erreur vérification carte:", e); }
       }
       // ─── FIN LOGIQUE CARTE ───
-      const priceHT = priceTTC / (1 + (c.tvaTaux || 5.5) / 100);
+
+      // ─── CALCUL RÉDUCTIONS (famille + multi-stages) ───
+      // Ne s'applique qu'aux stages en période de vacances scolaires.
+      // Pour les autres types, applyDiscounts renvoie le prix plein.
+      const discountResult = await applyDiscounts({
+        familyId: child.familyId,
+        newChildId: child.childId,
+        stageDate: c.date,
+        stageType: c.activityType,
+        originalPriceTTC: Math.round(priceTTC * 100) / 100,
+        settings: discountSettings,
+        periods: vacationPeriods,
+      });
+      const finalPriceTTC = discountResult.finalPriceTTC;
+      const finalPriceHT = finalPriceTTC / (1 + (c.tvaTaux || 5.5) / 100);
+      // ─── FIN CALCUL RÉDUCTIONS ───
+
+      const priceHT = finalPriceHT;
       const isPaid = !!payMode;
-      const newItem = { activityTitle: c.activityTitle, childId: child.childId, childName: child.childName, creneauId: cid, activityType: c.activityType, date: c.date, startTime: c.startTime, endTime: c.endTime, priceHT: Math.round(priceHT * 100) / 100, tva: c.tvaTaux || 5.5, priceTTC: Math.round(priceTTC * 100) / 100 };
+      const newItem: any = {
+        activityTitle: c.activityTitle,
+        childId: child.childId,
+        childName: child.childName,
+        creneauId: cid,
+        activityType: c.activityType,
+        date: c.date,
+        startTime: c.startTime,
+        endTime: c.endTime,
+        priceHT: Math.round(finalPriceHT * 100) / 100,
+        tva: c.tvaTaux || 5.5,
+        priceTTC: Math.round(finalPriceTTC * 100) / 100,
+      };
+      if (discountResult.discountPercent > 0) {
+        newItem.originalPriceTTC = discountResult.originalPriceTTC;
+        newItem.discountPercent = discountResult.discountPercent;
+        newItem.discountAmount = discountResult.discountAmount;
+        newItem.discountReasons = discountResult.reasons;
+      }
 
       let payRefId = "";
 
@@ -586,11 +644,11 @@ export default function PlanningPage() {
         const payRef = await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
           familyId: child.familyId, familyName: child.familyName,
           items: [newItem],
-          totalTTC: Math.round(priceTTC * 100) / 100,
+          totalTTC: Math.round(finalPriceTTC * 100) / 100,
           paymentMode: payMode || "",
           paymentRef: "",
           status: "paid",
-          paidAmount: Math.round(priceTTC * 100) / 100,
+          paidAmount: Math.round(finalPriceTTC * 100) / 100,
           ...(invoiceNumber ? { invoiceNumber } : {}),
           date: serverTimestamp(),
         });
@@ -617,7 +675,7 @@ export default function PlanningPage() {
               throw new Error("NO_AVOIR");
             }
 
-            let remaining = Math.round(priceTTC * 100) / 100;
+            let remaining = Math.round(finalPriceTTC * 100) / 100;
             let totalDeduit = 0;
             for (const a of avoirsActifs) {
               if (remaining <= 0) break;
@@ -656,7 +714,7 @@ export default function PlanningPage() {
 
         await addDoc(collection(db, "encaissements"), {
           paymentId: payRefId, familyId: child.familyId, familyName: child.familyName,
-          montant: Math.round(priceTTC * 100) / 100, mode: payMode,
+          montant: Math.round(finalPriceTTC * 100) / 100, mode: payMode,
           modeLabel: payMode === "cb_terminal" ? "CB (terminal)" : payMode === "especes" ? "Espèces" : payMode === "cheque" ? "Chèque" : payMode || "",
           ref: "", activityTitle: `${c.activityTitle} — ${child.childName}`,
           date: serverTimestamp(),
@@ -666,12 +724,12 @@ export default function PlanningPage() {
         try {
           const fidSettingsSnap = await getDoc(doc(db, "settings", "fidelite"));
           const fidEnabled = fidSettingsSnap.exists() ? (fidSettingsSnap.data()?.enabled !== false) : false;
-          if (fidEnabled && priceTTC > 0) {
-            const pts = Math.floor(priceTTC);
+          if (fidEnabled && finalPriceTTC > 0) {
+            const pts = Math.floor(finalPriceTTC);
             const fidRef = doc(db, "fidelite", child.familyId);
             const fidSnap = await getDoc(fidRef);
             const expiry = new Date(); expiry.setFullYear(expiry.getFullYear() + 1);
-            const entry = { date: new Date().toISOString(), points: pts, type: "gain", label: `${c.activityTitle} — ${child.childName}`, expiry: expiry.toISOString(), montant: priceTTC };
+            const entry = { date: new Date().toISOString(), points: pts, type: "gain", label: `${c.activityTitle} — ${child.childName}`, expiry: expiry.toISOString(), montant: finalPriceTTC };
             if (fidSnap.exists()) {
               const cur = fidSnap.data() || {};
               await updateDoc(fidRef, { points: ((cur.points as number) || 0) + pts, history: [...((cur.history as any[]) || []), entry], updatedAt: serverTimestamp() });
@@ -685,16 +743,25 @@ export default function PlanningPage() {
       } else {
         // Paiement en attente → fusionner dans la commande ouverte la plus récente
         const existingSnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", child.familyId), where("status", "==", "pending")));
-        // Prendre la plus récente par date — EXCLURE les échéances de forfait
+        // Filtrage : fusion seulement si pending < 7 jours (hors échéances de forfait)
+        const MERGE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+        const now = Date.now();
         const pendingDocs = existingSnap.docs
           .filter(d => !(d.data().echeancesTotal > 1))
+          .filter(d => {
+            const dt = d.data().date;
+            if (!dt) return false;
+            const ms = dt.seconds ? dt.seconds * 1000 : new Date(dt).getTime();
+            if (isNaN(ms)) return false;
+            return now - ms <= MERGE_WINDOW_MS;
+          })
           .sort((a, b) => {
             const da = a.data().date?.seconds || 0;
             const db2 = b.data().date?.seconds || 0;
             return db2 - da;
           });
         if (pendingDocs.length > 1) {
-          console.warn(`⚠️ ${pendingDocs.length} commandes pending pour famille ${child.familyId} — fusion dans la plus récente`);
+          console.warn(`⚠️ ${pendingDocs.length} commandes pending récentes pour famille ${child.familyId} — fusion dans la plus récente`);
         }
         const openOrder = pendingDocs.length > 0 ? pendingDocs[0] : null;
 
@@ -712,7 +779,7 @@ export default function PlanningPage() {
           const payRef = await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
             familyId: child.familyId, familyName: child.familyName,
             items: [newItem],
-            totalTTC: Math.round(priceTTC * 100) / 100,
+            totalTTC: Math.round(finalPriceTTC * 100) / 100,
             paymentMode: "",
             paymentRef: "",
             status: "pending",

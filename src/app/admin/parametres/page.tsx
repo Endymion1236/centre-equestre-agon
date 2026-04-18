@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc, collection, getDocs, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { Save, Plus, Trash2, Loader2, AlertTriangle, Users, Pencil } from "lucide-react";
+import { Save, Plus, Trash2, Loader2, AlertTriangle, Users, Pencil, Calendar } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 
 const defaultAccounts = [
@@ -35,7 +35,7 @@ export default function ParametresPage() {
     setAgentContext({ module_actif: "parametres", description: "moniteurs, tarifs, infos centre" });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [section, setSection] = useState<"centre" | "tarifs" | "reductions" | "degressivite" | "annulation" | "comptable" | "horaires" | "moniteurs" | "fidelite" | "inscription" | "epreuves" | "maintenance" | "notifications">("centre");
+  const [section, setSection] = useState<"centre" | "tarifs" | "reductions" | "degressivite" | "vacances" | "annulation" | "comptable" | "horaires" | "moniteurs" | "fidelite" | "inscription" | "epreuves" | "maintenance" | "notifications">("centre");
   const [notifSettings, setNotifSettings] = useState({
     nouvelle_inscription: true,
     nouveau_paiement: true,
@@ -153,6 +153,63 @@ export default function ParametresPage() {
     { nth: 3, discount: 10 },
   ]);
   const [cancellation, setCancellation] = useState({ hours: 72, retention: 50 });
+
+  // ═══ Vacances scolaires ═══
+  // Source pour la logique de réduction famille/multi-stages.
+  interface VacationPeriod { id: string; name: string; startDate: string; endDate: string; }
+  const [vacations, setVacations] = useState<VacationPeriod[]>([]);
+  const [loadingVacations, setLoadingVacations] = useState(true);
+  const [savingVacation, setSavingVacation] = useState(false);
+  const [newVacName, setNewVacName] = useState("");
+  const [newVacStart, setNewVacStart] = useState("");
+  const [newVacEnd, setNewVacEnd] = useState("");
+  // Vacances scolaires zone B 2025-2026 (source : education.gouv.fr)
+  const DEFAULT_VACATION_PERIODS = [
+    { name: "Vacances de la Toussaint 2025", startDate: "2025-10-18", endDate: "2025-11-03" },
+    { name: "Vacances de Noël 2025", startDate: "2025-12-20", endDate: "2026-01-05" },
+    { name: "Vacances d'Hiver 2026", startDate: "2026-02-14", endDate: "2026-03-02" },
+    { name: "Vacances de Printemps 2026", startDate: "2026-04-11", endDate: "2026-04-27" },
+    { name: "Vacances d'Été 2026", startDate: "2026-07-04", endDate: "2026-08-31" },
+  ];
+  useEffect(() => {
+    (async () => {
+      try {
+        const snap = await getDocs(collection(db, "vacationPeriods"));
+        if (snap.empty) {
+          // Seed automatique au premier lancement
+          for (const p of DEFAULT_VACATION_PERIODS) {
+            await addDoc(collection(db, "vacationPeriods"), { ...p, createdAt: serverTimestamp() });
+          }
+          const newSnap = await getDocs(collection(db, "vacationPeriods"));
+          setVacations(newSnap.docs.map(d => ({ id: d.id, ...d.data() } as VacationPeriod)));
+        } else {
+          setVacations(snap.docs.map(d => ({ id: d.id, ...d.data() } as VacationPeriod)));
+        }
+      } catch (e) { console.error("[parametres] load vacations:", e); }
+      setLoadingVacations(false);
+    })();
+  }, []);
+  const handleAddVacation = async () => {
+    if (!newVacName || !newVacStart || !newVacEnd) { alert("Merci de remplir tous les champs."); return; }
+    if (newVacStart > newVacEnd) { alert("La date de début doit être antérieure à la date de fin."); return; }
+    setSavingVacation(true);
+    try {
+      const ref = await addDoc(collection(db, "vacationPeriods"), {
+        name: newVacName, startDate: newVacStart, endDate: newVacEnd, createdAt: serverTimestamp(),
+      });
+      setVacations([...vacations, { id: ref.id, name: newVacName, startDate: newVacStart, endDate: newVacEnd }]);
+      setNewVacName(""); setNewVacStart(""); setNewVacEnd("");
+    } catch (e) { console.error(e); alert("Erreur : " + (e as any).message); }
+    setSavingVacation(false);
+  };
+  const handleUpdateVacation = async (id: string, field: string, value: string) => {
+    setVacations(prev => prev.map(v => v.id === id ? { ...v, [field]: value } : v));
+    try { await updateDoc(doc(db, "vacationPeriods", id), { [field]: value }); } catch (e) { console.error(e); }
+  };
+  const handleDeleteVacation = async (id: string) => {
+    if (!confirm("Supprimer cette période ?")) return;
+    try { await deleteDoc(doc(db, "vacationPeriods", id)); setVacations(vacations.filter(v => v.id !== id)); } catch (e) { console.error(e); }
+  };
   const [saved, setSaved] = useState(false);
   const [savingDegress, setSavingDegress] = useState(false);
 
@@ -324,6 +381,7 @@ export default function ParametresPage() {
           ["inscription", "📋 Inscription annuelle"],
           ["reductions", "Réductions & promos"],
           ["degressivite", "Dégressivité"],
+          ["vacances", "📅 Vacances scolaires"],
           ["annulation", "Annulation"],
           ["comptable", "Plan comptable"],
           ["horaires", "Horaires"],
@@ -788,6 +846,78 @@ export default function ParametresPage() {
           <button onClick={handleSave} disabled={savingDegress} className="self-start flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-6 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400 disabled:opacity-50">
             {savingDegress ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {savingDegress ? "Enregistrement..." : "Enregistrer"}
           </button>
+        </div>
+      )}
+
+      {/* ─── Vacances scolaires ─── */}
+      {section === "vacances" && (
+        <div className="flex flex-col gap-5">
+          <Card padding="sm" className="bg-blue-50 border-blue-500/8">
+            <div className="font-body text-sm text-blue-800">
+              <Calendar className="inline w-4 h-4 mr-1" />
+              Ces périodes définissent quand les réductions famille et multi-stages s&apos;appliquent. Une inscription stage en dehors de ces périodes n&apos;aura pas de réduction automatique.
+            </div>
+          </Card>
+          {loadingVacations ? (
+            <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto" /></div>
+          ) : (
+            <>
+              <Card padding="md">
+                <h3 className="font-body text-base font-semibold text-blue-800 mb-4">
+                  Périodes définies ({vacations.length})
+                </h3>
+                <div className="flex flex-col gap-3">
+                  {[...vacations].sort((a, b) => a.startDate.localeCompare(b.startDate)).map((v) => (
+                    <div key={v.id} className="flex items-center gap-3 flex-wrap border border-blue-500/8 rounded-lg p-3">
+                      <input type="text" value={v.name}
+                        onChange={(e) => handleUpdateVacation(v.id, "name", e.target.value)}
+                        className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
+                      <input type="date" value={v.startDate}
+                        onChange={(e) => handleUpdateVacation(v.id, "startDate", e.target.value)}
+                        className="w-40 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
+                      <span className="font-body text-xs text-gray-400">→</span>
+                      <input type="date" value={v.endDate}
+                        onChange={(e) => handleUpdateVacation(v.id, "endDate", e.target.value)}
+                        className="w-40 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
+                      <button onClick={() => handleDeleteVacation(v.id)}
+                        className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                  {vacations.length === 0 && (
+                    <p className="font-body text-sm text-gray-400 italic text-center py-4">Aucune période définie.</p>
+                  )}
+                </div>
+              </Card>
+              <Card padding="md">
+                <h3 className="font-body text-base font-semibold text-blue-800 mb-4">Ajouter une période</h3>
+                <div className="flex gap-3 flex-wrap items-end">
+                  <div className="flex-1 min-w-[200px]">
+                    <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Nom</label>
+                    <input type="text" value={newVacName} onChange={(e) => setNewVacName(e.target.value)}
+                      placeholder="Ex : Vacances de la Toussaint 2026"
+                      className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Début</label>
+                    <input type="date" value={newVacStart} onChange={(e) => setNewVacStart(e.target.value)}
+                      className="w-40 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Fin</label>
+                    <input type="date" value={newVacEnd} onChange={(e) => setNewVacEnd(e.target.value)}
+                      className="w-40 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
+                  </div>
+                  <button onClick={handleAddVacation} disabled={savingVacation}
+                    className={`px-4 py-2 rounded-lg font-body text-sm font-semibold border-none cursor-pointer
+                      ${savingVacation ? "bg-gray-200 text-gray-400" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
+                    {savingVacation ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus size={14} className="inline mr-1" />Ajouter</>}
+                  </button>
+                </div>
+              </Card>
+            </>
+          )}
         </div>
       )}
 
