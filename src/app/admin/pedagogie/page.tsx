@@ -64,7 +64,15 @@ export default function PedagogiePage() {
   const allChildren = families.flatMap(f => (f.children || []).map((c: any) => ({
     ...c, familyId: f.firestoreId, familyName: f.parentName,
     peda: c.peda || { objectifs: [], notes: [] },
-  })));
+  }))).sort((a, b) => {
+    // Tri alphabétique : nom de famille d'abord, puis prénom (cohérent avec /admin/cavaliers)
+    const lastA = (a.lastName || a.familyName || "").toLowerCase();
+    const lastB = (b.lastName || b.familyName || "").toLowerCase();
+    if (lastA !== lastB) return lastA.localeCompare(lastB, "fr");
+    const firstA = (a.firstName || "").toLowerCase();
+    const firstB = (b.firstName || "").toLowerCase();
+    return firstA.localeCompare(firstB, "fr");
+  });
 
   const filtered = search
     ? allChildren.filter(c => {
