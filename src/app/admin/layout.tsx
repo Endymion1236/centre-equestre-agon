@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -36,6 +36,7 @@ import {
   Building2,
   FileText,
   CheckCircle2,
+  ChevronDown,
 } from "lucide-react";
 
 const navItems = [
@@ -79,7 +80,6 @@ function AdminSidebar({ nbImpayes }: { nbImpayes: number }) {
   const { user, signOut, isMoniteur, userRole } = useAuth();
   const pathname = usePathname();
 
-  // Pages autorisées pour les moniteurs
   const MONITEUR_PAGES = [
     "/admin/dashboard",
     "/admin/planning",
@@ -88,10 +88,8 @@ function AdminSidebar({ nbImpayes }: { nbImpayes: number }) {
     "/admin/pedagogie",
     "/admin/management",
   ];
-  // Sections (séparateurs) autorisées pour les moniteurs
   const MONITEUR_SECTIONS = ["Terrain"];
 
-  // Filtrer les navItems selon le rôle
   const filteredNavItems = isMoniteur
     ? navItems.filter((item: any) => {
         if (item.separator) return MONITEUR_SECTIONS.includes(item.label);
@@ -99,59 +97,138 @@ function AdminSidebar({ nbImpayes }: { nbImpayes: number }) {
       })
     : navItems;
 
+  // Regrouper les items par section (label du séparateur précédent).
+  // Les items sans séparateur en amont (ex: Dashboard) forment une section "null".
+  const sections = useMemo(() => {
+    const out: { label: string | null; items: any[] }[] = [];
+    let curr: { label: string | null; items: any[] } = { label: null, items: [] };
+    for (const it of filteredNavItems) {
+      if (it.separator) {
+        if (curr.items.length > 0) out.push(curr);
+        curr = { label: it.label, items: [] };
+      } else {
+        curr.items.push(it);
+      }
+    }
+    if (curr.items.length > 0) out.push(curr);
+    return out;
+  }, [filteredNavItems]);
+
+  // Section contenant le path actif — on la force dépliée
+  const activeSectionLabel = useMemo(() => {
+    for (const s of sections) {
+      if (s.items.some((i: any) => pathname?.startsWith(i.href))) return s.label;
+    }
+    return null;
+  }, [sections, pathname]);
+
+  // État collapse persistant (localStorage)
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("admin-sidebar-collapsed");
+      if (saved) setCollapsed(new Set(JSON.parse(saved)));
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem("admin-sidebar-collapsed", JSON.stringify([...collapsed])); } catch {}
+  }, [collapsed]);
+
+  const toggleSection = (label: string) => {
+    if (label === activeSectionLabel) return; // pas de repli sur la section active
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label); else next.add(label);
+      return next;
+    });
+  };
+
   return (
-    <div data-testid="admin-nav" className="w-[224px] bg-blue-800 border-r border-white/5 py-3 px-2.5 flex flex-col gap-0.5 flex-shrink-0 min-h-screen hidden md:flex">
-      {/* ─── Logo + rôle ─── */}
-      <div className="px-2.5 pt-2 pb-5 flex items-center gap-2.5">
-        <img src="/images/logo-ce-agon.png" alt="Logo" className="w-9 h-9 rounded-lg object-contain" />
+    <div
+      data-testid="admin-nav"
+      className="w-[228px] border-r border-white/5 py-3 px-2.5 flex flex-col gap-0.5 flex-shrink-0 min-h-screen hidden md:flex"
+      style={{ background: "linear-gradient(180deg, #060D17 0%, #0C1A2E 45%, #122A5A 100%)" }}
+    >
+      {/* ─── Logo ─── */}
+      <div className="px-2.5 pt-2 pb-4 flex items-center gap-3 border-b border-gold-400/25 mb-3">
+        <img
+          src="/images/logo-ce-agon.png"
+          alt="Logo"
+          className="w-12 h-12 rounded-xl object-contain shadow-[0_4px_16px_rgba(0,0,0,0.3)] ring-1 ring-white/10"
+        />
         <div className="min-w-0">
-          <div className="font-display text-[15px] font-bold text-white leading-tight">Centre Équestre</div>
-          <div className="font-body text-[10px] text-gold-400/90 uppercase tracking-[0.18em] font-semibold mt-0.5">
+          <div className="font-display text-[16px] font-bold text-white leading-tight">Centre Équestre</div>
+          <div className="font-body text-[10px] text-gold-400 uppercase tracking-[0.2em] font-bold mt-1">
             {isMoniteur ? "Espace moniteur" : "Administration"}
           </div>
         </div>
       </div>
 
-      {/* ─── Items ─── */}
-      {filteredNavItems.map((item: any, idx: number) => {
-        if (item.separator) {
-          return (
-            <div key={`sep-${idx}`} className="px-2.5 pt-5 pb-1.5">
-              {idx > 0 && <div className="border-t border-white/10 mb-3" />}
-              <div className="font-body text-[10px] text-gold-400/80 uppercase tracking-[0.18em] font-bold">
-                {item.label}
-              </div>
-            </div>
-          );
-        }
-        const Icon = item.icon;
-        const active = pathname?.startsWith(item.href);
-        const showImpayesBadge = item.href === "/admin/paiements" && nbImpayes > 0;
+      {/* ─── Sections ─── */}
+      {sections.map((section, sIdx) => {
+        const isCollapsed = section.label ? collapsed.has(section.label) : false;
+        const isActiveSection = section.label === activeSectionLabel;
         return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`
-              group relative flex items-center gap-3 pl-3 pr-2.5 py-2 rounded-lg no-underline transition-all duration-150
-              ${active
-                ? "bg-white/10 text-white font-semibold"
-                : "text-white/70 hover:text-white hover:bg-white/5"}
-            `}
-          >
-            {/* Barre d'accent gold à gauche quand actif */}
-            {active && (
-              <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-gold-400" />
+          <div key={`sec-${sIdx}`} className={sIdx > 0 && section.label ? "mt-2" : ""}>
+            {section.label && (
+              <button
+                type="button"
+                onClick={() => toggleSection(section.label!)}
+                disabled={isActiveSection}
+                className="group w-full flex items-center justify-between px-2.5 pt-3 pb-1.5 bg-transparent border-none cursor-pointer disabled:cursor-default"
+              >
+                <span className={`font-body text-[10px] uppercase tracking-[0.2em] font-bold transition-colors ${
+                  isActiveSection ? "text-gold-400" : "text-gold-400/75 group-hover:text-gold-300"
+                }`}>
+                  {section.label}
+                </span>
+                {!isActiveSection && (
+                  <ChevronDown
+                    size={12}
+                    className={`text-gold-400/50 group-hover:text-gold-300 transition-transform duration-200 ${
+                      isCollapsed ? "-rotate-90" : ""
+                    }`}
+                  />
+                )}
+              </button>
             )}
-            <Icon size={16} className={active ? "text-gold-400" : "text-white/60 group-hover:text-white/90 transition-colors"} />
-            <span className="font-body text-[13px] flex-1 truncate">
-              {item.label}
-            </span>
-            {showImpayesBadge && (
-              <span className="flex-shrink-0 bg-red-500 text-white font-body text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-tight">
-                {nbImpayes}
-              </span>
-            )}
-          </Link>
+            <div
+              className="overflow-hidden transition-[max-height,opacity] duration-250 ease-in-out"
+              style={{
+                maxHeight: isCollapsed ? 0 : 800,
+                opacity: isCollapsed ? 0 : 1,
+              }}
+            >
+              {section.items.map((item: any) => {
+                const Icon = item.icon;
+                const active = pathname?.startsWith(item.href);
+                const showImpayesBadge = item.href === "/admin/paiements" && nbImpayes > 0;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`
+                      group flex items-center gap-3 px-3 py-2 rounded-lg no-underline transition-all duration-150 mt-0.5
+                      ${active
+                        ? "bg-gold-400/20 text-gold-200 font-semibold shadow-[inset_0_0_0_1px_rgba(240,160,16,0.25)]"
+                        : "text-white/70 hover:text-white hover:bg-white/5"}
+                    `}
+                  >
+                    <Icon
+                      size={16}
+                      className={active ? "text-gold-300" : "text-white/55 group-hover:text-white/90 transition-colors"}
+                    />
+                    <span className="font-body text-[13px] flex-1 truncate">{item.label}</span>
+                    {showImpayesBadge && (
+                      <span className="flex-shrink-0 bg-red-500 text-white font-body text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-tight">
+                        {nbImpayes}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
         );
       })}
 
@@ -384,7 +461,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Menu mobile déroulant */}
         {mobileMenuOpen && (
           <div className="md:hidden fixed inset-0 top-[56px] z-40 bg-black/30" onClick={() => setMobileMenuOpen(false)}>
-            <div className="bg-blue-800 w-[260px] h-full overflow-y-auto py-3 px-2.5 flex flex-col gap-0.5 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div
+              className="w-[260px] h-full overflow-y-auto py-3 px-2.5 flex flex-col gap-0.5 shadow-2xl"
+              style={{ background: "linear-gradient(180deg, #060D17 0%, #0C1A2E 45%, #122A5A 100%)" }}
+              onClick={e => e.stopPropagation()}
+            >
               {(isMoniteur && !isAdmin ? navItems.filter((item: any) => {
                 if (item.separator) return ["Terrain"].includes(item.label);
                 return ["/admin/dashboard","/admin/planning","/admin/montoir","/admin/cavalerie","/admin/pedagogie","/admin/management"].includes(item.href);
@@ -402,10 +483,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 const showImpayesBadge = item.href === "/admin/paiements" && nbImpayes > 0;
                 return (
                   <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)}
-                    className={`group relative flex items-center gap-3 pl-3 pr-2.5 py-2 rounded-lg no-underline transition-all duration-150
-                      ${active ? "bg-white/10 text-white font-semibold" : "text-white/70 hover:text-white hover:bg-white/5"}`}>
-                    {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-gold-400" />}
-                    <Icon size={16} className={active ? "text-gold-400" : "text-white/60"} />
+                    className={`group flex items-center gap-3 px-3 py-2 rounded-lg no-underline transition-all duration-150
+                      ${active
+                        ? "bg-gold-400/20 text-gold-200 font-semibold shadow-[inset_0_0_0_1px_rgba(240,160,16,0.25)]"
+                        : "text-white/70 hover:text-white hover:bg-white/5"}`}>
+                    <Icon size={16} className={active ? "text-gold-300" : "text-white/55"} />
                     <span className="font-body text-[13px] flex-1 truncate">{item.label}</span>
                     {showImpayesBadge && (
                       <span className="flex-shrink-0 bg-red-500 text-white font-body text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-tight">
