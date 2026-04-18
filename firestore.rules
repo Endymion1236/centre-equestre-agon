@@ -140,6 +140,14 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ── Périodes de vacances scolaires ────────────────────────────────────
+    // Lecture publique (nécessaire pour calcul des réductions côté client,
+    // y compris espace-cavalier). Écriture réservée au staff (admin + moniteur).
+    match /vacationPeriods/{docId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
     // ── Progression pédagogique ───────────────────────────────────────────
     match /progressions/{docId} {
       allow read: if isStaff()
