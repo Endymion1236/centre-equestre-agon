@@ -146,11 +146,11 @@ function AdminSidebar({ nbImpayes }: { nbImpayes: number }) {
   return (
     <div
       data-testid="admin-nav"
-      className="w-[228px] border-r border-white/5 py-3 px-2.5 flex flex-col gap-0.5 flex-shrink-0 min-h-screen hidden md:flex"
+      className="w-[228px] border-r border-white/5 py-3 px-2.5 flex flex-col gap-0.5 flex-shrink-0 hidden md:flex sticky top-0 h-screen"
       style={{ background: "linear-gradient(180deg, #060D17 0%, #0C1A2E 45%, #122A5A 100%)" }}
     >
       {/* ─── Logo ─── */}
-      <div className="px-2.5 pt-2 pb-4 flex items-center gap-3 border-b border-gold-400/25 mb-3">
+      <div className="px-2.5 pt-2 pb-4 flex items-center gap-3 border-b border-gold-400/25 mb-3 flex-shrink-0">
         <img
           src="/images/logo-ce-agon.png"
           alt="Logo"
@@ -164,7 +164,8 @@ function AdminSidebar({ nbImpayes }: { nbImpayes: number }) {
         </div>
       </div>
 
-      {/* ─── Sections ─── */}
+      {/* ─── Sections (zone scrollable si trop d'items) ─── */}
+      <div className="flex-1 overflow-y-auto flex flex-col gap-0.5 -mx-2.5 px-2.5 min-h-0">
       {sections.map((section, sIdx) => {
         const isCollapsed = section.label ? collapsed.has(section.label) : false;
         const isActiveSection = section.label === activeSectionLabel;
@@ -231,9 +232,10 @@ function AdminSidebar({ nbImpayes }: { nbImpayes: number }) {
           </div>
         );
       })}
+      </div>
 
-      {/* ─── Footer ─── */}
-      <div className="mt-auto pt-3 border-t border-white/10">
+      {/* ─── Footer (toujours visible en bas de la sidebar) ─── */}
+      <div className="flex-shrink-0 pt-3 mt-2 border-t border-white/10">
         <Link
           href="/"
           className="flex items-center gap-3 px-3 py-2 rounded-lg text-white/70 hover:text-gold-300 hover:bg-gold-400/10 transition-all no-underline mb-0.5"
