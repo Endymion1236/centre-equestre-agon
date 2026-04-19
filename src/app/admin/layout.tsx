@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { ToastProvider } from "@/components/ui/Toast";
 import GlobalSearch from "@/components/admin/GlobalSearch";
+import GlobalKeyboardShortcuts from "@/components/admin/GlobalKeyboardShortcuts";
 import VoiceAssistant from "@/components/VoiceAssistant";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, getDoc, doc, query, where } from "firebase/firestore";
@@ -561,6 +562,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </div>
       <GlobalSearch />
+      <GlobalKeyboardShortcuts />
     </div>
     </ToastProvider>
   );

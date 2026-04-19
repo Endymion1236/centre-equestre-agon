@@ -351,6 +351,7 @@ export default function GlobalSearch() {
 
   return (
     <div
+      data-global-search-open="true"
       className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm flex items-start justify-center pt-[8vh] px-4"
       onClick={() => setOpen(false)}>
       <div

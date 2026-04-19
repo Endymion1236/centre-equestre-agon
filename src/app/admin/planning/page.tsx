@@ -82,6 +82,12 @@ export default function PlanningPage() {
     document.addEventListener("click", handler);
     return () => document.removeEventListener("click", handler);
   }, [menuAddOpen, menuMoreOpen]);
+  // Raccourci clavier global : 'N' ouvre le menu "+ Ajouter"
+  useEffect(() => {
+    const openAddMenu = () => setMenuAddOpen(true);
+    window.addEventListener("planning:open-add-menu", openAddMenu);
+    return () => window.removeEventListener("planning:open-add-menu", openAddMenu);
+  }, []);
   const [duplicateCreneau, setDuplicateCreneau] = useState<(Creneau & { id: string })|null>(null);
 
   // ─── RDV Pro ───
