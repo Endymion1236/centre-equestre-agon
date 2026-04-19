@@ -701,9 +701,54 @@ export default function ComptabilitePage() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
         <h1 className="font-display text-2xl font-bold text-blue-800">Comptabilité</h1>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center flex-wrap">
+          <button
+            onClick={async () => {
+              try {
+                // 1. FEC
+                generateFEC();
+                // 2. PDF synthèse (ouvre dans nouvel onglet)
+                const periodEnc = encaissementsCompta.filter(e => {
+                  const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+                  if (!d) return false;
+                  const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                  return pm === period;
+                });
+                const res = await authFetch("/api/compta-export-pdf", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    period,
+                    payments: filteredPayments,
+                    encaissements: periodEnc,
+                  }),
+                });
+                if (!res.ok) {
+                  alert("Erreur génération PDF : " + await res.text());
+                  return;
+                }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                window.open(url, "_blank");
+                // Ne pas révoquer immédiatement pour que l'onglet puisse charger
+                setTimeout(() => URL.revokeObjectURL(url), 5000);
+              } catch (e: any) {
+                console.error("[export compta] échec:", e);
+                alert("Erreur lors de l'export : " + e.message);
+              }
+            }}
+            disabled={filteredPayments.length === 0}
+            className="flex items-center gap-2 text-white font-body text-sm font-semibold px-4 py-2 rounded-full border-none cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-all hover:-translate-y-px active:scale-[0.96]"
+            style={{
+              background: "linear-gradient(135deg, #2050A0 0%, #122A5A 100%)",
+              boxShadow: "0 4px 12px rgba(32, 80, 160, 0.28)",
+            }}
+            title="Télécharge le FEC (.txt) et ouvre le PDF de synthèse">
+            <Download size={16} />
+            Export complet du mois
+          </button>
           <label className="font-body text-xs text-slate-500">Période :</label>
           <input type="month" value={period} onChange={(e) => setPeriod(e.target.value)}
             className="px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
