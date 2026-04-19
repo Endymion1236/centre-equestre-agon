@@ -217,7 +217,8 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
     match /taches-type/{docId} {
-      allow read, write: if isAdmin();
+      allow read: if isStaff();
+      allow write: if isAdmin();
     }
 
     // ── Satisfaction ──────────────────────────────────────────────────────
@@ -295,7 +296,8 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
     match /modeles-planning/{docId} {
-      allow read, write: if isAdmin();
+      allow read: if isStaff();
+      allow write: if isAdmin();
     }
 
     // ── Mouvements registre ───────────────────────────────────────────────

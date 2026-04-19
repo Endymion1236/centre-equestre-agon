@@ -1,14 +1,29 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { Loader2 } from "lucide-react";
 
 export default function EspaceMoniteurLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const { user, loading, userRole, signInWithEmail } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
+
+  // ─── Redirection automatique vers /admin/dashboard ─────────────────────────
+  // Tout collaborateur connecté (admin OU moniteur) est redirigé vers l'admin.
+  // Cela unifie l'expérience : Emmeline Lagy (admin) et Éméline Pannella
+  // (moniteur) voient la même interface, juste avec des items de sidebar
+  // différents selon leurs droits (filtrage via MONITEUR_PAGES dans
+  // /admin/layout.tsx).
+  useEffect(() => {
+    if (loading) return;
+    if (user && (userRole === "admin" || userRole === "moniteur")) {
+      router.replace("/admin/dashboard");
+    }
+  }, [user, userRole, loading, router]);
 
   const handleLogin = async () => {
     setLoggingIn(true);
@@ -82,29 +97,15 @@ export default function EspaceMoniteurLayout({ children }: { children: React.Rea
     );
   }
 
+  // Admin ou moniteur connecté → on affiche un loader le temps que
+  // la redirection vers /admin/dashboard se termine (évite un flash
+  // de l'ancien contenu "Planning équipe")
   return (
-    <div className="min-h-screen bg-cream">
-      <header className="bg-white border-b border-gray-100 px-4 py-3">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-xl">🐴</span>
-            <div>
-              <div className="font-display text-sm font-bold text-blue-800">Centre Équestre d'Agon</div>
-              <div className="font-body text-[10px] text-slate-400">Espace collaborateur</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="font-body text-xs text-slate-500">{user.displayName || user.email}</span>
-            <button onClick={() => { import("firebase/auth").then(({ getAuth, signOut }) => signOut(getAuth())); }}
-              className="font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer">
-              Déconnexion
-            </button>
-          </div>
-        </div>
-      </header>
-      <main className="max-w-4xl mx-auto px-4 py-6">
-        {children}
-      </main>
+    <div className="min-h-screen bg-cream flex items-center justify-center">
+      <div className="text-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-3" />
+        <p className="font-body text-sm text-slate-500">Redirection vers l'espace admin…</p>
+      </div>
     </div>
   );
 }

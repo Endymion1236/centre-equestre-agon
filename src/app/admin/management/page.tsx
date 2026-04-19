@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { collection, getDocs, query, where, orderBy, addDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useAuth } from "@/lib/auth-context";
 import { Loader2, BookOpen, Calendar, Users, Sparkles, LayoutTemplate, ClipboardList, Clock } from "lucide-react";
 import type { TacheType, Salarie, TachePlanifiee, ModelePlanning } from "./types";
 import { getISOWeek } from "./types";
@@ -16,6 +17,7 @@ import TabHoraires from "./TabHoraires";
 type TabId = "planning" | "resume" | "horaires" | "bibliotheque" | "equipe" | "ia" | "modeles";
 
 export default function ManagementPage() {
+  const { isMoniteur, isAdmin } = useAuth();
   const [tab, setTab] = useState<TabId>("planning");
   const [loading, setLoading] = useState(true);
   const [tachesType, setTachesType] = useState<TacheType[]>([]);
@@ -92,7 +94,7 @@ export default function ManagementPage() {
 
   const refresh = () => { fetchData(); fetchTachesPlanifiees(); };
 
-  const TABS = [
+  const ALL_TABS = [
     { id: "planning" as TabId, label: "Planning", icon: Calendar },
     { id: "resume" as TabId, label: "Résumé", icon: ClipboardList },
     { id: "horaires" as TabId, label: "Horaires", icon: Clock },
@@ -101,6 +103,20 @@ export default function ManagementPage() {
     { id: "equipe" as TabId, label: "Équipe", icon: Users },
     { id: "ia" as TabId, label: "Agent IA", icon: Sparkles },
   ];
+  // Un moniteur ne voit que Planning + Résumé (visualisation).
+  // Les onglets de configuration (Horaires, Modèles, Bibliothèque, Équipe, IA)
+  // restent réservés aux admins pour éviter toute modification accidentelle.
+  const TABS = isAdmin
+    ? ALL_TABS
+    : ALL_TABS.filter(t => t.id === "planning" || t.id === "resume");
+
+  // Si un moniteur atterrit sur un onglet interdit (ex: via URL), on le
+  // ramène sur 'planning'.
+  useEffect(() => {
+    if (!isAdmin && isMoniteur && !TABS.some(t => t.id === tab)) {
+      setTab("planning");
+    }
+  }, [isAdmin, isMoniteur, tab]);
 
   return (
     <div>
