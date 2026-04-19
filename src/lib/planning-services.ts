@@ -59,29 +59,55 @@ export function getWeekBounds(dateStr: string) {
 /** Trouve tous les créneaux d'un stage sur la même semaine */
 export async function findStageCreneaux(activityTitle: string, dateStr: string) {
   const { monday, sunday } = getWeekBounds(dateStr);
+  const mondayStr = fmtDate(monday);
+  const sundayStr = fmtDate(sunday);
+
+  // Log diagnostic (retirer une fois qu'on a compris le bug de désinscription
+  // Simone Thibault qui laissait des traces dans le montoir après unenroll).
+  // Voir aussi handleUnenroll dans planning/page.tsx qui logge la suite.
+  console.log("[findStageCreneaux] Recherche", {
+    activityTitle,
+    dateRef: dateStr,
+    bounds: `${mondayStr} → ${sundayStr}`,
+  });
+
   try {
     // Requête optimale (nécessite index composite: activityTitle + date)
     const snap = await getDocs(query(
       collection(db, "creneaux"),
       where("activityTitle", "==", activityTitle),
-      where("date", ">=", fmtDate(monday)),
-      where("date", "<=", fmtDate(sunday)),
+      where("date", ">=", mondayStr),
+      where("date", "<=", sundayStr),
     ));
-    return snap.docs
+    const result = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .sort((a: any, b: any) => a.date.localeCompare(b.date));
+    console.log("[findStageCreneaux] Trouvés (requête indexée)", result.length, "créneaux :",
+      result.map((c: any) => ({ id: c.id, date: c.date, startTime: c.startTime, nbInscrits: (c.enrolled || []).length })));
+    return result;
   } catch (e) {
     // Fallback si index manquant : charger par date et filtrer côté client
-    console.warn("Index Firestore manquant pour creneaux (activityTitle+date). Fallback client-side.", e);
+    console.warn("[findStageCreneaux] Index Firestore manquant (activityTitle+date). Fallback client-side.", e);
     const snap = await getDocs(query(
       collection(db, "creneaux"),
-      where("date", ">=", fmtDate(monday)),
-      where("date", "<=", fmtDate(sunday)),
+      where("date", ">=", mondayStr),
+      where("date", "<=", sundayStr),
     ));
-    return snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
+    const allInWeek = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const result = allInWeek
       .filter((c: any) => c.activityTitle === activityTitle)
       .sort((a: any, b: any) => a.date.localeCompare(b.date));
+    console.log("[findStageCreneaux] Trouvés (fallback client)", result.length, "créneaux (sur",
+      allInWeek.length, "de la semaine) :",
+      result.map((c: any) => ({ id: c.id, date: c.date, startTime: c.startTime, nbInscrits: (c.enrolled || []).length })));
+    // Log aussi les activityTitle présents dans la semaine mais qui n'ont pas matché,
+    // utile si le nom du stage a été modifié entre temps
+    const autresTitres = Array.from(new Set(allInWeek.map((c: any) => c.activityTitle)))
+      .filter((t: any) => t !== activityTitle);
+    if (autresTitres.length > 0) {
+      console.log("[findStageCreneaux] Autres titres dans la semaine :", autresTitres);
+    }
+    return result;
   }
 }
 

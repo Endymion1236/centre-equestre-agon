@@ -880,10 +880,53 @@ export default function PlanningPage() {
       : `Désinscrire ${child.childName} de "${c.activityTitle}" le ${new Date(c.date).toLocaleDateString("fr-FR")} ?\n\nSi un paiement a été encaissé, un avoir sera créé automatiquement.`;
     if (!confirm(msg)) return;
 
+    console.log("[handleUnenroll] Démarrage", {
+      childName: child.childName,
+      childId,
+      isStageType,
+      creneauxIdsÀTraiter: creneauxIds,
+      nbJours,
+    });
+
     // 1. Retirer l'enfant de tous les créneaux + réservations
     for (const crId of creneauxIds) {
       await removeChildFromCreneau(crId, childId);
       await deleteReservations(crId, childId);
+    }
+
+    // ── Vérification post-désinscription ──
+    // Refait une lecture des créneaux du stage pour s'assurer que l'enfant
+    // n'apparaît plus nulle part. Si c'est le cas, on log une alerte (et on
+    // pourra ajouter un nettoyage automatique plus tard si le bug réapparaît).
+    if (isStageType) {
+      try {
+        const verif = await findStageCreneaux(c.activityTitle, c.date);
+        const tracesRestantes = verif
+          .map((vc: any) => ({
+            id: vc.id,
+            date: vc.date,
+            startTime: vc.startTime,
+            stillEnrolled: (vc.enrolled || []).some((e: any) => e.childId === childId),
+          }))
+          .filter((x: any) => x.stillEnrolled);
+        if (tracesRestantes.length > 0) {
+          console.error(
+            "[handleUnenroll] ⚠️ BUG : l'enfant apparaît encore dans certains créneaux stage après désinscription !",
+            {
+              childName: child.childName,
+              childId,
+              activityTitle: c.activityTitle,
+              tracesRestantes,
+              creneauxIdsTraités: creneauxIds,
+              creneauxIdsOubliés: tracesRestantes.map((t: any) => t.id).filter((id: string) => !creneauxIds.includes(id)),
+            }
+          );
+        } else {
+          console.log("[handleUnenroll] ✓ Désinscription propre, aucune trace restante dans les créneaux du stage");
+        }
+      } catch (err) {
+        console.warn("[handleUnenroll] Impossible de vérifier les traces restantes :", err);
+      }
     }
 
     // 2. Si payé par carte → recréditer la carte
