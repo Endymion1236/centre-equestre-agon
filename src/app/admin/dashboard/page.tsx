@@ -4,6 +4,7 @@ import { useAgentContext } from "@/hooks/useAgentContext";
 import { useEffect, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
 import Link from "next/link";
 import {
@@ -15,6 +16,7 @@ import { authFetch } from "@/lib/auth-fetch";
 import StagesImpayesAlert from "@/components/admin/StagesImpayesAlert";
 
 export default function AdminDashboard() {
+  const { isAdmin } = useAuth();
   const { setAgentContext } = useAgentContext("dashboard");
 
   useEffect(() => {
@@ -37,9 +39,22 @@ export default function AdminDashboard() {
       }
     }
     fetchStats();
-    // Billing IA
-    authFetch("/api/billing").then(r => r.json()).then(setBilling).catch(() => {});
-  }, []);
+    // Billing IA — admin uniquement (l'API renvoie 403 aux moniteurs)
+    if (isAdmin) {
+      authFetch("/api/billing")
+        .then(r => {
+          if (!r.ok) return null;
+          return r.json();
+        })
+        .then(data => {
+          // Ne setter billing que si la réponse contient bien la structure attendue
+          if (data && (data.anthropic !== undefined || data.openai !== undefined || data.elevenlabs !== undefined)) {
+            setBilling(data);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isAdmin]);
 
   // Couleurs par section sémantique (alignées sur les séparateurs de la sidebar) :
   //   Terrain       → blue   (activités opérationnelles, cavalerie, planning)
@@ -144,7 +159,7 @@ export default function AdminDashboard() {
                 </div>
                 <span className="font-body text-sm font-semibold text-blue-800">Claude (Anthropic)</span>
               </div>
-              {billing.anthropic?.cost !== null ? (
+              {typeof billing.anthropic?.cost === "number" ? (
                 <div className="font-body text-2xl font-bold text-orange-500">{billing.anthropic.cost.toFixed(2)}€</div>
               ) : (
                 <div className="font-body text-xs text-gray-500">{billing.anthropic?.error || "—"}</div>
@@ -163,7 +178,7 @@ export default function AdminDashboard() {
                 </div>
                 <span className="font-body text-sm font-semibold text-blue-800">Whisper (OpenAI)</span>
               </div>
-              {billing.openai?.cost !== null ? (
+              {typeof billing.openai?.cost === "number" ? (
                 <div className="font-body text-2xl font-bold text-green-500">{billing.openai.cost.toFixed(2)}$</div>
               ) : (
                 <div className="font-body text-xs text-gray-500">{billing.openai?.error || "—"}</div>
@@ -182,7 +197,7 @@ export default function AdminDashboard() {
                 </div>
                 <span className="font-body text-sm font-semibold text-blue-800">ElevenLabs</span>
               </div>
-              {billing.elevenlabs?.used !== null ? (
+              {typeof billing.elevenlabs?.used === "number" && typeof billing.elevenlabs?.limit === "number" && billing.elevenlabs.limit > 0 ? (
                 <>
                   <div className="font-body text-2xl font-bold text-purple-500">
                     {Math.round((billing.elevenlabs.used / 1000))}k
@@ -191,7 +206,7 @@ export default function AdminDashboard() {
                   <div className="h-2 bg-gray-100 rounded-full overflow-hidden mt-2">
                     <div className="h-full bg-purple-400 rounded-full" style={{ width: `${Math.min(100, (billing.elevenlabs.used / billing.elevenlabs.limit) * 100)}%` }} />
                   </div>
-                  <div className="font-body text-[10px] text-gray-400 mt-1">Plan {billing.elevenlabs.plan} · Synthèse vocale</div>
+                  <div className="font-body text-[10px] text-gray-400 mt-1">Plan {billing.elevenlabs.plan || "—"} · Synthèse vocale</div>
                 </>
               ) : (
                 <div className="font-body text-xs text-gray-500">{billing.elevenlabs?.error || "—"}</div>
