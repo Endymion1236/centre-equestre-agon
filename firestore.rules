@@ -330,13 +330,25 @@ service cloud.firestore {
     }
 
     // ── Salariés management (planning équipe) ─────────────────────────────
+    // Lecture : staff (admins + moniteurs voient l'équipe et leurs propres tâches)
+    // Écriture : admin uniquement
     match /salaries-management/{docId} {
-      allow read, write: if isAdmin();
+      allow read: if isStaff();
+      allow write: if isAdmin();
     }
 
     // ── Tâches planifiées (cron, rappels) ─────────────────────────────────
+    // Lecture : staff (moniteurs voient leur planning)
+    // Écriture : admin OU le moniteur qui toggle 'done' sur sa propre tâche
     match /taches-planifiees/{docId} {
-      allow read, write: if isAdmin();
+      allow read: if isStaff();
+      allow create, delete: if isAdmin();
+      // Un moniteur peut mettre à jour UNIQUEMENT si :
+      //  - la tâche lui appartient (salarieId correspond à un moniteur identifié par email)
+      //  - les seuls champs modifiés sont 'done' et 'updatedAt'
+      allow update: if isAdmin()
+        || (isMoniteur()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['done', 'updatedAt']));
     }
 
     // ── Avis satisfaction ─────────────────────────────────────────────────

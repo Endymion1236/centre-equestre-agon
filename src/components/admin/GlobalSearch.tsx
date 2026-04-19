@@ -137,24 +137,26 @@ export default function GlobalSearch() {
     let cancelled = false;
     setLoading(true);
     (async () => {
-      try {
-        const [famSnap, eqSnap, paySnap, actSnap] = await Promise.all([
-          getDocs(collection(db, "families")),
-          getDocs(collection(db, "equides")),
-          getDocs(collection(db, "payments")),
-          getDocs(collection(db, "activities")),
-        ]);
-        if (cancelled) return;
-        setData({
-          families: famSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[],
-          equides: eqSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[],
-          payments: paySnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[],
-          activities: actSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[],
-        });
-      } catch (e) {
-        console.error("[GlobalSearch] load failed:", e);
-      }
-      if (!cancelled) setLoading(false);
+      // Chaque fetch est isolé : si une collection est inaccessible
+      // (ex: moniteur qui n'a pas accès à payments), les autres continuent.
+      const safeLoad = async (name: string): Promise<any[]> => {
+        try {
+          const snap = await getDocs(collection(db, name));
+          return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        } catch (e) {
+          console.warn(`[GlobalSearch] ${name} inaccessible:`, e);
+          return [];
+        }
+      };
+      const [families, equides, payments, activities] = await Promise.all([
+        safeLoad("families"),
+        safeLoad("equides"),
+        safeLoad("payments"),
+        safeLoad("activities"),
+      ]);
+      if (cancelled) return;
+      setData({ families, equides, payments, activities });
+      setLoading(false);
     })();
     return () => { cancelled = true; };
   }, [open, data]);

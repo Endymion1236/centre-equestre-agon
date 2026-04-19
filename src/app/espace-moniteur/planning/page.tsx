@@ -31,28 +31,34 @@ export default function EspaceMoniteurPlanning() {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [salSnap, tSnap, monSnap] = await Promise.all([
-        getDocs(collection(db, "salaries-management")),
-        getDocs(query(collection(db, "taches-planifiees"), where("semaine", "==", semaine))),
-        getDocs(collection(db, "moniteurs")),
-      ]);
-      const sals = salSnap.docs.map(d => ({ id: d.id, ...d.data() } as Salarie)).filter(s => s.actif).sort((a, b) => a.nom.localeCompare(b.nom));
-      setSalaries(sals);
-      setTaches(tSnap.docs.map(d => ({ id: d.id, ...d.data() } as TachePlanifiee)));
+      try {
+        const [salSnap, tSnap, monSnap] = await Promise.all([
+          getDocs(collection(db, "salaries-management")),
+          getDocs(query(collection(db, "taches-planifiees"), where("semaine", "==", semaine))),
+          getDocs(collection(db, "moniteurs")),
+        ]);
+        const sals = salSnap.docs.map(d => ({ id: d.id, ...d.data() } as Salarie)).filter(s => s.actif).sort((a, b) => a.nom.localeCompare(b.nom));
+        setSalaries(sals);
+        setTaches(tSnap.docs.map(d => ({ id: d.id, ...d.data() } as TachePlanifiee)));
 
-      // Identifier le salarié correspondant au moniteur connecté
-      if (user) {
-        const displayName = user.displayName || "";
-        const email = user.email || "";
-        // Chercher le moniteur par email
-        const mon = monSnap.docs.map(d => d.data() as any).find((m: any) =>
-          m.email?.toLowerCase() === email.toLowerCase()
-        );
-        const monName = mon?.name || displayName;
-        const sal = sals.find(s => s.nom.toLowerCase().trim() === monName.toLowerCase().trim());
-        setMySalId(sal?.id || null);
+        // Identifier le salarié correspondant au moniteur connecté
+        if (user) {
+          const displayName = user.displayName || "";
+          const email = user.email || "";
+          // Chercher le moniteur par email
+          const mon = monSnap.docs.map(d => d.data() as any).find((m: any) =>
+            m.email?.toLowerCase() === email.toLowerCase()
+          );
+          const monName = mon?.name || displayName;
+          const sal = sals.find(s => s.nom.toLowerCase().trim() === monName.toLowerCase().trim());
+          setMySalId(sal?.id || null);
+        }
+      } catch (e) {
+        console.error("[espace-moniteur/planning] chargement échoué:", e);
+        // On continue sans crasher — l'UI affichera 'aucune tâche'
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     load();
   }, [semaine, user]);
