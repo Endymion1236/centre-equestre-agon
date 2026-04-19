@@ -4,7 +4,7 @@ import { doc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs, query,
 import { db } from "@/lib/firebase";
 import {
   ChevronDown, ChevronUp, Mail, Edit3, Trash2, GitMerge, UserPlus,
-  Save, Loader2, CalendarDays, Users, Phone, Clock, Wallet, Receipt,
+  Save, Loader2, CalendarDays, Users, Phone, Clock, Wallet, Receipt, Copy,
 } from "lucide-react";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
@@ -13,6 +13,7 @@ import FamilyDetailTabs from "../FamilyDetailTabs";
 import ProgressionEditor from "@/components/ProgressionEditor";
 import EnrollModal from "./EnrollModal";
 import MergeFamilyModal from "./MergeFamilyModal";
+import LastUpdated from "@/components/admin/LastUpdated";
 import { authFetch } from "@/lib/auth-fetch";
 import LinkChildrenModal from "./LinkChildrenModal";
 import EmailModal from "./EmailModal";
@@ -292,11 +293,34 @@ export default function FamilyCard({
                   return t ? <span key={tag} className={`font-body text-[10px] font-semibold ${t.color} px-1.5 py-0.5 rounded`}>{t.emoji} {t.label}</span> : null;
                 })}
               </div>
-              <div className="font-body text-xs text-slate-600">
-                {family.parentEmail && <><Mail size={10} className="inline mr-1"/>{family.parentEmail} · </>}
+              <div className="font-body text-xs text-slate-600 flex items-center gap-1.5 flex-wrap">
+                {family.parentEmail && (
+                  <span className="inline-flex items-center gap-1">
+                    <Mail size={10} />
+                    <span>{family.parentEmail}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigator.clipboard.writeText(family.parentEmail).then(
+                          () => toast("📋 Email copié", "success"),
+                          () => toast("Impossible de copier", "error"),
+                        );
+                      }}
+                      className="ml-0.5 p-0.5 rounded hover:bg-blue-500/10 text-slate-400 hover:text-blue-500 bg-transparent border-none cursor-pointer transition-colors"
+                      title="Copier l'email">
+                      <Copy size={10} />
+                    </button>
+                    <span className="text-slate-400">·</span>
+                  </span>
+                )}
                 {family.parentPhone && <><Phone size={10} className="inline mr-1"/>{family.parentPhone} · </>}
                 {children.length} cavalier{children.length > 1 ? "s" : ""}
               </div>
+              {(family as any).updatedAt && (
+                <div className="mt-1">
+                  <LastUpdated timestamp={(family as any).updatedAt} />
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3">

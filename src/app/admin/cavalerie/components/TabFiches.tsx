@@ -8,6 +8,7 @@ import {
   X, Save, Loader2, ClipboardList, Pill, Syringe, Wrench, Bone, Scissors, Stethoscope,
 } from "lucide-react";
 import type { Equide, SoinRecord, DocumentEquide, MouvementRegistre, EquideType, EquideSex, EquideStatus } from "../types";
+import LastUpdated from "@/components/admin/LastUpdated";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const typeOptions = [
@@ -405,6 +406,11 @@ export default function TabFiches({
                       {e.race || e.type} · {e.robe} · {e.sex === "hongre" ? "Hongre" : e.sex === "femelle" ? "Jument" : "Entier"} · {calcAge(e.birthDate)}
                       {e.sire && <> · SIRE {e.sire}</>}
                     </div>
+                    {(e as any).updatedAt && (
+                      <div className="mt-0.5">
+                        <LastUpdated timestamp={(e as any).updatedAt} />
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <button onClick={ev => { ev.stopPropagation(); onEdit(e); }}
