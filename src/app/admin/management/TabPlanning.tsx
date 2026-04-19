@@ -1052,7 +1052,7 @@ Réponds de façon concise et pratique, en français.`,
           </button>
         </div>
 
-        <div id="management-fiche-print">
+        <div id="management-fiche-print" style={{maxWidth: "100%", overflow: "hidden"}}>
           {jourDates.slice(0, nbJours).map(({jour, date}) => {
             const dateStr = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
             const dayTaches = taches.filter(t => t.salarieId === sal.id && t.jour === jour)
@@ -1103,21 +1103,25 @@ Réponds de façon concise et pratique, en français.`,
                       const fin = minToHeure(heureToMin(t.heureDebut) + t.dureeMinutes);
                       return (
                         <div key={t.id}
-                          style={{display:"flex", alignItems:"center", padding:"6px 0", borderBottom:"1px solid #f1f5f9", cursor:"pointer", opacity: t.done ? 0.5 : 1}}
+                          style={{display:"flex", alignItems:"center", padding:"6px 4px", borderBottom:"1px solid #f1f5f9", cursor:"pointer", opacity: t.done ? 0.5 : 1, gap: 6, minWidth: 0}}
                           onClick={() => toggleDone(t)}>
-                          <div style={{width:70, fontSize:13, fontWeight:700, color:"#475569", flexShrink:0}}>{t.heureDebut}</div>
-                          <div style={{flex:1, display:"flex", alignItems:"center", gap:6}}>
-                            <span style={{fontSize:14}}>{cat?.emoji}</span>
-                            <span style={{fontSize:13, fontWeight:600, color: t.done ? "#94a3b8" : getTaskColor(t), textDecoration: t.done ? "line-through" : "none"}}>
+                          {/* Heure de début — largeur réduite sur mobile */}
+                          <div style={{width:50, fontSize:13, fontWeight:700, color:"#475569", flexShrink:0}}>{t.heureDebut}</div>
+                          {/* Label de tâche — prend l'espace disponible, ellipsis si trop long */}
+                          <div style={{flex:1, display:"flex", alignItems:"center", gap:6, minWidth: 0, flexWrap: "wrap"}}>
+                            <span style={{fontSize:14, flexShrink:0}}>{cat?.emoji}</span>
+                            <span style={{fontSize:13, fontWeight:600, color: t.done ? "#94a3b8" : getTaskColor(t), textDecoration: t.done ? "line-through" : "none", overflow:"hidden", textOverflow:"ellipsis"}}>
                               {t.tacheLabel}
                             </span>
-                            <span style={{fontSize:10, color:"#94a3b8"}}>{cat?.label}</span>
+                            <span style={{fontSize:10, color:"#94a3b8", flexShrink:0}}>{cat?.label}</span>
                           </div>
-                          <div style={{width:80, fontSize:11, color:"#64748b", textAlign:"right", flexShrink:0}}>
+                          {/* Durée → fin — cachée sur mobile (<480px) pour éviter le débordement */}
+                          <div className="hide-on-mobile" style={{fontSize:11, color:"#64748b", textAlign:"right", flexShrink:0, whiteSpace:"nowrap"}}>
                             {fmtDuree(t.dureeMinutes)} → {fin}
                           </div>
-                          <div style={{width:24, height:24, borderRadius:6, border:`2px solid ${t.done?"#16a34a":"#d1d5db"}`, background:t.done?"#16a34a":"white", display:"flex", alignItems:"center", justifyContent:"center", marginLeft:8, flexShrink:0}}>
-                            {t.done && <Check size={14} color="white"/>}
+                          {/* Checkbox — taille réduite sur mobile pour garantir qu'elle reste visible */}
+                          <div style={{width:22, height:22, borderRadius:6, border:`2px solid ${t.done?"#16a34a":"#d1d5db"}`, background:t.done?"#16a34a":"white", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0}}>
+                            {t.done && <Check size={13} color="white"/>}
                           </div>
                         </div>
                       );
