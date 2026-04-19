@@ -2,6 +2,7 @@
 import { useState, useMemo } from "react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useAuth } from "@/lib/auth-context";
 import { authFetch } from "@/lib/auth-fetch";
 import { Plus, Trash2, Check, ChevronLeft, ChevronRight, Printer, Save, LayoutTemplate } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
@@ -31,6 +32,7 @@ function minToHeure(m: number) { return `${String(Math.floor(m/60)).padStart(2,"
 const COULEURS_SALARIE = ["#2050A0","#16a34a","#dc2626","#d97706","#7c3aed","#0891b2","#be185d","#374151"];
 
 export default function TabPlanning({ semaine, setSemaine, taches, tachesType, salaries, creneaux, modeles, onRefresh }: Props) {
+  const { isAdmin } = useAuth();
   const { toast } = useToast();
   const [addCell, setAddCell] = useState<{ salarieId: string; jour: JourSemaine } | null>(null);
   const [addForm, setAddForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30, joursSelectionnes: [] as JourSemaine[], enchainer: false });
@@ -40,7 +42,9 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   const [saveModeleName, setSaveModeleName] = useState("");
   const [saveModeleType, setSaveModeleType] = useState<"scolaire" | "vacances" | "autre">("scolaire");
   const [applyingModele, setApplyingModele] = useState(false);
-  const [view, setView] = useState<"tableau" | "horaire" | "fiche">("tableau");
+  // Vue par défaut : 'tableau' pour admin, 'fiche' pour moniteur
+  // (seule info utile à une monitrice : son horaire et ses tâches individuelles)
+  const [view, setView] = useState<"tableau" | "horaire" | "fiche">(isAdmin ? "tableau" : "fiche");
   const [selectedDay, setSelectedDay] = useState<JourSemaine>(() => {
     const dayIndex = (new Date().getDay() + 6) % 7; // 0=lundi
     return JOURS[Math.min(dayIndex, 4)] as JourSemaine; // cap à vendredi
@@ -1253,7 +1257,14 @@ Réponds de façon concise et pratique, en français.`,
           })}
         </div>
 
-        {/* ── BARRE D'ACTIONS — 3 gros boutons ── */}
+        {/* ── BARRE D'ACTIONS — 3 gros boutons (admin uniquement) ──
+            Les moniteurs n'ont pas besoin de ces actions :
+            - Le switcher de vues est inutile (on leur impose la vue Fiche)
+            - 'Planning' (Importer/Modèles) est une action de configuration
+            - 'Partager' est une action de coordination d'équipe
+            Ils ne voient donc que leur fiche, directement lisible. */}
+        {isAdmin && (
+        <>
         <div className="flex gap-3 items-stretch">
 
           {/* ① Switcher de vue — toujours visible */}
@@ -1422,9 +1433,11 @@ Réponds de façon concise et pratique, en français.`,
             </div>
           </Card>
         )}
+        </>
+        )}
 
         {/* ── ALERTES ── */}
-        {conflits.length > 0 && (
+        {conflits.length > 0 && isAdmin && (
           <div style={{background: showConflits ? "#fffbeb" : "#f8fafc", border: showConflits ? "1px solid #fde68a" : "1px solid #e2e8f0", borderRadius:12, padding: showConflits ? "12px 16px" : "8px 16px", display:"flex", alignItems:"center", gap:10}}>
             <span style={{fontSize: showConflits ? 18 : 14, flexShrink:0}}>{showConflits ? "🔴" : "⚪"}</span>
             {showConflits ? (

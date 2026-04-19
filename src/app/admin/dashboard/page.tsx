@@ -16,8 +16,22 @@ import { authFetch } from "@/lib/auth-fetch";
 import StagesImpayesAlert from "@/components/admin/StagesImpayesAlert";
 
 export default function AdminDashboard() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isMoniteur, user } = useAuth();
   const { setAgentContext } = useAgentContext("dashboard");
+
+  // Log diagnostic (à retirer après validation que le filtrage fonctionne
+  // pour tous les moniteurs — utile si un moniteur rapporte encore voir les
+  // cartes admin, cela permettra de voir l'état réel au moment du render)
+  useEffect(() => {
+    if (typeof window !== "undefined" && user) {
+      console.log("[Dashboard auth]", {
+        email: user.email,
+        isAdmin,
+        isMoniteur,
+        willShowAdminShortcuts: isAdmin,
+      });
+    }
+  }, [user, isAdmin, isMoniteur]);
 
   useEffect(() => {
     setAgentContext({ module_actif: "dashboard", description: "tableau de bord, stats globales" });
