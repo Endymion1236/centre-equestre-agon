@@ -66,7 +66,9 @@ export default function AdminDashboard() {
   const GESTION = "text-amber-600 bg-amber-50";
   const CONFIG = "text-slate-500 bg-slate-50";
 
-  const quickActions: { href: string; icon: LucideIcon; label: string; tint: string }[] = [
+  // Liste complète (admin) — les moniteurs n'en voient qu'un sous-ensemble
+  // aligné sur MONITEUR_PAGES du layout admin.
+  const ALL_ACTIONS: { href: string; icon: LucideIcon; label: string; tint: string }[] = [
     { href: "/admin/planning", icon: CalendarDays, label: "Planning", tint: TERRAIN },
     { href: "/admin/cavalerie", icon: Heart, label: "Cavalerie", tint: TERRAIN },
     { href: "/admin/cavaliers", icon: Users, label: "Cavaliers", tint: COMMERCIAL },
@@ -78,6 +80,17 @@ export default function AdminDashboard() {
     { href: "/admin/parametres", icon: Settings, label: "Paramètres", tint: CONFIG },
     { href: "/admin/galerie", icon: Camera, label: "Galerie", tint: CONFIG },
   ];
+  // Pages autorisées aux moniteurs (même liste que MONITEUR_PAGES dans /admin/layout.tsx).
+  // On ajoute aussi Montoir, Suivi péda. et Management qui n'étaient pas dans
+  // les raccourcis admin mais qui sont des pages Terrain utiles à Éméline.
+  const MONITEUR_ACTIONS: { href: string; icon: LucideIcon; label: string; tint: string }[] = [
+    { href: "/admin/planning", icon: CalendarDays, label: "Planning", tint: TERRAIN },
+    { href: "/admin/montoir", icon: ClipboardList, label: "Montoir", tint: TERRAIN },
+    { href: "/admin/cavalerie", icon: Heart, label: "Cavalerie", tint: TERRAIN },
+    { href: "/admin/pedagogie", icon: BookOpen, label: "Suivi péda.", tint: TERRAIN },
+    { href: "/admin/management", icon: Users, label: "Mon planning", tint: TERRAIN },
+  ];
+  const quickActions = isAdmin ? ALL_ACTIONS : MONITEUR_ACTIONS;
 
   return (
     <div>
@@ -88,16 +101,18 @@ export default function AdminDashboard() {
             {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
           </p>
         </div>
-        <Link href="/admin/activites">
-          <button className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400 transition-colors">
-            <Plus size={16} />
-            Créer une activité
-          </button>
-        </Link>
+        {isAdmin && (
+          <Link href="/admin/activites">
+            <button className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400 transition-colors">
+              <Plus size={16} />
+              Créer une activité
+            </button>
+          </Link>
+        )}
       </div>
 
-      {/* Alertes stages impayés */}
-      <StagesImpayesAlert />
+      {/* Alertes stages impayés — admin uniquement (info financière) */}
+      {isAdmin && <StagesImpayesAlert />}
 
       {/* KPIs — toutes les valeurs sont en slate sombre (neutre) ; seule l'icône
           porte la couleur sémantique. Évite l'effet "sapin de Noël". */}
@@ -225,11 +240,17 @@ export default function AdminDashboard() {
           <CalendarDays size={28} className="text-blue-300" />
         </div>
         <p className="font-body text-sm text-gray-500">
-          Aucune reprise planifiée aujourd&apos;hui. Créez vos premières activités pour commencer !
+          Aucune reprise planifiée aujourd&apos;hui. {isAdmin ? "Créez vos premières activités pour commencer !" : "Consultez le planning pour voir les prochaines reprises."}
         </p>
-        <Link href="/admin/activites" className="font-body text-sm font-semibold text-blue-500 no-underline mt-3 inline-block">
-          Créer une activité →
-        </Link>
+        {isAdmin ? (
+          <Link href="/admin/activites" className="font-body text-sm font-semibold text-blue-500 no-underline mt-3 inline-block">
+            Créer une activité →
+          </Link>
+        ) : (
+          <Link href="/admin/planning" className="font-body text-sm font-semibold text-blue-500 no-underline mt-3 inline-block">
+            Voir le planning →
+          </Link>
+        )}
       </Card>
     </div>
   );
