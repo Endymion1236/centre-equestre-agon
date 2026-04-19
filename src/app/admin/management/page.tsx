@@ -17,7 +17,7 @@ import TabHoraires from "./TabHoraires";
 type TabId = "planning" | "resume" | "horaires" | "bibliotheque" | "equipe" | "ia" | "modeles";
 
 export default function ManagementPage() {
-  const { isMoniteur, isAdmin } = useAuth();
+  const { user, isMoniteur, isAdmin } = useAuth();
   const [tab, setTab] = useState<TabId>("planning");
   const [loading, setLoading] = useState(true);
   const [tachesType, setTachesType] = useState<TacheType[]>([]);
@@ -26,6 +26,8 @@ export default function ManagementPage() {
   const [creneaux, setCreneaux] = useState<any[]>([]);
   const [modeles, setModeles] = useState<ModelePlanning[]>([]);
   const [semaine, setSemaine] = useState(() => getISOWeek(new Date()));
+  // ID du salarié correspondant au moniteur connecté (null si admin ou non trouvé)
+  const [mySalId, setMySalId] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
@@ -78,6 +80,26 @@ export default function ManagementPage() {
       }
 
       setSalaries(existingSalaries.sort((a,b)=>a.nom.localeCompare(b.nom)));
+
+      // ── Identification du salarié correspondant au moniteur connecté ──
+      // Un moniteur ne doit voir QUE sa propre fiche dans Management (conf RGPD).
+      // On cherche :
+      //   1. D'abord le moniteur qui a l'email de l'utilisateur connecté
+      //   2. Puis le salarié qui a soit moniteurId === monId, soit le même nom
+      if (user?.email && !isAdmin) {
+        const myMoniteur = moniteurs.find((m: any) =>
+          (m.email || "").toLowerCase() === user.email!.toLowerCase()
+        );
+        if (myMoniteur) {
+          const matchedSal = existingSalaries.find((s: any) =>
+            s.moniteurId === myMoniteur.id
+            || s.nom.toLowerCase().trim() === (myMoniteur.name || "").toLowerCase().trim()
+          );
+          setMySalId(matchedSal?.id || null);
+        } else {
+          setMySalId(null);
+        }
+      }
     } catch(e) { console.error(e); }
     setLoading(false);
   };
@@ -93,6 +115,17 @@ export default function ManagementPage() {
   useEffect(() => { fetchTachesPlanifiees(); }, [semaine]);
 
   const refresh = () => { fetchData(); fetchTachesPlanifiees(); };
+
+  // ── Filtrage pour les moniteurs : ne voir que sa propre fiche ─────────
+  // RGPD / confidentialité : une monitrice n'a pas à voir les heures et
+  // tâches de ses collègues. Si on ne trouve pas de fiche pour elle, on
+  // affiche un tableau vide avec un message explicatif.
+  const visibleSalaries = isAdmin
+    ? salaries
+    : (mySalId ? salaries.filter(s => s.id === mySalId) : []);
+  const visibleTaches = isAdmin
+    ? tachesPlanifiees
+    : (mySalId ? tachesPlanifiees.filter(t => t.salarieId === mySalId) : []);
 
   const ALL_TABS = [
     { id: "planning" as TabId, label: "Planning", icon: Calendar },
@@ -124,7 +157,11 @@ export default function ManagementPage() {
       <div className="flex justify-between items-center mb-6 print-hide">
         <div>
           <h1 className="font-display text-2xl font-bold text-blue-800">Management</h1>
-          <p className="font-body text-sm text-gray-400">Planning équipe · Répartition des tâches · Agent IA</p>
+          <p className="font-body text-sm text-gray-400">
+            {isAdmin
+              ? "Planning équipe · Répartition des tâches · Agent IA"
+              : "Mon planning et mes tâches"}
+          </p>
         </div>
       </div>
 
@@ -147,25 +184,36 @@ export default function ManagementPage() {
 
       {loading ? (
         <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>
+      ) : (!isAdmin && !mySalId) ? (
+        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-6 text-center max-w-2xl mx-auto">
+          <div className="text-3xl mb-3">🔍</div>
+          <h3 className="font-display text-lg font-bold text-blue-800 mb-2">Aucune fiche trouvée pour votre compte</h3>
+          <p className="font-body text-sm text-slate-600 mb-1">
+            Votre compte moniteur ({user?.email}) n&apos;est pas encore lié à une fiche dans le planning d&apos;équipe.
+          </p>
+          <p className="font-body text-xs text-slate-500 mt-3">
+            Demandez à Nicolas ou à un administrateur de créer votre fiche dans <strong>Paramètres → Accès moniteurs</strong>.
+          </p>
+        </div>
       ) : (
         <>
           {tab==="planning" && (
             <TabPlanning
               semaine={semaine} setSemaine={s=>{setSemaine(s);}}
-              taches={tachesPlanifiees} tachesType={tachesType}
-              salaries={salaries} creneaux={creneaux}
+              taches={visibleTaches} tachesType={tachesType}
+              salaries={visibleSalaries} creneaux={creneaux}
               modeles={modeles}
               onRefresh={refresh}/>
           )}
           {tab==="resume" && (
             <TabResume
               semaine={semaine} setSemaine={s=>{setSemaine(s);}}
-              taches={tachesPlanifiees} salaries={salaries}/>
+              taches={visibleTaches} salaries={visibleSalaries}/>
           )}
           {tab==="horaires" && (
             <TabHoraires
               semaine={semaine} setSemaine={s=>{setSemaine(s);}}
-              taches={tachesPlanifiees} salaries={salaries}/>
+              taches={visibleTaches} salaries={visibleSalaries}/>
           )}
           {tab==="modeles" && (
             <TabModeles
