@@ -1475,7 +1475,7 @@ Réponds de façon concise et pratique, en français.`,
           </div>
         )}
 
-        {tachesManquantes.length > 0 && (
+        {tachesManquantes.length > 0 && isAdmin && (
           <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:12,padding:"12px 16px",display:"flex",alignItems:"flex-start",gap:10}}>
             <span style={{fontSize:18,flexShrink:0}}>⚠️</span>
             <div style={{flex:1}}>
@@ -1501,7 +1501,7 @@ Réponds de façon concise et pratique, en français.`,
           </div>
         )}
 
-        {tachesManquantes.length === 0 && tachesObligatoires.length > 0 && taches.length > 0 && (
+        {tachesManquantes.length === 0 && tachesObligatoires.length > 0 && taches.length > 0 && isAdmin && (
           <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:12,padding:"10px 16px",display:"flex",alignItems:"center",gap:10}}>
             <span style={{fontSize:16}}>✅</span>
             <span style={{fontFamily:"sans-serif",fontSize:12,color:"#166534",fontWeight:600}}>
@@ -1515,7 +1515,7 @@ Réponds de façon concise et pratique, en français.`,
           </div>
         )}
 
-        {iaResult && (
+        {iaResult && isAdmin && (
           <div style={{background:"#faf5ff",border:"1px solid #e9d5ff",borderRadius:12,padding:"14px 18px",position:"relative"}}>
             <button onClick={() => setIaResult(null)}
               style={{position:"absolute",top:8,right:10,background:"transparent",border:"none",cursor:"pointer",color:"#a78bfa",fontSize:16}}>✕</button>
