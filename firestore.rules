@@ -177,10 +177,20 @@ service cloud.firestore {
 
     // ── Cartes de séances ─────────────────────────────────────────────────
     // Lecture : staff (moniteurs voient les cartes actives depuis planning/montoir)
-    // Écriture : admin
+    // Écriture :
+    //  - admin : tout autorisé (création, modif complète, suppression)
+    //  - moniteur : uniquement update des champs métier terrain modifiés
+    //    automatiquement lors de la clôture d'une reprise (débit d'une séance,
+    //    ajout d'une entrée historique, update du statut). Un moniteur ne peut
+    //    PAS modifier le prix, le type, le propriétaire, la date d'expiration,
+    //    le childId, etc.
     match /cartes/{docId} {
       allow read: if isStaff() || (isAuth() && resource.data.familyId == request.auth.uid);
-      allow write: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (isMoniteur()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['history', 'remainingSessions', 'usedSessions', 'remainingBalance', 'status', 'updatedAt']));
     }
 
     // ── Forfaits ──────────────────────────────────────────────────────────
