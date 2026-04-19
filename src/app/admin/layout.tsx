@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { ToastProvider } from "@/components/ui/Toast";
+import GlobalSearch from "@/components/admin/GlobalSearch";
 import VoiceAssistant from "@/components/VoiceAssistant";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, getDoc, doc, query, where } from "firebase/firestore";
@@ -37,6 +38,7 @@ import {
   FileText,
   CheckCircle2,
   ChevronDown,
+  Search,
 } from "lucide-react";
 
 const navItems = [
@@ -163,6 +165,16 @@ function AdminSidebar({ nbImpayes }: { nbImpayes: number }) {
           </div>
         </div>
       </div>
+
+      {/* ─── Bouton recherche globale ─── */}
+      <button
+        onClick={() => window.dispatchEvent(new Event("open-global-search"))}
+        className="flex items-center gap-2.5 px-3 py-2 mb-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-all border border-white/5 cursor-pointer flex-shrink-0"
+        title="Recherche globale (Ctrl+K)">
+        <Search size={14} className="flex-shrink-0" />
+        <span className="font-body text-[12px] flex-1 text-left">Rechercher…</span>
+        <kbd className="font-body text-[10px] px-1.5 py-0.5 rounded bg-white/10 border border-white/10 font-mono">⌘K</kbd>
+      </button>
 
       {/* ─── Sections (zone scrollable si trop d'items) ─── */}
       <div className="flex-1 overflow-y-auto flex flex-col gap-0.5 -mx-2.5 px-2.5 min-h-0">
@@ -440,6 +452,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
             <span className="font-display text-sm font-bold text-white">Admin</span>
+            <button
+              onClick={() => window.dispatchEvent(new Event("open-global-search"))}
+              className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-white/70 border-none cursor-pointer"
+              title="Recherche">
+              <Search size={14} />
+            </button>
           </div>
           <div className="flex items-center gap-2">
             <Link href="/admin/dashboard" className="font-body text-xs text-white/70 no-underline flex items-center gap-1 bg-white/10 px-2.5 py-1.5 rounded-lg">
@@ -542,6 +560,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </button>
         </div>
       </div>
+      <GlobalSearch />
     </div>
     </ToastProvider>
   );
