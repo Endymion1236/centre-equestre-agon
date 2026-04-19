@@ -70,9 +70,12 @@ service cloud.firestore {
     }
     match /encaissements/{docId} {
       allow read: if isAdmin();
-      // Plus aucune création côté client — toutes les écritures passent par
-      // adminDb (webhooks CAWL, API /pay-with-avoir, encaissements admin)
-      allow write: if isAdmin();
+      // Création : staff (admin + moniteur inscrivant un cavalier au planning).
+      // Update/delete : admin uniquement (les corrections sont sensibles).
+      // Les écritures automatiques (webhooks CAWL, pay-with-avoir) passent par
+      // adminDb et bypassent ces règles.
+      allow create: if isStaff();
+      allow update, delete: if isAdmin();
     }
 
     // ── Équidés ───────────────────────────────────────────────────────────
@@ -162,23 +165,29 @@ service cloud.firestore {
     }
 
     // ── Avoirs ────────────────────────────────────────────────────────────
+    // Lecture : staff (moniteurs voient les avoirs actifs d'une famille au planning)
+    // Écriture : admin
     match /avoirs/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
-      // Seul le staff peut créer/modifier/supprimer un avoir.
+      allow read: if isStaff() || (isAuth() && resource.data.familyId == request.auth.uid);
+      // Seul l'admin peut créer/modifier/supprimer un avoir.
       // L'utilisation d'un avoir par un cavalier passe par l'API
       // /api/pay-with-avoir (adminDb bypass)
       allow write: if isAdmin();
     }
 
     // ── Cartes de séances ─────────────────────────────────────────────────
+    // Lecture : staff (moniteurs voient les cartes actives depuis planning/montoir)
+    // Écriture : admin
     match /cartes/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
+      allow read: if isStaff() || (isAuth() && resource.data.familyId == request.auth.uid);
       allow write: if isAdmin();
     }
 
     // ── Forfaits ──────────────────────────────────────────────────────────
+    // Lecture : staff (moniteurs vérifient les forfaits actifs au planning/montoir)
+    // Écriture : admin
     match /forfaits/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
+      allow read: if isStaff() || (isAuth() && resource.data.familyId == request.auth.uid);
       allow write: if isAdmin();
     }
 
@@ -289,9 +298,12 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // ── Mouvements registre (alias) ───────────────────────────────────────
+    // ── Mouvements registre ───────────────────────────────────────────────
+    // Lecture : staff (cavalerie affiche le registre d'un équidé aux moniteurs)
+    // Écriture : admin uniquement (registre officiel)
     match /mouvements_registre/{docId} {
-      allow read, write: if isAdmin();
+      allow read: if isStaff();
+      allow write: if isAdmin();
     }
 
     // ── Passages (appel / feuille de présence) ────────────────────────────
@@ -358,8 +370,10 @@ service cloud.firestore {
     }
 
     // ── Liste d'attente ───────────────────────────────────────────────────
+    // Lecture : staff (moniteurs voient les inscrits en attente au planning)
+    // Écriture : admin (validation/suppression), création par tous utilisateurs auth
     match /waitlist/{docId} {
-      allow read: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
+      allow read: if isStaff() || (isAuth() && resource.data.familyId == request.auth.uid);
       allow create: if isAuth();
       allow update, delete: if isAdmin();
     }
