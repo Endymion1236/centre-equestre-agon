@@ -266,17 +266,26 @@ export default function ContenuPage() {
       {/* ── Infos pratiques ── */}
       {tab === "infos" && (
         <Card padding="md">
-          <div className="font-body text-sm font-semibold text-blue-800 mb-4">ℹ️ Informations pratiques</div>
+          <div className="font-body text-sm font-semibold text-blue-800 mb-1">ℹ️ Informations pratiques</div>
+          <div className="font-body text-[11px] text-slate-400 mb-4">
+            Ces informations s'affichent sur la page Contact, dans le footer et sur la carte Google Maps du site public.
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[
-              { field: "adresse", label: "Adresse" },
-              { field: "telephone", label: "Téléphone" },
+              { field: "adresse", label: "Adresse complète" },
+              { field: "telephone", label: "Téléphone principal" },
+              { field: "telephone_secondaire", label: "Téléphone secondaire (optionnel, laisser vide si non utilisé)" },
               { field: "email", label: "Email public" },
-              { field: "horaires_bureau", label: "Horaires d'accueil" },
+              { field: "horaires_bureau", label: "Horaires d'accueil (hors saison)" },
             ].map(({ field, label: lbl }) => (
-              <div key={field}>
+              <div key={field} className={field === "telephone_secondaire" ? "sm:col-span-2" : ""}>
                 <label className={label}>{lbl}</label>
-                <input value={(data.infos as any)[field]} onChange={e => setInfo(field, e.target.value)} className={inp} />
+                <input
+                  value={(data.infos as any)[field] || ""}
+                  onChange={e => setInfo(field, e.target.value)}
+                  placeholder={field === "telephone_secondaire" ? "Ex: 06 09 02 71 59 (laisser vide si non utilisé)" : ""}
+                  className={inp}
+                />
               </div>
             ))}
             <div className="sm:col-span-2">

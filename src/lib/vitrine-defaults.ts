@@ -67,8 +67,9 @@ export const vitrineDefaults = {
 
   // ── Infos pratiques ──────────────────────────────────────────────────────────
   infos: {
-    adresse: "Route de la Côte, 50230 Agon-Coutainville",
-    telephone: "02 33 47 XX XX",
+    adresse: "56 Charrière du Commerce, 50230 Agon-Coutainville",
+    telephone: "02 44 84 99 96",
+    telephone_secondaire: "",
     email: "ceagon50@gmail.com",
     horaires_bureau: "Lun–Ven 9h–19h · Sam 9h–17h",
     presentation: "Centre équestre familial à 800m de la mer, spécialisé dans les stages enfants et les balades sur la plage.",
