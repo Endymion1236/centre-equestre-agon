@@ -1,5 +1,5 @@
 export type PaymentMode =
-  | "cb_terminal" | "cb_online" | "cheque" | "especes"
+  | "cb_terminal" | "cb_online" | "cheque" | "cheque_differe" | "especes"
   | "cheque_vacances" | "pass_sport" | "ancv" | "virement"
   | "avoir" | "prelevement_sepa";
 
@@ -36,6 +36,7 @@ export const paymentModes: { id: PaymentMode; label: string }[] = [
   { id: "cb_terminal", label: "CB (terminal)" },
   { id: "cb_online", label: "CB en ligne (CAWL)" },
   { id: "cheque", label: "Chèque" },
+  { id: "cheque_differe", label: "Chèques différés" },
   { id: "especes", label: "Espèces" },
   { id: "cheque_vacances", label: "Chèques vacances" },
   { id: "pass_sport", label: "Pass'Sport" },

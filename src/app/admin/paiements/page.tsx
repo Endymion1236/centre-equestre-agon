@@ -9,7 +9,7 @@ import { safeNumber, round2, generateOrderId } from "@/lib/utils";
 import { Card, Badge, Button } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { useAgentContext } from "@/hooks/useAgentContext";
-import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle, Copy, ChevronDown, Gift } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle, Copy, ChevronDown, Gift, Calendar } from "lucide-react";
 import { openHtmlInTab } from "@/lib/open-html-tab";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
 import { downloadAvoirPdf } from "@/lib/download-avoir";
@@ -24,6 +24,7 @@ import { TabEcheances } from "./TabEcheances";
 import { TabImpayes } from "./TabImpayes";
 import { TabOfferts } from "./TabOfferts";
 import { TabDeclarations } from "./TabDeclarations";
+import { TabChequesDiffres } from "./TabChequesDiffres";
 import { authFetch } from "@/lib/auth-fetch";
 
 export default function PaiementsPage() {
@@ -32,7 +33,7 @@ export default function PaiementsPage() {
   const urlSearch = searchParams.get("search") || "";
   const urlFamily = searchParams.get("family") || "";
   const urlTab = searchParams.get("tab") || "";
-  const [tab, setTab] = useState<"encaisser" | "journal" | "historique" | "echeances" | "impayes" | "offerts" | "declarations">(urlTab === "impayes" ? "impayes" : urlSearch ? "impayes" : "encaisser");
+  const [tab, setTab] = useState<"encaisser" | "journal" | "historique" | "echeances" | "impayes" | "offerts" | "declarations" | "cheques_differes">(urlTab === "impayes" ? "impayes" : urlSearch ? "impayes" : "encaisser");
   const [editPayment, setEditPayment] = useState<any | null>(null);
   const [quickEncaisser, setQuickEncaisser] = useState<{ payment: any } | null>(null);
   const [sendingCawlLink, setSendingCawlLink] = useState<string | null>(null);
@@ -64,6 +65,8 @@ export default function PaiementsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [declarations, setDeclarations] = useState<any[]>([]);
   const [confirmingDeclId, setConfirmingDeclId] = useState<string | null>(null);
+  // Chèques différés (pour calcul du badge de retard dans la barre d'onglets)
+  const [chequesDiffresCount, setChequesDiffresCount] = useState<{ total: number; overdue: number }>({ total: 0, overdue: 0 });
 
   // Historique filters
   const [histModeFilter, setHistModeFilter] = useState<string>("all");
@@ -129,6 +132,14 @@ export default function PaiementsPage() {
       if (promoSnap.exists() && promoSnap.data().items) setPromos(promoSnap.data().items);
       const decls = declSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setDeclarations(decls);
+      // Charger les chèques différés pour le badge
+      try {
+        const chqSnap = await getDocs(collection(db, "cheques-differes"));
+        const todayBadge = new Date().toISOString().split("T")[0];
+        const pending = chqSnap.docs.filter(d => d.data().status === "pending");
+        const overdue = pending.filter(d => (d.data().dateEncaissementPrevue || "") < todayBadge);
+        setChequesDiffresCount({ total: pending.length, overdue: overdue.length });
+      } catch {}
       setLoading(false);
       const impayes = (pays as any[]).filter(p => p.status === "pending" || p.status === "partial");
       const totalImpaye = impayes.reduce((s: number, p: any) => s + ((p.totalTTC||0) - (p.paidAmount||0)), 0);
@@ -376,16 +387,24 @@ export default function PaiementsPage() {
 
   // Rafraîchir les données
   const refreshAll = async () => {
-    const [paySnap, encSnap, avoirsSnap] = await Promise.all([
+    const [paySnap, encSnap, avoirsSnap, chqSnap] = await Promise.all([
       getDocs(collection(db, "payments")),
       getDocs(query(collection(db, "encaissements"), orderBy("date", "desc"), limit(500))),
       getDocs(collection(db, "avoirs")),
+      getDocs(collection(db, "cheques-differes")).catch(() => null),
     ]);
     const pays = loadPayments(paySnap.docs) as any[];
     pays.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
     setPayments(pays as any);
     setEncaissements(encSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
     setAvoirs(avoirsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any);
+    // Calcul du badge chèques différés (total en attente + retard)
+    if (chqSnap) {
+      const today = new Date().toISOString().split("T")[0];
+      const pending = chqSnap.docs.filter(d => d.data().status === "pending");
+      const overdue = pending.filter(d => (d.data().dateEncaissementPrevue || "") < today);
+      setChequesDiffresCount({ total: pending.length, overdue: overdue.length });
+    }
   };
 
   // ═══ SUPPRESSION / MODIFICATION DE COMMANDE ═══
@@ -1019,7 +1038,7 @@ export default function PaiementsPage() {
       </div>
 
       <div className="flex gap-1.5 mb-6 overflow-x-auto pb-1 -mx-1 px-1 hide-scrollbar">
-        {([["encaisser", "Encaisser", ShoppingCart], ["journal", "Journal", Receipt], ["historique", "Historique", Receipt], ["echeances", "Échéances", Receipt], ["impayes", "Impayés", Receipt], ["offerts", "Offerts", Gift], ["declarations", "Déclarations", Receipt]] as const).map(([id, label, Icon]) => (
+        {([["encaisser", "Encaisser", ShoppingCart], ["journal", "Journal", Receipt], ["historique", "Historique", Receipt], ["echeances", "Échéances", Receipt], ["impayes", "Impayés", Receipt], ["cheques_differes", "Chèques différés", Calendar], ["offerts", "Offerts", Gift], ["declarations", "Déclarations", Receipt]] as const).map(([id, label, Icon]) => (
           <button key={id} onClick={() => setTab(id as any)}
             className={`flex items-center gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg border font-body text-xs sm:text-sm font-medium cursor-pointer transition-all whitespace-nowrap flex-shrink-0
               ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
@@ -1034,6 +1053,11 @@ export default function PaiementsPage() {
               }).length;
               return count > 0 ? <span className="bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{count}</span> : null;
             })()}
+            {id === "cheques_differes" && chequesDiffresCount.overdue > 0 && (
+              <span className="bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center" title={`${chequesDiffresCount.overdue} chèque(s) en retard`}>
+                {chequesDiffresCount.overdue}
+              </span>
+            )}
             {id === "declarations" && declarations.length > 0 && (
               <span className="bg-orange-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{declarations.length}</span>
             )}
@@ -1100,6 +1124,16 @@ export default function PaiementsPage() {
           setDuplicateTarget={setDuplicateTarget}
           deletePaymentCommand={deletePaymentCommand}
           enrollChildInForfait={enrollChildInForfait}
+        />
+      )}
+
+      {/* ─── Onglet Chèques différés ─── */}
+      {tab === "cheques_differes" && (
+        <TabChequesDiffres
+          payments={payments}
+          enregistrerEncaissement={enregistrerEncaissement}
+          toast={toast}
+          refreshAll={refreshAll}
         />
       )}
 

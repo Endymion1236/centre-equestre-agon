@@ -30,7 +30,7 @@ interface TabEncaisserProps {
     mode: string, ref?: string, activityTitle?: string, customDate?: string
   ) => Promise<any>;
   toast: (message: string, type?: "error" | "success" | "warning" | "info", duration?: number) => void;
-  setTab: React.Dispatch<React.SetStateAction<"encaisser" | "journal" | "historique" | "echeances" | "impayes" | "offerts" | "declarations">>;
+  setTab: React.Dispatch<React.SetStateAction<"encaisser" | "journal" | "historique" | "echeances" | "impayes" | "offerts" | "declarations" | "cheques_differes">>;
   refreshAll: () => Promise<void>;
 }
 
@@ -38,6 +38,17 @@ export function TabEncaisser({
   families, activities, payments, encaissements, avoirs, promos, loading,
   enregistrerEncaissement, toast, setTab, refreshAll,
 }: TabEncaisserProps) {
+  // Répartit un montant total en n parts égales avec ajustement du reliquat
+  // sur la première part pour que la somme soit EXACTEMENT le total.
+  const repartirEnParts = (total: number, n: number): number[] => {
+    if (n <= 0) return [];
+    const cents = Math.round(total * 100);
+    const base = Math.floor(cents / n);
+    const reste = cents - base * n;
+    // reste est réparti sur les premières parts (+1 centime chacune)
+    return Array.from({ length: n }, (_, i) => (base + (i < reste ? 1 : 0)) / 100);
+  };
+
   const [familySearch, setFamilySearch] = useState("");
   const [basket, setBasket] = useState<BasketItem[]>([]);
   const [selectedActivity, setSelectedActivity] = useState("");
@@ -56,6 +67,12 @@ export function TabEncaisser({
   const [promoCode, setPromoCode] = useState("");
   const [appliedPromo, setAppliedPromo] = useState<{ label: string; discountMode: string; discountValue: number } | null>(null);
   const [manualDiscount, setManualDiscount] = useState("");
+
+  // ─── Chèques différés (mode "cheque_differe") ─────────────────────────────
+  type ChequeDifferE = { numero: string; banque: string; montant: string; dateEncaissementPrevue: string };
+  const [chequesDiffres, setChequesDiffres] = useState<ChequeDifferE[]>([
+    { numero: "", banque: "", montant: "", dateEncaissementPrevue: new Date().toISOString().split("T")[0] },
+  ]);
 
   // ─── Réductions famille/multi-stages (chargées au montage) ───
   const [vacationPeriods, setVacationPeriods] = useState<VacationPeriod[]>([]);
@@ -234,6 +251,63 @@ export function TabEncaisser({
       ? (appliedPromo.discountMode === "percent" ? revisedSubtotal * appliedPromo.discountValue / 100 : appliedPromo.discountValue)
       : (safeNumber(manualDiscount));
     const revisedTotal = Math.max(0, revisedSubtotal - revisedPromoDiscount);
+
+    // ─── Mode chèques différés : pas d'encaissement immédiat ───
+    // On crée le payment en pending, on crée N documents cheques-differes,
+    // chaque chèque sera encaissé individuellement le jour venu.
+    if (paymentMode === "cheque_differe") {
+      const chqsValides = chequesDiffres.filter(c => safeNumber(c.montant) > 0 && c.dateEncaissementPrevue);
+      if (chqsValides.length === 0) {
+        toast("Ajoutez au moins un chèque avec un montant et une date", "warning");
+        return;
+      }
+      const totalChq = chqsValides.reduce((s, c) => s + safeNumber(c.montant), 0);
+      if (Math.abs(totalChq - revisedTotal) > 0.01) {
+        if (!confirm(`Le total des chèques (${totalChq.toFixed(2)}€) ne correspond pas au total du panier (${revisedTotal.toFixed(2)}€).\n\nÉcart : ${(totalChq - revisedTotal).toFixed(2)}€.\n\nContinuer quand même ?`)) {
+          return;
+        }
+      }
+
+      // Créer le payment parent (pending, sera marqué paid quand TOUS les chèques seront déposés)
+      const payRef = await addDoc(collection(db, "payments"), {
+        orderId: generateOrderId(),
+        familyId: selectedFamily,
+        familyName: selectedFam?.parentName || "—",
+        items: revisedBasket,
+        totalTTC: revisedTotal,
+        paymentMode: "cheque_differe",
+        paymentRef: `${chqsValides.length} chèque(s) différé(s)`,
+        status: "pending",
+        paidAmount: 0,
+        date: encaissementDate ? Timestamp.fromDate(new Date(encaissementDate + "T12:00:00")) : serverTimestamp(),
+        createdAt: serverTimestamp(),
+      });
+
+      // Créer un document par chèque dans cheques-differes
+      for (const chq of chqsValides) {
+        await addDoc(collection(db, "cheques-differes"), {
+          paymentId: payRef.id,
+          familyId: selectedFamily,
+          familyName: selectedFam?.parentName || "—",
+          numero: chq.numero.trim(),
+          banque: chq.banque.trim(),
+          montant: safeNumber(chq.montant),
+          dateEncaissementPrevue: chq.dateEncaissementPrevue,
+          status: "pending",
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      setBasket([]); setPaymentRef(""); setPaidAmount("");
+      setEncaissementDate(new Date().toISOString().split("T")[0]);
+      setChequesDiffres([{ numero: "", banque: "", montant: "", dateEncaissementPrevue: new Date().toISOString().split("T")[0] }]);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+      toast(`✅ ${chqsValides.length} chèque(s) différé(s) enregistré(s) — ${totalChq.toFixed(2)}€`, "success");
+      await refreshAll();
+      return;
+    }
+
     const paid = paidAmount ? safeNumber(paidAmount) : revisedTotal;
 
     const payRef = await addDoc(collection(db, "payments"), {
@@ -618,6 +692,115 @@ export function TabEncaisser({
                 className={inputCls} />
             </div>
           )}
+
+          {/* Chèques différés — saisie de plusieurs chèques à encaisser à des dates différentes */}
+          {paymentMode === "cheque_differe" && (() => {
+            const totalChq = chequesDiffres.reduce((s, c) => s + safeNumber(c.montant), 0);
+            const ecart = Math.round((totalChq - basketTotal) * 100) / 100;
+            const ecartAbs = Math.abs(ecart);
+            return (
+              <div className="mb-4 border border-orange-200 rounded-xl p-3 bg-orange-50">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="font-body text-xs font-semibold text-orange-800">
+                    📅 Saisie des chèques différés ({chequesDiffres.length})
+                  </div>
+                  <div className="font-body text-xs text-orange-700">
+                    Total saisi : <span className="font-bold">{totalChq.toFixed(2)}€</span> / {basketTotal.toFixed(2)}€
+                    {ecartAbs > 0.01 && (
+                      <span className="ml-2 text-red-600">
+                        (écart : {ecart > 0 ? "+" : ""}{ecart.toFixed(2)}€)
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {chequesDiffres.map((chq, idx) => (
+                    <div key={idx} className="flex gap-2 items-center bg-white rounded-lg p-2">
+                      <input
+                        value={chq.numero}
+                        onChange={e => {
+                          const u = [...chequesDiffres]; u[idx].numero = e.target.value; setChequesDiffres(u);
+                        }}
+                        placeholder="N° chèque"
+                        className="w-28 px-2 py-1.5 rounded border border-gray-200 font-body text-xs focus:outline-none focus:border-orange-400"
+                      />
+                      <input
+                        value={chq.banque}
+                        onChange={e => {
+                          const u = [...chequesDiffres]; u[idx].banque = e.target.value; setChequesDiffres(u);
+                        }}
+                        placeholder="Banque"
+                        className="flex-1 min-w-0 px-2 py-1.5 rounded border border-gray-200 font-body text-xs focus:outline-none focus:border-orange-400"
+                      />
+                      <input
+                        value={chq.montant}
+                        onChange={e => {
+                          const u = [...chequesDiffres]; u[idx].montant = e.target.value; setChequesDiffres(u);
+                        }}
+                        type="number" step="0.01" placeholder="Montant"
+                        className="w-24 px-2 py-1.5 rounded border border-gray-200 font-body text-xs text-right focus:outline-none focus:border-orange-400"
+                      />
+                      <input
+                        value={chq.dateEncaissementPrevue}
+                        onChange={e => {
+                          const u = [...chequesDiffres]; u[idx].dateEncaissementPrevue = e.target.value; setChequesDiffres(u);
+                        }}
+                        type="date"
+                        className="w-36 px-2 py-1.5 rounded border border-gray-200 font-body text-xs focus:outline-none focus:border-orange-400"
+                      />
+                      {chequesDiffres.length > 1 && (
+                        <button
+                          onClick={() => setChequesDiffres(chequesDiffres.filter((_, i) => i !== idx))}
+                          className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1">
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={() => {
+                      // Ajouter un chèque en pré-remplissant le montant avec le solde restant
+                      const reste = Math.max(0, Math.round((basketTotal - totalChq) * 100) / 100);
+                      // Prochaine date = +1 mois par rapport au dernier chèque saisi
+                      const lastDate = chequesDiffres[chequesDiffres.length - 1]?.dateEncaissementPrevue;
+                      let nextDate = new Date().toISOString().split("T")[0];
+                      if (lastDate) {
+                        const d = new Date(lastDate);
+                        d.setMonth(d.getMonth() + 1);
+                        nextDate = d.toISOString().split("T")[0];
+                      }
+                      setChequesDiffres([...chequesDiffres, { numero: "", banque: "", montant: reste > 0 ? reste.toFixed(2) : "", dateEncaissementPrevue: nextDate }]);
+                    }}
+                    className="font-body text-xs text-orange-700 bg-white border border-orange-300 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-orange-100">
+                    + Ajouter un chèque
+                  </button>
+                  <button
+                    onClick={() => {
+                      // Répartir le total en N chèques égaux (prochain mois par mois)
+                      const n = chequesDiffres.length;
+                      if (n === 0) return;
+                      const baseDate = chequesDiffres[0]?.dateEncaissementPrevue || new Date().toISOString().split("T")[0];
+                      const parts = repartirEnParts(basketTotal, n);
+                      const updated = chequesDiffres.map((c, i) => {
+                        const d = new Date(baseDate);
+                        d.setMonth(d.getMonth() + i);
+                        return {
+                          ...c,
+                          montant: parts[i].toFixed(2),
+                          dateEncaissementPrevue: d.toISOString().split("T")[0],
+                        };
+                      });
+                      setChequesDiffres(updated);
+                    }}
+                    className="font-body text-xs text-orange-700 bg-white border border-orange-300 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-orange-100">
+                    ⚖️ Répartir {basketTotal.toFixed(2)}€ en {chequesDiffres.length} chèque{chequesDiffres.length > 1 ? "s" : ""} égaux
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Date d'encaissement */}
           <div className="mb-3">
