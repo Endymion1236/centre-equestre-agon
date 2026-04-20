@@ -94,6 +94,10 @@ export function TabEncaisser({
   ];
 
   const addToBasket = () => {
+    if (!selectedFamily) {
+      toast("Veuillez d'abord sélectionner une famille", "warning");
+      return;
+    }
     if (customLabel && customPrice) {
       const price = safeNumber(customPrice);
       const tvaRate = safeNumber(customTva);
@@ -153,8 +157,16 @@ export function TabEncaisser({
   const removeFromBasket = (id: string) => setBasket(basket.filter((i) => i.id !== id));
 
   const handlePayment = async () => {
-    if (!selectedFamily || basket.length === 0) return;
+    if (!selectedFamily) {
+      toast("Veuillez sélectionner une famille avant de valider le paiement", "warning");
+      return;
+    }
+    if (basket.length === 0) {
+      toast("Le panier est vide", "warning");
+      return;
+    }
     setSaving(true);
+    try {
 
     // ─── Revérification des réductions famille/multi-stages sur items "stage" ───
     const revisedBasket: BasketItem[] = [];
@@ -242,9 +254,15 @@ export function TabEncaisser({
     }
     setBasket([]); setPaymentRef(""); setPaidAmount("");
     setEncaissementDate(new Date().toISOString().split("T")[0]);
-    setSaving(false); setSuccess(true);
+    setSuccess(true);
     setTimeout(() => setSuccess(false), 3000);
     await refreshAll();
+    } catch (err) {
+      console.error("[paiements] Erreur lors de l'encaissement:", err);
+      toast(`Erreur lors de l'encaissement : ${(err as Error)?.message || "erreur inconnue"}`, "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
