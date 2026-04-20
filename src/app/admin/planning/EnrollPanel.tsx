@@ -1542,6 +1542,39 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             )}
             {fam && available.length > 0 && !isStage && <div className="flex flex-wrap gap-2">{available.map((c:any)=><button key={c.id} onClick={()=>setSelChild(c.id)} className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${selChild===c.id?"bg-blue-500 text-white border-blue-500":"bg-white text-slate-600 border-gray-200"}`}><Users size={12}/> {c.firstName}</button>)}</div>}
 
+            {/* Message explicite si aucun enfant disponible */}
+            {fam && children.length > 0 && available.length === 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <div className="font-body text-xs font-semibold text-amber-800 mb-2">
+                  Aucun cavalier disponible pour ce créneau
+                </div>
+                <ul className="font-body text-xs text-amber-700 space-y-1">
+                  {children.map((c: any) => {
+                    const isEnrolled = enrolledIds.includes(c.id);
+                    const conflict = !isEnrolled && allCreneaux.find(other => {
+                      if (other.id === creneau.id || other.date !== creneau.date) return false;
+                      if (!(other.enrolled || []).some((e: any) => e.childId === c.id)) return false;
+                      return creneau.startTime < other.endTime && other.startTime < creneau.endTime;
+                    });
+                    return (
+                      <li key={c.id}>
+                        <strong>{c.firstName}</strong>
+                        {isEnrolled && <span> — déjà inscrit(e) sur ce créneau</span>}
+                        {conflict && <span> — déjà inscrit(e) sur « {(conflict as any).activityTitle} » à {(conflict as any).startTime}</span>}
+                        {!isEnrolled && !conflict && <span> — indisponible</span>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+
+            {fam && children.length === 0 && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 font-body text-xs text-red-700">
+                Cette famille n'a aucun cavalier enregistré. Ajoutez-en un depuis la fiche famille.
+              </div>
+            )}
+
             {/* Stage : sélection multiple d'enfants */}
             {fam && available.length > 0 && isStage && (
               <div>
