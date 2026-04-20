@@ -541,8 +541,8 @@ export function TabEncaisser({
         <div className="font-body text-xs text-slate-600 mb-2">— ou saisie libre —</div>
         <div className="flex flex-col gap-2">
           <div className="flex flex-col sm:flex-row gap-2">
-            <input value={customLabel} onChange={(e) => setCustomLabel(e.target.value)} placeholder="Libellé (ex: Location box avril)" className={`${inputCls} flex-1`} />
-            <input value={customPrice} onChange={(e) => setCustomPrice(e.target.value)} placeholder="Prix TTC" type="number" step="0.01" className={`${inputCls} w-28`} />
+            <input value={customLabel} onChange={(e) => setCustomLabel(e.target.value)} placeholder="Libellé (ex: Location box avril)" className={`${inputCls} flex-1 min-w-0`} />
+            <input value={customPrice} onChange={(e) => setCustomPrice(e.target.value)} placeholder="Prix TTC" type="number" step="0.01" className={`${inputCls} w-full sm:w-28 flex-shrink-0`} />
           </div>
           <div className="flex flex-col sm:flex-row gap-2 items-end">
             <div className="flex-1">
