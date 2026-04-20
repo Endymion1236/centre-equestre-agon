@@ -81,6 +81,9 @@ export default function ComptabilitePage() {
   const [expandedBankLine, setExpandedBankLine] = useState<number | null>(null);
   const [manualSearch, setManualSearch] = useState("");
 
+  // Sélection manuelle pour bordereau de remise : IDs des paiements cochés
+  const [selectedForRemise, setSelectedForRemise] = useState<Set<string>>(new Set());
+
   // Sauvegarder les bankLines dans Firestore après modification manuelle
   const updateAndSaveBankLines = async (updated: typeof bankLines) => {
     setBankLines(updated);
@@ -987,49 +990,118 @@ export default function ComptabilitePage() {
                 <div className="flex flex-col gap-1 mb-4 max-h-[300px] overflow-y-auto">
                   {nonRemis.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)).map(p => {
                     const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
+                    const isChecked = selectedForRemise.has(p.id!);
                     return (
-                      <div key={p.id} className="flex items-center justify-between font-body text-xs py-1.5 px-3 bg-white rounded-lg">
-                        <div className="flex items-center gap-2">
+                      <label key={p.id} className={`flex items-center justify-between font-body text-xs py-1.5 px-3 rounded-lg cursor-pointer ${isChecked ? "bg-blue-50 border border-blue-200" : "bg-white hover:bg-slate-50"}`}>
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {
+                              setSelectedForRemise(prev => {
+                                const next = new Set(prev);
+                                if (next.has(p.id!)) next.delete(p.id!); else next.add(p.id!);
+                                return next;
+                              });
+                            }}
+                            className="w-4 h-4 accent-blue-500 cursor-pointer flex-shrink-0"
+                          />
                           <span className="text-slate-500 min-w-[65px]">{d ? d.toLocaleDateString("fr-FR") : "—"}</span>
                           <Badge color="gray">{modeLabels[p.paymentMode] || p.paymentMode}</Badge>
-                          <span className="text-blue-800 font-semibold">{p.familyName}</span>
-                          <span className="text-slate-500">{(p.items || []).map((i: any) => i.activityTitle).join(", ").slice(0, 40)}</span>
+                          <span className="text-blue-800 font-semibold truncate">{p.familyName}</span>
+                          <span className="text-slate-500 truncate">{(p.items || []).map((i: any) => i.activityTitle).join(", ").slice(0, 40)}</span>
                         </div>
-                        <span className="font-semibold text-blue-500">{(p.paidAmount || p.totalTTC || 0).toFixed(2)}€</span>
+                        <span className="font-semibold text-blue-500 flex-shrink-0 ml-2">{(p.paidAmount || p.totalTTC || 0).toFixed(2)}€</span>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                {/* Barre d'aide à la sélection */}
+                {(() => {
+                  const selectedPayments = nonRemis.filter(p => selectedForRemise.has(p.id!));
+                  const selectedTotal = selectedPayments.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
+                  const selectedModes = new Set(selectedPayments.map(p => p.paymentMode));
+                  const selectedModeLabel = selectedModes.size === 1
+                    ? (modeLabels[selectedPayments[0]?.paymentMode] || selectedPayments[0]?.paymentMode)
+                    : "mixte";
+                  return (
+                    <>
+                      {/* Boutons de cochage rapide */}
+                      <div className="flex gap-2 flex-wrap mb-2 items-center">
+                        <span className="font-body text-[11px] text-slate-500 uppercase tracking-wider">Cocher :</span>
+                        {[
+                          { id: "", label: "tout" },
+                          { id: "cb_terminal", label: "CB" },
+                          { id: "cheque", label: "Chèques" },
+                          { id: "especes", label: "Espèces" },
+                        ].map(m => {
+                          const matching = m.id ? nonRemis.filter(p => p.paymentMode === m.id) : nonRemis;
+                          if (m.id && matching.length === 0) return null;
+                          return (
+                            <button
+                              key={m.id || "all"}
+                              onClick={() => {
+                                // Cocher tous les items du mode (ou tous si m.id vide)
+                                setSelectedForRemise(prev => {
+                                  const next = new Set(prev);
+                                  matching.forEach(p => next.add(p.id!));
+                                  return next;
+                                });
+                              }}
+                              className="font-body text-[11px] text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-slate-200">
+                              + {m.label} ({matching.length})
+                            </button>
+                          );
+                        })}
+                        {selectedForRemise.size > 0 && (
+                          <button
+                            onClick={() => setSelectedForRemise(new Set())}
+                            className="font-body text-[11px] text-red-600 bg-red-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-red-100 ml-auto">
+                            Vider la sélection ({selectedForRemise.size})
+                          </button>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  {[
-                    { id: "", label: "Tout remettre", color: "bg-blue-500 text-white" },
-                    { id: "cb_terminal", label: "CB", color: "bg-blue-100 text-blue-800" },
-                    { id: "cheque", label: "Chèques", color: "bg-orange-100 text-orange-800" },
-                    { id: "especes", label: "Espèces", color: "bg-green-100 text-green-800" },
-                    // Virements exclus des remises : rapprochement direct uniquement
-                  ].map(m => {
-                    const toRemise = m.id ? nonRemis.filter(p => p.paymentMode === m.id) : nonRemis;
-                    if (m.id && toRemise.length === 0) return null;
-                    const remiseTotal = toRemise.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
-                    return (
-                      <button key={m.id || "all"} onClick={async () => {
-                        if (!confirm(`Créer un bordereau de remise ?\n\n${toRemise.length} paiement(s) — ${remiseTotal.toFixed(2)}€${m.id ? ` (${m.label})` : ""}`)) return;
-                        try {
-                          const remiseRef = await addDoc(collection(db, "remises"), {
-                            date: serverTimestamp(), paymentIds: toRemise.map(p => p.id),
-                            paymentMode: m.id || "mixte", total: remiseTotal,
-                            nbPaiements: toRemise.length, status: "created",
-                            pointee: false, createdAt: serverTimestamp(),
-                          });
-                          for (const p of toRemise) await updateDoc(doc(db, "payments", p.id!), { remiseId: remiseRef.id });
-                          fetchData();
-                        } catch (e) { console.error(e); }
-                      }} className={`font-body text-[11px] font-semibold ${m.color} px-3 py-2 rounded-lg border-none cursor-pointer`}>
-                        {m.label} ({remiseTotal.toFixed(0)}€)
-                      </button>
-                    );
-                  })}
-                </div>
+
+                      {/* Bouton créer bordereau avec la sélection */}
+                      {selectedForRemise.size > 0 && (
+                        <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-gradient-to-r from-blue-50 to-green-50 border border-blue-200">
+                          <div className="font-body text-sm">
+                            <span className="font-semibold text-blue-800">{selectedForRemise.size} paiement{selectedForRemise.size > 1 ? "s" : ""} sélectionné{selectedForRemise.size > 1 ? "s" : ""}</span>
+                            <span className="text-slate-500"> · {selectedModeLabel}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="font-body text-lg font-bold text-green-600">{selectedTotal.toFixed(2)}€</span>
+                            <button
+                              onClick={async () => {
+                                if (!confirm(`Créer un bordereau de remise ?\n\n${selectedPayments.length} paiement(s) — ${selectedTotal.toFixed(2)}€\nMode : ${selectedModeLabel}`)) return;
+                                try {
+                                  const remiseRef = await addDoc(collection(db, "remises"), {
+                                    date: serverTimestamp(),
+                                    paymentIds: selectedPayments.map(p => p.id),
+                                    paymentMode: selectedModes.size === 1 ? [...selectedModes][0] : "mixte",
+                                    total: selectedTotal,
+                                    nbPaiements: selectedPayments.length,
+                                    status: "created",
+                                    pointee: false,
+                                    createdAt: serverTimestamp(),
+                                  });
+                                  for (const p of selectedPayments) {
+                                    await updateDoc(doc(db, "payments", p.id!), { remiseId: remiseRef.id });
+                                  }
+                                  setSelectedForRemise(new Set());
+                                  fetchData();
+                                } catch (e) { console.error(e); alert("Erreur lors de la création du bordereau."); }
+                              }}
+                              className="font-body text-sm font-semibold text-white bg-green-600 hover:bg-green-500 px-4 py-2 rounded-lg border-none cursor-pointer">
+                              Créer le bordereau
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </>
             )}
           </Card>
