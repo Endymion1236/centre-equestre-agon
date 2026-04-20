@@ -38,6 +38,7 @@ export default function PedagogiePage() {
   const { user } = useAuth();
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [addingNote, setAddingNote] = useState<string | null>(null);
@@ -48,9 +49,19 @@ export default function PedagogiePage() {
 
   const fetchData = async () => {
     try {
+      setLoadError(null);
       const snap = await getDocs(collection(db, "families"));
       setFamilies(snap.docs.map(d => ({ firestoreId: d.id, ...d.data() })) as any);
-    } catch (e) { console.error(e); }
+    } catch (e: any) {
+      console.error("[pedagogie] erreur chargement families:", e);
+      const code = e?.code || "";
+      const msg = e?.message || String(e);
+      if (code === "permission-denied" || /permission/i.test(msg)) {
+        setLoadError("Vous n'avez pas les droits pour consulter les fiches cavaliers. Contactez un administrateur pour vérifier votre rôle moniteur.");
+      } else {
+        setLoadError(`Erreur de chargement : ${msg}`);
+      }
+    }
     setLoading(false);
   };
   useEffect(() => {
@@ -195,7 +206,23 @@ export default function PedagogiePage() {
           className="w-full pl-10 pr-4 py-3 rounded-xl border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none" />
       </div>
 
-      {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
+      {loadError ? (
+        <Card padding="lg" className="text-center border-red-200 bg-red-50">
+          <div className="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center mx-auto mb-3">
+            <X size={28} className="text-red-500" />
+          </div>
+          <p className="font-body text-sm font-semibold text-red-700 mb-2">Impossible de charger les fiches</p>
+          <p className="font-body text-xs text-red-600 mb-4">{loadError}</p>
+          <div className="font-body text-xs text-slate-600 bg-white rounded-lg p-3 text-left inline-block">
+            <div className="font-semibold mb-1">Solutions à essayer :</div>
+            <ol className="list-decimal ml-4 space-y-0.5">
+              <li>Se déconnecter puis se reconnecter (rafraîchit le token d'accès)</li>
+              <li>Vider le cache du navigateur (Ctrl+Maj+Suppr)</li>
+              <li>Demander à un administrateur de vérifier le rôle moniteur dans Configuration → Accès moniteurs</li>
+            </ol>
+          </div>
+        </Card>
+      ) : loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
       filtered.length === 0 ? <Card padding="lg" className="text-center"><div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><GraduationCap size={28} className="text-blue-300" /></div><p className="font-body text-sm text-slate-600">Aucun cavalier trouvé.</p></Card> :
       <div className="flex flex-col gap-3">
         {filtered.map(child => {

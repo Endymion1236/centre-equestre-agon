@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { auth } from "@/lib/firebase";
-import { UserPlus, Trash2, Loader2, Shield, Eye, EyeOff } from "lucide-react";
+import { UserPlus, Trash2, Loader2, Shield, Eye, EyeOff, RefreshCw } from "lucide-react";
 
 interface Moniteur {
   uid: string;
@@ -114,6 +114,37 @@ export default function EquipePage() {
       } else {
         const data = await res.json();
         setError(data.error || "Erreur lors de la suppression.");
+      }
+    } catch (e) {
+      setError("Erreur réseau.");
+    }
+  };
+
+  const handleRefreshClaim = async (moniteur: Moniteur) => {
+    if (!confirm(
+      `Rafraîchir le rôle moniteur de ${moniteur.displayName} ?\n\n` +
+      `Cela réapplique le droit d'accès et déconnecte la personne de toutes ses sessions.\n` +
+      `Elle devra se reconnecter pour retrouver ses droits (cela peut résoudre les erreurs de permission).`
+    )) {
+      return;
+    }
+    setError("");
+    setSuccess("");
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/admin/refresh-moniteur-claim", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ uid: moniteur.uid }),
+      });
+      if (res.ok) {
+        setSuccess(`Rôle moniteur réappliqué pour ${moniteur.displayName}. Demandez-lui de se reconnecter.`);
+      } else {
+        const data = await res.json();
+        setError(data.error || "Erreur lors du rafraîchissement.");
       }
     } catch (e) {
       setError("Erreur réseau.");
@@ -263,6 +294,13 @@ export default function EquipePage() {
                   <span className="px-2.5 py-1 rounded-lg bg-blue-50 font-body text-[11px] font-semibold text-blue-600">
                     Moniteur
                   </span>
+                  <button
+                    onClick={() => handleRefreshClaim(m)}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-300 hover:text-blue-500 hover:bg-blue-50 cursor-pointer border-none bg-transparent transition-colors"
+                    title="Rafraîchir le rôle (en cas d'erreur de permission)"
+                  >
+                    <RefreshCw size={14} />
+                  </button>
                   <button
                     onClick={() => handleDelete(m)}
                     className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 cursor-pointer border-none bg-transparent transition-colors"

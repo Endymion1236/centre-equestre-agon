@@ -212,10 +212,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!user) { setAdminClaim(null); setMoniteurClaim(false); return; }
+    // Première lecture rapide depuis le cache pour affichage immédiat
     user.getIdTokenResult(false).then(result => {
       setAdminClaim(result.claims.admin === true);
       setMoniteurClaim(result.claims.moniteur === true);
     }).catch(() => { setAdminClaim(null); setMoniteurClaim(false); });
+    // Puis refresh forcé pour récupérer les claims à jour (cas où un admin
+    // vient d'attribuer le rôle moniteur : le cache local ne le voit pas encore)
+    user.getIdTokenResult(true).then(result => {
+      setAdminClaim(result.claims.admin === true);
+      setMoniteurClaim(result.claims.moniteur === true);
+    }).catch(() => {});
   }, [user]);
 
   const isAdmin = adminClaim !== null
