@@ -1559,7 +1559,12 @@ export default function PaiementsPage() {
         </div>
       )}
 
-      {editPayment && (
+      {editPayment && (() => {
+        const isInvoiced = !!editPayment.invoiceNumber;
+        const newTotalLive = Math.round(editItems.reduce((s, i) => s + (i.priceTTC || 0), 0) * 100) / 100;
+        const paidAmount = editPayment.paidAmount || 0;
+        const tropPercu = Math.round((paidAmount - newTotalLive) * 100) / 100;
+        return (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
           onClick={() => !editSaving && setEditPayment(null)}>
           <div className="bg-white rounded-2xl w-full sm:max-w-lg max-h-[85vh] overflow-auto shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -1571,6 +1576,36 @@ export default function PaiementsPage() {
               </div>
               <button onClick={() => setEditPayment(null)} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
             </div>
+
+            {/* Bandeau de blocage si facture définitive émise */}
+            {isInvoiced && (
+              <div className="mx-5 mt-5 p-4 rounded-xl bg-red-50 border border-red-200">
+                <div className="font-body text-sm font-semibold text-red-700 mb-1">
+                  🔒 Modification impossible — facture {editPayment.invoiceNumber} émise
+                </div>
+                <div className="font-body text-xs text-red-600 leading-relaxed">
+                  Cette commande a déjà fait l'objet d'une facture définitive numérotée.
+                  Pour des raisons de conformité comptable (article L123-14 du Code de commerce),
+                  une facture émise ne peut pas être modifiée.
+                  <br /><br />
+                  Pour corriger le montant, vous devez : <strong>annuler la facture via un avoir</strong>,
+                  puis créer une nouvelle commande avec le bon montant.
+                </div>
+              </div>
+            )}
+
+            {/* Alerte trop-perçu */}
+            {!isInvoiced && tropPercu > 0 && (
+              <div className="mx-5 mt-5 p-4 rounded-xl bg-orange-50 border border-orange-300">
+                <div className="font-body text-sm font-semibold text-orange-700 mb-1">
+                  ⚠️ Attention — trop-perçu de {tropPercu.toFixed(2)}€
+                </div>
+                <div className="font-body text-xs text-orange-700 leading-relaxed">
+                  La famille a déjà payé <strong>{paidAmount.toFixed(2)}€</strong> mais le nouveau total ne sera que de <strong>{newTotalLive.toFixed(2)}€</strong>.
+                  À l'enregistrement, un <strong>avoir de {tropPercu.toFixed(2)}€</strong> sera automatiquement créé au nom de {editPayment.familyName}, utilisable sur une prochaine commande ou remboursable.
+                </div>
+              </div>
+            )}
 
             <div className="p-5 flex flex-col gap-4">
               {/* Items modifiables */}
@@ -1586,15 +1621,17 @@ export default function PaiementsPage() {
                       <input
                         type="number" step="0.01" min="0"
                         value={item.priceTTC}
+                        disabled={isInvoiced}
                         onChange={e => {
                           const v = parseFloat(e.target.value) || 0;
                           setEditItems(prev => prev.map((it, i) => i === idx ? { ...it, priceTTC: v, priceHT: Math.round(v / (1 + (it.tva || 5.5) / 100) * 100) / 100 } : it));
                         }}
-                        className="w-20 px-2 py-1.5 rounded-lg border border-gray-200 font-body text-sm text-right focus:outline-none focus:border-blue-500"
+                        className={`w-20 px-2 py-1.5 rounded-lg border border-gray-200 font-body text-sm text-right focus:outline-none focus:border-blue-500 ${isInvoiced ? "opacity-50 cursor-not-allowed bg-gray-100" : ""}`}
                       />
                       <span className="font-body text-xs text-slate-400">€</span>
-                      <button onClick={() => setEditItems(prev => prev.filter((_, i) => i !== idx))}
-                        className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1">
+                      <button onClick={() => !isInvoiced && setEditItems(prev => prev.filter((_, i) => i !== idx))}
+                        disabled={isInvoiced}
+                        className={`text-red-400 hover:text-red-600 bg-transparent border-none p-1 ${isInvoiced ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}`}>
                         <Trash2 size={14}/>
                       </button>
                     </div>
@@ -1666,16 +1703,22 @@ export default function PaiementsPage() {
               <div className="flex gap-3">
                 <button onClick={() => setEditPayment(null)}
                   className="px-5 py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
-                  Annuler
+                  {isInvoiced ? "Fermer" : "Annuler"}
                 </button>
+                {!isInvoiced && (
                 <button
                   disabled={editSaving}
                   onClick={async () => {
                     setEditSaving(true);
                     try {
                       const newTotal = Math.round(editItems.reduce((s, i) => s + (i.priceTTC || 0), 0) * 100) / 100;
-                      const newPaid = Math.min(editPayment.paidAmount || 0, newTotal);
+                      const previousPaid = editPayment.paidAmount || 0;
+                      const overpayment = Math.round((previousPaid - newTotal) * 100) / 100;
+                      // Si trop-perçu : on garde paidAmount au niveau de newTotal
+                      // et on crée un avoir pour la différence (pas d'écrasement silencieux)
+                      const newPaid = Math.min(previousPaid, newTotal);
                       const newStatus = newPaid >= newTotal ? "paid" : newPaid > 0 ? "partial" : "pending";
+
                       await updateDoc(doc(db, "payments", editPayment.id), {
                         items: editItems,
                         totalTTC: newTotal,
@@ -1683,24 +1726,48 @@ export default function PaiementsPage() {
                         status: newStatus,
                         updatedAt: serverTimestamp(),
                       });
+
+                      // Création automatique d'un avoir si trop-perçu
+                      let avoirMsg = "";
+                      if (overpayment > 0) {
+                        try {
+                          const avoirRef = await addDoc(collection(db, "avoirs"), {
+                            familyId: editPayment.familyId,
+                            familyName: editPayment.familyName,
+                            amount: overpayment,
+                            remainingAmount: overpayment,
+                            reason: `Trop-perçu suite modification commande ${editPayment.orderId || editPayment.id.slice(-6)} (total ${(editPayment.totalTTC || 0).toFixed(2)}€ → ${newTotal.toFixed(2)}€)`,
+                            sourcePaymentId: editPayment.id,
+                            status: "active",
+                            createdAt: serverTimestamp(),
+                          });
+                          avoirMsg = ` — Avoir de ${overpayment.toFixed(2)}€ créé (réf. ${avoirRef.id.slice(-6)})`;
+                        } catch (avoirErr) {
+                          console.error("[paiements] échec création avoir trop-perçu:", avoirErr);
+                          toast(`⚠️ Commande modifiée mais avoir non créé — à faire manuellement (${overpayment.toFixed(2)}€)`, "warning");
+                        }
+                      }
+
                       // Mettre à jour la liste locale
                       setPayments(prev => prev.map(p => p.id === editPayment.id
                         ? { ...p, items: editItems, totalTTC: newTotal, paidAmount: newPaid, status: newStatus }
                         : p
                       ));
-                      toast(`✅ Commande mise à jour — ${newTotal.toFixed(2)}€`, "success");
+                      toast(`✅ Commande mise à jour — ${newTotal.toFixed(2)}€${avoirMsg}`, "success");
                       setEditPayment(null);
-                    } catch (e) { console.error(e); toast("Erreur", "error"); }
+                    } catch (e) { console.error(e); toast("Erreur lors de la sauvegarde", "error"); }
                     setEditSaving(false);
                   }}
                   className={`flex-1 py-2.5 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${editSaving ? "bg-gray-200 text-slate-400" : "bg-blue-500 text-white hover:bg-blue-600"}`}>
-                  {editSaving ? "Sauvegarde..." : "Enregistrer les modifications"}
+                  {editSaving ? "Sauvegarde..." : tropPercu > 0 ? `Enregistrer + créer avoir ${tropPercu.toFixed(2)}€` : "Enregistrer les modifications"}
                 </button>
+                )}
               </div>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* ─── Modale : Envoyer un lien de paiement ─── */}
       {payLinkModal && (() => {
