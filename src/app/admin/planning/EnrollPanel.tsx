@@ -521,6 +521,56 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const stageSolde = showAcompte ? Math.round((stageTotalTTC - stageAcompte) * 100) / 100 : 0;
 
   const handleEnroll = async () => {
+    // Mode non-stage, non-compétition, ponctuel, 2+ enfants sélectionnés :
+    // inscrire un par un avec un paiement séparé par enfant (plus simple pour
+    // les avoirs/remboursements individuels).
+    if (!isStage && !isCompetition && inscriptionMode === "ponctuel" && selectedChildren.length > 1 && fam) {
+      setEnrolling(true);
+      try {
+        const childrenToEnroll = selectedChildren
+          .map(cid => children.find((c: any) => c.id === cid))
+          .filter(Boolean) as any[];
+
+        const freeEnrollOptions = freeEnroll ? { freeReason, skipEmail: false } : undefined;
+        const payModeToUse = showPay && !freeEnroll && !useRattrapage ? payMode : undefined;
+
+        const enrolledNames: string[] = [];
+        for (const child of childrenToEnroll) {
+          const firstName = child.firstName || "—";
+          const lastName = child.lastName || "";
+          const childName = lastName ? `${firstName} ${lastName}` : firstName;
+          try {
+            await onEnroll(
+              creneau.id!,
+              {
+                childId: child.id,
+                childName,
+                familyId: fam.firestoreId,
+                familyName: fam.parentName || "—",
+                enrolledAt: new Date().toISOString(),
+              },
+              payModeToUse,
+              freeEnrollOptions,
+            );
+            enrolledNames.push(firstName);
+          } catch (err) {
+            console.error(`[EnrollPanel] échec inscription ${firstName}:`, err);
+            panelToast(`Erreur inscription ${firstName}`, "error");
+          }
+        }
+
+        const payInfo = freeEnroll ? ` — 🎁 offert (${freeReason})` : showPay ? " — encaissé ✅" : priceTTC > 0 ? " — paiement(s) en attente" : "";
+        setJustEnrolled(`${enrolledNames.length} cavalier${enrolledNames.length > 1 ? "s" : ""} inscrit${enrolledNames.length > 1 ? "s" : ""} : ${enrolledNames.join(", ")}${payInfo}`);
+        panelToast(`${enrolledNames.length} inscription${enrolledNames.length > 1 ? "s" : ""} créée${enrolledNames.length > 1 ? "s" : ""} — ${(priceTTC * enrolledNames.length).toFixed(2)}€ au total`, "success");
+      } finally {
+        setSelChild(""); setSelectedChildren([]); setSelFam(""); setSearch("");
+        setEnrolling(false); setShowPay(false); setFreeEnroll(false); setFreeReason("Rattrapage");
+        setUseRattrapage(null); setInscriptionMode("ponctuel");
+        setTimeout(() => setJustEnrolled(""), 5000);
+      }
+      return;
+    }
+
     // Mode stage : inscription multi-enfants
     if (isStage && selectedChildren.length > 0 && fam) {
       setEnrolling(true);
@@ -1540,7 +1590,37 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 </div>
               </div>
             )}
-            {fam && available.length > 0 && !isStage && <div className="flex flex-wrap gap-2">{available.map((c:any)=><button key={c.id} onClick={()=>setSelChild(c.id)} className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${selChild===c.id?"bg-blue-500 text-white border-blue-500":"bg-white text-slate-600 border-gray-200"}`}><Users size={12}/> {c.firstName}</button>)}</div>}
+            {fam && available.length > 0 && !isStage && (
+              <div>
+                {available.length > 1 && (
+                  <div className="font-body text-xs font-semibold text-slate-500 mb-2">
+                    Sélectionner les cavaliers {selectedChildren.length > 1 ? "(un paiement séparé par enfant)" : ""}
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">{available.map((c:any) => {
+                  const sel = selectedChildren.includes(c.id);
+                  return (
+                    <button key={c.id} onClick={() => {
+                      if (sel) {
+                        // Désélectionner
+                        const next = selectedChildren.filter(x => x !== c.id);
+                        setSelectedChildren(next);
+                        // selChild reflète le premier pour compat avec le reste du code
+                        setSelChild(next[0] || "");
+                      } else {
+                        // Sélectionner
+                        const next = [...selectedChildren, c.id];
+                        setSelectedChildren(next);
+                        if (!selChild) setSelChild(c.id);
+                      }
+                    }}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${sel ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
+                      {sel ? <Check size={12}/> : <Users size={12}/>} {c.firstName}
+                    </button>
+                  );
+                })}</div>
+              </div>
+            )}
 
             {/* Message explicite si aucun enfant disponible */}
             {fam && children.length > 0 && available.length === 0 && (
@@ -1794,7 +1874,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       </>
                     )}
                   </button>
-                  <button onClick={() => setInscriptionMode("annuel")}
+                  <button onClick={() => {
+                    setInscriptionMode("annuel");
+                    // Le mode annuel ne supporte qu'un enfant à la fois : on garde le premier sélectionné
+                    if (selectedChildren.length > 1) {
+                      const first = selectedChildren[0];
+                      setSelectedChildren([first]);
+                      setSelChild(first);
+                    }
+                  }}
                     className={`p-3 rounded-lg border-2 text-left cursor-pointer transition-all ${inscriptionMode === "annuel" ? "border-green-500 bg-green-50" : "border-gray-200 bg-white"}`}>
                     <div className="font-body text-sm font-semibold text-green-700">Forfait à l'année</div>
                     <div className="font-body text-xs text-slate-500 mt-0.5">{sessionsRestantes} séances restantes × {frequenceCours}× ({sessionsRestantes * frequenceCours} total)</div>
@@ -2124,11 +2212,17 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             )}
 
             {/* Bouton Cours / Activité ponctuelle */}
-            {!isStage && selChild && (
+            {!isStage && selChild && (() => {
+              const nbSel = Math.max(1, selectedChildren.length);
+              const isMulti = nbSel > 1 && inscriptionMode === "ponctuel" && !isCompetition;
+              const totalTTC = priceTTC * nbSel;
+              const suffixe = isMulti ? ` (${nbSel} cavaliers)` : "";
+              return (
               <button onClick={handleEnroll} disabled={!selChild||enrolling||(inscriptionMode==="annuel"&&frequenceCours>=2&&extraSlots.length<frequenceCours-1)} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${(!selChild||enrolling||(inscriptionMode==="annuel"&&frequenceCours>=2&&extraSlots.length<frequenceCours-1))?"bg-gray-200 text-slate-500":inscriptionMode==="annuel"?"bg-green-600 text-white hover:bg-green-500":"bg-blue-500 text-white hover:bg-blue-400"}`}>
-                {enrolling ? "..." : inscriptionMode === "annuel" ? `Inscrire à l'année (${totalAnnuel.toFixed(2)}€)` : (allCartes.some((c: any) => c.status === "active" && (c.remainingSessions || 0) > 0 && (c.childId === selChild || (c.familiale && c.familyId === selFam)))) ? "Inscrire 🎟️ (débit carte à la clôture)" : showPay ? `Inscrire + Encaisser (${priceTTC.toFixed(2)}€)` : priceTTC > 0 ? `Inscrire — paiement en attente (${priceTTC.toFixed(2)}€)` : "Inscrire"}
+                {enrolling ? "..." : inscriptionMode === "annuel" ? `Inscrire à l'année (${totalAnnuel.toFixed(2)}€)` : (allCartes.some((c: any) => c.status === "active" && (c.remainingSessions || 0) > 0 && (c.childId === selChild || (c.familiale && c.familyId === selFam)))) ? `Inscrire 🎟️ (débit carte à la clôture)${suffixe}` : showPay ? `Inscrire + Encaisser (${totalTTC.toFixed(2)}€)${suffixe}` : totalTTC > 0 ? `Inscrire — paiement${isMulti ? "s" : ""} en attente (${totalTTC.toFixed(2)}€)${suffixe}` : `Inscrire${suffixe}`}
               </button>
-            )}
+              );
+            })()}
           </div></div>)}
 
           {/* Panel proposant d'autres jours après inscription jour */}
