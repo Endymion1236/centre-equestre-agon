@@ -81,8 +81,10 @@ export default function ComptabilitePage() {
   const [expandedBankLine, setExpandedBankLine] = useState<number | null>(null);
   const [manualSearch, setManualSearch] = useState("");
 
-  // Sélection manuelle pour bordereau de remise : IDs des paiements cochés
+  // Sélection manuelle pour bordereau de remise : IDs des encaissements cochés
   const [selectedForRemise, setSelectedForRemise] = useState<Set<string>>(new Set());
+  // Filtre d'affichage par mode dans la liste à remettre ("" = tous)
+  const [remiseModeView, setRemiseModeView] = useState<string>("");
 
   // Sauvegarder les bankLines dans Firestore après modification manuelle
   const updateAndSaveBankLines = async (updated: typeof bankLines) => {
@@ -931,22 +933,45 @@ export default function ComptabilitePage() {
 
       {/* ─── Bordereaux de remise ─── */}
       {!loading && tab === "remise" && (() => {
-        const paidPayments = payments.filter(p => p.status === "paid" && p.paidAmount > 0);
-        const remisPaymentIds = (remises || []).flatMap((r: any) => r.paymentIds || []);
-        const nonRemis = paidPayments.filter(p => 
-          !remisPaymentIds.includes(p.id) && 
-          !(p as any).remiseId &&
-          p.paymentMode !== "virement" &&
-          p.paymentMode !== "prelevement_sepa" &&
-          p.paymentMode !== "cb_online"  // CB en ligne = virement CAWL, pas de remise physique
+        // ──────────────────────────────────────────────────────────────────
+        // Travail au niveau ENCAISSEMENT (pas payment) pour gérer les
+        // paiements mixtes : un payment mixte a plusieurs encaissements avec
+        // des modes différents, chacun doit pouvoir être remis séparément.
+        // ──────────────────────────────────────────────────────────────────
+        const remisEncaissementIds = new Set(
+          (remises || []).flatMap((r: any) => r.encaissementIds || [])
         );
-        const nonRemisByMode: Record<string, typeof nonRemis> = {};
-        nonRemis.forEach(p => {
-          const m = p.paymentMode || "autre";
-          if (!nonRemisByMode[m]) nonRemisByMode[m] = [];
-          nonRemisByMode[m].push(p);
+        // Les anciennes remises n'ont que paymentIds : on les utilise pour
+        // considérer tous les encaissements de ces payments comme déjà remis.
+        const remisPaymentIdsLegacy = new Set(
+          (remises || []).flatMap((r: any) => r.paymentIds || [])
+        );
+
+        const nonRemisEnc = (encaissementsCompta || []).filter((e: any) => {
+          // Modes exclus des remises physiques
+          if (["virement", "prelevement_sepa", "cb_online", "avoir"].includes(e.mode)) return false;
+          // Montant positif uniquement (pas de remboursements)
+          if ((e.montant || 0) <= 0) return false;
+          // Déjà remis : soit marqué directement, soit via ancienne remise par payment
+          if (e.remiseId) return false;
+          if (remisEncaissementIds.has(e.id)) return false;
+          if (e.paymentId && remisPaymentIdsLegacy.has(e.paymentId)) return false;
+          return true;
         });
-        const totalNonRemis = nonRemis.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
+
+        const nonRemisByModeEnc: Record<string, typeof nonRemisEnc> = {};
+        nonRemisEnc.forEach((e: any) => {
+          const m = e.mode || "autre";
+          if (!nonRemisByModeEnc[m]) nonRemisByModeEnc[m] = [];
+          nonRemisByModeEnc[m].push(e);
+        });
+        const totalNonRemisEnc = nonRemisEnc.reduce((s: number, e: any) => s + (e.montant || 0), 0);
+
+        // Alias pour le code plus bas (compat), mais désormais vide car on ne
+        // travaille plus au niveau payment ici
+        const nonRemis: any[] = [];
+        const nonRemisByMode: Record<string, any[]> = {};
+        const totalNonRemis = 0;
 
         // Filtre date sur l'historique des remises
         const remisesFiltrees = (remises || []).filter((r: any) => {
@@ -964,96 +989,123 @@ export default function ComptabilitePage() {
         <div className="flex flex-col gap-5">
 
           {/* À remettre */}
-          <Card padding="md" className={totalNonRemis > 0 ? "border-orange-200 bg-orange-50/30" : ""}>
+          <Card padding="md" className={totalNonRemisEnc > 0 ? "border-orange-200 bg-orange-50/30" : ""}>
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="font-body text-base font-semibold text-blue-800">Encaissements à remettre</h3>
-                <p className="font-body text-xs text-slate-500">{nonRemis.length} paiement{nonRemis.length > 1 ? "s" : ""} non encore inclus dans une remise <span className="text-slate-400">(virements et CB en ligne exclus — rapprochement direct)</span></p>
+                <p className="font-body text-xs text-slate-500">{nonRemisEnc.length} encaissement{nonRemisEnc.length > 1 ? "s" : ""} non encore inclus dans une remise <span className="text-slate-400">(virements et CB en ligne exclus — rapprochement direct)</span></p>
               </div>
-              {nonRemis.length > 0 && <span className="font-body text-xl font-bold text-orange-500">{totalNonRemis.toFixed(2)}€</span>}
+              {nonRemisEnc.length > 0 && <span className="font-body text-xl font-bold text-orange-500">{totalNonRemisEnc.toFixed(2)}€</span>}
             </div>
-            {nonRemis.length === 0 ? (
+            {nonRemisEnc.length === 0 ? (
               <p className="font-body text-sm text-green-600">✓ Tous les encaissements ont été remis en banque.</p>
             ) : (
               <>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {Object.entries(nonRemisByMode).map(([mode, ps]) => {
-                    const mTotal = ps.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
+                {/* Filtre d'affichage par mode */}
+                <div className="flex flex-wrap gap-2 mb-3 items-center">
+                  <span className="font-body text-[11px] text-slate-500 uppercase tracking-wider">Afficher :</span>
+                  {[
+                    { id: "", label: "Tous" },
+                    { id: "cb_terminal", label: "CB" },
+                    { id: "cheque", label: "Chèques" },
+                    { id: "especes", label: "Espèces" },
+                  ].map(m => {
+                    const count = m.id ? (nonRemisByModeEnc[m.id]?.length || 0) : nonRemisEnc.length;
+                    const total = m.id
+                      ? (nonRemisByModeEnc[m.id] || []).reduce((s: number, e: any) => s + (e.montant || 0), 0)
+                      : totalNonRemisEnc;
+                    if (m.id && count === 0) return null;
+                    const isActive = remiseModeView === m.id;
                     return (
-                      <div key={mode} className="font-body text-xs bg-white rounded-lg px-3 py-1.5 border border-gray-100">
-                        <span className="text-slate-600">{modeLabels[mode] || mode} :</span>{" "}
-                        <span className="font-semibold text-blue-800">{mTotal.toFixed(2)}€ ({ps.length})</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex flex-col gap-1 mb-4 max-h-[300px] overflow-y-auto">
-                  {nonRemis.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0)).map(p => {
-                    const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
-                    const isChecked = selectedForRemise.has(p.id!);
-                    return (
-                      <label key={p.id} className={`flex items-center justify-between font-body text-xs py-1.5 px-3 rounded-lg cursor-pointer ${isChecked ? "bg-blue-50 border border-blue-200" : "bg-white hover:bg-slate-50"}`}>
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => {
-                              setSelectedForRemise(prev => {
-                                const next = new Set(prev);
-                                if (next.has(p.id!)) next.delete(p.id!); else next.add(p.id!);
-                                return next;
-                              });
-                            }}
-                            className="w-4 h-4 accent-blue-500 cursor-pointer flex-shrink-0"
-                          />
-                          <span className="text-slate-500 min-w-[65px]">{d ? d.toLocaleDateString("fr-FR") : "—"}</span>
-                          <Badge color="gray">{modeLabels[p.paymentMode] || p.paymentMode}</Badge>
-                          <span className="text-blue-800 font-semibold truncate">{p.familyName}</span>
-                          <span className="text-slate-500 truncate">{(p.items || []).map((i: any) => i.activityTitle).join(", ").slice(0, 40)}</span>
-                        </div>
-                        <span className="font-semibold text-blue-500 flex-shrink-0 ml-2">{(p.paidAmount || p.totalTTC || 0).toFixed(2)}€</span>
-                      </label>
+                      <button
+                        key={m.id || "all"}
+                        onClick={() => setRemiseModeView(m.id)}
+                        className={`font-body text-xs px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${
+                          isActive
+                            ? "bg-blue-500 text-white border-blue-500"
+                            : "bg-white text-slate-600 border-gray-200 hover:bg-slate-50"
+                        }`}>
+                        {m.label} · {total.toFixed(2)}€ ({count})
+                      </button>
                     );
                   })}
                 </div>
 
-                {/* Barre d'aide à la sélection */}
-                {(() => {
-                  const selectedPayments = nonRemis.filter(p => selectedForRemise.has(p.id!));
-                  const selectedTotal = selectedPayments.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
-                  const selectedModes = new Set(selectedPayments.map(p => p.paymentMode));
-                  const selectedModeLabel = selectedModes.size === 1
-                    ? (modeLabels[selectedPayments[0]?.paymentMode] || selectedPayments[0]?.paymentMode)
-                    : "mixte";
-                  return (
-                    <>
-                      {/* Boutons de cochage rapide */}
-                      <div className="flex gap-2 flex-wrap mb-2 items-center">
-                        <span className="font-body text-[11px] text-slate-500 uppercase tracking-wider">Cocher :</span>
-                        {[
-                          { id: "", label: "tout" },
-                          { id: "cb_terminal", label: "CB" },
-                          { id: "cheque", label: "Chèques" },
-                          { id: "especes", label: "Espèces" },
-                        ].map(m => {
-                          const matching = m.id ? nonRemis.filter(p => p.paymentMode === m.id) : nonRemis;
-                          if (m.id && matching.length === 0) return null;
-                          return (
-                            <button
-                              key={m.id || "all"}
-                              onClick={() => {
-                                // Cocher tous les items du mode (ou tous si m.id vide)
+                {/* Liste des encaissements filtrée par mode */}
+                <div className="flex flex-col gap-1 mb-4 max-h-[300px] overflow-y-auto">
+                  {nonRemisEnc
+                    .filter((e: any) => !remiseModeView || e.mode === remiseModeView)
+                    .sort((a: any, b: any) => (b.date?.seconds || 0) - (a.date?.seconds || 0))
+                    .map((e: any) => {
+                      const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+                      const isChecked = selectedForRemise.has(e.id!);
+                      // Infos du payment associé pour contexte
+                      const pay = payments.find(p => p.id === e.paymentId);
+                      const activityLabel = e.activityTitle || (pay?.items || []).map((i: any) => i.activityTitle).join(", ");
+                      const isFromMixed = pay && pay.paymentMode === "mixte";
+                      return (
+                        <label key={e.id} className={`flex items-center justify-between font-body text-xs py-1.5 px-3 rounded-lg cursor-pointer ${isChecked ? "bg-blue-50 border border-blue-200" : "bg-white hover:bg-slate-50"}`}>
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
                                 setSelectedForRemise(prev => {
                                   const next = new Set(prev);
-                                  matching.forEach(p => next.add(p.id!));
+                                  if (next.has(e.id!)) next.delete(e.id!); else next.add(e.id!);
                                   return next;
                                 });
                               }}
-                              className="font-body text-[11px] text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-slate-200">
-                              + {m.label} ({matching.length})
-                            </button>
-                          );
-                        })}
+                              className="w-4 h-4 accent-blue-500 cursor-pointer flex-shrink-0"
+                            />
+                            <span className="text-slate-500 min-w-[65px]">{d ? d.toLocaleDateString("fr-FR") : "—"}</span>
+                            <Badge color="gray">{modeLabels[e.mode] || e.mode}</Badge>
+                            <span className="text-blue-800 font-semibold truncate">{e.familyName || pay?.familyName || "—"}</span>
+                            <span className="text-slate-500 truncate">{(activityLabel || "").slice(0, 40)}</span>
+                            {isFromMixed && (
+                              <span className="font-body text-[10px] text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded flex-shrink-0" title="Partie d'un paiement mixte">mixte</span>
+                            )}
+                            {e.ref && (
+                              <span className="font-body text-[10px] text-slate-400 flex-shrink-0">n°{e.ref}</span>
+                            )}
+                          </div>
+                          <span className="font-semibold text-blue-500 flex-shrink-0 ml-2">{(e.montant || 0).toFixed(2)}€</span>
+                        </label>
+                      );
+                    })}
+                </div>
+
+                {/* Barre d'aide à la sélection */}
+                {(() => {
+                  const selectedEncs = nonRemisEnc.filter((e: any) => selectedForRemise.has(e.id!));
+                  const selectedTotal = selectedEncs.reduce((s: number, e: any) => s + (e.montant || 0), 0);
+                  const selectedModes = new Set(selectedEncs.map((e: any) => e.mode));
+                  const selectedModeLabel = selectedModes.size === 1
+                    ? (modeLabels[selectedEncs[0]?.mode] || selectedEncs[0]?.mode)
+                    : "mixte";
+                  // Dans la vue filtrée uniquement : quels encaissements sont affichés ?
+                  const visibleEncs = nonRemisEnc.filter((e: any) => !remiseModeView || e.mode === remiseModeView);
+                  const allVisibleSelected = visibleEncs.length > 0 && visibleEncs.every((e: any) => selectedForRemise.has(e.id!));
+                  return (
+                    <>
+                      {/* Boutons de cochage rapide sur la vue filtrée */}
+                      <div className="flex gap-2 flex-wrap mb-2 items-center">
+                        <span className="font-body text-[11px] text-slate-500 uppercase tracking-wider">Cocher :</span>
+                        <button
+                          onClick={() => {
+                            setSelectedForRemise(prev => {
+                              const next = new Set(prev);
+                              if (allVisibleSelected) {
+                                visibleEncs.forEach((e: any) => next.delete(e.id!));
+                              } else {
+                                visibleEncs.forEach((e: any) => next.add(e.id!));
+                              }
+                              return next;
+                            });
+                          }}
+                          className="font-body text-[11px] text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-slate-200">
+                          {allVisibleSelected ? "Tout décocher" : "Tout cocher"} ({visibleEncs.length})
+                        </button>
                         {selectedForRemise.size > 0 && (
                           <button
                             onClick={() => setSelectedForRemise(new Set())}
@@ -1067,28 +1119,51 @@ export default function ComptabilitePage() {
                       {selectedForRemise.size > 0 && (
                         <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-gradient-to-r from-blue-50 to-green-50 border border-blue-200">
                           <div className="font-body text-sm">
-                            <span className="font-semibold text-blue-800">{selectedForRemise.size} paiement{selectedForRemise.size > 1 ? "s" : ""} sélectionné{selectedForRemise.size > 1 ? "s" : ""}</span>
+                            <span className="font-semibold text-blue-800">{selectedForRemise.size} encaissement{selectedForRemise.size > 1 ? "s" : ""} sélectionné{selectedForRemise.size > 1 ? "s" : ""}</span>
                             <span className="text-slate-500"> · {selectedModeLabel}</span>
                           </div>
                           <div className="flex items-center gap-3">
                             <span className="font-body text-lg font-bold text-green-600">{selectedTotal.toFixed(2)}€</span>
                             <button
                               onClick={async () => {
-                                if (!confirm(`Créer un bordereau de remise ?\n\n${selectedPayments.length} paiement(s) — ${selectedTotal.toFixed(2)}€\nMode : ${selectedModeLabel}`)) return;
+                                if (!confirm(`Créer un bordereau de remise ?\n\n${selectedEncs.length} encaissement(s) — ${selectedTotal.toFixed(2)}€\nMode : ${selectedModeLabel}`)) return;
                                 try {
+                                  // Regrouper les paymentIds concernés (pour l'historique/affichage)
+                                  const affectedPaymentIds = [...new Set(selectedEncs.map((e: any) => e.paymentId).filter(Boolean))];
+
                                   const remiseRef = await addDoc(collection(db, "remises"), {
                                     date: serverTimestamp(),
-                                    paymentIds: selectedPayments.map(p => p.id),
+                                    encaissementIds: selectedEncs.map((e: any) => e.id), // nouveau : lien fin
+                                    paymentIds: affectedPaymentIds, // compat affichage historique
                                     paymentMode: selectedModes.size === 1 ? [...selectedModes][0] : "mixte",
                                     total: selectedTotal,
-                                    nbPaiements: selectedPayments.length,
+                                    nbPaiements: selectedEncs.length,
                                     status: "created",
                                     pointee: false,
                                     createdAt: serverTimestamp(),
                                   });
-                                  for (const p of selectedPayments) {
-                                    await updateDoc(doc(db, "payments", p.id!), { remiseId: remiseRef.id });
+
+                                  // Marquer chaque encaissement comme remis
+                                  for (const e of selectedEncs) {
+                                    await updateDoc(doc(db, "encaissements", e.id!), { remiseId: remiseRef.id });
                                   }
+
+                                  // Marquer le payment comme entièrement remis UNIQUEMENT si tous
+                                  // ses encaissements éligibles sont dans cette remise (ou déjà remis)
+                                  for (const payId of affectedPaymentIds) {
+                                    const allEncsOfPayment = (encaissementsCompta || []).filter(
+                                      (x: any) => x.paymentId === payId
+                                      && !["virement", "prelevement_sepa", "cb_online", "avoir"].includes(x.mode)
+                                      && (x.montant || 0) > 0
+                                    );
+                                    const allRemis = allEncsOfPayment.every((x: any) =>
+                                      selectedEncs.some((s: any) => s.id === x.id) || x.remiseId || remisEncaissementIds.has(x.id)
+                                    );
+                                    if (allRemis) {
+                                      await updateDoc(doc(db, "payments", payId), { remiseId: remiseRef.id });
+                                    }
+                                  }
+
                                   setSelectedForRemise(new Set());
                                   fetchData();
                                 } catch (e) { console.error(e); alert("Erreur lors de la création du bordereau."); }
