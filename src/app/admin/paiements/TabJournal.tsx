@@ -62,7 +62,21 @@ export function TabJournal({ loading, payments, encaissements, avoirs, toast, re
       if (journalMontantMax) filtered = filtered.filter(e => (e.montant || 0) <= safeNumber(journalMontantMax));
       if (journalMode !== "all") filtered = filtered.filter(e => e.mode === journalMode);
       if (journalSearch) { const q = journalSearch.toLowerCase(); filtered = filtered.filter(e => e.familyName?.toLowerCase().includes(q) || e.activityTitle?.toLowerCase().includes(q) || e.ref?.toLowerCase().includes(q)); }
-      filtered.sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
+      // Tri chronologique : plus récent en haut. Priorité à createdAt (heure
+      // précise de l'encaissement), fallback sur date (fixée à 12h si date
+      // manuelle), puis tie-break stable par id.
+      const getJournalTs = (e: any): number => {
+        const src = e.createdAt || e.date;
+        if (!src) return 0;
+        if (src.seconds !== undefined) return src.seconds * 1000 + (src.nanoseconds || 0) / 1e6;
+        if (src.toDate) return src.toDate().getTime();
+        return 0;
+      };
+      filtered.sort((a, b) => {
+        const diff = getJournalTs(b) - getJournalTs(a);
+        if (diff !== 0) return diff;
+        return String(b.id || "").localeCompare(String(a.id || ""));
+      });
 
       // Totaux par mode
       const totalsByMode: Record<string, number> = {};

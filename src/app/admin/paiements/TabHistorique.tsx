@@ -83,15 +83,32 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
         });
       }
 
-      // Tri chronologique : plus récent en haut. Priorité à createdAt (heure
-      // réelle de l'opération), fallback sur date (qui peut être fixée à 12:00
-      // si l'utilisateur a saisi une date manuelle), puis stable par id.
-      const getTs = (p: any) => {
-        const src = p.createdAt || p.date;
+      // Tri chronologique : plus récent en haut. Pour refléter l'ordre réel
+      // d'encaissement (ce qui est intuitif dans un "historique"), on cherche
+      // le DERNIER encaissement associé au paiement. Fallback sur createdAt
+      // (heure de création de la commande), puis date (date fiscale fixée à 12h),
+      // puis tie-break stable par id.
+      const getTsFromField = (src: any): number => {
         if (!src) return 0;
         if (src.seconds !== undefined) return src.seconds * 1000 + (src.nanoseconds || 0) / 1e6;
         if (src.toDate) return src.toDate().getTime();
         return 0;
+      };
+      // Index : paymentId → heure du dernier encaissement
+      const lastEncaissementByPayment = new Map<string, number>();
+      for (const e of encaissements) {
+        if (!e.paymentId) continue;
+        const ts = getTsFromField(e.createdAt) || getTsFromField(e.date);
+        const cur = lastEncaissementByPayment.get(e.paymentId) || 0;
+        if (ts > cur) lastEncaissementByPayment.set(e.paymentId, ts);
+      }
+      const getTs = (p: any) => {
+        // Priorité 1 : dernier encaissement réel
+        const encTs = lastEncaissementByPayment.get(p.id) || 0;
+        if (encTs > 0) return encTs;
+        // Priorité 2 : createdAt de la commande (si pas d'encaissement lié)
+        // Priorité 3 : date fiscale
+        return getTsFromField(p.createdAt) || getTsFromField(p.date);
       };
       filtered = [...filtered].sort((a, b) => {
         const diff = getTs(b) - getTs(a);
