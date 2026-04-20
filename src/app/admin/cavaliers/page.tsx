@@ -32,6 +32,9 @@ export default function CavaliersPage() {
   const searchParams = useSearchParams();
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const tabParam = searchParams.get("tab");
+  // Depuis GlobalSearch : ?id=FAMxxx ouvre la famille, &child=CHILDyyy cible le cavalier
+  const targetFamilyId = searchParams.get("id") || "";
+  const targetChildId = searchParams.get("child") || "";
   const [filterTag, setFilterTag] = useState<string>("");
   const [showCreateFamily, setShowCreateFamily] = useState(false);
   const { toast } = useToast();
@@ -72,6 +75,12 @@ export default function CavaliersPage() {
 
   // ── Filtrage ──────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
+    // Si une famille est ciblée par l'URL (clic depuis la barre de recherche globale),
+    // on ne montre QUE cette famille pour éviter de noyer l'utilisateur dans la liste.
+    if (targetFamilyId) {
+      const target = families.find(f => f.firestoreId === targetFamilyId);
+      return target ? [target] : [];
+    }
     let list = !search.trim() ? families : families.filter(f =>
       f.parentName?.toLowerCase().includes(search.toLowerCase()) ||
       (f as any).lastName?.toLowerCase().includes(search.toLowerCase()) ||
@@ -94,7 +103,7 @@ export default function CavaliersPage() {
       const firstB = ((b as any).firstName || "").toLowerCase();
       return firstA.localeCompare(firstB, "fr");
     });
-  }, [families, search, filterTag]);
+  }, [families, search, filterTag, targetFamilyId]);
 
   // ── Stats ─────────────────────────────────────────────────────────────────
   const allChildren = families.flatMap(f => f.children || []);
@@ -184,6 +193,7 @@ export default function CavaliersPage() {
               onRefresh={fetchFamilies}
               autoOpenProgressionChildName={tabParam === "progression" ? search : undefined}
               initialProgressionChildId={searchParams.get("showProgression") || undefined}
+              initialExpandedForChildId={targetFamilyId && family.firestoreId === targetFamilyId ? (targetChildId || "FAMILY") : undefined}
             />
           ))}
         </div>

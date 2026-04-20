@@ -49,16 +49,19 @@ interface Props {
   onRefresh: () => void;
   autoOpenProgressionChildName?: string;
   initialProgressionChildId?: string;
+  /** Si fourni, force l'expansion de la carte au montage (sans ouvrir la modale progression).
+   *  Valeur "FAMILY" si on cible juste la famille, ou l'id du cavalier sinon. */
+  initialExpandedForChildId?: string;
 }
 
 export default function FamilyCard({
   family, families, allReservations, allPayments, allAvoirs,
   allCartes, allMandats, allFidelite, allCreneaux, onRefresh,
-  autoOpenProgressionChildName, initialProgressionChildId,
+  autoOpenProgressionChildName, initialProgressionChildId, initialExpandedForChildId,
 }: Props) {
   // Auto-expand si cette famille contient l'enfant ciblé par ID
   const hasTargetChild = initialProgressionChildId && (family.children || []).some((c: any) => c.id === initialProgressionChildId);
-  const [isExpanded, setIsExpanded] = useState(!!autoOpenProgressionChildName || !!hasTargetChild);
+  const [isExpanded, setIsExpanded] = useState(!!autoOpenProgressionChildName || !!hasTargetChild || !!initialExpandedForChildId);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
@@ -421,6 +424,9 @@ export default function FamilyCard({
                       <Mail size={12}/> Email
                     </button>
                   )}
+                  <button onClick={() => setAddingChild(true)} className="font-body text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
+                    <UserPlus size={12}/> Ajouter un cavalier
+                  </button>
                   <button onClick={startEditFamily} className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
                     <Edit3 size={12}/> Modifier
                   </button>
@@ -569,8 +575,8 @@ export default function FamilyCard({
               );
             })()}
 
-            {/* ── Ajouter un enfant ────────────────────────────────────── */}
-            {addingChild ? (
+            {/* ── Formulaire d'ajout cavalier (déclenché par le bouton du haut) ── */}
+            {addingChild && (
               <div className="bg-blue-50 rounded-lg p-4 flex flex-col gap-3">
                 <div className="font-body text-xs font-semibold text-blue-800">Ajouter un cavalier</div>
                 <div className="flex gap-2">
@@ -591,10 +597,6 @@ export default function FamilyCard({
                   <button onClick={() => setAddingChild(false)} className="font-body text-xs text-slate-600 bg-white px-3 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
                 </div>
               </div>
-            ) : (
-              <button onClick={() => setAddingChild(true)} className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
-                <UserPlus size={14}/> Ajouter un cavalier
-              </button>
             )}
           </div>
         )}

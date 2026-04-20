@@ -1508,17 +1508,33 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   <div className="border-t border-gray-100 pt-2.5">
                     <div className="font-body text-[10px] text-slate-400 uppercase mb-1.5">Cavaliers</div>
                     {newChildren.map((child, idx) => (
-                      <div key={idx} className="flex gap-2 mb-2 items-center">
-                        <input value={child.firstName} onChange={e => { const u = [...newChildren]; u[idx].firstName = e.target.value; setNewChildren(u); }}
-                          placeholder="Prénom *" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
-                        <input value={child.lastName} onChange={e => { const u = [...newChildren]; u[idx].lastName = e.target.value; setNewChildren(u); }}
-                          placeholder="Nom" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
-                        <input value={child.birthDate} onChange={e => { const u = [...newChildren]; u[idx].birthDate = e.target.value; setNewChildren(u); }}
-                          type="date" className="w-36 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
-                        {newChildren.length > 1 && (
-                          <button onClick={() => setNewChildren(newChildren.filter((_, i) => i !== idx))}
-                            className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1"><X size={14} /></button>
-                        )}
+                      <div key={idx} className="mb-3 border border-gray-100 rounded-lg p-2.5 bg-white">
+                        <div className="flex gap-2 mb-2 items-center">
+                          <input value={child.firstName} onChange={e => { const u = [...newChildren]; u[idx].firstName = e.target.value; setNewChildren(u); }}
+                            placeholder="Prénom *" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+                          <input value={child.lastName} onChange={e => { const u = [...newChildren]; u[idx].lastName = e.target.value; setNewChildren(u); }}
+                            placeholder="Nom" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+                          {newChildren.length > 1 && (
+                            <button onClick={() => setNewChildren(newChildren.filter((_, i) => i !== idx))}
+                              className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1"><X size={14} /></button>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <div className="flex-1">
+                            <label className="font-body text-[10px] text-slate-400 block mb-1">Date de naissance</label>
+                            <input value={child.birthDate} onChange={e => { const u = [...newChildren]; u[idx].birthDate = e.target.value; setNewChildren(u); }}
+                              type="date" className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+                          </div>
+                          <div className="flex-1">
+                            <label className="font-body text-[10px] text-slate-400 block mb-1">Niveau Galop</label>
+                            <select value={child.galopLevel} onChange={e => { const u = [...newChildren]; u[idx].galopLevel = e.target.value; setNewChildren(u); }}
+                              className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-green-500">
+                              {["—", "Poney Bronze", "Poney Argent", "Poney Or", "Bronze", "Argent", "Or", "G1", "G2", "G3", "G4", "G5", "G6", "G7"].map(g =>
+                                <option key={g} value={g}>{g === "—" ? "Débutant" : g}</option>
+                              )}
+                            </select>
+                          </div>
+                        </div>
                       </div>
                     ))}
                     <button onClick={() => setNewChildren([...newChildren, { firstName: "", lastName: "", birthDate: "", galopLevel: "—" }])}
