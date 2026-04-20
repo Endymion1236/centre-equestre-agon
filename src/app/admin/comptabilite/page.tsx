@@ -1217,18 +1217,120 @@ export default function ComptabilitePage() {
               <div className="flex flex-col gap-3">
                 {remisesFiltrees.map((r: any) => {
                   const rDate = r.createdAt?.seconds ? new Date(r.createdAt.seconds * 1000) : new Date();
-                  const rPayments = payments.filter(p => (r.paymentIds || []).includes(p.id));
+
+                  // ─── Résolution des encaissements de cette remise ───
+                  // Nouveau format : r.encaissementIds (liste précise des flux)
+                  // Ancien format : r.paymentIds (on reconstitue tous les encaissements des payments)
+                  let rEncaissements: any[] = [];
+                  if (Array.isArray(r.encaissementIds) && r.encaissementIds.length > 0) {
+                    const idSet = new Set(r.encaissementIds);
+                    rEncaissements = (encaissementsCompta || []).filter((e: any) => idSet.has(e.id));
+                  } else if (Array.isArray(r.paymentIds) && r.paymentIds.length > 0) {
+                    // Compat : pour les anciennes remises, afficher tous les encaissements
+                    // des payments inclus (exclusion des modes non-physiques)
+                    const payIdSet = new Set(r.paymentIds);
+                    rEncaissements = (encaissementsCompta || []).filter((e: any) =>
+                      payIdSet.has(e.paymentId)
+                      && !["virement", "prelevement_sepa", "cb_online", "avoir"].includes(e.mode)
+                      && (e.montant || 0) > 0
+                    );
+                  }
+                  // Tri chronologique
+                  rEncaissements = [...rEncaissements].sort((a, b) => (a.date?.seconds || 0) - (b.date?.seconds || 0));
+
                   const isEditing = editingRemiseId === r.id;
                   const isPointing = pointageRemiseId === r.id;
 
-                  // Paiements éligibles à ajouter (pas encore dans une remise)
-                  const addablePays = nonRemis.filter(p => {
+                  // Encaissements éligibles à ajouter (non remis, filtrés par recherche)
+                  const addableEncs = nonRemisEnc.filter((e: any) => {
                     if (editingRemiseSearch) {
                       const q = editingRemiseSearch.toLowerCase();
-                      return p.familyName?.toLowerCase().includes(q) || (p.items||[]).some((i:any)=>i.activityTitle?.toLowerCase().includes(q));
+                      const pay = payments.find(p => p.id === e.paymentId);
+                      const label = (pay?.items || []).map((i: any) => i.activityTitle).join(", ");
+                      return (e.familyName || "").toLowerCase().includes(q)
+                        || (pay?.familyName || "").toLowerCase().includes(q)
+                        || label.toLowerCase().includes(q);
                     }
                     return true;
                   }).slice(0, 20);
+
+                  // Helpers pour retrait / ajout au niveau encaissement
+                  const retirerEncaissement = async (enc: any) => {
+                    if (!confirm(`Retirer ${enc.familyName || "cet encaissement"} (${(enc.montant || 0).toFixed(2)}€ ${modeLabels[enc.mode] || enc.mode}) de cette remise ?`)) return;
+                    // Retirer l'id de r.encaissementIds
+                    const oldEncIds = Array.isArray(r.encaissementIds) ? r.encaissementIds : [];
+                    const newEncIds = oldEncIds.filter((id: string) => id !== enc.id);
+                    // Recalculer le total à partir des encaissements restants
+                    const remainingEncs = (encaissementsCompta || []).filter((x: any) => newEncIds.includes(x.id));
+                    const newTotal = remainingEncs.reduce((s: number, x: any) => s + (x.montant || 0), 0);
+
+                    // Recalculer les modes et paymentIds affectés
+                    const modes = new Set(remainingEncs.map((x: any) => x.mode));
+                    const paymentIds = [...new Set(remainingEncs.map((x: any) => x.paymentId).filter(Boolean))];
+
+                    await updateDoc(doc(db, "remises", r.id), {
+                      encaissementIds: newEncIds,
+                      paymentIds,
+                      total: Math.round(newTotal * 100) / 100,
+                      nbPaiements: newEncIds.length,
+                      paymentMode: modes.size === 1 ? [...modes][0] : (modes.size > 1 ? "mixte" : r.paymentMode),
+                      updatedAt: serverTimestamp(),
+                    });
+
+                    // Libérer l'encaissement (remiseId: null)
+                    await updateDoc(doc(db, "encaissements", enc.id!), { remiseId: null });
+
+                    // Retirer aussi le payment.remiseId SI ce payment n'a plus aucun encaissement dans la remise
+                    if (enc.paymentId) {
+                      const stillInRemise = remainingEncs.some((x: any) => x.paymentId === enc.paymentId);
+                      if (!stillInRemise) {
+                        try {
+                          await updateDoc(doc(db, "payments", enc.paymentId), { remiseId: null });
+                        } catch (err) {
+                          console.error("[remises] libération payment échouée:", err);
+                        }
+                      }
+                    }
+
+                    fetchData();
+                  };
+
+                  const ajouterEncaissement = async (enc: any) => {
+                    const oldEncIds = Array.isArray(r.encaissementIds) ? r.encaissementIds : [];
+                    const newEncIds = [...oldEncIds, enc.id];
+                    const newEncs = (encaissementsCompta || []).filter((x: any) => newEncIds.includes(x.id));
+                    const newTotal = newEncs.reduce((s: number, x: any) => s + (x.montant || 0), 0);
+                    const modes = new Set(newEncs.map((x: any) => x.mode));
+                    const paymentIds = [...new Set(newEncs.map((x: any) => x.paymentId).filter(Boolean))];
+
+                    await updateDoc(doc(db, "remises", r.id), {
+                      encaissementIds: newEncIds,
+                      paymentIds,
+                      total: Math.round(newTotal * 100) / 100,
+                      nbPaiements: newEncIds.length,
+                      paymentMode: modes.size === 1 ? [...modes][0] : "mixte",
+                      updatedAt: serverTimestamp(),
+                    });
+
+                    await updateDoc(doc(db, "encaissements", enc.id!), { remiseId: r.id });
+
+                    // Marquer aussi le payment si tous ses encaissements éligibles sont remis
+                    if (enc.paymentId) {
+                      const allEncsOfPayment = (encaissementsCompta || []).filter(
+                        (x: any) => x.paymentId === enc.paymentId
+                        && !["virement", "prelevement_sepa", "cb_online", "avoir"].includes(x.mode)
+                        && (x.montant || 0) > 0
+                      );
+                      const allNowRemis = allEncsOfPayment.every((x: any) => x.id === enc.id || x.remiseId);
+                      if (allNowRemis) {
+                        try {
+                          await updateDoc(doc(db, "payments", enc.paymentId), { remiseId: r.id });
+                        } catch {}
+                      }
+                    }
+
+                    fetchData();
+                  };
 
                   return (
                     <Card key={r.id} padding="md" className={r.pointee ? "border-green-200" : ""}>
@@ -1243,7 +1345,7 @@ export default function ComptabilitePage() {
                             {r.pointee
                               ? <Badge color="green">✓ Pointée</Badge>
                               : <Badge color="orange">Non pointée</Badge>}
-                            <span className="font-body text-xs text-slate-500">{rPayments.length} paiement{rPayments.length > 1 ? "s" : ""} · {modeLabels[r.paymentMode] || r.paymentMode || "Mixte"}</span>
+                            <span className="font-body text-xs text-slate-500">{rEncaissements.length} encaissement{rEncaissements.length > 1 ? "s" : ""} · {modeLabels[r.paymentMode] || r.paymentMode || "Mixte"}</span>
                           </div>
                           {r.pointeeNote && <div className="font-body text-[10px] text-slate-500 mt-0.5 italic truncate">{r.pointeeNote}</div>}
                         </div>
@@ -1267,7 +1369,7 @@ export default function ComptabilitePage() {
                               ✏️ Modifier
                             </button>
                             <button onClick={e => { e.stopPropagation();
-                              const html = `<html><head><meta charset="utf-8"><title>Bordereau de remise</title><style>body{font-family:Arial;max-width:600px;margin:30px auto}h1{font-size:18px;color:#2050A0;border-bottom:2px solid #2050A0;padding-bottom:8px}table{width:100%;border-collapse:collapse;margin:16px 0}th,td{padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;text-align:left}th{font-size:11px;color:#999;text-transform:uppercase}.total{font-size:16px;font-weight:bold;color:#2050A0;text-align:right;margin-top:12px}.status{font-size:12px;color:${r.pointee?"#16a34a":"#d97706"};margin-top:4px;text-align:right}.footer{font-size:11px;color:#999;margin-top:30px}</style></head><body><h1>Bordereau de remise — ${rDate.toLocaleDateString("fr-FR")}</h1><p style="font-size:12px;color:#666">Centre Equestre d'Agon-Coutainville</p><table><thead><tr><th>Date</th><th>Client</th><th>Prestation</th><th>Mode</th><th style="text-align:right">Montant</th></tr></thead><tbody>${rPayments.map(p => { const pd = p.date?.seconds ? new Date(p.date.seconds * 1000).toLocaleDateString("fr-FR") : "—"; return `<tr><td>${pd}</td><td>${p.familyName||"—"}</td><td>${(p.items||[]).map((i: any)=>i.activityTitle).join(", ")||"—"}</td><td>${modeLabels[p.paymentMode]||p.paymentMode}</td><td style="text-align:right">${(p.paidAmount||p.totalTTC||0).toFixed(2)}€</td></tr>`; }).join("")}</tbody></table><div class="total">Total : ${(r.total || 0).toFixed(2)}€</div><div class="status">${r.pointee ? "✓ Remise pointée" : "Non pointée"}</div>${r.pointeeNote?`<div style="font-size:11px;color:#666;text-align:right">${r.pointeeNote}</div>`:""}<div class="footer">Imprimé le ${new Date().toLocaleDateString("fr-FR")} — Signature : _______________</div></body></html>`;
+                              const html = `<html><head><meta charset="utf-8"><title>Bordereau de remise</title><style>body{font-family:Arial;max-width:600px;margin:30px auto}h1{font-size:18px;color:#2050A0;border-bottom:2px solid #2050A0;padding-bottom:8px}table{width:100%;border-collapse:collapse;margin:16px 0}th,td{padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;text-align:left}th{font-size:11px;color:#999;text-transform:uppercase}.total{font-size:16px;font-weight:bold;color:#2050A0;text-align:right;margin-top:12px}.status{font-size:12px;color:${r.pointee?"#16a34a":"#d97706"};margin-top:4px;text-align:right}.footer{font-size:11px;color:#999;margin-top:30px}</style></head><body><h1>Bordereau de remise — ${rDate.toLocaleDateString("fr-FR")}</h1><p style="font-size:12px;color:#666">Centre Equestre d'Agon-Coutainville</p><table><thead><tr><th>Date</th><th>Client</th><th>Prestation</th><th>Mode</th><th style="text-align:right">Montant</th></tr></thead><tbody>${rEncaissements.map((enc: any) => { const pay = payments.find(p => p.id === enc.paymentId); const pd = enc.date?.seconds ? new Date(enc.date.seconds * 1000).toLocaleDateString("fr-FR") : "—"; const label = enc.activityTitle || (pay?.items || []).map((i: any) => i.activityTitle).join(", ") || "—"; const ref = enc.ref ? ` (n°${enc.ref})` : ""; return `<tr><td>${pd}</td><td>${enc.familyName || pay?.familyName || "—"}</td><td>${label}${ref}</td><td>${modeLabels[enc.mode] || enc.mode}</td><td style="text-align:right">${(enc.montant || 0).toFixed(2)}€</td></tr>`; }).join("")}</tbody></table><div class="total">Total : ${(r.total || 0).toFixed(2)}€</div><div class="status">${r.pointee ? "✓ Remise pointée" : "Non pointée"}</div>${r.pointeeNote?`<div style="font-size:11px;color:#666;text-align:right">${r.pointeeNote}</div>`:""}<div class="footer">Imprimé le ${new Date().toLocaleDateString("fr-FR")} — Signature : _______________</div></body></html>`;
                               const w = window.open("", "_blank"); if (w) { w.document.write(html); w.document.close(); w.print(); }
                             }} className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
                               <Printer size={12} /> Imprimer
@@ -1315,66 +1417,66 @@ export default function ComptabilitePage() {
                         <div className="mt-3 pt-3 border-t border-gray-100">
                           <div className="font-body text-xs font-semibold text-blue-800 mb-2">Modifier la remise</div>
 
-                          {/* Retirer des paiements */}
-                          {rPayments.length > 0 && (
+                          {/* Retirer des encaissements */}
+                          {rEncaissements.length > 0 && (
                             <div className="mb-3">
-                              <div className="font-body text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Paiements inclus — cliquer pour retirer</div>
+                              <div className="font-body text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Encaissements inclus — cliquer pour retirer</div>
                               <div className="flex flex-col gap-1">
-                                {rPayments.map(p => (
-                                  <div key={p.id} className="flex items-center justify-between px-3 py-1.5 bg-sand rounded-lg">
-                                    <div className="flex items-center gap-2 font-body text-xs">
-                                      <Badge color="gray">{modeLabels[p.paymentMode] || p.paymentMode}</Badge>
-                                      <span className="text-blue-800 font-semibold">{p.familyName}</span>
-                                      <span className="text-slate-500">{(p.items||[]).map((i:any)=>i.activityTitle).join(", ").slice(0,35)}</span>
+                                {rEncaissements.map((enc: any) => {
+                                  const pay = payments.find(p => p.id === enc.paymentId);
+                                  const label = enc.activityTitle || (pay?.items || []).map((i: any) => i.activityTitle).join(", ");
+                                  const isFromMixed = pay && pay.paymentMode === "mixte";
+                                  return (
+                                    <div key={enc.id} className="flex items-center justify-between px-3 py-1.5 bg-sand rounded-lg">
+                                      <div className="flex items-center gap-2 font-body text-xs min-w-0 flex-1">
+                                        <Badge color="gray">{modeLabels[enc.mode] || enc.mode}</Badge>
+                                        <span className="text-blue-800 font-semibold truncate">{enc.familyName || pay?.familyName || "—"}</span>
+                                        <span className="text-slate-500 truncate">{(label || "").slice(0, 35)}</span>
+                                        {isFromMixed && <span className="font-body text-[10px] text-purple-600 bg-purple-50 px-1 py-0.5 rounded flex-shrink-0">mixte</span>}
+                                        {enc.ref && <span className="font-body text-[10px] text-slate-400 flex-shrink-0">n°{enc.ref}</span>}
+                                      </div>
+                                      <div className="flex items-center gap-2 flex-shrink-0">
+                                        <span className="font-body text-xs font-semibold text-blue-500">{(enc.montant || 0).toFixed(2)}€</span>
+                                        <button onClick={() => retirerEncaissement(enc)}
+                                          className="font-body text-[10px] text-red-400 bg-red-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-red-100">
+                                          − Retirer
+                                        </button>
+                                      </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-body text-xs font-semibold text-blue-500">{(p.paidAmount||p.totalTTC||0).toFixed(2)}€</span>
-                                      <button onClick={async () => {
-                                        if (!confirm(`Retirer ${p.familyName} de cette remise ?`)) return;
-                                        const newIds = (r.paymentIds||[]).filter((id:string)=>id!==p.id);
-                                        const newTotal = newIds.reduce((s:number,id:string)=>{const pp=payments.find(x=>x.id===id);return s+(pp?.paidAmount||pp?.totalTTC||0);},0);
-                                        await updateDoc(doc(db,"remises",r.id),{paymentIds:newIds,total:newTotal,nbPaiements:newIds.length,updatedAt:serverTimestamp()});
-                                        await updateDoc(doc(db,"payments",p.id!),{remiseId:null});
-                                        fetchData();
-                                      }} className="font-body text-[10px] text-red-400 bg-red-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-red-100">
-                                        − Retirer
-                                      </button>
-                                    </div>
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             </div>
                           )}
 
-                          {/* Ajouter des paiements */}
-                          {nonRemis.length > 0 && (
+                          {/* Ajouter des encaissements */}
+                          {nonRemisEnc.length > 0 && (
                             <div>
                               <div className="font-body text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Ajouter un encaissement non remis</div>
                               <input value={editingRemiseSearch} onChange={e => setEditingRemiseSearch(e.target.value)}
                                 placeholder="Rechercher une famille ou activité..."
                                 className="w-full font-body text-xs border border-gray-200 rounded-lg px-3 py-2 mb-2 bg-white focus:outline-none focus:border-blue-400" />
                               <div className="flex flex-col gap-1 max-h-[180px] overflow-y-auto">
-                                {addablePays.map(p => (
-                                  <div key={p.id} className="flex items-center justify-between px-3 py-1.5 bg-white border border-gray-100 rounded-lg">
-                                    <div className="flex items-center gap-2 font-body text-xs">
-                                      <Badge color="gray">{modeLabels[p.paymentMode] || p.paymentMode}</Badge>
-                                      <span className="text-blue-800 font-semibold">{p.familyName}</span>
-                                      <span className="text-slate-500">{(p.items||[]).map((i:any)=>i.activityTitle).join(", ").slice(0,35)}</span>
+                                {addableEncs.map((enc: any) => {
+                                  const pay = payments.find(p => p.id === enc.paymentId);
+                                  const label = enc.activityTitle || (pay?.items || []).map((i: any) => i.activityTitle).join(", ");
+                                  return (
+                                    <div key={enc.id} className="flex items-center justify-between px-3 py-1.5 bg-white border border-gray-100 rounded-lg">
+                                      <div className="flex items-center gap-2 font-body text-xs min-w-0 flex-1">
+                                        <Badge color="gray">{modeLabels[enc.mode] || enc.mode}</Badge>
+                                        <span className="text-blue-800 font-semibold truncate">{enc.familyName || pay?.familyName || "—"}</span>
+                                        <span className="text-slate-500 truncate">{(label || "").slice(0, 35)}</span>
+                                      </div>
+                                      <div className="flex items-center gap-2 flex-shrink-0">
+                                        <span className="font-body text-xs font-semibold text-blue-500">{(enc.montant || 0).toFixed(2)}€</span>
+                                        <button onClick={() => ajouterEncaissement(enc)}
+                                          className="font-body text-[10px] text-green-600 bg-green-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-green-100">
+                                          + Ajouter
+                                        </button>
+                                      </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-body text-xs font-semibold text-blue-500">{(p.paidAmount||p.totalTTC||0).toFixed(2)}€</span>
-                                      <button onClick={async () => {
-                                        const newIds = [...(r.paymentIds||[]), p.id];
-                                        const newTotal = newIds.reduce((s:number,id:string)=>{const pp=payments.find(x=>x.id===id);return s+(pp?.paidAmount||pp?.totalTTC||0);},0);
-                                        await updateDoc(doc(db,"remises",r.id),{paymentIds:newIds,total:newTotal,nbPaiements:newIds.length,updatedAt:serverTimestamp()});
-                                        await updateDoc(doc(db,"payments",p.id!),{remiseId:r.id});
-                                        fetchData();
-                                      }} className="font-body text-[10px] text-green-600 bg-green-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-green-100">
-                                        + Ajouter
-                                      </button>
-                                    </div>
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             </div>
                           )}
@@ -1386,20 +1488,23 @@ export default function ComptabilitePage() {
                         </div>
                       )}
 
-                      {/* Détail paiements (masqué si en édition) */}
-                      {/* Détail paiements */}
+                      {/* Détail encaissements (masqué si en édition) */}
                       {!isEditing && openRemiseId === r.id && (
                         <div className="mt-2">
-                          {rPayments.map(p => {
-                            const pd = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
+                          {rEncaissements.map((enc: any) => {
+                            const pay = payments.find(p => p.id === enc.paymentId);
+                            const pd = enc.date?.seconds ? new Date(enc.date.seconds * 1000) : null;
+                            const label = enc.activityTitle || (pay?.items || []).map((i: any) => i.activityTitle).join(", ");
                             return (
-                              <div key={p.id} className="flex justify-between py-1 font-body text-xs">
-                                <div className="flex items-center gap-2">
+                              <div key={enc.id} className="flex justify-between py-1 font-body text-xs">
+                                <div className="flex items-center gap-2 min-w-0">
                                   <span className="text-slate-500">{pd ? pd.toLocaleDateString("fr-FR") : "—"}</span>
-                                  <Badge color="gray">{modeLabels[p.paymentMode] || p.paymentMode}</Badge>
-                                  <span className="text-blue-800">{p.familyName}</span>
+                                  <Badge color="gray">{modeLabels[enc.mode] || enc.mode}</Badge>
+                                  <span className="text-blue-800 truncate">{enc.familyName || pay?.familyName || "—"}</span>
+                                  <span className="text-slate-500 truncate hidden sm:inline">{(label || "").slice(0, 30)}</span>
+                                  {enc.ref && <span className="text-slate-400 flex-shrink-0">n°{enc.ref}</span>}
                                 </div>
-                                <span className="text-blue-500 font-semibold">{(p.paidAmount || p.totalTTC || 0).toFixed(2)}€</span>
+                                <span className="text-blue-500 font-semibold flex-shrink-0">{(enc.montant || 0).toFixed(2)}€</span>
                               </div>
                             );
                           })}
