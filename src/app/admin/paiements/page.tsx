@@ -1064,6 +1064,10 @@ export default function PaiementsPage() {
           toast={toast} setPayments={setPayments}
           setDuplicateTarget={setDuplicateTarget}
           deletePaymentCommand={deletePaymentCommand}
+          setEditPayment={setEditPayment}
+          setEditItems={setEditItems}
+          setEditRemisePct={setEditRemisePct}
+          setEditRemiseEuros={setEditRemiseEuros}
         />
       )}
       {/* ─── Échéances Tab ─── */}

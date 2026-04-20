@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
           return React.createElement(View, { key: String(i), style: i % 2 === 0 ? s.trow : s.trowAlt },
             React.createElement(View, { style: s.cDesc },
               React.createElement(Text, { style: s.cellTxt },
-                `${item.activityTitle || item.description || "Prestation"}${item.childName ? ` — ${item.childName}` : ""}`),
+                `${item.activityTitle || item.description || "Prestation"}${item.childName && !String(item.childName).startsWith("child_") && item.childName !== "—" ? ` — ${item.childName}` : ""}`),
               subtitle ? React.createElement(Text, { style: s.cellSubtitle }, subtitle) : null,
             ),
             React.createElement(Text, { style: [s.cellGray, s.cQty] }, `${item.quantity || 1}`),

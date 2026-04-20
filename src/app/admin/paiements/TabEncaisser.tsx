@@ -102,11 +102,15 @@ export function TabEncaisser({
       const price = safeNumber(customPrice);
       const tvaRate = safeNumber(customTva);
       const cat = CATEGORIES.find(c => c.id === customCategory);
+      // Résoudre le prénom de l'enfant à partir de son ID
+      const selFam = families.find(f => f.firestoreId === selectedFamily);
+      const selChild = (selFam?.children || []).find((c: any) => c.id === selectedChild);
+      const childNameLabel = (selChild as any)?.firstName || "—";
       setBasket([...basket, {
         id: Date.now().toString(),
         activityTitle: customLabel,
         childId: selectedChild || "",
-        childName: selectedChild || "—",
+        childName: childNameLabel,
         description: "Saisie manuelle",
         priceHT: tvaRate > 0 ? Math.round(price / (1 + tvaRate / 100) * 100) / 100 : price,
         tva: tvaRate,

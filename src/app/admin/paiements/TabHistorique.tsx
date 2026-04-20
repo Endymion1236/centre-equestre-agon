@@ -4,7 +4,7 @@ import { updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { safeNumber, generateOrderId } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
-import { Loader2, ChevronDown, Receipt, Trash2, Search, X, Check, Copy } from "lucide-react";
+import { Loader2, ChevronDown, Receipt, Trash2, Search, X, Check, Copy, Pencil } from "lucide-react";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
 import { downloadAvoirPdf } from "@/lib/download-avoir";
 import { paymentModes } from "./types";
@@ -20,9 +20,13 @@ interface TabHistoriqueProps {
   setPayments: React.Dispatch<React.SetStateAction<any[]>>;
   setDuplicateTarget: (val: any) => void;
   deletePaymentCommand: (payment: any) => Promise<void>;
+  setEditPayment: (val: any) => void;
+  setEditItems: (val: any[]) => void;
+  setEditRemisePct: (val: string) => void;
+  setEditRemiseEuros: (val: string) => void;
 }
 
-export function TabHistorique({ loading, payments, avoirs, encaissements, families, toast, setPayments, setDuplicateTarget, deletePaymentCommand }: TabHistoriqueProps) {
+export function TabHistorique({ loading, payments, avoirs, encaissements, families, toast, setPayments, setDuplicateTarget, deletePaymentCommand, setEditPayment, setEditItems, setEditRemisePct, setEditRemiseEuros }: TabHistoriqueProps) {
   const [histSearch, setHistSearch] = useState("");
   const [histModeFilter, setHistModeFilter] = useState("all");
   const [histStatusFilter, setHistStatusFilter] = useState("all");
@@ -150,6 +154,7 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                 <span className="w-16 text-center">Statut</span>
                 <span className="w-16 text-center">PDF</span>
                 <span className="w-16 text-center">Copier</span>
+                <span className="w-16 text-center">Modifier</span>
                 <span className="w-16 text-center"></span>
               </div>
               {filtered.map((p, idx) => {
@@ -221,6 +226,25 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                       )}
                     </span>
                     <span className="w-16 text-center"><button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} title="Dupliquer cette commande" className="font-body text-xs text-purple-500 bg-purple-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-purple-100"><Copy size={12} /></button></span>
+                    <span className="w-16 text-center">
+                      {p.status !== "cancelled" && (
+                        <button
+                          onClick={() => {
+                            if ((p as any).invoiceNumber) {
+                              toast(`🔒 Facture ${(p as any).invoiceNumber} — modification impossible. Annulez-la via avoir pour la corriger.`, "warning", 5000);
+                              return;
+                            }
+                            setEditPayment(p);
+                            setEditItems((p.items || []).map((i: any) => ({ ...i })));
+                            setEditRemisePct("");
+                            setEditRemiseEuros("");
+                          }}
+                          title={(p as any).invoiceNumber ? "Facture définitive — non modifiable" : "Modifier la commande"}
+                          className={`font-body text-xs px-2 py-1 rounded border-none ${(p as any).invoiceNumber ? "text-gray-400 bg-gray-100 cursor-not-allowed" : "text-amber-600 bg-amber-50 cursor-pointer hover:bg-amber-100"}`}>
+                          <Pencil size={12} />
+                        </button>
+                      )}
+                    </span>
                     <span className="w-16 text-center">
                       {p.status !== "cancelled" && !(p as any)._fromEncaissement && (
                         <button onClick={() => deletePaymentCommand(p)} title="Annuler + avoir" className="font-body text-xs text-red-500 bg-red-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-red-100"><Trash2 size={12} /></button>
