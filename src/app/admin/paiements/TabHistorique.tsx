@@ -59,6 +59,7 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
           familyId: e.familyId,
           familyName: e.familyName,
           date: e.date,
+          createdAt: e.createdAt || e.date, // pour tri chronologique
           totalTTC: e.montant || 0,
           paidAmount: e.montant || 0,
           status: "paid",
@@ -81,6 +82,23 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
           return m === periodFilter;
         });
       }
+
+      // Tri chronologique : plus récent en haut. Priorité à createdAt (heure
+      // réelle de l'opération), fallback sur date (qui peut être fixée à 12:00
+      // si l'utilisateur a saisi une date manuelle), puis stable par id.
+      const getTs = (p: any) => {
+        const src = p.createdAt || p.date;
+        if (!src) return 0;
+        if (src.seconds !== undefined) return src.seconds * 1000 + (src.nanoseconds || 0) / 1e6;
+        if (src.toDate) return src.toDate().getTime();
+        return 0;
+      };
+      filtered = [...filtered].sort((a, b) => {
+        const diff = getTs(b) - getTs(a);
+        if (diff !== 0) return diff;
+        // Tie-break stable par id pour éviter les sauts d'ordre visuels
+        return String(b.id || "").localeCompare(String(a.id || ""));
+      });
 
       // Totaux par mode
       const totalsByMode: Record<string, number> = {};

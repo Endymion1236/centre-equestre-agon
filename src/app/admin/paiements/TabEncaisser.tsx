@@ -247,6 +247,7 @@ export function TabEncaisser({
       status: "pending",
       paidAmount: 0,
       date: encaissementDate ? Timestamp.fromDate(new Date(encaissementDate + "T12:00:00")) : serverTimestamp(),
+      createdAt: serverTimestamp(), // heure réelle de création (pour tri chronologique)
     });
     if (paid > 0) {
       await enregistrerEncaissement(payRef.id, {

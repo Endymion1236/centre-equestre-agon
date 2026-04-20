@@ -271,6 +271,7 @@ export default function PaiementsPage() {
       ref,
       activityTitle: activityTitle || (paymentData.items || []).map((i: any) => i.activityTitle).join(", "),
       date: dateValue,
+      createdAt: serverTimestamp(), // heure réelle de l'encaissement (pour tri chronologique)
     });
 
     // 2. Recalculer paidAmount depuis TOUS les encaissements de ce payment
