@@ -48,7 +48,20 @@ export default function EmailModal({ emailModal, allPayments, onClose }: Props) 
       const res = await authFetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: emailModal.email, subject: emailSubject, html: htmlContent }),
+        body: JSON.stringify({
+          to: emailModal.email, subject: emailSubject, html: htmlContent,
+          context: emailTemplate === "rappelImpaye"
+            ? "admin_rappel_impaye"
+            : emailTemplate === "bienvenue"
+            ? "admin_bienvenue_famille"
+            : "admin_manual",
+          template: emailTemplate === "rappelImpaye"
+            ? "rappelImpaye"
+            : emailTemplate === "bienvenue"
+            ? "bienvenueNouvelleFamille"
+            : undefined,
+          familyId: emailModal.familyId,
+        }),
       });
       const data = await res.json();
       if (!res.ok || data.error) {

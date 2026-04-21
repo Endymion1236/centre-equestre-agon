@@ -77,6 +77,8 @@ export default function CommunicationPage() {
           body: JSON.stringify({
             to: fam.parentEmail,
             subject: personalSubject,
+            context: "admin_communication",
+            familyId: fam.firestoreId,
             html: `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:20px;">
               <h2 style="color:#1e3a5f;">Centre Equestre d'Agon-Coutainville</h2>
               ${personalBody.split("\n").map(l => `<p style="color:#333;line-height:1.6;">${l}</p>`).join("")}

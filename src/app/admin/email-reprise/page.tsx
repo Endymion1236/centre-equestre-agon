@@ -122,7 +122,7 @@ export default function EmailReprisePage() {
             02 44 84 99 96 — ceagon@orange.fr
           </div>
         </div>`;
-        const res = await authFetch("/api/send-email", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ to:emails, subject, html:htmlBody }) });
+        const res = await authFetch("/api/send-email", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ to:emails, subject, html:htmlBody, context: "admin_email_reprise", creneauId: selectedCreneau.id }) });
         const result = await res.json();
         emailStatus = result.success ? "sent" : "error";
       } catch (e) { emailStatus = "error"; }

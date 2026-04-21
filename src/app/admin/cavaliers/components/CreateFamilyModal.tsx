@@ -102,7 +102,12 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
         const emailData = emailTemplates.bienvenueNouvelleFamille({ parentName: computedName });
         authFetch("/api/send-email", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ to: newFamily.parentEmail.trim(), ...emailData }),
+          body: JSON.stringify({
+            to: newFamily.parentEmail.trim(),
+            ...emailData,
+            context: "admin_bienvenue_famille",
+            template: "bienvenueNouvelleFamille",
+          }),
         }).catch(() => {});
       }
 

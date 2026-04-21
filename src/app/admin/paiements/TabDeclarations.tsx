@@ -133,6 +133,10 @@ export function TabDeclarations({
                           body: JSON.stringify({
                             to: decl.familyEmail,
                             subject: `✅ Paiement confirmé — ${decl.montant.toFixed(2)}€`,
+                            context: "admin_confirmation_declaration",
+                            template: "confirmationDeclaration",
+                            familyId: decl.familyId,
+                            paymentId: decl.paymentId,
                             html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
                               <p>Bonjour <strong>${decl.familyName}</strong>,</p>
                               <p>Nous avons bien reçu votre règlement :</p>

@@ -585,6 +585,8 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
               to: mon.email,
               subject: `📋 Votre planning semaine ${semaineNum} — ${dateDebut} → ${dateFin}`,
               html,
+              context: "admin_planning_moniteur",
+              template: "planningMoniteur",
             }),
           });
           sent++;

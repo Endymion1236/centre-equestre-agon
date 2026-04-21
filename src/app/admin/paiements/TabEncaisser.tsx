@@ -596,7 +596,17 @@ export function TabEncaisser({
                         mode: paymentModes.find(m => m.id === paymentMode)?.label || paymentMode,
                         prestations: familyPending.flatMap(p => (p.items || []).map((i: any) => i.activityTitle)).join(", "),
                       });
-                      authFetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: selectedFam.parentEmail, ...emailData }) }).catch(e => console.warn("Email:", e));
+                      authFetch("/api/send-email", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          to: selectedFam.parentEmail,
+                          ...emailData,
+                          context: "admin_confirmation_paiement",
+                          template: "confirmationPaiement",
+                          familyId: selectedFam.firestoreId,
+                        }),
+                      }).catch(e => console.warn("Email:", e));
                     } catch (e) { console.error("Email confirmation paiement:", e); }
                   }
                   setPaidAmount("");

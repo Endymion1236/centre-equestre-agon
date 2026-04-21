@@ -823,7 +823,18 @@ export default function PlanningPage() {
           date: new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
           horaire: `${c.startTime}–${c.endTime}`, prix: priceTTC,
         });
-        authFetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: fam.parentEmail, ...emailData }) }).catch(e => console.warn("Email:", e));
+        authFetch("/api/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: fam.parentEmail,
+            ...emailData,
+            context: "admin_confirmation_cours",
+            template: "confirmationCours",
+            familyId: fam.firestoreId,
+            creneauId: cid,
+          }),
+        }).catch(e => console.warn("Email:", e));
       } catch (e) { console.error("Email confirmation cours:", e); }
       }
     }
@@ -1000,7 +1011,19 @@ export default function PlanningPage() {
                   parentName: fam2.parentName || "", childName: child.childName,
                   activite: c.activityTitle, montantAvoir: avoirMontant, refAvoir: ref,
                 });
-                authFetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: fam2.parentEmail, ...emailData }) }).catch(e => console.warn("Email avoir:", e));
+                authFetch("/api/send-email", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    to: fam2.parentEmail,
+                    ...emailData,
+                    context: "admin_desinscription_avoir",
+                    template: "desinscriptionAvoir",
+                    familyId: fam2.firestoreId,
+                    paymentId: paymentDoc.id,
+                    creneauId: cid,
+                  }),
+                }).catch(e => console.warn("Email avoir:", e));
               } catch (e) { console.error("Email avoir:", e); }
             }
           } else {
@@ -1064,6 +1087,10 @@ export default function PlanningPage() {
               body: JSON.stringify({
                 to: first.familyEmail,
                 subject: `🎉 Une place s'est libérée — ${c.activityTitle}`,
+                context: "admin_place_liberee",
+                template: "placeLibereeNotif",
+                familyId: first.familyId,
+                creneauId: cid,
                 html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
                   <p>Bonjour <strong>${first.familyName}</strong>,</p>
                   <p>Une place s'est libérée pour <strong>${first.childName}</strong> dans :</p>

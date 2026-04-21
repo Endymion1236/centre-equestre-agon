@@ -192,6 +192,9 @@ export default function DevisPage() {
           to: d.familyEmail,
           subject: `Devis ${d.numero} — Centre Équestre d'Agon-Coutainville`,
           html,
+          context: "admin_devis",
+          template: "devis",
+          familyId: d.familyId,
         }),
       });
 

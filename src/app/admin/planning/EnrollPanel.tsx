@@ -249,6 +249,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         body: JSON.stringify({
           to: entry.familyEmail,
           subject: `🎉 Une place s'est libérée — ${creneau.activityTitle}`,
+          context: "admin_place_liberee",
+          template: "placeLiberee",
+          familyId: entry.familyId,
+          creneauId: creneau.id,
           html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
             <p>Bonjour <strong>${entry.familyName}</strong>,</p>
             <p>Bonne nouvelle ! Une place s'est libérée pour <strong>${entry.childName}</strong> :</p>
@@ -762,7 +766,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             authFetch("/api/send-email", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ to: fam.parentEmail, ...confirmEmail }),
+              body: JSON.stringify({
+                to: fam.parentEmail,
+                ...confirmEmail,
+                context: "admin_confirmation_stage",
+                template: "confirmationStage",
+                familyId: fam.firestoreId,
+                creneauId: creneau.id,
+              }),
             }).catch(e => console.warn("Email stage:", e));
 
             // Notification push
@@ -1101,6 +1112,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         body: JSON.stringify({
           to: first.familyEmail,
           subject: `🎉 Une place s'est libérée — ${creneau.activityTitle}`,
+          context: "admin_place_liberee",
+          template: "placeLibereeNotif",
+          familyId: first.familyId,
+          creneauId: creneau.id,
           html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
             <p>Bonjour <strong>${first.familyName}</strong>,</p>
             <p>Une place vient de se libérer pour <strong>${first.childName}</strong> !</p>
@@ -1119,13 +1134,13 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
   // ── Email créneau : envoi à toutes les familles inscrites ──
   const getCreneauRecipients = () => {
-    const recipients: { email: string; parentName: string }[] = [];
+    const recipients: { email: string; parentName: string; familyId: string }[] = [];
     const seen = new Set<string>();
     for (const e of enrolled) {
       const fam = families.find(f => f.firestoreId === e.familyId);
       if (fam?.parentEmail && !seen.has(fam.parentEmail)) {
         seen.add(fam.parentEmail);
-        recipients.push({ email: fam.parentEmail, parentName: fam.parentName || "" });
+        recipients.push({ email: fam.parentEmail, parentName: fam.parentName || "", familyId: fam.firestoreId });
       }
     }
     return recipients;
@@ -1167,6 +1182,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           body: JSON.stringify({
             to: r.email,
             subject: emailSubject,
+            context: "admin_email_reprise",
+            familyId: r.familyId,
+            creneauId: creneau.id,
             html: `<div style="font-family:'Segoe UI',Arial,sans-serif;max-width:560px;margin:0 auto;">
               <div style="background:#1e3a5f;padding:20px 24px;border-radius:12px 12px 0 0;">
                 <h1 style="color:white;margin:0;font-size:18px;font-weight:700;">Centre Équestre d'Agon-Coutainville</h1>
@@ -1257,6 +1275,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             to: email,
             subject: `Bilan de progression — ${e.childName} — ${creneau.activityTitle}`,
             html: cleanHtml,
+            context: "admin_bilan_progression",
+            template: "bilanProgression",
+            familyId: e.familyId,
+            creneauId: creneau.id,
           }),
         });
         sent++;
@@ -1575,7 +1597,17 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       // Email bienvenue
                       if (newFam.parentEmail.trim()) {
                         const emailData = emailTemplates.bienvenueNouvelleFamille({ parentName: newFam.parentName.trim() });
-                        authFetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: newFam.parentEmail.trim(), ...emailData }) }).catch(() => {});
+                        authFetch("/api/send-email", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            to: newFam.parentEmail.trim(),
+                            ...emailData,
+                            context: "admin_bienvenue_famille",
+                            template: "bienvenueNouvelleFamille",
+                            familyId: famRef.id,
+                          }),
+                        }).catch(() => {});
                       }
                       // Ajouter la famille au state local pour qu'elle soit sélectionnable
                       setLocalFamilies(prev => [...prev, {

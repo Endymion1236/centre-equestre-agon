@@ -108,6 +108,8 @@ export default function SatisfactionPage() {
         body: JSON.stringify({
           to: process.env.NEXT_PUBLIC_OWNER_EMAIL || "ceagon50@gmail.com",
           subject: `${stars} Avis satisfaction — ${family.parentName}`,
+          context: "espace_cavalier_satisfaction",
+          familyId: user.uid,
           html: `<div style="font-family:sans-serif;max-width:520px;padding:24px;">
             <p><strong>${family.parentName}</strong> a laissé un avis :</p>
             <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:16px 0;">

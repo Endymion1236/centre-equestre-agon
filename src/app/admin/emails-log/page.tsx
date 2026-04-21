@@ -22,6 +22,7 @@ const CONTEXT_LABELS: Record<string, string> = {
   admin_confirmation_cours: "Réservation cours",
   admin_confirmation_forfait: "Forfait annuel",
   admin_confirmation_paiement: "Confirmation paiement",
+  admin_confirmation_declaration: "Déclaration confirmée",
   admin_rappel_impaye: "Rappel impayé",
   admin_bienvenue_famille: "Bienvenue nouvelle famille",
   admin_desinscription_avoir: "Désinscription + avoir",
@@ -32,9 +33,12 @@ const CONTEXT_LABELS: Record<string, string> = {
   admin_planning_moniteur: "Planning moniteur",
   admin_rappel_montoir: "Rappel cours (depuis montoir)",
   admin_bilan_progression: "Bilan de progression",
+  admin_test_template: "Test template email",
+  // Espace cavalier
   espace_cavalier_reservation: "Réservation espace cavalier",
-  espace_cavalier_satisfaction: "Demande satisfaction",
+  espace_cavalier_satisfaction: "Avis satisfaction",
   espace_cavalier_facture: "Demande facture",
+  espace_cavalier_declaration: "Déclaration paiement",
   unknown: "Inconnu",
 };
 

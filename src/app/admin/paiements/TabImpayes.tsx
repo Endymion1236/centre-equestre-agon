@@ -162,7 +162,18 @@ export function TabImpayes({
                           const email = fam?.parentEmail || "";
                           if (!email) { toast("Pas d'email pour cette famille.", "warning"); return; }
                           const emailData = emailTemplates.rappelImpaye({ parentName: p.familyName || "", montant: due, prestations: (p.items||[]).map((i:any) => i.activityTitle).join(", ") });
-                          authFetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: email, ...emailData }) }).catch(e => console.warn("Email:", e));
+                          authFetch("/api/send-email", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              to: email,
+                              ...emailData,
+                              context: "admin_rappel_impaye",
+                              template: "rappelImpaye",
+                              familyId: p.familyId,
+                              paymentId: p.id,
+                            }),
+                          }).catch(e => console.warn("Email:", e));
                           toast(`Relance envoyée à ${email}`);
                         }} className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">Relancer</button>
                         {/* Bouton lien de paiement personnalisé */}

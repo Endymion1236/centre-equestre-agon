@@ -401,6 +401,8 @@ export default function ReserverPage() {
           body: JSON.stringify({
             to: family.parentEmail,
             subject: `✅ Inscription confirmée — Centre Équestre d'Agon-Coutainville`,
+            context: "espace_cavalier_reservation",
+            familyId,
             html: `<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;">
               <h2 style="color:#2050A0;">Inscription confirmée !</h2>
               <p>Bonjour <strong>${family.parentName}</strong>,</p>
@@ -1269,6 +1271,8 @@ export default function ReserverPage() {
                               body: JSON.stringify({
                                 to: "ceagon50@gmail.com",
                                 subject: `Paiement ${cartPayMode} à confirmer — ${family.parentName}`,
+                                context: "espace_cavalier_declaration",
+                                familyId,
                                 html: `<p>${family.parentName} déclare un paiement de <strong>${cartTotal.toFixed(2)}€</strong> par ${cartPayMode}.<br/>Activités : ${cart.map(i => i.activityTitle).join(", ")}</p>`,
                               }),
                             }).catch(() => {});

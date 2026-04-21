@@ -268,7 +268,7 @@ export default function EmailTemplatesPage() {
       const res = await authFetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: sendTestTo, subject, html }),
+        body: JSON.stringify({ to: sendTestTo, subject, html, context: "admin_test_template", template: selectedKey }),
       });
       const data = await res.json();
       if (data.success) alert(`✅ Email test envoyé à ${sendTestTo}`);
