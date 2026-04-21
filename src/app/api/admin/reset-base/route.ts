@@ -25,6 +25,20 @@ import { FieldValue } from "firebase-admin/firestore";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 minutes (Pro Vercel plan) pour laisser le temps aux suppressions
 
+// ═════════════════════════════════════════════════════════════════════════
+// GARDE-FOU TEMPOREL — DATE BUTOIR DE L'OUTIL
+// ═════════════════════════════════════════════════════════════════════════
+// Cet outil sert à vider la base de test AVANT la bascule en production
+// officielle (prévue septembre 2026). Après cette date, l'outil ne doit
+// plus être utilisable. La protection ci-dessous bloque toute utilisation
+// après le 1er juillet 2026 (marge de sécurité par rapport à septembre).
+//
+// Pour être complet, l'idéal est de SUPPRIMER entièrement ce fichier après
+// usage (voir docs/PROCEDURE_BASCULE_PROD.md). Cette date butoir est une
+// protection supplémentaire au cas où la suppression serait oubliée.
+const DATE_BUTOIR = new Date("2026-07-01T00:00:00Z");
+// ═════════════════════════════════════════════════════════════════════════
+
 // Collections que l'utilisateur peut choisir d'effacer
 const RESETTABLE_COLLECTIONS = [
   // ─── Transactionnel ─────────────────────────────────
@@ -63,6 +77,17 @@ const CONFIRMATION_PHRASE = "SUPPRIMER-DONNEES-TEST";
 
 export async function POST(req: NextRequest) {
   try {
+    // ─── 0. Garde-fou temporel ────────────────────────────────────
+    // Cet outil est réservé à la phase de pré-production (avant juillet 2026).
+    // Après la date butoir, toute utilisation est refusée — même par l'admin.
+    if (new Date() > DATE_BUTOIR) {
+      return NextResponse.json({
+        error: `Outil désactivé depuis le ${DATE_BUTOIR.toLocaleDateString("fr-FR")}. ` +
+               `Cet outil était réservé à la phase de tests avant la mise en production. ` +
+               `La comptabilité étant désormais en production, aucune réinitialisation n'est plus possible.`,
+      }, { status: 410 }); // 410 Gone = ressource définitivement indisponible
+    }
+
     // ─── 1. Authentification ─────────────────────────────────────
     const authHeader = req.headers.get("authorization") || "";
     if (!authHeader.startsWith("Bearer ")) {
@@ -181,6 +206,14 @@ export async function POST(req: NextRequest) {
 // GET : liste des collections disponibles et leur comptage actuel
 export async function GET(req: NextRequest) {
   try {
+    // Garde-fou temporel (cohérent avec POST)
+    if (new Date() > DATE_BUTOIR) {
+      return NextResponse.json({
+        error: `Outil désactivé depuis le ${DATE_BUTOIR.toLocaleDateString("fr-FR")}.`,
+        dateButoir: DATE_BUTOIR.toISOString(),
+      }, { status: 410 });
+    }
+
     const authHeader = req.headers.get("authorization") || "";
     if (!authHeader.startsWith("Bearer ")) {
       return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
