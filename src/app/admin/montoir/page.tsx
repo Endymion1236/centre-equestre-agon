@@ -86,15 +86,33 @@ export default function MontoirPage() {
   useEffect(() => { setLoading(true); fetchData(); }, [dayOffset]);
 
   // Liste des équidés disponibles (pas sortis, pas indisponibles)
+  // NB : le schéma côté création (cavalerie/TabIndispos) utilise { active, dateDebut, dateFin }
+  // On supporte aussi les anciens formats { status, startDate, endDate } par sécurité.
+  const isIndispoActive = (i: any, dateStr: string): boolean => {
+    // Terminée ? (deux conventions possibles)
+    if (i.active === false) return false;
+    if (i.status === "terminee") return false;
+
+    const startRaw = i.dateDebut ?? i.startDate;
+    const endRaw = i.dateFin ?? i.endDate;
+    const start = startRaw?.seconds
+      ? new Date(startRaw.seconds * 1000).toISOString().split("T")[0]
+      : (typeof startRaw === "string" ? startRaw.split("T")[0] : "");
+    const end = endRaw?.seconds
+      ? new Date(endRaw.seconds * 1000).toISOString().split("T")[0]
+      : (typeof endRaw === "string" ? endRaw.split("T")[0] : "");
+
+    // Pas encore commencée
+    if (start && dateStr < start) return false;
+    // Déjà terminée (date de fin dépassée)
+    if (end && dateStr > end) return false;
+    return true;
+  };
+
   const availableHorses = useMemo(() => {
-    const activeIndispos = indisponibilites.filter((i: any) => {
-      if (i.status === "terminee") return false;
-      const start = i.startDate?.seconds ? new Date(i.startDate.seconds * 1000).toISOString().split("T")[0] : i.startDate || "";
-      const end = i.endDate?.seconds ? new Date(i.endDate.seconds * 1000).toISOString().split("T")[0] : i.endDate || "";
-      if (dateStr < start) return false;
-      if (end && dateStr > end) return false;
-      return true;
-    }).map((i: any) => i.equideId);
+    const activeIndispos = indisponibilites
+      .filter((i: any) => isIndispoActive(i, dateStr))
+      .map((i: any) => i.equideId);
 
     return equides
       .filter(e => e.status !== "sorti" && e.status !== "deces" && !activeIndispos.includes(e.id))
@@ -102,14 +120,7 @@ export default function MontoirPage() {
   }, [equides, indisponibilites, dateStr]);
 
   const unavailableHorses = useMemo(() => {
-    const activeIndispos = indisponibilites.filter((i: any) => {
-      if (i.status === "terminee") return false;
-      const start = i.startDate?.seconds ? new Date(i.startDate.seconds * 1000).toISOString().split("T")[0] : i.startDate || "";
-      const end = i.endDate?.seconds ? new Date(i.endDate.seconds * 1000).toISOString().split("T")[0] : i.endDate || "";
-      if (dateStr < start) return false;
-      if (end && dateStr > end) return false;
-      return true;
-    });
+    const activeIndispos = indisponibilites.filter((i: any) => isIndispoActive(i, dateStr));
     return activeIndispos.map((i: any) => {
       const eq = equides.find(e => e.id === i.equideId);
       return { name: eq?.name || "?", reason: i.motif || "Indisponible" };
