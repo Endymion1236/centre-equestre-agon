@@ -39,6 +39,8 @@ export default function AdminDashboard() {
   }, []);
   const [familyCount, setFamilyCount] = useState(0);
   const [activityCount, setActivityCount] = useState(0);
+  const [caMois, setCaMois] = useState<number | null>(null);
+  const [tauxRemplissage, setTauxRemplissage] = useState<number | null>(null);
   const [billing, setBilling] = useState<any>(null);
 
   useEffect(() => {
@@ -48,6 +50,60 @@ export default function AdminDashboard() {
         setFamilyCount(familiesSnap.size);
         const activitiesSnap = await getDocs(collection(db, "activities"));
         setActivityCount(activitiesSnap.size);
+
+        // ─── CA du mois en cours ────────────────────────────────────
+        // Somme des encaissements positifs (hors avoirs) du mois courant.
+        // Sémantique : comptabilité de trésorerie = argent effectivement reçu.
+        try {
+          const now = new Date();
+          const debutMois = new Date(now.getFullYear(), now.getMonth(), 1);
+          const encSnap = await getDocs(collection(db, "encaissements"));
+          const ca = encSnap.docs.reduce((s, d) => {
+            const e: any = d.data();
+            if (e.mode === "avoir") return s;
+            const montant = Number(e.montant || 0);
+            if (montant <= 0) return s;
+            const dt = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+            if (!dt || dt < debutMois || dt > now) return s;
+            return s + montant;
+          }, 0);
+          setCaMois(Math.round(ca * 100) / 100);
+        } catch (e) {
+          console.error("Erreur calcul CA mois:", e);
+          setCaMois(0);
+        }
+
+        // ─── Taux de remplissage (30 prochains jours) ───────────────
+        // Moyenne pondérée : Σ(inscrits) / Σ(places max) sur les créneaux
+        // actifs des 30 prochains jours (hors créneaux complets = 0 place).
+        try {
+          const today = new Date();
+          const in30 = new Date();
+          in30.setDate(in30.getDate() + 30);
+          const todayStr = today.toISOString().split("T")[0];
+          const in30Str = in30.toISOString().split("T")[0];
+          const crSnap = await getDocs(collection(db, "creneaux"));
+          let totalPlaces = 0, totalInscrits = 0;
+          crSnap.docs.forEach(d => {
+            const c: any = d.data();
+            if (c.status === "cancelled" || c.status === "closed") return;
+            const date = typeof c.date === "string" ? c.date : "";
+            if (!date || date < todayStr || date > in30Str) return;
+            const maxPlaces = Number(c.maxPlaces || 0);
+            if (maxPlaces <= 0) return;
+            const inscrits = Number(c.enrolledCount || (c.enrolled || []).length || 0);
+            totalPlaces += maxPlaces;
+            totalInscrits += Math.min(inscrits, maxPlaces);
+          });
+          if (totalPlaces > 0) {
+            setTauxRemplissage(Math.round((totalInscrits / totalPlaces) * 100));
+          } else {
+            setTauxRemplissage(0);
+          }
+        } catch (e) {
+          console.error("Erreur calcul taux remplissage:", e);
+          setTauxRemplissage(null);
+        }
       } catch (e) {
         console.error("Erreur chargement stats:", e);
       }
@@ -134,8 +190,8 @@ export default function AdminDashboard() {
         {[
           { icon: Users, value: familyCount.toString(), label: "Familles inscrites", tint: TERRAIN },
           { icon: CalendarDays, value: activityCount.toString(), label: "Activités créées", tint: TERRAIN },
-          { icon: CreditCard, value: "0€", label: "CA ce mois", tint: COMMERCIAL },
-          { icon: TrendingUp, value: "—", label: "Taux de remplissage", tint: GESTION },
+          { icon: CreditCard, value: caMois === null ? "…" : `${caMois.toFixed(0)}€`, label: "CA ce mois", tint: COMMERCIAL },
+          { icon: TrendingUp, value: tauxRemplissage === null ? "…" : `${tauxRemplissage}%`, label: "Taux de remplissage", tint: GESTION },
         ].map((kpi, i) => {
           const Icon = kpi.icon;
           const [iconColor, bgColor] = kpi.tint.split(" ");
