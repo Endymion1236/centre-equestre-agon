@@ -90,6 +90,24 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ── Clôtures journalières (Z de caisse) ───────────────────────────────
+    // Totalement inaltérables. Scellées dès la clôture avec hash SHA-256.
+    // Aucune modification ni suppression possible, quel qu'en soit le motif.
+    match /cloturesJournalieres/{docId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // ── Fonds de caisse (comptages physiques espèces) ─────────────────────
+    // Historique des comptages billets/pièces avec écart vs solde théorique.
+    // Inaltérable une fois enregistré (comme une pesée scellée).
+    match /fondsDeCaisse/{docId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
     // ── Équidés ───────────────────────────────────────────────────────────
     match /equides/{docId} {
       allow read: if isStaff();
