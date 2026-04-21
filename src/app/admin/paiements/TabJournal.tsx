@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { collection, addDoc, getDoc, getDocs, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { safeNumber } from "@/lib/utils";
+import { createEncaissement } from "@/lib/compta-encaissement";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, ChevronDown, Receipt, AlertTriangle, Copy, Check, X, Search } from "lucide-react";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
@@ -215,7 +216,7 @@ export function TabJournal({ loading, payments, encaissements, avoirs, toast, re
                     const newMontant = safeNumber(correctionMontant);
 
                     // 1. Contre-passation (écriture négative)
-                    await addDoc(collection(db, "encaissements"), {
+                    await createEncaissement({
                       paymentId: correctionEnc.paymentId,
                       familyId: correctionEnc.familyId,
                       familyName: correctionEnc.familyName,
@@ -226,12 +227,11 @@ export function TabJournal({ loading, payments, encaissements, avoirs, toast, re
                       activityTitle: correctionEnc.activityTitle,
                       raison: `Correction : ${correctionRaison}`,
                       correctionDe: correctionEnc.id,
-                      date: serverTimestamp(),
                     });
 
                     // 2. Nouvel encaissement correct (si montant > 0)
                     if (newMontant > 0) {
-                      await addDoc(collection(db, "encaissements"), {
+                      await createEncaissement({
                         paymentId: correctionEnc.paymentId,
                         familyId: correctionEnc.familyId,
                         familyName: correctionEnc.familyName,
@@ -241,7 +241,6 @@ export function TabJournal({ loading, payments, encaissements, avoirs, toast, re
                         ref: correctionRef,
                         activityTitle: correctionEnc.activityTitle,
                         raison: `Remplacement : ${correctionRaison}`,
-                        date: serverTimestamp(),
                       });
                     }
 

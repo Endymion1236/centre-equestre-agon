@@ -8,6 +8,7 @@ import { emailTemplates } from "@/lib/email-templates";
 import { safeNumber, round2, generateOrderId } from "@/lib/utils";
 import { Card, Badge, Button } from "@/components/ui";
 import { HelpButton } from "@/components/HelpButton";
+import { createEncaissement } from "@/lib/compta-encaissement";
 import { useToast } from "@/components/ui/Toast";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle, Copy, ChevronDown, Gift, Calendar } from "lucide-react";
@@ -269,11 +270,9 @@ export default function PaiementsPage() {
     activityTitle: string = "",
     customDate?: string, // format YYYY-MM-DD, si absent → serverTimestamp()
   ) => {
-    // 1. Créer le doc encaissement (journal)
-    const dateValue = customDate
-      ? Timestamp.fromDate(new Date(customDate + "T12:00:00"))
-      : serverTimestamp();
-    await addDoc(collection(db, "encaissements"), {
+    // 1. Créer le doc encaissement (journal) — avec hash SHA-256 chaîné
+    const explicitDate = customDate ? new Date(customDate + "T12:00:00") : undefined;
+    await createEncaissement({
       paymentId,
       familyId: paymentData.familyId,
       familyName: paymentData.familyName,
@@ -282,7 +281,7 @@ export default function PaiementsPage() {
       modeLabel: paymentModes.find(m => m.id === mode)?.label || mode,
       ref,
       activityTitle: activityTitle || (paymentData.items || []).map((i: any) => i.activityTitle).join(", "),
-      date: dateValue,
+      explicitDate,
       createdAt: serverTimestamp(), // heure réelle de l'encaissement (pour tri chronologique)
     });
 
@@ -610,7 +609,7 @@ export default function PaiementsPage() {
       });
 
       // Trace dans le journal des encaissements (montant négatif = avoir)
-      await addDoc(collection(db, "encaissements"), {
+      await createEncaissement({
         paymentId: payment.id,
         familyId: payment.familyId,
         familyName: payment.familyName,
@@ -619,7 +618,6 @@ export default function PaiementsPage() {
         modeLabel: "Avoir (annulation)",
         ref: ref,
         activityTitle: (payment.items || []).map((i: any) => i.activityTitle).join(", "),
-        date: serverTimestamp(),
         isAvoir: true,
         avoirRef: ref,
       });
@@ -692,7 +690,7 @@ export default function PaiementsPage() {
         });
 
         // Trace dans le journal des encaissements (montant négatif = avoir)
-        await addDoc(collection(db, "encaissements"), {
+        await createEncaissement({
           paymentId: payment.id,
           familyId: payment.familyId,
           familyName: payment.familyName,
@@ -701,7 +699,6 @@ export default function PaiementsPage() {
           modeLabel: "Avoir (trop-perçu)",
           ref: ref,
           activityTitle: itemToRemove.activityTitle,
-          date: serverTimestamp(),
           isAvoir: true,
           avoirRef: ref,
         });

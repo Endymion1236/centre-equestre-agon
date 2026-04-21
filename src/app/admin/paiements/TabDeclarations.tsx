@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { updateDoc, addDoc, getDoc, doc, collection, query, where, getDocs, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { safeNumber, generateOrderId } from "@/lib/utils";
+import { createEncaissement } from "@/lib/compta-encaissement";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Check, X, CreditCard, Sparkles, AlertTriangle, Plus, Trash2, Search } from "lucide-react";
 import { paymentModes } from "./types";
@@ -108,7 +109,7 @@ export function TabDeclarations({
                           const encDate = decl.dateEncaissement
                             ? new Date(decl.dateEncaissement + "T12:00:00")
                             : new Date();
-                          await addDoc(collection(db, "encaissements"), {
+                          await createEncaissement({
                             paymentId: decl.paymentId,
                             familyId: decl.familyId,
                             familyName: decl.familyName,
@@ -117,7 +118,7 @@ export function TabDeclarations({
                             modeLabel: decl.mode === "cheque" ? `Chèque${decl.chequeRef ? ` n°${decl.chequeRef}` : ""}` : decl.mode === "virement" ? "Virement" : "Espèces",
                             ref: chequeRef,
                             activityTitle: decl.activityTitle,
-                            date: Timestamp.fromDate(encDate),
+                            explicitDate: encDate,
                           });
                         }
                       }

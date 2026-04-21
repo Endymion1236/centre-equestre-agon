@@ -6,6 +6,7 @@ import { awardLoyaltyPointsServer } from "@/lib/fidelite";
 import { confirmReservationsForPayment } from "@/lib/reservations";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import { logEmail } from "@/lib/email-log";
+import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 
 export const dynamic = "force-dynamic";
 
@@ -118,7 +119,7 @@ export async function POST(req: NextRequest) {
             updatedAt: FieldValue.serverTimestamp(),
           });
 
-          await adminDb.collection("encaissements").add({
+          await createEncaissementServer({
             paymentId: payRef.id,
             familyId: pData.familyId,
             familyName: pData.familyName || "",
@@ -127,7 +128,6 @@ export async function POST(req: NextRequest) {
             modeLabel: "CB en ligne (CAWL)",
             ref: `CAWL-${payment.id}`,
             activityTitle: (pData.items || []).map((i: any) => i.activityTitle).join(", "),
-            date: FieldValue.serverTimestamp(),
           });
 
           console.log(`✅ CAWL webhook payment confirmé: ${merchantRef} — ${totalTTC}€`);

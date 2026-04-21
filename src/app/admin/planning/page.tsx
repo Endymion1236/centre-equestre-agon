@@ -12,6 +12,7 @@ import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { HelpButton } from "@/components/HelpButton";
 import { emailTemplates } from "@/lib/email-templates";
+import { createEncaissement } from "@/lib/compta-encaissement";
 import { generateOrderId } from "@/lib/utils";
 import {
   applyDiscounts,
@@ -723,24 +724,22 @@ export default function PlanningPage() {
               });
             }
             // Encaissement uniquement du montant réellement déduit
-            await addDoc(collection(db, "encaissements"), {
+            await createEncaissement({
               paymentId: payRefId, familyId: child.familyId, familyName: child.familyName,
               montant: Math.round(totalDeduit * 100) / 100, mode: "avoir",
               modeLabel: "Avoir",
               ref: "", activityTitle: `${c.activityTitle} — ${child.childName}`,
-              date: serverTimestamp(),
             });
           } catch (e: any) {
             if (e?.message !== "NO_AVOIR") console.error("Erreur déduction avoir:", e);
           }
         } else {
 
-        await addDoc(collection(db, "encaissements"), {
+        await createEncaissement({
           paymentId: payRefId, familyId: child.familyId, familyName: child.familyName,
           montant: Math.round(finalPriceTTC * 100) / 100, mode: payMode,
           modeLabel: payMode === "cb_terminal" ? "CB (terminal)" : payMode === "especes" ? "Espèces" : payMode === "cheque" ? "Chèque" : payMode || "",
           ref: "", activityTitle: `${c.activityTitle} — ${child.childName}`,
-          date: serverTimestamp(),
         });
 
         // Points de fidélité (1 point par euro encaissé)

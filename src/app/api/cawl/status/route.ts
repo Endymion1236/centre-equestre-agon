@@ -6,6 +6,7 @@ import { awardLoyaltyPointsServer } from "@/lib/fidelite";
 import { confirmReservationsForPayment } from "@/lib/reservations";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import { logEmail } from "@/lib/email-log";
+import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -215,7 +216,7 @@ export async function GET(req: NextRequest) {
         updatedAt: FieldValue.serverTimestamp(),
       });
 
-      await adminDb.collection("encaissements").add({
+      await createEncaissementServer({
         paymentId: payRef.id,
         familyId: familyId || pData.familyId,
         familyName: pData.familyName || "",
@@ -224,7 +225,6 @@ export async function GET(req: NextRequest) {
         modeLabel: isDeposit ? `CB en ligne CAWL (acompte ${depositPercent}%)` : "CB en ligne (CAWL)",
         ref: `CAWL-${hostedCheckoutId}`,
         activityTitle: (pData.items || []).map((i: any) => i.activityTitle).join(", "),
-        date: FieldValue.serverTimestamp(),
       });
 
       console.log(`✅ Payment ${payRef.id} mis à jour: ${isDeposit ? "partial" : "paid"} — ${paidAmount}€`);

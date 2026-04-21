@@ -6,6 +6,7 @@ import { collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, Timestamp
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { downloadAvoirPdf } from "@/lib/download-avoir";
+import { createEncaissement } from "@/lib/compta-encaissement";
 import {
   Plus, Search, Loader2, X, Save, Wallet, CreditCard, TrendingDown, TrendingUp, Check, BadgeEuro, FileDown,
 } from "lucide-react";
@@ -127,7 +128,7 @@ export default function AvoirsPage() {
       });
 
       // Trace dans le journal des encaissements (montant négatif)
-      await addDoc(collection(db, "encaissements"), {
+      await createEncaissement({
         paymentId: "",
         familyId: selFamily,
         familyName: fam?.parentName || "",
@@ -136,7 +137,6 @@ export default function AvoirsPage() {
         modeLabel: avoirType === "avoir" ? "Avoir (création manuelle)" : "Avance (création manuelle)",
         ref: ref,
         activityTitle: reason || (avoirType === "avoir" ? "Avoir" : "Avance"),
-        date: serverTimestamp(),
         isAvoir: true,
         avoirRef: ref,
       });
@@ -219,7 +219,7 @@ export default function AvoirsPage() {
         createdAt: serverTimestamp(),
       });
       // Trace dans le journal des encaissements (sortie de trésorerie)
-      await addDoc(collection(db, "encaissements"), {
+      await createEncaissement({
         paymentId: "",
         familyId: avoir.familyId,
         familyName: avoir.familyName,
@@ -228,7 +228,6 @@ export default function AvoirsPage() {
         modeLabel: `Remboursement avoir (${rembMode})`,
         ref: avoir.reference,
         activityTitle: `Remboursement avoir ${avoir.reference}`,
-        date: serverTimestamp(),
         isAvoir: true,
         avoirRef: avoir.reference,
         isRemboursement: true,

@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
+import { createEncaissement } from "@/lib/compta-encaissement";
 import { Plus, Minus, Search, Loader2, Ticket, X, Check, History } from "lucide-react";
 import type { Family } from "@/types";
 
@@ -156,7 +157,7 @@ export default function CartesPage() {
 
     // Créer l'encaissement uniquement si paiement immédiat
     if (encaisserMaintenant) {
-      await addDoc(collection(db, "encaissements"), {
+      await createEncaissement({
         paymentId: payRef.id,
         familyId: selFamily,
         familyName: family.parentName || "—",
@@ -165,7 +166,6 @@ export default function CartesPage() {
         modeLabel: payMode === "cb_terminal" ? "CB (terminal)" : payMode === "especes" ? "Espèces" : payMode === "cheque" ? "Chèque" : payMode,
         ref: "",
         activityTitle: `${template.label} — ${(child as any)?.firstName}`,
-        date: serverTimestamp(),
       });
     }
 
