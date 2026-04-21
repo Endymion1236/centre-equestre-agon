@@ -68,15 +68,17 @@ const badgeColors: Record<BadgeColor, string> = {
 interface BadgeProps {
   color?: BadgeColor;
   children: ReactNode;
+  className?: string;
 }
 
-export function Badge({ color = "blue", children }: BadgeProps) {
+export function Badge({ color = "blue", children, className = "" }: BadgeProps) {
   return (
     <span
       className={`
         inline-flex items-center px-2.5 py-0.5 rounded-full
         text-xs font-semibold font-body whitespace-nowrap
         ${badgeColors[color]}
+        ${className}
       `}
     >
       {children}

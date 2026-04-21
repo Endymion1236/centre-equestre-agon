@@ -70,12 +70,24 @@ service cloud.firestore {
     }
     match /encaissements/{docId} {
       allow read: if isAdmin();
+      // ─── INALTÉRABILITÉ (loi anti-fraude TVA 2018 / NF525 / Art 286-I-3°bis CGI) ───
+      // Un encaissement validé ne peut être ni modifié ni supprimé, même par l'admin.
+      // Pour corriger une erreur : il faut créer une contre-passation (écriture
+      // négative) + un nouvel encaissement correct. Les deux lignes coexistent
+      // et la piste d'audit reste intacte.
       // Création : staff (admin + moniteur inscrivant un cavalier au planning).
-      // Update/delete : admin uniquement (les corrections sont sensibles).
-      // Les écritures automatiques (webhooks CAWL, pay-with-avoir) passent par
-      // adminDb et bypassent ces règles.
+      // Les écritures automatiques (webhooks CAWL, pay-with-avoir, contre-passation)
+      // passent par addDoc côté client/serveur → soumises aux mêmes règles.
+      // adminDb (Firebase Admin SDK) bypasse ces règles — utilisé uniquement par
+      // les routes API server-side de confiance (ex: webhooks).
       allow create: if isStaff();
-      allow update, delete: if isAdmin();
+      // Update : interdit sauf modification du champ 'remiseId' (métadonnée de
+      // rapprochement bancaire, non comptable — rattache l'encaissement à un
+      // bordereau de remise). Les autres champs (montant, mode, date, famille,
+      // activité, raison, correctionDe…) sont scellés définitivement.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['remiseId']);
+      allow delete: if false;
     }
 
     // ── Équidés ───────────────────────────────────────────────────────────
