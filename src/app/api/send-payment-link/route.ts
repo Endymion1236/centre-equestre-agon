@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { verifyAuth } from "@/lib/api-auth";
+import { logEmail } from "@/lib/email-log";
 
 export const dynamic = "force-dynamic";
 
@@ -101,18 +102,31 @@ export async function POST(req: NextRequest) {
 
     // Envoyer via Resend
     const resendKey = process.env.RESEND_API_KEY;
+    const subject = `Lien de paiement — ${amount.toFixed(2)}€ — Centre Équestre`;
+    const sentByUid = (auth as any)?.uid || "admin";
     if (resendKey) {
-      await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${resendKey}` },
-        body: JSON.stringify({
-          from: process.env.RESEND_FROM || "noreply@ce-agon.fr",
-          to: recipientEmail,
-          bcc: "ceagon50@gmail.com",
-          subject: `Lien de paiement — ${amount.toFixed(2)}€ — Centre Équestre`,
-          html: emailHtml,
-        }),
-      }).catch(e => console.error("Erreur envoi email:", e));
+      try {
+        const resendRes = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${resendKey}` },
+          body: JSON.stringify({
+            from: process.env.RESEND_FROM || "noreply@ce-agon.fr",
+            to: recipientEmail,
+            bcc: "ceagon50@gmail.com",
+            subject,
+            html: emailHtml,
+          }),
+        });
+        if (resendRes.ok) {
+          await logEmail({ to: recipientEmail, subject, context: "payment_link", template: "paymentLink", status: "sent", sentBy: sentByUid, paymentId, familyId: payData.familyId });
+        } else {
+          const errText = await resendRes.text().catch(() => "");
+          await logEmail({ to: recipientEmail, subject, context: "payment_link", template: "paymentLink", status: "failed", error: `HTTP ${resendRes.status}: ${errText}`.slice(0, 500), sentBy: sentByUid, paymentId, familyId: payData.familyId });
+        }
+      } catch (e: any) {
+        await logEmail({ to: recipientEmail, subject, context: "payment_link", template: "paymentLink", status: "failed", error: e?.message || String(e), sentBy: sentByUid, paymentId, familyId: payData.familyId });
+        console.error("Erreur envoi email:", e);
+      }
     }
 
     // 4. Tracer l'envoi

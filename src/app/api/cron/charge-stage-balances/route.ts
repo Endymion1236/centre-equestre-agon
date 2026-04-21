@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { logEmail } from "@/lib/email-log";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -112,7 +113,7 @@ export async function GET(req: NextRequest) {
         </div>`;
 
         if (resendKey) {
-          await fetch("https://api.resend.com/emails", {
+          const resendRes = await fetch("https://api.resend.com/emails", {
             method: "POST",
             headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -122,6 +123,12 @@ export async function GET(req: NextRequest) {
               subject, html,
             }),
           });
+          if (resendRes.ok) {
+            await logEmail({ to: familyEmail, subject, context: "cron_stage_solde", template: "stageSoldeJ7", status: "sent", sentBy: "system", paymentId: payDoc.id });
+          } else {
+            const errText = await resendRes.text().catch(() => "");
+            await logEmail({ to: familyEmail, subject, context: "cron_stage_solde", template: "stageSoldeJ7", status: "failed", error: `HTTP ${resendRes.status}: ${errText}`.slice(0, 500), sentBy: "system", paymentId: payDoc.id });
+          }
         }
 
         // Marquer le rappel comme envoyé

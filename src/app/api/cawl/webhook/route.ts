@@ -5,6 +5,7 @@ import { loadTemplate } from "@/lib/email-template-loader";
 import { awardLoyaltyPointsServer } from "@/lib/fidelite";
 import { confirmReservationsForPayment } from "@/lib/reservations";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
+import { logEmail } from "@/lib/email-log";
 
 export const dynamic = "force-dynamic";
 
@@ -192,7 +193,19 @@ export async function POST(req: NextRequest) {
                   subject,
                   html,
                 }),
-              }).catch(e => console.error("Email webhook CAWL error:", e));
+              })
+                .then(async (res) => {
+                  if (res.ok) {
+                    await logEmail({ to: parentEmail, subject, context: "cawl_webhook", template: templateKey, status: "sent", sentBy: "system", paymentId: merchantRef, familyId: pData.familyId });
+                  } else {
+                    const errText = await res.text().catch(() => "");
+                    await logEmail({ to: parentEmail, subject, context: "cawl_webhook", template: templateKey, status: "failed", error: `HTTP ${res.status}: ${errText}`.slice(0, 500), sentBy: "system", paymentId: merchantRef, familyId: pData.familyId });
+                  }
+                })
+                .catch(async (e) => {
+                  await logEmail({ to: parentEmail, subject, context: "cawl_webhook", template: templateKey, status: "failed", error: e?.message || String(e), sentBy: "system", paymentId: merchantRef, familyId: pData.familyId });
+                  console.error("Email webhook CAWL error:", e);
+                });
             } catch (emailErr) {
               console.error("Email template CAWL webhook error:", emailErr);
             }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { compareCreneaux } from "@/lib/creneau-sort";
+import { logEmail } from "@/lib/email-log";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -18,11 +19,15 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const today = new Date();
-    const todayStr = today.toISOString().split("T")[0];
-    const dateLabel = today.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+    // target=tomorrow → envoyer le récap de DEMAIN (cas du cron du soir)
+    // target=today (défaut) → récap d'aujourd'hui (cas de lancement manuel le matin)
+    const target = new URL(req.url).searchParams.get("target") || "today";
+    const targetDate = new Date();
+    if (target === "tomorrow") targetDate.setDate(targetDate.getDate() + 1);
+    const todayStr = targetDate.toISOString().split("T")[0];
+    const dateLabel = targetDate.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 
-    console.log(`📋 Récap quotidien moniteurs pour le ${todayStr}`);
+    console.log(`📋 Récap quotidien moniteurs pour le ${todayStr} (target=${target})`);
 
     // 1. Charger tous les créneaux du jour
     const creneauxSnap = await adminDb.collection("creneaux")
@@ -30,7 +35,7 @@ export async function GET(req: NextRequest) {
       .get();
 
     if (creneauxSnap.empty) {
-      console.log("  → Aucun créneau aujourd'hui");
+      console.log("  → Aucun créneau ce jour-là");
       return NextResponse.json({ sent: 0, date: todayStr, message: "Aucun créneau" });
     }
 
@@ -223,20 +228,29 @@ export async function GET(req: NextRequest) {
           </div>`;
 
         for (const email of emails) {
+          const subject = `📋 Planning ${dateLabel} — ${isPersonal ? `${monitorCreneaux.length} cours` : `${(coursToShow as any[]).length} cours`}`;
           try {
-            await fetch("https://api.resend.com/emails", {
+            const resendRes = await fetch("https://api.resend.com/emails", {
               method: "POST",
               headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
               body: JSON.stringify({
                 from: fromEmail,
                 to: email,
-                subject: `📋 Planning ${dateLabel} — ${isPersonal ? `${monitorCreneaux.length} cours` : `${(coursToShow as any[]).length} cours`}`,
+                subject,
                 html,
               }),
             });
-            emailsSent++;
-            console.log(`  📧 Email récap envoyé à ${email}`);
+            if (resendRes.ok) {
+              emailsSent++;
+              await logEmail({ to: email, subject, context: "cron_monitor_recap", template: "monitorRecap", status: "sent", sentBy: "system" });
+              console.log(`  📧 Email récap envoyé à ${email}`);
+            } else {
+              const errText = await resendRes.text().catch(() => "");
+              await logEmail({ to: email, subject, context: "cron_monitor_recap", template: "monitorRecap", status: "failed", error: `HTTP ${resendRes.status}: ${errText}`.slice(0, 500), sentBy: "system" });
+              console.error(`  ❌ Resend ${resendRes.status} pour ${email}`);
+            }
           } catch (e) {
+            await logEmail({ to: email, subject, context: "cron_monitor_recap", template: "monitorRecap", status: "failed", error: (e as any)?.message || String(e), sentBy: "system" });
             console.error(`  ❌ Erreur email ${email}:`, e);
           }
         }

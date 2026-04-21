@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
+import { logEmail } from "@/lib/email-log";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -12,12 +13,15 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Date de demain
+    // target=tomorrow (défaut) → rappels pour demain (classique)
+    // target=after-tomorrow → rappels pour après-demain (non utilisé pour l'instant)
+    // Depuis le cron du soir à 20h : target=tomorrow est exactement ce qu'il faut
+    const target = new URL(req.url).searchParams.get("target") || "tomorrow";
     const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setDate(tomorrow.getDate() + (target === "after-tomorrow" ? 2 : 1));
     const tomorrowStr = tomorrow.toISOString().split("T")[0];
 
-    console.log(`🔔 Rappels J-1 pour le ${tomorrowStr}`);
+    console.log(`🔔 Rappels J-1 pour le ${tomorrowStr} (target=${target})`);
 
     // Charger tous les créneaux de demain
     const creneauxSnap = await adminDb.collection("creneaux")
@@ -91,6 +95,10 @@ export async function GET(req: NextRequest) {
     let errors = 0;
 
     for (const [email, { parentName, items }] of recipients) {
+      const childrenStr = [...new Set(items.map(i => i.childName))].filter(Boolean).join(", ");
+      const subject = items.length === 1
+        ? `Rappel — ${items[0].coursTitle} demain`
+        : `Rappel — ${items.length} séances demain`;
       try {
         // Grouper les items par enfant pour un email lisible
         const lignes = items.map(item => `
@@ -104,11 +112,6 @@ export async function GET(req: NextRequest) {
             ${item.moniteur ? `<p style="margin:4px 0 0;color:#555;font-size:13px;">👤 ${item.moniteur}</p>` : ""}
           </div>
         `).join("");
-
-        const childrenStr = [...new Set(items.map(i => i.childName))].filter(Boolean).join(", ");
-        const subject = items.length === 1
-          ? `Rappel — ${items[0].coursTitle} demain`
-          : `Rappel — ${items.length} séances demain`;
 
         const html = `
           <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
@@ -133,7 +136,7 @@ export async function GET(req: NextRequest) {
           </div>
         `;
 
-        await fetch("https://api.resend.com/emails", {
+        const resendRes = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${resendKey}`,
@@ -142,10 +145,33 @@ export async function GET(req: NextRequest) {
           body: JSON.stringify({ from: fromEmail, to: email, subject, html }),
         });
 
-        sent++;
-        console.log(`  ✅ Rappel envoyé à ${email} (${items.length} séance${items.length > 1 ? "s" : ""})`);
+        if (resendRes.ok) {
+          sent++;
+          await logEmail({
+            to: email, subject,
+            context: "cron_rappel_j1", template: "rappelJ1",
+            status: "sent", sentBy: "system",
+          });
+          console.log(`  ✅ Rappel envoyé à ${email} (${items.length} séance${items.length > 1 ? "s" : ""})`);
+        } else {
+          errors++;
+          const errText = await resendRes.text().catch(() => "");
+          await logEmail({
+            to: email, subject,
+            context: "cron_rappel_j1", template: "rappelJ1",
+            status: "failed", error: `HTTP ${resendRes.status}: ${errText}`.slice(0, 500),
+            sentBy: "system",
+          });
+          console.error(`  ❌ Resend ${resendRes.status} pour ${email}`);
+        }
       } catch (e) {
         errors++;
+        await logEmail({
+          to: email, subject,
+          context: "cron_rappel_j1", template: "rappelJ1",
+          status: "failed", error: (e as any)?.message || String(e),
+          sentBy: "system",
+        });
         console.error(`  ❌ Erreur envoi à ${email}:`, e);
       }
     }

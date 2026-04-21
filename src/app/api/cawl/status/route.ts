@@ -5,6 +5,7 @@ import { loadTemplate } from "@/lib/email-template-loader";
 import { awardLoyaltyPointsServer } from "@/lib/fidelite";
 import { confirmReservationsForPayment } from "@/lib/reservations";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
+import { logEmail } from "@/lib/email-log";
 import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -297,7 +298,19 @@ export async function GET(req: NextRequest) {
               ...(process.env.RESEND_BCC_EMAIL ? { bcc: process.env.RESEND_BCC_EMAIL } : {}),
               subject, html,
             }),
-          }).catch(e => console.error("Email CAWL error:", e));
+          })
+            .then(async (res) => {
+              if (res.ok) {
+                await logEmail({ to: parentEmail, subject, context: "cawl_status_check", template: templateKey, status: "sent", sentBy: "system", paymentId: payRef?.id, familyId: pData.familyId });
+              } else {
+                const errText = await res.text().catch(() => "");
+                await logEmail({ to: parentEmail, subject, context: "cawl_status_check", template: templateKey, status: "failed", error: `HTTP ${res.status}: ${errText}`.slice(0, 500), sentBy: "system", paymentId: payRef?.id, familyId: pData.familyId });
+              }
+            })
+            .catch(async (e) => {
+              await logEmail({ to: parentEmail, subject, context: "cawl_status_check", template: templateKey, status: "failed", error: e?.message || String(e), sentBy: "system", paymentId: payRef?.id, familyId: pData.familyId });
+              console.error("Email CAWL error:", e);
+            });
         } catch (e) { console.error("Email template error:", e); }
       }
     } else if (pData?.status === "paid") {

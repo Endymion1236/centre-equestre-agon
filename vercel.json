@@ -1,20 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/cron/daily-notifications",
-      "schedule": "30 5 * * *"
-    },
-    {
-      "path": "/api/cron/charge-stage-balances",
-      "schedule": "0 8 * * *"
-    },
-    {
-      "path": "/api/cron/daily-monitor-recap",
-      "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/rappels-j1",
-      "schedule": "0 7 * * *"
+      "path": "/api/cron/daily-emails",
+      "schedule": "0 20 * * *"
     }
   ]
 }

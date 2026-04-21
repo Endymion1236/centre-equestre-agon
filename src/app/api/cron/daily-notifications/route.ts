@@ -3,6 +3,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { sendPush } from "@/lib/push";
 import { loadTemplate } from "@/lib/email-template-loader";
 import { compareCreneaux } from "@/lib/creneau-sort";
+import { logEmail } from "@/lib/email-log";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -29,14 +30,20 @@ export async function GET(req: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
 
   try {
+    // target=tomorrow → décalage de +1 jour (cron du soir pour le lendemain)
+    // target=today (défaut) → sémantique historique (cron du matin pour aujourd'hui)
+    const target = new URL(req.url).searchParams.get("target") || "today";
+    const dayShift = target === "tomorrow" ? 1 : 0;
+
     // ══════════════════════════════════════
-    // JOB 1 : RÉCAP MONITEURS (planning du jour)
+    // JOB 1 : RÉCAP MONITEURS (planning du jour cible)
     // ══════════════════════════════════════
     const today = new Date();
+    today.setDate(today.getDate() + dayShift);
     const todayStr = today.toISOString().split("T")[0];
     const todayLabel = today.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 
-    console.log(`\n📋 [JOB 1] Récap moniteurs — ${todayStr}`);
+    console.log(`\n📋 [JOB 1] Récap moniteurs — ${todayStr} (target=${target})`);
 
     const todaySnap = await adminDb.collection("creneaux").where("date", "==", todayStr).get();
     const todayCreneaux = todaySnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
@@ -145,15 +152,26 @@ export async function GET(req: NextRequest) {
           </div>`;
 
           for (const email of emails) {
+            const subject = `📋 Planning ${todayLabel} — ${isPersonal ? `${monitorCreneaux.length} cours` : `${coursToShow.length} cours`}`;
             try {
-              await fetch("https://api.resend.com/emails", {
+              const resendRes = await fetch("https://api.resend.com/emails", {
                 method: "POST",
                 headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
-                body: JSON.stringify({ from: fromEmail, to: email, subject: `📋 Planning ${todayLabel} — ${isPersonal ? `${monitorCreneaux.length} cours` : `${coursToShow.length} cours`}`, html }),
+                body: JSON.stringify({ from: fromEmail, to: email, subject, html }),
               });
-              results.monitorRecap.emailsSent++;
-              console.log(`  📧 Email → ${email}`);
-            } catch (e) { console.error(`  ❌ Email ${email}:`, e); }
+              if (resendRes.ok) {
+                results.monitorRecap.emailsSent++;
+                await logEmail({ to: email, subject, context: "cron_monitor_recap", template: "monitorRecap", status: "sent", sentBy: "system" });
+                console.log(`  📧 Email → ${email}`);
+              } else {
+                const errText = await resendRes.text().catch(() => "");
+                await logEmail({ to: email, subject, context: "cron_monitor_recap", template: "monitorRecap", status: "failed", error: `HTTP ${resendRes.status}: ${errText}`.slice(0, 500), sentBy: "system" });
+                console.error(`  ❌ Resend ${resendRes.status} pour ${email}`);
+              }
+            } catch (e) {
+              await logEmail({ to: email, subject, context: "cron_monitor_recap", template: "monitorRecap", status: "failed", error: (e as any)?.message || String(e), sentBy: "system" });
+              console.error(`  ❌ Email ${email}:`, e);
+            }
           }
         }
       }
@@ -162,14 +180,14 @@ export async function GET(req: NextRequest) {
     }
 
     // ══════════════════════════════════════
-    // JOB 2 : RAPPELS J-1 FAMILLES (demain)
+    // JOB 2 : RAPPELS J-1 FAMILLES (lendemain du jour cible)
     // ══════════════════════════════════════
     const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setDate(tomorrow.getDate() + 1 + dayShift);
     const tomorrowStr = tomorrow.toISOString().split("T")[0];
     const tomorrowLabel = tomorrow.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 
-    console.log(`\n🔔 [JOB 2] Rappels J-1 pour le ${tomorrowStr}`);
+    console.log(`\n🔔 [JOB 2] Rappels J-1 pour le ${tomorrowStr} (target=${target})`);
 
     const tomorrowSnap = await adminDb.collection("creneaux").where("date", "==", tomorrowStr).get();
     const tomorrowCreneaux = tomorrowSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((c: any) => c.status !== "closed") as any[];
@@ -255,14 +273,24 @@ export async function GET(req: NextRequest) {
               lignes: lignesHtml,
             });
 
-            await fetch("https://api.resend.com/emails", {
+            const resendRes = await fetch("https://api.resend.com/emails", {
               method: "POST",
               headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
               body: JSON.stringify({ from: fromEmail, to: email, subject, html }),
             });
-            results.familyReminders.emailsSent++;
-            console.log(`  ✅ Rappel J-1 → ${email}`);
-          } catch { results.familyReminders.errors++; }
+            if (resendRes.ok) {
+              results.familyReminders.emailsSent++;
+              await logEmail({ to: email, subject, context: "cron_rappel_j1", template: "rappelJ1", status: "sent", sentBy: "system" });
+              console.log(`  ✅ Rappel J-1 → ${email}`);
+            } else {
+              results.familyReminders.errors++;
+              const errText = await resendRes.text().catch(() => "");
+              await logEmail({ to: email, subject, context: "cron_rappel_j1", template: "rappelJ1", status: "failed", error: `HTTP ${resendRes.status}: ${errText}`.slice(0, 500), sentBy: "system" });
+            }
+          } catch (e) {
+            results.familyReminders.errors++;
+            await logEmail({ to: email, subject: "Rappel J-1", context: "cron_rappel_j1", template: "rappelJ1", status: "failed", error: (e as any)?.message || String(e), sentBy: "system" });
+          }
         }
       }
     } else {
@@ -351,7 +379,7 @@ export async function GET(req: NextRequest) {
             </div>
           </div>`;
 
-          await fetch("https://api.resend.com/emails", {
+          const resendRes = await fetch("https://api.resend.com/emails", {
             method: "POST",
             headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -361,10 +389,18 @@ export async function GET(req: NextRequest) {
               subject, html,
             }),
           });
-          results.soldeStagej7.emailsSent++;
-          console.log(`  ✅ Rappel solde J-7 → ${data.email} (${totalSolde.toFixed(2)}€)`);
+          if (resendRes.ok) {
+            results.soldeStagej7.emailsSent++;
+            await logEmail({ to: data.email, subject, context: "cron_stage_solde", template: "stageSoldeJ7", status: "sent", sentBy: "system", familyId, paymentId: data.items[0]?.paymentId });
+            console.log(`  ✅ Rappel solde J-7 → ${data.email} (${totalSolde.toFixed(2)}€)`);
+          } else {
+            results.soldeStagej7.errors++;
+            const errText = await resendRes.text().catch(() => "");
+            await logEmail({ to: data.email, subject, context: "cron_stage_solde", template: "stageSoldeJ7", status: "failed", error: `HTTP ${resendRes.status}: ${errText}`.slice(0, 500), sentBy: "system", familyId, paymentId: data.items[0]?.paymentId });
+          }
         } catch (e) {
           results.soldeStagej7.errors++;
+          await logEmail({ to: data.email, subject: "Rappel solde stage J-7", context: "cron_stage_solde", template: "stageSoldeJ7", status: "failed", error: (e as any)?.message || String(e), sentBy: "system", familyId });
           console.error(`  ❌ Erreur rappel solde J-7 → ${data.email}`, e);
         }
       }

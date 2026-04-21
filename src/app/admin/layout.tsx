@@ -68,6 +68,7 @@ const navItems = [
   { href: "/admin/communication", icon: Mail, label: "Communication" },
   { href: "/admin/email-templates", icon: Mail, label: "Templates email" },
   { href: "/admin/email-reprise", icon: Send, label: "Email reprise" },
+  { href: "/admin/emails-log", icon: Mail, label: "Journal emails" },
   // ─── Config ───
   { separator: true, label: "Configuration" },
   { href: "/admin/activites", icon: ClipboardList, label: "Activités" },

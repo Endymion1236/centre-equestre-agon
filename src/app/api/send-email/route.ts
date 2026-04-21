@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { verifyAuth } from "@/lib/api-auth";
+import { logEmail } from "@/lib/email-log";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,14 @@ export async function POST(request: NextRequest) {
   const auth = await verifyAuth(request, { adminOnly: true });
   if (auth instanceof NextResponse) return auth;
 
+  // Champs utilisés aussi en cas d'erreur pour le log
+  let logTo: string | string[] = "";
+  let logSubject = "";
+  let logContext = "admin_manual";
+  let logTemplate: string | undefined;
+  let logMeta: { familyId?: string; paymentId?: string; creneauId?: string } = {};
+  const sentBy = (auth as any)?.uid || "admin";
+
   try {
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) {
@@ -27,9 +36,23 @@ export async function POST(request: NextRequest) {
 
     const resend = new Resend(apiKey);
     const body = await request.json();
-    const { to, subject, html, replyTo, bcc } = body;
+    const { to, subject, html, replyTo, bcc, context, template, familyId, paymentId, creneauId } = body;
+
+    logTo = to;
+    logSubject = subject || "";
+    if (context) logContext = String(context);
+    if (template) logTemplate = String(template);
+    if (familyId) logMeta.familyId = String(familyId);
+    if (paymentId) logMeta.paymentId = String(paymentId);
+    if (creneauId) logMeta.creneauId = String(creneauId);
 
     if (!to || !subject || !html) {
+      await logEmail({
+        to: to || "", subject: subject || "",
+        context: logContext, template: logTemplate,
+        status: "failed", error: "Champs manquants",
+        sentBy, ...logMeta,
+      });
       return NextResponse.json(
         { error: "Champs requis : to, subject, html" },
         { status: 400 }
@@ -43,6 +66,12 @@ export async function POST(request: NextRequest) {
     );
 
     if (validRecipients.length === 0) {
+      await logEmail({
+        to, subject,
+        context: logContext, template: logTemplate,
+        status: "failed", error: "Aucun destinataire valide",
+        sentBy, ...logMeta,
+      });
       return NextResponse.json(
         { error: "Aucun destinataire valide" },
         { status: 400 }
@@ -80,9 +109,22 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error("Resend error:", error);
-      console.error("API error:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+      await logEmail({
+        to: validRecipients, subject,
+        context: logContext, template: logTemplate,
+        status: "failed", error: (error as any)?.message || String(error),
+        sentBy, ...logMeta,
+      });
+      return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
     }
+
+    // Succès — log
+    await logEmail({
+      to: validRecipients, subject,
+      context: logContext, template: logTemplate,
+      status: "sent",
+      sentBy, ...logMeta,
+    });
 
     return NextResponse.json({
       success: true,
@@ -93,7 +135,12 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("Send email error:", error);
-    console.error("API error:", error);
+    await logEmail({
+      to: logTo || "", subject: logSubject,
+      context: logContext, template: logTemplate,
+      status: "failed", error: error?.message || String(error),
+      sentBy, ...logMeta,
+    });
     return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }
