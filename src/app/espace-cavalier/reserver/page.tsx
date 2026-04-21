@@ -266,6 +266,34 @@ export default function ReserverPage() {
       return;
     }
     const child = children.find((c: any) => c.id === childId);
+
+    // ── Règle métier : 12 ans minimum pour les promenades ──────────────
+    // "Année des 12 ans" : l'enfant doit être né au plus tard l'année N-12
+    // (où N = année courante). Ex : en 2026, il faut être né en 2014 ou avant.
+    if (creneau.activityType === "balade" && child) {
+      const bd: any = (child as any).birthDate;
+      const birthDate = bd?.seconds ? new Date(bd.seconds * 1000) : (bd ? new Date(bd) : null);
+      if (birthDate && !isNaN(birthDate.getTime())) {
+        const anneeSeuil = new Date().getFullYear() - 12;
+        if (birthDate.getFullYear() > anneeSeuil) {
+          alert(
+            `Désolé, l'inscription aux promenades est réservée aux cavaliers qui ont 12 ans (ou plus) dans l'année en cours.\n\n` +
+            `${(child as any)?.firstName || "Cet enfant"} est trop jeune pour cette activité.\n\n` +
+            `Contactez le centre équestre pour voir les alternatives adaptées à son âge.`
+          );
+          return;
+        }
+      } else {
+        // Pas de date de naissance renseignée → on bloque par précaution et on invite à compléter
+        alert(
+          `Aucune date de naissance n'est renseignée pour ${(child as any)?.firstName || "cet enfant"}.\n\n` +
+          `Les promenades sont réservées aux cavaliers de 12 ans et plus. Merci de compléter la date de naissance dans le profil avant l'inscription.`
+        );
+        return;
+      }
+    }
+    // ── fin règle d'âge ────────────────────────────────────────────────
+
     const priceTTC = (creneau as any).priceTTC || creneau.priceHT * (1 + (creneau.tvaTaux || 5.5) / 100);
     // Enlever le suffixe " (NomFamille)" pour les cavaliers liés
     const cleanName = ((child as any)?.firstName || "?").split(" (")[0];
@@ -924,12 +952,41 @@ export default function ReserverPage() {
                             <div className="mt-3 pt-3 border-t border-blue-100">
                               <div className="font-body text-xs text-slate-600 mb-2">Pour quel enfant ?</div>
                               <div className="flex flex-wrap gap-2">
-                                {children.filter((ch: any) => !(c.enrolled || []).some((e: any) => e.childId === ch.id)).map((ch: any) => (
-                                  <button key={ch.id} onClick={(e) => { e.stopPropagation(); addCoursToCart(c, ch.id); }}
-                                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 font-body text-xs text-blue-800 cursor-pointer hover:bg-blue-100">
-                                    <Users size={12} /> {ch.firstName}
-                                  </button>
-                                ))}
+                                {children.filter((ch: any) => !(c.enrolled || []).some((e: any) => e.childId === ch.id)).map((ch: any) => {
+                                  // Règle : 12 ans minimum pour les promenades (année des 12 ans)
+                                  let tooYoung = false;
+                                  if (c.activityType === "balade") {
+                                    const bd: any = ch.birthDate;
+                                    const bdDate = bd?.seconds ? new Date(bd.seconds * 1000) : (bd ? new Date(bd) : null);
+                                    if (!bdDate || isNaN(bdDate.getTime())) tooYoung = true; // date absente → bloqué
+                                    else if (bdDate.getFullYear() > new Date().getFullYear() - 12) tooYoung = true;
+                                  }
+                                  return (
+                                    <button key={ch.id}
+                                      onClick={(e) => { e.stopPropagation(); addCoursToCart(c, ch.id); }}
+                                      disabled={tooYoung}
+                                      title={tooYoung ? "Promenades réservées aux 12 ans et plus" : undefined}
+                                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-body text-xs cursor-pointer ${
+                                        tooYoung
+                                          ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed line-through"
+                                          : "border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100"
+                                      }`}>
+                                      <Users size={12} /> {ch.firstName}
+                                      {tooYoung && <span className="ml-1">🔒</span>}
+                                    </button>
+                                  );
+                                })}
+                                {/* Message si tous les enfants sont trop jeunes pour cette balade */}
+                                {c.activityType === "balade" && children.filter((ch: any) => !(c.enrolled || []).some((e: any) => e.childId === ch.id)).length > 0 && children.filter((ch: any) => !(c.enrolled || []).some((e: any) => e.childId === ch.id)).every((ch: any) => {
+                                  const bd: any = ch.birthDate;
+                                  const bdDate = bd?.seconds ? new Date(bd.seconds * 1000) : (bd ? new Date(bd) : null);
+                                  if (!bdDate || isNaN(bdDate.getTime())) return true;
+                                  return bdDate.getFullYear() > new Date().getFullYear() - 12;
+                                }) && (
+                                  <div className="w-full mt-1 font-body text-[11px] text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1.5">
+                                    ⚠️ Les promenades sont réservées aux cavaliers de 12 ans et plus (nés en {new Date().getFullYear() - 12} ou avant).
+                                  </div>
+                                )}
                               </div>
                             </div>
                           )}
@@ -989,20 +1046,43 @@ export default function ReserverPage() {
               <div className="flex flex-col gap-2">
                 {(family?.children || [])
                   .filter((ch: any) => !(bookingCreneau.enrolled || []).some((e: any) => e.childId === ch.id))
-                  .map((ch: any) => (
-                    <button key={ch.id}
-                      onClick={() => {
-                        addCoursToCart(bookingCreneau, ch.id);
-                        setBookingCreneau(null);
-                        setShowCart(true);
-                      }}
-                      className="flex items-center justify-between px-4 py-3 rounded-xl border border-blue-200 bg-blue-50 font-body text-sm text-blue-800 cursor-pointer hover:bg-blue-100 transition-all">
-                      <span className="font-semibold">{ch.firstName}</span>
-                      {ch.galopLevel && ch.galopLevel !== "—" && (
-                        <span className="font-body text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">G{ch.galopLevel}</span>
-                      )}
-                    </button>
-                  ))
+                  .map((ch: any) => {
+                    // Règle : 12 ans minimum pour les promenades
+                    let tooYoung = false;
+                    if (bookingCreneau.activityType === "balade") {
+                      const bd: any = ch.birthDate;
+                      const bdDate = bd?.seconds ? new Date(bd.seconds * 1000) : (bd ? new Date(bd) : null);
+                      if (!bdDate || isNaN(bdDate.getTime())) tooYoung = true;
+                      else if (bdDate.getFullYear() > new Date().getFullYear() - 12) tooYoung = true;
+                    }
+                    return (
+                      <button key={ch.id}
+                        onClick={() => {
+                          if (tooYoung) {
+                            alert(`Les promenades sont réservées aux cavaliers de 12 ans et plus (nés en ${new Date().getFullYear() - 12} ou avant).`);
+                            return;
+                          }
+                          addCoursToCart(bookingCreneau, ch.id);
+                          setBookingCreneau(null);
+                          setShowCart(true);
+                        }}
+                        disabled={tooYoung}
+                        title={tooYoung ? "Promenades réservées aux 12 ans et plus" : undefined}
+                        className={`flex items-center justify-between px-4 py-3 rounded-xl border font-body text-sm transition-all ${
+                          tooYoung
+                            ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
+                            : "border-blue-200 bg-blue-50 text-blue-800 cursor-pointer hover:bg-blue-100"
+                        }`}>
+                        <span className="font-semibold">
+                          {ch.firstName}
+                          {tooYoung && <span className="ml-2 text-xs">🔒 Moins de 12 ans</span>}
+                        </span>
+                        {ch.galopLevel && ch.galopLevel !== "—" && (
+                          <span className="font-body text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">G{ch.galopLevel}</span>
+                        )}
+                      </button>
+                    );
+                  })
                 }
                 {(family?.children || []).filter((ch: any) => !(bookingCreneau.enrolled || []).some((e: any) => e.childId === ch.id)).length === 0 && (
                   <p className="font-body text-sm text-slate-500 text-center py-2">Tous vos cavaliers sont déjà inscrits à ce créneau.</p>

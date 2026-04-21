@@ -10,6 +10,7 @@ import {
 } from "@/lib/planning-services";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
+import { HelpButton } from "@/components/HelpButton";
 import { emailTemplates } from "@/lib/email-templates";
 import { generateOrderId } from "@/lib/utils";
 import {
@@ -1121,7 +1122,10 @@ export default function PlanningPage() {
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
-        <h1 className="font-display text-2xl font-bold text-blue-800">Planning</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="font-display text-2xl font-bold text-blue-800">Planning</h1>
+          <HelpButton tourId="planning-enroll" manualLink="/admin/manuel#planning" />
+        </div>
         <div className="flex items-center gap-2 flex-wrap">
 
           {/* ─── Segmented control : Mois / Semaine / Timeline / Jour ─── */}
