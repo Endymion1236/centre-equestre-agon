@@ -38,11 +38,12 @@ export default function PoneyChargeView({ creneaux, equides, availableHorses }: 
   });
 
   // Trier les équidés par ordre, fallback alphabétique
+  const displayName = (eq: any): string => (eq?.surnom && eq.surnom.trim()) ? eq.surnom : (eq?.name || "");
   const sorted = [...availableHorses].sort((a, b) => {
     const oa = a.ordre ?? 999;
     const ob = b.ordre ?? 999;
     if (oa !== ob) return oa - ob;
-    return (a.name || "").localeCompare(b.name || "");
+    return displayName(a).localeCompare(displayName(b));
   });
 
   const col1 = sorted.filter(h => (h.ordre ?? 999) <= 22);
@@ -62,7 +63,7 @@ export default function PoneyChargeView({ creneaux, equides, availableHorses }: 
     return (
       <tr key={h.id} className={`border-b border-gray-100 ${heures > 0 ? "" : "opacity-50"}`}>
         <td className="py-1 px-2 font-body text-[10px] text-slate-400 w-6 text-right">{h.ordre ?? "—"}</td>
-        <td className="py-1 px-2 font-body text-xs text-slate-700 truncate max-w-[100px]" title={h.name}>{h.name}</td>
+        <td className="py-1 px-2 font-body text-xs text-slate-700 truncate max-w-[100px]" title={h.name}>{displayName(h)}</td>
         <td className={`py-1 px-2 font-body text-xs text-right tabular-nums ${color}`}>
           {heures > 0 ? `${heures}h` : "—"}
           {seances > 0 && <span className="ml-1 text-[9px] text-slate-400">({seances}s)</span>}

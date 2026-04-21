@@ -95,7 +95,7 @@ export default function TabFiches({
   const [saving, setSaving] = useState(false);
 
   const emptyForm = {
-    name: "", sire: "", puce: "", type: "poney" as EquideType, sex: "hongre" as EquideSex,
+    name: "", surnom: "", sire: "", puce: "", type: "poney" as EquideType, sex: "hongre" as EquideSex,
     robe: "Bai", race: "", birthDate: "", toise: "", photo: null as string | null,
     provenance: "Achat", proprietaire: "Centre",
     dateArrivee: new Date().toISOString().split("T")[0],
@@ -111,7 +111,7 @@ export default function TabFiches({
   useEffect(() => {
     if (editingEquide) {
       setForm({
-        name: editingEquide.name, sire: editingEquide.sire || "", puce: editingEquide.puce || "",
+        name: editingEquide.name, surnom: (editingEquide as any).surnom || "", sire: editingEquide.sire || "", puce: editingEquide.puce || "",
         type: editingEquide.type, sex: editingEquide.sex, robe: editingEquide.robe || "Bai",
         race: editingEquide.race || "", birthDate: toDateStr(editingEquide.birthDate),
         toise: editingEquide.toise ? String(editingEquide.toise) : "", photo: editingEquide.photo,
@@ -148,7 +148,7 @@ export default function TabFiches({
     setSaving(true);
     try {
       const data: any = {
-        name: form.name.trim(), sire: form.sire.trim(), puce: form.puce.trim(),
+        name: form.name.trim(), surnom: form.surnom.trim(), sire: form.sire.trim(), puce: form.puce.trim(),
         type: form.type, sex: form.sex, robe: form.robe, race: form.race.trim(),
         birthDate: form.birthDate ? Timestamp.fromDate(new Date(form.birthDate)) : null,
         toise: form.toise ? Number(form.toise) : null, photo: form.photo,
@@ -200,8 +200,12 @@ export default function TabFiches({
                 <div className="font-body text-xs font-semibold text-blue-500 uppercase tracking-wider mb-3">Identité</div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2 sm:col-span-1">
-                    <label className={labelStyle}>Nom *</label>
-                    <input className={inputStyle} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Ex: Gatsby"/>
+                    <label className={labelStyle}>Nom officiel *</label>
+                    <input className={inputStyle} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Ex: Galadriel du Moulin"/>
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className={labelStyle}>Surnom <span className="text-slate-400 font-normal">(usuel, affiché au montoir)</span></label>
+                    <input className={inputStyle} value={form.surnom} onChange={e => setForm(f => ({ ...f, surnom: e.target.value }))} placeholder="Ex: Gala"/>
                   </div>
                   <div>
                     <label className={labelStyle}>Type</label>

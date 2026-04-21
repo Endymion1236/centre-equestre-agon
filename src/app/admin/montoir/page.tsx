@@ -88,6 +88,14 @@ export default function MontoirPage() {
   // Liste des équidés disponibles (pas sortis, pas indisponibles)
   // NB : le schéma côté création (cavalerie/TabIndispos) utilise { active, dateDebut, dateFin }
   // On supporte aussi les anciens formats { status, startDate, endDate } par sécurité.
+  // Nom affiché : surnom usuel si renseigné, sinon nom officiel
+  const displayName = (eq: any): string => (eq?.surnom && eq.surnom.trim()) ? eq.surnom : (eq?.name || "");
+  // Résout un horseName stocké (nom officiel) vers le nom à afficher (surnom > officiel)
+  const displayFromHorseName = (horseName: string): string => {
+    if (!horseName) return "";
+    const eq = equides.find(x => x.name === horseName);
+    return eq ? displayName(eq) : horseName;
+  };
   const isIndispoActive = (i: any, dateStr: string): boolean => {
     // Terminée ? (deux conventions possibles)
     if (i.active === false) return false;
@@ -116,14 +124,14 @@ export default function MontoirPage() {
 
     return equides
       .filter(e => e.status !== "sorti" && e.status !== "deces" && !activeIndispos.includes(e.id))
-      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      .sort((a, b) => displayName(a).localeCompare(displayName(b)));
   }, [equides, indisponibilites, dateStr]);
 
   const unavailableHorses = useMemo(() => {
     const activeIndispos = indisponibilites.filter((i: any) => isIndispoActive(i, dateStr));
     return activeIndispos.map((i: any) => {
       const eq = equides.find(e => e.id === i.equideId);
-      return { name: eq?.name || "?", reason: i.motif || "Indisponible" };
+      return { name: eq ? displayName(eq) : "?", reason: i.motif || "Indisponible" };
     });
   }, [equides, indisponibilites, dateStr]);
 
@@ -258,7 +266,7 @@ export default function MontoirPage() {
 
         const seanceNote = {
           date: new Date().toISOString(),
-          text: `Séance : ${c.activityTitle} (${c.startTime}-${c.endTime})${child.horseName ? ` — Poney : ${child.horseName}` : ""}`,
+          text: `Séance : ${c.activityTitle} (${c.startTime}-${c.endTime})${child.horseName ? ` — Poney : ${displayFromHorseName(child.horseName)}` : ""}`,
           author: "Montoir (auto)",
           type: "seance",
           creneauId: cid,
@@ -651,10 +659,10 @@ export default function MontoirPage() {
           <div className="flex flex-wrap gap-1.5">
             {availableHorses.map(h => {
               const ch = poneyCharge[h.name];
-              if (!ch) return <span key={h.id} className="font-body text-[10px] px-2 py-1 rounded-lg bg-green-50 text-green-700">{h.name} 0s</span>;
+              if (!ch) return <span key={h.id} className="font-body text-[10px] px-2 py-1 rounded-lg bg-green-50 text-green-700">{displayName(h)} 0s</span>;
               const color = ch.seances >= seuilPoney.rouge ? "bg-red-50 text-red-600" : ch.seances >= seuilPoney.orange ? "bg-orange-50 text-orange-600" : ch.seances >= 2 ? "bg-yellow-50 text-yellow-700" : "bg-green-50 text-green-700";
               const heuresAlert = ch.heures >= seuilPoney.heures;
-              return <span key={h.id} className={`font-body text-[10px] px-2 py-1 rounded-lg font-semibold ${color}`}>{h.name} {ch.seances}s·{ch.heures}h{heuresAlert ? " ⚠️" : ""}</span>;
+              return <span key={h.id} className={`font-body text-[10px] px-2 py-1 rounded-lg font-semibold ${color}`}>{displayName(h)} {ch.seances}s·{ch.heures}h{heuresAlert ? " ⚠️" : ""}</span>;
             })}
             {unavailableHorses.map((h, i) => (
               <span key={i} className="font-body text-[10px] px-2 py-1 rounded-lg bg-gray-100 text-gray-400 line-through">{h.name}</span>
@@ -768,7 +776,7 @@ export default function MontoirPage() {
                           const chargeStr = charge ? ` (${charge.seances}s)` : "";
                           return <option key={h.id} value={h.name} disabled={usedHere || blockedOther}
                             style={usedHere || blockedOther ? {color:"#ccc"} : charge?.seances >= seuilPoney.orange ? {color:"#f59e0b"} : {}}>
-                            {h.name}{chargeStr}{usedHere ? " ✗" : blockedOther ? " ✗" : usedOther ? " ↺" : ""}
+                            {displayName(h)}{chargeStr}{usedHere ? " ✗" : blockedOther ? " ✗" : usedOther ? " ↺" : ""}
                           </option>;
                         })}
                       </select>
@@ -780,7 +788,7 @@ export default function MontoirPage() {
                       )}
                     </div>
                   );
-                })() : <span className="font-body text-xs font-semibold text-blue-800">{e.horseName||"—"}</span>}</span>
+                })() : <span className="font-body text-xs font-semibold text-blue-800">{displayFromHorseName(e.horseName) || "—"}</span>}</span>
                 <span className="w-20 sm:w-24 flex justify-center gap-1 sm:gap-2">{!closed ? <>
                   <button onClick={()=>togglePresence(c,e.childId,"present")} className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="present"?"bg-green-500 text-white":"bg-gray-100 text-slate-600 hover:bg-green-100"}`}><CheckCircle2 size={18}/></button>
                   <button onClick={()=>togglePresence(c,e.childId,"absent")} className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent"?"bg-red-500 text-white":"bg-gray-100 text-slate-600 hover:bg-red-100"}`}><XCircle size={18}/></button>
@@ -823,7 +831,7 @@ export default function MontoirPage() {
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <span className="font-body text-sm font-semibold text-blue-800">{child.childName}</span>
-                        {child.horseName && <Badge color="blue">🐴 {child.horseName}</Badge>}
+                        {child.horseName && <Badge color="blue">🐴 {displayFromHorseName(child.horseName)}</Badge>}
                       </div>
                       {bilan && <Badge color="green">✓ Analysé</Badge>}
                     </div>

@@ -62,6 +62,9 @@ export default function MontiorDisplayClient() {
   const chevaux = equides.filter(e => e.type === "cheval");
   const poneys  = equides.filter(e => e.type !== "cheval");
 
+  // Nom affiché : surnom usuel si renseigné, sinon nom officiel
+  const displayName = (eq: any): string => (eq?.surnom && eq.surnom.trim()) ? eq.surnom : (eq?.name || "");
+
   // Horaires propres à une liste d'équidés
   const getHoraires = (list: Equide[]) => {
     const names = new Set(list.map(e => e.name));
@@ -170,7 +173,7 @@ export default function MontiorDisplayClient() {
                   opacity: active ? 1 : 0.45,
                 }}>
                   <div style={{ ...styles.cellName, ...styles.equideName, color: active ? "#1e293b" : "#94a3b8" }}>
-                    {eq.name}
+                    {displayName(eq)}
                   </div>
                   {slots.map(h => {
                     const names = riders[h] || [];
