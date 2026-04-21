@@ -108,6 +108,15 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ── Logs de réinitialisation de la base ──────────────────────────────
+    // Audit trail des opérations de reset (vidage de collections). Créés
+    // uniquement par la route API /api/admin/reset-base avec adminDb.
+    // Lecture admin pour consultation. Jamais modifiables ni supprimables.
+    match /resetLogs/{docId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
     // ── Équidés ───────────────────────────────────────────────────────────
     match /equides/{docId} {
       allow read: if isStaff();
