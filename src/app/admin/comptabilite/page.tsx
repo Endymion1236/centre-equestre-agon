@@ -293,6 +293,7 @@ export default function ComptabilitePage() {
       const usedEncIds = new Set<string>();        // ids des encaissements déjà rapprochés
       const usedRemiseSepaIds = new Set<string>(); // ids des remises SEPA déjà rapprochées
       const usedPaymentIds = new Set<string>();    // ids des paiements (virements) déjà rapprochés
+      const usedRemiseIds = new Set<string>();     // ids des bordereaux de remise (chèques/espèces) déjà rapprochés
 
       // Parse la date de la ligne bancaire (formats : DD/MM/YYYY, D/M/YYYY, YYYY-MM-DD, DD-MM-YYYY)
       const parseBankDate = (s: string): Date | null => {
@@ -612,6 +613,40 @@ export default function ComptabilitePage() {
 
         // ── 4. Chèque ─────────────────────────────────────────────────────
         if (label.includes("CHQ") || label.includes("CHEQUE") || label.includes("REMISE CHQ")) {
+
+          // a0) PRIORITÉ ABSOLUE : chercher un bordereau de remise chèque qui
+          //     correspond EXACTEMENT à ce mouvement bancaire. Les bordereaux
+          //     sont créés manuellement via l'onglet "Bordereaux remise" et
+          //     contiennent la liste exacte des chèques remis à la banque.
+          const remiseMatch = (remises || []).find((r: any) => {
+            if (usedRemiseIds.has(r.id)) return false;
+            if (r.paymentMode !== "cheque" && r.paymentMode !== "mixte") return false;
+            if (Math.abs((r.total || 0) - bl.amount) >= 0.02) return false;
+            // Fenêtre : la remise bancaire arrive dans les 10 jours après la création du bordereau
+            if (bankDate && r.date?.seconds) {
+              const rd = new Date(r.date.seconds * 1000);
+              const diff = (bankDate.getTime() - rd.getTime()) / (1000 * 60 * 60 * 24);
+              if (diff < -1 || diff > 15) return false;
+            }
+            return true;
+          });
+          if (remiseMatch) {
+            usedRemiseIds.add(remiseMatch.id);
+            // Marquer les encaissements du bordereau comme consommés
+            const encIds = remiseMatch.encaissementIds || [];
+            encIds.forEach((id: string) => usedEncIds.add(id));
+            // Récupérer les détails des encaissements pour l'affichage
+            const remiseEncs = encaissementsCompta.filter(e => encIds.includes(e.id));
+            const dayLabel = remiseMatch.date?.seconds
+              ? new Date(remiseMatch.date.seconds * 1000).toLocaleDateString("fr-FR")
+              : "?";
+            return {
+              ...bl, matched: true, matchType: "Chèques",
+              matchDetail: `Bordereau du ${dayLabel} — ${remiseMatch.nbPaiements || encIds.length} chèque(s) = ${(remiseMatch.total || 0).toFixed(2)}€`,
+              matchedEncs: remiseEncs.map(encToDetail),
+            };
+          }
+
           // Pool élargi : une remise chèque peut contenir des chèques du mois d'avant
           const allChqEncs = periodEncExtended.filter(e => e.mode === "cheque");
 
@@ -689,7 +724,35 @@ export default function ComptabilitePage() {
 
         // ── 5. Espèces ────────────────────────────────────────────────────
         if (label.includes("ESP") || label.includes("VERSEMENT")) {
-          // On cherche un jour dont la somme des encaissements en espèces = montant du dépôt
+
+          // a0) PRIORITÉ : chercher un bordereau de remise espèces qui correspond
+          const remiseEspMatch = (remises || []).find((r: any) => {
+            if (usedRemiseIds.has(r.id)) return false;
+            if (r.paymentMode !== "especes" && r.paymentMode !== "mixte") return false;
+            if (Math.abs((r.total || 0) - bl.amount) >= 0.02) return false;
+            if (bankDate && r.date?.seconds) {
+              const rd = new Date(r.date.seconds * 1000);
+              const diff = (bankDate.getTime() - rd.getTime()) / (1000 * 60 * 60 * 24);
+              if (diff < -1 || diff > 15) return false;
+            }
+            return true;
+          });
+          if (remiseEspMatch) {
+            usedRemiseIds.add(remiseEspMatch.id);
+            const encIds = remiseEspMatch.encaissementIds || [];
+            encIds.forEach((id: string) => usedEncIds.add(id));
+            const remiseEncs = encaissementsCompta.filter(e => encIds.includes(e.id));
+            const dayLabel = remiseEspMatch.date?.seconds
+              ? new Date(remiseEspMatch.date.seconds * 1000).toLocaleDateString("fr-FR")
+              : "?";
+            return {
+              ...bl, matched: true, matchType: "Espèces",
+              matchDetail: `Bordereau du ${dayLabel} — ${remiseEspMatch.nbPaiements || encIds.length} enc. espèces = ${(remiseEspMatch.total || 0).toFixed(2)}€`,
+              matchedEncs: remiseEncs.map(encToDetail),
+            };
+          }
+
+          // b) On cherche un jour dont la somme des encaissements en espèces = montant du dépôt
           const espByDay: Record<string, { total: number; encs: any[] }> = {};
           for (const e of periodEnc.filter(e => e.mode === "especes")) {
             const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
