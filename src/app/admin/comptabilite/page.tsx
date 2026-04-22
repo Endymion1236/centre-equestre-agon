@@ -958,21 +958,45 @@ export default function ComptabilitePage() {
         const remisEncaissementIds = new Set(
           (remises || []).flatMap((r: any) => r.encaissementIds || [])
         );
-        // Les anciennes remises n'ont que paymentIds : on les utilise pour
-        // considérer tous les encaissements de ces payments comme déjà remis.
-        const remisPaymentIdsLegacy = new Set(
-          (remises || []).flatMap((r: any) => r.paymentIds || [])
-        );
+        // Legacy : certaines remises anciennes n'ont que paymentIds (pas
+        // encaissementIds). Dans ce cas on considère qu'elles concernent
+        // TOUS les encaissements de ces payments DONT LE MODE CORRESPOND
+        // à celui de la remise.
+        // BUG HISTORIQUE (corrigé ici) : avant, on excluait tous les
+        // encaissements d'un paymentId dès qu'une remise le mentionnait,
+        // même si la remise était pour un autre mode. Résultat : pour un
+        // paiement mixte chèque + espèces, quand on remettait le chèque
+        // en banque, l'encaissement espèces du même paiement disparaissait
+        // aussi des "à remettre" → écart visible dans le diag-espèces.
+        const remisPaymentModeLegacy = new Map<string, Set<string>>();
+        (remises || []).forEach((r: any) => {
+          // On ne prend en compte le legacy QUE si la remise n'a pas déjà
+          // encaissementIds (sinon doublon avec le chemin moderne).
+          if ((r.encaissementIds || []).length > 0) return;
+          const mode = r.paymentMode || "autre";
+          (r.paymentIds || []).forEach((pid: string) => {
+            if (!remisPaymentModeLegacy.has(pid)) {
+              remisPaymentModeLegacy.set(pid, new Set());
+            }
+            remisPaymentModeLegacy.get(pid)!.add(mode);
+          });
+        });
 
         const nonRemisEnc = (encaissementsCompta || []).filter((e: any) => {
           // Modes exclus des remises physiques
           if (["virement", "prelevement_sepa", "cb_online", "avoir"].includes(e.mode)) return false;
           // Montant positif uniquement (pas de remboursements)
           if ((e.montant || 0) <= 0) return false;
-          // Déjà remis : soit marqué directement, soit via ancienne remise par payment
+          // Déjà remis : soit marqué directement, soit via encaissementIds
           if (e.remiseId) return false;
           if (remisEncaissementIds.has(e.id)) return false;
-          if (e.paymentId && remisPaymentIdsLegacy.has(e.paymentId)) return false;
+          // Legacy : la remise ne mentionne que paymentIds, on compare aussi le mode
+          if (e.paymentId && remisPaymentModeLegacy.get(e.paymentId)?.has(e.mode)) return false;
+          // Legacy mixte : remise.paymentMode === 'mixte' + paymentId matche → déjà remis
+          // (on ne peut pas distinguer les modes, on suppose que toute la
+          // commande est remise, comportement historique)
+          if (e.paymentId && remisPaymentModeLegacy.get(e.paymentId)?.has("mixte")) return false;
+          return true;
           return true;
         });
 
