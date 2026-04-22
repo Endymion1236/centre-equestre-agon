@@ -878,23 +878,54 @@ export default function PlanningPage() {
     const child = (c.enrolled || []).find((e: any) => e.childId === childId);
     if (!child) return;
 
-    // Trouver les créneaux à déinscrire (stage = tous les jours)
+    // Trouver les créneaux à désinscrire (stage = tous les jours par défaut)
     let creneauxIds = [cid];
+    let isPartialStageUnenroll = false; // true si on désinscrit 1 jour seulement d'un stage
     if (isStageType) {
       const stageCreneaux = await findStageCreneaux(c.activityTitle, c.date);
-      creneauxIds = stageCreneaux.map((sc: any) => sc.id);
+      const allCreneauxIds = stageCreneaux.map((sc: any) => sc.id);
+
+      // Si le stage a plusieurs jours, proposer le choix
+      if (allCreneauxIds.length > 1) {
+        const dateStr = new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+        // window.confirm n'offre que 2 choix (OK/Annuler). On utilise un prompt avec 3 options.
+        const choice = window.prompt(
+          `${child.childName} est inscrit(e) au stage "${c.activityTitle}" (${allCreneauxIds.length} jours).\n\n` +
+          `Que veux-tu désinscrire ?\n\n` +
+          `  1 → Tout le stage (${allCreneauxIds.length} jours)\n` +
+          `  2 → Seulement ce jour (${dateStr})\n` +
+          `  (Annuler pour abandonner)\n\n` +
+          `Saisis 1 ou 2 :`,
+          "1"
+        );
+        if (choice === null) return; // Annulé
+        if (choice.trim() === "2") {
+          creneauxIds = [cid]; // juste ce jour
+          isPartialStageUnenroll = true;
+        } else if (choice.trim() === "1") {
+          creneauxIds = allCreneauxIds;
+        } else {
+          alert("Choix invalide — désinscription annulée.");
+          return;
+        }
+      } else {
+        creneauxIds = allCreneauxIds;
+      }
     }
 
     const nbJours = creneauxIds.length;
-    const msg = isStageType
+    const msg = isStageType && !isPartialStageUnenroll
       ? `Désinscrire ${child.childName} du stage "${c.activityTitle}" (${nbJours} jour${nbJours > 1 ? "s" : ""}) ?\n\nSi un paiement a été encaissé, un avoir sera créé automatiquement.`
-      : `Désinscrire ${child.childName} de "${c.activityTitle}" le ${new Date(c.date).toLocaleDateString("fr-FR")} ?\n\nSi un paiement a été encaissé, un avoir sera créé automatiquement.`;
+      : isPartialStageUnenroll
+        ? `Désinscrire ${child.childName} du stage "${c.activityTitle}" UNIQUEMENT pour le ${new Date(c.date).toLocaleDateString("fr-FR")} ?\n\nUn avoir au prorata sera créé si un paiement a été encaissé.`
+        : `Désinscrire ${child.childName} de "${c.activityTitle}" le ${new Date(c.date).toLocaleDateString("fr-FR")} ?\n\nSi un paiement a été encaissé, un avoir sera créé automatiquement.`;
     if (!confirm(msg)) return;
 
     console.log("[handleUnenroll] Démarrage", {
       childName: child.childName,
       childId,
       isStageType,
+      isPartialStageUnenroll,
       creneauxIdsÀTraiter: creneauxIds,
       nbJours,
     });
@@ -972,11 +1003,54 @@ export default function PlanningPage() {
       const linked = await findLinkedPayment(child.familyId, childId, c.activityTitle);
       if (linked) {
         const { paymentDoc, paymentData, matchItem } = linked;
-        const montantAvoir = matchItem.priceTTC || 0;
-        const newItems = (paymentData.items || []).filter((i: any) => i !== matchItem);
-        const newTotal = newItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
-        // Conserver le montant original pour l'historique
         const originalTotalTTC = paymentData.originalTotalTTC || paymentData.totalTTC || 0;
+
+        // Pour un désinscription PARTIELLE d'un stage (1 jour sur N),
+        // on ne supprime pas l'item mais on réduit son prix au prorata.
+        // Le total du stage complet est récupéré via findStageCreneaux pour
+        // connaître le nombre total de jours.
+        let montantAvoir: number;
+        let newItems: any[];
+        let newTotal: number;
+
+        if (isPartialStageUnenroll) {
+          // On retrouve combien de jours avait le stage complet
+          const stageAll = await findStageCreneaux(c.activityTitle, c.date);
+          const totalJours = stageAll.length || 1;
+          const prixParJour = (matchItem.priceTTC || 0) / totalJours;
+          const prixHTParJour = (matchItem.priceHT || 0) / totalJours;
+          const tvaParJour = ((matchItem.priceTTC || 0) - (matchItem.priceHT || 0)) / totalJours;
+
+          montantAvoir = Math.round(prixParJour * 100) / 100;
+
+          // Remplacer l'item par une version avec prix réduit
+          newItems = (paymentData.items || []).map((i: any) => {
+            if (i !== matchItem) return i;
+            const joursRestants = totalJours - 1;
+            return {
+              ...i,
+              priceTTC: Math.round((i.priceTTC - prixParJour) * 100) / 100,
+              priceHT: Math.round((i.priceHT - prixHTParJour) * 100) / 100,
+              activityTitle: `${i.activityTitle} (${joursRestants}j)`,
+              _originalPriceTTC: i._originalPriceTTC || i.priceTTC, // historique
+              _originalJours: i._originalJours || totalJours,
+              _joursRestants: joursRestants,
+            };
+          });
+          newTotal = newItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
+
+          console.log("[handleUnenroll partiel]", {
+            prixParJour,
+            totalJours,
+            montantAvoir,
+            newTotal,
+          });
+        } else {
+          // Désinscription complète : on supprime l'item entier
+          montantAvoir = matchItem.priceTTC || 0;
+          newItems = (paymentData.items || []).filter((i: any) => i !== matchItem);
+          newTotal = newItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
+        }
 
         if (newItems.length === 0) {
           await updateDoc(doc(db, "payments", paymentDoc.id), {
@@ -1000,16 +1074,23 @@ export default function PlanningPage() {
           const tropPercu = await computeTropPercu(paymentDoc.id, newTotal);
           if (tropPercu > 0) {
             const avoirMontant = Math.min(tropPercu, montantAvoir);
+            const raison = isPartialStageUnenroll
+              ? `Désinscription partielle ${child.childName} — ${c.activityTitle} (${new Date(c.date).toLocaleDateString("fr-FR")})`
+              : `Désinscription ${child.childName} — ${c.activityTitle}`;
             const ref = await createAvoir(child.familyId, child.familyName, avoirMontant,
-              `Désinscription ${child.childName} — ${c.activityTitle}`, paymentDoc.id, "desinscription");
-            toast(`${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""} — Avoir : ${avoirMontant.toFixed(2)}€`, "success");
+              raison, paymentDoc.id, "desinscription");
+            const toastMsg = isPartialStageUnenroll
+              ? `${child.childName} désinscrit(e) du ${new Date(c.date).toLocaleDateString("fr-FR")} — Avoir au prorata : ${avoirMontant.toFixed(2)}€`
+              : `${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""} — Avoir : ${avoirMontant.toFixed(2)}€`;
+            toast(toastMsg, "success");
             // Email notification avoir
             const fam2 = families.find(f => f.firestoreId === child.familyId);
             if (fam2?.parentEmail) {
               try {
                 const emailData = emailTemplates.desinscriptionAvoir({
                   parentName: fam2.parentName || "", childName: child.childName,
-                  activite: c.activityTitle, montantAvoir: avoirMontant, refAvoir: ref,
+                  activite: isPartialStageUnenroll ? `${c.activityTitle} (${new Date(c.date).toLocaleDateString("fr-FR")})` : c.activityTitle,
+                  montantAvoir: avoirMontant, refAvoir: ref,
                 });
                 authFetch("/api/send-email", {
                   method: "POST",
@@ -1027,13 +1108,13 @@ export default function PlanningPage() {
               } catch (e) { console.error("Email avoir:", e); }
             }
           } else {
-            toast(`${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""} — Paiement ajusté`, "success");
+            toast(`${child.childName} désinscrit(e)${isStageType ? (isPartialStageUnenroll ? " (1 jour)" : ` (${nbJours} jours)`) : ""} — Paiement ajusté`, "success");
           }
         } else {
-          toast(`${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""}`, "success");
+          toast(`${child.childName} désinscrit(e)${isStageType ? (isPartialStageUnenroll ? " (1 jour)" : ` (${nbJours} jours)`) : ""}`, "success");
         }
       } else {
-        toast(`${child.childName} désinscrit(e)${isStageType ? ` (${nbJours} jours)` : ""}`, "success");
+        toast(`${child.childName} désinscrit(e)${isStageType ? (isPartialStageUnenroll ? " (1 jour)" : ` (${nbJours} jours)`) : ""}`, "success");
       }
 
       // ── Nettoyage : annuler tous les paiements pending orphelins ──────────
