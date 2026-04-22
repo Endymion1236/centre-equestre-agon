@@ -82,6 +82,11 @@ export default function ComptabilitePage() {
   const [expandedBankLine, setExpandedBankLine] = useState<number | null>(null);
   const [manualSearch, setManualSearch] = useState("");
 
+  // Option A : modale pour coller le détail d'une remise depuis le site Crédit Agricole
+  const [showCADetailModal, setShowCADetailModal] = useState<number | null>(null);
+  const [caDetailText, setCaDetailText] = useState("");
+  const [caDetailPreview, setCaDetailPreview] = useState<{ found: any[]; missing: number[]; total: number } | null>(null);
+
   // Sélection manuelle pour bordereau de remise : IDs des encaissements cochés
   const [selectedForRemise, setSelectedForRemise] = useState<Set<string>>(new Set());
   // Filtre d'affichage par mode dans la liste à remettre ("" = tous)
@@ -295,6 +300,49 @@ export default function ComptabilitePage() {
       const usedPaymentIds = new Set<string>();    // ids des paiements (virements) déjà rapprochés
       const usedRemiseIds = new Set<string>();     // ids des bordereaux de remise (chèques/espèces) déjà rapprochés
 
+      // ─────────────────────────────────────────────────────────────────────
+      // findSubsetSum : cherche une combinaison d'encaissements dont la somme
+      // (en centimes) = targetCents (±2 centimes). Utilisé pour les remises CB
+      // terminal : la banque peut faire plusieurs remises dans la même journée,
+      // ou une transaction a pu être refusée. Exemple : 18 CB saisis = 2802€,
+      // la banque remet 2766€ (une tx refusée) → on trouve la combinaison de
+      // 17 CB qui fait 2766€.
+      //
+      // Algorithme : programmation dynamique sur les sommes atteignables.
+      // Complexité O(n × S) où S = targetCents. Limite : 25 transactions max
+      // et map plafonnée à 100k entries pour éviter OOM sur gros volumes.
+      // ─────────────────────────────────────────────────────────────────────
+      const findSubsetSum = (encs: any[], targetCents: number): any[] | null => {
+        if (encs.length === 0 || encs.length > 25) return null;
+        const centsValues = encs.map(e => Math.round((e.montant || 0) * 100));
+        const totalCents = centsValues.reduce((s, c) => s + c, 0);
+        if (targetCents > totalCents + 2) return null;
+        if (targetCents <= 0) return null;
+        // Match direct avec le total ?
+        if (Math.abs(totalCents - targetCents) <= 2) return [...encs];
+
+        let dp = new Map<number, number[]>();
+        dp.set(0, []);
+        for (let i = 0; i < centsValues.length; i++) {
+          const current = centsValues[i];
+          const nextDp = new Map(dp);
+          for (const [sum, indices] of dp.entries()) {
+            const newSum = sum + current;
+            if (newSum > targetCents + 2) continue;
+            if (!nextDp.has(newSum)) {
+              const newIndices = [...indices, i];
+              nextDp.set(newSum, newIndices);
+              if (Math.abs(newSum - targetCents) <= 2) {
+                return newIndices.map(idx => encs[idx]);
+              }
+            }
+          }
+          dp = nextDp;
+          if (dp.size > 100000) return null;
+        }
+        return null;
+      };
+
       // Parse la date de la ligne bancaire (formats : DD/MM/YYYY, D/M/YYYY, YYYY-MM-DD, DD-MM-YYYY)
       const parseBankDate = (s: string): Date | null => {
         if (!s) return null;
@@ -456,6 +504,36 @@ export default function ComptabilitePage() {
                 ...bl, matched: true, matchType: "CB Terminal",
                 matchDetail: `${dayData.count} transaction(s) CB du ${dayLabel} = ${dayTotal.toFixed(2)}€`,
                 matchedEncs: dayData.encs.map(encToDetail),
+              };
+            }
+          }
+
+          // b.bis) Sous-ensemble d'un jour : trouver une combinaison de transactions CB
+          //        dont la somme = montant bancaire (utile quand la banque fait plusieurs
+          //        remises dans la même journée, ou qu'une transaction a été refusée).
+          //        Utilise findSubsetSum défini plus haut.
+          const targetCents = Math.round(bl.amount * 100);
+          for (const [dayKey, dayData] of Object.entries(cbByDay)) {
+            // Vérifier fenêtre date
+            if (bankDate) {
+              const encDay = new Date(dayKey);
+              const diff = (bankDate.getTime() - encDay.getTime()) / (1000 * 60 * 60 * 24);
+              if (diff < -1 || diff > 5) continue;
+            }
+            // Ne chercher de sous-ensemble que si le total du jour est >= montant bancaire
+            // (sinon aucune chance qu'un sous-ensemble atteigne le target)
+            if (dayData.total < bl.amount - 0.02) continue;
+            // Exclure les encs déjà matchés par b)
+            const freeEncs = dayData.encs.filter(e => !usedEncIds.has(e.id));
+            const subset = findSubsetSum(freeEncs, targetCents);
+            if (subset && subset.length > 0) {
+              const subsetSum = subset.reduce((s, e) => s + (e.montant || 0), 0);
+              subset.forEach(e => usedEncIds.add(e.id));
+              const dayLabel = dayKey.split("-").reverse().join("/");
+              return {
+                ...bl, matched: true, matchType: "CB Terminal",
+                matchDetail: `Sous-ensemble de ${subset.length}/${dayData.encs.length} CB du ${dayLabel} = ${subsetSum.toFixed(2)}€`,
+                matchedEncs: subset.map(encToDetail),
               };
             }
           }
@@ -688,6 +766,31 @@ export default function ComptabilitePage() {
                 ...bl, matched: true, matchType: "Chèques",
                 matchDetail: `${dayData.count} chèque(s) du ${dayLabel} = ${dayTotal.toFixed(2)}€`,
                 matchedEncs: dayData.encs.map(encToDetail),
+              };
+            }
+          }
+
+          // b.bis) Sous-ensemble d'un jour : si tu as saisi 7 chèques mais que ta
+          //        remise n'en contient que 6, on cherche la combinaison qui fait
+          //        le montant exact. Utile si tu as oublié d'inclure un chèque.
+          const chqTargetCents = Math.round(bl.amount * 100);
+          for (const [dayKey, dayData] of Object.entries(chqByDay)) {
+            if (bankDate) {
+              const encDay = new Date(dayKey);
+              const diff = (bankDate.getTime() - encDay.getTime()) / (1000 * 60 * 60 * 24);
+              if (diff < -1 || diff > 10) continue;
+            }
+            if (dayData.total < bl.amount - 0.02) continue;
+            const freeEncs = dayData.encs.filter(e => !usedEncIds.has(e.id));
+            const subset = findSubsetSum(freeEncs, chqTargetCents);
+            if (subset && subset.length > 0) {
+              const subsetSum = subset.reduce((s, e) => s + (e.montant || 0), 0);
+              subset.forEach(e => usedEncIds.add(e.id));
+              const dayLabel = dayKey.split("-").reverse().join("/");
+              return {
+                ...bl, matched: true, matchType: "Chèques",
+                matchDetail: `Sous-ensemble ${subset.length}/${dayData.encs.length} chèque(s) du ${dayLabel} = ${subsetSum.toFixed(2)}€`,
+                matchedEncs: subset.map(encToDetail),
               };
             }
           }
@@ -2128,11 +2231,19 @@ export default function ComptabilitePage() {
                   </span>
                   <span className="w-20 text-center">
                     {!bl.matched && (
-                      <div className="flex gap-1">
+                      <div className="flex flex-col gap-1">
                         <button onClick={() => { setShowManualMatch(i); setManualSearch(""); }}
                           className="font-body text-[10px] text-blue-500 bg-blue-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-blue-100">
                           Pointer
                         </button>
+                        {/* Bouton Détail CA : uniquement pour les remises CB */}
+                        {(bl.label.toUpperCase().includes("REMISE") && (bl.label.toUpperCase().includes("CARTE") || bl.label.toUpperCase().includes("CB") || bl.label.toUpperCase().includes("TPE"))) && (
+                          <button onClick={() => { setShowCADetailModal(i); setCaDetailText(""); setCaDetailPreview(null); }}
+                            className="font-body text-[10px] text-purple-600 bg-purple-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-purple-100"
+                            title="Coller le détail de la remise depuis le site Crédit Agricole">
+                            📋 Détail CA
+                          </button>
+                        )}
                         <button onClick={() => {
                           const updated = [...bankLines];
                           updated[i] = { ...updated[i], matched: true, matchType: "Ignoré", matchDetail: "Ignoré manuellement" };
@@ -2350,6 +2461,185 @@ export default function ComptabilitePage() {
           </div>
         </div>
       )}
+
+      {/* ─── Modal : Saisie détail remise CA (Option A) ─── */}
+      {showCADetailModal !== null && (() => {
+        const bl = bankLines[showCADetailModal];
+        if (!bl) return null;
+
+        // Parse les montants depuis le texte copié depuis le site CA
+        // Formats attendus : "95,00 EUR", "2 766,00 EUR", "105.00 EUR", etc.
+        const parseCaText = (text: string): number[] => {
+          const amounts: number[] = [];
+          // Regex : capture les nombres (avec espace/virgule/point) suivis de "EUR"
+          // Ex : "95,00 EUR" → 95.00 ; "2 766,00 EUR" → 2766.00
+          const regex = /(\d[\d\s]*[,.]\d{2})\s*(?:EUR|€)/gi;
+          let m;
+          while ((m = regex.exec(text)) !== null) {
+            const cleaned = m[1].replace(/\s/g, "").replace(",", ".");
+            const val = parseFloat(cleaned);
+            if (!isNaN(val) && val > 0) amounts.push(val);
+          }
+          return amounts;
+        };
+
+        // Essai de matching : on cherche parmi les CB terminal NON CONSOMMÉS ceux
+        // dont le montant correspond aux montants parsés (dans une fenêtre ±3j)
+        const tryMatch = (text: string) => {
+          const amounts = parseCaText(text);
+          if (amounts.length === 0) { setCaDetailPreview(null); return; }
+
+          // Date bancaire (pour la fenêtre)
+          const bankDateParsed = (() => {
+            const p1 = bl.date.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            if (p1) return new Date(`${p1[3]}-${p1[2].padStart(2,"0")}-${p1[1].padStart(2,"0")}`);
+            return null;
+          })();
+
+          // Encaissements CB terminal libres dans la fenêtre ±7j (large pour ne rien rater)
+          const cbPool = encaissementsCompta.filter(e => {
+            if (e.mode !== "cb_terminal") return false;
+            if (e.remiseId) return false; // déjà dans une remise
+            const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+            if (!d) return false;
+            if (bankDateParsed) {
+              const diff = Math.abs(bankDateParsed.getTime() - d.getTime()) / (1000 * 60 * 60 * 24);
+              if (diff > 7) return false;
+            }
+            return true;
+          });
+
+          // Pour chaque montant, trouve le meilleur candidat (sans réutilisation)
+          const used = new Set<string>();
+          const found: any[] = [];
+          const missing: number[] = [];
+          for (const amount of amounts) {
+            const candidate = cbPool.find(e => !used.has(e.id) && Math.abs((e.montant || 0) - amount) < 0.02);
+            if (candidate) {
+              used.add(candidate.id);
+              found.push({ ...candidate, _amount: amount });
+            } else {
+              missing.push(amount);
+            }
+          }
+          const total = amounts.reduce((s, a) => s + a, 0);
+          setCaDetailPreview({ found, missing, total });
+        };
+
+        const blAmount = bl.amount;
+        const parsed = caDetailText ? parseCaText(caDetailText) : [];
+        const parsedTotal = parsed.reduce((s, a) => s + a, 0);
+        const totalMatches = Math.abs(parsedTotal - blAmount) < 0.02;
+
+        return (
+          <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={() => setShowCADetailModal(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-2xl mx-4 shadow-xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center p-5 border-b border-gray-100">
+                <div>
+                  <h2 className="font-display text-lg font-bold text-blue-800">Détail remise Crédit Agricole</h2>
+                  <p className="font-body text-xs text-slate-500">
+                    Mouvement : {bl.label} — <strong>{bl.amount.toFixed(2)}€</strong>
+                  </p>
+                </div>
+                <button onClick={() => setShowCADetailModal(null)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none">✕</button>
+              </div>
+
+              <div className="p-5 flex-1 overflow-y-auto">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                  <p className="font-body text-xs text-blue-800 leading-relaxed">
+                    <strong>Mode d'emploi :</strong><br />
+                    1. Connectez-vous au site Crédit Agricole → Comptes → Cliquer sur la remise CB<br />
+                    2. Sélectionner tout le tableau des transactions (ou juste la colonne "Montant")<br />
+                    3. Copier puis coller ci-dessous. Le système extrait automatiquement les montants en EUR.
+                  </p>
+                </div>
+
+                <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Coller le détail copié depuis le site CA :</label>
+                <textarea
+                  value={caDetailText}
+                  onChange={e => { setCaDetailText(e.target.value); tryMatch(e.target.value); }}
+                  placeholder="20/04/2026 17:02:34  95,00 EUR  497711******5900  ...&#10;20/04/2026 16:24:00  105,00 EUR  ..."
+                  rows={6}
+                  className="w-full font-mono text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-purple-400 resize-none"
+                />
+
+                {parsed.length > 0 && (
+                  <div className="mt-3 bg-slate-50 rounded-lg p-3">
+                    <div className="flex items-center justify-between font-body text-xs">
+                      <span className="text-slate-600">
+                        <strong>{parsed.length}</strong> montant(s) extrait(s) — Total : <strong>{parsedTotal.toFixed(2)}€</strong>
+                      </span>
+                      <span className={totalMatches ? "text-green-600 font-semibold" : "text-orange-500 font-semibold"}>
+                        {totalMatches ? "✓ correspond au mouvement" : `⚠ écart de ${(parsedTotal - blAmount).toFixed(2)}€`}
+                      </span>
+                    </div>
+                    {caDetailPreview && (
+                      <div className="mt-3 grid grid-cols-2 gap-3">
+                        <div>
+                          <div className="font-body text-xs font-semibold text-green-700 mb-1">✓ Trouvés ({caDetailPreview.found.length})</div>
+                          <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
+                            {caDetailPreview.found.map((e, idx) => (
+                              <div key={idx} className="bg-green-50 rounded px-2 py-1 font-body text-[11px]">
+                                <strong>{(e.montant || 0).toFixed(2)}€</strong> — {e.familyName || "?"} ({e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "?"})
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-body text-xs font-semibold text-orange-700 mb-1">⚠ Manquants ({caDetailPreview.missing.length})</div>
+                          <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
+                            {caDetailPreview.missing.map((amount, idx) => (
+                              <div key={idx} className="bg-orange-50 rounded px-2 py-1 font-body text-[11px]">
+                                <strong>{amount.toFixed(2)}€</strong> — pas d'encaissement CB correspondant
+                              </div>
+                            ))}
+                            {caDetailPreview.missing.length === 0 && (
+                              <div className="font-body text-[11px] text-slate-400 italic">Tous les montants matchent !</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 p-4 border-t border-gray-100">
+                <button onClick={() => setShowCADetailModal(null)}
+                  className="font-body text-sm text-slate-600 bg-white border border-gray-200 rounded-lg px-4 py-2 cursor-pointer hover:bg-gray-50">
+                  Annuler
+                </button>
+                <button
+                  disabled={!caDetailPreview || caDetailPreview.found.length === 0}
+                  onClick={() => {
+                    if (!caDetailPreview || caDetailPreview.found.length === 0) return;
+                    const updated = [...bankLines];
+                    const foundSum = caDetailPreview.found.reduce((s, e) => s + (e.montant || 0), 0);
+                    updated[showCADetailModal!] = {
+                      ...updated[showCADetailModal!],
+                      matched: true,
+                      matchType: "Manuel",
+                      matchDetail: `Détail CA : ${caDetailPreview.found.length}/${parsed.length} transactions trouvées = ${foundSum.toFixed(2)}€${caDetailPreview.missing.length > 0 ? ` (${caDetailPreview.missing.length} manquant(s))` : ""}`,
+                      matchedEncs: caDetailPreview.found.map((e: any) => ({
+                        familyName: e.familyName || "",
+                        montant: e.montant || 0,
+                        date: e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "",
+                        activityTitle: e.activityTitle || "",
+                        mode: "CB Terminal",
+                      })),
+                    };
+                    updateAndSaveBankLines(updated);
+                    setShowCADetailModal(null);
+                  }}
+                  className="font-body text-sm text-white border-none rounded-lg px-4 py-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ background: "linear-gradient(135deg, #7c3aed, #2050A0)" }}>
+                  Valider le rapprochement
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ─── Export FEC ─── */}
       {!loading && tab === "fec" && (
