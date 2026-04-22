@@ -624,25 +624,66 @@ export default function ComptabilitePage() {
             return { ...bl, matched: true, matchType: "Chèque", matchDetail: `Chèque ${match.familyName}`, matchedEncs: [encToDetail(match)] };
           }
 
-          // b) Remise chèques groupée — total de TOUS les chèques du mois
+          // b) Remise chèques groupée par JOUR EXACT
+          //    La banque remet souvent tous les chèques d'une journée en 1 virement.
+          //    On groupe d'abord par jour et on cherche un jour dont la somme = montant remise.
+          const chqByDay: Record<string, { total: number; count: number; encs: any[] }> = {};
+          for (const e of allChqEncs) {
+            const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+            if (!d) continue;
+            const dayKey = d.toISOString().split("T")[0];
+            if (!chqByDay[dayKey]) chqByDay[dayKey] = { total: 0, count: 0, encs: [] };
+            chqByDay[dayKey].total += (e.montant || 0);
+            chqByDay[dayKey].count++;
+            chqByDay[dayKey].encs.push(e);
+          }
+          // Chercher un jour dont le total = montant de la remise (fenêtre J-0 à J+7)
+          for (const [dayKey, dayData] of Object.entries(chqByDay)) {
+            const dayTotal = Math.round(dayData.total * 100) / 100;
+            if (Math.abs(dayTotal - bl.amount) < 0.02) {
+              if (bankDate) {
+                const encDay = new Date(dayKey);
+                const diff = (bankDate.getTime() - encDay.getTime()) / (1000 * 60 * 60 * 24);
+                // La remise arrive J+0 à J+7 après la saisie des chèques
+                if (diff < -1 || diff > 10) continue;
+              }
+              const dayLabel = dayKey.split("-").reverse().join("/");
+              dayData.encs.forEach(e => usedEncIds.add(e.id));
+              return {
+                ...bl, matched: true, matchType: "Chèques",
+                matchDetail: `${dayData.count} chèque(s) du ${dayLabel} = ${dayTotal.toFixed(2)}€`,
+                matchedEncs: dayData.encs.map(encToDetail),
+              };
+            }
+          }
+
+          // c) Agrégat multi-jours : 2-3 jours consécutifs
+          const sortedDays = Object.keys(chqByDay).sort();
+          for (let i = 0; i < sortedDays.length; i++) {
+            let runningTotal = 0;
+            let runningCount = 0;
+            for (let j = i; j < Math.min(i + 3, sortedDays.length); j++) {
+              runningTotal += chqByDay[sortedDays[j]].total;
+              runningCount += chqByDay[sortedDays[j]].count;
+              const roundedTotal = Math.round(runningTotal * 100) / 100;
+              if (Math.abs(roundedTotal - bl.amount) < 0.02) {
+                const days = sortedDays.slice(i, j + 1).map(d => d.split("-")[2] + "/" + d.split("-")[1]).join(", ");
+                const allEncs = sortedDays.slice(i, j + 1).flatMap(d => chqByDay[d].encs);
+                allEncs.forEach(e => usedEncIds.add(e.id));
+                return {
+                  ...bl, matched: true, matchType: "Chèques",
+                  matchDetail: `Agrégat ${runningCount} chèque(s) (${days}) = ${roundedTotal.toFixed(2)}€`,
+                  matchedEncs: allEncs.map(encToDetail),
+                };
+              }
+            }
+          }
+
+          // d) Total de TOUS les chèques du mois (rare mais possible)
           const totalMois = Math.round(allChqEncs.reduce((s, e) => s + (e.montant || 0), 0) * 100) / 100;
           if (totalMois > 0 && Math.abs(totalMois - bl.amount) < 0.02) {
             allChqEncs.forEach(e => usedEncIds.add(e.id));
             return { ...bl, matched: true, matchType: "Chèques", matchDetail: `Remise ${allChqEncs.length} chèque(s) du mois = ${totalMois.toFixed(2)}€`, matchedEncs: allChqEncs.map(encToDetail) };
-          }
-
-          // c) Remise partielle (sous-ensemble par semaine ou par fenêtre ±3j)
-          for (let w = 1; w <= 7; w++) {
-            const chqEncs = allChqEncs.filter(e => {
-              if (!bankDate) return true;
-              const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
-              return d && Math.abs(bankDate.getTime() - d.getTime()) / (1000*60*60*24) <= w;
-            });
-            const chqTotal = Math.round(chqEncs.reduce((s, e) => s + (e.montant || 0), 0) * 100) / 100;
-            if (chqTotal > 0 && Math.abs(chqTotal - bl.amount) < 0.02) {
-              chqEncs.forEach(e => usedEncIds.add(e.id));
-              return { ...bl, matched: true, matchType: "Chèques", matchDetail: `Remise ${chqEncs.length} chèque(s) = ${chqTotal.toFixed(2)}€`, matchedEncs: chqEncs.map(encToDetail) };
-            }
           }
         }
 
