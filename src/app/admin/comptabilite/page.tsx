@@ -248,8 +248,8 @@ export default function ComptabilitePage() {
             const date = cleanField(fields[0] || "");
             const label = cleanField(fields[1] || "");
             
-            // Vérifier que la date ressemble à une date (DD/MM/YYYY ou YYYY-MM-DD)
-            const isDate = /^\d{2}\/\d{2}\/\d{4}$/.test(date) || /^\d{4}-\d{2}-\d{2}$/.test(date);
+            // Vérifier que la date ressemble à une date (DD/MM/YYYY, D/M/YYYY, YYYY-MM-DD, DD-MM-YYYY)
+            const isDate = /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(date) || /^\d{4}-\d{2}-\d{2}$/.test(date) || /^\d{1,2}-\d{1,2}-\d{4}$/.test(date);
             
             if (isDate && label) {
               if (hasDebitCredit) {
@@ -271,11 +271,8 @@ export default function ComptabilitePage() {
       }
       
       // 4. Convertir en format attendu (montant = crédit - débit pour avoir + pour les recettes)
-      const EXTERNAL_KEYWORDS = [
-        "VIR SEPA EMIS", "VIR PERM", "VIREMENT EMIS", "VIRT EMIS",
-        "PRLV SEPA", "PRELEVEMENT", "CHEQUE EMIS", "REMISE CHEQUE",
-        "FRAIS", "COTISATION", "ABONNEMENT", "ASSURANCE",
-      ];
+      // On ne garde que les crédits (mouvements entrants). Les débits sont tous exclus d'office
+      // car le rapprochement bancaire ne concerne que les encaissements.
       const parsed = records.map(r => ({
         date: r.date,
         label: r.label,
@@ -283,15 +280,38 @@ export default function ComptabilitePage() {
         matched: false,
         matchType: "" as string,
         matchDetail: "" as string,
-      })).filter(r => {
-        if (r.amount <= 0) return false; // exclure les débits
-        const labelUp = r.label.toUpperCase();
-        // Exclure les virements sortants vers comptes externes
-        if (EXTERNAL_KEYWORDS.some(k => labelUp.includes(k))) return false;
-        return true;
-      });
+      })).filter(r => r.amount > 0);
 
-      // Smart matching amélioré
+      // ─────────────────────────────────────────────────────────────────────
+      //  Smart matching — version robuste avec unicité
+      // ─────────────────────────────────────────────────────────────────────
+      // Principe : chaque encaissement et chaque remise SEPA ne peut être
+      // consommé qu'UNE SEULE FOIS. On utilise des Sets pour tracker ce qui
+      // a déjà été matché, afin que deux lignes bancaires de même montant ne
+      // se partagent pas le même encaissement.
+
+      const usedEncIds = new Set<string>();        // ids des encaissements déjà rapprochés
+      const usedRemiseSepaIds = new Set<string>(); // ids des remises SEPA déjà rapprochées
+      const usedPaymentIds = new Set<string>();    // ids des paiements (virements) déjà rapprochés
+
+      // Parse la date de la ligne bancaire (formats : DD/MM/YYYY, D/M/YYYY, YYYY-MM-DD, DD-MM-YYYY)
+      const parseBankDate = (s: string): Date | null => {
+        if (!s) return null;
+        const p1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (p1) {
+          const dd = p1[1].padStart(2, "0"), mm = p1[2].padStart(2, "0");
+          return new Date(`${p1[3]}-${mm}-${dd}`);
+        }
+        const p2 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (p2) return new Date(s);
+        const p3 = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+        if (p3) {
+          const dd = p3[1].padStart(2, "0"), mm = p3[2].padStart(2, "0");
+          return new Date(`${p3[3]}-${mm}-${dd}`);
+        }
+        return null;
+      };
+
       // Helper pour convertir un encaissement en détail affichable
       const encToDetail = (e: any) => ({
         familyName: e.familyName || "",
@@ -303,24 +323,35 @@ export default function ComptabilitePage() {
 
       const matched = parsed.map((bl) => {
         const label = bl.label.toUpperCase();
-
-        // Parse la date de la ligne bancaire (formats : DD/MM/YYYY ou YYYY-MM-DD)
-        const parseBankDate = (s: string): Date | null => {
-          if (!s) return null;
-          const p1 = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-          if (p1) return new Date(`${p1[3]}-${p1[2]}-${p1[1]}`);
-          const p2 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-          if (p2) return new Date(s);
-          return null;
-        };
         const bankDate = parseBankDate(bl.date);
 
+        // Calcul de la période précédente pour élargir le pool
+        // (les chèques / CB terminal peuvent être datés du mois d'avant)
+        const prevPeriod = (() => {
+          const [y, m] = period.split("-").map(Number);
+          const pm = m === 1 ? 12 : m - 1;
+          const py = m === 1 ? y - 1 : y;
+          return `${py}-${String(pm).padStart(2, "0")}`;
+        })();
+
         // Encaissements de la période, avec leur date
+        // On EXCLUT les encaissements déjà consommés par une autre bankLine
         const periodEnc = encaissementsCompta.filter(e => {
+          if (usedEncIds.has(e.id)) return false;
           const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
           if (!d) return false;
           const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
           return pm === period;
+        });
+
+        // Pool élargi : période courante + précédente (utile pour chèques/CB
+        // remis en début de mois mais datés du mois d'avant)
+        const periodEncExtended = encaissementsCompta.filter(e => {
+          if (usedEncIds.has(e.id)) return false;
+          const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+          if (!d) return false;
+          const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          return pm === period || pm === prevPeriod;
         });
 
         // Fenêtre de ±3 jours autour de la date bancaire
@@ -335,7 +366,7 @@ export default function ComptabilitePage() {
         // ── 1. CB en ligne (CAWL) payout ─────────────────────────────────
         // CAWL verse les fonds ~2-7 jours après les paiements, regroupés,
         // net de commissions (~2.9% + 0.25€). On cherche dans une fenêtre large.
-        if (label.includes("STRIPE") || label.includes("STP")) {
+        if (label.includes("CAWL") || label.includes("WORLDLINE") || label.includes("STRIPE") || label.includes("STP")) {
           const cbEncs = periodEnc.filter(e =>
             e.mode === "cb_online" || e.mode === "cb_cawl"
           );
@@ -343,13 +374,15 @@ export default function ComptabilitePage() {
           // a) Match exact (montant identique, rare mais possible)
           const exactCb = cbEncs.find(e => Math.abs((e.montant || 0) - bl.amount) < 0.02);
           if (exactCb) {
-            return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `CB en ligne ${exactCb.familyName} — ${exactCb.montant?.toFixed(2)}€` };
+            usedEncIds.add(exactCb.id);
+            return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `CB en ligne ${exactCb.familyName} — ${exactCb.montant?.toFixed(2)}€`, matchedEncs: [encToDetail(exactCb)] };
           }
 
           // b) Total CB en ligne de la période (payout global)
           const cbTotal = cbEncs.reduce((s, e) => s + (e.montant || 0), 0);
           if (cbTotal > 0 && Math.abs(cbTotal - bl.amount) < 0.02) {
-            return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `Virement CB en ligne — ${cbEncs.length} transaction(s) = ${cbTotal.toFixed(2)}€` };
+            cbEncs.forEach(e => usedEncIds.add(e.id));
+            return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `Virement CB en ligne — ${cbEncs.length} transaction(s) = ${cbTotal.toFixed(2)}€`, matchedEncs: cbEncs.map(encToDetail) };
           }
 
           // c) Total CB en ligne net de commissions
@@ -357,7 +390,8 @@ export default function ComptabilitePage() {
             const estimatedFees = cbEncs.reduce((s, e) => s + ((e.montant || 0) * 0.029 + 0.25), 0);
             const cbNet = Math.round((cbTotal - estimatedFees) * 100) / 100;
             if (Math.abs(cbNet - bl.amount) < 1.00) { // tolérance 1€ sur les commissions
-              return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `Virement CB en ligne net — ${cbEncs.length} tx = ${cbTotal.toFixed(2)}€ brut − ~${estimatedFees.toFixed(2)}€ frais ≈ ${cbNet.toFixed(2)}€` };
+              cbEncs.forEach(e => usedEncIds.add(e.id));
+              return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `Virement CB en ligne net — ${cbEncs.length} tx = ${cbTotal.toFixed(2)}€ brut − ~${estimatedFees.toFixed(2)}€ frais ≈ ${cbNet.toFixed(2)}€`, matchedEncs: cbEncs.map(encToDetail) };
             }
           }
 
@@ -372,14 +406,16 @@ export default function ComptabilitePage() {
             });
             const windowTotal = cbWindow.reduce((s, e) => s + (e.montant || 0), 0);
             if (windowTotal > 0 && Math.abs(windowTotal - bl.amount) < 0.02) {
-              return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `Virement CB en ligne — ${cbWindow.length} tx (J-2 à J-14) = ${windowTotal.toFixed(2)}€` };
+              cbWindow.forEach(e => usedEncIds.add(e.id));
+              return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `Virement CB en ligne — ${cbWindow.length} tx (J-2 à J-14) = ${windowTotal.toFixed(2)}€`, matchedEncs: cbWindow.map(encToDetail) };
             }
             // Net de commissions
             if (windowTotal > 0) {
               const wFees = cbWindow.reduce((s, e) => s + ((e.montant || 0) * 0.029 + 0.25), 0);
               const wNet = Math.round((windowTotal - wFees) * 100) / 100;
               if (Math.abs(wNet - bl.amount) < 1.00) {
-                return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `Virement CB en ligne net — ${cbWindow.length} tx = ${windowTotal.toFixed(2)}€ − ~${wFees.toFixed(2)}€ frais` };
+                cbWindow.forEach(e => usedEncIds.add(e.id));
+                return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `Virement CB en ligne net — ${cbWindow.length} tx = ${windowTotal.toFixed(2)}€ − ~${wFees.toFixed(2)}€ frais`, matchedEncs: cbWindow.map(encToDetail) };
               }
             }
           }
@@ -388,7 +424,8 @@ export default function ComptabilitePage() {
         // ── 2. CB terminal — matching agrégat par jour ───────────────────
         // La banque remet en 1 virement le total CB d'une journée (J-1, J-2, etc.)
         if (label.includes("REMISE") || label.includes("CB") || label.includes("TPE") || label.includes("CARTE")) {
-          const cbEncs = periodEnc.filter(e => e.mode === "cb_terminal");
+          // Pool élargi : un virement de remise CB du 3 novembre peut concerner des CB du 30 octobre
+          const cbEncs = periodEncExtended.filter(e => e.mode === "cb_terminal");
 
           // a) Grouper les encaissements CB par jour
           const cbByDay: Record<string, { total: number; count: number; encs: any[] }> = {};
@@ -413,6 +450,7 @@ export default function ComptabilitePage() {
                 if (diff < -1 || diff > 5) continue; // la remise doit être APRÈS les CB (J+0 à J+5)
               }
               const dayLabel = dayKey.split("-").reverse().join("/");
+              dayData.encs.forEach(e => usedEncIds.add(e.id));
               return {
                 ...bl, matched: true, matchType: "CB Terminal",
                 matchDetail: `${dayData.count} transaction(s) CB du ${dayLabel} = ${dayTotal.toFixed(2)}€`,
@@ -426,7 +464,6 @@ export default function ComptabilitePage() {
           for (let i = 0; i < sortedDays.length; i++) {
             let runningTotal = 0;
             let runningCount = 0;
-            const startDay = sortedDays[i];
             for (let j = i; j < Math.min(i + 3, sortedDays.length); j++) {
               runningTotal += cbByDay[sortedDays[j]].total;
               runningCount += cbByDay[sortedDays[j]].count;
@@ -434,6 +471,7 @@ export default function ComptabilitePage() {
               if (Math.abs(roundedTotal - bl.amount) < 0.02) {
                 const days = sortedDays.slice(i, j + 1).map(d => d.split("-")[2] + "/" + d.split("-")[1]).join(", ");
                 const allEncs = sortedDays.slice(i, j + 1).flatMap(d => cbByDay[d].encs);
+                allEncs.forEach(e => usedEncIds.add(e.id));
                 return {
                   ...bl, matched: true, matchType: "CB Terminal",
                   matchDetail: `Agrégat ${runningCount} CB (${days}) = ${roundedTotal.toFixed(2)}€`,
@@ -446,31 +484,95 @@ export default function ComptabilitePage() {
           // d) Dernier recours : match exact montant unitaire
           const exactCB = cbEncs.filter(inWindow).find(e => Math.abs((e.montant || 0) - bl.amount) < 0.02);
           if (exactCB) {
-            return { ...bl, matched: true, matchType: "CB Terminal", matchDetail: `CB ${exactCB.familyName} — ${exactCB.activityTitle || ""}` };
+            usedEncIds.add(exactCB.id);
+            return { ...bl, matched: true, matchType: "CB Terminal", matchDetail: `CB ${exactCB.familyName} — ${exactCB.activityTitle || ""}`, matchedEncs: [encToDetail(exactCB)] };
           }
         }
 
         // ── 3. Virement / SEPA / Prélèvement ──────────────────────────────
         if (label.includes("VIR") || label.includes("SEPA") || label.includes("PRLV")) {
-          // a) Match individuel virement/sepa par montant exact
-          const match = periodEnc.filter(inWindow).find(e =>
-            (e.mode === "virement" || e.mode === "sepa" || e.mode === "prelevement_sepa") && Math.abs((e.montant || 0) - bl.amount) < 0.02
-          );
-          if (match) return { ...bl, matched: true, matchType: "Virement", matchDetail: `Virement ${match.familyName}` };
 
-          // b) Match virement par nom de famille dans le libellé bancaire
-          // Ex: "VIR DUPONT MARIE" → chercher famille "Dupont" dans les paiements virement en attente
-          const virPayments = payments.filter(p =>
-            p.paymentMode === "virement" && (p.status === "pending" || p.status === "partial")
+          // a) Match remise SEPA (somme des prélèvements groupés) — priorité maximum
+          //    Les remises SEPA sont typiquement reçues sous forme "PRLV SEPA" ou avec la référence ICS
+          if (label.includes("PRLV") || label.includes("SEPA") || label.includes("ICS")) {
+            const remiseMatch = remisesSepa.find(r => {
+              if (usedRemiseSepaIds.has(r.id)) return false; // déjà consommée
+              if (Math.abs((r.montantTotal || 0) - bl.amount) >= 0.02) return false;
+              // La remise doit être dans la même période OU dans une fenêtre proche de la date bancaire
+              if (r.datePrelevement?.startsWith(period)) return true;
+              if (bankDate && r.datePrelevement) {
+                const rd = new Date(r.datePrelevement);
+                const diff = Math.abs(bankDate.getTime() - rd.getTime()) / (1000 * 60 * 60 * 24);
+                return diff <= 7;
+              }
+              return false;
+            });
+            if (remiseMatch) {
+              usedRemiseSepaIds.add(remiseMatch.id);
+              return { ...bl, matched: true, matchType: "Prélèvement SEPA", matchDetail: `Remise SEPA n°${remiseMatch.numero} — ${remiseMatch.nbTransactions} prélèvements` };
+            }
+          }
+
+          // b) Match par NOM de famille dans le libellé bancaire — PRIORITÉ ABSOLUE
+          //    Ex: "VIR DE MLLE MARIE JOUSSE" → on cherche un encaissement ou paiement virement
+          //    dont la famille correspond, dans une fenêtre ±30 jours.
+          //    CRITIQUE : on fait CE match AVANT le match par montant seul, sinon on risque
+          //    de matcher un faux positif (encaissement d'une autre famille de même montant).
+
+          // b.1) Parmi les ENCAISSEMENTS virement/sepa de la période, priorité au nom qui matche le libellé
+          const virEncs = periodEnc.filter(e =>
+            e.mode === "virement" || e.mode === "sepa" || e.mode === "prelevement_sepa"
           );
-          const nameMatch = virPayments.find(p => {
+          const encNameMatches = virEncs.filter(e => {
+            if (!e.familyName) return false;
+            const nameParts = e.familyName.toUpperCase().split(/\s+/).filter((n: string) => n.length > 2);
+            return nameParts.some((part: string) => label.includes(part));
+          });
+          // Nom + montant exact + fenêtre → idéal
+          const encNameAmountInWindow = encNameMatches.find(e => inWindow(e) && Math.abs((e.montant || 0) - bl.amount) < 0.02);
+          if (encNameAmountInWindow) {
+            usedEncIds.add(encNameAmountInWindow.id);
+            return { ...bl, matched: true, matchType: "Virement", matchDetail: `Virement ${encNameAmountInWindow.familyName}`, matchedEncs: [encToDetail(encNameAmountInWindow)] };
+          }
+          // Nom + montant exact (même hors fenêtre, jusqu'à 15j)
+          const encNameAmount = encNameMatches.find(e => Math.abs((e.montant || 0) - bl.amount) < 0.02);
+          if (encNameAmount) {
+            usedEncIds.add(encNameAmount.id);
+            return { ...bl, matched: true, matchType: "Virement", matchDetail: `Virement ${encNameAmount.familyName}`, matchedEncs: [encToDetail(encNameAmount)] };
+          }
+
+          // b.2) Parmi les PAIEMENTS virement en attente (pending/partial), match par nom
+          const virPayments = payments.filter(p => {
+            if (p.paymentMode !== "virement") return false;
+            if (p.status !== "pending" && p.status !== "partial") return false;
+            if (usedPaymentIds.has(p.id)) return false;
+            if (bankDate && p.date?.seconds) {
+              const d = new Date(p.date.seconds * 1000);
+              const diff = Math.abs(bankDate.getTime() - d.getTime()) / (1000 * 60 * 60 * 24);
+              if (diff > 60) return false; // au-delà de 60j, on considère que ce n'est pas lié
+            }
+            return true;
+          });
+          const paymentNameMatches = virPayments.filter(p => {
             if (!p.familyName) return false;
-            // Normaliser : "Dupont Marie" → ["DUPONT", "MARIE"]
             const nameParts = p.familyName.toUpperCase().split(/\s+/).filter((n: string) => n.length > 2);
             return nameParts.some((part: string) => label.includes(part));
           });
-          if (nameMatch) {
+          // Nom + montant exact
+          const paymentNameAmount = paymentNameMatches.find(p => Math.abs((p.totalTTC || 0) - bl.amount) < 0.02);
+          if (paymentNameAmount) {
+            usedPaymentIds.add(paymentNameAmount.id);
+            return {
+              ...bl, matched: true, matchType: "Virement",
+              matchDetail: `Virement ${paymentNameAmount.familyName}`,
+              manualPaymentId: paymentNameAmount.id,
+            };
+          }
+          // Nom uniquement si UN SEUL candidat (avertissement si montant différent)
+          if (paymentNameMatches.length === 1) {
+            const nameMatch = paymentNameMatches[0];
             const amountClose = Math.abs((nameMatch.totalTTC || 0) - bl.amount) < 0.02;
+            usedPaymentIds.add(nameMatch.id);
             return {
               ...bl, matched: true, matchType: "Virement",
               matchDetail: `Virement ${nameMatch.familyName}${amountClose ? "" : ` ⚠️ montant: attendu ${nameMatch.totalTTC?.toFixed(2)}€, reçu ${bl.amount.toFixed(2)}€`}`,
@@ -478,35 +580,54 @@ export default function ComptabilitePage() {
             };
           }
 
-          // c) Match par montant exact sur TOUS les paiements virement (même sans fenêtre)
-          const allVirMatch = payments.find(p =>
-            p.paymentMode === "virement" && Math.abs((p.totalTTC || 0) - bl.amount) < 0.02
+          // c) Match individuel encaissement virement/sepa par MONTANT EXACT dans la fenêtre
+          //    ATTENTION : ce bloc ne s'exécute QUE si aucun nom n'a été trouvé dans le libellé,
+          //    pour éviter qu'un virement "JOUSSE 50€" soit faussement matché à un encaissement
+          //    "GUYON 50€". On impose aussi qu'il n'y ait qu'UN SEUL candidat (pas d'ambigüité).
+          const amountMatches = virEncs.filter(e =>
+            inWindow(e) && Math.abs((e.montant || 0) - bl.amount) < 0.02
           );
-          if (allVirMatch) return { ...bl, matched: true, matchType: "Virement", matchDetail: `Virement ${allVirMatch.familyName}`, manualPaymentId: allVirMatch.id };
+          if (amountMatches.length === 1) {
+            const match = amountMatches[0];
+            usedEncIds.add(match.id);
+            return { ...bl, matched: true, matchType: "Virement", matchDetail: `Virement ${match.familyName} (montant seul)`, matchedEncs: [encToDetail(match)] };
+          }
+          // Si plusieurs encaissements de même montant → ambigu, on laisse au pointage manuel
 
-          // b) Match remise SEPA (somme des prélèvements groupés)
-          if (label.includes("PRLV") || label.includes("SEPA")) {
-            const remiseMatch = remisesSepa.find(r =>
-              Math.abs(r.montantTotal - bl.amount) < 0.02 &&
-              r.datePrelevement?.startsWith(period)
-            );
-            if (remiseMatch) return { ...bl, matched: true, matchType: "Prélèvement SEPA", matchDetail: `Remise SEPA n°${remiseMatch.numero} — ${remiseMatch.nbTransactions} prélèvements` };
+          // d) Match par montant exact sur les paiements virement EN ATTENTE uniquement
+          const pendingVirPayments = payments.filter(p =>
+            p.paymentMode === "virement" &&
+            (p.status === "pending" || p.status === "partial") &&
+            !usedPaymentIds.has(p.id)
+          );
+          const pendingAmountMatches = pendingVirPayments.filter(p =>
+            Math.abs((p.totalTTC || 0) - bl.amount) < 0.02
+          );
+          if (pendingAmountMatches.length === 1) {
+            const p = pendingAmountMatches[0];
+            usedPaymentIds.add(p.id);
+            return { ...bl, matched: true, matchType: "Virement", matchDetail: `Virement ${p.familyName} (montant seul)`, manualPaymentId: p.id };
           }
         }
 
         // ── 4. Chèque ─────────────────────────────────────────────────────
         if (label.includes("CHQ") || label.includes("CHEQUE") || label.includes("REMISE CHQ")) {
-          const allChqEncs = periodEnc.filter(e => e.mode === "cheque");
+          // Pool élargi : une remise chèque peut contenir des chèques du mois d'avant
+          const allChqEncs = periodEncExtended.filter(e => e.mode === "cheque");
 
           // a) Chèque unitaire (montant exact)
           const match = allChqEncs.filter(inWindow).find(e =>
             Math.abs((e.montant || 0) - bl.amount) < 0.02
           );
-          if (match) return { ...bl, matched: true, matchType: "Chèque", matchDetail: `Chèque ${match.familyName}` };
+          if (match) {
+            usedEncIds.add(match.id);
+            return { ...bl, matched: true, matchType: "Chèque", matchDetail: `Chèque ${match.familyName}`, matchedEncs: [encToDetail(match)] };
+          }
 
           // b) Remise chèques groupée — total de TOUS les chèques du mois
           const totalMois = Math.round(allChqEncs.reduce((s, e) => s + (e.montant || 0), 0) * 100) / 100;
           if (totalMois > 0 && Math.abs(totalMois - bl.amount) < 0.02) {
+            allChqEncs.forEach(e => usedEncIds.add(e.id));
             return { ...bl, matched: true, matchType: "Chèques", matchDetail: `Remise ${allChqEncs.length} chèque(s) du mois = ${totalMois.toFixed(2)}€`, matchedEncs: allChqEncs.map(encToDetail) };
           }
 
@@ -519,6 +640,7 @@ export default function ComptabilitePage() {
             });
             const chqTotal = Math.round(chqEncs.reduce((s, e) => s + (e.montant || 0), 0) * 100) / 100;
             if (chqTotal > 0 && Math.abs(chqTotal - bl.amount) < 0.02) {
+              chqEncs.forEach(e => usedEncIds.add(e.id));
               return { ...bl, matched: true, matchType: "Chèques", matchDetail: `Remise ${chqEncs.length} chèque(s) = ${chqTotal.toFixed(2)}€`, matchedEncs: chqEncs.map(encToDetail) };
             }
           }
@@ -526,10 +648,22 @@ export default function ComptabilitePage() {
 
         // ── 5. Espèces ────────────────────────────────────────────────────
         if (label.includes("ESP") || label.includes("VERSEMENT")) {
-          for (const [day, modes] of Object.entries(dailyTotals)) {
-            const espTotal = (modes as any)["especes"] || 0;
-            if (espTotal > 0 && Math.abs(espTotal - bl.amount) < 0.02) {
-              return { ...bl, matched: true, matchType: "Espèces", matchDetail: `Dépôt espèces du ${day}` };
+          // On cherche un jour dont la somme des encaissements en espèces = montant du dépôt
+          const espByDay: Record<string, { total: number; encs: any[] }> = {};
+          for (const e of periodEnc.filter(e => e.mode === "especes")) {
+            const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+            if (!d) continue;
+            const dayKey = d.toISOString().split("T")[0];
+            if (!espByDay[dayKey]) espByDay[dayKey] = { total: 0, encs: [] };
+            espByDay[dayKey].total += (e.montant || 0);
+            espByDay[dayKey].encs.push(e);
+          }
+          for (const [dayKey, dayData] of Object.entries(espByDay)) {
+            const dayTotal = Math.round(dayData.total * 100) / 100;
+            if (Math.abs(dayTotal - bl.amount) < 0.02) {
+              const dayLabel = dayKey.split("-").reverse().join("/");
+              dayData.encs.forEach(e => usedEncIds.add(e.id));
+              return { ...bl, matched: true, matchType: "Espèces", matchDetail: `Dépôt espèces du ${dayLabel} = ${dayTotal.toFixed(2)}€`, matchedEncs: dayData.encs.map(encToDetail) };
             }
           }
         }
@@ -540,19 +674,179 @@ export default function ComptabilitePage() {
           Math.abs((e.montant || 0) - bl.amount) < 0.02
         );
         if (exactMatch) {
-          return { ...bl, matched: true, matchType: "Montant exact", matchDetail: `${exactMatch.familyName} — ${exactMatch.activityTitle || ""}` };
+          usedEncIds.add(exactMatch.id);
+          return { ...bl, matched: true, matchType: "Montant exact", matchDetail: `${exactMatch.familyName} — ${exactMatch.activityTitle || ""}`, matchedEncs: [encToDetail(exactMatch)] };
         }
+
+        // ── DEBUG : ligne non rapprochée → on log pour diagnostic ────────
+        // Pourquoi n'a-t-elle pas matché ? On affiche les encaissements du mois
+        // qui auraient pu correspondre (même montant, ±5€), leur date, leur mode.
+        const periodEncAll = encaissementsCompta.filter(e => {
+          const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+          if (!d) return false;
+          const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          return pm === period;
+        });
+        const candidatsMontantProche = periodEncAll.filter(e =>
+          Math.abs((e.montant || 0) - bl.amount) < 5
+        ).map(e => ({
+          date: e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "?",
+          mode: e.mode,
+          montant: (e.montant || 0).toFixed(2),
+          famille: e.familyName || "?",
+          id: e.id,
+          utilisé: usedEncIds.has(e.id) ? "✅ déjà matché" : "❌ libre",
+        }));
+        const totalEspecesMois = Math.round(periodEncAll.filter(e => e.mode === "especes").reduce((s,e) => s + (e.montant||0), 0) * 100) / 100;
+        const totalChequesMois = Math.round(periodEncAll.filter(e => e.mode === "cheque").reduce((s,e) => s + (e.montant||0), 0) * 100) / 100;
+        const totalCBTerminalMois = Math.round(periodEncAll.filter(e => e.mode === "cb_terminal").reduce((s,e) => s + (e.montant||0), 0) * 100) / 100;
+        const totalCBOnlineMois = Math.round(periodEncAll.filter(e => e.mode === "cb_online" || e.mode === "cb_cawl").reduce((s,e) => s + (e.montant||0), 0) * 100) / 100;
+
+        // Totaux journaliers par mode pour détecter un jour proche du montant bancaire
+        const groupByDayMode = (mode: string | string[]) => {
+          const modes = Array.isArray(mode) ? mode : [mode];
+          const byDay: Record<string, { total: number; count: number; encs: any[] }> = {};
+          for (const e of periodEncAll) {
+            if (!modes.includes(e.mode)) continue;
+            const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+            if (!d) continue;
+            const dayKey = d.toLocaleDateString("fr-FR");
+            if (!byDay[dayKey]) byDay[dayKey] = { total: 0, count: 0, encs: [] };
+            byDay[dayKey].total += (e.montant || 0);
+            byDay[dayKey].count++;
+            byDay[dayKey].encs.push(e);
+          }
+          // Format : { "17/04/2026": "281.00€ (3 tx)", écart: "0.50€" }
+          return Object.entries(byDay)
+            .sort(([a],[b]) => {
+              const pa = a.split("/").reverse().join("-");
+              const pb = b.split("/").reverse().join("-");
+              return pa.localeCompare(pb);
+            })
+            .map(([day, d]) => ({
+              jour: day,
+              total: d.total.toFixed(2) + "€",
+              nb: d.count,
+              écart_vs_banque: (d.total - bl.amount).toFixed(2) + "€",
+              usedIds: d.encs.filter(e => usedEncIds.has(e.id)).length,
+            }));
+        };
+
+        // Détection du type de ligne bancaire (CB, chèque, espèces, virement)
+        const blType = label.includes("REMISE") && (label.includes("CARTE") || label.includes("CB") || label.includes("TPE")) ? "CB_TERMINAL"
+          : label.includes("CHQ") || label.includes("CHEQUE") ? "CHEQUE"
+          : label.includes("ESP") || label.includes("VERSEMENT") ? "ESPECES"
+          : label.includes("VIR") || label.includes("SEPA") || label.includes("PRLV") ? "VIREMENT"
+          : "INCONNU";
+
+        const debugInfo: any = {
+          bankDate: bankDate?.toISOString().slice(0,10) || "non parsée",
+          typeDétecté: blType,
+          totauxMois: { especes: totalEspecesMois, cheques: totalChequesMois, cb_terminal: totalCBTerminalMois, cb_online: totalCBOnlineMois },
+          candidats_montant_proche_5eur: candidatsMontantProche.slice(0, 10),
+        };
+        // On ajoute les totaux journaliers selon le type détecté
+        if (blType === "CB_TERMINAL") debugInfo.cb_terminal_par_jour = groupByDayMode("cb_terminal");
+        if (blType === "CHEQUE") debugInfo.cheques_par_jour = groupByDayMode("cheque");
+        if (blType === "ESPECES") debugInfo.especes_par_jour = groupByDayMode("especes");
+        if (blType === "VIREMENT") debugInfo.virements_enc_proches = periodEncAll
+          .filter(e => (e.mode === "virement" || e.mode === "sepa" || e.mode === "prelevement_sepa") && Math.abs((e.montant||0) - bl.amount) < 10)
+          .map(e => ({
+            date: e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "?",
+            famille: e.familyName, montant: (e.montant||0).toFixed(2),
+          }));
+
+        console.log(`🔍 Ligne non rapprochée : "${bl.label}" | ${bl.amount.toFixed(2)}€ | date ${bl.date}`, debugInfo);
 
         return bl;
       });
 
-      setBankLines(matched as any);
+      // ─────────────────────────────────────────────────────────────────────
+      //  Bug #2 : Fusion avec les matchs manuels existants
+      // ─────────────────────────────────────────────────────────────────────
+      // Si une ligne identique (même date + libellé + montant) existait déjà
+      // dans le rapprochement avec un pointage MANUEL ou IGNORÉ, on conserve
+      // ce pointage pour ne pas le perdre au re-import.
+      const previousBankLines = bankLines;
+      const lineKey = (l: any) => `${l.date}|${l.label}|${l.amount.toFixed(2)}`;
+      const previousManualByKey = new Map<string, any>();
+      for (const prev of previousBankLines) {
+        if (prev.matchType === "Manuel" || prev.matchType === "Ignoré") {
+          previousManualByKey.set(lineKey(prev), prev);
+        }
+      }
+
+      const finalMatched = matched.map((bl: any) => {
+        const prev = previousManualByKey.get(lineKey(bl));
+        if (prev) {
+          // On garde le pointage manuel existant plutôt que l'auto-match
+          return {
+            ...bl,
+            matched: prev.matched,
+            matchType: prev.matchType,
+            matchDetail: prev.matchDetail,
+            matchedEncs: prev.matchedEncs || bl.matchedEncs,
+            manualPaymentId: prev.manualPaymentId,
+          };
+        }
+        return bl;
+      });
+
+      // ─────────────────────────────────────────────────────────────────────
+      //  Bug #11 : Avertissement si doublons potentiels dans le nouveau CSV
+      // ─────────────────────────────────────────────────────────────────────
+      // Si le CSV importé contient des lignes déjà présentes avec un statut
+      // automatique (non manuel), on informe l'utilisateur du nombre de lignes
+      // qui seront écrasées (les auto-matchs se refont proprement à chaque import).
+      const autoOverwritten = previousBankLines.filter(p =>
+        p.matchType !== "Manuel" && p.matchType !== "Ignoré" &&
+        finalMatched.some((m: any) => lineKey(m) === lineKey(p))
+      ).length;
+      if (autoOverwritten > 0) {
+        console.log(`ℹ️ Re-import : ${autoOverwritten} ligne(s) auto-rapprochée(s) recalculée(s), ${previousManualByKey.size} pointage(s) manuel(s) préservé(s)`);
+      }
+
+      setBankLines(finalMatched as any);
+
+      // ─────────────────────────────────────────────────────────────────────
+      //  Bug #8 : Mise à jour du status des paiements virement pointés
+      // ─────────────────────────────────────────────────────────────────────
+      // Quand un virement est rapproché (auto ou manuel), on marque le paiement
+      // comme "paid" dans Firestore pour qu'il ne réapparaisse pas dans l'alerte
+      // "virements attendus >7j" et pour que l'encaissement soit reflété côté compta.
+      const paymentsToUpdate = new Set<string>();
+      for (const bl of finalMatched as any[]) {
+        if (bl.matched && bl.manualPaymentId) {
+          paymentsToUpdate.add(bl.manualPaymentId);
+        }
+      }
+      if (paymentsToUpdate.size > 0) {
+        try {
+          await Promise.all(Array.from(paymentsToUpdate).map(async (pid) => {
+            const pSnap = await getDoc(doc(db, "payments", pid));
+            if (!pSnap.exists()) return;
+            const p = pSnap.data() as any;
+            if (p.status === "paid") return; // déjà marqué
+            await updateDoc(doc(db, "payments", pid), {
+              status: "paid",
+              paidAmount: p.totalTTC || p.paidAmount || 0,
+              paidAt: serverTimestamp(),
+              reconciledByBank: true,
+            });
+          }));
+          console.log(`✅ ${paymentsToUpdate.size} paiement(s) virement marqué(s) comme encaissé(s)`);
+          // Recharger les paiements pour rafraîchir l'UI
+          fetchData();
+        } catch (e) {
+          console.error("Erreur mise à jour paiements rapprochés:", e);
+        }
+      }
 
       // Sauvegarder dans Firestore
       try {
         await setDoc(doc(db, "rapprochements", period), {
           period,
-          bankLines: matched.map((bl: any) => ({
+          bankLines: (finalMatched as any[]).map((bl: any) => ({
             date: bl.date,
             label: bl.label,
             amount: bl.amount,
@@ -562,12 +856,12 @@ export default function ComptabilitePage() {
             matchedEncs: bl.matchedEncs || null,
             manualPaymentId: bl.manualPaymentId || null,
           })),
-          totalLines: matched.length,
-          totalMatched: matched.filter((b: any) => b.matched).length,
-          totalAmount: Math.round(matched.reduce((s: number, b: any) => s + b.amount, 0) * 100) / 100,
+          totalLines: finalMatched.length,
+          totalMatched: (finalMatched as any[]).filter((b: any) => b.matched).length,
+          totalAmount: Math.round((finalMatched as any[]).reduce((s: number, b: any) => s + b.amount, 0) * 100) / 100,
           updatedAt: serverTimestamp(),
         });
-        console.log(`✅ Rapprochement ${period} sauvegardé (${matched.length} lignes)`);
+        console.log(`✅ Rapprochement ${period} sauvegardé (${finalMatched.length} lignes)`);
       } catch (e) { console.error("Erreur sauvegarde rapprochement:", e); }
     };
     reader.readAsText(file, "ISO-8859-1"); // Encodage Crédit Agricole = Latin1
@@ -1723,10 +2017,31 @@ export default function ComptabilitePage() {
                       </button>
                     )}
                     {bl.matched && bl.matchType === "Manuel" && (
-                      <button onClick={() => {
+                      <button onClick={async () => {
+                        const oldPaymentId = bl.manualPaymentId;
                         const updated = [...bankLines];
                         updated[i] = { ...updated[i], matched: false, matchType: "", matchDetail: "", manualPaymentId: undefined };
-                        updateAndSaveBankLines(updated);
+                        await updateAndSaveBankLines(updated);
+
+                        // Bug #8 : si le paiement était un virement rapproché, on le repasse en pending
+                        if (oldPaymentId) {
+                          try {
+                            const pSnap = await getDoc(doc(db, "payments", oldPaymentId));
+                            if (pSnap.exists()) {
+                              const p = pSnap.data() as any;
+                              if (p.paymentMode === "virement" && p.reconciledByBank) {
+                                await updateDoc(doc(db, "payments", oldPaymentId), {
+                                  status: "pending",
+                                  paidAmount: 0,
+                                  reconciledByBank: false,
+                                });
+                                fetchData();
+                              }
+                            }
+                          } catch (e) {
+                            console.error("Erreur dé-pointage paiement:", e);
+                          }
+                        }
                       }}
                         className="font-body text-[10px] text-orange-500 bg-orange-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-orange-100">
                         Dé-pointer
@@ -1852,7 +2167,7 @@ export default function ComptabilitePage() {
                     return (
                       <div key={p.id}
                         className={`flex items-center justify-between px-3 py-2.5 rounded-lg border cursor-pointer hover:border-blue-300 ${amountMatch ? "border-green-300 bg-green-50/30" : "border-gray-100"}`}
-                        onClick={() => {
+                        onClick={async () => {
                           const updated = [...bankLines];
                           updated[showManualMatch!] = {
                             ...updated[showManualMatch!],
@@ -1861,7 +2176,23 @@ export default function ComptabilitePage() {
                             matchDetail: `${p.familyName} — ${(p.totalTTC || 0).toFixed(2)}€ (${modeLabels[p.paymentMode] || p.paymentMode})`,
                             manualPaymentId: p.id,
                           };
-                          updateAndSaveBankLines(updated);
+                          await updateAndSaveBankLines(updated);
+
+                          // Bug #8 : si le paiement pointé est un virement pending/partial,
+                          // on le marque comme encaissé pour sortir de l'alerte "virements attendus"
+                          if (p.paymentMode === "virement" && (p.status === "pending" || p.status === "partial")) {
+                            try {
+                              await updateDoc(doc(db, "payments", p.id), {
+                                status: "paid",
+                                paidAmount: p.totalTTC || 0,
+                                paidAt: serverTimestamp(),
+                                reconciledByBank: true,
+                              });
+                              fetchData();
+                            } catch (e) {
+                              console.error("Erreur mise à jour paiement:", e);
+                            }
+                          }
                           setShowManualMatch(null);
                         }}>
                         <div>
