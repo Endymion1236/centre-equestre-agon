@@ -739,24 +739,57 @@ export default function ComptabilitePage() {
           : label.includes("VIR") || label.includes("SEPA") || label.includes("PRLV") ? "VIREMENT"
           : "INCONNU";
 
-        const debugInfo: any = {
-          bankDate: bankDate?.toISOString().slice(0,10) || "non parsée",
-          typeDétecté: blType,
-          totauxMois: { especes: totalEspecesMois, cheques: totalChequesMois, cb_terminal: totalCBTerminalMois, cb_online: totalCBOnlineMois },
-          candidats_montant_proche_5eur: candidatsMontantProche.slice(0, 10),
-        };
-        // On ajoute les totaux journaliers selon le type détecté
-        if (blType === "CB_TERMINAL") debugInfo.cb_terminal_par_jour = groupByDayMode("cb_terminal");
-        if (blType === "CHEQUE") debugInfo.cheques_par_jour = groupByDayMode("cheque");
-        if (blType === "ESPECES") debugInfo.especes_par_jour = groupByDayMode("especes");
-        if (blType === "VIREMENT") debugInfo.virements_enc_proches = periodEncAll
-          .filter(e => (e.mode === "virement" || e.mode === "sepa" || e.mode === "prelevement_sepa") && Math.abs((e.montant||0) - bl.amount) < 10)
-          .map(e => ({
-            date: e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "?",
-            famille: e.familyName, montant: (e.montant||0).toFixed(2),
-          }));
+        // Log à plat (format texte) pour faciliter la lecture/copie sans avoir à dérouler
+        const lines: string[] = [];
+        lines.push(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+        lines.push(`🔍 NON RAPPROCHÉE : "${bl.label}"`);
+        lines.push(`   Montant : ${bl.amount.toFixed(2)}€ | Date banque : ${bl.date} | Type détecté : ${blType}`);
+        lines.push(`   Totaux ${period} : espèces=${totalEspecesMois.toFixed(2)}€ | chèques=${totalChequesMois.toFixed(2)}€ | cb_terminal=${totalCBTerminalMois.toFixed(2)}€ | cb_online=${totalCBOnlineMois.toFixed(2)}€`);
 
-        console.log(`🔍 Ligne non rapprochée : "${bl.label}" | ${bl.amount.toFixed(2)}€ | date ${bl.date}`, debugInfo);
+        if (blType === "CB_TERMINAL") {
+          const days = groupByDayMode("cb_terminal");
+          lines.push(`   CB terminal par jour :`);
+          if (days.length === 0) lines.push(`      (aucun encaissement CB terminal sur ${period})`);
+          for (const d of days) {
+            lines.push(`      → ${d.jour} : ${d.total} (${d.nb} tx) | écart vs banque : ${d.écart_vs_banque} | ${d.usedIds} déjà consommé(s)`);
+          }
+        }
+        if (blType === "CHEQUE") {
+          const days = groupByDayMode("cheque");
+          lines.push(`   Chèques par jour :`);
+          if (days.length === 0) lines.push(`      (aucun chèque enregistré sur ${period})`);
+          for (const d of days) {
+            lines.push(`      → ${d.jour} : ${d.total} (${d.nb} chèque(s)) | écart vs banque : ${d.écart_vs_banque} | ${d.usedIds} déjà consommé(s)`);
+          }
+        }
+        if (blType === "ESPECES") {
+          const days = groupByDayMode("especes");
+          lines.push(`   Espèces par jour :`);
+          if (days.length === 0) lines.push(`      (aucun encaissement espèces sur ${period})`);
+          for (const d of days) {
+            lines.push(`      → ${d.jour} : ${d.total} (${d.nb} tx) | écart vs banque : ${d.écart_vs_banque} | ${d.usedIds} déjà consommé(s)`);
+          }
+        }
+        if (blType === "VIREMENT") {
+          const vEncs = periodEncAll.filter(e => (e.mode === "virement" || e.mode === "sepa" || e.mode === "prelevement_sepa") && Math.abs((e.montant||0) - bl.amount) < 10);
+          lines.push(`   Virements enc. proches (±10€) :`);
+          if (vEncs.length === 0) lines.push(`      (aucun encaissement virement proche de ${bl.amount.toFixed(2)}€)`);
+          for (const e of vEncs) {
+            const d = e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "?";
+            lines.push(`      → ${d} : ${(e.montant||0).toFixed(2)}€ | ${e.familyName || "?"}`);
+          }
+        }
+
+        if (candidatsMontantProche.length > 0) {
+          lines.push(`   Candidats ±5€ (tous modes) :`);
+          for (const c of candidatsMontantProche.slice(0, 5)) {
+            lines.push(`      → ${c.date} | ${c.mode} | ${c.montant}€ | ${c.famille} | ${c.utilisé}`);
+          }
+        } else {
+          lines.push(`   ❌ Aucun encaissement ±5€ dans la base → il manque probablement des saisies`);
+        }
+
+        console.log(lines.join("\n"));
 
         return bl;
       });
