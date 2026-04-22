@@ -881,6 +881,7 @@ export default function PlanningPage() {
     // Trouver les créneaux à désinscrire (stage = tous les jours par défaut)
     let creneauxIds = [cid];
     let isPartialStageUnenroll = false; // true si on désinscrit 1 jour seulement d'un stage
+    let skipAvoir = false; // true si l'admin a choisi "sans avoir" (absence tardive, le montant reste dû)
     if (isStageType) {
       const stageCreneaux = await findStageCreneaux(c.activityTitle, c.date);
       const allCreneauxIds = stageCreneaux.map((sc: any) => sc.id);
@@ -892,17 +893,23 @@ export default function PlanningPage() {
         const choice = window.prompt(
           `${child.childName} est inscrit(e) au stage "${c.activityTitle}" (${allCreneauxIds.length} jours).\n\n` +
           `Que veux-tu désinscrire ?\n\n` +
-          `  1 → Tout le stage (${allCreneauxIds.length} jours)\n` +
-          `  2 → Seulement ce jour (${dateStr})\n` +
+          `  1 → Tout le stage (${allCreneauxIds.length} jours, avoir plein)\n` +
+          `  2 → Seulement ce jour (${dateStr}) — avoir au prorata\n` +
+          `  3 → Seulement ce jour (${dateStr}) — SANS avoir (absence tardive, le stage reste dû)\n` +
           `  (Annuler pour abandonner)\n\n` +
-          `Saisis 1 ou 2 :`,
+          `Saisis 1, 2 ou 3 :`,
           "1"
         );
         if (choice === null) return; // Annulé
-        if (choice.trim() === "2") {
+        const trimmed = choice.trim();
+        if (trimmed === "2") {
           creneauxIds = [cid]; // juste ce jour
           isPartialStageUnenroll = true;
-        } else if (choice.trim() === "1") {
+        } else if (trimmed === "3") {
+          creneauxIds = [cid]; // juste ce jour
+          isPartialStageUnenroll = true;
+          skipAvoir = true; // pas d'avoir : le montant reste dû (ex: absence tardive non prévue)
+        } else if (trimmed === "1") {
           creneauxIds = allCreneauxIds;
         } else {
           alert("Choix invalide — désinscription annulée.");
@@ -916,9 +923,11 @@ export default function PlanningPage() {
     const nbJours = creneauxIds.length;
     const msg = isStageType && !isPartialStageUnenroll
       ? `Désinscrire ${child.childName} du stage "${c.activityTitle}" (${nbJours} jour${nbJours > 1 ? "s" : ""}) ?\n\nSi un paiement a été encaissé, un avoir sera créé automatiquement.`
-      : isPartialStageUnenroll
-        ? `Désinscrire ${child.childName} du stage "${c.activityTitle}" UNIQUEMENT pour le ${new Date(c.date).toLocaleDateString("fr-FR")} ?\n\nUn avoir au prorata sera créé si un paiement a été encaissé.`
-        : `Désinscrire ${child.childName} de "${c.activityTitle}" le ${new Date(c.date).toLocaleDateString("fr-FR")} ?\n\nSi un paiement a été encaissé, un avoir sera créé automatiquement.`;
+      : isPartialStageUnenroll && skipAvoir
+        ? `Désinscrire ${child.childName} du stage "${c.activityTitle}" UNIQUEMENT pour le ${new Date(c.date).toLocaleDateString("fr-FR")} ?\n\n⚠️ AUCUN avoir ne sera créé (absence tardive).\nLe stage reste dû en totalité.`
+        : isPartialStageUnenroll
+          ? `Désinscrire ${child.childName} du stage "${c.activityTitle}" UNIQUEMENT pour le ${new Date(c.date).toLocaleDateString("fr-FR")} ?\n\nUn avoir au prorata sera créé si un paiement a été encaissé.`
+          : `Désinscrire ${child.childName} de "${c.activityTitle}" le ${new Date(c.date).toLocaleDateString("fr-FR")} ?\n\nSi un paiement a été encaissé, un avoir sera créé automatiquement.`;
     if (!confirm(msg)) return;
 
     console.log("[handleUnenroll] Démarrage", {
@@ -971,6 +980,29 @@ export default function PlanningPage() {
       }
     }
 
+    // 1bis. Cas "absence tardive" : désinscription sans avoir ni recrédit
+    // On garde le paiement et la carte intacts (le stage reste dû), on retire
+    // juste l'enfant du créneau. Cas typique : cavalier annule la veille sans
+    // préavis → place libérée mais montant reste dû, carte non recréditée.
+    // Ce check doit être AVANT le bloc carte pour que la carte ne soit pas
+    // recréditée automatiquement.
+    if (skipAvoir) {
+      toast(
+        `${child.childName} désinscrit(e) du ${new Date(c.date).toLocaleDateString("fr-FR")} — Aucun avoir (absence tardive)`,
+        "success"
+      );
+      // Journal d'audit pour garder une trace de cette décision
+      console.log("[handleUnenroll] Désinscription sans avoir", {
+        childName: child.childName,
+        date: c.date,
+        activityTitle: c.activityTitle,
+        paymentSource: child.paymentSource,
+        reason: "absence tardive — montant reste dû, carte non recréditée",
+      });
+      await fetchData();
+      return;
+    }
+
     // 2. Si payé par carte → recréditer la carte
     if (child.paymentSource === "card" && child.cardId) {
       try {
@@ -997,6 +1029,8 @@ export default function PlanningPage() {
       await fetchData();
       return;
     }
+
+    // 2bis. (déplacé en 1bis)
 
     // 3. Gestion financière (paiement classique)
     try {
