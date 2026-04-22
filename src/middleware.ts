@@ -34,6 +34,7 @@ const ADMIN_MAINTENANCE_ROUTES = [
   "/api/admin/fix-pending-reservations",
   "/api/admin/migrate-paiements-collection",
   "/api/admin/delete-family",
+  "/api/admin/diag-creneaux-sans-prix",
   "/api/admin/list-claims",
   "/api/admin/set-claims",
   "/api/admin/push-test",

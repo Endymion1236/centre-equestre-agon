@@ -538,6 +538,32 @@ export default function PlanningPage() {
 
       // skipPayment = true pour les inscriptions stage multi-jours
       const priceTTC = c.priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
+
+      // ⚠️ GARDE-FOU : créneau sans prix défini
+      // Sans cette vérification, handleEnroll aurait sauté tout le bloc de
+      // création de payment (ligne "if priceTTC > 0"), laissant le cavalier
+      // inscrit au planning sans aucune trace financière. Nicolas nous a
+      // confirmé que tous ses créneaux DOIVENT avoir un prix — un priceTTC
+      // à 0 ou manquant est donc un oubli, pas un cas volontaire.
+      if (!options?.skipPayment && !options?.freeReason && priceTTC <= 0) {
+        console.error("[handleEnroll] Créneau sans prix !", {
+          creneauId: cid,
+          activityTitle: c.activityTitle,
+          date: c.date,
+          priceTTC: c.priceTTC,
+          priceHT: c.priceHT,
+        });
+        toast(
+          `⚠️ Ce créneau "${c.activityTitle}" n'a pas de prix défini. ` +
+          `Configure son prix dans les paramètres du créneau avant d'inscrire un cavalier.`,
+          "error"
+        );
+        // On annule : on retire l'inscription qui vient d'être faite
+        await removeChildFromCreneau(cid, child.childId);
+        if (reservationCreated) await deleteReservations(cid, child.childId);
+        return;
+      }
+
       if (!options?.skipPayment && priceTTC > 0) {
 
       // ─── LOGIQUE CARTE : noter paymentSource=card si carte compatible, sans débiter ───
