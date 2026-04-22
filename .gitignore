@@ -34,3 +34,26 @@ next-env.d.ts
 /playwright-report/
 /test-results/
 tests/e2e/.auth/
+
+
+# === SECURITE - cles et secrets ===
+serviceAccountKey.json
+src/serviceAccountKey.json
+*firebase-adminsdk*.json
+*.key
+credentials*.json
+
+# === Scripts one-shot a la racine (ne pas commit) ===
+/check-*.js
+/create-payments-*.js
+/delete-*.js
+/find-*.js
+/fix-*.js
+/import-preprod*.js
+/inscriptions-*.js
+/reset-*.js
+src/import-preprod.js
+
+# === Fichiers orphelins a la racine ===
+/node
+/middleware.ts
