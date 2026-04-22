@@ -56,12 +56,16 @@ export default function ComptabilitePage() {
   const [remiseDateFrom, setRemiseDateFrom] = useState("");
   const [remiseDateTo, setRemiseDateTo] = useState("");
   const [remiseModeFilter, setRemiseModeFilter] = useState("");
+  // Filtres de la liste "Encaissements à remettre"
+  const [aRemettreDateFrom, setARemettreDateFrom] = useState("");
+  const [aRemettreDateTo, setARemettreDateTo] = useState("");
   // Édition remise (ajouter/retirer paiements)
   const [editingRemiseId, setEditingRemiseId] = useState<string | null>(null);
   const [editingRemiseSearch, setEditingRemiseSearch] = useState("");
   // Pointage manuel remise
   const [pointageRemiseId, setPointageRemiseId] = useState<string | null>(null);
   const [pointageNote, setPointageNote] = useState("");
+  const [pointageDate, setPointageDate] = useState(""); // date de pointage bancaire choisie par l'utilisateur
   const [openRemiseId, setOpenRemiseId] = useState<string | null>(null);
 
   // ── IA ──────────────────────────────────────────────────────────────────────
@@ -1120,6 +1124,54 @@ export default function ComptabilitePage() {
       setBankLines(finalMatched as any);
 
       // ─────────────────────────────────────────────────────────────────────
+      //  Marquer les encaissements rapprochés avec reconciledByBank=true
+      // ─────────────────────────────────────────────────────────────────────
+      //  Objectif : les sortir de la liste "Encaissements à remettre" côté
+      //  bordereau, puisqu'ils sont déjà rapprochés directement avec la banque
+      //  (cas des CB terminal remises automatiquement par la banque).
+      //
+      //  On compare avec l'état actuel en Firestore : on ne touche que les
+      //  encs qui sont dans usedEncIds MAIS pas encore marqués reconciledByBank.
+      //  Réciproquement, un enc marqué reconciledByBank qui n'est plus dans
+      //  usedEncIds (cas : la bankLine a été dé-pointée) doit être remis à false.
+      try {
+        const allEncsSnap = await getDocs(collection(db, "encaissements"));
+        const updates: Promise<any>[] = [];
+        for (const d of allEncsSnap.docs) {
+          const data = d.data() as any;
+          const isUsed = usedEncIds.has(d.id);
+          const wasReconciled = Boolean(data.reconciledByBank);
+          if (isUsed && !wasReconciled) {
+            updates.push(updateDoc(doc(db, "encaissements", d.id), {
+              reconciledByBank: true,
+              reconciledAt: serverTimestamp(),
+            }));
+          } else if (!isUsed && wasReconciled) {
+            // Ne pas dé-marquer si l'encaissement a été rapproché lors d'un autre
+            // import (ex : CSV précédent). On ne dé-marque QUE si l'encaissement
+            // est dans la période du CSV courant (sinon on pourrait casser un
+            // rapprochement précédent).
+            const encDate = data.date?.seconds ? new Date(data.date.seconds * 1000) : null;
+            if (encDate) {
+              const pm = `${encDate.getFullYear()}-${String(encDate.getMonth() + 1).padStart(2, "0")}`;
+              if (pm === period) {
+                updates.push(updateDoc(doc(db, "encaissements", d.id), {
+                  reconciledByBank: false,
+                  reconciledAt: null,
+                }));
+              }
+            }
+          }
+        }
+        if (updates.length > 0) {
+          await Promise.all(updates);
+          console.log(`✅ ${updates.length} encaissement(s) mis à jour (reconciledByBank)`);
+        }
+      } catch (e) {
+        console.error("Erreur mise à jour reconciledByBank:", e);
+      }
+
+      // ─────────────────────────────────────────────────────────────────────
       //  Bug #8 : Mise à jour du status des paiements virement pointés
       // ─────────────────────────────────────────────────────────────────────
       // Quand un virement est rapproché (auto ou manuel), on marque le paiement
@@ -1565,6 +1617,25 @@ export default function ComptabilitePage() {
         const remisEncaissementIds = new Set(
           (remises || []).flatMap((r: any) => r.encaissementIds || [])
         );
+
+        // ──────────────────────────────────────────────────────────────────
+        // Contre-passations neutralisées :
+        // Si un encaissement A (positif) a une contre-passation B (négatif,
+        // montant opposé), alors A et B s'annulent mutuellement et doivent
+        // disparaître de la liste "Encaissements à remettre".
+        // ──────────────────────────────────────────────────────────────────
+        const neutralizedEncIds = new Set<string>();
+        const reversals = (encaissementsCompta || []).filter((e: any) => e.correctionDe && (e.montant || 0) < 0);
+        for (const rev of reversals) {
+          const original = (encaissementsCompta || []).find((e: any) => e.id === rev.correctionDe);
+          if (!original) continue;
+          // Vérifier que les montants s'annulent exactement
+          if (Math.abs((original.montant || 0) + (rev.montant || 0)) < 0.02) {
+            neutralizedEncIds.add(original.id);
+            neutralizedEncIds.add(rev.id);
+          }
+        }
+
         // Legacy : certaines remises anciennes n'ont que paymentIds (pas
         // encaissementIds). Dans ce cas on considère qu'elles concernent
         // TOUS les encaissements de ces payments DONT LE MODE CORRESPOND
@@ -1594,16 +1665,20 @@ export default function ComptabilitePage() {
           if (["virement", "prelevement_sepa", "cb_online", "avoir"].includes(e.mode)) return false;
           // Montant positif uniquement (pas de remboursements)
           if ((e.montant || 0) <= 0) return false;
+          // Neutralisé par une contre-passation de montant opposé
+          if (neutralizedEncIds.has(e.id)) return false;
           // Déjà remis : soit marqué directement, soit via encaissementIds
           if (e.remiseId) return false;
           if (remisEncaissementIds.has(e.id)) return false;
+          // Déjà rapproché directement par la banque (CB terminal, etc.)
+          // → pas besoin de passer par un bordereau de remise physique
+          if (e.reconciledByBank) return false;
           // Legacy : la remise ne mentionne que paymentIds, on compare aussi le mode
           if (e.paymentId && remisPaymentModeLegacy.get(e.paymentId)?.has(e.mode)) return false;
           // Legacy mixte : remise.paymentMode === 'mixte' + paymentId matche → déjà remis
           // (on ne peut pas distinguer les modes, on suppose que toute la
           // commande est remise, comportement historique)
           if (e.paymentId && remisPaymentModeLegacy.get(e.paymentId)?.has("mixte")) return false;
-          return true;
           return true;
         });
 
@@ -1649,6 +1724,53 @@ export default function ComptabilitePage() {
               <p className="font-body text-sm text-green-600">✓ Tous les encaissements ont été remis en banque.</p>
             ) : (
               <>
+                {/* Filtre par date */}
+                <div className="flex flex-wrap gap-2 mb-3 items-center bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
+                  <span className="font-body text-[11px] text-slate-500 uppercase tracking-wider">Du</span>
+                  <input
+                    type="date"
+                    value={aRemettreDateFrom}
+                    onChange={e => setARemettreDateFrom(e.target.value)}
+                    className="font-body text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:border-blue-400"
+                  />
+                  <span className="font-body text-[11px] text-slate-500 uppercase tracking-wider">au</span>
+                  <input
+                    type="date"
+                    value={aRemettreDateTo}
+                    onChange={e => setARemettreDateTo(e.target.value)}
+                    className="font-body text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:border-blue-400"
+                  />
+                  {(aRemettreDateFrom || aRemettreDateTo) && (
+                    <button
+                      onClick={() => { setARemettreDateFrom(""); setARemettreDateTo(""); }}
+                      className="font-body text-[11px] text-slate-500 bg-white border border-gray-200 px-2 py-1 rounded cursor-pointer hover:bg-slate-100">
+                      ✕ Réinitialiser
+                    </button>
+                  )}
+                  {/* Boutons raccourcis */}
+                  <div className="flex gap-1 ml-auto">
+                    <button
+                      onClick={() => {
+                        const t = new Date();
+                        const iso = t.toISOString().slice(0, 10);
+                        setARemettreDateFrom(iso); setARemettreDateTo(iso);
+                      }}
+                      className="font-body text-[11px] text-blue-600 bg-blue-50 border border-blue-200 px-2 py-1 rounded cursor-pointer hover:bg-blue-100">
+                      Aujourd'hui
+                    </button>
+                    <button
+                      onClick={() => {
+                        const t = new Date();
+                        const weekAgo = new Date(t.getTime() - 7 * 24 * 60 * 60 * 1000);
+                        setARemettreDateFrom(weekAgo.toISOString().slice(0, 10));
+                        setARemettreDateTo(t.toISOString().slice(0, 10));
+                      }}
+                      className="font-body text-[11px] text-blue-600 bg-blue-50 border border-blue-200 px-2 py-1 rounded cursor-pointer hover:bg-blue-100">
+                      7 derniers jours
+                    </button>
+                  </div>
+                </div>
+
                 {/* Filtre d'affichage par mode */}
                 <div className="flex flex-wrap gap-2 mb-3 items-center">
                   <span className="font-body text-[11px] text-slate-500 uppercase tracking-wider">Afficher :</span>
@@ -1679,10 +1801,25 @@ export default function ComptabilitePage() {
                   })}
                 </div>
 
-                {/* Liste des encaissements filtrée par mode */}
+                {/* Liste des encaissements filtrée par mode ET par date */}
                 <div className="flex flex-col gap-1 mb-4 max-h-[300px] overflow-y-auto">
                   {nonRemisEnc
                     .filter((e: any) => !remiseModeView || e.mode === remiseModeView)
+                    .filter((e: any) => {
+                      // Filtre par date
+                      if (!aRemettreDateFrom && !aRemettreDateTo) return true;
+                      const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+                      if (!d) return false;
+                      if (aRemettreDateFrom) {
+                        const from = new Date(aRemettreDateFrom + "T00:00:00");
+                        if (d < from) return false;
+                      }
+                      if (aRemettreDateTo) {
+                        const to = new Date(aRemettreDateTo + "T23:59:59");
+                        if (d > to) return false;
+                      }
+                      return true;
+                    })
                     .sort((a: any, b: any) => (b.date?.seconds || 0) - (a.date?.seconds || 0))
                     .map((e: any) => {
                       const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
@@ -1732,7 +1869,23 @@ export default function ComptabilitePage() {
                     ? (modeLabels[selectedEncs[0]?.mode] || selectedEncs[0]?.mode)
                     : "mixte";
                   // Dans la vue filtrée uniquement : quels encaissements sont affichés ?
-                  const visibleEncs = nonRemisEnc.filter((e: any) => !remiseModeView || e.mode === remiseModeView);
+                  // On applique LE MÊME filtre que la liste visible (mode + date)
+                  const visibleEncs = nonRemisEnc
+                    .filter((e: any) => !remiseModeView || e.mode === remiseModeView)
+                    .filter((e: any) => {
+                      if (!aRemettreDateFrom && !aRemettreDateTo) return true;
+                      const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+                      if (!d) return false;
+                      if (aRemettreDateFrom) {
+                        const from = new Date(aRemettreDateFrom + "T00:00:00");
+                        if (d < from) return false;
+                      }
+                      if (aRemettreDateTo) {
+                        const to = new Date(aRemettreDateTo + "T23:59:59");
+                        if (d > to) return false;
+                      }
+                      return true;
+                    });
                   const allVisibleSelected = visibleEncs.length > 0 && visibleEncs.every((e: any) => selectedForRemise.has(e.id!));
                   return (
                     <>
@@ -2008,7 +2161,16 @@ export default function ComptabilitePage() {
                         <div className="mt-3 pt-3 border-t border-gray-100">
                           {/* Boutons d'action */}
                           <div className="flex gap-2 flex-wrap mb-3">
-                            <button onClick={e => { e.stopPropagation(); setPointageRemiseId(isPointing ? null : r.id); setPointageNote(r.pointeeNote || ""); }}
+                            <button onClick={e => {
+                              e.stopPropagation();
+                              const opening = !isPointing;
+                              setPointageRemiseId(opening ? r.id : null);
+                              setPointageNote(r.pointeeNote || "");
+                              // Pré-remplir la date avec aujourd'hui à chaque ouverture
+                              if (opening) {
+                                setPointageDate(new Date().toISOString().slice(0, 10));
+                              }
+                            }}
                               className={`font-body text-xs px-3 py-1.5 rounded-lg border-none cursor-pointer flex items-center gap-1 ${r.pointee ? "bg-green-50 text-green-600 hover:bg-red-50 hover:text-red-500" : "bg-orange-50 text-orange-600 hover:bg-orange-100"}`}>
                               {r.pointee ? "✓ Dépointer" : "◎ Pointer"}
                             </button>
@@ -2035,6 +2197,20 @@ export default function ComptabilitePage() {
                               ? "Cette remise sera marquée comme non vérifiée."
                               : "Confirmez que vous avez vérifié cette remise avec votre relevé bancaire."}
                           </p>
+                          {!r.pointee && (
+                            <div>
+                              <label className="font-body text-xs text-slate-600 block mb-1">Date de pointage bancaire</label>
+                              <input
+                                type="date"
+                                value={pointageDate}
+                                onChange={e => setPointageDate(e.target.value)}
+                                className="font-body text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-blue-400"
+                              />
+                              <p className="font-body text-[11px] text-slate-500 mt-1">
+                                Par défaut, aujourd'hui. Tu peux choisir la date effective d'encaissement en banque.
+                              </p>
+                            </div>
+                          )}
                           <div>
                             <label className="font-body text-xs text-slate-600 block mb-1">Note de rapprochement (optionnel)</label>
                             <input value={pointageNote} onChange={e => setPointageNote(e.target.value)}
@@ -2043,18 +2219,26 @@ export default function ComptabilitePage() {
                           </div>
                           <div className="flex gap-2">
                             <button onClick={async () => {
+                              // Si l'utilisateur a choisi une date, on l'utilise ; sinon aujourd'hui
+                              const pointeeDate = !r.pointee
+                                ? (pointageDate
+                                    ? new Date(pointageDate + "T12:00:00").toISOString()
+                                    : new Date().toISOString())
+                                : null;
                               await updateDoc(doc(db, "remises", r.id), {
                                 pointee: !r.pointee,
-                                pointeeDate: !r.pointee ? new Date().toISOString() : null,
+                                pointeeDate,
                                 pointeeNote: pointageNote.trim() || null,
                                 updatedAt: serverTimestamp(),
                               });
                               setPointageRemiseId(null);
+                              setPointageDate("");
+                              setPointageNote("");
                               fetchData();
                             }} className={`font-body text-xs font-semibold px-4 py-2 rounded-lg border-none cursor-pointer text-white ${r.pointee ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"}`}>
                               {r.pointee ? "Confirmer le dépointage" : "✓ Confirmer le pointage"}
                             </button>
-                            <button onClick={() => setPointageRemiseId(null)}
+                            <button onClick={() => { setPointageRemiseId(null); setPointageDate(""); setPointageNote(""); }}
                               className="font-body text-xs text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
                           </div>
                         </div>
