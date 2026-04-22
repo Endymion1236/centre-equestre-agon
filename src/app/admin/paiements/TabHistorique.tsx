@@ -202,6 +202,29 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                   const fam = families.find(f => f.firestoreId === p.familyId);
                   const civilite = fam?.civilite ? `${fam.civilite} ` : "";
                   const adresseLines = [fam?.address, [fam?.zipCode, fam?.city].filter(Boolean).join(" ")].filter(Boolean).join("\n");
+
+                  // Récupérer le détail des encaissements associés à cette commande
+                  // pour afficher chaque ligne (mode, montant, date) sur la facture
+                  // plutôt qu'un simple "mixte".
+                  const paymentDetails = encaissements
+                    .filter((e: any) => e.paymentId === p.id && (e.montant || 0) > 0)
+                    .sort((a: any, b: any) => {
+                      const da = a.date?.seconds || 0;
+                      const db = b.date?.seconds || 0;
+                      return da - db;
+                    })
+                    .map((e: any) => {
+                      const modeObj = paymentModes.find(m => m.id === e.mode);
+                      const encDate = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+                      return {
+                        mode: e.mode,
+                        modeLabel: modeObj?.label || e.modeLabel || e.mode,
+                        montant: Number(e.montant || 0),
+                        date: encDate ? encDate.toLocaleDateString("fr-FR") : undefined,
+                        ref: e.ref,
+                      };
+                    });
+
                   await downloadInvoicePdf({
                     invoiceNumber: invoiceNum, date: date.toLocaleDateString("fr-FR"),
                     familyName: `${civilite}${p.familyName}`, familyEmail: fam?.parentEmail || "",
@@ -211,6 +234,7 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                     paymentMode: mode?.label || p.paymentMode || "",
                     paymentDate: p.paidAmount > 0 ? date.toLocaleDateString("fr-FR") : "",
                     paidAmount: p.paidAmount || p.totalTTC || 0,
+                    paymentDetails: paymentDetails.length > 0 ? paymentDetails : undefined,
                   });
                 };
                 // Trouver TOUS les avoirs liés pour les annulés

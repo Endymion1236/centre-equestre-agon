@@ -1,5 +1,13 @@
 import { authFetch } from "@/lib/auth-fetch";
 
+export interface PaymentDetail {
+  mode: string;
+  modeLabel?: string;
+  montant: number;
+  date?: string;
+  ref?: string;
+}
+
 // Helper — télécharger une facture en PDF
 export async function downloadInvoicePdf(params: {
   invoiceNumber: string;
@@ -14,6 +22,8 @@ export async function downloadInvoicePdf(params: {
   paidAmount: number;
   paymentMode: string;
   paymentDate: string;
+  /** Détail ligne-par-ligne des encaissements (optionnel, prioritaire sur paymentMode) */
+  paymentDetails?: PaymentDetail[];
 }) {
   const res = await authFetch("/api/invoice-pdf", {
     method: "POST",

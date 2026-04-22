@@ -105,6 +105,7 @@ export async function POST(request: NextRequest) {
       familyName, familyEmail, familyAddress,
       items = [], totalHT = 0, totalTVA = 0, totalTTC = 0,
       paidAmount = 0, paymentMode, paymentDate,
+      paymentDetails, // nouveau : [{ mode, modeLabel, montant, date }]
       remise,
     } = body;
 
@@ -112,6 +113,18 @@ export async function POST(request: NextRequest) {
     const resteDu = Math.max(0, (totalTTC || 0) - (paidAmount || 0));
     const tvaRecap = getTvaRecap(items);
     const isTVAApplicable = totalTVA > 0;
+
+    // Construction du libellé de règlement :
+    // - Si paymentDetails fourni (plusieurs encaissements) → lister chaque ligne
+    // - Sinon → fallback sur paymentMode simple (compat)
+    const renderPaymentDetails = () => {
+      if (!Array.isArray(paymentDetails) || paymentDetails.length === 0) return null;
+      return paymentDetails.map((pd: any, idx: number) =>
+        React.createElement(Text, { key: idx, style: s.payDetail },
+          `• ${pd.modeLabel || pd.mode || "—"} : ${Number(pd.montant || 0).toFixed(2)}€${pd.date ? ` (${pd.date})` : ""}`
+        )
+      );
+    };
 
     const doc = React.createElement(Document, { title: `Facture ${invoiceNumber}`, author: CLUB.nom },
       React.createElement(Page, { size: "A4", style: s.page },
@@ -244,9 +257,16 @@ export async function POST(request: NextRequest) {
         React.createElement(View, { style: [s.payBox, isPaid ? s.payPaid : s.payUnpaid] },
           React.createElement(Text, { style: [s.payTitle, { color: isPaid ? GREEN : ORANGE }] },
             isPaid ? "✓ Facture réglée" : "⏳ En attente de règlement"),
-          isPaid && paymentMode
-            ? React.createElement(Text, { style: s.payDetail }, `Mode de règlement : ${paymentMode}${paymentDate ? ` · le ${paymentDate}` : ""}`)
-            : null,
+          // Priorité 1 : détail ligne par ligne si fourni
+          isPaid && Array.isArray(paymentDetails) && paymentDetails.length > 0
+            ? [
+                React.createElement(Text, { key: "title", style: s.payDetail }, "Détail des règlements :"),
+                ...(renderPaymentDetails() || []),
+              ]
+            // Priorité 2 : libellé simple (fallback compat)
+            : isPaid && paymentMode
+              ? React.createElement(Text, { style: s.payDetail }, `Mode de règlement : ${paymentMode}${paymentDate ? ` · le ${paymentDate}` : ""}`)
+              : null,
           !isPaid && paidAmount > 0
             ? React.createElement(Text, { style: s.payDetail }, `Acompte versé : ${paidAmount.toFixed(2)} € · Reste dû : ${resteDu.toFixed(2)} €`)
             : null,

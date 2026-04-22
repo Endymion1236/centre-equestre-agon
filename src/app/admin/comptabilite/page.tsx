@@ -710,6 +710,10 @@ export default function ComptabilitePage() {
       <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
         <h1 className="font-display text-2xl font-bold text-blue-800">Comptabilité</h1>
         <div className="flex gap-2 items-center flex-wrap">
+          <Link href="/admin/comptabilite/diag-especes"
+            className="flex items-center gap-1.5 font-body text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100 px-3 py-2 rounded-lg no-underline">
+            🔍 Diagnostic
+          </Link>
           <Link href="/admin/comptabilite/livre-caisse"
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-green-700 bg-green-50 border border-green-200 hover:bg-green-100 px-3 py-2 rounded-lg no-underline">
             💵 Livre de caisse

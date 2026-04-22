@@ -2,7 +2,7 @@
 import { useState } from "react";
 import ProgressionEditor from "@/components/ProgressionEditor";
 import PedaSuiviCard from "@/components/PedaSuiviCard";
-import { doc, updateDoc, addDoc, collection, getDoc, serverTimestamp } from "firebase/firestore";
+import { doc, updateDoc, addDoc, collection, getDoc, getDocs, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Badge } from "@/components/ui";
 import { Wallet, UserPlus, X, Trash2, CalendarDays, Plus, Save, Loader2 } from "lucide-react";
@@ -221,7 +221,38 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                         const invoiceNumber = p.orderId || `F-${invDate.getFullYear()}${String(invDate.getMonth()+1).padStart(2,"0")}-${(p.id||"").slice(-4).toUpperCase()}`;
                         const items = (p.items||[]).map((i: any) => ({ label: i.activityTitle||"Prestation", priceHT: i.priceHT||Math.round((i.priceTTC||0)/1.055*100)/100, tva: i.tva||5.5, priceTTC: i.priceTTC||0 }));
                         const totalHT = items.reduce((s: number, i: any) => s+(i.priceHT||0), 0);
-                        await downloadInvoicePdf({ invoiceNumber, date: invDate.toLocaleDateString("fr-FR"), familyName: `${civilite}${family.parentName||p.familyName}`, familyEmail: family.parentEmail||"", familyAddress: adresseLines, items, totalHT, totalTVA: (p.totalTTC||0)-totalHT, totalTTC: p.totalTTC||0, paidAmount: p.paidAmount||p.totalTTC||0, paymentMode: modeLabels[p.paymentMode]||p.paymentMode||"", paymentDate: p.status==="paid" ? invDate.toLocaleDateString("fr-FR") : "" });
+
+                        // Charger le détail des encaissements pour cette commande,
+                        // afin d'afficher chaque ligne sur la facture au lieu de "mixte"
+                        let paymentDetails: any[] = [];
+                        try {
+                          const encSnap = await getDocs(query(
+                            collection(db, "encaissements"),
+                            where("paymentId", "==", p.id)
+                          ));
+                          paymentDetails = encSnap.docs
+                            .map(d => d.data() as any)
+                            .filter(e => (e.montant || 0) > 0)
+                            .sort((a, b) => (a.date?.seconds || 0) - (b.date?.seconds || 0))
+                            .map(e => ({
+                              mode: e.mode,
+                              modeLabel: modeLabels[e.mode] || e.modeLabel || e.mode,
+                              montant: Number(e.montant || 0),
+                              date: e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : undefined,
+                              ref: e.ref,
+                            }));
+                        } catch { /* silencieux : fallback sur paymentMode */ }
+
+                        await downloadInvoicePdf({
+                          invoiceNumber, date: invDate.toLocaleDateString("fr-FR"),
+                          familyName: `${civilite}${family.parentName||p.familyName}`,
+                          familyEmail: family.parentEmail||"", familyAddress: adresseLines,
+                          items, totalHT, totalTVA: (p.totalTTC||0)-totalHT, totalTTC: p.totalTTC||0,
+                          paidAmount: p.paidAmount||p.totalTTC||0,
+                          paymentMode: modeLabels[p.paymentMode]||p.paymentMode||"",
+                          paymentDate: p.status==="paid" ? invDate.toLocaleDateString("fr-FR") : "",
+                          paymentDetails: paymentDetails.length > 0 ? paymentDetails : undefined,
+                        });
                       }} className="text-blue-500 bg-blue-50 px-1.5 py-1 rounded cursor-pointer border-none hover:bg-blue-100 text-[10px]">📄</button>
                     </div>
                   </div>
