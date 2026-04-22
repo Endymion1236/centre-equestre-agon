@@ -139,7 +139,7 @@ export function TabJournal({ loading, payments, encaissements, avoirs, toast, re
                   <thead>
                     <tr className="bg-sand border-b border-blue-500/8">
                       {["Date", "Client", "Prestation", "Montant", "Mode", "Référence", ""].map(h => (
-                        <th key={h} className="px-3 py-2.5 font-body text-[10px] font-semibold text-slate-600 uppercase tracking-wider text-left">{h}</th>
+                        <th key={h} className="px-2 py-2.5 font-body text-[10px] font-semibold text-slate-600 uppercase tracking-wider text-left whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -148,17 +148,17 @@ export function TabJournal({ loading, payments, encaissements, avoirs, toast, re
                       const d = enc.date?.seconds ? new Date(enc.date.seconds * 1000) : null;
                       return (
                         <tr key={enc.id} className={`border-b border-blue-500/5 hover:bg-blue-50/30 ${(enc.montant || 0) < 0 ? "bg-red-50/30" : ""}`}>
-                          <td className="px-3 py-2.5 font-body text-xs text-slate-600">{d ? d.toLocaleDateString("fr-FR") : "—"}</td>
-                          <td className="px-3 py-2.5 font-body text-sm font-semibold text-blue-800">{enc.familyName || "—"}</td>
-                          <td className="px-3 py-2.5 font-body text-xs text-slate-600 max-w-[250px] truncate">
+                          <td className="px-2 py-2.5 font-body text-xs text-slate-600 whitespace-nowrap">{d ? d.toLocaleDateString("fr-FR") : "—"}</td>
+                          <td className="px-2 py-2.5 font-body text-sm font-semibold text-blue-800">{enc.familyName || "—"}</td>
+                          <td className="px-2 py-2.5 font-body text-xs text-slate-600 max-w-[180px] truncate" title={`${enc.activityTitle || ""}${enc.raison ? ` — ${enc.raison}` : ""}`}>
                             {enc.activityTitle || "—"}
                             {enc.correctionDe && <span className="text-red-400 ml-1">(annule #{enc.correctionDe.slice(-4)})</span>}
                             {enc.raison && <span className="text-orange-400 ml-1">— {enc.raison}</span>}
                           </td>
-                          <td className={`px-3 py-2.5 font-body text-sm font-bold ${(enc.montant || 0) < 0 ? "text-red-500" : "text-green-600"}`}>{(enc.montant || 0).toFixed(2)}€</td>
-                          <td className="px-3 py-2.5"><Badge color={(enc.montant || 0) < 0 ? "red" : "blue"}>{enc.modeLabel || enc.mode || "—"}</Badge></td>
-                          <td className="px-3 py-2.5 font-body text-xs text-slate-600">{enc.ref || "—"}</td>
-                          <td className="px-3 py-2.5">
+                          <td className={`px-2 py-2.5 font-body text-sm font-bold whitespace-nowrap ${(enc.montant || 0) < 0 ? "text-red-500" : "text-green-600"}`}>{(enc.montant || 0).toFixed(2)}€</td>
+                          <td className="px-2 py-2.5 whitespace-nowrap"><Badge color={(enc.montant || 0) < 0 ? "red" : "blue"}>{enc.modeLabel || enc.mode || "—"}</Badge></td>
+                          <td className="px-2 py-2.5 font-body text-xs text-slate-600 max-w-[120px] truncate" title={enc.ref || ""}>{enc.ref || "—"}</td>
+                          <td className="px-2 py-2.5 whitespace-nowrap">
                             {!enc.id?.startsWith("fallback_") && (enc.montant || 0) > 0 && !enc.correctionDe && (
                               <button onClick={() => { setCorrectionEnc(enc); setCorrectionMontant(enc.montant?.toString() || ""); setCorrectionMode(enc.mode || ""); setCorrectionRef(enc.ref || ""); setCorrectionRaison(""); }}
                                 className="font-body text-[10px] text-orange-500 bg-orange-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-orange-100">Corriger</button>
