@@ -2467,18 +2467,44 @@ export default function ComptabilitePage() {
         const bl = bankLines[showCADetailModal];
         if (!bl) return null;
 
-        // Parse les montants depuis le texte copié depuis le site CA
-        // Formats attendus : "95,00 EUR", "2 766,00 EUR", "105.00 EUR", etc.
+        // Parse les montants depuis le texte copié depuis le site CA.
+        // Le site CA affiche chaque transaction avec : Date + Heure + Montant + N°Carte + N°Ticket.
+        //
+        // DIFFICULTÉ : les numéros de ticket ou de carte peuvent contenir des chiffres qui,
+        // collés au montant (sans séparateur propre), causent des faux positifs.
+        // Exemple : "13:59:09 175,00 EUR" où la regex gloutonne capture "09 175,00" = 9175 €.
+        //
+        // STRATÉGIE : on s'ancre TOUJOURS sur le pattern "HH:MM[:SS]" qui précède le montant.
+        // C'est l'ancre la plus fiable car toutes les tx CB ont une heure d'horodatage.
+        // Fallback : parsing ligne par ligne avec regex stricte (sans ancre heure) si aucune
+        // tx détectée avec heure (ex: l'utilisateur a copié juste les montants).
+        //
+        // Limites : montants 0.01 € à 50 000 € ; exclusion des lignes "total"/"somme".
         const parseCaText = (text: string): number[] => {
           const amounts: number[] = [];
-          // Regex : capture les nombres (avec espace/virgule/point) suivis de "EUR"
-          // Ex : "95,00 EUR" → 95.00 ; "2 766,00 EUR" → 2766.00
-          const regex = /(\d[\d\s]*[,.]\d{2})\s*(?:EUR|€)/gi;
+
+          // PASSE 1 : ancrage HH:MM:SS (la plus fiable, marche dans tous les cas)
+          //   Matches : "17:02:34 95,00 EUR", "09:59:09175,00 EUR", "10:00145,00 EUR", etc.
+          const anchored = /\d{2}:\d{2}(?::\d{2})?\s*(\d{1,6})[,.](\d{2})\s*(?:EUR|€)/gi;
           let m;
-          while ((m = regex.exec(text)) !== null) {
-            const cleaned = m[1].replace(/\s/g, "").replace(",", ".");
-            const val = parseFloat(cleaned);
-            if (!isNaN(val) && val > 0) amounts.push(val);
+          while ((m = anchored.exec(text)) !== null) {
+            const val = parseFloat(`${m[1]}.${m[2]}`);
+            if (!isNaN(val) && val > 0 && val < 50000) amounts.push(val);
+          }
+          if (amounts.length > 0) return amounts;
+
+          // PASSE 2 (fallback) : ligne par ligne, regex stricte avec bord de ligne
+          //   Cas où l'utilisateur copie juste les montants sans les heures
+          const lines = text.split(/[\r\n]+/);
+          const single = /(?:^|[\s\u00A0\t])(\d{1,3}(?:[\s\u00A0]\d{3})*|\d{1,6})[,.](\d{2})\s*(?:EUR|€)/i;
+          for (const line of lines) {
+            const lower = line.toLowerCase();
+            if (lower.includes("total") || lower.includes("somme") || lower.includes("récap") || lower.includes("recap")) continue;
+            const mm = line.match(single);
+            if (!mm) continue;
+            const intPart = mm[1].replace(/[\s\u00A0]/g, "");
+            const val = parseFloat(`${intPart}.${mm[2]}`);
+            if (!isNaN(val) && val > 0 && val < 50000) amounts.push(val);
           }
           return amounts;
         };
