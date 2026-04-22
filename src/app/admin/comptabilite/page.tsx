@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { collection, getDocs, addDoc, updateDoc, doc, getDoc, setDoc, deleteDoc, query, orderBy, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, doc, getDoc, setDoc, deleteDoc, query, where, orderBy, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { safeNumber } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
@@ -109,7 +109,78 @@ export default function ComptabilitePage() {
         totalAmount: Math.round(updated.reduce((s, b) => s + b.amount, 0) * 100) / 100,
         updatedAt: serverTimestamp(),
       });
+      // Synchroniser les versements bancaires du livre de caisse
+      await syncVersementsEspeces(updated);
     } catch (e) { console.error("Erreur sauvegarde rapprochement:", e); }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  //  syncVersementsEspeces : synchronise les sorties du livre de caisse
+  //  avec les lignes bancaires de type versement d'espèces
+  // ─────────────────────────────────────────────────────────────────────────
+  //  Pour chaque bankLine matchée de libellé "VERSEMENT D'ESPECES..." on veut :
+  //    - s'il n'existe pas d'encaissement especes négatif avec bankLineKey correspondant → on le crée
+  //    - s'il existe mais la bankLine n'est plus matchée → on le supprime
+  //  La "bankLineKey" est un identifiant stable : date|label|amount.
+  //  Tag Firestore : isVersementBanque=true, bankLineKey="..."
+  //
+  //  Note : on ne fait ça QUE pour les VERSEMENT D'ESPECES (pas les chèques/CB
+  //  car ces encaissements physiques sont déjà comptabilisés individuellement
+  //  et les remises ne sortent pas du livre de caisse espèces).
+  // ─────────────────────────────────────────────────────────────────────────
+  const syncVersementsEspeces = async (lines: typeof bankLines) => {
+    try {
+      // Charger tous les versements existants (encaissements avec isVersementBanque=true)
+      const snap = await getDocs(query(collection(db, "encaissements"), where("isVersementBanque", "==", true)));
+      const existing = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+      const existingByKey = new Map<string, any>();
+      for (const v of existing) {
+        if (v.bankLineKey) existingByKey.set(v.bankLineKey, v);
+      }
+
+      // Parcourir les bankLines et créer/supprimer les versements
+      for (const bl of lines) {
+        const isVersement = bl.label.toUpperCase().includes("VERSEMENT") &&
+          (bl.label.toUpperCase().includes("ESPECE") || bl.label.toUpperCase().includes("ESP."));
+        if (!isVersement) continue;
+
+        const key = `${bl.date}|${bl.label}|${bl.amount.toFixed(2)}`;
+        const existingVers = existingByKey.get(key);
+
+        // bankLine rapprochée (auto ou manuelle) et pas "Ignoré" → il FAUT un versement
+        const shouldExist = bl.matched && bl.matchType !== "Ignoré";
+
+        if (shouldExist && !existingVers) {
+          // Créer le versement
+          const p1 = bl.date.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+          const bankDateObj = p1
+            ? new Date(`${p1[3]}-${p1[2].padStart(2, "0")}-${p1[1].padStart(2, "0")}T12:00:00`)
+            : new Date();
+          await addDoc(collection(db, "encaissements"), {
+            mode: "especes",
+            modeLabel: "Versement banque",
+            montant: -Math.abs(bl.amount),
+            date: bankDateObj,
+            familyName: "—",
+            activityTitle: "Versement en banque",
+            raison: `Versement bancaire auto (rapprochement du ${bl.date})`,
+            ref: `VERS-${bankDateObj.toISOString().slice(0, 10).replace(/-/g, "")}-${Math.round(bl.amount)}`,
+            isVersementBanque: true,
+            bankLineKey: key,
+            bankLineLabel: bl.label,
+            bankLineAmount: bl.amount,
+            createdAt: serverTimestamp(),
+          });
+          console.log(`[sync-versements] ✅ Versement créé pour "${bl.label}" (${bl.amount}€)`);
+        } else if (!shouldExist && existingVers) {
+          // Supprimer le versement (bankLine dé-pointée ou ignorée)
+          await deleteDoc(doc(db, "encaissements", existingVers.id));
+          console.log(`[sync-versements] 🗑️ Versement supprimé pour "${bl.label}" (${bl.amount}€)`);
+        }
+      }
+    } catch (e) {
+      console.error("[sync-versements] Erreur:", e);
+    }
   };
 
   const [encaissementsCompta, setEncaissementsCompta] = useState<any[]>([]);
@@ -1102,6 +1173,8 @@ export default function ComptabilitePage() {
           updatedAt: serverTimestamp(),
         });
         console.log(`✅ Rapprochement ${period} sauvegardé (${finalMatched.length} lignes)`);
+        // Synchroniser les versements bancaires (sorties du livre de caisse)
+        await syncVersementsEspeces(finalMatched as any);
       } catch (e) { console.error("Erreur sauvegarde rapprochement:", e); }
     };
     reader.readAsText(file, "ISO-8859-1"); // Encodage Crédit Agricole = Latin1

@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where, addDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { Banknote, Download, ChevronLeft, ChevronRight, Printer, ShieldCheck } from "lucide-react";
+import { Banknote, ChevronLeft, ChevronRight, Printer, ShieldCheck, Building2, X } from "lucide-react";
 import Link from "next/link";
 
 interface EncaissementEspeces {
@@ -18,6 +18,7 @@ interface EncaissementEspeces {
   ref?: string;
   modeLabel?: string;
   isReversal: boolean; // montant < 0 (contre-passation)
+  isVersementBanque?: boolean; // true si versement bancaire (sortie identifiable)
 }
 
 export default function LivreCaissePage() {
@@ -28,77 +29,149 @@ export default function LivreCaissePage() {
   const [loading, setLoading] = useState(true);
   const [soldeInitial, setSoldeInitial] = useState<number>(0); // solde reporté du mois précédent
 
+  // ── Modal versement bancaire ─────────────────────────────────────────────
+  const [showVersementModal, setShowVersementModal] = useState(false);
+  const [versementDate, setVersementDate] = useState(today.toISOString().slice(0, 10));
+  const [versementMontant, setVersementMontant] = useState("");
+  const [versementLieu, setVersementLieu] = useState("Agon-Coutainville");
+  const [versementNote, setVersementNote] = useState("");
+  const [savingVersement, setSavingVersement] = useState(false);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const debutMois = new Date(year, month, 1, 0, 0, 0, 0);
+      const finMois = new Date(year, month + 1, 0, 23, 59, 59, 999);
+
+      // ─── Stratégie : récupérer TOUS les encaissements (ou un sous-ensemble
+      // filtré par mode uniquement) et filtrer la période en JavaScript.
+      // Évite d'avoir besoin d'un index composite Firestore (mode + date + orderBy)
+      // qui n'a probablement jamais été créé.
+      // Performance : OK tant qu'on reste sous ~5000 docs ; au-delà il faudra
+      // créer l'index composite explicitement.
+      const qAll = query(
+        collection(db, "encaissements"),
+        where("mode", "==", "especes")
+      );
+      const snapAll = await getDocs(qAll);
+
+      const allEspeces: EncaissementEspeces[] = snapAll.docs
+        .map(d => {
+          const data = d.data() as any;
+          // Le champ `date` peut être stocké de plusieurs façons selon l'origine :
+          // - Timestamp Firestore (cas normal via serverTimestamp)
+          // - null / undefined (cas rare mais possible si écriture incomplète)
+          // Fallback sur createdAt si date absente.
+          const rawDate = data.date || data.createdAt;
+          const dt = rawDate?.seconds
+            ? new Date(rawDate.seconds * 1000)
+            : rawDate?.toDate
+              ? rawDate.toDate()
+              : null;
+          return {
+            id: d.id,
+            date: dt,
+            montant: Number(data.montant || 0),
+            familyName: data.familyName || "—",
+            activityTitle: data.activityTitle || "",
+            raison: data.raison,
+            correctionDe: data.correctionDe,
+            ref: data.ref,
+            modeLabel: data.modeLabel,
+            isReversal: Number(data.montant || 0) < 0,
+            isVersementBanque: Boolean(data.isVersementBanque),
+          } as EncaissementEspeces & { date: Date | null };
+        })
+        .filter(e => e.date !== null) as EncaissementEspeces[];
+
+      console.log(`[livre-caisse] ${allEspeces.length} encaissements espèces trouvés au total`);
+
+      const listMois = allEspeces
+        .filter(e => e.date >= debutMois && e.date <= finMois)
+        .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+      const soldeAvant = allEspeces
+        .filter(e => e.date < debutMois)
+        .reduce((s, e) => s + e.montant, 0);
+
+      console.log(`[livre-caisse] Mois en cours : ${listMois.length} mouvements | Solde d'ouverture : ${soldeAvant.toFixed(2)}€`);
+
+      setEncaissements(listMois);
+      setSoldeInitial(Math.round(soldeAvant * 100) / 100);
+    } catch (e) {
+      console.error("Erreur chargement livre de caisse:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    async function fetchData() {
-      setLoading(true);
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [year, month]);
+
+  // Solde physique en caisse (tous mois confondus) — pour afficher dans la modale versement
+  const [soldeCaissePhysique, setSoldeCaissePhysique] = useState<number | null>(null);
+  useEffect(() => {
+    // Calcul du solde TOTAL cumulé jusqu'à la date actuelle
+    const calcPhysique = async () => {
       try {
-        const debutMois = new Date(year, month, 1, 0, 0, 0, 0);
-        const finMois = new Date(year, month + 1, 0, 23, 59, 59, 999);
-
-        // ─── Stratégie : récupérer TOUS les encaissements (ou un sous-ensemble
-        // filtré par mode uniquement) et filtrer la période en JavaScript.
-        // Évite d'avoir besoin d'un index composite Firestore (mode + date + orderBy)
-        // qui n'a probablement jamais été créé.
-        // Performance : OK tant qu'on reste sous ~5000 docs ; au-delà il faudra
-        // créer l'index composite explicitement.
-        const qAll = query(
-          collection(db, "encaissements"),
-          where("mode", "==", "especes")
-        );
-        const snapAll = await getDocs(qAll);
-
-        const allEspeces: EncaissementEspeces[] = snapAll.docs
-          .map(d => {
-            const data = d.data() as any;
-            // Le champ `date` peut être stocké de plusieurs façons selon l'origine :
-            // - Timestamp Firestore (cas normal via serverTimestamp)
-            // - null / undefined (cas rare mais possible si écriture incomplète)
-            // Fallback sur createdAt si date absente.
-            const rawDate = data.date || data.createdAt;
-            const dt = rawDate?.seconds
-              ? new Date(rawDate.seconds * 1000)
-              : rawDate?.toDate
-                ? rawDate.toDate()
-                : null;
-            return {
-              id: d.id,
-              date: dt,
-              montant: Number(data.montant || 0),
-              familyName: data.familyName || "—",
-              activityTitle: data.activityTitle || "",
-              raison: data.raison,
-              correctionDe: data.correctionDe,
-              ref: data.ref,
-              modeLabel: data.modeLabel,
-              isReversal: Number(data.montant || 0) < 0,
-            } as EncaissementEspeces & { date: Date | null };
-          })
-          .filter(e => e.date !== null) as EncaissementEspeces[];
-
-        // Log diagnostic visible dans la console navigateur
-        console.log(`[livre-caisse] ${allEspeces.length} encaissements espèces trouvés au total`);
-
-        // Séparer par période
-        const listMois = allEspeces
-          .filter(e => e.date >= debutMois && e.date <= finMois)
-          .sort((a, b) => a.date.getTime() - b.date.getTime());
-
-        const soldeAvant = allEspeces
-          .filter(e => e.date < debutMois)
-          .reduce((s, e) => s + e.montant, 0);
-
-        console.log(`[livre-caisse] Mois en cours : ${listMois.length} mouvements | Solde d'ouverture : ${soldeAvant.toFixed(2)}€`);
-
-        setEncaissements(listMois);
-        setSoldeInitial(Math.round(soldeAvant * 100) / 100);
+        const qAll = query(collection(db, "encaissements"), where("mode", "==", "especes"));
+        const snap = await getDocs(qAll);
+        let solde = 0;
+        for (const d of snap.docs) {
+          const data = d.data() as any;
+          solde += Number(data.montant || 0);
+        }
+        setSoldeCaissePhysique(Math.round(solde * 100) / 100);
       } catch (e) {
-        console.error("Erreur chargement livre de caisse:", e);
-      } finally {
-        setLoading(false);
+        console.error("Erreur calcul solde physique:", e);
+      }
+    };
+    calcPhysique();
+  }, [encaissements]);
+
+  // ── Création d'un versement bancaire ──────────────────────────────────────
+  // Crée une écriture de sortie (montant négatif) dans la collection encaissements.
+  // L'écriture apparaît automatiquement dans le livre de caisse.
+  const creerVersementBanque = async () => {
+    const montant = parseFloat(versementMontant.replace(",", "."));
+    if (isNaN(montant) || montant <= 0) {
+      alert("Montant invalide.");
+      return;
+    }
+    if (soldeCaissePhysique !== null && montant > soldeCaissePhysique + 0.01) {
+      if (!confirm(`Le montant du versement (${montant.toFixed(2)}€) dépasse le solde physique en caisse (${soldeCaissePhysique.toFixed(2)}€). Continuer quand même ?`)) {
+        return;
       }
     }
-    fetchData();
-  }, [year, month]);
+    setSavingVersement(true);
+    try {
+      const dateObj = new Date(versementDate + "T12:00:00");
+      await addDoc(collection(db, "encaissements"), {
+        mode: "especes",
+        modeLabel: "Versement banque",
+        montant: -Math.abs(montant), // sortie → montant négatif
+        date: Timestamp.fromDate(dateObj),
+        familyName: "—",
+        activityTitle: "Versement en banque",
+        raison: `Versement ${versementLieu}${versementNote ? " — " + versementNote : ""}`,
+        ref: `VERS-${dateObj.toISOString().slice(0, 10).replace(/-/g, "")}`,
+        isVersementBanque: true,
+        createdAt: serverTimestamp(),
+      });
+      // Reset et recharge
+      setShowVersementModal(false);
+      setVersementMontant("");
+      setVersementNote("");
+      await fetchData();
+    } catch (e: any) {
+      console.error("Erreur création versement:", e);
+      alert(`Erreur : ${e.message || e}`);
+    } finally {
+      setSavingVersement(false);
+    }
+  };
 
   // Calculs avec solde cumulé ligne par ligne
   const lignes = useMemo(() => {
@@ -155,6 +228,10 @@ export default function LivreCaissePage() {
             className="font-body text-xs text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg no-underline hover:bg-gray-50">
             ← Comptabilité
           </Link>
+          <button onClick={() => setShowVersementModal(true)}
+            className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 border-none px-3 py-2 rounded-lg cursor-pointer">
+            <Building2 size={14} /> Versement banque
+          </button>
           <button onClick={exportPDF}
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none px-3 py-2 rounded-lg cursor-pointer">
             <Printer size={14} /> Imprimer / PDF
@@ -225,16 +302,19 @@ export default function LivreCaissePage() {
             ) : lignes.length === 0 ? (
               <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-400 italic">Aucun mouvement d'espèces pour ce mois.</td></tr>
             ) : lignes.map((l) => (
-              <tr key={l.id} className={`border-b border-gray-100 hover:bg-slate-50/50 print:hover:bg-white ${l.isReversal ? "bg-red-50/30" : ""}`}>
+              <tr key={l.id} className={`border-b border-gray-100 hover:bg-slate-50/50 print:hover:bg-white ${l.isVersementBanque ? "bg-orange-50/40" : l.isReversal ? "bg-red-50/30" : ""}`}>
                 <td className="px-3 py-2 text-slate-700 text-xs">
                   {l.date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })}
                   <span className="text-slate-400"> {l.date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
                 </td>
                 <td className="px-3 py-2 text-slate-800">
                   <div className="font-medium">{l.activityTitle || l.modeLabel || "—"}</div>
-                  {l.raison && <div className="text-[11px] text-red-600 italic">{l.raison}</div>}
+                  {l.raison && <div className="text-[11px] text-orange-700 italic">{l.raison}</div>}
                   {l.ref && <div className="text-[11px] text-slate-400">Réf : {l.ref}</div>}
-                  {l.correctionDe && (
+                  {l.isVersementBanque && (
+                    <Badge color="orange" className="mt-0.5 text-[9px] print:border print:border-orange-300">🏦 Versement banque</Badge>
+                  )}
+                  {l.correctionDe && !l.isVersementBanque && (
                     <Badge color="red" className="mt-0.5 text-[9px] print:border print:border-red-300">↺ Contre-passation</Badge>
                   )}
                 </td>
@@ -290,6 +370,106 @@ export default function LivreCaissePage() {
           }
         }
       `}</style>
+
+      {/* ─── Modal versement bancaire ─── */}
+      {showVersementModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center print:hidden" onClick={() => !savingVersement && setShowVersementModal(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-5 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-lg bg-orange-50 flex items-center justify-center">
+                  <Building2 size={16} className="text-orange-600" />
+                </div>
+                <div>
+                  <h2 className="font-display text-lg font-bold text-blue-800">Versement en banque</h2>
+                  <p className="font-body text-xs text-slate-500">Sortie d'espèces de la caisse physique</p>
+                </div>
+              </div>
+              <button onClick={() => !savingVersement && setShowVersementModal(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none">
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="p-5">
+              {soldeCaissePhysique !== null && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                  <div className="font-body text-xs text-blue-800">
+                    Solde physique en caisse : <strong>{soldeCaissePhysique.toFixed(2)}€</strong>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-3">
+                <div>
+                  <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Date du versement</label>
+                  <input
+                    type="date"
+                    value={versementDate}
+                    onChange={e => setVersementDate(e.target.value)}
+                    className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-orange-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Montant versé *</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={versementMontant}
+                      onChange={e => setVersementMontant(e.target.value)}
+                      placeholder="Ex : 595,00"
+                      className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2 pr-8 bg-white focus:outline-none focus:border-orange-400"
+                      autoFocus
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 font-body text-sm text-slate-400">€</span>
+                  </div>
+                  <div className="font-body text-[11px] text-slate-500 mt-1">
+                    Si un billet a été refusé, saisis le montant <strong>réellement accepté par la banque</strong>.
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Lieu / agence</label>
+                  <input
+                    type="text"
+                    value={versementLieu}
+                    onChange={e => setVersementLieu(e.target.value)}
+                    placeholder="Agon-Coutainville"
+                    className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-orange-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Note (facultatif)</label>
+                  <input
+                    type="text"
+                    value={versementNote}
+                    onChange={e => setVersementNote(e.target.value)}
+                    placeholder="Ex : billet 5€ refusé, borne automatique 18h33..."
+                    className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-orange-400"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 p-4 border-t border-gray-100">
+              <button
+                onClick={() => setShowVersementModal(false)}
+                disabled={savingVersement}
+                className="font-body text-sm text-slate-600 bg-white border border-gray-200 rounded-lg px-4 py-2 cursor-pointer hover:bg-gray-50 disabled:opacity-50">
+                Annuler
+              </button>
+              <button
+                onClick={creerVersementBanque}
+                disabled={savingVersement || !versementMontant}
+                className="font-body text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 border-none rounded-lg px-4 py-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                {savingVersement ? "Enregistrement..." : "Enregistrer le versement"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
