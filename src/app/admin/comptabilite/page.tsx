@@ -1125,6 +1125,26 @@ export default function ComptabilitePage() {
       setBankLines(finalMatched as any);
 
       // ─────────────────────────────────────────────────────────────────────
+      //  Détection indirecte des remises consommées
+      // ─────────────────────────────────────────────────────────────────────
+      //  Quand le matching consomme des encaissements un par un (bloc 'par jour
+      //  exact' ou 'sous-ensemble'), les remises (bordereaux) ne sont pas
+      //  ajoutées à usedRemiseIds. On rattrape ici : si tous les encaissements
+      //  d'un bordereau existant sont dans usedEncIds, alors ce bordereau
+      //  doit être considéré comme consommé aussi.
+      for (const r of (remises || [])) {
+        if (usedRemiseIds.has(r.id)) continue; // déjà marquée
+        const encIds = r.encaissementIds || [];
+        if (encIds.length === 0) continue;
+        // Tous les encaissements du bordereau doivent être dans usedEncIds
+        const allConsumed = encIds.every((id: string) => usedEncIds.has(id));
+        if (allConsumed) {
+          usedRemiseIds.add(r.id);
+          console.log(`[sync-remises] Remise "${r.id}" marquée consommée indirectement (${encIds.length} encs)`);
+        }
+      }
+
+      // ─────────────────────────────────────────────────────────────────────
       //  Marquer les encaissements rapprochés avec reconciledByBank=true
       // ─────────────────────────────────────────────────────────────────────
       //  Objectif : les sortir de la liste "Encaissements à remettre" côté
@@ -2596,6 +2616,19 @@ export default function ComptabilitePage() {
                             (r.paymentMode === (bl.matchType === "Chèques" ? "cheque" : "especes") || r.paymentMode === "mixte")
                           );
                           if (remiseMatch) targetRemiseIds.add(remiseMatch.id);
+                        }
+                      }
+
+                      // 1.bis. Détection indirecte des remises via leurs encaissements
+                      //        Si tous les encs d'une remise sont dans targetEncIds, on pointe la remise.
+                      for (const r of (remises || [])) {
+                        if (targetRemiseIds.has(r.id)) continue;
+                        const encIds = r.encaissementIds || [];
+                        if (encIds.length === 0) continue;
+                        const allConsumed = encIds.every((id: string) => targetEncIds.has(id));
+                        if (allConsumed) {
+                          targetRemiseIds.add(r.id);
+                          console.log(`[resync] Remise ${r.id} détectée indirectement via encs`);
                         }
                       }
 
