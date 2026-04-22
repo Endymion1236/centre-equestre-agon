@@ -66,6 +66,7 @@ export default function ComptabilitePage() {
   const [pointageRemiseId, setPointageRemiseId] = useState<string | null>(null);
   const [pointageNote, setPointageNote] = useState("");
   const [pointageDate, setPointageDate] = useState(""); // date de pointage bancaire choisie par l'utilisateur
+  const [pointageMontantReel, setPointageMontantReel] = useState(""); // montant réellement encaissé (espèces avec écart)
   const [openRemiseId, setOpenRemiseId] = useState<string | null>(null);
 
   // ── IA ──────────────────────────────────────────────────────────────────────
@@ -1172,6 +1173,49 @@ export default function ComptabilitePage() {
       }
 
       // ─────────────────────────────────────────────────────────────────────
+      //  Pointer automatiquement les remises (bordereaux) rapprochées
+      // ─────────────────────────────────────────────────────────────────────
+      //  Quand le matching consomme une remise via usedRemiseIds (bloc a0 des
+      //  chèques/espèces), on marque la remise comme pointée côté bordereau
+      //  pour garder les deux vues synchronisées.
+      try {
+        const remiseUpdates: Promise<any>[] = [];
+        for (const rid of usedRemiseIds) {
+          const rSnap = await getDoc(doc(db, "remises", rid));
+          if (!rSnap.exists()) continue;
+          const r = rSnap.data() as any;
+          if (r.pointee) continue; // déjà pointée
+          remiseUpdates.push(updateDoc(doc(db, "remises", rid), {
+            pointee: true,
+            pointeeDate: new Date().toISOString(),
+            pointeeNote: "Pointée automatiquement par rapprochement bancaire",
+            updatedAt: serverTimestamp(),
+          }));
+        }
+        // Réciproquement, dé-pointer les remises qui ont été dé-matchées dans le CSV courant
+        // (si pointeeNote = "Pointée automatiquement..." et remise n'est plus dans usedRemiseIds)
+        const allRemisesSnap = await getDocs(collection(db, "remises"));
+        for (const d of allRemisesSnap.docs) {
+          const r = d.data() as any;
+          if (!r.pointee) continue;
+          if (r.pointeeNote !== "Pointée automatiquement par rapprochement bancaire") continue;
+          if (usedRemiseIds.has(d.id)) continue; // toujours matchée
+          remiseUpdates.push(updateDoc(doc(db, "remises", d.id), {
+            pointee: false,
+            pointeeDate: null,
+            pointeeNote: null,
+            updatedAt: serverTimestamp(),
+          }));
+        }
+        if (remiseUpdates.length > 0) {
+          await Promise.all(remiseUpdates);
+          console.log(`✅ ${remiseUpdates.length} remise(s) synchronisée(s) (pointée/dépointée)`);
+        }
+      } catch (e) {
+        console.error("Erreur synchronisation remises:", e);
+      }
+
+      // ─────────────────────────────────────────────────────────────────────
       //  Bug #8 : Mise à jour du status des paiements virement pointés
       // ─────────────────────────────────────────────────────────────────────
       // Quand un virement est rapproché (auto ou manuel), on marque le paiement
@@ -2211,6 +2255,30 @@ export default function ComptabilitePage() {
                               </p>
                             </div>
                           )}
+                          {/* Montant réellement encaissé (si espèces et écart possible) */}
+                          {!r.pointee && r.paymentMode === "especes" && (
+                            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                              <label className="font-body text-xs font-semibold text-orange-800 block mb-1">
+                                🏦 Versement livre de caisse
+                              </label>
+                              <p className="font-body text-[11px] text-orange-700 mb-2">
+                                Montant réellement accepté par la banque (si un billet a été refusé, indique le vrai montant crédité) :
+                              </p>
+                              <div className="relative inline-block">
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={pointageMontantReel || (r.total || 0).toFixed(2).replace(".", ",")}
+                                  onChange={e => setPointageMontantReel(e.target.value)}
+                                  className="font-body text-sm border border-orange-300 rounded-lg px-3 py-2 pr-8 bg-white focus:outline-none focus:border-orange-500 w-32"
+                                />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 font-body text-sm text-slate-400">€</span>
+                              </div>
+                              <p className="font-body text-[10px] text-orange-600 mt-2">
+                                Un versement (sortie d'espèces) sera créé automatiquement dans le livre de caisse à hauteur de ce montant.
+                              </p>
+                            </div>
+                          )}
                           <div>
                             <label className="font-body text-xs text-slate-600 block mb-1">Note de rapprochement (optionnel)</label>
                             <input value={pointageNote} onChange={e => setPointageNote(e.target.value)}
@@ -2231,14 +2299,56 @@ export default function ComptabilitePage() {
                                 pointeeNote: pointageNote.trim() || null,
                                 updatedAt: serverTimestamp(),
                               });
+
+                              // Si pointage d'une remise ESPÈCES → créer la sortie dans le livre de caisse
+                              if (!r.pointee && r.paymentMode === "especes") {
+                                const montantReel = parseFloat((pointageMontantReel || String(r.total || 0)).replace(",", "."));
+                                if (!isNaN(montantReel) && montantReel > 0) {
+                                  const dateVers = pointeeDate ? new Date(pointeeDate) : new Date();
+                                  await addDoc(collection(db, "encaissements"), {
+                                    mode: "especes",
+                                    modeLabel: "Versement banque",
+                                    montant: -Math.abs(montantReel),
+                                    date: dateVers,
+                                    familyName: "—",
+                                    activityTitle: "Versement en banque",
+                                    raison: `Versement auto pour remise du ${new Date(r.date.seconds * 1000).toLocaleDateString("fr-FR")}`
+                                      + (Math.abs(montantReel - (r.total || 0)) > 0.01 ? ` (écart ${(montantReel - (r.total || 0)).toFixed(2)}€)` : ""),
+                                    ref: `VERS-REM-${r.id}`,
+                                    isVersementBanque: true,
+                                    remiseId: r.id, // lien vers la remise pour dépointage
+                                    createdAt: serverTimestamp(),
+                                  });
+                                  console.log(`[pointage] Versement livre de caisse créé : -${montantReel.toFixed(2)}€`);
+                                }
+                              }
+
+                              // Si dépointage d'une remise ESPÈCES → supprimer la sortie créée
+                              if (r.pointee && r.paymentMode === "especes") {
+                                try {
+                                  const versSnap = await getDocs(query(
+                                    collection(db, "encaissements"),
+                                    where("remiseId", "==", r.id),
+                                    where("isVersementBanque", "==", true)
+                                  ));
+                                  const dels: Promise<any>[] = [];
+                                  versSnap.docs.forEach(d => dels.push(deleteDoc(doc(db, "encaissements", d.id))));
+                                  await Promise.all(dels);
+                                  if (dels.length > 0) console.log(`[dépointage] ${dels.length} versement(s) livre de caisse supprimé(s)`);
+                                } catch (e) {
+                                  console.error("[dépointage] Erreur suppression versements:", e);
+                                }
+                              }
+
                               setPointageRemiseId(null);
                               setPointageDate("");
                               setPointageNote("");
+                              setPointageMontantReel("");
                               fetchData();
                             }} className={`font-body text-xs font-semibold px-4 py-2 rounded-lg border-none cursor-pointer text-white ${r.pointee ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"}`}>
                               {r.pointee ? "Confirmer le dépointage" : "✓ Confirmer le pointage"}
                             </button>
-                            <button onClick={() => { setPointageRemiseId(null); setPointageDate(""); setPointageNote(""); }}
+                            <button onClick={() => { setPointageRemiseId(null); setPointageDate(""); setPointageNote(""); setPointageMontantReel(""); }}
                               className="font-body text-xs text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
                           </div>
                         </div>
@@ -2443,10 +2553,109 @@ export default function ComptabilitePage() {
           <Card padding="md">
             <h3 className="font-body text-base font-semibold text-blue-800 mb-3">Importer un relevé bancaire</h3>
             <p className="font-body text-xs text-slate-500 mb-3">Compatible Crédit Agricole, LCL, BNP, Société Générale (CSV avec séparateur point-virgule)</p>
-            <label className="flex items-center gap-2 font-body text-sm font-semibold text-blue-500 bg-white px-5 py-3 rounded-lg border border-blue-200 cursor-pointer hover:bg-blue-50 transition-colors inline-flex">
-              <Upload size={16} /> Importer CSV
-              <input type="file" accept=".csv" onChange={handleCSVImport} className="hidden" />
-            </label>
+            <div className="flex flex-wrap gap-2 items-center">
+              <label className="flex items-center gap-2 font-body text-sm font-semibold text-blue-500 bg-white px-5 py-3 rounded-lg border border-blue-200 cursor-pointer hover:bg-blue-50 transition-colors inline-flex">
+                <Upload size={16} /> Importer CSV
+                <input type="file" accept=".csv" onChange={handleCSVImport} className="hidden" />
+              </label>
+              {bankLines.length > 0 && bankLines.some(b => b.matched) && (
+                <button
+                  onClick={async () => {
+                    if (!confirm("Synchroniser les encaissements et remises avec les lignes bancaires actuellement matchées ?\n\n• Les encaissements reliés seront marqués 'rapprochés' (donc retirés de 'à remettre').\n• Les remises dont tous les encaissements sont rapprochés seront pointées automatiquement.")) return;
+                    try {
+                      // 1. Reconstruire usedEncIds à partir des bankLines matchées
+                      //    Via matchedEncs on a (familyName, montant, date, activityTitle)
+                      //    → on retrouve les encaissements correspondants
+                      const targetEncIds = new Set<string>();
+                      const targetRemiseIds = new Set<string>();
+                      const targetPaymentIds = new Set<string>();
+
+                      for (const bl of bankLines) {
+                        if (!bl.matched) continue;
+                        if (bl.matchType === "Ignoré") continue;
+
+                        // Paiement virement : via manualPaymentId
+                        if (bl.manualPaymentId) targetPaymentIds.add(bl.manualPaymentId);
+
+                        // Encaissements individuels : via matchedEncs
+                        for (const enc of (bl.matchedEncs || [])) {
+                          const candidate = encaissementsCompta.find((e: any) => {
+                            const d = e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "";
+                            return (e.familyName || "") === enc.familyName
+                              && Math.abs((e.montant || 0) - enc.montant) < 0.02
+                              && d === enc.date;
+                          });
+                          if (candidate) targetEncIds.add(candidate.id);
+                        }
+
+                        // Remises bancaires : détection via matchType "Chèques" / "Espèces"
+                        // + montant exact → on cherche un bordereau existant
+                        if (bl.matchType === "Chèques" || bl.matchType === "Espèces") {
+                          const remiseMatch = (remises || []).find((r: any) =>
+                            Math.abs((r.total || 0) - bl.amount) < 0.02 &&
+                            (r.paymentMode === (bl.matchType === "Chèques" ? "cheque" : "especes") || r.paymentMode === "mixte")
+                          );
+                          if (remiseMatch) targetRemiseIds.add(remiseMatch.id);
+                        }
+                      }
+
+                      // 2. Marquer les encaissements
+                      const encUpdates: Promise<any>[] = [];
+                      for (const encId of targetEncIds) {
+                        encUpdates.push(updateDoc(doc(db, "encaissements", encId), {
+                          reconciledByBank: true,
+                          reconciledAt: serverTimestamp(),
+                        }));
+                      }
+
+                      // 3. Marquer les remises comme pointées
+                      const remiseUpdates: Promise<any>[] = [];
+                      for (const rid of targetRemiseIds) {
+                        remiseUpdates.push(updateDoc(doc(db, "remises", rid), {
+                          pointee: true,
+                          pointeeDate: new Date().toISOString(),
+                          pointeeNote: "Synchronisation rétroactive depuis le rapprochement bancaire",
+                          updatedAt: serverTimestamp(),
+                        }));
+                      }
+
+                      // 4. Marquer les paiements virement comme payés
+                      const paymentUpdates: Promise<any>[] = [];
+                      for (const pid of targetPaymentIds) {
+                        const pSnap = await getDoc(doc(db, "payments", pid));
+                        if (!pSnap.exists()) continue;
+                        const p = pSnap.data() as any;
+                        if (p.status === "paid") continue;
+                        paymentUpdates.push(updateDoc(doc(db, "payments", pid), {
+                          status: "paid",
+                          paidAmount: p.totalTTC || p.paidAmount || 0,
+                          paidAt: serverTimestamp(),
+                          reconciledByBank: true,
+                        }));
+                      }
+
+                      await Promise.all([...encUpdates, ...remiseUpdates, ...paymentUpdates]);
+
+                      // 5. Créer les versements espèces manquants (sync livre de caisse)
+                      await syncVersementsEspeces(bankLines);
+
+                      alert(`✅ Synchronisation terminée\n\n• ${encUpdates.length} encaissement(s) marqués rapprochés\n• ${remiseUpdates.length} remise(s) pointée(s)\n• ${paymentUpdates.length} paiement(s) virement marqué(s) payés`);
+                      fetchData();
+                    } catch (e: any) {
+                      console.error("Erreur sync rétroactive:", e);
+                      alert(`Erreur : ${e.message || e}`);
+                    }
+                  }}
+                  className="flex items-center gap-2 font-body text-sm font-semibold text-purple-600 bg-purple-50 hover:bg-purple-100 px-4 py-3 rounded-lg border border-purple-200 cursor-pointer">
+                  🔄 Resynchroniser
+                </button>
+              )}
+            </div>
+            {bankLines.length > 0 && bankLines.some(b => b.matched) && (
+              <p className="font-body text-[11px] text-slate-500 mt-2">
+                "Resynchroniser" marque tous les encaissements/remises/paiements correspondant aux rapprochements actuels, utile après une mise à jour du code ou pour rattraper d'anciens rapprochements.
+              </p>
+            )}
           </Card>
 
           {bankLines.length > 0 && (
