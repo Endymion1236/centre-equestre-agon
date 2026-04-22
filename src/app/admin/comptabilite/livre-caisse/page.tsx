@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { collection, getDocs, query, where, orderBy, Timestamp } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { Banknote, Download, ChevronLeft, ChevronRight, Printer, ShieldCheck } from "lucide-react";
@@ -35,44 +35,61 @@ export default function LivreCaissePage() {
         const debutMois = new Date(year, month, 1, 0, 0, 0, 0);
         const finMois = new Date(year, month + 1, 0, 23, 59, 59, 999);
 
-        // 1. Encaissements espèces du mois
-        const qCurrent = query(
+        // ─── Stratégie : récupérer TOUS les encaissements (ou un sous-ensemble
+        // filtré par mode uniquement) et filtrer la période en JavaScript.
+        // Évite d'avoir besoin d'un index composite Firestore (mode + date + orderBy)
+        // qui n'a probablement jamais été créé.
+        // Performance : OK tant qu'on reste sous ~5000 docs ; au-delà il faudra
+        // créer l'index composite explicitement.
+        const qAll = query(
           collection(db, "encaissements"),
-          where("mode", "==", "especes"),
-          where("date", ">=", Timestamp.fromDate(debutMois)),
-          where("date", "<=", Timestamp.fromDate(finMois)),
-          orderBy("date", "asc")
+          where("mode", "==", "especes")
         );
-        const snap = await getDocs(qCurrent);
-        const list: EncaissementEspeces[] = snap.docs.map(d => {
-          const data = d.data() as any;
-          const dt = data.date?.seconds
-            ? new Date(data.date.seconds * 1000)
-            : new Date();
-          const montant = Number(data.montant || 0);
-          return {
-            id: d.id,
-            date: dt,
-            montant,
-            familyName: data.familyName || "—",
-            activityTitle: data.activityTitle || "",
-            raison: data.raison,
-            correctionDe: data.correctionDe,
-            ref: data.ref,
-            modeLabel: data.modeLabel,
-            isReversal: montant < 0,
-          };
-        });
-        setEncaissements(list);
+        const snapAll = await getDocs(qAll);
 
-        // 2. Solde cumulé depuis le début (pour avoir le solde d'ouverture du mois)
-        const qHistorique = query(
-          collection(db, "encaissements"),
-          where("mode", "==", "especes"),
-          where("date", "<", Timestamp.fromDate(debutMois)),
-        );
-        const snapHist = await getDocs(qHistorique);
-        const soldeAvant = snapHist.docs.reduce((s, d) => s + Number(d.data().montant || 0), 0);
+        const allEspeces: EncaissementEspeces[] = snapAll.docs
+          .map(d => {
+            const data = d.data() as any;
+            // Le champ `date` peut être stocké de plusieurs façons selon l'origine :
+            // - Timestamp Firestore (cas normal via serverTimestamp)
+            // - null / undefined (cas rare mais possible si écriture incomplète)
+            // Fallback sur createdAt si date absente.
+            const rawDate = data.date || data.createdAt;
+            const dt = rawDate?.seconds
+              ? new Date(rawDate.seconds * 1000)
+              : rawDate?.toDate
+                ? rawDate.toDate()
+                : null;
+            return {
+              id: d.id,
+              date: dt,
+              montant: Number(data.montant || 0),
+              familyName: data.familyName || "—",
+              activityTitle: data.activityTitle || "",
+              raison: data.raison,
+              correctionDe: data.correctionDe,
+              ref: data.ref,
+              modeLabel: data.modeLabel,
+              isReversal: Number(data.montant || 0) < 0,
+            } as EncaissementEspeces & { date: Date | null };
+          })
+          .filter(e => e.date !== null) as EncaissementEspeces[];
+
+        // Log diagnostic visible dans la console navigateur
+        console.log(`[livre-caisse] ${allEspeces.length} encaissements espèces trouvés au total`);
+
+        // Séparer par période
+        const listMois = allEspeces
+          .filter(e => e.date >= debutMois && e.date <= finMois)
+          .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+        const soldeAvant = allEspeces
+          .filter(e => e.date < debutMois)
+          .reduce((s, e) => s + e.montant, 0);
+
+        console.log(`[livre-caisse] Mois en cours : ${listMois.length} mouvements | Solde d'ouverture : ${soldeAvant.toFixed(2)}€`);
+
+        setEncaissements(listMois);
         setSoldeInitial(Math.round(soldeAvant * 100) / 100);
       } catch (e) {
         console.error("Erreur chargement livre de caisse:", e);
