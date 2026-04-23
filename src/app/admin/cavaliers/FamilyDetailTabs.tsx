@@ -175,12 +175,25 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
               {past.length > 0 && (
                 <div className="mt-2">
                   <div className="font-body text-[10px] text-slate-400 font-semibold mb-1">Passées</div>
-                  {past.map((r: any) => (
-                    <div key={r.id} className="flex items-center gap-2 font-body text-xs py-1 px-3 text-slate-500">
-                      <span className="min-w-[70px]">{new Date(r.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span>
-                      <span>{r.activityTitle}</span>
-                    </div>
-                  ))}
+                  {past.map((r: any) => {
+                    // Croiser avec les notes de clôture Montoir pour retrouver le poney
+                    // attribué à cette séance (même créneau). Les notes "type: seance"
+                    // sont créées à la clôture et contiennent creneauId + horseName.
+                    const seanceNote = (child.peda?.notes || []).find(
+                      (n: any) => n.type === "seance" && n.creneauId === r.creneauId && n.horseName
+                    );
+                    return (
+                      <div key={r.id} className="flex items-center gap-2 font-body text-xs py-1 px-3 text-slate-500">
+                        <span className="min-w-[70px]">{new Date(r.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span>
+                        <span className="flex-1 truncate">{r.activityTitle}</span>
+                        {seanceNote?.horseName && (
+                          <span className="font-body text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full flex-shrink-0" title="Poney attribué lors de la clôture Montoir">
+                            🐴 {seanceNote.horseName}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
