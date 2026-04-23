@@ -77,6 +77,32 @@ export default function ProgressionCavalierPage() {
     })();
   }, [childId, familyIdParam]);
 
+  // Retour au planning : on tente de fermer l'onglet (cas target="_blank"
+  // depuis EnrollPanel) mais plein de navigateurs bloquent window.close() par
+  // sécurité. On redirige systématiquement vers /admin/planning en fallback —
+  // ça marche partout, même en webview mobile.
+  const goBack = () => {
+    if (typeof window !== "undefined") {
+      try {
+        window.close();
+      } catch {/* ignoré */}
+    }
+    // Si on est encore là après 200ms, redirection
+    setTimeout(() => {
+      router.push("/admin/planning");
+    }, 200);
+  };
+
+  // Feedback post-enregistrement : petite notification + fermeture différée
+  const [savedToast, setSavedToast] = useState(false);
+  const handleSaved = () => {
+    setSavedToast(true);
+    // Laisser le temps au moniteur de voir le ✅ avant de fermer
+    setTimeout(() => {
+      goBack();
+    }, 1200);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -89,7 +115,7 @@ export default function ProgressionCavalierPage() {
     return (
       <div className="max-w-2xl mx-auto p-6">
         <button
-          onClick={() => router.back()}
+          onClick={goBack}
           className="flex items-center gap-2 text-blue-500 bg-transparent border-none cursor-pointer mb-4 font-body text-sm">
           <ArrowLeft size={16} /> Retour
         </button>
@@ -104,9 +130,9 @@ export default function ProgressionCavalierPage() {
   return (
     <div className="max-w-3xl mx-auto p-4 md:p-6 flex flex-col gap-4">
       <button
-        onClick={() => router.back()}
+        onClick={goBack}
         className="flex items-center gap-2 text-blue-500 bg-transparent border-none cursor-pointer font-body text-sm hover:text-blue-700 self-start">
-        <ArrowLeft size={16} /> Retour
+        <ArrowLeft size={16} /> Retour au planning
       </button>
       <div className="bg-white rounded-2xl border border-gray-100 p-4 md:p-6 flex flex-col gap-2">
         <h1 className="font-display text-xl font-bold text-blue-800">
@@ -121,7 +147,14 @@ export default function ProgressionCavalierPage() {
         familyId={resolvedFamilyId}
         childName={child.firstName}
         galopLevel={child.galopLevel}
+        onSaved={handleSaved}
       />
+      {/* Toast d'enregistrement avec retour automatique */}
+      {savedToast && (
+        <div className="fixed inset-x-4 bottom-6 md:inset-x-auto md:right-6 md:bottom-6 z-50 bg-green-500 text-white px-4 py-3 rounded-xl shadow-lg font-body text-sm flex items-center gap-2">
+          <span>✅ Progression enregistrée — retour au planning…</span>
+        </div>
+      )}
     </div>
   );
 }

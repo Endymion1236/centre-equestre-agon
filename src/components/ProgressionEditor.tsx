@@ -10,9 +10,10 @@ interface Props {
   familyId: string;
   childName: string;
   galopLevel?: string; // niveau actuel du cavalier
+  onSaved?: () => void; // callback appelé après une sauvegarde réussie (pour fermer/rediriger)
 }
 
-export default function ProgressionEditor({ childId, familyId, childName, galopLevel }: Props) {
+export default function ProgressionEditor({ childId, familyId, childName, galopLevel, onSaved }: Props) {
   const [acquis, setAcquis] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -71,6 +72,7 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
       setAcquis(enrichedAcquis);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      onSaved?.();
     } catch (e) { console.error(e); }
     setSaving(false);
   };
