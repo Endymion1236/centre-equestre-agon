@@ -287,7 +287,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (!user || !isAdmin) return;
     getDocs(collection(db, "payments")).then(snap => {
       const count = snap.docs.filter(d => {
-        const s = d.data().status;
+        const data = d.data();
+        const s = data.status;
+        // Exclure les chèques différés : ils ont leur propre onglet
+        if (data.paymentMode === "cheque_differe") return false;
         return s === "pending" || s === "partial";
       }).length;
       setNbImpayes(count);
@@ -342,7 +345,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}` === monthStr;
         });
         const totalEncaisse = paysMois.filter(p=>p.status==="paid").reduce((s,p)=>s+(p.paidAmount||p.totalTTC||0),0);
-        const nbImpayes = paysMois.filter(p=>p.status==="pending"||p.status==="partial").length;
+        const nbImpayes = paysMois.filter(p=>(p.status==="pending"||p.status==="partial") && p.paymentMode !== "cheque_differe").length;
 
         setVoiceContext(prev => ({
           date_aujourdhui: now.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}),

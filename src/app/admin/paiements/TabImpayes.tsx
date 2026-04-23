@@ -55,6 +55,10 @@ export function TabImpayes({
       const unpaid = payments.filter(p => {
         if (p.status === "cancelled" || p.status === "paid" || p.status === "sepa_scheduled") return false;
         if ((p.paidAmount || 0) >= (p.totalTTC || 0)) return false;
+        // Paiement converti en chèques différés : plus dans les impayés, il est
+        // suivi dans l'onglet dédié "Chèques différés" (chaque chèque y est déposé
+        // individuellement le jour venu).
+        if (p.paymentMode === "cheque_differe") return false;
         // Échéances : inclure uniquement celles en retard (date dépassée)
         if ((p as any).echeancesTotal > 1) {
           return (p as any).echeanceDate && (p as any).echeanceDate < todayStr;

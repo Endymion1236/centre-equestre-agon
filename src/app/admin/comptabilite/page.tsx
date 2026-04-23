@@ -1538,7 +1538,7 @@ export default function ComptabilitePage() {
           context: {
             totalCA, totalEncaisse: totalEnc,
             nbPaiements: filteredPayments.length,
-            nbImpayés: filteredPayments.filter(p => p.status === "pending" || p.status === "partial").length,
+            nbImpayés: filteredPayments.filter(p => (p.status === "pending" || p.status === "partial") && p.paymentMode !== "cheque_differe").length,
             topFamilles, periode: period,
             encaissementsParMode: modeMap,
           },
