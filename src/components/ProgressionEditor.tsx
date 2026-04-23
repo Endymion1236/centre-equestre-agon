@@ -392,6 +392,8 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
     setSaving(false);
   };
 
+  const [expandedNoteIdx, setExpandedNoteIdx] = useState<number | null>(null);
+
   return (
     <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-4">
       <div className="font-body text-xs font-semibold text-purple-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
@@ -436,25 +438,67 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
       {/* Notes récentes — sélectionner celle qui apparaît dans le bilan */}
       {recentNotes.length > 0 && (
         <div>
-          <div className="font-body text-[10px] text-purple-400 font-semibold mb-1.5">Notes précédentes — cliquez sur ⭐ pour choisir celle du bilan PDF</div>
-          {recentNotes.map((n: any, i: number) => (
-            <div key={i} className={`flex items-start gap-2 font-body text-[10px] text-slate-500 rounded px-2 py-1.5 mb-1 border ${n.featured ? "bg-purple-50 border-purple-300" : "bg-white border-purple-100"}`}>
-              <button onClick={() => toggleFeatured(i)}
-                className="bg-transparent border-none cursor-pointer p-0 text-sm flex-shrink-0 mt-0.5"
-                title={n.featured ? "Retirer du bilan" : "Afficher dans le bilan PDF"}>
-                {n.featured ? "⭐" : "☆"}
-              </button>
-              <div className="flex-1">
-                <span className="text-purple-400">{new Date(n.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}</span>
-                {" — "}{n.text}
+          <div className="font-body text-[10px] text-purple-400 font-semibold mb-1.5">
+            Notes précédentes — cliquez dessus pour voir le détail, ⭐ pour choisir celle du bilan PDF
+          </div>
+          {recentNotes.map((n: any, i: number) => {
+            const isExpanded = expandedNoteIdx === i;
+            return (
+              <div key={i} className={`rounded px-2 py-1.5 mb-1 border ${n.featured ? "bg-purple-50 border-purple-300" : "bg-white border-purple-100"}`}>
+                <div className="flex items-start gap-2 font-body text-xs text-slate-600">
+                  <button onClick={() => toggleFeatured(i)}
+                    className="bg-transparent border-none cursor-pointer p-0 text-sm flex-shrink-0 mt-0.5"
+                    title={n.featured ? "Retirer du bilan" : "Afficher dans le bilan PDF"}>
+                    {n.featured ? "⭐" : "☆"}
+                  </button>
+                  <button
+                    onClick={() => setExpandedNoteIdx(isExpanded ? null : i)}
+                    className="flex-1 bg-transparent border-none text-left cursor-pointer p-0 font-body text-xs"
+                    title={isExpanded ? "Masquer" : "Voir le détail"}>
+                    <span className="text-purple-400">{new Date(n.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}</span>
+                    {" — "}
+                    <span className={isExpanded ? "text-slate-700" : "text-slate-500 line-clamp-2"}>
+                      {n.text}
+                    </span>
+                  </button>
+                  <button onClick={() => deleteNote(i)}
+                    className="bg-transparent border-none cursor-pointer p-0 text-red-300 hover:text-red-500 flex-shrink-0 mt-0.5 text-sm"
+                    title="Supprimer cette note">
+                    ✕
+                  </button>
+                </div>
+                {isExpanded && (
+                  <div className="mt-2 pl-6 flex flex-col gap-2">
+                    {n.activity && (
+                      <div className="font-body text-[10px] text-purple-400">
+                        Activité : {n.activity}
+                      </div>
+                    )}
+                    <div className="font-body text-sm text-slate-700 whitespace-pre-wrap bg-white rounded-lg p-2 border border-purple-100">
+                      {n.text || <span className="text-slate-400 italic">(note vide)</span>}
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={() => {
+                          setNoteText(n.text || "");
+                          setExpandedNoteIdx(null);
+                          // Scroll vers le haut pour voir le champ de saisie
+                          if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+                        }}
+                        className="font-body text-[11px] text-purple-700 bg-white border border-purple-300 rounded-lg px-3 py-1.5 cursor-pointer hover:bg-purple-100">
+                        ✏️ Reprendre ce texte
+                      </button>
+                      <button
+                        onClick={() => setExpandedNoteIdx(null)}
+                        className="font-body text-[11px] text-slate-500 bg-transparent border-none cursor-pointer px-2 py-1.5">
+                        Fermer
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <button onClick={() => deleteNote(i)}
-                className="bg-transparent border-none cursor-pointer p-0 text-red-300 hover:text-red-500 flex-shrink-0 mt-0.5 text-sm"
-                title="Supprimer cette note">
-                ✕
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
