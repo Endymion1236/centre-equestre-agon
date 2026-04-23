@@ -51,6 +51,10 @@ export default function PaiementsPage() {
   const [quickRef, setQuickRef] = useState("");
   const [quickSaving, setQuickSaving] = useState(false);
   const [quickMandatActif, setQuickMandatActif] = useState<boolean | null>(null);
+  // Saisie multi-chèques pour le mode "cheque_differe" dans la modale rapide
+  const [quickChequesDiffres, setQuickChequesDiffres] = useState<
+    { numero: string; banque: string; montant: string; dateEncaissementPrevue: string }[]
+  >([{ numero: "", banque: "", montant: "", dateEncaissementPrevue: new Date().toISOString().split("T")[0] }]);
   const [impayesSearch, setImpayesSearch] = useState(urlSearch);
   const [impayesExpanded, setImpayesExpanded] = useState<Set<string>>(new Set());
   const [editItems, setEditItems] = useState<any[]>([]);
@@ -173,6 +177,27 @@ export default function PaiementsPage() {
     )).then(snap => setQuickMandatActif(!snap.empty)).catch(() => setQuickMandatActif(false));
   }, [quickEncaisser]);
 
+  // Pré-remplir la grille de chèques différés avec le montant dû quand la modale s'ouvre
+  useEffect(() => {
+    if (!quickEncaisser) return;
+    const p = quickEncaisser.payment;
+    const du = Math.max(0, Math.round(((p.totalTTC || 0) - (p.paidAmount || 0)) * 100) / 100);
+    setQuickChequesDiffres([{
+      numero: "", banque: "",
+      montant: du > 0 ? du.toFixed(2) : "",
+      dateEncaissementPrevue: new Date().toISOString().split("T")[0],
+    }]);
+  }, [quickEncaisser]);
+
+  // Répartir un total en N parts égales (centimes bien distribués)
+  const quickRepartirEnParts = (total: number, n: number): number[] => {
+    if (n <= 0) return [];
+    const cents = Math.round(total * 100);
+    const base = Math.floor(cents / n);
+    const reste = cents - base * n;
+    return Array.from({ length: n }, (_, i) => (base + (i < reste ? 1 : 0)) / 100);
+  };
+
   const handleQuickEncaisser = async () => {
     if (!quickEncaisser) return;
     const p = quickEncaisser.payment;
@@ -180,6 +205,67 @@ export default function PaiementsPage() {
     if (montant <= 0) return;
     setQuickSaving(true);
     try {
+      // ── Mode chèques différés : pas d'encaissement immédiat ──
+      // On convertit l'impayé : on passe le payment en paymentMode "cheque_differe"
+      // et on crée N documents cheques-differes. Chaque chèque sera encaissé
+      // individuellement le jour venu via l'onglet "Chèques différés".
+      if (quickMode === "cheque_differe") {
+        const chqsValides = quickChequesDiffres.filter(
+          c => safeNumber(c.montant) > 0 && c.dateEncaissementPrevue
+        );
+        if (chqsValides.length === 0) {
+          toast("Ajoutez au moins un chèque avec un montant et une date", "warning");
+          setQuickSaving(false);
+          return;
+        }
+        const totalChq = chqsValides.reduce((s, c) => s + safeNumber(c.montant), 0);
+        if (Math.abs(totalChq - montant) > 0.01) {
+          if (!confirm(
+            `Le total des chèques (${totalChq.toFixed(2)}€) ne correspond pas au montant à encaisser (${montant.toFixed(2)}€).\n\nÉcart : ${(totalChq - montant).toFixed(2)}€.\n\nContinuer quand même ?`
+          )) {
+            setQuickSaving(false);
+            return;
+          }
+        }
+
+        // Créer un document par chèque dans cheques-differes
+        for (const chq of chqsValides) {
+          await addDoc(collection(db, "cheques-differes"), {
+            paymentId: p.id,
+            familyId: p.familyId,
+            familyName: p.familyName,
+            numero: chq.numero.trim(),
+            banque: chq.banque.trim(),
+            montant: safeNumber(chq.montant),
+            dateEncaissementPrevue: chq.dateEncaissementPrevue,
+            status: "pending",
+            createdAt: serverTimestamp(),
+          });
+        }
+
+        // Mettre à jour le payment : mode cheque_differe, ref synthétique
+        // Statut conservé en "pending" car aucun chèque n'a encore été déposé.
+        // L'onglet "Chèques différés" marquera le payment "paid" quand tous
+        // les chèques seront déposés.
+        await updateDoc(doc(db, "payments", p.id), {
+          paymentMode: "cheque_differe",
+          paymentRef: `${chqsValides.length} chèque(s) différé(s)`,
+          updatedAt: serverTimestamp(),
+        });
+
+        toast(
+          `✅ ${chqsValides.length} chèque(s) différé(s) enregistré(s) pour ${p.familyName} — ${totalChq.toFixed(2)}€`,
+          "success"
+        );
+        setQuickEncaisser(null);
+        setQuickMontant(""); setQuickRef("");
+        setQuickDate(new Date().toISOString().split("T")[0]);
+        setQuickChequesDiffres([{ numero: "", banque: "", montant: "", dateEncaissementPrevue: new Date().toISOString().split("T")[0] }]);
+        await refreshAll();
+        setQuickSaving(false);
+        return;
+      }
+
       // ── Mode SEPA : créer les échéances au lieu d'encaisser directement ──
       if (quickMode === "prelevement_sepa") {
         const nbEch = parseInt(quickRef || "10");
@@ -1511,6 +1597,7 @@ export default function PaiementsPage() {
                     { id: "virement", label: "Virement", icon: "🏦" },
                     { id: "cb_terminal", label: "CB", icon: "💳" },
                     { id: "prelevement_sepa", label: "SEPA", icon: "🏦" },
+                    { id: "cheque_differe", label: "Chèques différés", icon: "📅" },
                   ].map(m => {
                     const isSepa = m.id === "prelevement_sepa";
                     const sepaBlocked = isSepa && quickMandatActif === false;
@@ -1572,26 +1659,145 @@ export default function PaiementsPage() {
                   </div>
                 </div>
               )}
-              {/* Date */}
-              <div>
-                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Date d'encaissement</label>
-                <input type="date" value={quickDate} onChange={e => setQuickDate(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
-                <p className="font-body text-[10px] text-slate-400 mt-1">Modifiable si encaissement différé</p>
-              </div>
-              {/* Référence */}
-              <div>
-                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Référence (optionnel)</label>
-                <input value={quickRef} onChange={e => setQuickRef(e.target.value)}
-                  placeholder="N° chèque, virement..."
-                  className="w-full px-3 py-2.5 rounded-xl border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
-              </div>
+              {/* Saisie multi-chèques (mode cheque_differe) */}
+              {quickMode === "cheque_differe" && (() => {
+                const totalChq = quickChequesDiffres.reduce((s, c) => s + safeNumber(c.montant), 0);
+                const montantCible = parseFloat(quickMontant) || ((quickEncaisser.payment.totalTTC || 0) - (quickEncaisser.payment.paidAmount || 0));
+                const ecart = Math.round((totalChq - montantCible) * 100) / 100;
+                const ecartAbs = Math.abs(ecart);
+                return (
+                  <div className="border border-orange-200 rounded-xl p-3 bg-orange-50 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <div className="font-body text-xs font-semibold text-orange-800">
+                        📅 Chèques ({quickChequesDiffres.length})
+                      </div>
+                      <div className="font-body text-xs text-orange-700">
+                        <span className="font-bold">{totalChq.toFixed(2)}€</span> / {montantCible.toFixed(2)}€
+                        {ecartAbs > 0.01 && (
+                          <span className="ml-1 text-red-600">
+                            ({ecart > 0 ? "+" : ""}{ecart.toFixed(2)}€)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      {quickChequesDiffres.map((chq, idx) => (
+                        <div key={idx} className="flex flex-col gap-1 bg-white rounded-lg p-2 border border-orange-100">
+                          <div className="flex gap-1.5 items-center">
+                            <input
+                              value={chq.numero}
+                              onChange={e => {
+                                const u = [...quickChequesDiffres]; u[idx].numero = e.target.value; setQuickChequesDiffres(u);
+                              }}
+                              placeholder="N°"
+                              className="w-20 px-2 py-1 rounded border border-gray-200 font-body text-xs focus:outline-none focus:border-orange-400"
+                            />
+                            <input
+                              value={chq.banque}
+                              onChange={e => {
+                                const u = [...quickChequesDiffres]; u[idx].banque = e.target.value; setQuickChequesDiffres(u);
+                              }}
+                              placeholder="Banque"
+                              className="flex-1 min-w-0 px-2 py-1 rounded border border-gray-200 font-body text-xs focus:outline-none focus:border-orange-400"
+                            />
+                            {quickChequesDiffres.length > 1 && (
+                              <button
+                                onClick={() => setQuickChequesDiffres(quickChequesDiffres.filter((_, i) => i !== idx))}
+                                className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1"
+                                title="Supprimer ce chèque">
+                                <X size={14} />
+                              </button>
+                            )}
+                          </div>
+                          <div className="flex gap-1.5 items-center">
+                            <input
+                              value={chq.montant}
+                              onChange={e => {
+                                const u = [...quickChequesDiffres]; u[idx].montant = e.target.value; setQuickChequesDiffres(u);
+                              }}
+                              type="number" step="0.01" placeholder="Montant"
+                              className="w-24 px-2 py-1 rounded border border-gray-200 font-body text-xs text-right focus:outline-none focus:border-orange-400"
+                            />
+                            <input
+                              value={chq.dateEncaissementPrevue}
+                              onChange={e => {
+                                const u = [...quickChequesDiffres]; u[idx].dateEncaissementPrevue = e.target.value; setQuickChequesDiffres(u);
+                              }}
+                              type="date"
+                              className="flex-1 min-w-0 px-2 py-1 rounded border border-gray-200 font-body text-xs focus:outline-none focus:border-orange-400"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={() => {
+                          const reste = Math.max(0, Math.round((montantCible - totalChq) * 100) / 100);
+                          const lastDate = quickChequesDiffres[quickChequesDiffres.length - 1]?.dateEncaissementPrevue;
+                          let nextDate = new Date().toISOString().split("T")[0];
+                          if (lastDate) {
+                            const d = new Date(lastDate);
+                            d.setMonth(d.getMonth() + 1);
+                            nextDate = d.toISOString().split("T")[0];
+                          }
+                          setQuickChequesDiffres([...quickChequesDiffres, { numero: "", banque: "", montant: reste > 0 ? reste.toFixed(2) : "", dateEncaissementPrevue: nextDate }]);
+                        }}
+                        className="font-body text-xs text-orange-700 bg-white border border-orange-300 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-orange-100">
+                        + Ajouter
+                      </button>
+                      {quickChequesDiffres.length > 0 && (
+                        <button
+                          onClick={() => {
+                            const n = quickChequesDiffres.length;
+                            if (n === 0) return;
+                            const baseDate = quickChequesDiffres[0]?.dateEncaissementPrevue || new Date().toISOString().split("T")[0];
+                            const parts = quickRepartirEnParts(montantCible, n);
+                            const updated = quickChequesDiffres.map((c, i) => {
+                              const d = new Date(baseDate);
+                              d.setMonth(d.getMonth() + i);
+                              return {
+                                ...c,
+                                montant: parts[i].toFixed(2),
+                                dateEncaissementPrevue: d.toISOString().split("T")[0],
+                              };
+                            });
+                            setQuickChequesDiffres(updated);
+                          }}
+                          className="font-body text-xs text-orange-700 bg-white border border-orange-300 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-orange-100">
+                          ⚖️ Répartir en {quickChequesDiffres.length}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+              {/* Date (masquée en mode cheque_differe : chaque chèque a sa propre date) */}
+              {quickMode !== "cheque_differe" && (
+                <div>
+                  <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Date d'encaissement</label>
+                  <input type="date" value={quickDate} onChange={e => setQuickDate(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
+                  <p className="font-body text-[10px] text-slate-400 mt-1">Modifiable si encaissement différé</p>
+                </div>
+              )}
+              {/* Référence (masquée en mode cheque_differe : le N° se saisit par chèque) */}
+              {quickMode !== "cheque_differe" && (
+                <div>
+                  <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Référence (optionnel)</label>
+                  <input value={quickRef} onChange={e => setQuickRef(e.target.value)}
+                    placeholder="N° chèque, virement..."
+                    className="w-full px-3 py-2.5 rounded-xl border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
+                </div>
+              )}
               <div className="flex gap-3 pt-1">
                 <button onClick={() => setQuickEncaisser(null)} className="px-5 py-3 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">Annuler</button>
                 <button onClick={handleQuickEncaisser} disabled={quickSaving || !quickMontant || (quickMode === "prelevement_sepa" && quickMandatActif !== true)}
                   className="flex-1 py-3 rounded-xl font-body text-sm font-semibold text-white bg-green-600 hover:bg-green-700 border-none cursor-pointer disabled:opacity-50">
-                  {quickSaving ? <Loader2 size={16} className="animate-spin inline mr-2"/> : "💶 "}
-                  Confirmer {quickMontant ? `${parseFloat(quickMontant).toFixed(2)}€` : ""}
+                  {quickSaving ? <Loader2 size={16} className="animate-spin inline mr-2"/> : (quickMode === "cheque_differe" ? "📅 " : "💶 ")}
+                  {quickMode === "cheque_differe"
+                    ? `Enregistrer ${quickChequesDiffres.length} chèque${quickChequesDiffres.length > 1 ? "s" : ""}`
+                    : `Confirmer ${quickMontant ? `${parseFloat(quickMontant).toFixed(2)}€` : ""}`}
                 </button>
               </div>
             </div>
