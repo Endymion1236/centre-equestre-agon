@@ -65,6 +65,7 @@ import { X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera,
 import type { Activity, Family } from "@/types";
 import { Creneau, EnrolledChild, payModes, typeColors, fmtDate } from "./types";
 import { authFetch } from "@/lib/auth-fetch";
+import { useAuth } from "@/lib/auth-context";
 
 function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allForfaits, onClose, onEnroll, onUnenroll }: {
   creneau: Creneau & { id: string }; families: (Family & { firestoreId: string })[]; allCreneaux: (Creneau & { id: string })[]; payments: any[]; allCartes: any[]; allForfaits: any[];  onClose: () => void;
@@ -72,6 +73,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   onUnenroll: (id: string, childId: string) => Promise<void>;
 }) {
   const { toast: panelToast } = useToast();
+  const { isAdmin, isMoniteur } = useAuth();
   const [search, setSearch] = useState(""); const [selFam, setSelFam] = useState(""); const [selChild, setSelChild] = useState("");
   const [enrolling, setEnrolling] = useState(false); const [justEnrolled, setJustEnrolled] = useState("");
   const [showPay, setShowPay] = useState(false); const [payMode, setPayMode] = useState("cb_terminal"); const [unenrolling, setUnenrolling] = useState("");
@@ -1440,7 +1442,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               <div key={e.childId} className="flex items-center justify-between bg-sand rounded-lg px-3 py-2">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColor}`}></span>
-                  <a href={`/admin/cavaliers?search=${encodeURIComponent(e.familyName || e.childName)}`} target="_blank" rel="noopener noreferrer"
+                  <a
+                    href={
+                      isMoniteur && !isAdmin
+                        // Moniteur : on va directement à la page progression (pas accès à /admin/cavaliers)
+                        ? `/admin/progression/${e.childId}?familyId=${encodeURIComponent(e.familyId || "")}`
+                        // Admin : fiche famille complète avec le bon enfant ciblé
+                        : `/admin/cavaliers?search=${encodeURIComponent(e.familyName || e.childName)}&showProgression=${e.childId}`
+                    }
+                    target="_blank" rel="noopener noreferrer"
                     className="font-body text-sm font-semibold text-blue-800 hover:text-blue-500 hover:underline no-underline cursor-pointer truncate" title="Ouvrir la fiche cavalier">
                     {e.childName}
                   </a>
@@ -1449,7 +1459,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   {statusLabel && <span className={`font-body text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${hasPaid ? "text-green-700 bg-green-50" : "text-orange-600 bg-orange-50"}`}>{statusLabel}</span>}
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  <a href={`/admin/cavaliers?search=${encodeURIComponent(e.familyName || e.childName)}&showProgression=${e.childId}`} target="_blank" rel="noopener noreferrer"
+                  <a
+                    href={`/admin/progression/${e.childId}?familyId=${encodeURIComponent(e.familyId || "")}`}
+                    target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-1 font-body text-xs text-purple-500 hover:text-purple-700 bg-transparent no-underline px-2 py-1 rounded hover:bg-purple-50"
                     title={`Progression de ${e.childName}`}>
                     <span>📊</span>
