@@ -210,14 +210,21 @@ function NoteMoniteur({ childId, familyId, childName }: { childId: string; famil
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  // Charger les notes récentes
+  // Charger les notes récentes.
+  // Filtre : on exclut les notes automatiques du Montoir (type "seance" —
+  // clôture de séance "Poney : XXX" ou thème de stage). Elles n'ont pas de
+  // valeur pédagogique pour un bilan de progression, et polluaient l'affichage
+  // en prenant les 3 slots réservés aux vraies notes du moniteur.
+  // On garde : notes libres (sans type) + bilans IA (type "bilan_ia").
   useEffect(() => {
     (async () => {
       try {
         const famDoc = await getDoc(doc(db, "families", familyId));
         if (famDoc.exists()) {
           const child = ((famDoc.data() as any).children || []).find((c: any) => c.id === childId);
-          setRecentNotes(child?.peda?.notes?.slice(0, 3) || []);
+          const allNotes = child?.peda?.notes || [];
+          const pedaNotes = allNotes.filter((n: any) => n.type !== "seance");
+          setRecentNotes(pedaNotes.slice(0, 3));
         }
       } catch (e) { console.error(e); }
     })();
@@ -326,7 +333,13 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
     setProcessing(false);
   };
 
+  // toggleFeatured / deleteNote : on matche par DATE (unique en pratique car
+  // créée par new Date().toISOString() au moment de l'écriture) au lieu de
+  // l'index. Raison : recentNotes est filtré (notes de type "seance" exclues)
+  // donc l'index dans recentNotes ne correspond plus à l'index dans peda.notes.
   const toggleFeatured = async (idx: number) => {
+    const target = recentNotes[idx];
+    if (!target) return;
     try {
       const famDoc = await getDoc(doc(db, "families", familyId));
       if (!famDoc.exists()) return;
@@ -335,19 +348,21 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
         if (c.id !== childId) return c;
         const peda = c.peda || { objectifs: [], notes: [] };
         // Retirer featured de toutes les notes, mettre sur celle cliquée (toggle)
-        const updatedNotes = peda.notes.map((n: any, i: number) => ({
+        const updatedNotes = peda.notes.map((n: any) => ({
           ...n,
-          featured: i === idx ? !n.featured : false,
+          featured: n.date === target.date ? !n.featured : false,
         }));
         return { ...c, peda: { ...peda, notes: updatedNotes } };
       });
       await setDoc(doc(db, "families", familyId), { ...famData, children: updatedChildren, updatedAt: serverTimestamp() }, { merge: true });
-      // Mettre à jour localement
-      setRecentNotes(prev => prev.map((n, i) => ({ ...n, featured: i === idx ? !n.featured : false })));
+      // Mettre à jour localement (même filtre/indexation qu'à l'affichage)
+      setRecentNotes(prev => prev.map(n => ({ ...n, featured: n.date === target.date ? !n.featured : false })));
     } catch (e) { console.error(e); }
   };
 
   const deleteNote = async (idx: number) => {
+    const target = recentNotes[idx];
+    if (!target) return;
     if (!confirm("Supprimer cette note ?")) return;
     try {
       const famDoc = await getDoc(doc(db, "families", familyId));
@@ -356,11 +371,11 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
       const updatedChildren = (famData.children || []).map((c: any) => {
         if (c.id !== childId) return c;
         const peda = c.peda || { objectifs: [], notes: [] };
-        const updatedNotes = peda.notes.filter((_: any, i: number) => i !== idx);
+        const updatedNotes = peda.notes.filter((n: any) => n.date !== target.date);
         return { ...c, peda: { ...peda, notes: updatedNotes } };
       });
       await setDoc(doc(db, "families", familyId), { ...famData, children: updatedChildren, updatedAt: serverTimestamp() }, { merge: true });
-      setRecentNotes(prev => prev.filter((_, i) => i !== idx));
+      setRecentNotes(prev => prev.filter(n => n.date !== target.date));
     } catch (e) { console.error(e); }
   };
 
