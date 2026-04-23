@@ -53,7 +53,7 @@ export function Button({
 }
 
 // ═══ Badge ═══
-type BadgeColor = "blue" | "green" | "red" | "orange" | "gold" | "gray" | "purple";
+type BadgeColor = "blue" | "green" | "red" | "orange" | "gold" | "gray" | "purple" | "yellow";
 
 const badgeColors: Record<BadgeColor, string> = {
   blue: "text-blue-500 bg-blue-50",
@@ -63,6 +63,7 @@ const badgeColors: Record<BadgeColor, string> = {
   gold: "text-gold-600 bg-gold-50",
   gray: "text-gray-500 bg-gray-100",
   purple: "text-purple-600 bg-purple-50",
+  yellow: "text-yellow-800 bg-yellow-100",
 };
 
 interface BadgeProps {

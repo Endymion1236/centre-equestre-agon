@@ -19,6 +19,7 @@ interface Payment {
   status: string;
   paidAmount: number;
   date: any;
+  reconciledByBank?: boolean;
 }
 
 const accounts = [
@@ -81,7 +82,7 @@ export default function ComptabilitePage() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
-  const [bankLines, setBankLines] = useState<{ date: string; label: string; amount: number; matched: boolean; matchType: string; matchDetail: string; matchedEncs?: { familyName: string; montant: number; date: string; activityTitle: string; mode: string }[]; manualPaymentId?: string }[]>([]);
+  const [bankLines, setBankLines] = useState<{ date: string; label: string; amount: number; matched: boolean; matchType: string; matchDetail: string; matchedEncs?: { familyName: string; montant: number; date: string; activityTitle: string; mode: string }[]; manualPaymentId?: string; uncertain?: boolean }[]>([]);
   // Pointage manuel
   const [showManualMatch, setShowManualMatch] = useState<number | null>(null); // index de la bankLine
   const [expandedBankLine, setExpandedBankLine] = useState<number | null>(null);
@@ -97,6 +98,138 @@ export default function ComptabilitePage() {
   // Filtre d'affichage par mode dans la liste à remettre ("" = tous)
   const [remiseModeView, setRemiseModeView] = useState<string>("");
 
+  // ─────────────────────────────────────────────────────────────────────────
+  //  syncReconciledFromBankLines : synchronise reconciledByBank sur les
+  //  encaissements et payments en fonction des bankLines actuelles.
+  //
+  //  - Tout encaissement présent dans matchedEncs d'une bankLine matchée
+  //    (hors "Ignoré") passe à reconciledByBank=true.
+  //  - Tout encaissement qui avait reconciledByBank=true mais qui n'est plus
+  //    référencé par aucune bankLine matchée → reconciledByBank=false.
+  //  - Même logique pour les payments virement via manualPaymentId.
+  //
+  //  Pour éviter de casser des rapprochements antérieurs (périodes précédentes),
+  //  on ne dé-marque QUE les encs dont la date appartient à la période courante.
+  //  ─────────────────────────────────────────────────────────────────────────
+  const syncReconciledFromBankLines = async (lines: typeof bankLines) => {
+    try {
+      // 1. Construire l'ensemble cible des encs et payments à marquer rapprochés
+      const targetEncIds = new Set<string>();
+      const targetPaymentIds = new Set<string>();
+
+      for (const bl of lines) {
+        if (!bl.matched) continue;
+        if (bl.matchType === "Ignoré") continue;
+
+        if (bl.manualPaymentId) targetPaymentIds.add(bl.manualPaymentId);
+
+        for (const enc of (bl.matchedEncs || [])) {
+          const candidate = encaissementsCompta.find((e: any) => {
+            const d = e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "";
+            return (e.familyName || "") === enc.familyName
+              && Math.abs((e.montant || 0) - enc.montant) < 0.02
+              && d === enc.date;
+          });
+          if (candidate) targetEncIds.add(candidate.id);
+        }
+      }
+
+      // 2. Encaissements : marquer ceux qui doivent l'être, dé-marquer ceux
+      //    qui ne le sont plus (uniquement dans la période courante).
+      const encUpdates: Promise<any>[] = [];
+      for (const e of encaissementsCompta) {
+        const wasReconciled = Boolean(e.reconciledByBank);
+        const shouldBeReconciled = targetEncIds.has(e.id);
+        if (shouldBeReconciled && !wasReconciled) {
+          encUpdates.push(updateDoc(doc(db, "encaissements", e.id), {
+            reconciledByBank: true,
+            reconciledAt: serverTimestamp(),
+          }));
+        } else if (!shouldBeReconciled && wasReconciled) {
+          // Ne dé-marquer que si l'enc est dans la période courante
+          const encDate = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+          if (encDate) {
+            const pm = `${encDate.getFullYear()}-${String(encDate.getMonth() + 1).padStart(2, "0")}`;
+            if (pm === period) {
+              encUpdates.push(updateDoc(doc(db, "encaissements", e.id), {
+                reconciledByBank: false,
+                reconciledAt: null,
+              }));
+            }
+          }
+        }
+      }
+
+      // 3. Payments virement : marquer paid ceux qui sont pointés, dé-marquer
+      //    ceux qui étaient rapprochés mais ne le sont plus.
+      const paymentUpdates: Promise<any>[] = [];
+      for (const pid of targetPaymentIds) {
+        const pSnap = await getDoc(doc(db, "payments", pid));
+        if (!pSnap.exists()) continue;
+        const p = pSnap.data() as any;
+        if (p.status === "paid" && p.reconciledByBank) continue;
+        paymentUpdates.push(updateDoc(doc(db, "payments", pid), {
+          status: "paid",
+          paidAmount: p.totalTTC || p.paidAmount || 0,
+          paidAt: serverTimestamp(),
+          reconciledByBank: true,
+        }));
+      }
+      // Dé-marquer les payments précédemment rapprochés qui ne sont plus cibles
+      for (const p of payments) {
+        if (!p.reconciledByBank) continue;
+        if (targetPaymentIds.has(p.id)) continue;
+        if (p.paymentMode !== "virement") continue;
+        // Uniquement période courante
+        const pd = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
+        if (!pd) continue;
+        const pm = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, "0")}`;
+        if (pm !== period) continue;
+        paymentUpdates.push(updateDoc(doc(db, "payments", p.id), {
+          status: "pending",
+          paidAmount: 0,
+          reconciledByBank: false,
+        }));
+      }
+
+      if (encUpdates.length > 0 || paymentUpdates.length > 0) {
+        await Promise.all([...encUpdates, ...paymentUpdates]);
+        console.log(`[sync-reconciled] ✅ ${encUpdates.length} enc(s) + ${paymentUpdates.length} payment(s) mis à jour`);
+      }
+
+      // 4. Remises : pointer celles dont tous les encs sont rapprochés
+      const remiseUpdates: Promise<any>[] = [];
+      for (const r of (remises || [])) {
+        const encIds = r.encaissementIds || [];
+        if (encIds.length === 0) continue;
+        const allConsumed = encIds.every((id: string) => targetEncIds.has(id));
+        if (allConsumed && !r.pointee) {
+          remiseUpdates.push(updateDoc(doc(db, "remises", r.id), {
+            pointee: true,
+            pointeeDate: new Date().toISOString(),
+            pointeeNote: "Synchronisation automatique depuis le rapprochement bancaire",
+            updatedAt: serverTimestamp(),
+          }));
+        } else if (!allConsumed && r.pointee && r.pointeeNote?.includes("Synchronisation")) {
+          // Dé-pointer UNIQUEMENT si c'était une remise pointée automatiquement
+          // (on ne touche pas aux remises pointées manuellement par l'utilisateur)
+          remiseUpdates.push(updateDoc(doc(db, "remises", r.id), {
+            pointee: false,
+            pointeeDate: null,
+            pointeeNote: null,
+            updatedAt: serverTimestamp(),
+          }));
+        }
+      }
+      if (remiseUpdates.length > 0) {
+        await Promise.all(remiseUpdates);
+        console.log(`[sync-reconciled] ✅ ${remiseUpdates.length} remise(s) (dé)pointée(s)`);
+      }
+    } catch (e) {
+      console.error("[sync-reconciled] Erreur:", e);
+    }
+  };
+
   // Sauvegarder les bankLines dans Firestore après modification manuelle
   const updateAndSaveBankLines = async (updated: typeof bankLines) => {
     setBankLines(updated);
@@ -108,14 +241,19 @@ export default function ComptabilitePage() {
           matched: bl.matched, matchType: bl.matchType, matchDetail: bl.matchDetail,
           matchedEncs: bl.matchedEncs || null,
           manualPaymentId: bl.manualPaymentId || null,
+          uncertain: bl.uncertain || false,
         })),
         totalLines: updated.length,
         totalMatched: updated.filter(b => b.matched).length,
         totalAmount: Math.round(updated.reduce((s, b) => s + b.amount, 0) * 100) / 100,
         updatedAt: serverTimestamp(),
       });
+      // Synchroniser reconciledByBank sur encs/payments/remises
+      await syncReconciledFromBankLines(updated);
       // Synchroniser les versements bancaires du livre de caisse
       await syncVersementsEspeces(updated);
+      // Rafraîchir les données pour que l'UI reflète les changements
+      fetchData();
     } catch (e) { console.error("Erreur sauvegarde rapprochement:", e); }
   };
 
@@ -732,6 +870,7 @@ export default function ComptabilitePage() {
               ...bl, matched: true, matchType: "Virement",
               matchDetail: `Virement ${nameMatch.familyName}${amountClose ? "" : ` ⚠️ montant: attendu ${nameMatch.totalTTC?.toFixed(2)}€, reçu ${bl.amount.toFixed(2)}€`}`,
               manualPaymentId: nameMatch.id,
+              uncertain: !amountClose, // douteux si montant différent
             };
           }
 
@@ -745,7 +884,12 @@ export default function ComptabilitePage() {
           if (amountMatches.length === 1) {
             const match = amountMatches[0];
             usedEncIds.add(match.id);
-            return { ...bl, matched: true, matchType: "Virement", matchDetail: `Virement ${match.familyName} (montant seul)`, matchedEncs: [encToDetail(match)] };
+            return {
+              ...bl, matched: true, matchType: "Virement",
+              matchDetail: `Virement ${match.familyName} (montant seul)`,
+              matchedEncs: [encToDetail(match)],
+              uncertain: true, // nom absent du libellé → à vérifier
+            };
           }
           // Si plusieurs encaissements de même montant → ambigu, on laisse au pointage manuel
 
@@ -761,7 +905,12 @@ export default function ComptabilitePage() {
           if (pendingAmountMatches.length === 1) {
             const p = pendingAmountMatches[0];
             usedPaymentIds.add(p.id);
-            return { ...bl, matched: true, matchType: "Virement", matchDetail: `Virement ${p.familyName} (montant seul)`, manualPaymentId: p.id };
+            return {
+              ...bl, matched: true, matchType: "Virement",
+              matchDetail: `Virement ${p.familyName} (montant seul)`,
+              manualPaymentId: p.id,
+              uncertain: true, // nom absent du libellé → à vérifier
+            };
           }
         }
 
@@ -952,13 +1101,28 @@ export default function ComptabilitePage() {
         }
 
         // ── 6. Montant exact toutes modes ─────────────────────────────────
-        // Dernier recours : trouver un encaissement de même montant dans la fenêtre
-        const exactMatch = periodEnc.filter(inWindow).find(e =>
-          Math.abs((e.montant || 0) - bl.amount) < 0.02
-        );
-        if (exactMatch) {
-          usedEncIds.add(exactMatch.id);
-          return { ...bl, matched: true, matchType: "Montant exact", matchDetail: `${exactMatch.familyName} — ${exactMatch.activityTitle || ""}`, matchedEncs: [encToDetail(exactMatch)] };
+        // Dernier recours : trouver un encaissement de même montant dans la fenêtre.
+        // EXCLUSION : pour les virements (VIR / SEPA / PRLV), ce fallback est DÉSACTIVÉ.
+        // Raison : un virement doit matcher par nom dans le libellé (bloc 3.b). Sans nom
+        // qui colle, il vaut mieux laisser non-matché pour éviter les faux positifs
+        // (ex : "VIR DE MME ROPIQUET 30€" faussement attribué à un encaissement
+        // cb_terminal "Nicolas Richard — animation" de 30€ d'un autre jour).
+        // IMPORTANT : même quand on l'accepte, on marque uncertain=true car ce match
+        // ne repose que sur le montant, sans confirmation par le nom. Badge ⚠️ visible.
+        const isVirementLabel = label.includes("VIR") || label.includes("SEPA") || label.includes("PRLV");
+        if (!isVirementLabel) {
+          const exactMatch = periodEnc.filter(inWindow).find(e =>
+            Math.abs((e.montant || 0) - bl.amount) < 0.02
+          );
+          if (exactMatch) {
+            usedEncIds.add(exactMatch.id);
+            return {
+              ...bl, matched: true, matchType: "Montant exact",
+              matchDetail: `${exactMatch.familyName} — ${exactMatch.activityTitle || ""}`,
+              matchedEncs: [encToDetail(exactMatch)],
+              uncertain: true, // match fragile : à vérifier
+            };
+          }
         }
 
         // ── DEBUG : ligne non rapprochée → on log pour diagnostic ────────
@@ -1282,6 +1446,7 @@ export default function ComptabilitePage() {
             matchDetail: bl.matchDetail,
             matchedEncs: bl.matchedEncs || null,
             manualPaymentId: bl.manualPaymentId || null,
+            uncertain: bl.uncertain || false,
           })),
           totalLines: finalMatched.length,
           totalMatched: (finalMatched as any[]).filter((b: any) => b.matched).length,
@@ -1307,6 +1472,7 @@ export default function ComptabilitePage() {
             ...bl,
             matchedEncs: bl.matchedEncs || undefined,
             manualPaymentId: bl.manualPaymentId || undefined,
+            uncertain: bl.uncertain || false,
           })));
         } else {
           setBankLines([]);
@@ -2723,10 +2889,21 @@ export default function ComptabilitePage() {
                   </div>
                   <span className="w-24 text-right font-body text-sm font-semibold text-green-600">{bl.amount.toFixed(2)}€</span>
                   <span className="w-28 text-center">
-                    {bl.matched && bl.matchType && <Badge color={bl.matchType === "Ignoré" ? "gray" : bl.matchType === "Manuel" ? "orange" : "blue"}>{bl.matchType}</Badge>}
+                    {bl.matched && bl.matchType && (
+                      <Badge color={
+                        bl.matchType === "Ignoré" ? "gray"
+                        : bl.uncertain ? "yellow"
+                        : bl.matchType === "Manuel" ? "orange"
+                        : "blue"
+                      }>
+                        {bl.uncertain ? "⚠️ " : ""}{bl.matchType}
+                      </Badge>
+                    )}
                   </span>
                   <span className="w-20 text-center">
-                    <Badge color={bl.matched ? "green" : "orange"}>{bl.matched ? "OK" : "À traiter"}</Badge>
+                    <Badge color={bl.matched ? (bl.uncertain ? "yellow" : "green") : "orange"}>
+                      {bl.matched ? (bl.uncertain ? "À vérifier" : "OK") : "À traiter"}
+                    </Badge>
                   </span>
                   <span className="w-20 text-center">
                     {!bl.matched && (
@@ -2763,34 +2940,17 @@ export default function ComptabilitePage() {
                         Restaurer
                       </button>
                     )}
-                    {bl.matched && bl.matchType === "Manuel" && (
+                    {/* Bouton "Dé-pointer" universel pour tout match hors Ignoré.
+                        La sync auto dans updateAndSaveBankLines se charge de repasser
+                        les encs à reconciledByBank=false et les payments virement à pending. */}
+                    {bl.matched && bl.matchType !== "Ignoré" && (
                       <button onClick={async () => {
-                        const oldPaymentId = bl.manualPaymentId;
                         const updated = [...bankLines];
-                        updated[i] = { ...updated[i], matched: false, matchType: "", matchDetail: "", manualPaymentId: undefined };
+                        updated[i] = { ...updated[i], matched: false, matchType: "", matchDetail: "", matchedEncs: undefined, manualPaymentId: undefined, uncertain: false };
                         await updateAndSaveBankLines(updated);
-
-                        // Bug #8 : si le paiement était un virement rapproché, on le repasse en pending
-                        if (oldPaymentId) {
-                          try {
-                            const pSnap = await getDoc(doc(db, "payments", oldPaymentId));
-                            if (pSnap.exists()) {
-                              const p = pSnap.data() as any;
-                              if (p.paymentMode === "virement" && p.reconciledByBank) {
-                                await updateDoc(doc(db, "payments", oldPaymentId), {
-                                  status: "pending",
-                                  paidAmount: 0,
-                                  reconciledByBank: false,
-                                });
-                                fetchData();
-                              }
-                            }
-                          } catch (e) {
-                            console.error("Erreur dé-pointage paiement:", e);
-                          }
-                        }
                       }}
-                        className="font-body text-[10px] text-orange-500 bg-orange-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-orange-100">
+                        className="font-body text-[10px] text-orange-500 bg-orange-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-orange-100"
+                        title="Annuler ce rapprochement et remettre l'encaissement dans 'à remettre'">
                         Dé-pointer
                       </button>
                     )}
