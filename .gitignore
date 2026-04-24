@@ -57,3 +57,4 @@ src/import-preprod.js
 # === Fichiers orphelins a la racine ===
 /node
 /middleware.ts
+screenshot.mjs
