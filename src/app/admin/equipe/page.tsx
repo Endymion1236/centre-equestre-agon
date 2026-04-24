@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { auth } from "@/lib/firebase";
-import { UserPlus, Trash2, Loader2, Shield, Eye, EyeOff, RefreshCw } from "lucide-react";
+import { UserPlus, Trash2, Loader2, Shield, Eye, EyeOff, RefreshCw, Search } from "lucide-react";
 
 interface Moniteur {
   uid: string;
@@ -146,6 +146,41 @@ export default function EquipePage() {
         const data = await res.json();
         setError(data.error || "Erreur lors du rafraîchissement.");
       }
+    } catch (e) {
+      setError("Erreur réseau.");
+    }
+  };
+
+  // Diagnostic : affiche l'état réel des custom claims Firebase Auth d'un
+  // moniteur. Permet de voir si le claim "moniteur: true" est bien posé
+  // côté serveur, indépendamment de ce que son navigateur affiche.
+  const handleDiag = async (moniteur: Moniteur) => {
+    setError("");
+    setSuccess("");
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/admin/diag-claims?email=${encodeURIComponent(moniteur.email)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Erreur lors du diagnostic.");
+        return;
+      }
+      const claims = data.customClaims || {};
+      const claimsStr = Object.keys(claims).length === 0 ? "AUCUN CLAIM" : JSON.stringify(claims, null, 2);
+      alert(
+        `🔍 Diagnostic claims — ${moniteur.displayName}\n\n` +
+        `Email : ${data.email}\n` +
+        `UID : ${data.uid}\n` +
+        `Compte désactivé : ${data.disabled ? "OUI" : "non"}\n` +
+        `Email vérifié : ${data.emailVerified ? "oui" : "NON"}\n\n` +
+        `Custom claims : ${claimsStr}\n\n` +
+        `✅ A le claim moniteur : ${data.hasMoniteurClaim ? "OUI" : "❌ NON"}\n` +
+        `✅ A le claim admin : ${data.hasAdminClaim ? "OUI" : "non"}\n\n` +
+        `Dernière connexion : ${data.lastSignIn || "jamais"}\n` +
+        `Tokens révoqués après : ${data.tokensValidAfter || "jamais"}`
+      );
     } catch (e) {
       setError("Erreur réseau.");
     }
@@ -294,6 +329,13 @@ export default function EquipePage() {
                   <span className="px-2.5 py-1 rounded-lg bg-blue-50 font-body text-[11px] font-semibold text-blue-600">
                     Moniteur
                   </span>
+                  <button
+                    onClick={() => handleDiag(m)}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-300 hover:text-purple-500 hover:bg-purple-50 cursor-pointer border-none bg-transparent transition-colors"
+                    title="Diagnostic : voir les claims Firebase Auth"
+                  >
+                    <Search size={14} />
+                  </button>
                   <button
                     onClick={() => handleRefreshClaim(m)}
                     className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-300 hover:text-blue-500 hover:bg-blue-50 cursor-pointer border-none bg-transparent transition-colors"
