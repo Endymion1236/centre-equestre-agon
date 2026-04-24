@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { collection, getDocs, query, where, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useAuth } from "@/lib/auth-context";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import ProgressionEditor from "@/components/ProgressionEditor";
 
@@ -19,6 +20,7 @@ export default function ProgressionCavalierPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const childId = params?.childId as string;
   const familyIdParam = searchParams.get("familyId");
 
@@ -29,6 +31,20 @@ export default function ProgressionCavalierPage() {
   const [familyName, setFamilyName] = useState<string>("");
 
   useEffect(() => {
+    // ⚠️ Attendre que Firebase Auth ait fini de restaurer la session avant
+    // de faire des requêtes Firestore. Sans cette attente, sur iPhone (Safari,
+    // IndexedDB lente / évincée par iOS), la requête part avec user=null et
+    // Firestore refuse avec une permission denied → erreur de chargement
+    // intermittente.
+    if (authLoading) return;
+
+    // Si après chargement, toujours pas d'utilisateur → rediriger vers login
+    if (!user) {
+      setError("Vous devez être connecté pour voir cette page");
+      setLoading(false);
+      return;
+    }
+
     (async () => {
       setLoading(true);
       setError(null);
@@ -68,14 +84,30 @@ export default function ProgressionCavalierPage() {
         setResolvedFamilyId(familyId);
         setChild({ firstName: c.firstName, lastName: c.lastName, galopLevel: c.galopLevel });
         setFamilyName(family.parentName || "");
-      } catch (e) {
-        console.error("[progression/[childId]] chargement échoué:", e);
-        setError("Erreur de chargement");
+      } catch (e: any) {
+        // Log détaillé pour diagnostic (visible dans la console Safari via USB debug)
+        console.error("[progression/[childId]] chargement échoué:", {
+          code: e?.code,
+          message: e?.message,
+          userPresent: !!user,
+          userUid: user?.uid,
+          authLoading,
+          childId,
+          familyIdParam,
+        });
+        // Message adapté selon le type d'erreur Firestore
+        if (e?.code === "permission-denied") {
+          setError("Permissions insuffisantes. Reconnectez-vous et réessayez.");
+        } else if (e?.code === "unavailable" || e?.message?.includes("offline")) {
+          setError("Connexion internet instable. Réessayez.");
+        } else {
+          setError("Erreur de chargement");
+        }
       } finally {
         setLoading(false);
       }
     })();
-  }, [childId, familyIdParam]);
+  }, [childId, familyIdParam, user, authLoading]);
 
   // Retour au planning : on tente de fermer l'onglet (cas target="_blank"
   // depuis EnrollPanel) mais plein de navigateurs bloquent window.close() par
@@ -121,7 +153,15 @@ export default function ProgressionCavalierPage() {
         </button>
         <div className="bg-white rounded-2xl border border-orange-200 p-8 text-center">
           <div className="text-4xl mb-3">⚠️</div>
-          <p className="font-body text-sm text-slate-500">{error || "Données introuvables"}</p>
+          <p className="font-body text-sm text-slate-500 mb-4">{error || "Données introuvables"}</p>
+          <button
+            onClick={() => {
+              // Forcer un reload complet de la page (utile si auth pas prête au premier essai)
+              if (typeof window !== "undefined") window.location.reload();
+            }}
+            className="font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none cursor-pointer px-5 py-2.5 rounded-xl">
+            🔄 Réessayer
+          </button>
         </div>
       </div>
     );
