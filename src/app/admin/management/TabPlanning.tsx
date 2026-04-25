@@ -310,8 +310,9 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       dateStr: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,
     }));
 
-    // Trouver les créneaux de la semaine qui ont un moniteur correspondant à un salarié
-    const matchedCreneaux: { creneau: any; salarieId: string; salarieName: string; jour: JourSemaine }[] = [];
+    // ── 1. Lister tout ce qu'il faudrait avoir après import ──
+    // (= les créneaux du planning de la semaine qui ont un moniteur reconnu)
+    const targetCreneaux: { creneau: any; salarieId: string; salarieName: string; jour: JourSemaine }[] = [];
 
     for (const { jour, dateStr } of dates) {
       const dayCr = creneaux.filter(c => c.date === dateStr && c.monitor);
@@ -324,43 +325,57 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
             s.actif && s.nom.toLowerCase().trim() === monitorLower
           );
           if (sal) {
-            const alreadyExists = taches.some(t =>
-              t.salarieId === sal.id &&
-              t.jour === jour &&
-              t.heureDebut === c.startTime &&
-              t.tacheLabel === c.activityTitle
-            );
-            if (!alreadyExists) {
-              matchedCreneaux.push({ creneau: c, salarieId: sal.id, salarieName: sal.nom, jour });
-            }
+            targetCreneaux.push({ creneau: c, salarieId: sal.id, salarieName: sal.nom, jour });
           }
         }
       }
     }
 
-    if (matchedCreneaux.length === 0) {
-      toast("Aucun nouveau cours/stage à importer cette semaine (déjà importés ou aucun moniteur correspondant)", "info");
+    // ── 2. Lister ce qu'on va supprimer ──
+    // Toutes les tâches importées depuis le planning (tacheTypeId === "__planning__")
+    // et qui appartiennent à la semaine en cours. Les tâches manuelles ajoutées
+    // (avec un vrai tacheTypeId) ne sont PAS touchées.
+    const tachesAEffacer = taches.filter(t =>
+      t.tacheTypeId === "__planning__" && t.semaine === semaine
+    );
+
+    // ── 3. Garde-fou : si rien à faire dans les deux sens, on sort ──
+    if (targetCreneaux.length === 0 && tachesAEffacer.length === 0) {
+      toast("Aucun cours/stage avec moniteur reconnu cette semaine", "info");
       return;
     }
 
+    // ── 4. Confirmation utilisateur avec récap clair ──
     const confirmed = confirm(
-      `Importer ${matchedCreneaux.length} cours/stages du planning ?\n\n` +
-      matchedCreneaux.slice(0, 8).map(m =>
-        `• ${JOURS_LABELS[m.jour]} ${m.creneau.startTime}→${m.creneau.endTime} : ${m.creneau.activityTitle} (${m.salarieName})`
-      ).join("\n") +
-      (matchedCreneaux.length > 8 ? `\n… et ${matchedCreneaux.length - 8} autres` : "")
+      `Réimporter le planning de la semaine ?\n\n` +
+      (tachesAEffacer.length > 0
+        ? `🗑️ ${tachesAEffacer.length} ancienne(s) tâche(s) importée(s) seront SUPPRIMÉES (y compris si déjà cochées 'fait')\n`
+        : "") +
+      `📥 ${targetCreneaux.length} nouvelle(s) tâche(s) seront créées depuis le planning actuel\n\n` +
+      (targetCreneaux.length > 0
+        ? targetCreneaux.slice(0, 6).map(m =>
+            `• ${JOURS_LABELS[m.jour]} ${m.creneau.startTime}→${m.creneau.endTime} : ${m.creneau.activityTitle} (${m.salarieName})`
+          ).join("\n") +
+          (targetCreneaux.length > 6 ? `\n… et ${targetCreneaux.length - 6} autres` : "")
+        : "") +
+      `\n\nLes tâches manuelles (non issues du planning) ne sont PAS touchées.`
     );
     if (!confirmed) return;
 
     setImporting(true);
     try {
-      const batch: Promise<any>[] = [];
-      for (const { creneau, salarieId, salarieName, jour } of matchedCreneaux) {
+      // ── 5. Supprimer les anciennes tâches __planning__ de la semaine ──
+      const deletePromises = tachesAEffacer.map(t => deleteDoc(doc(db, "taches-planifiees", t.id)));
+      await Promise.all(deletePromises);
+
+      // ── 6. Recréer toutes les tâches depuis le planning actuel ──
+      const createPromises: Promise<any>[] = [];
+      for (const { creneau, salarieId, salarieName, jour } of targetCreneaux) {
         const startMin = heureToMin(creneau.startTime);
         const endMin = heureToMin(creneau.endTime);
         const duree = endMin - startMin;
 
-        batch.push(addDoc(collection(db, "taches-planifiees"), {
+        createPromises.push(addDoc(collection(db, "taches-planifiees"), {
           tacheTypeId: "__planning__",
           tacheLabel: creneau.activityTitle,
           categorie: "animation" as any,
@@ -376,8 +391,13 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
           createdAt: serverTimestamp(),
         }));
       }
-      await Promise.all(batch);
-      toast(`${matchedCreneaux.length} cours/stages importés du planning`, "success");
+      await Promise.all(createPromises);
+
+      // ── 7. Toast récap ──
+      const parts: string[] = [];
+      if (tachesAEffacer.length > 0) parts.push(`${tachesAEffacer.length} ancienne(s) supprimée(s)`);
+      if (targetCreneaux.length > 0) parts.push(`${targetCreneaux.length} nouvelle(s) importée(s)`);
+      toast(`✅ ${parts.join(" · ")}`, "success");
       onRefresh();
     } catch (e: any) {
       console.error(e);
