@@ -469,6 +469,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ── Marées Pointe d'Agon (saisie manuelle pour planning) ──────────────
+    // Lecture par tous les utilisateurs authentifiés (le bandeau marées
+    // s'affiche dans le planning admin et potentiellement l'espace cavalier).
+    // Écriture admin seulement (saisie en masse via /admin/parametres).
+    match /marees/{docId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
     // ── Bloc par défaut — DENY ALL ────────────────────────────────────────
     // Toute collection non listée ci-dessus est bloquée
     match /{document=**} {
