@@ -1,6 +1,6 @@
 "use client";
 import { ChevronLeft, ChevronRight, Loader2, Users, Trash2, Settings } from "lucide-react";
-import { fmtDate, fmtDateFR, fmtMonthFR, typeColors, compareCreneaux } from "./types";
+import { fmtDate, fmtDateFR, fmtMonthFR, typeColors, compareCreneaux, itemMatchesCreneau } from "./types";
 import type { Creneau } from "./types";
 import type { EditForm } from "./EditCreneauModal";
 
@@ -44,13 +44,11 @@ function StageBadge({ list, bg, border, dot, text, onGoToDay }: {
 }
 
 // ── Dots de paiement pour un cavalier ───────────────────────────────────────
-function PaymentDot({ enrolled, payments, childId, childName, creneauId }: {
-  enrolled: any; payments: any[]; childId: string; childName: string; creneauId: string;
+function PaymentDot({ enrolled, payments, childId, childName, creneauId, activityTitle }: {
+  enrolled: any; payments: any[]; childId: string; childName: string; creneauId: string; activityTitle: string;
 }) {
   const isCard = enrolled.paymentSource === "card";
-  // Match strict (childId + creneauId) pour ne pas confondre avec le paiement
-  // d'un autre stage du même cavalier.
-  const matchesThis = (i: any) => i.childId === childId && i.creneauId === creneauId;
+  const matchesThis = (i: any) => itemMatchesCreneau(i, childId, { id: creneauId, activityTitle });
   const hasPaid = isCard || payments.some((p: any) =>
     p.familyId === enrolled.familyId && p.status === "paid" &&
     (p.items || []).some(matchesThis)
@@ -84,7 +82,7 @@ function CreneauCard({ c, payments, onSelect, onDelete, onEdit }: {
 
   const unpaidCount = en.filter((e: any) => {
     const isCard = e.paymentSource === "card";
-    const matchesThis = (i: any) => i.childId === e.childId && i.creneauId === c.id;
+    const matchesThis = (i: any) => itemMatchesCreneau(i, e.childId, c);
     const hasPaid = isCard || payments.some((p: any) =>
       p.familyId === e.familyId && p.status === "paid" &&
       (p.items || []).some(matchesThis)
@@ -114,7 +112,7 @@ function CreneauCard({ c, payments, onSelect, onDelete, onEdit }: {
         <div className="flex items-center gap-1 mt-1">
           <div className="flex flex-wrap gap-0.5">
             {en.slice(0, 6).map((e: any) => (
-              <PaymentDot key={e.childId} enrolled={e} payments={payments} childId={e.childId} childName={e.childName} creneauId={c.id} />
+              <PaymentDot key={e.childId} enrolled={e} payments={payments} childId={e.childId} childName={e.childName} creneauId={c.id} activityTitle={c.activityTitle} />
             ))}
             {en.length > 6 && <span className="font-body text-[9px] text-slate-600 ml-0.5">+{en.length - 6}</span>}
           </div>

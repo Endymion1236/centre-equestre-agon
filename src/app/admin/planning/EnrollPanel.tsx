@@ -63,7 +63,7 @@ import {
 } from "@/lib/discounts";
 import { X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera, FileImage, Mail, Sparkles, Send, FileText, Printer } from "lucide-react";
 import type { Activity, Family } from "@/types";
-import { Creneau, EnrolledChild, payModes, typeColors, fmtDate } from "./types";
+import { Creneau, EnrolledChild, payModes, typeColors, fmtDate, itemMatchesCreneau } from "./types";
 import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/lib/auth-context";
 
@@ -1430,12 +1430,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           {enrolled.length === 0 ? <p className="font-body text-sm text-slate-500 italic mb-4">Aucun</p> :
           <div className="flex flex-col gap-2 mb-4">{enrolled.map((e: any) => {
             const isCard = e.paymentSource === "card";
-            // BUG FIX : on doit matcher sur (childId + creneauId) et pas seulement childId,
-            // sinon un cavalier qui a déjà payé un AUTRE stage apparaît "réglé" partout.
-            // Ex : Charlyse Pierre paye stage 1 (paid) puis on l'inscrit au stage 2 (pending)
-            // → l'inscription au stage 2 affichait "réglé" alors qu'elle est impayée.
-            const matchesThisEnrollment = (item: any) =>
-              item.childId === e.childId && item.creneauId === creneau.id;
+            const matchesThisEnrollment = (item: any) => itemMatchesCreneau(item, e.childId, creneau);
             const hasPaid = isCard || payments.some((p: any) =>
               p.familyId === e.familyId &&
               p.status === "paid" &&

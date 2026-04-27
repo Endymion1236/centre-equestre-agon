@@ -1,6 +1,6 @@
 "use client";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
-import { fmtDate, fmtDateFR, fmtMonthFR, typeColors, compareCreneaux } from "./types";
+import { fmtDate, fmtDateFR, fmtMonthFR, typeColors, compareCreneaux, itemMatchesCreneau } from "./types";
 import type { Creneau } from "./types";
 
 interface Props {
@@ -233,10 +233,7 @@ export default function TimelineView({
                                 {en.length > 0 && (
                                   <div style={{ display: "flex", gap: 1 }}>
                                     {en.slice(0, 5).map((e: any) => {
-                                      // Match strict (childId + creneauId) — sinon n'importe
-                                      // quel paiement paid de la famille rendait tous les
-                                      // inscrits verts, y compris pour d'autres stages.
-                                      const matchesThis = (i: any) => i.childId === e.childId && i.creneauId === c.id;
+                                      const matchesThis = (i: any) => itemMatchesCreneau(i, e.childId, c);
                                       const hasPaid = payments.some((p: any) =>
                                         p.familyId === e.familyId &&
                                         p.status === "paid" &&
