@@ -32,6 +32,7 @@ import RdvModal, { RDV_CATEGORIES, type RdvForm } from "./RdvModal";
 import DeleteCreneauModal from "./DeleteCreneauModal";
 import EditCreneauModal, { type EditForm } from "./EditCreneauModal";
 import DuplicateCreneauModal from "./DuplicateCreneauModal";
+import MareesBandeau from "@/components/MareesBandeau";
 import MonthView from "./MonthView";
 import TimelineView from "./TimelineView";
 import WeekView from "./WeekView";
@@ -1495,6 +1496,7 @@ export default function PlanningPage() {
           </div>
           <div className="flex gap-2"><button onClick={()=>setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setDayOffset(d=>d+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain<ChevronRight size={16}/></button></div>
         </div>
+        <MareesBandeau date={fmtDate(currentDay)} />
         {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:
         dayCreneaux.length===0?<Card padding="lg" className="text-center"><div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><CalendarDays size={28} className="text-blue-300" /></div><p className="font-body text-sm text-slate-600">Aucun créneau.</p></Card>:
         <div className="flex flex-col gap-3">{dayCreneaux.map(c=>{const en=c.enrolled||[];const fill=c.maxPlaces>0?en.length/c.maxPlaces:0;const col=(c as any).color||typeColors[c.activityType]||"#666";const ttc=(c as any).priceTTC||(c.priceHT||0)*(1+(c.tvaTaux||5.5)/100);return(
