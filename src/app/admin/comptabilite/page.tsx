@@ -291,10 +291,21 @@ export default function ComptabilitePage() {
       }
 
       // 4. Remises : pointer celles dont tous les encs sont rapprochés
+      // IMPORTANT : on n'agit que sur les remises de la période courante.
+      // Sans ce filtre, travailler sur mai dépointerait des remises d'avril
+      // (leurs encs ne sont pas dans targetEncIds qui ne reflète que les
+      // bankLines de la période courante).
       const remiseUpdates: Promise<any>[] = [];
       for (const r of (remises || [])) {
         const encIds = r.encaissementIds || [];
         if (encIds.length === 0) continue;
+
+        // Filtre période : ne traiter que les remises créées dans le mois courant
+        const rDate = r.createdAt?.seconds ? new Date(r.createdAt.seconds * 1000) : null;
+        if (!rDate) continue;
+        const rPeriod = `${rDate.getFullYear()}-${String(rDate.getMonth() + 1).padStart(2, "0")}`;
+        if (rPeriod !== period) continue;
+
         const allConsumed = encIds.every((id: string) => targetEncIds.has(id));
         if (allConsumed && !r.pointee) {
           remiseUpdates.push(updateDoc(doc(db, "remises", r.id), {
@@ -1471,12 +1482,23 @@ export default function ComptabilitePage() {
         }
         // Réciproquement, dé-pointer les remises qui ont été dé-matchées dans le CSV courant
         // (si pointeeNote = "Pointée automatiquement..." et remise n'est plus dans usedRemiseIds)
+        // IMPORTANT : on ne traite que les remises de la période courante. Sans ce filtre,
+        // un import CSV partiel d'avril dépointerait toutes les remises pointées-auto
+        // de mars et antérieures (un bug réel observé : Nicolas a perdu l'état pointé de
+        // remises antérieures en réimportant un CSV plus court).
         const allRemisesSnap = await getDocs(collection(db, "remises"));
         for (const d of allRemisesSnap.docs) {
           const r = d.data() as any;
           if (!r.pointee) continue;
           if (r.pointeeNote !== "Pointée automatiquement par rapprochement bancaire") continue;
           if (usedRemiseIds.has(d.id)) continue; // toujours matchée
+
+          // Filtre période : ne dé-pointer que les remises créées dans le mois courant
+          const rDate = r.createdAt?.seconds ? new Date(r.createdAt.seconds * 1000) : null;
+          if (!rDate) continue;
+          const rPeriod = `${rDate.getFullYear()}-${String(rDate.getMonth() + 1).padStart(2, "0")}`;
+          if (rPeriod !== period) continue;
+
           remiseUpdates.push(updateDoc(doc(db, "remises", d.id), {
             pointee: false,
             pointeeDate: null,
