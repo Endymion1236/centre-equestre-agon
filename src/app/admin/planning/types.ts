@@ -106,30 +106,54 @@ export function fmtMonthFR(d: Date) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Helper partagé : match d'un item de paiement avec un créneau visible.
 //
-//  Cas couverts :
-//  - Cours unique : item.creneauId === c.id
-//  - Stage multi-jours : item.stageKey commence par c.activityTitle + "_"
-//    (le stageKey "Stage galop d'or_2026-04-27" est commun à tous les
-//    créneaux d'un même stage, peu importe lequel on regarde dans le planning)
-//  - Legacy : pas de creneauId ni stageKey → on accepte si activityTitle
-//    contient le titre du créneau (filet de sécurité pour anciens items)
+//  Cas couverts (par ordre de priorité) :
 //
-//  Pourquoi ce filtre élargi : un filtre strict creneauId === c.id rejetait
-//  tous les jours d'un stage sauf le 1er (créneau d'inscription). Mais on
-//  reste protégé contre le faux positif initial (Charlyse Pierre paye stage
-//  A, ouvre stage B → stage B a un activityTitle différent → pas de match).
+//  1. Cours unique : item a un creneauId → match strict
 //
-//  Limite acceptée : si un cavalier a deux stages "Stage galop d'or" payés
-//  à des semaines différentes, le filtre les fusionnera en "réglé". Cas
-//  rare et bénéfice net positif.
+//  2. Stage moderne : enrolled.stageKey existe ET item.stageKey existe
+//     → match strict sur stageKey complet (format "activityTitle_premierJour")
+//     Aucune confusion possible entre 2 stages de même titre sur 2 semaines.
+//
+//  3. Stage legacy (avant le fix stageKey) : enrolled n'a pas de stageKey
+//     → fallback sur préfixe item.stageKey commence par activityTitle + "_"
+//     Limite : un cavalier qui a payé "Stage galop d'or" semaine 1 apparaît
+//     "réglé" sur "Stage galop d'or" semaine 2 si l'inscription est antérieure
+//     au déploiement de ce fix. Pour les nouveaux stages c'est correct.
+//
+//  4. Très ancien : ni creneauId ni stageKey → match par activityTitle.includes
+//
+//  Le bug initial (Charlyse Pierre stage A payé, stage B inscriptions
+//  apparaissait "réglé") reste corrigé : ces 2 stages ont des activityTitle
+//  différents donc aucun cas ne matche.
 // ─────────────────────────────────────────────────────────────────────────────
 export function itemMatchesCreneau(
   item: any,
-  childId: string,
+  enrolledOrChildId: string | { childId: string; stageKey?: string },
   creneau: { id?: string; activityTitle: string }
 ): boolean {
+  // Compatibilité ascendante : accepte string (childId) ou objet enrolled
+  const childId = typeof enrolledOrChildId === "string"
+    ? enrolledOrChildId
+    : enrolledOrChildId.childId;
+  const enrolledStageKey = typeof enrolledOrChildId === "object"
+    ? enrolledOrChildId.stageKey
+    : undefined;
+
   if (item.childId !== childId) return false;
+
+  // 1. Cours unique : creneauId strict
   if (item.creneauId) return item.creneauId === creneau.id;
-  if (item.stageKey) return String(item.stageKey).startsWith(creneau.activityTitle + "_");
+
+  // 2. Stage moderne : on a le stageKey dans l'enrolled → match strict
+  if (enrolledStageKey && item.stageKey) {
+    return item.stageKey === enrolledStageKey;
+  }
+
+  // 3. Stage legacy : seul l'item a un stageKey, on tente le préfixe
+  if (item.stageKey) {
+    return String(item.stageKey).startsWith(creneau.activityTitle + "_");
+  }
+
+  // 4. Très ancien : fallback activityTitle
   return String(item.activityTitle || "").includes(creneau.activityTitle);
 }

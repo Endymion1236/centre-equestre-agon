@@ -48,7 +48,7 @@ function PaymentDot({ enrolled, payments, childId, childName, creneauId, activit
   enrolled: any; payments: any[]; childId: string; childName: string; creneauId: string; activityTitle: string;
 }) {
   const isCard = enrolled.paymentSource === "card";
-  const matchesThis = (i: any) => itemMatchesCreneau(i, childId, { id: creneauId, activityTitle });
+  const matchesThis = (i: any) => itemMatchesCreneau(i, enrolled, { id: creneauId, activityTitle });
   const hasPaid = isCard || payments.some((p: any) =>
     p.familyId === enrolled.familyId && p.status === "paid" &&
     (p.items || []).some(matchesThis)
@@ -82,7 +82,7 @@ function CreneauCard({ c, payments, onSelect, onDelete, onEdit }: {
 
   const unpaidCount = en.filter((e: any) => {
     const isCard = e.paymentSource === "card";
-    const matchesThis = (i: any) => itemMatchesCreneau(i, e.childId, c);
+    const matchesThis = (i: any) => itemMatchesCreneau(i, e, c);
     const hasPaid = isCard || payments.some((p: any) =>
       p.familyId === e.familyId && p.status === "paid" &&
       (p.items || []).some(matchesThis)

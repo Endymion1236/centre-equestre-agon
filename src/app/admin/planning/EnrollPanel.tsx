@@ -622,6 +622,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         }
         // Mode "jour" → juste le créneau cliqué (déjà par défaut)
 
+        // Calculer un stageKey STABLE pour ce stage : il est le même pour
+        // tous les créneaux du stage (peu importe lequel on a cliqué dans
+        // le planning). Format : "activityTitle_premierJourDuStage".
+        // On le stocke dans chaque enrolled + dans l'item paiement, pour que
+        // le filtre planning puisse matcher les badges paiement de manière
+        // stricte (aucun risque de confusion entre deux stages de même titre
+        // sur deux semaines différentes).
+        const stageKey = `${creneau.activityTitle}_${creneauxAInscrire[0]?.date || creneau.date}`;
+
         // Inscrire chaque enfant dans TOUS les jours du stage (inscription technique seulement, pas de paiement par jour)
         const conflictsFound: string[] = [];
         for (const line of stageLines) {
@@ -643,7 +652,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               childId: line.childId, childName: line.childName,
               familyId: fam.firestoreId, familyName: fam.parentName || "—",
               enrolledAt: new Date().toISOString(),
-            }, undefined, { skipPayment: true, skipEmail: true });
+              stageKey, // ← NOUVEAU : permet le matching paiement précis
+            } as any, undefined, { skipPayment: true, skipEmail: true });
           }
         }
         if (conflictsFound.length > 0) {
@@ -655,7 +665,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         const newItems = stageLines.map(l => ({
           activityTitle: `${creneau.activityTitle} (${creneauxAInscrire.length}j) — ${l.childName}${l.remiseEuros > 0 ? ` (-${l.remiseEuros}€)` : ""}`,
           childId: l.childId, childName: l.childName,
-          stageKey: `${creneau.activityTitle}_${creneau.date}`,
+          stageKey, // ← maintenant STABLE (avant : dépendait du créneau cliqué)
           activityType: creneau.activityType,
           stageSchedule: scheduleDesc,
           stageDates: creneauxAInscrire.map(c => ({ date: c.date, startTime: c.startTime, endTime: c.endTime })),
@@ -1430,7 +1440,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           {enrolled.length === 0 ? <p className="font-body text-sm text-slate-500 italic mb-4">Aucun</p> :
           <div className="flex flex-col gap-2 mb-4">{enrolled.map((e: any) => {
             const isCard = e.paymentSource === "card";
-            const matchesThisEnrollment = (item: any) => itemMatchesCreneau(item, e.childId, creneau);
+            const matchesThisEnrollment = (item: any) => itemMatchesCreneau(item, e, creneau);
             const hasPaid = isCard || payments.some((p: any) =>
               p.familyId === e.familyId &&
               p.status === "paid" &&

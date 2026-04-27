@@ -233,7 +233,7 @@ export default function TimelineView({
                                 {en.length > 0 && (
                                   <div style={{ display: "flex", gap: 1 }}>
                                     {en.slice(0, 5).map((e: any) => {
-                                      const matchesThis = (i: any) => itemMatchesCreneau(i, e.childId, c);
+                                      const matchesThis = (i: any) => itemMatchesCreneau(i, e, c);
                                       const hasPaid = payments.some((p: any) =>
                                         p.familyId === e.familyId &&
                                         p.status === "paid" &&
