@@ -7,6 +7,7 @@ import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { Save, Plus, Trash2, Loader2, AlertTriangle, Users, Pencil, Calendar } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
+import MareesSection from "./MareesSection";
 
 const defaultAccounts = [
   { code: "70641000", label: "Animations collectivité", tva: "5.50%", affectation: "Animations CE, collectivités" },
@@ -35,7 +36,7 @@ export default function ParametresPage() {
     setAgentContext({ module_actif: "parametres", description: "moniteurs, tarifs, infos centre" });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [section, setSection] = useState<"centre" | "tarifs" | "reductions" | "degressivite" | "vacances" | "annulation" | "comptable" | "horaires" | "moniteurs" | "fidelite" | "inscription" | "epreuves" | "maintenance" | "notifications">("centre");
+  const [section, setSection] = useState<"centre" | "tarifs" | "reductions" | "degressivite" | "vacances" | "annulation" | "comptable" | "horaires" | "moniteurs" | "fidelite" | "inscription" | "epreuves" | "maintenance" | "notifications" | "marees">("centre");
   const [notifSettings, setNotifSettings] = useState({
     nouvelle_inscription: true,
     nouveau_paiement: true,
@@ -389,6 +390,7 @@ export default function ParametresPage() {
           ["epreuves", "🏆 Épreuves"],
           ["fidelite", "🏆 Fidélité"],
           ["notifications", "🔔 Notifications"],
+          ["marees", "🌊 Marées"],
           ["maintenance", "Maintenance"],
         ] as const).map(([id, label]) => (
           <button key={id} onClick={() => setSection(id)}
@@ -1360,6 +1362,11 @@ export default function ParametresPage() {
             </div>
           </Card>
         </div>
+      )}
+
+      {/* ─── Marées ─── */}
+      {section === "marees" && (
+        <MareesSection />
       )}
 
       {/* ─── Maintenance ─── */}

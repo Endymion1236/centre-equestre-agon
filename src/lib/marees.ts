@@ -16,16 +16,64 @@ export interface Maree {
 }
 
 /**
- * Récupère les marées du jour donné, ou null si la date n'est pas couverte
- * par les données chargées.
+ * Récupère les marées du jour donné, ou null si la date n'est pas couverte.
+ *
+ * Lookup en cascade :
+ *   1. Cache mémoire (chargé depuis Firestore au premier appel)
+ *   2. Données locales (fichier marees-data.ts) en fallback
  *
  * @param dateStr Date au format ISO "YYYY-MM-DD"
  */
+
+// Cache mémoire global (re-fetch au reload de page)
+let mareesCache: Record<string, Maree[]> | null = null;
+let cachePromise: Promise<Record<string, Maree[]>> | null = null;
+
+async function loadAllMareesFromFirestore(): Promise<Record<string, Maree[]>> {
+  if (mareesCache) return mareesCache;
+  if (cachePromise) return cachePromise;
+
+  cachePromise = (async () => {
+    try {
+      const { collection, getDocs } = await import("firebase/firestore");
+      const { db } = await import("./firebase");
+      const snap = await getDocs(collection(db, "marees"));
+      const out: Record<string, Maree[]> = {};
+      snap.forEach(doc => {
+        const data = doc.data() as { marees?: Maree[] };
+        if (data.marees && Array.isArray(data.marees)) {
+          out[doc.id] = data.marees;
+        }
+      });
+      mareesCache = out;
+      return out;
+    } catch (e) {
+      console.warn("[marees] Firestore unavailable, using local fallback:", e);
+      mareesCache = {};
+      return {};
+    }
+  })();
+
+  return cachePromise;
+}
+
+/**
+ * Vide le cache pour forcer un rechargement au prochain appel.
+ * À appeler après une modification (saisie en masse, suppression).
+ */
+export function invalidateMareesCache() {
+  mareesCache = null;
+  cachePromise = null;
+}
+
 export async function getMareesForDate(dateStr: string): Promise<Maree[] | null> {
-  // Import dynamique pour éviter de charger le bundle des données partout
+  // 1. Tenter Firestore d'abord
+  const fromFirestore = await loadAllMareesFromFirestore();
+  if (fromFirestore[dateStr]) return fromFirestore[dateStr];
+
+  // 2. Fallback sur les données locales (3-4 jours seed dans marees-data.ts)
   const { MAREES_POINTE_AGON_2026 } = await import("./marees-data");
-  const data = MAREES_POINTE_AGON_2026[dateStr];
-  return data || null;
+  return MAREES_POINTE_AGON_2026[dateStr] || null;
 }
 
 /**
