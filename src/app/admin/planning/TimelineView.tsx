@@ -233,7 +233,15 @@ export default function TimelineView({
                                 {en.length > 0 && (
                                   <div style={{ display: "flex", gap: 1 }}>
                                     {en.slice(0, 5).map((e: any) => {
-                                      const hasPaid = payments.some((p: any) => p.familyId === e.familyId && p.status === "paid");
+                                      // Match strict (childId + creneauId) — sinon n'importe
+                                      // quel paiement paid de la famille rendait tous les
+                                      // inscrits verts, y compris pour d'autres stages.
+                                      const matchesThis = (i: any) => i.childId === e.childId && i.creneauId === c.id;
+                                      const hasPaid = payments.some((p: any) =>
+                                        p.familyId === e.familyId &&
+                                        p.status === "paid" &&
+                                        (p.items || []).some(matchesThis)
+                                      );
                                       return <span key={e.childId} style={{ width: 6, height: 6, borderRadius: "50%", background: hasPaid ? "#22c55e" : "#fb923c", display: "inline-block" }} />;
                                     })}
                                   </div>

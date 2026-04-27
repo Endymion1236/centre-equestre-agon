@@ -44,18 +44,21 @@ function StageBadge({ list, bg, border, dot, text, onGoToDay }: {
 }
 
 // ── Dots de paiement pour un cavalier ───────────────────────────────────────
-function PaymentDot({ enrolled, payments, childId, childName }: {
-  enrolled: any; payments: any[]; childId: string; childName: string;
+function PaymentDot({ enrolled, payments, childId, childName, creneauId }: {
+  enrolled: any; payments: any[]; childId: string; childName: string; creneauId: string;
 }) {
   const isCard = enrolled.paymentSource === "card";
+  // Match strict (childId + creneauId) pour ne pas confondre avec le paiement
+  // d'un autre stage du même cavalier.
+  const matchesThis = (i: any) => i.childId === childId && i.creneauId === creneauId;
   const hasPaid = isCard || payments.some((p: any) =>
     p.familyId === enrolled.familyId && p.status === "paid" &&
-    (p.items || []).some((i: any) => i.childId === childId)
+    (p.items || []).some(matchesThis)
   );
   const hasPending = !hasPaid && !isCard && payments.some((p: any) =>
     p.familyId === enrolled.familyId &&
     (p.status === "pending" || p.status === "partial") &&
-    (p.items || []).some((i: any) => i.childId === childId)
+    (p.items || []).some(matchesThis)
   );
   return (
     <span
@@ -81,14 +84,15 @@ function CreneauCard({ c, payments, onSelect, onDelete, onEdit }: {
 
   const unpaidCount = en.filter((e: any) => {
     const isCard = e.paymentSource === "card";
+    const matchesThis = (i: any) => i.childId === e.childId && i.creneauId === c.id;
     const hasPaid = isCard || payments.some((p: any) =>
       p.familyId === e.familyId && p.status === "paid" &&
-      (p.items || []).some((i: any) => i.childId === e.childId)
+      (p.items || []).some(matchesThis)
     );
     const hasPending = !hasPaid && !isCard && payments.some((p: any) =>
       p.familyId === e.familyId &&
       (p.status === "pending" || p.status === "partial") &&
-      (p.items || []).some((i: any) => i.childId === e.childId)
+      (p.items || []).some(matchesThis)
     );
     return !hasPaid && !hasPending && !isCard;
   }).length;
@@ -110,7 +114,7 @@ function CreneauCard({ c, payments, onSelect, onDelete, onEdit }: {
         <div className="flex items-center gap-1 mt-1">
           <div className="flex flex-wrap gap-0.5">
             {en.slice(0, 6).map((e: any) => (
-              <PaymentDot key={e.childId} enrolled={e} payments={payments} childId={e.childId} childName={e.childName} />
+              <PaymentDot key={e.childId} enrolled={e} payments={payments} childId={e.childId} childName={e.childName} creneauId={c.id} />
             ))}
             {en.length > 6 && <span className="font-body text-[9px] text-slate-600 ml-0.5">+{en.length - 6}</span>}
           </div>

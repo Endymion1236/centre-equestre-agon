@@ -1430,8 +1430,22 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           {enrolled.length === 0 ? <p className="font-body text-sm text-slate-500 italic mb-4">Aucun</p> :
           <div className="flex flex-col gap-2 mb-4">{enrolled.map((e: any) => {
             const isCard = e.paymentSource === "card";
-            const hasPaid = isCard || payments.some((p: any) => p.familyId === e.familyId && p.status === "paid" && (p.items||[]).some((i:any) => i.childId === e.childId));
-            const hasPending = !hasPaid && payments.some((p: any) => p.familyId === e.familyId && (p.status === "pending" || p.status === "partial") && (p.items||[]).some((i:any) => i.childId === e.childId));
+            // BUG FIX : on doit matcher sur (childId + creneauId) et pas seulement childId,
+            // sinon un cavalier qui a déjà payé un AUTRE stage apparaît "réglé" partout.
+            // Ex : Charlyse Pierre paye stage 1 (paid) puis on l'inscrit au stage 2 (pending)
+            // → l'inscription au stage 2 affichait "réglé" alors qu'elle est impayée.
+            const matchesThisEnrollment = (item: any) =>
+              item.childId === e.childId && item.creneauId === creneau.id;
+            const hasPaid = isCard || payments.some((p: any) =>
+              p.familyId === e.familyId &&
+              p.status === "paid" &&
+              (p.items || []).some(matchesThisEnrollment)
+            );
+            const hasPending = !hasPaid && payments.some((p: any) =>
+              p.familyId === e.familyId &&
+              (p.status === "pending" || p.status === "partial") &&
+              (p.items || []).some(matchesThisEnrollment)
+            );
             const enrolledFam = allFamilies.find(f => f.firestoreId === e.familyId);
             const enrolledChild = (enrolledFam?.children || []).find((c: any) => c.id === e.childId);
             const age = calcAge(enrolledChild?.birthDate);
