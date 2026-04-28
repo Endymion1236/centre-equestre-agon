@@ -45,10 +45,31 @@ export default function ProgressionCavalierPage() {
       return;
     }
 
-    (async () => {
-      setLoading(true);
-      setError(null);
+    // ─────────────────────────────────────────────────────────────────────
+    // Tentative de chargement avec retry automatique sur permission-denied.
+    //
+    // Pourquoi : Firebase Auth peut renvoyer un user valide côté client
+    // alors que le token n'est pas encore propagé à Firestore (~ms à s).
+    // Sur ~1 chargement sur 5 (rapporté par Nicolas), ça donnait une vraie
+    // erreur permission-denied qui demande à l'utilisateur de cliquer
+    // Réessayer. On automatise ce retry :
+    //   1. Avant la requête : forcer getIdToken(true) pour rafraîchir le
+    //      cache du token côté SDK Firebase Auth
+    //   2. Si permission-denied quand même : attendre 1500ms et retry
+    //      en silence (sans afficher l'erreur)
+    //   3. Si encore permission-denied : afficher l'erreur classique
+    // ─────────────────────────────────────────────────────────────────────
+    const loadProgression = async (isRetry = false): Promise<void> => {
+      if (!isRetry) {
+        setLoading(true);
+        setError(null);
+      }
       try {
+        // Forcer le rafraîchissement du token avant les requêtes Firestore.
+        // Important après un retry : si le 1er essai a échoué pour cause de
+        // token périmé, le re-fetch garantit qu'on en a un valide cette fois.
+        try { await user.getIdToken(true); } catch { /* non-bloquant */ }
+
         // Résoudre familyId : soit passé en query string (cas nominal depuis EnrollPanel),
         // soit on parcourt les familles pour trouver celle qui contient ce childId (fallback).
         let familyId = familyIdParam;
@@ -84,9 +105,10 @@ export default function ProgressionCavalierPage() {
         setResolvedFamilyId(familyId);
         setChild({ firstName: c.firstName, lastName: c.lastName, galopLevel: c.galopLevel });
         setFamilyName(family.parentName || "");
+        setLoading(false);
       } catch (e: any) {
         // Log détaillé pour diagnostic (visible dans la console Safari via USB debug)
-        console.error("[progression/[childId]] chargement échoué:", {
+        console.error(`[progression/[childId]] chargement échoué (retry=${isRetry}):`, {
           code: e?.code,
           message: e?.message,
           userPresent: !!user,
@@ -95,6 +117,14 @@ export default function ProgressionCavalierPage() {
           childId,
           familyIdParam,
         });
+        // Sur permission-denied, faire UN retry silencieux après 1500ms
+        // (le temps que le token soit propagé à Firestore). Si encore raté,
+        // afficher l'erreur normale.
+        if (e?.code === "permission-denied" && !isRetry) {
+          console.log("[progression/[childId]] permission-denied, retry dans 1500ms…");
+          setTimeout(() => { loadProgression(true); }, 1500);
+          return; // ne pas afficher d'erreur ni setLoading(false), on attend le retry
+        }
         // Message adapté selon le type d'erreur Firestore
         if (e?.code === "permission-denied") {
           setError("Permissions insuffisantes. Reconnectez-vous et réessayez.");
@@ -103,10 +133,11 @@ export default function ProgressionCavalierPage() {
         } else {
           setError("Erreur de chargement");
         }
-      } finally {
         setLoading(false);
       }
-    })();
+    };
+
+    loadProgression();
   }, [childId, familyIdParam, user, authLoading]);
 
   // Retour au planning : on tente de fermer l'onglet (cas target="_blank"
