@@ -5,6 +5,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { SectionHeader } from "@/components/ui";
 import { EditableImage } from "@/components/ui/EditableImage";
+import GalerieCategoryCard from "@/components/GalerieCategoryCard";
 import type { VitrineImageKey } from "@/hooks/useVitrineImages";
 
 const categories: { id: string; key: VitrineImageKey; label: string }[] = [
@@ -48,25 +49,24 @@ export default function GaleriePage() {
         <SectionHeader
           tag="Albums"
           title="Parcourez nos albums"
-          subtitle="Balades, stages, compétitions, mini-ferme... revivez l'ambiance du club."
+          subtitle="Balades, stages, compétitions, mini-ferme... revivez l'ambiance du club. Cliquez sur un album pour l'ouvrir."
         />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {categories.map((cat) => (
-            <div key={cat.id} className="card !p-0 overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all">
-              <EditableImage imageKey={cat.key} mode="img" label={`Photo ${cat.label}`} className="h-44" alt={cat.label} />
-              <div className="p-5 text-center">
-                <h3 className="font-display text-lg font-bold text-blue-800 mb-1">{cat.label}</h3>
-                <p className="font-body text-sm text-gray-400">Photos à venir</p>
-              </div>
-            </div>
+            <GalerieCategoryCard
+              key={cat.id}
+              category={cat.id}
+              label={cat.label}
+              fallbackKey={cat.key}
+            />
           ))}
         </div>
 
         <div className="mt-12 text-center bg-gold-50 rounded-2xl p-8 border border-gold-400/15">
           <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-4"><Camera size={28} className="text-blue-300" /></div>
-          <h3 className="font-display text-xl font-bold text-blue-800 mb-3">Galerie en cours de construction</h3>
+          <h3 className="font-display text-xl font-bold text-blue-800 mb-3">Suivez-nous sur les réseaux</h3>
           <p className="font-body text-sm text-gray-500 leading-relaxed max-w-lg mx-auto mb-4">
-            Nous préparons une belle galerie photos pour vous montrer l&apos;ambiance unique du centre.
+            Retrouvez encore plus de photos et les actualités du centre sur nos réseaux sociaux.
           </p>
           <div className="flex gap-3 justify-center">
             <a href="https://www.facebook.com/ceagon50230" target="_blank" rel="noopener noreferrer"

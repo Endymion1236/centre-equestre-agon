@@ -478,6 +478,16 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ── Galerie photos (page publique /galerie) ───────────────────────────
+    // Lecture publique (la page galerie est accessible aux visiteurs sans
+    // connexion). Écriture pour le staff (admins + moniteurs si on veut
+    // qu'ils puissent contribuer ; pour l'instant on garde admin pour
+    // simplifier et on étendra plus tard si besoin).
+    match /galerie_photos/{docId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
     // ── Bloc par défaut — DENY ALL ────────────────────────────────────────
     // Toute collection non listée ci-dessus est bloquée
     match /{document=**} {
