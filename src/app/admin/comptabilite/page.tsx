@@ -7,7 +7,7 @@ import { collection, getDocs, addDoc, updateDoc, doc, getDoc, setDoc, deleteDoc,
 import { db } from "@/lib/firebase";
 import { safeNumber } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
-import { Loader2, Download, Upload, Check, FileText, Building2, Receipt, Calculator, Search, Printer, Plus, Sparkles, Bot, AlertTriangle } from "lucide-react";
+import { Loader2, Download, Upload, Check, FileText, Building2, Receipt, Calculator, Search, Printer, Plus, Sparkles, Bot, AlertTriangle, EyeOff } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 
 interface Payment {
@@ -64,7 +64,7 @@ export default function ComptabilitePage() {
   const [diagReport, setDiagReport] = useState<any>(null);
   const [diagLoading, setDiagLoading] = useState(false);
 
-  const [tab, setTab] = useState<"journal" | "tva" | "rapprochement" | "remise" | "fec" | "export">("journal");
+  const [tab, setTab] = useState<"journal" | "tva" | "rapprochement" | "rapprochement_ignores" | "remise" | "fec" | "export">("journal");
   const [payments, setPayments] = useState<Payment[]>([]);
   const [remises, setRemises] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1700,11 +1700,13 @@ export default function ComptabilitePage() {
     URL.revokeObjectURL(url);
   };
 
+  const nbIgnores = bankLines.filter(b => b.matched && b.matchType === "Ignoré").length;
   const tabs = [
     { id: "journal" as const, label: "Journal des ventes", icon: Receipt },
     { id: "tva" as const, label: "TVA", icon: Calculator },
     { id: "remise" as const, label: "Bordereaux remise", icon: Printer },
     { id: "rapprochement" as const, label: "Rapprochement", icon: Building2 },
+    { id: "rapprochement_ignores" as const, label: nbIgnores > 0 ? `Ignorées (${nbIgnores})` : "Ignorées", icon: EyeOff },
     { id: "fec" as const, label: "Export FEC", icon: FileText },
     { id: "export" as const, label: "Export CSV", icon: Download },
   ];
@@ -2982,7 +2984,10 @@ export default function ComptabilitePage() {
                 <span className="w-20 text-center">Statut</span>
                 <span className="w-20 text-center">Action</span>
               </div>
-              {bankLines.map((bl, i) => (
+              {bankLines
+                .map((bl, i) => ({ bl, i }))
+                .filter(({ bl }) => bl.matchType !== "Ignoré") // les ignorées sont dans l'onglet dédié
+                .map(({ bl, i }) => (
                 <div key={i}>
                 <div className={`px-5 py-3 border-b border-blue-500/8 flex items-center ${bl.matched ? "" : "bg-orange-50"}`}>
                   <span className="w-24 font-body text-xs text-slate-500">{bl.date}</span>
@@ -3101,8 +3106,23 @@ export default function ComptabilitePage() {
                 </div>
               ))}
               <div className="px-5 py-3 bg-sand flex justify-between font-body text-sm">
-                <span className="font-semibold text-blue-800">{bankLines.length} lignes importées</span>
-                <span><span className="text-green-600 font-semibold">{bankLines.filter((b) => b.matched).length} rapprochées</span> · <span className="text-orange-500 font-semibold">{bankLines.filter((b) => !b.matched).length} à traiter</span></span>
+                <span className="font-semibold text-blue-800">
+                  {bankLines.filter(b => b.matchType !== "Ignoré").length} lignes affichées
+                  {nbIgnores > 0 && (
+                    <span className="text-slate-500 font-normal ml-2">
+                      ({nbIgnores} ignorée{nbIgnores > 1 ? "s" : ""} dans l'onglet dédié)
+                    </span>
+                  )}
+                </span>
+                <span>
+                  <span className="text-green-600 font-semibold">
+                    {bankLines.filter((b) => b.matched && b.matchType !== "Ignoré").length} rapprochées
+                  </span>
+                  {" · "}
+                  <span className="text-orange-500 font-semibold">
+                    {bankLines.filter((b) => !b.matched).length} à traiter
+                  </span>
+                </span>
               </div>
             </Card>
           )}
@@ -3440,6 +3460,90 @@ export default function ComptabilitePage() {
           </div>
         );
       })()}
+
+      {/* ─── Onglet Ignorées : lignes bancaires volontairement écartées ─── */}
+      {/* L'utilisateur a cliqué "Ignorer" sur ces lignes (commission, frais,
+          virement personnel...). Elles ne polluent plus l'onglet rapprochement
+          principal mais restent consultables et restaurables ici. */}
+      {!loading && tab === "rapprochement_ignores" && (
+        <div className="flex flex-col gap-5">
+          <Card padding="md" className="bg-blue-50 border-blue-200">
+            <div className="flex items-start gap-3">
+              <EyeOff className="text-blue-600 mt-0.5 flex-shrink-0" size={20} />
+              <div>
+                <h3 className="font-body text-base font-semibold text-blue-800 mb-1">Lignes bancaires ignorées</h3>
+                <p className="font-body text-sm text-slate-600">
+                  Ces lignes ont été marquées comme volontairement écartées du rapprochement
+                  (commissions, frais bancaires, virements personnels…). Elles restent stockées
+                  pour traçabilité mais n'apparaissent plus dans l'onglet principal.
+                </p>
+                <p className="font-body text-xs text-slate-500 mt-2">
+                  Cliquer sur <b>Restaurer</b> remet la ligne dans la liste des lignes à traiter.
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          {bankLines.filter(b => b.matchType === "Ignoré").length === 0 ? (
+            <Card padding="md" className="text-center">
+              <p className="font-body text-sm text-slate-500 italic">
+                Aucune ligne ignorée pour le moment.
+              </p>
+            </Card>
+          ) : (
+            <Card className="!p-0 overflow-hidden">
+              <div className="overflow-x-auto">
+                <div className="min-w-[800px]">
+                  <div className="bg-blue-500/8 px-5 py-3 border-b border-blue-500/8 flex items-center font-body text-xs font-semibold text-blue-800 uppercase tracking-wide">
+                    <span className="w-24">Date</span>
+                    <span className="flex-1">Libellé bancaire</span>
+                    <span className="w-24 text-right">Montant</span>
+                    <span className="w-32 text-center">Action</span>
+                  </div>
+                  {bankLines
+                    .map((bl, i) => ({ bl, i }))
+                    .filter(({ bl }) => bl.matchType === "Ignoré")
+                    .map(({ bl, i }) => (
+                      <div key={i} className="px-5 py-3 border-b border-blue-500/8 flex items-center bg-slate-50/50">
+                        <span className="w-24 font-body text-xs text-slate-500">{bl.date}</span>
+                        <div className="flex-1">
+                          <div className="font-body text-sm text-slate-700">{bl.label}</div>
+                          {bl.matchDetail && (
+                            <div className="font-body text-xs text-slate-500 mt-0.5">
+                              ↳ {bl.matchDetail}
+                            </div>
+                          )}
+                        </div>
+                        <span className="w-24 text-right font-body text-sm font-semibold text-slate-600">
+                          {bl.amount.toFixed(2)}€
+                        </span>
+                        <span className="w-32 text-center">
+                          <button
+                            onClick={() => {
+                              const updated = [...bankLines];
+                              updated[i] = { ...updated[i], matched: false, matchType: "", matchDetail: "" };
+                              updateAndSaveBankLines(updated);
+                            }}
+                            className="px-3 py-1.5 rounded-lg font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none cursor-pointer">
+                            Restaurer
+                          </button>
+                        </span>
+                      </div>
+                    ))}
+                  <div className="px-5 py-3 bg-sand flex justify-between font-body text-sm">
+                    <span className="font-semibold text-slate-600">
+                      {nbIgnores} ligne{nbIgnores > 1 ? "s" : ""} ignorée{nbIgnores > 1 ? "s" : ""}
+                    </span>
+                    <span className="text-slate-500">
+                      Total : {bankLines.filter(b => b.matchType === "Ignoré").reduce((s, b) => s + b.amount, 0).toFixed(2)}€
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* ─── Export FEC ─── */}
       {!loading && tab === "fec" && (
