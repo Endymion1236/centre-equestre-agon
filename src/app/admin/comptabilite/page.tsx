@@ -1701,14 +1701,28 @@ export default function ComptabilitePage() {
   };
 
   const nbIgnores = bankLines.filter(b => b.matched && b.matchType === "Ignoré").length;
-  const tabs = [
-    { id: "journal" as const, label: "Journal des ventes", icon: Receipt },
-    { id: "tva" as const, label: "TVA", icon: Calculator },
-    { id: "remise" as const, label: "Bordereaux remise", icon: Printer },
-    { id: "rapprochement" as const, label: "Rapprochement", icon: Building2 },
-    { id: "rapprochement_ignores" as const, label: nbIgnores > 0 ? `Ignorées (${nbIgnores})` : "Ignorées", icon: EyeOff },
-    { id: "fec" as const, label: "Export FEC", icon: FileText },
-    { id: "export" as const, label: "Export CSV", icon: Download },
+
+  // Classes Tailwind par couleur — on évite l'interpolation dynamique car Tailwind
+  // purge les classes non détectées en compilation. On garde des chaînes complètes.
+  type TabColor = "blue" | "purple" | "green" | "indigo" | "slate" | "rose" | "amber";
+  const tabClasses: Record<TabColor, { active: string; inactive: string }> = {
+    blue:   { active: "bg-blue-500 text-white border-blue-500",       inactive: "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" },
+    purple: { active: "bg-purple-500 text-white border-purple-500",   inactive: "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100" },
+    green:  { active: "bg-green-600 text-white border-green-600",     inactive: "bg-green-50 text-green-700 border-green-200 hover:bg-green-100" },
+    indigo: { active: "bg-indigo-500 text-white border-indigo-500",   inactive: "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100" },
+    slate:  { active: "bg-slate-500 text-white border-slate-500",     inactive: "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100" },
+    rose:   { active: "bg-rose-600 text-white border-rose-600",       inactive: "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100" },
+    amber:  { active: "bg-amber-500 text-white border-amber-500",     inactive: "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" },
+  };
+
+  const tabs: Array<{ id: typeof tab; label: string; icon: any; color: TabColor }> = [
+    { id: "journal" as const,                label: "Journal des ventes", icon: Receipt,    color: "blue"   },
+    { id: "tva" as const,                    label: "TVA",                icon: Calculator, color: "purple" },
+    { id: "remise" as const,                 label: "Bordereaux remise",  icon: Printer,    color: "green"  },
+    { id: "rapprochement" as const,          label: "Rapprochement",      icon: Building2,  color: "indigo" },
+    { id: "rapprochement_ignores" as const,  label: nbIgnores > 0 ? `Ignorées (${nbIgnores})` : "Ignorées", icon: EyeOff, color: "slate" },
+    { id: "fec" as const,                    label: "Export FEC",         icon: FileText,   color: "rose"   },
+    { id: "export" as const,                 label: "Export CSV",         icon: Download,   color: "amber"  },
   ];
 
   return (
@@ -1813,14 +1827,18 @@ export default function ComptabilitePage() {
       })()}
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6">
-        {tabs.map(({ id, label, icon: Icon }) => (
-          <button key={id} onClick={() => setTab(id)}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all
-              ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
-            <Icon size={16} /> {label}
-          </button>
-        ))}
+      <div className="flex flex-wrap gap-2 mb-6">
+        {tabs.map(({ id, label, icon: Icon, color }) => {
+          const isActive = tab === id;
+          const cls = tabClasses[color];
+          return (
+            <button key={id} onClick={() => setTab(id)}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all
+                ${isActive ? cls.active : cls.inactive}`}>
+              <Icon size={16} /> {label}
+            </button>
+          );
+        })}
       </div>
 
       {loading && <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div>}
