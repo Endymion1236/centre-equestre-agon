@@ -2891,23 +2891,12 @@ export default function ComptabilitePage() {
                   onClick={async () => {
                     if (!confirm("Synchroniser les encaissements et remises avec les lignes bancaires actuellement matchées ?\n\n• Les encaissements reliés seront marqués 'rapprochés' (donc retirés de 'à remettre').\n• Les remises dont tous les encaissements sont rapprochés seront pointées automatiquement.")) return;
                     try {
-                      // ── DIAGNOSTIC ─────────────────────────────────────
-                      console.log("=== [resync] DIAGNOSTIC DÉBUT ===");
-                      console.log(`[resync] bankLines.length = ${bankLines.length}`);
-                      console.log(`[resync] bankLines matched = ${bankLines.filter(b => b.matched && b.matchType !== "Ignoré").length}`);
-                      console.log(`[resync] encaissementsCompta.length = ${encaissementsCompta?.length ?? 0}`);
-                      const matchedEncsTotal = bankLines
-                        .filter(b => b.matched && b.matchType !== "Ignoré")
-                        .reduce((s, b) => s + (b.matchedEncs?.length || 0), 0);
-                      console.log(`[resync] total matchedEncs entries = ${matchedEncsTotal}`);
-                      // ───────────────────────────────────────────────────
                       // 1. Reconstruire usedEncIds à partir des bankLines matchées
                       //    Via matchedEncs on a (familyName, montant, date, activityTitle)
                       //    → on retrouve les encaissements correspondants
                       const targetEncIds = new Set<string>();
                       const targetRemiseIds = new Set<string>();
                       const targetPaymentIds = new Set<string>();
-                      const unmatchedEncs: any[] = []; // pour diagnostic
 
                       for (const bl of bankLines) {
                         if (!bl.matched) continue;
@@ -2931,12 +2920,7 @@ export default function ComptabilitePage() {
                               && Math.abs((e.montant || 0) - enc.montant) < 0.02
                               && d === enc.date;
                           });
-                          if (candidate) {
-                            targetEncIds.add(candidate.id);
-                          } else {
-                            // Pas de candidat → on logue pour debug
-                            unmatchedEncs.push({ bl: `${bl.date} ${bl.label.substring(0, 40)} ${bl.amount}€`, enc });
-                          }
+                          if (candidate) targetEncIds.add(candidate.id);
                         }
 
                         // Remises bancaires : détection via matchType "Chèques" / "Espèces"
@@ -2949,39 +2933,6 @@ export default function ComptabilitePage() {
                           if (remiseMatch) targetRemiseIds.add(remiseMatch.id);
                         }
                       }
-
-                      // ── DIAGNOSTIC SUITE ───────────────────────────────
-                      console.log(`[resync] targetEncIds.size = ${targetEncIds.size}`);
-                      console.log(`[resync] unmatchedEncs.length = ${unmatchedEncs.length}`);
-                      if (unmatchedEncs.length > 0) {
-                        console.log("[resync] EXEMPLES NON-MATCHÉS (5 premiers):");
-                        unmatchedEncs.slice(0, 5).forEach((u, i) => {
-                          console.log(`  ${i + 1}. bankLine: ${u.bl}`);
-                          console.log(`     cherche: famille="${u.enc.familyName}" montant=${u.enc.montant}€ date=${u.enc.date}`);
-                          // Cherche une enc qui matche au moins 2 critères pour aider au diag
-                          const partial = encaissementsCompta.filter((e: any) => {
-                            const d = e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "";
-                            const okFam = (e.familyName || "") === u.enc.familyName;
-                            const okMnt = Math.abs((e.montant || 0) - u.enc.montant) < 0.02;
-                            const okDate = d === u.enc.date;
-                            const score = (okFam ? 1 : 0) + (okMnt ? 1 : 0) + (okDate ? 1 : 0);
-                            return score >= 2;
-                          }).slice(0, 3);
-                          if (partial.length > 0) {
-                            console.log(`     candidats partiels:`, partial.map((e: any) => ({
-                              id: e.id,
-                              familyName: e.familyName,
-                              montant: e.montant,
-                              date: e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "?",
-                              reconciledByBank: e.reconciledByBank,
-                            })));
-                          } else {
-                            console.log(`     aucun candidat partiel trouvé`);
-                          }
-                        });
-                      }
-                      console.log("=== [resync] DIAGNOSTIC FIN ===");
-                      // ───────────────────────────────────────────────────
 
                       // 1.bis. Détection indirecte des remises via leurs encaissements
                       //        Si tous les encs d'une remise sont dans targetEncIds, on pointe la remise.
