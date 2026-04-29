@@ -81,12 +81,19 @@ service cloud.firestore {
       // adminDb (Firebase Admin SDK) bypasse ces règles — utilisé uniquement par
       // les routes API server-side de confiance (ex: webhooks).
       allow create: if isStaff();
-      // Update : interdit sauf modification du champ 'remiseId' (métadonnée de
-      // rapprochement bancaire, non comptable — rattache l'encaissement à un
-      // bordereau de remise). Les autres champs (montant, mode, date, famille,
-      // activité, raison, correctionDe…) sont scellés définitivement.
+      // Update : interdit sauf modification de métadonnées de rapprochement
+      // bancaire NON COMPTABLES :
+      //  - 'remiseId' : rattache l'encaissement à un bordereau de remise
+      //  - 'reconciledByBank' : flag indiquant que l'encaissement est pointé
+      //    avec une ligne du relevé bancaire (posé/retiré par sync auto)
+      //  - 'reconciledAt' : timestamp du pointage bancaire
+      // Les champs comptables (montant, mode, date, famille, activité, raison,
+      // correctionDe, paymentId…) restent scellés définitivement (NF525 / Art
+      // 286-I-3°bis CGI). Ces métadonnées ne modifient ni le montant ni la
+      // chronologie comptable, elles ne servent qu'au pointage banque.
       allow update: if isAdmin()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['remiseId']);
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['remiseId', 'reconciledByBank', 'reconciledAt']);
       allow delete: if false;
     }
 
