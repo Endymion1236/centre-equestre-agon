@@ -216,8 +216,15 @@ export default function ComptabilitePage() {
 
         if (bl.manualPaymentId) targetPaymentIds.add(bl.manualPaymentId);
 
+        // Pour chaque encs référencé dans matchedEncs, on prend UN candidat
+        // pas encore consommé. C'est crucial : une remise "Sous-ensemble CB
+        // Terminal" peut contenir plusieurs encs du même jour, même famille,
+        // même montant (ex: 3 promenades de 25€ pour la même famille). Sans
+        // déduplication via consumedEncIds, find() renvoie toujours le même
+        // premier candidat → un seul enc marqué reconciledByBank au lieu de N.
         for (const enc of (bl.matchedEncs || [])) {
           const candidate = encaissementsCompta.find((e: any) => {
+            if (targetEncIds.has(e.id)) return false; // déjà consommé
             const d = e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "";
             return (e.familyName || "") === enc.familyName
               && Math.abs((e.montant || 0) - enc.montant) < 0.02
@@ -2899,8 +2906,15 @@ export default function ComptabilitePage() {
                         if (bl.manualPaymentId) targetPaymentIds.add(bl.manualPaymentId);
 
                         // Encaissements individuels : via matchedEncs
+                        // Déduplication multi-set : plusieurs encs peuvent partager
+                        // le même triplet (familyName, montant, date) — typique des
+                        // remises "Sous-ensemble CB Terminal" qui regroupent N
+                        // promenades du même jour à 25€ pour la même famille.
+                        // On exclut les ids déjà consommés pour qu'à chaque enc
+                        // de matchedEncs corresponde un enc Firestore distinct.
                         for (const enc of (bl.matchedEncs || [])) {
                           const candidate = encaissementsCompta.find((e: any) => {
+                            if (targetEncIds.has(e.id)) return false; // déjà consommé
                             const d = e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "";
                             return (e.familyName || "") === enc.familyName
                               && Math.abs((e.montant || 0) - enc.montant) < 0.02
