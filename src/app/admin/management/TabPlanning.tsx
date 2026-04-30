@@ -500,7 +500,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       const joursLabels = jourDates.slice(0, nbJours);
       const semaineNum = semaine.split("-W")[1];
       const dateDebut = formatDateCourte(lundi);
-      const dateFin = formatDateCourte(new Date(lundi.getTime() + 5 * 86400000));
+      const dateFin = formatDateCourte(new Date(lundi.getTime() + (nbJours - 1) * 86400000));
       const siteUrl = "https://centre-equestre-agon.vercel.app";
 
       let sent = 0;
@@ -1039,7 +1039,7 @@ Réponds de façon concise et pratique, en français.`,
           @media print { body { padding: 10px; } .day-section { page-break-inside: avoid; } }
         </style></head><body>
         <h1>Planning — ${sal.nom}</h1>
-        <div class="subtitle">Semaine ${semaine.split("-W")[1]} · ${semaine.split("-W")[0]} · ${formatDateCourte(lundi)} → ${formatDateCourte(new Date(lundi.getTime()+5*86400000))}</div>
+        <div class="subtitle">Semaine ${semaine.split("-W")[1]} · ${semaine.split("-W")[0]} · ${formatDateCourte(lundi)} → ${formatDateCourte(new Date(lundi.getTime()+(nbJours-1)*86400000))}</div>
         ${el.innerHTML}
       </body></html>`);
       win.document.close();
@@ -1184,7 +1184,7 @@ Réponds de façon concise et pratique, en français.`,
               Planning équipe — {lundi.toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}
             </div>
             <div style={{fontFamily:"sans-serif",fontSize:12,color:"#64748b",marginTop:2}}>
-              Semaine {semaine.split("-W")[1]} · {formatDateCourte(lundi)} → {formatDateCourte(new Date(lundi.getTime()+5*86400000))}
+              Semaine {semaine.split("-W")[1]} · {formatDateCourte(lundi)} → {formatDateCourte(new Date(lundi.getTime()+(nbJours-1)*86400000))}
             </div>
           </div>
           <div style={{fontFamily:"sans-serif",fontSize:11,color:"#64748b",textAlign:"right"}}>
@@ -1206,7 +1206,7 @@ Réponds de façon concise et pratique, en français.`,
                 {lundi.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
               </div>
               <div className="font-body text-xs text-gray-400">
-                Du {formatDateCourte(lundi)} au {formatDateCourte(new Date(lundi.getTime() + 5 * 86400000))} · Semaine {semaine.split("-W")[1]}
+                Du {formatDateCourte(lundi)} au {formatDateCourte(new Date(lundi.getTime() + (nbJours - 1) * 86400000))} · Semaine {semaine.split("-W")[1]}
               </div>
               <input type="date" title="Aller à cette date"
                 className="font-body text-[10px] px-2 py-0.5 rounded-lg border border-gray-200 bg-white cursor-pointer focus:border-blue-400 focus:outline-none text-gray-400 mt-0.5"
@@ -1219,7 +1219,21 @@ Réponds de façon concise et pratique, en français.`,
                   e.target.value = "";
                 }}/>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <label
+                title="Inclure le dimanche dans la semaine"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-body text-xs font-semibold cursor-pointer transition-all
+                  ${inclureDimanche
+                    ? "bg-blue-500 text-white border-blue-500"
+                    : "bg-white text-slate-500 border-gray-200 hover:bg-gray-50"}`}>
+                <input
+                  type="checkbox"
+                  checked={inclureDimanche}
+                  onChange={e => setInclureDimanche(e.target.checked)}
+                  className="hidden"
+                />
+                Dim.
+              </label>
               <button onClick={() => setSemaine(getISOWeek(new Date()))}
                 className="font-body text-xs font-semibold text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 transition-colors">Auj.</button>
               <button onClick={nextWeek} className="flex items-center gap-1 font-body text-sm font-semibold text-blue-800 bg-transparent border-none cursor-pointer hover:text-blue-500 transition-colors px-2 py-1">
