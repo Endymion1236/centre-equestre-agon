@@ -2998,10 +2998,133 @@ export default function ComptabilitePage() {
                   🔄 Resynchroniser
                 </button>
               )}
+              {bankLines.length > 0 && bankLines.some(b => b.matched) && (
+                <button
+                  onClick={async () => {
+                    // ─────────────────────────────────────────────────────────
+                    // NETTOYAGE DES DOUBLONS matchedEncs
+                    //
+                    // Bug historique : l'algo de matching a parfois inscrit
+                    // le même triplet (famille, montant, date) dans matchedEncs
+                    // de plusieurs bankLines, alors qu'il n'existe qu'UN seul
+                    // encaissement Firestore correspondant. Conséquence : le
+                    // compteur "à remettre" reste élevé car les bankLines
+                    // suivantes n'ont pas de cible réelle.
+                    //
+                    // Ce bouton :
+                    //   1. Parcourt les bankLines dans l'ordre
+                    //   2. Pour chaque entrée matchedEncs, cherche un enc
+                    //      Firestore non encore consommé (triplet exact)
+                    //   3. Les entrées orphelines (déjà consommées) sont
+                    //      retirées
+                    //   4. Si une bankLine perd toutes ses entrées → on la
+                    //      dé-matche
+                    //   5. Affiche un rapport, demande confirmation, écrit
+                    // ─────────────────────────────────────────────────────────
+                    try {
+                      const claimedEncIds = new Set<string>();
+                      const cleanedLines = bankLines.map(bl => ({ ...bl, matchedEncs: bl.matchedEncs ? [...bl.matchedEncs] : undefined }));
+
+                      let totalOrphans = 0;
+                      let linesEmptied = 0;
+                      const reportSamples: string[] = [];
+
+                      for (let i = 0; i < cleanedLines.length; i++) {
+                        const bl = cleanedLines[i];
+                        if (!bl.matched) continue;
+                        if (bl.matchType === "Ignoré") continue;
+                        if (!bl.matchedEncs || bl.matchedEncs.length === 0) continue;
+
+                        const kept: typeof bl.matchedEncs = [];
+                        const orphans: typeof bl.matchedEncs = [];
+
+                        for (const enc of bl.matchedEncs) {
+                          // Cherche un enc Firestore non encore consommé
+                          const candidate = encaissementsCompta.find((e: any) => {
+                            if (claimedEncIds.has(e.id)) return false;
+                            const d = e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "";
+                            return (e.familyName || "") === enc.familyName
+                              && Math.abs((e.montant || 0) - enc.montant) < 0.02
+                              && d === enc.date;
+                          });
+                          if (candidate) {
+                            claimedEncIds.add(candidate.id);
+                            kept.push(enc);
+                          } else {
+                            orphans.push(enc);
+                          }
+                        }
+
+                        if (orphans.length > 0) {
+                          totalOrphans += orphans.length;
+                          if (reportSamples.length < 5) {
+                            reportSamples.push(`Ligne ${bl.date} (${bl.amount}€) : ${orphans.length} orphelin(s) — ex: ${orphans[0].familyName} ${orphans[0].montant}€`);
+                          }
+                          cleanedLines[i].matchedEncs = kept;
+                          if (kept.length === 0) {
+                            // Toutes les entrées étaient orphelines → on dé-matche
+                            // SAUF si c'est un type qui ne dépend pas de matchedEncs
+                            // (Virement avec manualPaymentId, Chèques/Espèces remises…)
+                            const hasOtherAnchor = bl.manualPaymentId
+                              || bl.matchType === "Chèques"
+                              || bl.matchType === "Espèces";
+                            if (!hasOtherAnchor) {
+                              cleanedLines[i] = {
+                                ...cleanedLines[i],
+                                matched: false,
+                                matchType: "",
+                                matchDetail: "",
+                                matchedEncs: undefined,
+                              };
+                              linesEmptied++;
+                            }
+                          }
+                        }
+                      }
+
+                      if (totalOrphans === 0) {
+                        alert("✅ Aucun doublon détecté.\n\nToutes les entrées matchedEncs correspondent à un encaissement Firestore distinct.");
+                        return;
+                      }
+
+                      const message = `🧹 Rapport de nettoyage\n\n`
+                        + `• ${totalOrphans} entrée(s) orpheline(s) à retirer\n`
+                        + `• ${linesEmptied} ligne(s) bancaire(s) à dé-matcher (devenues vides)\n\n`
+                        + `Exemples :\n${reportSamples.map(s => `  ${s}`).join("\n")}\n\n`
+                        + `Confirmer l'écriture en base ?`;
+
+                      if (!confirm(message)) return;
+
+                      await setDoc(doc(db, "rapprochements", period), {
+                        period,
+                        bankLines: cleanedLines.map(bl => ({
+                          date: bl.date, label: bl.label, amount: bl.amount,
+                          matched: bl.matched, matchType: bl.matchType, matchDetail: bl.matchDetail,
+                          matchedEncs: bl.matchedEncs || null,
+                          manualPaymentId: bl.manualPaymentId || null,
+                          uncertain: bl.uncertain || false,
+                        })),
+                        totalLines: cleanedLines.length,
+                        totalMatched: cleanedLines.filter(b => b.matched).length,
+                        totalAmount: Math.round(cleanedLines.reduce((s, b) => s + b.amount, 0) * 100) / 100,
+                        updatedAt: serverTimestamp(),
+                      }, { merge: true });
+
+                      setBankLines(cleanedLines);
+                      alert(`✅ Nettoyage terminé\n\n• ${totalOrphans} doublon(s) retiré(s)\n• ${linesEmptied} ligne(s) dé-matchée(s)\n\nClique maintenant sur "Resynchroniser" pour mettre à jour les encaissements.`);
+                    } catch (e: any) {
+                      console.error("[clean-duplicates] Erreur:", e);
+                      alert(`Erreur : ${e.message || e}`);
+                    }
+                  }}
+                  className="flex items-center gap-2 font-body text-sm font-semibold text-amber-600 bg-amber-50 hover:bg-amber-100 px-4 py-3 rounded-lg border border-amber-200 cursor-pointer">
+                  🧹 Nettoyer doublons
+                </button>
+              )}
             </div>
             {bankLines.length > 0 && bankLines.some(b => b.matched) && (
               <p className="font-body text-[11px] text-slate-500 mt-2">
-                "Resynchroniser" marque tous les encaissements/remises/paiements correspondant aux rapprochements actuels, utile après une mise à jour du code ou pour rattraper d'anciens rapprochements.
+                "Resynchroniser" marque tous les encaissements/remises/paiements correspondant aux rapprochements actuels. "Nettoyer doublons" retire les entrées matchedEncs qui pointent vers un encaissement déjà revendiqué par une autre ligne bancaire.
               </p>
             )}
           </Card>
