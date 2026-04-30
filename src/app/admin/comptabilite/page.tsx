@@ -3471,7 +3471,37 @@ export default function ComptabilitePage() {
             return null;
           })();
 
+          // ───────────────────────────────────────────────────────────────────
+          // Anti-fuite : construire un compteur des triplets (famille|montant|date)
+          // déjà revendiqués par d'AUTRES bankLines matchées. On exclut ensuite
+          // de cbPool les encs dont le triplet est déjà "consommé" autant de fois
+          // qu'il apparaît ailleurs.
+          //
+          // Sans ça, valider Détail CA sur la bankLine du 24/04 puis sur celle
+          // du 25/04 pouvait réinjecter les mêmes encs dans les 2 matchedEncs,
+          // créant des références fantômes qui pourrissent le compteur
+          // "Encaissements à remettre".
+          // ───────────────────────────────────────────────────────────────────
+          const triplet = (e: any) => {
+            const d = e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "";
+            return `${e.familyName || ""}|${(e.montant || 0).toFixed(2)}|${d}`;
+          };
+          const claimedTripletCount = new Map<string, number>();
+          for (let blIdx = 0; blIdx < bankLines.length; blIdx++) {
+            if (blIdx === showCADetailModal) continue; // on ignore la bankLine en cours
+            const otherBl = bankLines[blIdx];
+            if (!otherBl.matched) continue;
+            if (otherBl.matchType === "Ignoré") continue;
+            for (const enc of (otherBl.matchedEncs || [])) {
+              const k = `${enc.familyName || ""}|${(enc.montant || 0).toFixed(2)}|${enc.date || ""}`;
+              claimedTripletCount.set(k, (claimedTripletCount.get(k) || 0) + 1);
+            }
+          }
+
           // Encaissements CB terminal libres dans la fenêtre ±7j (large pour ne rien rater)
+          // On accumule les "consommations" de triplets au fur et à mesure pour
+          // exclure correctement les encs en surplus quand il y a des doublons légitimes.
+          const tripletConsumed = new Map<string, number>();
           const cbPool = encaissementsCompta.filter(e => {
             if (e.mode !== "cb_terminal") return false;
             if (e.remiseId) return false; // déjà dans une remise
@@ -3480,6 +3510,14 @@ export default function ComptabilitePage() {
             if (bankDateParsed) {
               const diff = Math.abs(bankDateParsed.getTime() - d.getTime()) / (1000 * 60 * 60 * 24);
               if (diff > 7) return false;
+            }
+            // Filtre anti-fuite : ce triplet est-il revendiqué par une autre bankLine ?
+            const k = triplet(e);
+            const claimed = claimedTripletCount.get(k) || 0;
+            const consumed = tripletConsumed.get(k) || 0;
+            if (consumed < claimed) {
+              tripletConsumed.set(k, consumed + 1);
+              return false; // exclu : un autre rapprochement le revendique déjà
             }
             return true;
           });
