@@ -64,6 +64,28 @@ export default function ComptabilitePage() {
   const [diagReport, setDiagReport] = useState<any>(null);
   const [diagLoading, setDiagLoading] = useState(false);
 
+  // ── Recherche d'un paiement par nom (sous-section du panel diag) ──
+  const [diagSearch, setDiagSearch] = useState("");
+  const [diagSearching, setDiagSearching] = useState(false);
+  const [diagSearchResult, setDiagSearchResult] = useState<any>(null);
+  const runDiagSearch = async () => {
+    if (!diagSearch.trim()) return;
+    setDiagSearching(true);
+    setDiagSearchResult(null);
+    try {
+      const res = await authFetch(`/api/admin/diag-paiement?q=${encodeURIComponent(diagSearch.trim())}`);
+      const data = await res.json();
+      if (!res.ok) {
+        setDiagSearchResult({ error: data?.error || `Erreur HTTP ${res.status}` });
+      } else {
+        setDiagSearchResult(data);
+      }
+    } catch (e: any) {
+      setDiagSearchResult({ error: e?.message || "Erreur réseau" });
+    }
+    setDiagSearching(false);
+  };
+
   const [tab, setTab] = useState<"journal" | "tva" | "rapprochement" | "rapprochement_ignores" | "remise" | "fec" | "export">("journal");
   const [payments, setPayments] = useState<Payment[]>([]);
   const [remises, setRemises] = useState<any[]>([]);
@@ -4185,6 +4207,70 @@ export default function ComptabilitePage() {
                       </div>
                     ))}
                   </div>
+                </div>
+
+                {/* ── Recherche d'un paiement par nom (utile en cas de doute) ──
+                    Appelle /api/admin/diag-paiement?q=xxx avec le token Firebase
+                    Auth de l'utilisateur (read-only, pas de modification possible) */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                  <div className="font-body text-xs font-semibold text-amber-800 mb-2">🔍 Rechercher un paiement par nom</div>
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      placeholder="ex: gourmelon"
+                      value={diagSearch}
+                      onChange={(e) => setDiagSearch(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") runDiagSearch(); }}
+                      className="flex-1 px-3 py-1.5 rounded-md border border-amber-300 font-body text-xs"
+                    />
+                    <button
+                      onClick={runDiagSearch}
+                      disabled={diagSearching || !diagSearch.trim()}
+                      className="px-4 py-1.5 rounded-md font-body text-xs font-semibold text-white bg-amber-600 border-none cursor-pointer disabled:opacity-50">
+                      {diagSearching ? "..." : "Chercher"}
+                    </button>
+                  </div>
+                  {diagSearchResult && (
+                    <div className="bg-white rounded-md border border-amber-200 p-2 max-h-72 overflow-y-auto">
+                      {diagSearchResult.error ? (
+                        <div className="text-red-600 text-xs">{diagSearchResult.error}</div>
+                      ) : (
+                        <>
+                          <div className="text-xs font-semibold text-slate-700 mb-2">
+                            💳 {diagSearchResult.payments?.count || 0} paiement(s) — total {(diagSearchResult.payments?.totalTTC || 0).toFixed(2)}€
+                          </div>
+                          {(diagSearchResult.payments?.list || []).map((p: any) => (
+                            <div key={p.id} className="border-l-2 border-blue-300 pl-2 mb-2 text-[10px]">
+                              <div className="font-semibold">
+                                {p.date} · {p.familyName} · <span className={`${p.status === "paid" ? "text-green-700" : "text-orange-700"}`}>{p.status}</span> · {p.paymentMode}
+                              </div>
+                              <div className="text-slate-600">Total {p.totalTTC?.toFixed(2)}€ · Payé {p.paidAmount?.toFixed(2)}€ · {p.nbItems} item(s)</div>
+                              {p.items.map((it: any, i: number) => (
+                                <div key={i} className="ml-2 text-slate-500">
+                                  • {it.childName} · {it.activityTitle} · {it.priceTTC?.toFixed(2)}€
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                          <div className="text-xs font-semibold text-slate-700 mb-2 mt-3 pt-2 border-t border-slate-200">
+                            💰 {diagSearchResult.encaissements?.count || 0} encaissement(s) — total {(diagSearchResult.encaissements?.totalEur || 0).toFixed(2)}€
+                          </div>
+                          {(diagSearchResult.encaissements?.list || []).map((e: any) => (
+                            <div key={e.id} className="border-l-2 border-green-300 pl-2 mb-1 text-[10px]">
+                              <div className="font-semibold">
+                                {e.date} · {e.familyName} · {e.activityTitle} · <b>{e.montant?.toFixed(2)}€</b> · {e.mode}
+                              </div>
+                              <div className="text-slate-500">
+                                {e.reconciledByBank ? "✓ rapproché banque" : "non rapproché"}
+                                {e.paymentId && ` · paymentId ${e.paymentId.slice(0, 8)}...`}
+                                {e.remiseId && ` · remiseId ${e.remiseId.slice(0, 8)}...`}
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <button
