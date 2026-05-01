@@ -83,8 +83,8 @@ export function matchMontantExact(line: BankLine, ctx: MatchContext): MatchResul
   ctx.usedEncIds.add(exactMatch.id);
   return {
     matchType: "Montant exact",
-    matchDetail: `${exactMatch.familyName || ""} — ${exactMatch.activityTitle || ""}`,
+    matchDetail: `${exactMatch.familyName} — ${exactMatch.activityTitle || ""}`,
     matchedEncs: [encToDetail(exactMatch)],
-    uncertain: true,
+    uncertain: true, // match fragile : à vérifier
   };
 }
