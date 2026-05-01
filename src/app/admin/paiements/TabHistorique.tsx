@@ -31,6 +31,18 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
   const [histModeFilter, setHistModeFilter] = useState("all");
   const [histStatusFilter, setHistStatusFilter] = useState("all");
   const [histPeriod, setHistPeriod] = useState("");
+  // Tri configurable (persisté en localStorage pour mémoriser le choix entre sessions).
+  // Trois options : 'commande' (date fiscale = colonne DATE affichée), 'encaissement'
+  // (heure du dernier paiement reçu), 'facture' (numéro de facture lexico).
+  const [sortBy, setSortBy] = useState<"commande" | "encaissement" | "facture">(() => {
+    if (typeof window === "undefined") return "commande";
+    const saved = window.localStorage.getItem("histSortBy");
+    return (saved === "encaissement" || saved === "facture") ? saved : "commande";
+  });
+  const updateSortBy = (v: "commande" | "encaissement" | "facture") => {
+    setSortBy(v);
+    if (typeof window !== "undefined") window.localStorage.setItem("histSortBy", v);
+  };
   const inputCls = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
 
   return (
@@ -83,18 +95,20 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
         });
       }
 
-      // Tri chronologique : plus récent en haut. Pour refléter l'ordre réel
-      // d'encaissement (ce qui est intuitif dans un "historique"), on cherche
-      // le DERNIER encaissement associé au paiement. Fallback sur createdAt
-      // (heure de création de la commande), puis date (date fiscale fixée à 12h),
-      // puis tie-break stable par id.
+      // Tri configurable selon le choix utilisateur (sortBy ci-dessus).
+      // - 'commande' : date fiscale (= colonne DATE affichée). Le plus intuitif
+      //   visuellement, c'est ce qu'attendent la plupart des utilisateurs.
+      // - 'encaissement' : heure du dernier encaissement reçu. Utile pour voir
+      //   ce qui vient d'être payé en haut, même pour des factures anciennes.
+      // - 'facture' : numéro de facture lexico desc. Utile pour la compta
+      //   officielle (le n° suit l'ordre chronologique légal de validation).
       const getTsFromField = (src: any): number => {
         if (!src) return 0;
         if (src.seconds !== undefined) return src.seconds * 1000 + (src.nanoseconds || 0) / 1e6;
         if (src.toDate) return src.toDate().getTime();
         return 0;
       };
-      // Index : paymentId → heure du dernier encaissement
+      // Index : paymentId → heure du dernier encaissement (utilisé en mode 'encaissement')
       const lastEncaissementByPayment = new Map<string, number>();
       for (const e of encaissements) {
         if (!e.paymentId) continue;
@@ -103,14 +117,27 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
         if (ts > cur) lastEncaissementByPayment.set(e.paymentId, ts);
       }
       const getTs = (p: any) => {
-        // Priorité 1 : dernier encaissement réel
-        const encTs = lastEncaissementByPayment.get(p.id) || 0;
-        if (encTs > 0) return encTs;
-        // Priorité 2 : createdAt de la commande (si pas d'encaissement lié)
-        // Priorité 3 : date fiscale
-        return getTsFromField(p.createdAt) || getTsFromField(p.date);
+        if (sortBy === "encaissement") {
+          // Priorité dernier encaissement, fallback createdAt puis date
+          const encTs = lastEncaissementByPayment.get(p.id) || 0;
+          if (encTs > 0) return encTs;
+          return getTsFromField(p.createdAt) || getTsFromField(p.date);
+        }
+        // 'commande' (par défaut) : on prend la date fiscale (date), qui correspond
+        // à la colonne DATE affichée. Fallback sur createdAt si date manquante.
+        return getTsFromField(p.date) || getTsFromField(p.createdAt);
       };
       filtered = [...filtered].sort((a, b) => {
+        if (sortBy === "facture") {
+          // Tri par numéro de facture lexico desc. Les paiements sans n° passent en bas.
+          const na = String((a as any).invoiceNumber || a.id || "");
+          const nb = String((b as any).invoiceNumber || b.id || "");
+          // Tri ASCII desc, mais on remonte les vrais n° "F-..." avant les ids type "PF-..." ou alphanumériques
+          const aHasNum = /^F-/.test(na);
+          const bHasNum = /^F-/.test(nb);
+          if (aHasNum !== bHasNum) return aHasNum ? -1 : 1;
+          return nb.localeCompare(na);
+        }
         const diff = getTs(b) - getTs(a);
         if (diff !== 0) return diff;
         // Tie-break stable par id pour éviter les sauts d'ordre visuels
@@ -167,6 +194,18 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                 Réinitialiser
               </button>
             )}
+            <div className="flex items-center gap-1.5 ml-auto">
+              <span className="font-body text-xs text-slate-500">Trier par :</span>
+              <select
+                value={sortBy}
+                onChange={(e) => updateSortBy(e.target.value as any)}
+                className="font-body text-xs px-2 py-1.5 rounded-lg border border-blue-500/8 bg-cream cursor-pointer focus:border-blue-500 focus:outline-none"
+                title="Choix mémorisé entre sessions">
+                <option value="commande">Date commande</option>
+                <option value="encaissement">Date encaissement</option>
+                <option value="facture">Numéro facture</option>
+              </select>
+            </div>
             <span className="font-body text-xs text-slate-600">{filtered.length} paiement{filtered.length > 1 ? "s" : ""}</span>
           </div>
 
