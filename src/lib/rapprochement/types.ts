@@ -44,6 +44,8 @@ export interface Remise {
   pointee?: boolean;
   pointeeNote?: string;
   createdAt?: { seconds: number } | null;
+  date?: { seconds: number } | null;     // Date d'enregistrement de la remise (utilisée par les matchers chèque/espèces)
+  nbPaiements?: number;                  // Nombre de paiements dans la remise (info affichage)
   [k: string]: any;
 }
 
@@ -52,6 +54,10 @@ export interface RemiseSepa {
   total?: number;
   paymentIds?: string[];
   pointee?: boolean;
+  montantTotal?: number;                 // Synonyme de `total` côté SEPA (vérifier lequel utilise le code, page.tsx:1049)
+  datePrelevement?: string;              // ISO "YYYY-MM-DD"
+  numero?: string | number;              // Numéro de remise SEPA
+  nbTransactions?: number;               // Nombre de transactions groupées dans la remise
   [k: string]: any;
 }
 
@@ -88,6 +94,12 @@ export interface MatchContext {
 /**
  * Résultat retourné par un matcher.
  * `null` = la règle ne s'applique pas, l'orchestrateur passe à la suivante.
+ *
+ * IMPORTANT : un matcher retourne UNIQUEMENT ce résultat, PAS la BankLine
+ * complète. C'est l'orchestrateur (engine.ts, Task 9) qui applique le résultat
+ * sur la BankLine via `{ ...bl, matched: true, ...result }`. Ne PAS copier
+ * le pattern inline de page.tsx qui retourne `{ ...bl, matched: true, ... }`
+ * directement depuis la règle — ce pattern est obsolète dans la nouvelle archi.
  */
 export type MatchResult = {
   matchType: string;
