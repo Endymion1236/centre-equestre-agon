@@ -1,45 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { matchMontantExact } from "../matchers/montant-exact";
-import type { BankLine, MatchContext, Encaissement } from "../types";
-
-function mkCtx(encs: Encaissement[], period = "2026-05"): MatchContext {
-  return {
-    encs,
-    remises: [],
-    remisesSepa: [],
-    payments: [],
-    period,
-    usedEncIds: new Set<string>(),
-    usedRemiseIds: new Set<string>(),
-    usedRemiseSepaIds: new Set<string>(),
-    usedPaymentIds: new Set<string>(),
-  };
-}
-
-function mkLine(overrides: Partial<BankLine> = {}): BankLine {
-  return {
-    date: "15/05/2026",
-    label: "PAIEMENT INCONNU",
-    amount: 100,
-    matched: false,
-    matchType: "",
-    matchDetail: "",
-    ...overrides,
-  };
-}
-
-function mkEnc(overrides: Partial<Encaissement>): Encaissement {
-  const date = new Date("2026-05-15T12:00:00");
-  return {
-    id: "e1",
-    mode: "cb_terminal",
-    montant: 100,
-    date: { seconds: Math.floor(date.getTime() / 1000) },
-    familyName: "Dupont",
-    activityTitle: "Carte 10h",
-    ...overrides,
-  };
-}
+import { mkCtx, mkLine, mkEnc } from "./factories";
 
 describe("matchMontantExact", () => {
   it("matche un encaissement de même montant dans la fenêtre ±3 jours", () => {
@@ -93,5 +54,13 @@ describe("matchMontantExact", () => {
     });
     const ctx = mkCtx([enc], "2026-05");
     expect(matchMontantExact(mkLine({ date: "15/05/2026", amount: 100 }), ctx)).toBeNull();
+  });
+
+  it("matche aussi si la date bancaire est illisible (fenêtre ouverte)", () => {
+    const enc = mkEnc({ id: "e1", montant: 100 });
+    const ctx = mkCtx([enc]);
+    const result = matchMontantExact(mkLine({ date: "", amount: 100 }), ctx);
+    expect(result).not.toBeNull();
+    expect(result!.matchType).toBe("Montant exact");
   });
 });
