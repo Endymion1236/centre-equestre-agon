@@ -416,20 +416,10 @@ export default function ComptabilitePage() {
   const updateAndSaveBankLines = async (updated: typeof bankLines) => {
     setBankLines(updated);
     try {
-      await setDoc(doc(db, "rapprochements", period), {
-        period,
-        bankLines: updated.map(bl => ({
-          date: bl.date, label: bl.label, amount: bl.amount,
-          matched: bl.matched, matchType: bl.matchType, matchDetail: bl.matchDetail,
-          matchedEncs: bl.matchedEncs || null,
-          manualPaymentId: bl.manualPaymentId || null,
-          uncertain: bl.uncertain || false,
-        })),
-        totalLines: updated.length,
-        totalMatched: updated.filter(b => b.matched).length,
-        totalAmount: Math.round(updated.reduce((s, b) => s + b.amount, 0) * 100) / 100,
-        updatedAt: serverTimestamp(),
-      });
+      // Sauvegarder en groupant par mois (chaque bankLine va dans le doc
+      // rapprochements/{YYYY-MM} correspondant à sa propre date, pas la
+      // période active. Cf. saveBankLinesByMonth pour le détail.)
+      await saveBankLinesByMonth(updated);
       // Synchroniser reconciledByBank sur encs/payments/remises
       await syncReconciledFromBankLines(updated);
       // Synchroniser les versements bancaires du livre de caisse
@@ -437,6 +427,75 @@ export default function ComptabilitePage() {
       // Rafraîchir les données pour que l'UI reflète les changements
       fetchData();
     } catch (e) { console.error("Erreur sauvegarde rapprochement:", e); }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  //  saveBankLinesByMonth : sauvegarde les bankLines en les routant chacune
+  //  dans le doc rapprochements/{YYYY-MM} correspondant à SA date.
+  //
+  //  Avant ce helper, toutes les bankLines étaient sauvegardées dans le doc
+  //  de la période active à l'import, ce qui créait des doublons quand on
+  //  importait un CSV à cheval sur plusieurs mois (bug rapporté par Nicolas).
+  //
+  //  Le helper :
+  //  1. Groupe les bankLines par mois selon bl.date (format DD/MM/YYYY)
+  //  2. Pour chaque mois concerné : récupère le doc existant, fusionne les
+  //     bankLines (par bankLineKey = date|label|amount), réécrit le doc.
+  //  3. Les bankLines de l'état courant écrasent celles du doc existant
+  //     (clés identiques) — c'est l'intention : on remonte les pointages
+  //     que l'utilisateur vient de modifier.
+  //
+  //  Note : cette fonction NE PURGE PAS les bankLines orphelines qui
+  //  pourraient exister dans des docs d'autres mois. Pour ça, voir
+  //  /api/admin/migrate-bankLines (étape 1 de la migration).
+  // ─────────────────────────────────────────────────────────────────────────
+  const saveBankLinesByMonth = async (lines: typeof bankLines) => {
+    // 1. Grouper par mois (YYYY-MM extrait de DD/MM/YYYY)
+    const byMonth: Record<string, typeof bankLines> = {};
+    for (const bl of lines) {
+      const m = bl.date.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (!m) {
+        console.warn("[saveBankLinesByMonth] bankLine sans date parseable:", bl);
+        continue;
+      }
+      const ym = `${m[3]}-${m[2].padStart(2, "0")}`;
+      if (!byMonth[ym]) byMonth[ym] = [];
+      byMonth[ym].push(bl);
+    }
+
+    // 2. Pour chaque mois : merge avec le doc existant
+    for (const [ym, blGroup] of Object.entries(byMonth)) {
+      try {
+        const existingSnap = await getDoc(doc(db, "rapprochements", ym));
+        const existingBls: any[] = (existingSnap.exists() ? (existingSnap.data() as any).bankLines : []) || [];
+
+        // Map des bankLines à fusionner par clé "date|label|amount"
+        const keyOf = (b: any) => `${b.date}|${b.label}|${Math.round(b.amount * 100)}`;
+        const merged = new Map<string, any>();
+        for (const eb of existingBls) merged.set(keyOf(eb), eb);
+        for (const nb of blGroup) merged.set(keyOf(nb), {
+          date: nb.date, label: nb.label, amount: nb.amount,
+          matched: nb.matched, matchType: nb.matchType, matchDetail: nb.matchDetail,
+          matchedEncs: nb.matchedEncs || null,
+          manualPaymentId: nb.manualPaymentId || null,
+          uncertain: nb.uncertain || false,
+        });
+        const allBls = Array.from(merged.values());
+
+        await setDoc(doc(db, "rapprochements", ym), {
+          period: ym,
+          bankLines: allBls,
+          totalLines: allBls.length,
+          totalMatched: allBls.filter((b: any) => b.matched).length,
+          totalAmount: Math.round(allBls.reduce((s: number, b: any) => s + (b.amount || 0), 0) * 100) / 100,
+          updatedAt: serverTimestamp(),
+        });
+        console.log(`[saveBankLinesByMonth] ✅ ${ym} : ${allBls.length} bankLines (${blGroup.length} de cette session)`);
+      } catch (e) {
+        console.error(`[saveBankLinesByMonth] erreur sur ${ym}:`, e);
+        throw e;
+      }
+    }
   };
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1596,27 +1655,12 @@ export default function ComptabilitePage() {
         }
       }
 
-      // Sauvegarder dans Firestore
+      // Sauvegarder dans Firestore (groupé par mois selon la date de chaque
+      // bankLine, plus la période active à l'import — fix du bug de doublons
+      // découvert par Nicolas le 28/04 sur les CSV à cheval sur 2 mois)
       try {
-        await setDoc(doc(db, "rapprochements", period), {
-          period,
-          bankLines: (finalMatched as any[]).map((bl: any) => ({
-            date: bl.date,
-            label: bl.label,
-            amount: bl.amount,
-            matched: bl.matched,
-            matchType: bl.matchType,
-            matchDetail: bl.matchDetail,
-            matchedEncs: bl.matchedEncs || null,
-            manualPaymentId: bl.manualPaymentId || null,
-            uncertain: bl.uncertain || false,
-          })),
-          totalLines: finalMatched.length,
-          totalMatched: (finalMatched as any[]).filter((b: any) => b.matched).length,
-          totalAmount: Math.round((finalMatched as any[]).reduce((s: number, b: any) => s + b.amount, 0) * 100) / 100,
-          updatedAt: serverTimestamp(),
-        });
-        console.log(`✅ Rapprochement ${period} sauvegardé (${finalMatched.length} lignes)`);
+        await saveBankLinesByMonth(finalMatched as any);
+        console.log(`✅ Rapprochement sauvegardé (${finalMatched.length} lignes réparties par mois)`);
         // Synchroniser les versements bancaires (sorties du livre de caisse)
         await syncVersementsEspeces(finalMatched as any);
       } catch (e) { console.error("Erreur sauvegarde rapprochement:", e); }
@@ -3144,20 +3188,7 @@ export default function ComptabilitePage() {
 
                       if (!confirm(message)) return;
 
-                      await setDoc(doc(db, "rapprochements", period), {
-                        period,
-                        bankLines: cleanedLines.map(bl => ({
-                          date: bl.date, label: bl.label, amount: bl.amount,
-                          matched: bl.matched, matchType: bl.matchType, matchDetail: bl.matchDetail,
-                          matchedEncs: bl.matchedEncs || null,
-                          manualPaymentId: bl.manualPaymentId || null,
-                          uncertain: bl.uncertain || false,
-                        })),
-                        totalLines: cleanedLines.length,
-                        totalMatched: cleanedLines.filter(b => b.matched).length,
-                        totalAmount: Math.round(cleanedLines.reduce((s, b) => s + b.amount, 0) * 100) / 100,
-                        updatedAt: serverTimestamp(),
-                      }, { merge: true });
+                      await saveBankLinesByMonth(cleanedLines);
 
                       setBankLines(cleanedLines);
                       alert(`✅ Nettoyage terminé\n\n• ${totalOrphans} doublon(s) retiré(s)\n• ${linesEmptied} ligne(s) dé-matchée(s)\n\nClique maintenant sur "Resynchroniser" pour mettre à jour les encaissements.`);
