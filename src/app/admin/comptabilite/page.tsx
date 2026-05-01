@@ -855,57 +855,27 @@ export default function ComptabilitePage() {
             }
           }
 
-          // b.bis) Sous-ensemble d'un jour : trouver une combinaison de transactions CB
-          //        dont la somme = montant bancaire (utile quand la banque fait plusieurs
-          //        remises dans la même journée, ou qu'une transaction a été refusée).
-          //        Utilise findSubsetSum défini plus haut.
-          const targetCents = Math.round(bl.amount * 100);
-          for (const [dayKey, dayData] of Object.entries(cbByDay)) {
-            // Vérifier fenêtre date
-            if (bankDate) {
-              const encDay = new Date(dayKey);
-              const diff = (bankDate.getTime() - encDay.getTime()) / (1000 * 60 * 60 * 24);
-              if (diff < -1 || diff > 5) continue;
-            }
-            // Ne chercher de sous-ensemble que si le total du jour est >= montant bancaire
-            // (sinon aucune chance qu'un sous-ensemble atteigne le target)
-            if (dayData.total < bl.amount - 0.02) continue;
-            // Exclure les encs déjà matchés par b)
-            const freeEncs = dayData.encs.filter(e => !usedEncIds.has(e.id));
-            const subset = findSubsetSum(freeEncs, targetCents);
-            if (subset && subset.length > 0) {
-              const subsetSum = subset.reduce((s, e) => s + (e.montant || 0), 0);
-              subset.forEach(e => usedEncIds.add(e.id));
-              const dayLabel = dayKey.split("-").reverse().join("/");
-              return {
-                ...bl, matched: true, matchType: "CB Terminal",
-                matchDetail: `Sous-ensemble de ${subset.length}/${dayData.encs.length} CB du ${dayLabel} = ${subsetSum.toFixed(2)}€`,
-                matchedEncs: subset.map(encToDetail),
-              };
-            }
-          }
+          // b.bis) Sous-ensemble d'un jour : DÉSACTIVÉ (option B retenue par
+          //        Nicolas le 28/04). Ce matching trouvait n'importe quelle
+          //        combinaison d'encaissements CB du jour qui faisait tomber
+          //        le total juste, sans tenir compte de l'heure réelle des
+          //        transactions. Résultat : il "mélangeait" les transactions
+          //        entre remises bancaires, créant de fausses associations
+          //        (cas vécu : 495€ gourmelon attribués à la mauvaise remise).
+          //
+          //        Désormais, ces remises CB arrivent en "À traiter" et il
+          //        faut utiliser le bouton Détail CA pour coller le détail
+          //        copié depuis le site Crédit Agricole, qui produit un
+          //        matching transaction par transaction fiable.
+          //
+          //        Si tu lis ce code et que tu veux réactiver, sache que la
+          //        cause de la défaillance est qu'on ne dispose pas de
+          //        l'horaire des transactions dans encaissements, donc on
+          //        ne peut pas distinguer 2 CB de même montant le même jour.
 
-          // c) Agrégat multi-jours : somme de 2-3 jours consécutifs
-          const sortedDays = Object.keys(cbByDay).sort();
-          for (let i = 0; i < sortedDays.length; i++) {
-            let runningTotal = 0;
-            let runningCount = 0;
-            for (let j = i; j < Math.min(i + 3, sortedDays.length); j++) {
-              runningTotal += cbByDay[sortedDays[j]].total;
-              runningCount += cbByDay[sortedDays[j]].count;
-              const roundedTotal = Math.round(runningTotal * 100) / 100;
-              if (Math.abs(roundedTotal - bl.amount) < 0.02) {
-                const days = sortedDays.slice(i, j + 1).map(d => d.split("-")[2] + "/" + d.split("-")[1]).join(", ");
-                const allEncs = sortedDays.slice(i, j + 1).flatMap(d => cbByDay[d].encs);
-                allEncs.forEach(e => usedEncIds.add(e.id));
-                return {
-                  ...bl, matched: true, matchType: "CB Terminal",
-                  matchDetail: `Agrégat ${runningCount} CB (${days}) = ${roundedTotal.toFixed(2)}€`,
-                  matchedEncs: allEncs.map(encToDetail),
-                };
-              }
-            }
-          }
+          // c) Agrégat multi-jours : DÉSACTIVÉ aussi (cohérent avec b.bis).
+          //    Combinait 2-3 jours consécutifs pour matcher une remise.
+          //    Risque similaire de mélange entre remises bancaires.
 
           // d) Dernier recours : match exact montant unitaire
           const exactCB = cbEncs.filter(inWindow).find(e => Math.abs((e.montant || 0) - bl.amount) < 0.02);
@@ -2902,7 +2872,15 @@ export default function ComptabilitePage() {
 
           <Card padding="md">
             <h3 className="font-body text-base font-semibold text-blue-800 mb-3">Importer un relevé bancaire</h3>
-            <p className="font-body text-xs text-slate-500 mb-3">Compatible Crédit Agricole, LCL, BNP, Société Générale (CSV avec séparateur point-virgule)</p>
+            <p className="font-body text-xs text-slate-500 mb-2">Compatible Crédit Agricole, LCL, BNP, Société Générale (CSV avec séparateur point-virgule)</p>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 flex items-start gap-2">
+              <AlertTriangle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="font-body text-xs text-amber-900">
+                <b>Remises CB :</b> le matching automatique par "sous-ensemble" est désactivé pour éviter les associations erronées. Les remises <code className="bg-amber-100 px-1 rounded">REMISE CARTE</code> arrivent en "À traiter" — utilise le bouton <b>Détail CA</b> sur chaque remise pour coller le détail des transactions copié depuis le site Crédit Agricole.
+                <br />
+                Les chèques, espèces et virements continuent d'être matchés automatiquement.
+              </div>
+            </div>
             <div className="flex flex-wrap gap-2 items-center">
               <label className="flex items-center gap-2 font-body text-sm font-semibold text-blue-500 bg-white px-5 py-3 rounded-lg border border-blue-200 cursor-pointer hover:bg-blue-50 transition-colors inline-flex">
                 <Upload size={16} /> Importer CSV
