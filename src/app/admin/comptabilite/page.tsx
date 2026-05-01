@@ -10,6 +10,7 @@ import { Card, Badge } from "@/components/ui";
 import { Loader2, Download, Upload, Check, FileText, Building2, Receipt, Calculator, Search, Printer, Plus, Sparkles, Bot, AlertTriangle, EyeOff, RefreshCw } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { parseCreditAgricoleCsv } from "@/lib/rapprochement/parser-ca";
+import { matchMontantExact } from "@/lib/rapprochement/matchers/montant-exact";
 
 interface Payment {
   id: string;
@@ -1276,28 +1277,19 @@ export default function ComptabilitePage() {
         }
 
         // ── 6. Montant exact toutes modes ─────────────────────────────────
-        // Dernier recours : trouver un encaissement de même montant dans la fenêtre.
-        // EXCLUSION : pour les virements (VIR / SEPA / PRLV), ce fallback est DÉSACTIVÉ.
-        // Raison : un virement doit matcher par nom dans le libellé (bloc 3.b). Sans nom
-        // qui colle, il vaut mieux laisser non-matché pour éviter les faux positifs
-        // (ex : "VIR DE MME ROPIQUET 30€" faussement attribué à un encaissement
-        // cb_terminal "Nicolas Richard — animation" de 30€ d'un autre jour).
-        // IMPORTANT : même quand on l'accepte, on marque uncertain=true car ce match
-        // ne repose que sur le montant, sans confirmation par le nom. Badge ⚠️ visible.
-        const isVirementLabel = label.includes("VIR") || label.includes("SEPA") || label.includes("PRLV");
-        if (!isVirementLabel) {
-          const exactMatch = periodEnc.filter(inWindow).find(e =>
-            Math.abs((e.montant || 0) - bl.amount) < 0.02
-          );
-          if (exactMatch) {
-            usedEncIds.add(exactMatch.id);
-            return {
-              ...bl, matched: true, matchType: "Montant exact",
-              matchDetail: `${exactMatch.familyName} — ${exactMatch.activityTitle || ""}`,
-              matchedEncs: [encToDetail(exactMatch)],
-              uncertain: true, // match fragile : à vérifier
-            };
-          }
+        const montantExactResult = matchMontantExact(bl, {
+          encs: encaissementsCompta,
+          remises,
+          remisesSepa,
+          payments,
+          period,
+          usedEncIds,
+          usedRemiseIds,
+          usedRemiseSepaIds,
+          usedPaymentIds,
+        });
+        if (montantExactResult) {
+          return { ...bl, matched: true, ...montantExactResult };
         }
 
         // ── DEBUG : ligne non rapprochée → on log pour diagnostic ────────
