@@ -81,6 +81,21 @@ describe("matchCbTerminal", () => {
     expect(result!.matchDetail).toContain("30/04/2026");
   });
 
+  it("gère correctement le year-wrap (janvier → décembre de l'année précédente)", () => {
+    // Bank line en janvier 2026, encs CB du 30 décembre 2025.
+    // periodEncExtended doit inclure prevPeriod = "2025-12" (m === 1 → pm=12, py=y-1).
+    const eDec = mkEnc({
+      id: "e1", mode: "cb_terminal", montant: 100,
+      date: { seconds: sameDayAt("2025-12-30", 12) },
+    });
+    const ctx = mkCtx([eDec], "2026-01");
+    const result = matchCbTerminal(mkLine({ label: "REMISE CB", amount: 100, date: "02/01/2026" }), ctx);
+    // diff = (02/01/2026 - 30/12/2025) = 3 jours → fenêtre [-1, +5] OK
+    expect(result).not.toBeNull();
+    expect(result!.matchDetail).toContain("30/12/2025");
+    expect(ctx.usedEncIds.has("e1")).toBe(true);
+  });
+
   it("exclut les encs déjà consommés", () => {
     const e1 = mkEnc({ id: "e1", mode: "cb_terminal", montant: 100, date: { seconds: sameDayAt("2026-05-14", 12) } });
     const ctx = mkCtx([e1]);
