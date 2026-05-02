@@ -61,9 +61,9 @@ describe("matchVirement", () => {
     expect(ctx.usedEncIds.has("e1")).toBe(true);
   });
 
-  it("matche un paiement pending par nom + montant (b.2.i)", () => {
+  it("matche un paiement pending/partial par nom + montant (b.2.i)", () => {
     const payment: Payment = {
-      id: "p1", paymentMode: "virement", status: "pending",
+      id: "p1", paymentMode: "virement", status: "partial",
       familyName: "MARTIN", totalTTC: 80,
       date: { seconds: sec("2026-05-10") },
     };
@@ -119,6 +119,22 @@ describe("matchVirement", () => {
     const e2 = mkEnc({ id: "e2", mode: "virement", montant: 50, familyName: "BETA", date: { seconds: sec("2026-05-14") } });
     const ctx = mkCtx([e1, e2]);
     expect(matchVirement(mkLine({ label: "VIR INCONNU", amount: 50, date: "15/05/2026" }), ctx)).toBeNull();
+  });
+
+  it("ne matche PAS si plusieurs paiements pending ont le même montant (ambigu, sous-bloc d)", () => {
+    const p1: Payment = {
+      id: "p1", paymentMode: "virement", status: "pending",
+      familyName: "ALPHA", totalTTC: 75,
+      date: { seconds: sec("2026-05-10") },
+    };
+    const p2: Payment = {
+      id: "p2", paymentMode: "virement", status: "pending",
+      familyName: "BETA", totalTTC: 75,
+      date: { seconds: sec("2026-05-10") },
+    };
+    const ctx = mkCtx([]);
+    ctx.payments = [p1, p2];
+    expect(matchVirement(mkLine({ label: "VIR INCONNU REF456", amount: 75, date: "15/05/2026" }), ctx)).toBeNull();
   });
 
   it("matche un paiement pending par montant seul si UN SEUL candidat (sous-bloc d, uncertain)", () => {

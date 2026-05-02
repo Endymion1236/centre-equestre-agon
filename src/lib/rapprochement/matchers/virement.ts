@@ -42,6 +42,13 @@ const encToDetail = (e: Encaissement): EncDetail => ({
   mode: e.modeLabel || e.mode || "",
 });
 
+/** Vérifie si une partie significative (>2 chars) du nom de famille apparaît dans le libellé. */
+const nameMatchesLabel = (familyName: string | undefined, label: string): boolean => {
+  if (!familyName) return false;
+  const parts = familyName.toUpperCase().split(/\s+/).filter(n => n.length > 2);
+  return parts.some(p => label.includes(p));
+};
+
 export function matchVirement(bl: BankLine, ctx: MatchContext): MatchResult {
   const label = bl.label.toUpperCase();
   const bankDate = parseBankDate(bl.date);
@@ -100,11 +107,7 @@ export function matchVirement(bl: BankLine, ctx: MatchContext): MatchResult {
     const virEncs = periodEnc.filter(e =>
       e.mode === "virement" || e.mode === "sepa" || e.mode === "prelevement_sepa"
     );
-    const encNameMatches = virEncs.filter(e => {
-      if (!e.familyName) return false;
-      const nameParts = e.familyName.toUpperCase().split(/\s+/).filter((n: string) => n.length > 2);
-      return nameParts.some((part: string) => label.includes(part));
-    });
+    const encNameMatches = virEncs.filter(e => nameMatchesLabel(e.familyName, label));
     // Nom + montant exact + fenêtre → idéal
     const encNameAmountInWindow = encNameMatches.find(e => inWindow(e) && Math.abs((e.montant || 0) - bl.amount) < 0.02);
     if (encNameAmountInWindow) {
@@ -130,11 +133,7 @@ export function matchVirement(bl: BankLine, ctx: MatchContext): MatchResult {
       }
       return true;
     });
-    const paymentNameMatches = virPayments.filter(p => {
-      if (!p.familyName) return false;
-      const nameParts = p.familyName.toUpperCase().split(/\s+/).filter((n: string) => n.length > 2);
-      return nameParts.some((part: string) => label.includes(part));
-    });
+    const paymentNameMatches = virPayments.filter(p => nameMatchesLabel(p.familyName, label));
     // Nom + montant exact
     const paymentNameAmount = paymentNameMatches.find(p => Math.abs((p.totalTTC || 0) - bl.amount) < 0.02);
     if (paymentNameAmount) {

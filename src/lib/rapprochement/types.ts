@@ -10,7 +10,7 @@ export interface BankLine {
   matchDetail: string;
   matchedEncs?: EncDetail[];
   manualPaymentId?: string;
-  uncertain?: boolean;   // true uniquement pour le fallback "Montant exact"
+  uncertain?: boolean;   // true pour les fallbacks incertains (Montant exact, Virement nom-seul, Virement montant-seul)
 }
 
 export interface EncDetail {
