@@ -17,6 +17,7 @@ describe("matchCbOnline", () => {
     expect(result).not.toBeNull();
     expect(result!.matchType).toBe("CB en ligne");
     expect(result!.matchDetail).toContain("Dupont");
+    expect(result!.matchDetail).not.toContain("transaction"); // verrouille le chemin sous-bloc a (b/c/d disent "transaction(s)" ou "tx")
     expect(result!.matchedEncs).toHaveLength(1);
     expect(ctx.usedEncIds.has("e1")).toBe(true);
   });
@@ -29,6 +30,7 @@ describe("matchCbOnline", () => {
     expect(result).not.toBeNull();
     expect(result!.matchedEncs).toHaveLength(2);
     expect(result!.matchDetail).toContain("2 transaction(s)");
+    expect(result!.matchDetail).not.toContain("net"); // verrouille le chemin sous-bloc b (c et d.2 contiennent "net")
     expect(ctx.usedEncIds.has("e1")).toBe(true);
     expect(ctx.usedEncIds.has("e2")).toBe(true);
   });
