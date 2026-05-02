@@ -561,6 +561,15 @@ export function TabEncaisser({
                 </div>
               )}
 
+              {/* Date d'encaissement (modifiable pour saisie en différé) */}
+              <div className="mb-3">
+                <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Date d&apos;encaissement</label>
+                <input type="date" value={encaissementDate}
+                  onChange={(e) => setEncaissementDate(e.target.value)}
+                  className={`${inputCls} w-48`} />
+                <p className="font-body text-[10px] text-slate-400 mt-1">Modifiable si encaissement différé</p>
+              </div>
+
               <button onClick={async () => {
                 const montant = paidAmount ? safeNumber(paidAmount) : totalPendingAfterDiscount;
                 if (montant <= 0) return;
@@ -584,7 +593,9 @@ export function TabEncaisser({
                       ? Math.max(0, (p.totalTTC || 0) - pendingDiscount) - (p.paidAmount || 0)
                       : (p.totalTTC || 0) - (p.paidAmount || 0);
                     const paye = Math.min(du, resteARegler);
-                    await enregistrerEncaissement(p.id!, p, paye, paymentMode, paymentRef);
+                    // Passer encaissementDate (6e arg) pour permettre la saisie en différé.
+                    // Sans ce param, enregistrerEncaissement utilise serverTimestamp() = aujourd'hui.
+                    await enregistrerEncaissement(p.id!, p, paye, paymentMode, paymentRef, "", encaissementDate);
                     resteARegler -= paye;
                   }
                   const resteFinal = totalPendingAfterDiscount - montant;
