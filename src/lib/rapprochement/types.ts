@@ -104,7 +104,7 @@ export interface MatchContext {
 export type MatchResult = {
   matchType: string;
   matchDetail: string;
-  matchedEncs: EncDetail[];
+  matchedEncs?: EncDetail[];      // optionnel : certains sous-blocs (Virement b.2/d, Remise SEPA groupée) n'attachent pas d'encaissement direct (ils utilisent manualPaymentId ou n'attachent rien). page.tsx 870-1000 ne le set pas dans ces cas, on conserve le comportement.
   uncertain?: boolean;
   manualPaymentId?: string;
 } | null;
