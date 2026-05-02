@@ -12,6 +12,7 @@ import { authFetch } from "@/lib/auth-fetch";
 import { parseCreditAgricoleCsv } from "@/lib/rapprochement/parser-ca";
 import { matchMontantExact } from "@/lib/rapprochement/matchers/montant-exact";
 import { matchCbOnline } from "@/lib/rapprochement/matchers/cb-online";
+import { matchEspeces } from "@/lib/rapprochement/matchers/especes";
 
 interface Payment {
   id: string;
@@ -1186,53 +1187,19 @@ export default function ComptabilitePage() {
         }
 
         // ── 5. Espèces ────────────────────────────────────────────────────
-        if (label.includes("ESP") || label.includes("VERSEMENT")) {
-
-          // a0) PRIORITÉ : chercher un bordereau de remise espèces qui correspond
-          const remiseEspMatch = (remises || []).find((r: any) => {
-            if (usedRemiseIds.has(r.id)) return false;
-            if (r.paymentMode !== "especes" && r.paymentMode !== "mixte") return false;
-            if (Math.abs((r.total || 0) - bl.amount) >= 0.02) return false;
-            if (bankDate && r.date?.seconds) {
-              const rd = new Date(r.date.seconds * 1000);
-              const diff = (bankDate.getTime() - rd.getTime()) / (1000 * 60 * 60 * 24);
-              if (diff < -1 || diff > 15) return false;
-            }
-            return true;
-          });
-          if (remiseEspMatch) {
-            usedRemiseIds.add(remiseEspMatch.id);
-            const encIds = remiseEspMatch.encaissementIds || [];
-            encIds.forEach((id: string) => usedEncIds.add(id));
-            const remiseEncs = encaissementsCompta.filter(e => encIds.includes(e.id));
-            const dayLabel = remiseEspMatch.date?.seconds
-              ? new Date(remiseEspMatch.date.seconds * 1000).toLocaleDateString("fr-FR")
-              : "?";
-            return {
-              ...bl, matched: true, matchType: "Espèces",
-              matchDetail: `Bordereau du ${dayLabel} — ${remiseEspMatch.nbPaiements || encIds.length} enc. espèces = ${(remiseEspMatch.total || 0).toFixed(2)}€`,
-              matchedEncs: remiseEncs.map(encToDetail),
-            };
-          }
-
-          // b) On cherche un jour dont la somme des encaissements en espèces = montant du dépôt
-          const espByDay: Record<string, { total: number; encs: any[] }> = {};
-          for (const e of periodEnc.filter(e => e.mode === "especes")) {
-            const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
-            if (!d) continue;
-            const dayKey = d.toISOString().split("T")[0];
-            if (!espByDay[dayKey]) espByDay[dayKey] = { total: 0, encs: [] };
-            espByDay[dayKey].total += (e.montant || 0);
-            espByDay[dayKey].encs.push(e);
-          }
-          for (const [dayKey, dayData] of Object.entries(espByDay)) {
-            const dayTotal = Math.round(dayData.total * 100) / 100;
-            if (Math.abs(dayTotal - bl.amount) < 0.02) {
-              const dayLabel = dayKey.split("-").reverse().join("/");
-              dayData.encs.forEach(e => usedEncIds.add(e.id));
-              return { ...bl, matched: true, matchType: "Espèces", matchDetail: `Dépôt espèces du ${dayLabel} = ${dayTotal.toFixed(2)}€`, matchedEncs: dayData.encs.map(encToDetail) };
-            }
-          }
+        const especesResult = matchEspeces(bl, {
+          encs: encaissementsCompta,
+          remises,
+          remisesSepa,
+          payments,
+          period,
+          usedEncIds,
+          usedRemiseIds,
+          usedRemiseSepaIds,
+          usedPaymentIds,
+        });
+        if (especesResult) {
+          return { ...bl, matched: true, ...especesResult };
         }
 
         // ── 6. Montant exact toutes modes ─────────────────────────────────
