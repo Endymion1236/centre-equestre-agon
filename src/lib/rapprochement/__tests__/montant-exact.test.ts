@@ -10,7 +10,7 @@ describe("matchMontantExact", () => {
     expect(result).not.toBeNull();
     expect(result!.matchType).toBe("Montant exact");
     expect(result!.uncertain).toBe(true);
-    expect(result!.matchedEncs[0].familyName).toBe("Dupont");
+    expect(result!.matchedEncs![0].familyName).toBe("Dupont");
     expect(ctx.usedEncIds.has("e1")).toBe(true);
   });
 

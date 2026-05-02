@@ -6,26 +6,37 @@ const sec = (date: string, h: number = 12) =>
   Math.floor(new Date(`${date}T${String(h).padStart(2, "0")}:00:00`).getTime() / 1000);
 
 describe("engine.runMatching", () => {
-  it("applique les matchers dans l'ordre — le premier qui matche gagne", () => {
-    // Un enc cb_terminal de 100€ le 14/05. Bank line "REMISE CARTES" 100€ le 15/05.
-    // CB terminal (sous-bloc b jour exact) match. Aucun autre matcher ne devrait être appelé.
-    const enc: Encaissement = {
-      id: "e1", mode: "cb_terminal", montant: 100,
-      date: { seconds: sec("2026-05-14") },
+  it("applique les matchers dans l'ordre — CB online a priorité sur CB terminal pour un label ambigu", () => {
+    // Label "CAWL REMISE CB" déclenche à la fois cb-online (CAWL) ET cb-terminal (REMISE/CB).
+    // Si l'ordre est respecté, cb-online (premier dans matchers[]) gagne.
+    // 1 enc cb_online de 100€ matchable par cb-online sous-bloc a (montant exact).
+    // 1 enc cb_terminal de 100€ matchable par cb-terminal sous-bloc b (jour exact).
+    const eOnline: Encaissement = {
+      id: "online", mode: "cb_online", montant: 100,
+      date: { seconds: sec("2026-05-15") },
       familyName: "Dupont",
     };
+    // Pour que cb-online sous-bloc a (match exact) gagne, l'enc doit juste matcher par montant.
+    // Sous-bloc a ne check pas la date, juste le montant.
+    const eTerminal: Encaissement = {
+      id: "terminal", mode: "cb_terminal", montant: 100,
+      date: { seconds: sec("2026-05-14") }, // J-1 dans la fenêtre [-1, +5]
+      familyName: "Martin",
+    };
     const ctx = createMatchContext({
-      encs: [enc], remises: [], remisesSepa: [], payments: [],
+      encs: [eOnline, eTerminal], remises: [], remisesSepa: [], payments: [],
       period: "2026-05",
     });
     const lines: BankLine[] = [{
-      date: "15/05/2026", label: "REMISE CARTES TPE",
+      date: "15/05/2026", label: "CAWL REMISE CB", // ambigu
       amount: 100, matched: false, matchType: "", matchDetail: "",
     }];
     const { lines: result } = runMatching(lines, ctx);
     expect(result[0].matched).toBe(true);
-    expect(result[0].matchType).toBe("CB Terminal");
-    expect(ctx.usedEncIds.has("e1")).toBe(true);
+    expect(result[0].matchType).toBe("CB en ligne"); // cb-online a gagné
+    expect(result[0].matchDetail).toContain("Dupont"); // famille du eOnline
+    expect(ctx.usedEncIds.has("online")).toBe(true);
+    expect(ctx.usedEncIds.has("terminal")).toBe(false); // cb-terminal n'a pas été appelé après cb-online success
   });
 
   it("laisse non-matché si aucun matcher ne matche", () => {

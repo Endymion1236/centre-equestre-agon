@@ -164,7 +164,7 @@ export function runMatching(
     for (const matcher of matchers) {
       const result = matcher(bl, ctx);
       if (result) {
-        return { ...bl, matched: true, ...result };
+        return { ...bl, ...result, matched: true };
       }
     }
     return bl; // non-matché

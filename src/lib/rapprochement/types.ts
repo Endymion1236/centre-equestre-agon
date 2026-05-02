@@ -97,9 +97,11 @@ export interface MatchContext {
  *
  * IMPORTANT : un matcher retourne UNIQUEMENT ce résultat, PAS la BankLine
  * complète. C'est l'orchestrateur (engine.ts, Task 9) qui applique le résultat
- * sur la BankLine via `{ ...bl, matched: true, ...result }`. Ne PAS copier
- * le pattern inline de page.tsx qui retourne `{ ...bl, matched: true, ... }`
- * directement depuis la règle — ce pattern est obsolète dans la nouvelle archi.
+ * sur la BankLine via `{ ...bl, ...result, matched: true }` (ordre défensif :
+ * `matched: true` en dernier pour qu'un éventuel `result.matched: false` ne
+ * le clobber pas). Ne PAS copier le pattern inline de page.tsx qui retourne
+ * `{ ...bl, matched: true, ... }` directement depuis la règle — ce pattern
+ * est obsolète dans la nouvelle archi.
  */
 export type MatchResult = {
   matchType: string;
