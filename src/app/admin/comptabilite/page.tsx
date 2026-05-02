@@ -494,7 +494,17 @@ export default function ComptabilitePage() {
   //  pourraient exister dans des docs d'autres mois. Pour ça, voir
   //  /api/admin/migrate-bankLines (étape 1 de la migration).
   // ─────────────────────────────────────────────────────────────────────────
-  const saveBankLinesByMonth = async (lines: typeof bankLines) => {
+  // mode "user-update" : les nouvelles bankLines écrasent les anciennes (intentionnel
+  //   pour remonter une modif utilisateur de pointage / dépointage / Détail CA).
+  // mode "csv-import" : on préserve toujours les pointages existants — une bankLine
+  //   réimportée en mode "À traiter" ne doit JAMAIS écraser un pointage manuel posé
+  //   précédemment (bug rencontré par Nicolas le 28/04 après réimport CSV qui avait
+  //   tout dépointé). Si la nouvelle apporte un nouveau pointage (matched: true), on
+  //   le prend ; sinon on garde l'existant.
+  const saveBankLinesByMonth = async (
+    lines: typeof bankLines,
+    mode: "user-update" | "csv-import" = "user-update"
+  ) => {
     // 1. Grouper par mois (YYYY-MM extrait de DD/MM/YYYY)
     const byMonth: Record<string, typeof bankLines> = {};
     for (const bl of lines) {
@@ -518,13 +528,26 @@ export default function ComptabilitePage() {
         const keyOf = (b: any) => `${b.date}|${b.label}|${Math.round(b.amount * 100)}`;
         const merged = new Map<string, any>();
         for (const eb of existingBls) merged.set(keyOf(eb), eb);
-        for (const nb of blGroup) merged.set(keyOf(nb), {
-          date: nb.date, label: nb.label, amount: nb.amount,
-          matched: nb.matched, matchType: nb.matchType, matchDetail: nb.matchDetail,
-          matchedEncs: nb.matchedEncs || null,
-          manualPaymentId: nb.manualPaymentId || null,
-          uncertain: nb.uncertain || false,
-        });
+        for (const nb of blGroup) {
+          const key = keyOf(nb);
+          const existing = merged.get(key);
+          const incoming = {
+            date: nb.date, label: nb.label, amount: nb.amount,
+            matched: nb.matched, matchType: nb.matchType, matchDetail: nb.matchDetail,
+            matchedEncs: nb.matchedEncs || null,
+            manualPaymentId: nb.manualPaymentId || null,
+            uncertain: nb.uncertain || false,
+          };
+
+          if (mode === "csv-import" && existing && existing.matched && !incoming.matched) {
+            // L'existante est pointée et la nouvelle (du CSV) ne l'est pas → on
+            // CONSERVE l'existante. C'est le cas typique d'un réimport CSV : une
+            // remise CB qu'on a pointée à la main via "Détail CA" doit garder son
+            // pointage même si le CSV la réimporte avec matched=false par défaut.
+            continue;
+          }
+          merged.set(key, incoming);
+        }
         const allBls = Array.from(merged.values());
 
         await setDoc(doc(db, "rapprochements", ym), {
@@ -535,7 +558,7 @@ export default function ComptabilitePage() {
           totalAmount: Math.round(allBls.reduce((s: number, b: any) => s + (b.amount || 0), 0) * 100) / 100,
           updatedAt: serverTimestamp(),
         });
-        console.log(`[saveBankLinesByMonth] ✅ ${ym} : ${allBls.length} bankLines (${blGroup.length} de cette session)`);
+        console.log(`[saveBankLinesByMonth] ✅ ${ym} : ${allBls.length} bankLines (${blGroup.length} de cette session, mode=${mode})`);
       } catch (e) {
         console.error(`[saveBankLinesByMonth] erreur sur ${ym}:`, e);
         throw e;
@@ -1704,7 +1727,7 @@ export default function ComptabilitePage() {
       // bankLine, plus la période active à l'import — fix du bug de doublons
       // découvert par Nicolas le 28/04 sur les CSV à cheval sur 2 mois)
       try {
-        await saveBankLinesByMonth(finalMatched as any);
+        await saveBankLinesByMonth(finalMatched as any, "csv-import");
         console.log(`✅ Rapprochement sauvegardé (${finalMatched.length} lignes réparties par mois)`);
         // Synchroniser les versements bancaires (sorties du livre de caisse)
         await syncVersementsEspeces(finalMatched as any);
