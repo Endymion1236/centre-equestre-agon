@@ -213,7 +213,7 @@ export default function ComptabilitePage() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
-  const [bankLines, setBankLines] = useState<{ date: string; label: string; amount: number; matched: boolean; matchType: string; matchDetail: string; matchedEncs?: { familyName: string; montant: number; date: string; activityTitle: string; mode: string }[]; manualPaymentId?: string; uncertain?: boolean }[]>([]);
+  const [bankLines, setBankLines] = useState<{ date: string; label: string; amount: number; matched: boolean; matchType: string; matchDetail: string; matchedEncs?: { familyName: string; montant: number; date: string; activityTitle: string; mode: string }[]; missingAmounts?: number[]; manualPaymentId?: string; uncertain?: boolean }[]>([]);
   // Pointage manuel
   const [showManualMatch, setShowManualMatch] = useState<number | null>(null); // index de la bankLine
   const [expandedBankLine, setExpandedBankLine] = useState<number | null>(null);
@@ -535,6 +535,7 @@ export default function ComptabilitePage() {
             date: nb.date, label: nb.label, amount: nb.amount,
             matched: nb.matched, matchType: nb.matchType, matchDetail: nb.matchDetail,
             matchedEncs: nb.matchedEncs || null,
+            missingAmounts: nb.missingAmounts || null,
             manualPaymentId: nb.manualPaymentId || null,
             uncertain: nb.uncertain || false,
           };
@@ -3290,12 +3291,37 @@ export default function ComptabilitePage() {
               {bankLines
                 .map((bl, i) => ({ bl, i }))
                 .filter(({ bl }) => bl.matchType !== "Ignoré") // les ignorées sont dans l'onglet dédié
-                .map(({ bl, i }) => (
+                .map(({ bl, i }) => {
+                  // Détecter une remise CB partiellement matchée via Détail CA
+                  // (X/Y transactions trouvées avec N manquantes). On stocke
+                  // missingAmounts[] depuis le commit Détail CA pour pouvoir les
+                  // afficher au survol et signaler visuellement la ligne.
+                  const hasMissing = !!(bl.missingAmounts && bl.missingAmounts.length > 0);
+                  const missingTooltip = hasMissing
+                    ? `${bl.missingAmounts!.length} transaction(s) non retrouvée(s) :\n` +
+                      bl.missingAmounts!.map(a => `• ${a.toFixed(2)}€`).join("\n") +
+                      `\n\nCela signifie que ces montants apparaissent dans le détail Crédit Agricole de cette remise mais qu'aucun encaissement CB Terminal n'a été enregistré dans Claude pour ces montants. Vérifie le TPE ou ajoute les paiements manquants.`
+                    : undefined;
+                return (
                 <div key={i}>
-                <div className={`px-5 py-3 border-b border-blue-500/8 flex items-center ${bl.matched ? "" : "bg-orange-50"}`}>
+                <div title={missingTooltip}
+                  className={`px-5 py-3 border-b border-blue-500/8 flex items-center ${
+                    bl.matched
+                      ? hasMissing
+                        ? "bg-amber-50 border-l-4 border-l-amber-500" // surlignage : remise CB partielle
+                        : ""
+                      : "bg-orange-50"
+                  }`}>
                   <span className="w-24 font-body text-xs text-slate-500">{bl.date}</span>
                   <div className="flex-1">
-                    <div className="font-body text-sm text-blue-800">{bl.label}</div>
+                    <div className="font-body text-sm text-blue-800 flex items-center gap-1.5">
+                      {bl.label}
+                      {hasMissing && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-200 text-amber-900 cursor-help">
+                          ⚠ {bl.missingAmounts!.length} manquant{bl.missingAmounts!.length > 1 ? "s" : ""}
+                        </span>
+                      )}
+                    </div>
                     {bl.matched && bl.matchDetail && (
                       <div className="font-body text-xs text-green-600 mt-0.5 flex items-center gap-1">
                         {bl.matchedEncs && bl.matchedEncs.length > 1 ? (
@@ -3407,7 +3433,7 @@ export default function ComptabilitePage() {
                   </div>
                 )}
                 </div>
-              ))}
+              )})}
               <div className="px-5 py-3 bg-sand flex justify-between font-body text-sm">
                 <span className="font-semibold text-blue-800">
                   {bankLines.filter(b => b.matchType !== "Ignoré").length} lignes affichées
@@ -3788,6 +3814,8 @@ export default function ComptabilitePage() {
                         activityTitle: e.activityTitle || "",
                         mode: "CB Terminal",
                       })),
+                      // Stocker les manquants pour les afficher au survol sur l'écran principal
+                      missingAmounts: caDetailPreview.missing.length > 0 ? caDetailPreview.missing : undefined,
                     };
                     updateAndSaveBankLines(updated);
                     setShowCADetailModal(null);
