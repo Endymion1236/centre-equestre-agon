@@ -13,6 +13,7 @@ import { parseCreditAgricoleCsv } from "@/lib/rapprochement/parser-ca";
 import { matchMontantExact } from "@/lib/rapprochement/matchers/montant-exact";
 import { matchCbOnline } from "@/lib/rapprochement/matchers/cb-online";
 import { matchEspeces } from "@/lib/rapprochement/matchers/especes";
+import { matchCbTerminal } from "@/lib/rapprochement/matchers/cb-terminal";
 
 interface Payment {
   id: string;
@@ -851,71 +852,19 @@ export default function ComptabilitePage() {
         }
 
         // ── 2. CB terminal — matching agrégat par jour ───────────────────
-        // La banque remet en 1 virement le total CB d'une journée (J-1, J-2, etc.)
-        if (label.includes("REMISE") || label.includes("CB") || label.includes("TPE") || label.includes("CARTE")) {
-          // Pool élargi : un virement de remise CB du 3 novembre peut concerner des CB du 30 octobre
-          const cbEncs = periodEncExtended.filter(e => e.mode === "cb_terminal");
-
-          // a) Grouper les encaissements CB par jour
-          const cbByDay: Record<string, { total: number; count: number; encs: any[] }> = {};
-          for (const e of cbEncs) {
-            const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
-            if (!d) continue;
-            const dayKey = d.toISOString().split("T")[0];
-            if (!cbByDay[dayKey]) cbByDay[dayKey] = { total: 0, count: 0, encs: [] };
-            cbByDay[dayKey].total += (e.montant || 0);
-            cbByDay[dayKey].count++;
-            cbByDay[dayKey].encs.push(e);
-          }
-
-          // b) Chercher un jour dont le total CB = montant de la remise (dans une fenêtre J-3)
-          for (const [dayKey, dayData] of Object.entries(cbByDay)) {
-            const dayTotal = Math.round(dayData.total * 100) / 100;
-            if (Math.abs(dayTotal - bl.amount) < 0.02) {
-              // Vérifier que ce jour est dans la fenêtre (la remise arrive J+1 ou J+2 après les CB)
-              if (bankDate) {
-                const encDay = new Date(dayKey);
-                const diff = (bankDate.getTime() - encDay.getTime()) / (1000 * 60 * 60 * 24);
-                if (diff < -1 || diff > 5) continue; // la remise doit être APRÈS les CB (J+0 à J+5)
-              }
-              const dayLabel = dayKey.split("-").reverse().join("/");
-              dayData.encs.forEach(e => usedEncIds.add(e.id));
-              return {
-                ...bl, matched: true, matchType: "CB Terminal",
-                matchDetail: `${dayData.count} transaction(s) CB du ${dayLabel} = ${dayTotal.toFixed(2)}€`,
-                matchedEncs: dayData.encs.map(encToDetail),
-              };
-            }
-          }
-
-          // b.bis) Sous-ensemble d'un jour : DÉSACTIVÉ (option B retenue par
-          //        Nicolas le 28/04). Ce matching trouvait n'importe quelle
-          //        combinaison d'encaissements CB du jour qui faisait tomber
-          //        le total juste, sans tenir compte de l'heure réelle des
-          //        transactions. Résultat : il "mélangeait" les transactions
-          //        entre remises bancaires, créant de fausses associations
-          //        (cas vécu : 495€ gourmelon attribués à la mauvaise remise).
-          //
-          //        Désormais, ces remises CB arrivent en "À traiter" et il
-          //        faut utiliser le bouton Détail CA pour coller le détail
-          //        copié depuis le site Crédit Agricole, qui produit un
-          //        matching transaction par transaction fiable.
-          //
-          //        Si tu lis ce code et que tu veux réactiver, sache que la
-          //        cause de la défaillance est qu'on ne dispose pas de
-          //        l'horaire des transactions dans encaissements, donc on
-          //        ne peut pas distinguer 2 CB de même montant le même jour.
-
-          // c) Agrégat multi-jours : DÉSACTIVÉ aussi (cohérent avec b.bis).
-          //    Combinait 2-3 jours consécutifs pour matcher une remise.
-          //    Risque similaire de mélange entre remises bancaires.
-
-          // d) Dernier recours : match exact montant unitaire
-          const exactCB = cbEncs.filter(inWindow).find(e => Math.abs((e.montant || 0) - bl.amount) < 0.02);
-          if (exactCB) {
-            usedEncIds.add(exactCB.id);
-            return { ...bl, matched: true, matchType: "CB Terminal", matchDetail: `CB ${exactCB.familyName} — ${exactCB.activityTitle || ""}`, matchedEncs: [encToDetail(exactCB)] };
-          }
+        const cbTerminalResult = matchCbTerminal(bl, {
+          encs: encaissementsCompta,
+          remises,
+          remisesSepa,
+          payments,
+          period,
+          usedEncIds,
+          usedRemiseIds,
+          usedRemiseSepaIds,
+          usedPaymentIds,
+        });
+        if (cbTerminalResult) {
+          return { ...bl, matched: true, ...cbTerminalResult };
         }
 
         // ── 3. Virement / SEPA / Prélèvement ──────────────────────────────
