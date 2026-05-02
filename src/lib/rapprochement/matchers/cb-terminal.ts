@@ -1,4 +1,5 @@
-import type { BankLine, MatchContext, MatchResult, Encaissement, EncDetail } from "../types";
+import type { BankLine, MatchContext, MatchResult } from "../types";
+import { parseBankDate, encToDetail, makeInWindow, getPeriodEncs } from "../engine";
 
 /**
  * Règle 2 — CB terminal / agrégat par jour (extrait depuis page.tsx:853-919).
@@ -12,67 +13,18 @@ import type { BankLine, MatchContext, MatchResult, Encaissement, EncDetail } fro
  * 6. Sous-bloc d (dernier recours) : enc unitaire de même montant ±0.02€ dans la fenêtre ±3 jours. Match → mute 1 enc.
  *
  * Premier sous-bloc qui match gagne. Aucun → return null.
- *
- * NB : `parseBankDate` et `encToDetail` sont dupliqués localement depuis page.tsx ;
- * ils seront centralisés dans engine.ts lors de la Task 9.
  */
-
-const parseBankDate = (s: string): Date | null => {
-  if (!s) return null;
-  const p1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (p1) {
-    const dd = p1[1].padStart(2, "0"), mm = p1[2].padStart(2, "0");
-    return new Date(`${p1[3]}-${mm}-${dd}`);
-  }
-  const p2 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (p2) return new Date(s);
-  const p3 = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-  if (p3) {
-    const dd = p3[1].padStart(2, "0"), mm = p3[2].padStart(2, "0");
-    return new Date(`${p3[3]}-${mm}-${dd}`);
-  }
-  return null;
-};
-
-const encToDetail = (e: Encaissement): EncDetail => ({
-  familyName: e.familyName || "",
-  montant: e.montant || 0,
-  date: e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "",
-  activityTitle: e.activityTitle || "",
-  mode: e.modeLabel || e.mode || "",
-});
 
 export function matchCbTerminal(bl: BankLine, ctx: MatchContext): MatchResult {
   const label = bl.label.toUpperCase();
   const bankDate = parseBankDate(bl.date);
 
   // Fenêtre de ±3 jours autour de la date bancaire
-  const inWindow = (enc: Encaissement) => {
-    if (!bankDate) return true; // pas de date → on essaie quand même
-    const d = enc.date?.seconds ? new Date(enc.date.seconds * 1000) : null;
-    if (!d) return false;
-    const diff = Math.abs(bankDate.getTime() - d.getTime()) / (1000 * 60 * 60 * 24);
-    return diff <= 3;
-  };
-
-  // Calcul de la période précédente pour élargir le pool
-  // (les chèques / CB terminal peuvent être datés du mois d'avant)
-  const prevPeriod = (() => {
-    const [y, m] = ctx.period.split("-").map(Number);
-    const pm = m === 1 ? 12 : m - 1;
-    const py = m === 1 ? y - 1 : y;
-    return `${py}-${String(pm).padStart(2, "0")}`;
-  })();
+  const inWindow = makeInWindow(bankDate);
 
   // Pool élargi : période courante + précédente (utile pour chèques/CB
   // remis en début de mois mais datés du mois d'avant)
-  const periodEncExtended = ctx.encs.filter(e => {
-    if (ctx.usedEncIds.has(e.id)) return false;
-    const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
-    if (!d) return false;
-    const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    return pm === ctx.period || pm === prevPeriod;
-  });
+  const periodEncExtended = getPeriodEncs(ctx, { extended: true });
 
   // ── 2. CB terminal — matching agrégat par jour ───────────────────
   // La banque remet en 1 virement le total CB d'une journée (J-1, J-2, etc.)

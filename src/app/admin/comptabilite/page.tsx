@@ -10,12 +10,7 @@ import { Card, Badge } from "@/components/ui";
 import { Loader2, Download, Upload, Check, FileText, Building2, Receipt, Calculator, Search, Printer, Plus, Sparkles, Bot, AlertTriangle, EyeOff, RefreshCw } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { parseCreditAgricoleCsv } from "@/lib/rapprochement/parser-ca";
-import { matchMontantExact } from "@/lib/rapprochement/matchers/montant-exact";
-import { matchCbOnline } from "@/lib/rapprochement/matchers/cb-online";
-import { matchEspeces } from "@/lib/rapprochement/matchers/especes";
-import { matchCbTerminal } from "@/lib/rapprochement/matchers/cb-terminal";
-import { matchVirement } from "@/lib/rapprochement/matchers/virement";
-import { matchCheque } from "@/lib/rapprochement/matchers/cheque";
+import { runMatching, createMatchContext } from "@/lib/rapprochement/engine";
 
 interface Payment {
   id: string;
@@ -713,341 +708,28 @@ export default function ComptabilitePage() {
       const parsed = parseCreditAgricoleCsv(raw);
 
       // ─────────────────────────────────────────────────────────────────────
-      //  Smart matching — version robuste avec unicité
+      //  Smart matching — orchestrateur extrait dans engine.ts (Task 9)
       // ─────────────────────────────────────────────────────────────────────
-      // Principe : chaque encaissement et chaque remise SEPA ne peut être
-      // consommé qu'UNE SEULE FOIS. On utilise des Sets pour tracker ce qui
-      // a déjà été matché, afin que deux lignes bancaires de même montant ne
-      // se partagent pas le même encaissement.
-
-      const usedEncIds = new Set<string>();        // ids des encaissements déjà rapprochés
-      const usedRemiseSepaIds = new Set<string>(); // ids des remises SEPA déjà rapprochées
-      const usedPaymentIds = new Set<string>();    // ids des paiements (virements) déjà rapprochés
-      const usedRemiseIds = new Set<string>();     // ids des bordereaux de remise (chèques/espèces) déjà rapprochés
-
-      // ─────────────────────────────────────────────────────────────────────
-      // findSubsetSum : cherche une combinaison d'encaissements dont la somme
-      // (en centimes) = targetCents (±2 centimes). Utilisé pour les remises CB
-      // terminal : la banque peut faire plusieurs remises dans la même journée,
-      // ou une transaction a pu être refusée. Exemple : 18 CB saisis = 2802€,
-      // la banque remet 2766€ (une tx refusée) → on trouve la combinaison de
-      // 17 CB qui fait 2766€.
-      //
-      // Algorithme : programmation dynamique sur les sommes atteignables.
-      // Complexité O(n × S) où S = targetCents. Limite : 25 transactions max
-      // et map plafonnée à 100k entries pour éviter OOM sur gros volumes.
-      // ─────────────────────────────────────────────────────────────────────
-      const findSubsetSum = (encs: any[], targetCents: number): any[] | null => {
-        if (encs.length === 0 || encs.length > 25) return null;
-        const centsValues = encs.map(e => Math.round((e.montant || 0) * 100));
-        const totalCents = centsValues.reduce((s, c) => s + c, 0);
-        if (targetCents > totalCents + 2) return null;
-        if (targetCents <= 0) return null;
-        // Match direct avec le total ?
-        if (Math.abs(totalCents - targetCents) <= 2) return [...encs];
-
-        let dp = new Map<number, number[]>();
-        dp.set(0, []);
-        for (let i = 0; i < centsValues.length; i++) {
-          const current = centsValues[i];
-          const nextDp = new Map(dp);
-          for (const [sum, indices] of dp.entries()) {
-            const newSum = sum + current;
-            if (newSum > targetCents + 2) continue;
-            if (!nextDp.has(newSum)) {
-              const newIndices = [...indices, i];
-              nextDp.set(newSum, newIndices);
-              if (Math.abs(newSum - targetCents) <= 2) {
-                return newIndices.map(idx => encs[idx]);
-              }
-            }
-          }
-          dp = nextDp;
-          if (dp.size > 100000) return null;
-        }
-        return null;
-      };
-
-      // Parse la date de la ligne bancaire (formats : DD/MM/YYYY, D/M/YYYY, YYYY-MM-DD, DD-MM-YYYY)
-      const parseBankDate = (s: string): Date | null => {
-        if (!s) return null;
-        const p1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-        if (p1) {
-          const dd = p1[1].padStart(2, "0"), mm = p1[2].padStart(2, "0");
-          return new Date(`${p1[3]}-${mm}-${dd}`);
-        }
-        const p2 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-        if (p2) return new Date(s);
-        const p3 = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-        if (p3) {
-          const dd = p3[1].padStart(2, "0"), mm = p3[2].padStart(2, "0");
-          return new Date(`${p3[3]}-${mm}-${dd}`);
-        }
-        return null;
-      };
-
-      // Helper pour convertir un encaissement en détail affichable
-      const encToDetail = (e: any) => ({
-        familyName: e.familyName || "",
-        montant: e.montant || 0,
-        date: e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "",
-        activityTitle: e.activityTitle || "",
-        mode: e.modeLabel || e.mode || "",
+      // Le contexte porte les Sets `used*Ids` qui empêchent qu'un même
+      // encaissement (ou remise) soit consommé par plusieurs lignes bancaires.
+      // Les helpers (parseBankDate, encToDetail, findSubsetSum, fenêtres,
+      // pools de période) vivent désormais dans `src/lib/rapprochement/engine.ts`.
+      const ctx = createMatchContext({
+        encs: encaissementsCompta,
+        remises,
+        remisesSepa,
+        payments,
+        period,
       });
+      const { lines: matched } = runMatching(parsed, ctx);
 
-      const matched = parsed.map((bl) => {
-        const label = bl.label.toUpperCase();
-        const bankDate = parseBankDate(bl.date);
-
-        // Calcul de la période précédente pour élargir le pool
-        // (les chèques / CB terminal peuvent être datés du mois d'avant)
-        const prevPeriod = (() => {
-          const [y, m] = period.split("-").map(Number);
-          const pm = m === 1 ? 12 : m - 1;
-          const py = m === 1 ? y - 1 : y;
-          return `${py}-${String(pm).padStart(2, "0")}`;
-        })();
-
-        // Encaissements de la période, avec leur date
-        // On EXCLUT les encaissements déjà consommés par une autre bankLine
-        const periodEnc = encaissementsCompta.filter(e => {
-          if (usedEncIds.has(e.id)) return false;
-          const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
-          if (!d) return false;
-          const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-          return pm === period;
-        });
-
-        // Pool élargi : période courante + précédente (utile pour chèques/CB
-        // remis en début de mois mais datés du mois d'avant)
-        const periodEncExtended = encaissementsCompta.filter(e => {
-          if (usedEncIds.has(e.id)) return false;
-          const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
-          if (!d) return false;
-          const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-          return pm === period || pm === prevPeriod;
-        });
-
-        // Fenêtre de ±3 jours autour de la date bancaire
-        const inWindow = (enc: any) => {
-          if (!bankDate) return true; // pas de date → on essaie quand même
-          const d = enc.date?.seconds ? new Date(enc.date.seconds * 1000) : null;
-          if (!d) return false;
-          const diff = Math.abs(bankDate.getTime() - d.getTime()) / (1000 * 60 * 60 * 24);
-          return diff <= 3;
-        };
-
-        // ── 1. CB en ligne (CAWL) payout ─────────────────────────────────
-        const cbOnlineResult = matchCbOnline(bl, {
-          encs: encaissementsCompta,
-          remises,
-          remisesSepa,
-          payments,
-          period,
-          usedEncIds,
-          usedRemiseIds,
-          usedRemiseSepaIds,
-          usedPaymentIds,
-        });
-        if (cbOnlineResult) {
-          return { ...bl, matched: true, ...cbOnlineResult };
+      // Log à plat des bankLines non-matchées (le bloc DEBUG verbeux d'origine
+      // reste disponible via le panel ?debug=diag — pas de duplication ici).
+      for (const bl of matched) {
+        if (!bl.matched) {
+          console.log(`🔍 NON RAPPROCHÉE : "${bl.label}" ${bl.amount.toFixed(2)}€ ${bl.date}`);
         }
-
-        // ── 2. CB terminal — matching agrégat par jour ───────────────────
-        const cbTerminalResult = matchCbTerminal(bl, {
-          encs: encaissementsCompta,
-          remises,
-          remisesSepa,
-          payments,
-          period,
-          usedEncIds,
-          usedRemiseIds,
-          usedRemiseSepaIds,
-          usedPaymentIds,
-        });
-        if (cbTerminalResult) {
-          return { ...bl, matched: true, ...cbTerminalResult };
-        }
-
-        // ── 3. Virement / SEPA / Prélèvement ──────────────────────────────
-        const virementResult = matchVirement(bl, {
-          encs: encaissementsCompta,
-          remises,
-          remisesSepa,
-          payments,
-          period,
-          usedEncIds,
-          usedRemiseIds,
-          usedRemiseSepaIds,
-          usedPaymentIds,
-        });
-        if (virementResult) {
-          return { ...bl, matched: true, ...virementResult };
-        }
-
-        // ── 4. Chèque ─────────────────────────────────────────────────────
-        const chequeResult = matchCheque(bl, {
-          encs: encaissementsCompta,
-          remises,
-          remisesSepa,
-          payments,
-          period,
-          usedEncIds,
-          usedRemiseIds,
-          usedRemiseSepaIds,
-          usedPaymentIds,
-        });
-        if (chequeResult) {
-          return { ...bl, matched: true, ...chequeResult };
-        }
-
-        // ── 5. Espèces ────────────────────────────────────────────────────
-        const especesResult = matchEspeces(bl, {
-          encs: encaissementsCompta,
-          remises,
-          remisesSepa,
-          payments,
-          period,
-          usedEncIds,
-          usedRemiseIds,
-          usedRemiseSepaIds,
-          usedPaymentIds,
-        });
-        if (especesResult) {
-          return { ...bl, matched: true, ...especesResult };
-        }
-
-        // ── 6. Montant exact toutes modes ─────────────────────────────────
-        const montantExactResult = matchMontantExact(bl, {
-          encs: encaissementsCompta,
-          remises,
-          remisesSepa,
-          payments,
-          period,
-          usedEncIds,
-          usedRemiseIds,
-          usedRemiseSepaIds,
-          usedPaymentIds,
-        });
-        if (montantExactResult) {
-          return { ...bl, matched: true, ...montantExactResult };
-        }
-
-        // ── DEBUG : ligne non rapprochée → on log pour diagnostic ────────
-        // Pourquoi n'a-t-elle pas matché ? On affiche les encaissements du mois
-        // qui auraient pu correspondre (même montant, ±5€), leur date, leur mode.
-        const periodEncAll = encaissementsCompta.filter(e => {
-          const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
-          if (!d) return false;
-          const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-          return pm === period;
-        });
-        const candidatsMontantProche = periodEncAll.filter(e =>
-          Math.abs((e.montant || 0) - bl.amount) < 5
-        ).map(e => ({
-          date: e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "?",
-          mode: e.mode,
-          montant: (e.montant || 0).toFixed(2),
-          famille: e.familyName || "?",
-          id: e.id,
-          utilisé: usedEncIds.has(e.id) ? "✅ déjà matché" : "❌ libre",
-        }));
-        const totalEspecesMois = Math.round(periodEncAll.filter(e => e.mode === "especes").reduce((s,e) => s + (e.montant||0), 0) * 100) / 100;
-        const totalChequesMois = Math.round(periodEncAll.filter(e => e.mode === "cheque").reduce((s,e) => s + (e.montant||0), 0) * 100) / 100;
-        const totalCBTerminalMois = Math.round(periodEncAll.filter(e => e.mode === "cb_terminal").reduce((s,e) => s + (e.montant||0), 0) * 100) / 100;
-        const totalCBOnlineMois = Math.round(periodEncAll.filter(e => e.mode === "cb_online" || e.mode === "cb_cawl").reduce((s,e) => s + (e.montant||0), 0) * 100) / 100;
-
-        // Totaux journaliers par mode pour détecter un jour proche du montant bancaire
-        const groupByDayMode = (mode: string | string[]) => {
-          const modes = Array.isArray(mode) ? mode : [mode];
-          const byDay: Record<string, { total: number; count: number; encs: any[] }> = {};
-          for (const e of periodEncAll) {
-            if (!modes.includes(e.mode)) continue;
-            const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
-            if (!d) continue;
-            const dayKey = d.toLocaleDateString("fr-FR");
-            if (!byDay[dayKey]) byDay[dayKey] = { total: 0, count: 0, encs: [] };
-            byDay[dayKey].total += (e.montant || 0);
-            byDay[dayKey].count++;
-            byDay[dayKey].encs.push(e);
-          }
-          // Format : { "17/04/2026": "281.00€ (3 tx)", écart: "0.50€" }
-          return Object.entries(byDay)
-            .sort(([a],[b]) => {
-              const pa = a.split("/").reverse().join("-");
-              const pb = b.split("/").reverse().join("-");
-              return pa.localeCompare(pb);
-            })
-            .map(([day, d]) => ({
-              jour: day,
-              total: d.total.toFixed(2) + "€",
-              nb: d.count,
-              écart_vs_banque: (d.total - bl.amount).toFixed(2) + "€",
-              usedIds: d.encs.filter(e => usedEncIds.has(e.id)).length,
-            }));
-        };
-
-        // Détection du type de ligne bancaire (CB, chèque, espèces, virement)
-        const blType = label.includes("REMISE") && (label.includes("CARTE") || label.includes("CB") || label.includes("TPE")) ? "CB_TERMINAL"
-          : label.includes("CHQ") || label.includes("CHEQUE") ? "CHEQUE"
-          : label.includes("ESP") || label.includes("VERSEMENT") ? "ESPECES"
-          : label.includes("VIR") || label.includes("SEPA") || label.includes("PRLV") ? "VIREMENT"
-          : "INCONNU";
-
-        // Log à plat (format texte) pour faciliter la lecture/copie sans avoir à dérouler
-        const lines: string[] = [];
-        lines.push(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-        lines.push(`🔍 NON RAPPROCHÉE : "${bl.label}"`);
-        lines.push(`   Montant : ${bl.amount.toFixed(2)}€ | Date banque : ${bl.date} | Type détecté : ${blType}`);
-        lines.push(`   Totaux ${period} : espèces=${totalEspecesMois.toFixed(2)}€ | chèques=${totalChequesMois.toFixed(2)}€ | cb_terminal=${totalCBTerminalMois.toFixed(2)}€ | cb_online=${totalCBOnlineMois.toFixed(2)}€`);
-
-        if (blType === "CB_TERMINAL") {
-          const days = groupByDayMode("cb_terminal");
-          lines.push(`   CB terminal par jour :`);
-          if (days.length === 0) lines.push(`      (aucun encaissement CB terminal sur ${period})`);
-          for (const d of days) {
-            lines.push(`      → ${d.jour} : ${d.total} (${d.nb} tx) | écart vs banque : ${d.écart_vs_banque} | ${d.usedIds} déjà consommé(s)`);
-          }
-        }
-        if (blType === "CHEQUE") {
-          const days = groupByDayMode("cheque");
-          lines.push(`   Chèques par jour :`);
-          if (days.length === 0) lines.push(`      (aucun chèque enregistré sur ${period})`);
-          for (const d of days) {
-            lines.push(`      → ${d.jour} : ${d.total} (${d.nb} chèque(s)) | écart vs banque : ${d.écart_vs_banque} | ${d.usedIds} déjà consommé(s)`);
-          }
-        }
-        if (blType === "ESPECES") {
-          const days = groupByDayMode("especes");
-          lines.push(`   Espèces par jour :`);
-          if (days.length === 0) lines.push(`      (aucun encaissement espèces sur ${period})`);
-          for (const d of days) {
-            lines.push(`      → ${d.jour} : ${d.total} (${d.nb} tx) | écart vs banque : ${d.écart_vs_banque} | ${d.usedIds} déjà consommé(s)`);
-          }
-        }
-        if (blType === "VIREMENT") {
-          const vEncs = periodEncAll.filter(e => (e.mode === "virement" || e.mode === "sepa" || e.mode === "prelevement_sepa") && Math.abs((e.montant||0) - bl.amount) < 10);
-          lines.push(`   Virements enc. proches (±10€) :`);
-          if (vEncs.length === 0) lines.push(`      (aucun encaissement virement proche de ${bl.amount.toFixed(2)}€)`);
-          for (const e of vEncs) {
-            const d = e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "?";
-            lines.push(`      → ${d} : ${(e.montant||0).toFixed(2)}€ | ${e.familyName || "?"}`);
-          }
-        }
-
-        if (candidatsMontantProche.length > 0) {
-          lines.push(`   Candidats ±5€ (tous modes) :`);
-          for (const c of candidatsMontantProche.slice(0, 5)) {
-            lines.push(`      → ${c.date} | ${c.mode} | ${c.montant}€ | ${c.famille} | ${c.utilisé}`);
-          }
-        } else {
-          lines.push(`   ❌ Aucun encaissement ±5€ dans la base → il manque probablement des saisies`);
-        }
-
-        console.log(lines.join("\n"));
-
-        return bl;
-      });
+      }
 
       // ─────────────────────────────────────────────────────────────────────
       //  Bug #2 : Fusion avec les matchs manuels existants
@@ -1097,26 +779,6 @@ export default function ComptabilitePage() {
       setBankLines(finalMatched as any);
 
       // ─────────────────────────────────────────────────────────────────────
-      //  Détection indirecte des remises consommées
-      // ─────────────────────────────────────────────────────────────────────
-      //  Quand le matching consomme des encaissements un par un (bloc 'par jour
-      //  exact' ou 'sous-ensemble'), les remises (bordereaux) ne sont pas
-      //  ajoutées à usedRemiseIds. On rattrape ici : si tous les encaissements
-      //  d'un bordereau existant sont dans usedEncIds, alors ce bordereau
-      //  doit être considéré comme consommé aussi.
-      for (const r of (remises || [])) {
-        if (usedRemiseIds.has(r.id)) continue; // déjà marquée
-        const encIds = r.encaissementIds || [];
-        if (encIds.length === 0) continue;
-        // Tous les encaissements du bordereau doivent être dans usedEncIds
-        const allConsumed = encIds.every((id: string) => usedEncIds.has(id));
-        if (allConsumed) {
-          usedRemiseIds.add(r.id);
-          console.log(`[sync-remises] Remise "${r.id}" marquée consommée indirectement (${encIds.length} encs)`);
-        }
-      }
-
-      // ─────────────────────────────────────────────────────────────────────
       //  Marquer les encaissements rapprochés avec reconciledByBank=true
       // ─────────────────────────────────────────────────────────────────────
       //  Objectif : les sortir de la liste "Encaissements à remettre" côté
@@ -1124,15 +786,18 @@ export default function ComptabilitePage() {
       //  (cas des CB terminal remises automatiquement par la banque).
       //
       //  On compare avec l'état actuel en Firestore : on ne touche que les
-      //  encs qui sont dans usedEncIds MAIS pas encore marqués reconciledByBank.
+      //  encs qui sont dans ctx.usedEncIds MAIS pas encore marqués reconciledByBank.
       //  Réciproquement, un enc marqué reconciledByBank qui n'est plus dans
-      //  usedEncIds (cas : la bankLine a été dé-pointée) doit être remis à false.
+      //  ctx.usedEncIds (cas : la bankLine a été dé-pointée) doit être remis à false.
+      //
+      //  La détection indirecte des remises consommées est faite dans
+      //  engine.runMatching (post-loop) : pas besoin de la refaire ici.
       try {
         const allEncsSnap = await getDocs(collection(db, "encaissements"));
         const updates: Promise<any>[] = [];
         for (const d of allEncsSnap.docs) {
           const data = d.data() as any;
-          const isUsed = usedEncIds.has(d.id);
+          const isUsed = ctx.usedEncIds.has(d.id);
           const wasReconciled = Boolean(data.reconciledByBank);
           if (isUsed && !wasReconciled) {
             updates.push(updateDoc(doc(db, "encaissements", d.id), {
@@ -1167,12 +832,12 @@ export default function ComptabilitePage() {
       // ─────────────────────────────────────────────────────────────────────
       //  Pointer automatiquement les remises (bordereaux) rapprochées
       // ─────────────────────────────────────────────────────────────────────
-      //  Quand le matching consomme une remise via usedRemiseIds (bloc a0 des
+      //  Quand le matching consomme une remise via ctx.usedRemiseIds (bloc a0 des
       //  chèques/espèces), on marque la remise comme pointée côté bordereau
       //  pour garder les deux vues synchronisées.
       try {
         const remiseUpdates: Promise<any>[] = [];
-        for (const rid of usedRemiseIds) {
+        for (const rid of ctx.usedRemiseIds) {
           const rSnap = await getDoc(doc(db, "remises", rid));
           if (!rSnap.exists()) continue;
           const r = rSnap.data() as any;
@@ -1185,7 +850,7 @@ export default function ComptabilitePage() {
           }));
         }
         // Réciproquement, dé-pointer les remises qui ont été dé-matchées dans le CSV courant
-        // (si pointeeNote = "Pointée automatiquement..." et remise n'est plus dans usedRemiseIds)
+        // (si pointeeNote = "Pointée automatiquement..." et remise n'est plus dans ctx.usedRemiseIds)
         // IMPORTANT : on ne traite que les remises de la période courante. Sans ce filtre,
         // un import CSV partiel d'avril dépointerait toutes les remises pointées-auto
         // de mars et antérieures (un bug réel observé : Nicolas a perdu l'état pointé de
@@ -1195,7 +860,7 @@ export default function ComptabilitePage() {
           const r = d.data() as any;
           if (!r.pointee) continue;
           if (r.pointeeNote !== "Pointée automatiquement par rapprochement bancaire") continue;
-          if (usedRemiseIds.has(d.id)) continue; // toujours matchée
+          if (ctx.usedRemiseIds.has(d.id)) continue; // toujours matchée
 
           // Filtre période : ne dé-pointer que les remises créées dans le mois courant
           const rDate = r.createdAt?.seconds ? new Date(r.createdAt.seconds * 1000) : null;

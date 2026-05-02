@@ -1,4 +1,5 @@
-import type { BankLine, MatchContext, MatchResult, Encaissement, EncDetail } from "../types";
+import type { BankLine, MatchContext, MatchResult } from "../types";
+import { parseBankDate, encToDetail, makeInWindow, getPeriodEncs } from "../engine";
 
 /**
  * Règle 3 — Virement / SEPA / Prélèvement (extrait depuis page.tsx:870-1000).
@@ -12,35 +13,7 @@ import type { BankLine, MatchContext, MatchResult, Encaissement, EncDetail } fro
  * 6. Sous-bloc d : si pas de match par nom, paiement pending par montant exact unique → uncertain=true. Mute usedPaymentIds.
  *
  * Premier sous-bloc qui match gagne. Aucun → return null.
- *
- * NB : `parseBankDate` et `encToDetail` sont dupliqués localement depuis page.tsx ;
- * ils seront centralisés dans engine.ts lors de la Task 9.
  */
-
-const parseBankDate = (s: string): Date | null => {
-  if (!s) return null;
-  const p1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (p1) {
-    const dd = p1[1].padStart(2, "0"), mm = p1[2].padStart(2, "0");
-    return new Date(`${p1[3]}-${mm}-${dd}`);
-  }
-  const p2 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (p2) return new Date(s);
-  const p3 = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-  if (p3) {
-    const dd = p3[1].padStart(2, "0"), mm = p3[2].padStart(2, "0");
-    return new Date(`${p3[3]}-${mm}-${dd}`);
-  }
-  return null;
-};
-
-const encToDetail = (e: Encaissement): EncDetail => ({
-  familyName: e.familyName || "",
-  montant: e.montant || 0,
-  date: e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "",
-  activityTitle: e.activityTitle || "",
-  mode: e.modeLabel || e.mode || "",
-});
 
 /** Vérifie si une partie significative (>2 chars) du nom de famille apparaît dans le libellé. */
 const nameMatchesLabel = (familyName: string | undefined, label: string): boolean => {
@@ -56,22 +29,10 @@ export function matchVirement(bl: BankLine, ctx: MatchContext): MatchResult {
 
   // Encaissements de la période, avec leur date
   // On EXCLUT les encaissements déjà consommés par une autre bankLine
-  const periodEnc = ctx.encs.filter(e => {
-    if (usedEncIds.has(e.id)) return false;
-    const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
-    if (!d) return false;
-    const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    return pm === period;
-  });
+  const periodEnc = getPeriodEncs(ctx);
 
   // Fenêtre de ±3 jours autour de la date bancaire
-  const inWindow = (enc: Encaissement) => {
-    if (!bankDate) return true; // pas de date → on essaie quand même
-    const d = enc.date?.seconds ? new Date(enc.date.seconds * 1000) : null;
-    if (!d) return false;
-    const diff = Math.abs(bankDate.getTime() - d.getTime()) / (1000 * 60 * 60 * 24);
-    return diff <= 3;
-  };
+  const inWindow = makeInWindow(bankDate);
 
   // ── 3. Virement / SEPA / Prélèvement ──────────────────────────────
   if (label.includes("VIR") || label.includes("SEPA") || label.includes("PRLV")) {
