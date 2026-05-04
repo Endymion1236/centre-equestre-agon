@@ -7,6 +7,7 @@ import {
   isDomaineEchelle,
   getCompetenceLevel,
   isCompetenceValidated,
+  computeProgressionPercent,
   DEFAULT_ECHELLE_LABELS,
   DEFAULT_VALIDATED_FFE_LEVEL,
   type ProgressionLabelsSettings,
@@ -88,7 +89,14 @@ export async function GET(req: NextRequest) {
   const renderNiveau = (niveau: typeof GALOPS_PROGRAMME[0], isCurrent: boolean) => {
     const nbTotal = niveau.competences.length;
     const nbAcquis = niveau.competences.filter(c => isCompetenceValidated(acquis[c.id], seuilFFE)).length;
-    const pct = nbTotal > 0 ? Math.round((nbAcquis / nbTotal) * 100) : 0;
+    // Pourcentage strict de validation FFE : combien de compétences atteignent
+    // le seuil (par défaut 5). C'est l'indicateur officiel pour le passage
+    // de Galop. Une compétence à niveau 4/5 ne compte PAS ici.
+    const pctFFE = nbTotal > 0 ? Math.round((nbAcquis / nbTotal) * 100) : 0;
+    // Pourcentage de progression globale : à quel point l'enfant avance
+    // dans l'apprentissage. Pour les pratiques, niveau/5 ; pour les binaires,
+    // 0 ou 100. Plus encourageant pour un bilan pédagogique remis aux familles.
+    const pctProgression = computeProgressionPercent(niveau.competences as any, acquis);
 
     // Densité : gros niveaux un peu plus compacts, petits niveaux aérés
     const fsComp   = isBigLevel ? "10.5px" : "11.5px";
@@ -148,7 +156,7 @@ export async function GET(req: NextRequest) {
       `;
     }).join("");
 
-    const barColor = pct === 100 ? "#22c55e" : niveau.color;
+    const barColor = pctFFE === 100 ? "#22c55e" : niveau.color;
 
     return `
       <div style="page-break-inside:avoid;">
@@ -160,13 +168,28 @@ export async function GET(req: NextRequest) {
             <div style="font-size:14px;font-weight:700;color:#1e3a5f;">${niveau.label}</div>
             <div style="font-size:11px;color:#6b7280;">${niveau.description}</div>
           </div>
-          <div style="text-align:right;">
-            <div style="font-size:16px;font-weight:bold;color:${barColor};">${pct}%</div>
-            <div style="font-size:10px;color:#9ca3af;">${nbAcquis}/${nbTotal}</div>
+          <!-- Deux pourcentages : FFE (validé) et Progression (continu).
+               Le premier est aligné avec ce que la FFE attend pour un passage
+               de Galop, le second reflète l'avancée globale de l'enfant. -->
+          <div style="text-align:right;display:flex;flex-direction:column;gap:2px;min-width:130px;">
+            <div style="display:flex;align-items:baseline;justify-content:flex-end;gap:6px;">
+              <span style="font-size:9px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Validé FFE</span>
+              <span style="font-size:16px;font-weight:bold;color:${barColor};">${pctFFE}%</span>
+            </div>
+            <div style="display:flex;align-items:baseline;justify-content:flex-end;gap:6px;">
+              <span style="font-size:9px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Progression</span>
+              <span style="font-size:13px;font-weight:600;color:#3b82f6;">${pctProgression}%</span>
+            </div>
+            <div style="font-size:9px;color:#9ca3af;text-align:right;">${nbAcquis}/${nbTotal} compétences</div>
           </div>
         </div>
-        <div style="height:6px;background:#f3f4f6;border-radius:3px;overflow:hidden;margin-bottom:14px;">
-          <div style="height:100%;background:${barColor};border-radius:3px;width:${pct}%;"></div>
+        <!-- Barre principale : reflète le % validé FFE (ce qui compte pour le passage) -->
+        <div style="height:6px;background:#f3f4f6;border-radius:3px;overflow:hidden;margin-bottom:3px;">
+          <div style="height:100%;background:${barColor};border-radius:3px;width:${pctFFE}%;"></div>
+        </div>
+        <!-- Barre secondaire fine : montre la progression globale en complément -->
+        <div style="height:3px;background:#f3f4f6;border-radius:2px;overflow:hidden;margin-bottom:14px;">
+          <div style="height:100%;background:#93c5fd;border-radius:2px;width:${pctProgression}%;"></div>
         </div>
         ${isCurrent
           ? `<div style="column-count:2;column-gap:20px;">${domainesHtml}</div>`

@@ -10,6 +10,7 @@ import {
   isDomaineEchelle,
   getCompetenceLevel,
   isCompetenceValidated,
+  computeProgressionPercent,
   DEFAULT_ECHELLE_LABELS,
   DEFAULT_VALIDATED_FFE_LEVEL,
   type ProgressionLabelsSettings,
@@ -155,7 +156,9 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
   // Compter via isCompetenceValidated pour gérer correctement boolean + level.
   // Une compétence pratique compte comme "validée" si son level >= seuilFFE.
   const totalAcquis = niveau.competences.filter(c => isCompetenceValidated(acquis[c.id], seuilFFE)).length;
-  const pct = Math.round((totalAcquis / niveau.competences.length) * 100);
+  const pctFFE = Math.round((totalAcquis / niveau.competences.length) * 100);
+  // Progression globale : sur l'échelle 1-5 chaque compétence apporte un score continu.
+  const pctProgression = computeProgressionPercent(niveau.competences, acquis);
 
   if (loading) return <div className="text-center py-4 text-sm text-slate-400">Chargement...</div>;
 
@@ -187,16 +190,26 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
         </select>
       </div>
 
-      {/* Barre de progression */}
+      {/* Barre de progression : double indicateur (Validé FFE + Progression globale) */}
       <div className="bg-white rounded-xl border border-gray-100 p-3">
-        <div className="flex justify-between items-center mb-1.5">
-          <span className="font-body text-xs text-slate-600">{niveau.description}</span>
-          <span className="font-body text-xs font-bold text-blue-600">{totalAcquis}/{niveau.competences.length} — {pct}%</span>
+        <div className="flex justify-between items-start mb-1.5 gap-3">
+          <span className="font-body text-xs text-slate-600 flex-1">{niveau.description}</span>
+          <div className="flex flex-col items-end gap-0.5">
+            <span className="font-body text-xs font-bold text-blue-600">{totalAcquis}/{niveau.competences.length} — {pctFFE}% <span className="text-[10px] font-normal text-slate-400">validé FFE</span></span>
+            <span className="font-body text-[11px] text-blue-400">{pctProgression}% <span className="text-[9px] text-slate-400">progression</span></span>
+          </div>
         </div>
         <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
           <div
             className="h-full bg-gradient-to-r from-blue-400 to-green-400 transition-all duration-500"
-            style={{ width: `${pct}%` }}
+            style={{ width: `${pctFFE}%` }}
+          />
+        </div>
+        {/* Barre fine secondaire = progression globale (montre l'effort en cours) */}
+        <div className="h-1 bg-gray-100 rounded-full overflow-hidden mt-1">
+          <div
+            className="h-full bg-blue-300 transition-all duration-500"
+            style={{ width: `${pctProgression}%` }}
           />
         </div>
       </div>

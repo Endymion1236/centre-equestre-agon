@@ -92,6 +92,47 @@ export const DEFAULT_ECHELLE_LABELS: string[] = [
 /** Seuil par défaut pour qu'une compétence pratique compte comme "validée FFE" */
 export const DEFAULT_VALIDATED_FFE_LEVEL = 5;
 
+/**
+ * Calcule la "progression globale" d'une liste de compétences.
+ * Différent du pourcentage de validation FFE :
+ *
+ * - Pour une compétence pratique (échelle 1-5) :
+ *   level / 5 → ex. niveau 3 = 60% de progression
+ * - Pour une compétence binaire :
+ *   true = 100%, absent = 0%
+ *
+ * Retourne un nombre entre 0 et 100 (déjà arrondi).
+ *
+ * Différence avec le calcul "validé FFE" :
+ * - Validé FFE = combien de compétences atteignent le seuil (binaire)
+ * - Progression = à quel point l'apprentissage avance (continu)
+ *
+ * Exemple : un cavalier à niveau 4/5 partout en pratique aurait :
+ * - 0% validé FFE (seuil = 5, jamais atteint)
+ * - 80% de progression (4/5 sur chaque)
+ *
+ * @param items - Liste { id, domaine } des compétences à évaluer
+ * @param acquis - Map des valeurs stockées
+ */
+export function computeProgressionPercent(
+  items: { id: string; domaine: Domaine }[],
+  acquis: Acquis
+): number {
+  if (items.length === 0) return 0;
+  let totalScore = 0;
+  for (const c of items) {
+    const v = acquis[c.id];
+    if (isDomaineEchelle(c.domaine)) {
+      // Pratique : level / 5 (max 1.0)
+      totalScore += getCompetenceLevel(v) / 5;
+    } else {
+      // Binaire : true = 1, absent = 0
+      totalScore += v === true ? 1 : 0;
+    }
+  }
+  return Math.round((totalScore / items.length) * 100);
+}
+
 export interface ProgressionLabelsSettings {
   echelle: string[]; // 5 entries, indices 0-4 pour niveaux 1-5
   validatedFfe: number; // niveau >= ce seuil = considéré validé FFE

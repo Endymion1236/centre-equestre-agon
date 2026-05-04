@@ -10,6 +10,7 @@ import {
   isDomaineEchelle,
   getCompetenceLevel,
   isCompetenceValidated,
+  computeProgressionPercent,
   DEFAULT_ECHELLE_LABELS,
   DEFAULT_VALIDATED_FFE_LEVEL,
   type ProgressionLabelsSettings,
@@ -191,8 +192,9 @@ function NiveauAccordeon({ child, niveau, acquis, isCurrent, openByDefault, open
 
   const totalAcquis = niveau.competences.filter((c: any) => isCompetenceValidated(acquis[c.id], seuilFFE)).length;
   const total = niveau.competences.length;
-  const pct = total > 0 ? Math.round((totalAcquis / total) * 100) : 0;
-  const isComplete = pct === 100;
+  const pctFFE = total > 0 ? Math.round((totalAcquis / total) * 100) : 0;
+  const pctProgression = computeProgressionPercent(niveau.competences as any, acquis);
+  const isComplete = pctFFE === 100;
 
   const parDomaine = niveau.competences.reduce((acc: any, c: any) => {
     if (!acc[c.domaine]) acc[c.domaine] = [];
@@ -221,18 +223,28 @@ function NiveauAccordeon({ child, niveau, acquis, isCurrent, openByDefault, open
           {isComplete ? (
             <span className="font-body text-[11px] font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">✅ Acquis</span>
           ) : (
-            <span className="font-body text-[11px] font-semibold text-blue-600">{pct}%</span>
+            <div className="flex flex-col items-end gap-0">
+              <span className="font-body text-[11px] font-semibold text-blue-600">{pctFFE}% <span className="text-[9px] text-slate-400 font-normal">validé</span></span>
+              <span className="font-body text-[10px] text-blue-400">{pctProgression}% <span className="text-[9px] text-slate-400 font-normal">progression</span></span>
+            </div>
           )}
           {isOpen ? <ChevronDown size={16} className="text-slate-400"/> : <ChevronRight size={16} className="text-slate-400"/>}
         </div>
       </button>
 
-      {/* Barre de progression (toujours visible) */}
+      {/* Barre de progression : la principale = % validé FFE,
+          la secondaire (plus fine, pâle) = % progression globale */}
       <div className="px-4 pb-2 bg-white">
         <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
           <div className="h-full rounded-full transition-all duration-500"
-            style={{ width: `${pct}%`, backgroundColor: isComplete ? "#22c55e" : niveau.color }}/>
+            style={{ width: `${pctFFE}%`, backgroundColor: isComplete ? "#22c55e" : niveau.color }}/>
         </div>
+        {!isComplete && (
+          <div className="h-1 bg-gray-100 rounded-full overflow-hidden mt-0.5">
+            <div className="h-full rounded-full transition-all duration-500 bg-blue-300"
+              style={{ width: `${pctProgression}%` }}/>
+          </div>
+        )}
         <div className="flex justify-between mt-0.5">
           <span className="font-body text-[10px] text-slate-400">{totalAcquis}/{total} compétences</span>
           {isComplete && <span className="font-body text-[10px] text-green-500 font-semibold">🏆 Niveau validé !</span>}
