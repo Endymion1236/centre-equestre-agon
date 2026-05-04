@@ -93,8 +93,8 @@ export async function GET(req: NextRequest) {
       const sepaLibelle = `${stageTitle} ${familyName}`.trim().slice(0, 70);
       const qrCAWL = await generateCAWLQR(soldeLink, "email");
       const qrSEPA = await generateSEPAQR(solde, sepaLibelle, "email");
-      const cidCAWL = `qr-cawl-${payDoc.id}@ce-agon`;
-      const cidSEPA = `qr-sepa-${payDoc.id}@ce-agon`;
+      const cidCAWL = `qr-cawl`;
+      const cidSEPA = `qr-sepa`;
       const qrSection = (qrCAWL || qrSEPA) ? `
         <div style="background:white;border:1px solid #e0e8ff;border-radius:8px;padding:16px;margin-top:8px;">
           <p style="margin:0 0 12px;font-size:12px;color:#6b7280;text-align:center;">Ou scannez avec votre téléphone :</p>
@@ -141,11 +141,12 @@ export async function GET(req: NextRequest) {
         </div>`;
 
         if (resendKey) {
-          // Attachments CID pour les QR (cf send-payment-link pour le détail
-          // du fix Gmail blocking inline data URLs)
+          // Attachments CID pour les QR. IMPORTANT : content_id (snake_case)
+          // pour l'API REST, sinon Resend traite l'image comme une simple
+          // PJ et le <img src="cid:xxx"> ne se résout pas (cf send-payment-link).
           const attachments: any[] = [];
-          if (qrCAWL) attachments.push({ filename: "qr-paiement-carte.png", content: qrCAWL.base64Raw, contentId: cidCAWL, contentType: "image/png" });
-          if (qrSEPA) attachments.push({ filename: "qr-virement-sepa.png", content: qrSEPA.base64Raw, contentId: cidSEPA, contentType: "image/png" });
+          if (qrCAWL) attachments.push({ filename: "qr-paiement-carte.png", content: qrCAWL.base64Raw, content_id: cidCAWL, content_type: "image/png" });
+          if (qrSEPA) attachments.push({ filename: "qr-virement-sepa.png", content: qrSEPA.base64Raw, content_id: cidSEPA, content_type: "image/png" });
 
           const resendRes = await fetch("https://api.resend.com/emails", {
             method: "POST",

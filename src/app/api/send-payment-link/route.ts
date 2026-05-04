@@ -84,9 +84,10 @@ export async function POST(req: NextRequest) {
     const sepaLibelle = `${(payData as any).invoiceNumber || paymentId.slice(0, 8)} ${payData.familyName || ""}`.trim();
     const qrSEPA = await generateSEPAQR(amount, sepaLibelle, "email");
 
-    // Identifiants CID (uniques par email)
-    const cidCAWL = `qr-cawl-${paymentId}@ce-agon`;
-    const cidSEPA = `qr-sepa-${paymentId}@ce-agon`;
+    // Identifiants CID simples (pas d'@, pas de paymentId trop long).
+    // L'API REST Resend attend content_id en snake_case (pas contentId).
+    const cidCAWL = `qr-cawl`;
+    const cidSEPA = `qr-sepa`;
 
     // Section HTML des QR codes (référence par cid:, pas par data:image)
     const qrSection = (qrCAWL || qrSEPA) ? `
@@ -150,24 +151,27 @@ export async function POST(req: NextRequest) {
     if (resendKey) {
       try {
         // Construire la liste d'attachments avec les QR codes en CID.
-        // Resend gère le multipart/related automatiquement quand on fournit
-        // un contentId, ce qui permet aux <img src="cid:xxx"> de fonctionner
-        // même sur Gmail qui bloque les data URLs inline.
+        // IMPORTANT : l'API REST Resend attend content_id (snake_case), pas
+        // contentId (camelCase) — c'est la convention JSON pour l'API HTTP
+        // brute, alors que le SDK Node accepte les deux. On utilise fetch()
+        // direct ici, donc snake_case obligatoire. Sinon Resend ne sait pas
+        // qu'il faut référencer cette image via cid:xxx et la traite comme
+        // une simple pièce jointe (ce que tu as constaté sur ta capture).
         const attachments: any[] = [];
         if (qrCAWL) {
           attachments.push({
             filename: "qr-paiement-carte.png",
             content: qrCAWL.base64Raw,
-            contentId: cidCAWL,
-            contentType: "image/png",
+            content_id: cidCAWL,
+            content_type: "image/png",
           });
         }
         if (qrSEPA) {
           attachments.push({
             filename: "qr-virement-sepa.png",
             content: qrSEPA.base64Raw,
-            contentId: cidSEPA,
-            contentType: "image/png",
+            content_id: cidSEPA,
+            content_type: "image/png",
           });
         }
 
