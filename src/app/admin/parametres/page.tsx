@@ -8,6 +8,7 @@ import { Card, Badge } from "@/components/ui";
 import { Save, Plus, Trash2, Loader2, AlertTriangle, Users, Pencil, Calendar } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import MareesSection from "./MareesSection";
+import { DEFAULT_ECHELLE_LABELS, DEFAULT_VALIDATED_FFE_LEVEL, type ProgressionLabelsSettings } from "@/lib/progression-helpers";
 
 const defaultAccounts = [
   { code: "70641000", label: "Animations collectivité", tva: "5.50%", affectation: "Animations CE, collectivités" },
@@ -36,7 +37,7 @@ export default function ParametresPage() {
     setAgentContext({ module_actif: "parametres", description: "moniteurs, tarifs, infos centre" });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [section, setSection] = useState<"centre" | "tarifs" | "reductions" | "degressivite" | "vacances" | "annulation" | "comptable" | "horaires" | "moniteurs" | "fidelite" | "inscription" | "epreuves" | "maintenance" | "notifications" | "marees">("centre");
+  const [section, setSection] = useState<"centre" | "tarifs" | "reductions" | "degressivite" | "vacances" | "annulation" | "comptable" | "horaires" | "moniteurs" | "fidelite" | "inscription" | "epreuves" | "progression" | "maintenance" | "notifications" | "marees">("centre");
   const [notifSettings, setNotifSettings] = useState({
     nouvelle_inscription: true,
     nouveau_paiement: true,
@@ -124,6 +125,37 @@ export default function ParametresPage() {
     await setDoc(doc(db, "settings", "competitions"), { ...epreuves, updatedAt: new Date() });
     setEpreuvesSaved(true);
     setTimeout(() => setEpreuvesSaved(false), 2000);
+  };
+
+  // ─── Progression : labels échelle 1-5 + seuil "validé FFE" ────────────────
+  const [progressionLabels, setProgressionLabels] = useState<string[]>(DEFAULT_ECHELLE_LABELS);
+  const [progressionValidatedFfe, setProgressionValidatedFfe] = useState<number>(DEFAULT_VALIDATED_FFE_LEVEL);
+  const [progressionSaved, setProgressionSaved] = useState(false);
+  useEffect(() => {
+    if (section !== "progression") return;
+    getDoc(doc(db, "settings", "progression_labels")).then(snap => {
+      if (snap.exists()) {
+        const data = snap.data() as ProgressionLabelsSettings;
+        if (Array.isArray(data.echelle) && data.echelle.length === 5) {
+          setProgressionLabels(data.echelle);
+        }
+        if (typeof data.validatedFfe === "number") {
+          setProgressionValidatedFfe(data.validatedFfe);
+        }
+      }
+    });
+  }, [section]);
+  const saveProgressionLabels = async () => {
+    // Validation : les 5 labels doivent être non vides
+    const cleaned = progressionLabels.map(l => l.trim()).map(l => l || "Niveau");
+    await setDoc(doc(db, "settings", "progression_labels"), {
+      echelle: cleaned,
+      validatedFfe: progressionValidatedFfe,
+      updatedAt: serverTimestamp(),
+    } as ProgressionLabelsSettings, { merge: true });
+    setProgressionLabels(cleaned);
+    setProgressionSaved(true);
+    setTimeout(() => setProgressionSaved(false), 2000);
   };
   const [moniteurs, setMoniteurs] = useState<any[]>([]);
   const [showAddMoniteur, setShowAddMoniteur] = useState(false);
@@ -388,6 +420,7 @@ export default function ParametresPage() {
           ["horaires", "Horaires"],
           ["moniteurs", "Moniteurs"],
           ["epreuves", "🏆 Épreuves"],
+          ["progression", "📈 Progression"],
           ["fidelite", "🏆 Fidélité"],
           ["notifications", "🔔 Notifications"],
           ["marees", "🌊 Marées"],
@@ -1292,6 +1325,95 @@ export default function ParametresPage() {
             className="flex items-center justify-center gap-2 py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none cursor-pointer">
             {epreuvesSaved ? "✅ Sauvegardé !" : "Sauvegarder les épreuves"}
           </button>
+        </div>
+      )}
+
+      {/* ─── Progression : labels échelle 1-5 ─── */}
+      {section === "progression" && (
+        <div className="flex flex-col gap-5">
+          <Card padding="md">
+            <h3 className="font-body text-base font-semibold text-blue-800 mb-2">📈 Échelle de progression (pratiques)</h3>
+            <p className="font-body text-xs text-slate-500 mb-4">
+              Pour les compétences de pratique à cheval et à pied, on utilise une échelle de 1 à 5.
+              Personnalise ici les libellés affichés dans l&apos;éditeur de progression et dans
+              l&apos;espace cavalier des familles. Les compétences de connaissances et soins
+              restent en case à cocher (binaire).
+            </p>
+            <div className="flex flex-col gap-3 mb-5">
+              {progressionLabels.map((label, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-lg font-body text-sm font-bold text-white"
+                    style={{ background: `linear-gradient(135deg, hsl(${(i * 30) + 0}, 75%, 50%), hsl(${(i * 30) + 0}, 70%, 45%))` }}>
+                    {i + 1}
+                  </div>
+                  <input
+                    value={label}
+                    onChange={(e) => {
+                      const next = [...progressionLabels];
+                      next[i] = e.target.value;
+                      setProgressionLabels(next);
+                    }}
+                    placeholder={DEFAULT_ECHELLE_LABELS[i]}
+                    className="flex-1 px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t border-gray-100 pt-4 mb-4">
+              <label className="font-body text-sm font-semibold text-blue-800 block mb-2">
+                Seuil &laquo;&nbsp;Validé FFE&nbsp;&raquo;
+              </label>
+              <p className="font-body text-xs text-slate-500 mb-3">
+                Niveau à partir duquel une compétence pratique compte comme validée pour le passage de Galop.
+                Les niveaux inférieurs apparaissent en progression mais pas comme validés sur le bilan FFE.
+              </p>
+              <select
+                value={progressionValidatedFfe}
+                onChange={(e) => setProgressionValidatedFfe(parseInt(e.target.value, 10))}
+                className="px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
+              >
+                {[1, 2, 3, 4, 5].map(n => (
+                  <option key={n} value={n}>
+                    Niveau {n} ({progressionLabels[n - 1] || DEFAULT_ECHELLE_LABELS[n - 1]}) ou +
+                  </option>
+                ))}
+              </select>
+              <p className="font-body text-[11px] text-slate-400 mt-2 italic">
+                Recommandé : niveau 5 (acquis). Tu peux baisser si tu veux marquer les Galops plus tôt
+                dans la progression — par exemple niveau 4 = autonomie suffisante pour valider FFE.
+              </p>
+            </div>
+
+            <button onClick={saveProgressionLabels}
+              className="flex items-center justify-center gap-2 py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none cursor-pointer">
+              {progressionSaved ? "✅ Sauvegardé !" : "Sauvegarder l'échelle"}
+            </button>
+          </Card>
+
+          <Card padding="md">
+            <h3 className="font-body text-base font-semibold text-blue-800 mb-2">📋 Aperçu</h3>
+            <p className="font-body text-xs text-slate-500 mb-4">
+              Voici comment l&apos;échelle apparaîtra dans l&apos;éditeur de progression et chez les familles.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {progressionLabels.map((label, i) => {
+                const level = i + 1;
+                const isValidatedFfe = level >= progressionValidatedFfe;
+                return (
+                  <div key={i}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${isValidatedFfe ? "bg-green-50 border-green-300" : "bg-slate-50 border-slate-200"}`}>
+                    <div className="flex items-center justify-center w-7 h-7 rounded-md font-body text-xs font-bold text-white"
+                      style={{ background: `linear-gradient(135deg, hsl(${(i * 30)}, 75%, 50%), hsl(${(i * 30)}, 70%, 45%))` }}>
+                      {level}
+                    </div>
+                    <span className="font-body text-sm text-slate-700">{label || DEFAULT_ECHELLE_LABELS[i]}</span>
+                    {isValidatedFfe && <span className="font-body text-[10px] text-green-700 font-semibold">✓ FFE</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
         </div>
       )}
 
