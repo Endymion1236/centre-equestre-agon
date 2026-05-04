@@ -176,7 +176,7 @@ export function TabJournal({ loading, payments, encaissements, avoirs, toast, re
           {/* Modale correction encaissement */}
           {correctionEnc && (
             <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setCorrectionEnc(null)}>
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="p-5 border-b border-gray-100">
                   <h2 className="font-display text-lg font-bold text-blue-800">Corriger un encaissement</h2>
                   <p className="font-body text-xs text-slate-600 mt-1">
