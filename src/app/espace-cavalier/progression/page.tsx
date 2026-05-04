@@ -6,12 +6,33 @@ import { doc, getDoc } from "firebase/firestore";
 import { Card } from "@/components/ui";
 import { CheckCircle2, Circle, ChevronDown, ChevronRight, Trophy, Lock } from "lucide-react";
 import { GALOPS_PROGRAMME, DOMAINE_LABELS, getNiveauById, type Domaine } from "@/lib/galops-programme";
+import {
+  isDomaineEchelle,
+  getCompetenceLevel,
+  isCompetenceValidated,
+  DEFAULT_ECHELLE_LABELS,
+  DEFAULT_VALIDATED_FFE_LEVEL,
+  type ProgressionLabelsSettings,
+} from "@/lib/progression-helpers";
 
 export default function ProgressionPage() {
   const { user, family } = useAuth();
   const children = family?.children || [];
   const [progressions, setProgressions] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
+
+  // Labels custom (chargés une fois au montage)
+  const [echelleLabels, setEchelleLabels] = useState<string[]>(DEFAULT_ECHELLE_LABELS);
+  const [seuilFFE, setSeuilFFE] = useState<number>(DEFAULT_VALIDATED_FFE_LEVEL);
+  useEffect(() => {
+    getDoc(doc(db, "settings", "progression_labels")).then(snap => {
+      if (snap.exists()) {
+        const data = snap.data() as ProgressionLabelsSettings;
+        if (Array.isArray(data.echelle) && data.echelle.length === 5) setEchelleLabels(data.echelle);
+        if (typeof data.validatedFfe === "number") setSeuilFFE(data.validatedFfe);
+      }
+    }).catch(() => {});
+  }, []);
 
   // Accordéon niveaux : childId_niveauId → boolean
   const [openNiveaux, setOpenNiveaux] = useState<Record<string, boolean>>({});
@@ -123,6 +144,7 @@ export default function ProgressionPage() {
                       isCurrent openByDefault
                       openNiveaux={openNiveaux} toggleNiveau={toggleNiveau}
                       openDomaines={openDomaines} toggleDomaine={toggleDomaine}
+                      echelleLabels={echelleLabels} seuilFFE={seuilFFE}
                     />
 
                     {/* ── Niveaux précédents ────────────────────────────── */}
@@ -138,6 +160,7 @@ export default function ProgressionPage() {
                             isCurrent={false} openByDefault={false}
                             openNiveaux={openNiveaux} toggleNiveau={toggleNiveau}
                             openDomaines={openDomaines} toggleDomaine={toggleDomaine}
+                            echelleLabels={echelleLabels} seuilFFE={seuilFFE}
                           />
                         ))}
                       </div>
@@ -154,18 +177,19 @@ export default function ProgressionPage() {
 }
 
 // ── Composant accordéon pour un niveau ───────────────────────────────────────
-function NiveauAccordeon({ child, niveau, acquis, isCurrent, openByDefault, openNiveaux, toggleNiveau, openDomaines, toggleDomaine }: {
-  child: any; niveau: any; acquis: Record<string, boolean>;
+function NiveauAccordeon({ child, niveau, acquis, isCurrent, openByDefault, openNiveaux, toggleNiveau, openDomaines, toggleDomaine, echelleLabels, seuilFFE }: {
+  child: any; niveau: any; acquis: Record<string, any>;
   isCurrent: boolean; openByDefault: boolean;
   openNiveaux: Record<string, boolean>;
   toggleNiveau: (k: string) => void;
   openDomaines: Record<string, boolean>;
   toggleDomaine: (k: string) => void;
+  echelleLabels: string[]; seuilFFE: number;
 }) {
   const niveauKey = `${child.id}_${niveau.id}`;
   const isOpen = openNiveaux[niveauKey] !== undefined ? openNiveaux[niveauKey] : openByDefault;
 
-  const totalAcquis = niveau.competences.filter((c: any) => acquis[c.id]).length;
+  const totalAcquis = niveau.competences.filter((c: any) => isCompetenceValidated(acquis[c.id], seuilFFE)).length;
   const total = niveau.competences.length;
   const pct = total > 0 ? Math.round((totalAcquis / total) * 100) : 0;
   const isComplete = pct === 100;
@@ -222,7 +246,8 @@ function NiveauAccordeon({ child, niveau, acquis, isCurrent, openByDefault, open
             const domaineKey = `${niveauKey}_${domaine}`;
             // Ouvert par défaut sauf si explicitement fermé
             const isDomOpen = openDomaines[domaineKey] !== false;
-            const acquisDomaine = comps.filter((c: any) => acquis[c.id]).length;
+            const acquisDomaine = comps.filter((c: any) => isCompetenceValidated(acquis[c.id], seuilFFE)).length;
+            const isEchelle = isDomaineEchelle(domaine as Domaine);
 
             return (
               <div key={domaine} className="border-b border-gray-50 last:border-0">
@@ -242,17 +267,66 @@ function NiveauAccordeon({ child, niveau, acquis, isCurrent, openByDefault, open
                 </button>
                 {isDomOpen && (
                   <div className="divide-y divide-gray-50">
-                    {comps.map((c: any) => (
-                      <div key={c.id} className={`flex items-start gap-3 px-4 py-3 ${acquis[c.id] ? "bg-green-50/40" : "bg-white"}`}>
-                        {acquis[c.id]
-                          ? <CheckCircle2 size={16} className="text-green-500 flex-shrink-0 mt-0.5"/>
-                          : <Circle size={16} className="text-gray-200 flex-shrink-0 mt-0.5"/>
-                        }
-                        <span className={`font-body text-sm ${acquis[c.id] ? "text-green-700" : "text-slate-500"}`}>
-                          {c.label}
-                        </span>
-                      </div>
-                    ))}
+                    {comps.map((c: any) => {
+                      const level = getCompetenceLevel(acquis[c.id]);
+                      const validated = isCompetenceValidated(acquis[c.id], seuilFFE);
+
+                      if (isEchelle) {
+                        // ─── Compétence pratique : jauge 1-5 lecture seule ───
+                        return (
+                          <div key={c.id} className={`px-4 py-3 ${level > 0 ? "bg-slate-50/40" : "bg-white"}`}>
+                            <div className="flex items-start gap-3 mb-2">
+                              {validated
+                                ? <CheckCircle2 size={16} className="text-green-500 flex-shrink-0 mt-0.5"/>
+                                : level > 0
+                                  ? <div className="w-4 h-4 rounded-full flex-shrink-0 mt-0.5 flex items-center justify-center font-body text-[9px] font-bold text-white"
+                                      style={{ background: `linear-gradient(135deg, hsl(${(level - 1) * 30}, 75%, 50%), hsl(${(level - 1) * 30}, 70%, 45%))` }}>
+                                      {level}
+                                    </div>
+                                  : <Circle size={16} className="text-gray-200 flex-shrink-0 mt-0.5"/>
+                              }
+                              <span className={`font-body text-sm flex-1 ${validated ? "text-green-700" : level > 0 ? "text-slate-700" : "text-slate-500"}`}>
+                                {c.label}
+                              </span>
+                            </div>
+                            {/* Jauge 5 segments lecture seule */}
+                            <div className="flex gap-0.5 ml-7">
+                              {[1, 2, 3, 4, 5].map(n => {
+                                const isReached = level >= n;
+                                return (
+                                  <div key={n}
+                                    title={`Niveau ${n} : ${echelleLabels[n - 1]}${level === n ? " (actuel)" : ""}`}
+                                    className="h-1.5 flex-1 rounded-sm transition-all"
+                                    style={isReached
+                                      ? { background: `linear-gradient(135deg, hsl(${(n - 1) * 30}, 75%, 55%), hsl(${(n - 1) * 30}, 70%, 50%))` }
+                                      : { background: "#e5e7eb" }
+                                    }
+                                  />
+                                );
+                              })}
+                            </div>
+                            {level > 0 && (
+                              <div className="ml-7 mt-1 font-body text-[10px] text-slate-500">
+                                {echelleLabels[level - 1]}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      // ─── Compétence binaire ─────────────────────────────────
+                      return (
+                        <div key={c.id} className={`flex items-start gap-3 px-4 py-3 ${validated ? "bg-green-50/40" : "bg-white"}`}>
+                          {validated
+                            ? <CheckCircle2 size={16} className="text-green-500 flex-shrink-0 mt-0.5"/>
+                            : <Circle size={16} className="text-gray-200 flex-shrink-0 mt-0.5"/>
+                          }
+                          <span className={`font-body text-sm ${validated ? "text-green-700" : "text-slate-500"}`}>
+                            {c.label}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

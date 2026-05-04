@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { GALOPS_PROGRAMME, DOMAINE_LABELS } from "@/lib/galops-programme";
 import { verifyAuth } from "@/lib/api-auth";
+import {
+  type Acquis,
+  isDomaineEchelle,
+  getCompetenceLevel,
+  isCompetenceValidated,
+  DEFAULT_ECHELLE_LABELS,
+  DEFAULT_VALIDATED_FFE_LEVEL,
+  type ProgressionLabelsSettings,
+} from "@/lib/progression-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -27,10 +36,22 @@ export async function GET(req: NextRequest) {
   }
 
   const data = snap.data()!;
-  const acquis: Record<string, boolean> = data.acquis || {};
+  const acquis: Acquis = data.acquis || {};
   const niveauEnCoursId: string = data.niveauEnCours || "";
   const niveauIdx = GALOPS_PROGRAMME.findIndex(n => n.id === niveauEnCoursId);
   const niveauEnCours = niveauIdx >= 0 ? GALOPS_PROGRAMME[niveauIdx] : null;
+
+  // Charger les labels et seuil custom (paramètres globaux)
+  let echelleLabels: string[] = DEFAULT_ECHELLE_LABELS;
+  let seuilFFE: number = DEFAULT_VALIDATED_FFE_LEVEL;
+  try {
+    const labelsSnap = await adminDb.collection("settings").doc("progression_labels").get();
+    if (labelsSnap.exists) {
+      const labelsData = labelsSnap.data() as ProgressionLabelsSettings;
+      if (Array.isArray(labelsData.echelle) && labelsData.echelle.length === 5) echelleLabels = labelsData.echelle;
+      if (typeof labelsData.validatedFfe === "number") seuilFFE = labelsData.validatedFfe;
+    }
+  } catch { /* non bloquant */ }
 
   const today = new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 
@@ -66,7 +87,7 @@ export async function GET(req: NextRequest) {
 
   const renderNiveau = (niveau: typeof GALOPS_PROGRAMME[0], isCurrent: boolean) => {
     const nbTotal = niveau.competences.length;
-    const nbAcquis = niveau.competences.filter(c => acquis[c.id]).length;
+    const nbAcquis = niveau.competences.filter(c => isCompetenceValidated(acquis[c.id], seuilFFE)).length;
     const pct = nbTotal > 0 ? Math.round((nbAcquis / nbTotal) * 100) : 0;
 
     // Densité : gros niveaux un peu plus compacts, petits niveaux aérés
@@ -83,12 +104,38 @@ export async function GET(req: NextRequest) {
     }
 
     const domainesHtml = Object.entries(parDomaine).map(([domaine, comps]) => {
-      const items = comps.map(c => `
-        <div style="display:flex;align-items:flex-start;gap:8px;padding:${padItem};">
-          <span style="color:${acquis[c.id] ? "#22c55e" : "#d1d5db"};font-size:${iconSize};line-height:1.2;flex-shrink:0;">${acquis[c.id] ? "✓" : "○"}</span>
-          <span style="font-size:${fsComp};line-height:1.3;color:${acquis[c.id] ? "#166534" : "#9ca3af"};">${c.label}</span>
-        </div>
-      `).join("");
+      const isEchelle = isDomaineEchelle(domaine as any);
+      const items = comps.map(c => {
+        const validated = isCompetenceValidated(acquis[c.id], seuilFFE);
+        const level = getCompetenceLevel(acquis[c.id]);
+
+        if (isEchelle) {
+          // Pratique : afficher étoiles ★★★☆☆ + libellé du niveau actuel
+          const stars = Array.from({ length: 5 }, (_, i) => {
+            const reached = level >= i + 1;
+            const starColor = reached ? `hsl(${i * 30}, 75%, 50%)` : "#d1d5db";
+            return `<span style="color:${starColor};font-size:${iconSize};line-height:1;">★</span>`;
+          }).join("");
+          const labelText = level > 0 ? echelleLabels[level - 1] : "";
+          const labelColor = validated ? "#166534" : level > 0 ? "#374151" : "#9ca3af";
+          return `
+            <div style="display:flex;align-items:flex-start;gap:8px;padding:${padItem};">
+              <span style="display:inline-flex;gap:1px;flex-shrink:0;line-height:1.2;">${stars}</span>
+              <span style="font-size:${fsComp};line-height:1.3;color:${labelColor};flex:1;">
+                ${c.label}${labelText ? ` <span style="color:#6b7280;font-style:italic;font-size:${fsComp === "11.5px" ? "10.5px" : "9.5px"};">— ${labelText}</span>` : ""}
+              </span>
+            </div>
+          `;
+        }
+
+        // Binaire : ✓ ou ○
+        return `
+          <div style="display:flex;align-items:flex-start;gap:8px;padding:${padItem};">
+            <span style="color:${validated ? "#22c55e" : "#d1d5db"};font-size:${iconSize};line-height:1.2;flex-shrink:0;">${validated ? "✓" : "○"}</span>
+            <span style="font-size:${fsComp};line-height:1.3;color:${validated ? "#166534" : "#9ca3af"};">${c.label}</span>
+          </div>
+        `;
+      }).join("");
 
       const domaineLabel = (DOMAINE_LABELS as any)[domaine] ?? domaine;
       return `
