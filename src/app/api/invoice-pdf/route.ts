@@ -12,6 +12,7 @@ try {
 } catch { console.warn("Logo non trouvé"); }
 import React from "react";
 import { verifyAuth } from "@/lib/api-auth";
+import { generateSEPAQR } from "@/lib/payment-qr";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -70,6 +71,11 @@ const s = StyleSheet.create({
   payUnpaid:  { backgroundColor: "#fff7ed", borderColor: "#fdba74" },
   payTitle:   { fontSize: 10, fontFamily: "Helvetica-Bold", marginBottom: 3 },
   payDetail:  { fontSize: 8, color: GRAY, lineHeight: 1.6 },
+  // QR Code SEPA pour faciliter le paiement par virement (norme EPC069-12)
+  qrRow:      { flexDirection: "row", marginTop: 8, alignItems: "center" },
+  qrImg:      { width: 75, height: 75, marginRight: 12 },
+  qrText:     { fontSize: 8, color: GRAY, lineHeight: 1.5, flex: 1 },
+  qrTitle:    { fontSize: 9, fontFamily: "Helvetica-Bold", color: BLUE, marginBottom: 2 },
   // Footer
   footer:     { position: "absolute", bottom: 24, left: 40, right: 40, textAlign: "center", fontSize: 7, color: "#9ca3af", borderTopWidth: 1, borderTopColor: "#e5e7eb", paddingTop: 6 },
   logo:       { width: 48, height: 48, objectFit: "contain" },
@@ -113,6 +119,14 @@ export async function POST(request: NextRequest) {
     const resteDu = Math.max(0, (totalTTC || 0) - (paidAmount || 0));
     const tvaRecap = getTvaRecap(items);
     const isTVAApplicable = totalTVA > 0;
+
+    // Générer le QR SEPA pour paiement par virement (norme EPC069-12) :
+    // uniquement si la facture n'est pas réglée ET qu'il reste un montant > 0.
+    // Le client peut scanner avec son app bancaire pour pré-remplir le virement.
+    const sepaLibelle = `${invoiceNumber} ${familyName || ""}`.trim().slice(0, 70);
+    const qrSEPADataUrl = (!isPaid && resteDu > 0)
+      ? await generateSEPAQR(resteDu, sepaLibelle, "pdf")
+      : null;
 
     // Construction du libellé de règlement :
     // - Si paymentDetails fourni (plusieurs encaissements) → lister chaque ligne
@@ -273,6 +287,18 @@ export async function POST(request: NextRequest) {
           !isPaid && resteDu > 0 && CLUB.iban
             ? React.createElement(Text, { style: s.payDetail },
                 `Règlement par virement :\nIBAN : ${CLUB.iban}\nBIC : ${CLUB.bic || ""}`)
+            : null,
+          // QR SEPA : permet de scanner avec l'app bancaire pour pré-remplir
+          // un virement (montant + IBAN + BIC + libellé). Norme EPC069-12.
+          qrSEPADataUrl
+            ? React.createElement(View, { style: s.qrRow },
+                React.createElement(Image, { src: qrSEPADataUrl, style: s.qrImg }),
+                React.createElement(View, { style: { flex: 1 } },
+                  React.createElement(Text, { style: s.qrTitle }, "📱 Payer par scan"),
+                  React.createElement(Text, { style: s.qrText },
+                    "Scannez ce QR Code depuis votre app bancaire (Crédit Agricole, BNP, Boursorama, Revolut...) pour ouvrir le formulaire de virement pré-rempli avec le bon montant et libellé."),
+                ),
+              )
             : null,
         ),
 

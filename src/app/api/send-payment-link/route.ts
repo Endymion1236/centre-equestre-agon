@@ -3,6 +3,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { verifyAuth } from "@/lib/api-auth";
 import { logEmail } from "@/lib/email-log";
+import { generateCAWLQR, generateSEPAQR } from "@/lib/payment-qr";
 
 export const dynamic = "force-dynamic";
 
@@ -73,6 +74,43 @@ export async function POST(req: NextRequest) {
       ? message.replace(/\n/g, "<br/>")
       : `<p>Bonjour,</p><p>Veuillez trouver ci-dessous le lien de paiement pour régler <strong>${amount.toFixed(2)}€</strong> pour : ${prestations}.</p>`;
 
+    // Générer les QR codes (CAWL pour paiement carte, SEPA pour virement bancaire).
+    // Si la génération échoue (ne devrait pas), les fonctions retournent null
+    // et on n'affiche simplement pas la section QR — l'email reste fonctionnel
+    // grâce au bouton "Payer" classique.
+    const qrCAWL = await generateCAWLQR(paymentUrl, "email");
+    const sepaLibelle = `${payData.invoiceNumber || paymentId.slice(0, 8)} ${payData.familyName || ""}`.trim();
+    const qrSEPA = await generateSEPAQR(amount, sepaLibelle, "email");
+
+    // Section HTML des QR codes : 2 colonnes côte à côte sur grand écran,
+    // empilées sur mobile (table avec width 100% pour compatibilité Outlook
+    // / Gmail qui ne respectent pas tous flexbox).
+    const qrSection = (qrCAWL || qrSEPA) ? `
+      <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-top: 16px;">
+        <p style="margin: 0 0 12px; font-size: 13px; color: #6b7280; text-align: center;">
+          Vous pouvez aussi <strong>scanner</strong> avec votre téléphone :
+        </p>
+        <table style="width: 100%; border-collapse: collapse;" cellpadding="0" cellspacing="0">
+          <tr>
+            ${qrCAWL ? `
+            <td style="text-align: center; vertical-align: top; padding: 8px;">
+              <img src="${qrCAWL}" alt="QR Code paiement carte" style="display: block; margin: 0 auto; width: 140px; height: 140px;" />
+              <p style="margin: 8px 0 0; font-size: 12px; color: #1e3a5f; font-weight: bold;">💳 Paiement carte</p>
+              <p style="margin: 2px 0 0; font-size: 11px; color: #6b7280;">Instantané, scannez avec l'appareil photo</p>
+            </td>
+            ` : ""}
+            ${qrSEPA ? `
+            <td style="text-align: center; vertical-align: top; padding: 8px;">
+              <img src="${qrSEPA}" alt="QR Code virement SEPA" style="display: block; margin: 0 auto; width: 140px; height: 140px;" />
+              <p style="margin: 8px 0 0; font-size: 12px; color: #1e3a5f; font-weight: bold;">🏦 Virement bancaire</p>
+              <p style="margin: 2px 0 0; font-size: 11px; color: #6b7280;">Scannez depuis votre app bancaire</p>
+            </td>
+            ` : ""}
+          </tr>
+        </table>
+      </div>
+    ` : "";
+
     const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #1e3a5f; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
@@ -92,6 +130,7 @@ export async function POST(req: NextRequest) {
             <p style="margin: 4px 0 0; font-size: 14px;"><strong>Montant :</strong> ${amount.toFixed(2)}€</p>
             ${amount < resteDu ? `<p style="margin: 4px 0 0; font-size: 13px; color: #f97316;">Reste dû après ce paiement : ${(resteDu - amount).toFixed(2)}€</p>` : ""}
           </div>
+          ${qrSection}
           <p style="font-size: 12px; color: #9ca3af; margin-top: 20px;">Paiement sécurisé par CAWL / Crédit Agricole. Ce lien est valable 2 heures.</p>
         </div>
         <div style="text-align: center; padding: 12px; font-size: 11px; color: #9ca3af;">

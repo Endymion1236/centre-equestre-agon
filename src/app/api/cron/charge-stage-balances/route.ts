@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { logEmail } from "@/lib/email-log";
+import { generateCAWLQR, generateSEPAQR } from "@/lib/payment-qr";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -86,6 +87,29 @@ export async function GET(req: NextRequest) {
 
       const soldeLink = `${appUrl}/espace-cavalier/factures?payId=${payDoc.id}`;
 
+      // Générer les QR codes : CAWL pointe vers la page espace cavalier qui
+      // déclenchera le paiement, SEPA pointe vers les coordonnées bancaires
+      // structurées pour un virement direct depuis l'app bancaire.
+      const sepaLibelle = `${stageTitle} ${familyName}`.trim().slice(0, 70);
+      const qrCAWLDataUrl = await generateCAWLQR(soldeLink, "email");
+      const qrSEPADataUrl = await generateSEPAQR(solde, sepaLibelle, "email");
+      const qrSection = (qrCAWLDataUrl || qrSEPADataUrl) ? `
+        <div style="background:white;border:1px solid #e0e8ff;border-radius:8px;padding:16px;margin-top:8px;">
+          <p style="margin:0 0 12px;font-size:12px;color:#6b7280;text-align:center;">Ou scannez avec votre téléphone :</p>
+          <table style="width:100%;border-collapse:collapse;" cellpadding="0" cellspacing="0">
+            <tr>
+              ${qrCAWLDataUrl ? `<td style="text-align:center;vertical-align:top;padding:6px;">
+                <img src="${qrCAWLDataUrl}" alt="QR carte" style="width:130px;height:130px;display:block;margin:0 auto;" />
+                <p style="margin:6px 0 0;font-size:11px;color:#2050A0;font-weight:bold;">💳 Carte</p>
+              </td>` : ""}
+              ${qrSEPADataUrl ? `<td style="text-align:center;vertical-align:top;padding:6px;">
+                <img src="${qrSEPADataUrl}" alt="QR virement" style="width:130px;height:130px;display:block;margin:0 auto;" />
+                <p style="margin:6px 0 0;font-size:11px;color:#2050A0;font-weight:bold;">🏦 Virement</p>
+              </td>` : ""}
+            </tr>
+          </table>
+        </div>` : "";
+
       try {
         const subject = `💳 Solde stage à régler — ${solde.toFixed(2)}€ avant le ${j7Label}`;
         const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
@@ -106,6 +130,7 @@ export async function GET(req: NextRequest) {
                 💳 Régler le solde en ligne
               </a>
             </div>
+            ${qrSection}
             <p style="color:#888;font-size:12px;text-align:center;">
               Vous pouvez également régler sur place par CB, chèque ou espèces.
             </p>

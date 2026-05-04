@@ -43,6 +43,7 @@
     "next": "^15.0.0",
     "onlinepayments-sdk-nodejs": "^7.4.0",
     "openai": "^6.33.0",
+    "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "resend": "^4.8.0"
@@ -51,6 +52,7 @@
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.0.0",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.0.0",
     "dotenv": "^17.3.1",
     "postcss": "^8.0.0",
