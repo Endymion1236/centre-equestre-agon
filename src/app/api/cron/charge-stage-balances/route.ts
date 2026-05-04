@@ -87,24 +87,27 @@ export async function GET(req: NextRequest) {
 
       const soldeLink = `${appUrl}/espace-cavalier/factures?payId=${payDoc.id}`;
 
-      // Générer les QR codes : CAWL pointe vers la page espace cavalier qui
-      // déclenchera le paiement, SEPA pointe vers les coordonnées bancaires
-      // structurées pour un virement direct depuis l'app bancaire.
+      // Générer les QR codes : on utilise le mécanisme CID (pas data URL inline)
+      // pour que les images soient affichées par Gmail. Cf send-payment-link
+      // pour le détail du fix.
       const sepaLibelle = `${stageTitle} ${familyName}`.trim().slice(0, 70);
-      const qrCAWLDataUrl = await generateCAWLQR(soldeLink, "email");
-      const qrSEPADataUrl = await generateSEPAQR(solde, sepaLibelle, "email");
-      const qrSection = (qrCAWLDataUrl || qrSEPADataUrl) ? `
+      const qrCAWL = await generateCAWLQR(soldeLink, "email");
+      const qrSEPA = await generateSEPAQR(solde, sepaLibelle, "email");
+      const cidCAWL = `qr-cawl-${payDoc.id}@ce-agon`;
+      const cidSEPA = `qr-sepa-${payDoc.id}@ce-agon`;
+      const qrSection = (qrCAWL || qrSEPA) ? `
         <div style="background:white;border:1px solid #e0e8ff;border-radius:8px;padding:16px;margin-top:8px;">
           <p style="margin:0 0 12px;font-size:12px;color:#6b7280;text-align:center;">Ou scannez avec votre téléphone :</p>
           <table style="width:100%;border-collapse:collapse;" cellpadding="0" cellspacing="0">
             <tr>
-              ${qrCAWLDataUrl ? `<td style="text-align:center;vertical-align:top;padding:6px;">
-                <img src="${qrCAWLDataUrl}" alt="QR carte" style="width:130px;height:130px;display:block;margin:0 auto;" />
+              ${qrCAWL ? `<td style="text-align:center;vertical-align:top;padding:6px;">
+                <img src="cid:${cidCAWL}" alt="QR carte" style="width:130px;height:130px;display:block;margin:0 auto;" />
                 <p style="margin:6px 0 0;font-size:11px;color:#2050A0;font-weight:bold;">💳 Carte</p>
               </td>` : ""}
-              ${qrSEPADataUrl ? `<td style="text-align:center;vertical-align:top;padding:6px;">
-                <img src="${qrSEPADataUrl}" alt="QR virement" style="width:130px;height:130px;display:block;margin:0 auto;" />
+              ${qrSEPA ? `<td style="text-align:center;vertical-align:top;padding:6px;">
+                <img src="cid:${cidSEPA}" alt="QR virement" style="width:130px;height:130px;display:block;margin:0 auto;" />
                 <p style="margin:6px 0 0;font-size:11px;color:#2050A0;font-weight:bold;">🏦 Virement</p>
+                <p style="margin:2px 0 0;font-size:9px;color:#6b7280;">ING, Boursorama, Revolut, BNP Pro</p>
               </td>` : ""}
             </tr>
           </table>
@@ -138,6 +141,12 @@ export async function GET(req: NextRequest) {
         </div>`;
 
         if (resendKey) {
+          // Attachments CID pour les QR (cf send-payment-link pour le détail
+          // du fix Gmail blocking inline data URLs)
+          const attachments: any[] = [];
+          if (qrCAWL) attachments.push({ filename: "qr-paiement-carte.png", content: qrCAWL.base64Raw, contentId: cidCAWL, contentType: "image/png" });
+          if (qrSEPA) attachments.push({ filename: "qr-virement-sepa.png", content: qrSEPA.base64Raw, contentId: cidSEPA, contentType: "image/png" });
+
           const resendRes = await fetch("https://api.resend.com/emails", {
             method: "POST",
             headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
@@ -146,6 +155,7 @@ export async function GET(req: NextRequest) {
               to: familyEmail,
               ...(process.env.RESEND_BCC_EMAIL ? { bcc: process.env.RESEND_BCC_EMAIL } : {}),
               subject, html,
+              ...(attachments.length > 0 ? { attachments } : {}),
             }),
           });
           if (resendRes.ok) {

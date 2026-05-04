@@ -49,20 +49,27 @@ const QR_OPTIONS_PDF: QRCode.QRCodeToDataURLOptions = {
  * Génère un QR Code SEPA Credit Transfer (norme EPC069-12).
  *
  * Le payload suit le format strict de la norme : 11 lignes, séparées par \n,
- * pas de \r. Le client doit scanner avec son app bancaire compatible
- * (toutes les grandes banques européennes le sont depuis 2017).
+ * pas de \r. Le client doit scanner avec son app bancaire compatible.
+ *
+ * IMPORTANT : Crédit Agricole "Ma Banque" ne supporte PAS encore le scan EPC
+ * (test en cours). Banques compatibles confirmées : ING, Revolut, Boursorama,
+ * BNP Pro, BPCE en déploiement. Pour les emails, on inclut une mention.
  *
  * @param amountEur - Montant en euros (sera formaté avec 2 décimales)
  * @param remittance - Libellé visible côté virement (ex: "F-2026-0127 Dupont").
  *                    Limité à 140 caractères (norme).
  * @param target - "email" ou "pdf" pour adapter la résolution.
- * @returns data URL PNG base64 ou null si erreur (ne casse pas l'envoi)
+ * @returns { dataUrl, base64Raw } ou null si erreur (ne casse pas l'envoi).
+ *   - dataUrl : "data:image/png;base64,..." pour <img src=... > inline
+ *   - base64Raw : juste la partie base64 (sans le préfixe), pour Resend
+ *     attachments (qui veulent le content brut, et utiliser cid: dans le HTML
+ *     pour contourner le blocage Gmail des images data: inline)
  */
 export async function generateSEPAQR(
   amountEur: number,
   remittance: string,
   target: "email" | "pdf" = "email"
-): Promise<string | null> {
+): Promise<{ dataUrl: string; base64Raw: string } | null> {
   if (!amountEur || amountEur <= 0) return null;
   try {
     // Limiter le libellé à 140 caractères et nettoyer les caractères qui
@@ -86,7 +93,9 @@ export async function generateSEPAQR(
     ].join("\n");
 
     const opts = target === "pdf" ? QR_OPTIONS_PDF : QR_OPTIONS_EMAIL;
-    return await QRCode.toDataURL(payload, opts);
+    const dataUrl = await QRCode.toDataURL(payload, opts);
+    const base64Raw = dataUrl.replace(/^data:image\/png;base64,/, "");
+    return { dataUrl, base64Raw };
   } catch (e) {
     console.error("[generateSEPAQR] erreur:", e);
     return null;
@@ -107,15 +116,18 @@ export async function generateSEPAQR(
  *
  * @param paymentUrl - URL Hosted Checkout Page CAWL
  * @param target - "email" ou "pdf"
+ * @returns { dataUrl, base64Raw } ou null - cf generateSEPAQR pour usage
  */
 export async function generateCAWLQR(
   paymentUrl: string,
   target: "email" | "pdf" = "email"
-): Promise<string | null> {
+): Promise<{ dataUrl: string; base64Raw: string } | null> {
   if (!paymentUrl) return null;
   try {
     const opts = target === "pdf" ? QR_OPTIONS_PDF : QR_OPTIONS_EMAIL;
-    return await QRCode.toDataURL(paymentUrl, opts);
+    const dataUrl = await QRCode.toDataURL(paymentUrl, opts);
+    const base64Raw = dataUrl.replace(/^data:image\/png;base64,/, "");
+    return { dataUrl, base64Raw };
   } catch (e) {
     console.error("[generateCAWLQR] erreur:", e);
     return null;

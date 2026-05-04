@@ -75,16 +75,20 @@ export async function POST(req: NextRequest) {
       : `<p>Bonjour,</p><p>Veuillez trouver ci-dessous le lien de paiement pour régler <strong>${amount.toFixed(2)}€</strong> pour : ${prestations}.</p>`;
 
     // Générer les QR codes (CAWL pour paiement carte, SEPA pour virement bancaire).
-    // Si la génération échoue (ne devrait pas), les fonctions retournent null
-    // et on n'affiche simplement pas la section QR — l'email reste fonctionnel
-    // grâce au bouton "Payer" classique.
+    // On utilise le mécanisme CID (Content-ID) de Resend plutôt que des images
+    // base64 inline, car Gmail bloque les <img src="data:image/..."> pour
+    // raisons de sécurité. Avec CID, les images sont attachées au mail (en
+    // multipart/related) et référencées via <img src="cid:xxx">. Méthode standard
+    // MIME, supportée par Gmail, Outlook, iCloud, etc.
     const qrCAWL = await generateCAWLQR(paymentUrl, "email");
-    const sepaLibelle = `${payData.invoiceNumber || paymentId.slice(0, 8)} ${payData.familyName || ""}`.trim();
+    const sepaLibelle = `${(payData as any).invoiceNumber || paymentId.slice(0, 8)} ${payData.familyName || ""}`.trim();
     const qrSEPA = await generateSEPAQR(amount, sepaLibelle, "email");
 
-    // Section HTML des QR codes : 2 colonnes côte à côte sur grand écran,
-    // empilées sur mobile (table avec width 100% pour compatibilité Outlook
-    // / Gmail qui ne respectent pas tous flexbox).
+    // Identifiants CID (uniques par email)
+    const cidCAWL = `qr-cawl-${paymentId}@ce-agon`;
+    const cidSEPA = `qr-sepa-${paymentId}@ce-agon`;
+
+    // Section HTML des QR codes (référence par cid:, pas par data:image)
     const qrSection = (qrCAWL || qrSEPA) ? `
       <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-top: 16px;">
         <p style="margin: 0 0 12px; font-size: 13px; color: #6b7280; text-align: center;">
@@ -94,16 +98,16 @@ export async function POST(req: NextRequest) {
           <tr>
             ${qrCAWL ? `
             <td style="text-align: center; vertical-align: top; padding: 8px;">
-              <img src="${qrCAWL}" alt="QR Code paiement carte" style="display: block; margin: 0 auto; width: 140px; height: 140px;" />
+              <img src="cid:${cidCAWL}" alt="QR Code paiement carte" style="display: block; margin: 0 auto; width: 140px; height: 140px;" />
               <p style="margin: 8px 0 0; font-size: 12px; color: #1e3a5f; font-weight: bold;">💳 Paiement carte</p>
               <p style="margin: 2px 0 0; font-size: 11px; color: #6b7280;">Instantané, scannez avec l'appareil photo</p>
             </td>
             ` : ""}
             ${qrSEPA ? `
             <td style="text-align: center; vertical-align: top; padding: 8px;">
-              <img src="${qrSEPA}" alt="QR Code virement SEPA" style="display: block; margin: 0 auto; width: 140px; height: 140px;" />
+              <img src="cid:${cidSEPA}" alt="QR Code virement SEPA" style="display: block; margin: 0 auto; width: 140px; height: 140px;" />
               <p style="margin: 8px 0 0; font-size: 12px; color: #1e3a5f; font-weight: bold;">🏦 Virement bancaire</p>
-              <p style="margin: 2px 0 0; font-size: 11px; color: #6b7280;">Scannez depuis votre app bancaire</p>
+              <p style="margin: 2px 0 0; font-size: 11px; color: #6b7280;">Compatible ING, Boursorama, Revolut, BNP Pro</p>
             </td>
             ` : ""}
           </tr>
@@ -145,6 +149,28 @@ export async function POST(req: NextRequest) {
     const sentByUid = (auth as any)?.uid || "admin";
     if (resendKey) {
       try {
+        // Construire la liste d'attachments avec les QR codes en CID.
+        // Resend gère le multipart/related automatiquement quand on fournit
+        // un contentId, ce qui permet aux <img src="cid:xxx"> de fonctionner
+        // même sur Gmail qui bloque les data URLs inline.
+        const attachments: any[] = [];
+        if (qrCAWL) {
+          attachments.push({
+            filename: "qr-paiement-carte.png",
+            content: qrCAWL.base64Raw,
+            contentId: cidCAWL,
+            contentType: "image/png",
+          });
+        }
+        if (qrSEPA) {
+          attachments.push({
+            filename: "qr-virement-sepa.png",
+            content: qrSEPA.base64Raw,
+            contentId: cidSEPA,
+            contentType: "image/png",
+          });
+        }
+
         const resendRes = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${resendKey}` },
@@ -154,6 +180,7 @@ export async function POST(req: NextRequest) {
             bcc: "ceagon50@gmail.com",
             subject,
             html: emailHtml,
+            ...(attachments.length > 0 ? { attachments } : {}),
           }),
         });
         if (resendRes.ok) {

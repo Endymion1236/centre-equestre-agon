@@ -124,9 +124,10 @@ export async function POST(request: NextRequest) {
     // uniquement si la facture n'est pas réglée ET qu'il reste un montant > 0.
     // Le client peut scanner avec son app bancaire pour pré-remplir le virement.
     const sepaLibelle = `${invoiceNumber} ${familyName || ""}`.trim().slice(0, 70);
-    const qrSEPADataUrl = (!isPaid && resteDu > 0)
+    const qrSEPAResult = (!isPaid && resteDu > 0)
       ? await generateSEPAQR(resteDu, sepaLibelle, "pdf")
       : null;
+    const qrSEPADataUrl = qrSEPAResult?.dataUrl || null;
 
     // Construction du libellé de règlement :
     // - Si paymentDetails fourni (plusieurs encaissements) → lister chaque ligne
@@ -296,7 +297,7 @@ export async function POST(request: NextRequest) {
                 React.createElement(View, { style: { flex: 1 } },
                   React.createElement(Text, { style: s.qrTitle }, "📱 Payer par scan"),
                   React.createElement(Text, { style: s.qrText },
-                    "Scannez ce QR Code depuis votre app bancaire (Crédit Agricole, BNP, Boursorama, Revolut...) pour ouvrir le formulaire de virement pré-rempli avec le bon montant et libellé."),
+                    "Scannez ce QR Code depuis votre app bancaire pour ouvrir le formulaire de virement pré-rempli avec le bon montant et libellé. Compatible avec ING, Boursorama, Revolut, BNP Pro et la plupart des banques européennes."),
                 ),
               )
             : null,
