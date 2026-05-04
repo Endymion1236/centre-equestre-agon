@@ -4,6 +4,16 @@ import { db } from "@/lib/firebase";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { GALOPS_PROGRAMME, DOMAINE_LABELS, getNiveauById, type Domaine } from "@/lib/galops-programme";
 import { CheckCircle2, Circle, ChevronDown, ChevronRight, Save } from "lucide-react";
+import {
+  type Acquis,
+  type AcquisValue,
+  isDomaineEchelle,
+  getCompetenceLevel,
+  isCompetenceValidated,
+  DEFAULT_ECHELLE_LABELS,
+  DEFAULT_VALIDATED_FFE_LEVEL,
+  type ProgressionLabelsSettings,
+} from "@/lib/progression-helpers";
 
 interface Props {
   childId: string;
@@ -14,14 +24,35 @@ interface Props {
 }
 
 export default function ProgressionEditor({ childId, familyId, childName, galopLevel, onSaved }: Props) {
-  const [acquis, setAcquis] = useState<Record<string, boolean>>({});
+  // Acquis : structure rétro-compatible, peut contenir boolean (legacy + binaire)
+  // ou { level: 1-5 } (nouveau format pour pratique_*). Cf. progression-helpers.ts.
+  const [acquis, setAcquis] = useState<Acquis>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [selectedNiveau, setSelectedNiveau] = useState<string>("");
   const [expandedDomaines, setExpandedDomaines] = useState<Set<string>>(new Set(["pratique_cheval", "pratique_pied", "soins", "connaissances"]));
 
+  // Labels échelle (chargés depuis settings/progression_labels)
+  const [echelleLabels, setEchelleLabels] = useState<string[]>(DEFAULT_ECHELLE_LABELS);
+  const [seuilFFE, setSeuilFFE] = useState<number>(DEFAULT_VALIDATED_FFE_LEVEL);
+
   const docId = `${familyId}_${childId}`;
+
+  // Charger les labels custom une fois au montage (paramètres globaux)
+  useEffect(() => {
+    getDoc(doc(db, "settings", "progression_labels")).then(snap => {
+      if (snap.exists()) {
+        const data = snap.data() as ProgressionLabelsSettings;
+        if (Array.isArray(data.echelle) && data.echelle.length === 5) {
+          setEchelleLabels(data.echelle);
+        }
+        if (typeof data.validatedFfe === "number") {
+          setSeuilFFE(data.validatedFfe);
+        }
+      }
+    }).catch(() => { /* fallback sur les defaults — non bloquant */ });
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -44,21 +75,55 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
     })();
   }, [docId, galopLevel]);
 
+  // Toggle une compétence binaire (connaissances / soins) : true ↔ absent
   const toggle = (competenceId: string) => {
-    setAcquis(prev => ({ ...prev, [competenceId]: !prev[competenceId] }));
+    setAcquis(prev => {
+      const next = { ...prev };
+      if (next[competenceId]) {
+        delete next[competenceId];
+      } else {
+        next[competenceId] = true;
+      }
+      return next;
+    });
+    setSaved(false);
+  };
+
+  // Set un niveau pour une compétence pratique (level: 1-5).
+  // Cliquer sur le même niveau que celui actuel = remettre à 0 (decoche).
+  const setLevel = (competenceId: string, level: number) => {
+    setAcquis(prev => {
+      const next = { ...prev };
+      const currentLevel = getCompetenceLevel(prev[competenceId]);
+      if (currentLevel === level) {
+        // Décochage : on retire la compétence du tableau
+        delete next[competenceId];
+      } else {
+        next[competenceId] = { level };
+      }
+      return next;
+    });
     setSaved(false);
   };
 
   const save = async () => {
     setSaving(true);
     try {
-      // Auto-valider tous les niveaux précédents à 100%
+      // Auto-valider tous les niveaux précédents à 100%.
+      // Pour les compétences pratiques, on stocke level: 5 (= acquis FFE).
+      // Pour les binaires, on stocke true. Cela garantit que les niveaux
+      // antérieurs comptent bien comme validés dans isCompetenceValidated.
       const currentIdx = GALOPS_PROGRAMME.findIndex(n => n.id === selectedNiveau);
-      const enrichedAcquis = { ...acquis };
+      const enrichedAcquis: Acquis = { ...acquis };
       if (currentIdx > 0) {
         GALOPS_PROGRAMME.slice(0, currentIdx).forEach(niveau => {
           niveau.competences.forEach(c => {
-            enrichedAcquis[c.id] = true;
+            // Ne pas écraser une valeur déjà finement réglée (level: 3 par
+            // exemple) si l'utilisateur l'a configurée volontairement. On
+            // remplit uniquement ce qui est absent.
+            if (!enrichedAcquis[c.id]) {
+              enrichedAcquis[c.id] = isDomaineEchelle(c.domaine) ? { level: 5 } : true;
+            }
           });
         });
       }
@@ -87,7 +152,9 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
     return acc;
   }, {} as Record<string, typeof niveau.competences>);
 
-  const totalAcquis = niveau.competences.filter(c => acquis[c.id]).length;
+  // Compter via isCompetenceValidated pour gérer correctement boolean + level.
+  // Une compétence pratique compte comme "validée" si son level >= seuilFFE.
+  const totalAcquis = niveau.competences.filter(c => isCompetenceValidated(acquis[c.id], seuilFFE)).length;
   const pct = Math.round((totalAcquis / niveau.competences.length) * 100);
 
   if (loading) return <div className="text-center py-4 text-sm text-slate-400">Chargement...</div>;
@@ -137,7 +204,7 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
       {/* Compétences par domaine */}
       {Object.entries(parDomaine).map(([domaine, comps]) => {
         const isOpen = expandedDomaines.has(domaine);
-        const acquisDomaine = comps.filter(c => acquis[c.id]).length;
+        const acquisDomaine = comps.filter(c => isCompetenceValidated(acquis[c.id], seuilFFE)).length;
         return (
           <div key={domaine} className="border border-gray-100 rounded-xl overflow-hidden">
             <button
@@ -158,21 +225,72 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
             </button>
             {isOpen && (
               <div className="divide-y divide-gray-50">
-                {comps.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => toggle(c.id)}
-                    className={`w-full flex items-start gap-3 p-3 cursor-pointer border-none text-left transition-colors ${acquis[c.id] ? "bg-green-50" : "bg-white hover:bg-gray-50"}`}
-                  >
-                    {acquis[c.id]
-                      ? <CheckCircle2 size={18} className="text-green-500 flex-shrink-0 mt-0.5" />
-                      : <Circle size={18} className="text-gray-300 flex-shrink-0 mt-0.5" />
-                    }
-                    <span className={`font-body text-sm ${acquis[c.id] ? "text-green-700 line-through" : "text-slate-700"}`}>
-                      {c.label}
-                    </span>
-                  </button>
-                ))}
+                {comps.map(c => {
+                  const isEchelle = isDomaineEchelle(c.domaine);
+                  const level = getCompetenceLevel(acquis[c.id]);
+                  const validated = isCompetenceValidated(acquis[c.id], seuilFFE);
+
+                  if (isEchelle) {
+                    // ─── Compétence pratique : échelle 1-5 ───────────────────
+                    return (
+                      <div key={c.id} className={`p-3 ${level > 0 ? "bg-slate-50/40" : "bg-white"}`}>
+                        <div className="flex items-start gap-3 mb-2">
+                          {validated
+                            ? <CheckCircle2 size={18} className="text-green-500 flex-shrink-0 mt-0.5" />
+                            : level > 0
+                              ? <div className="w-[18px] h-[18px] rounded-full flex-shrink-0 mt-0.5 flex items-center justify-center font-body text-[10px] font-bold text-white"
+                                  style={{ background: `linear-gradient(135deg, hsl(${(level - 1) * 30}, 75%, 50%), hsl(${(level - 1) * 30}, 70%, 45%))` }}>
+                                  {level}
+                                </div>
+                              : <Circle size={18} className="text-gray-300 flex-shrink-0 mt-0.5" />
+                          }
+                          <span className={`font-body text-sm flex-1 ${validated ? "text-green-700" : level > 0 ? "text-slate-700" : "text-slate-500"}`}>
+                            {c.label}
+                          </span>
+                        </div>
+                        {/* Échelle 1-5 cliquable */}
+                        <div className="flex gap-1 ml-7">
+                          {[1, 2, 3, 4, 5].map(n => {
+                            const isSelected = level === n;
+                            const isFFE = n >= seuilFFE;
+                            return (
+                              <button
+                                key={n}
+                                onClick={() => setLevel(c.id, n)}
+                                title={`${echelleLabels[n - 1]}${isFFE ? " (validé FFE)" : ""}`}
+                                className={`flex-1 py-1.5 rounded-md font-body text-[11px] font-semibold cursor-pointer transition-all border ${
+                                  isSelected
+                                    ? "text-white border-transparent"
+                                    : "bg-white text-slate-500 border-gray-200 hover:bg-gray-50"
+                                }`}
+                                style={isSelected ? { background: `linear-gradient(135deg, hsl(${(n - 1) * 30}, 75%, 50%), hsl(${(n - 1) * 30}, 70%, 45%))` } : {}}
+                              >
+                                {n} · {echelleLabels[n - 1]}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // ─── Compétence binaire (connaissances / soins) ────────────
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => toggle(c.id)}
+                      className={`w-full flex items-start gap-3 p-3 cursor-pointer border-none text-left transition-colors ${validated ? "bg-green-50" : "bg-white hover:bg-gray-50"}`}
+                    >
+                      {validated
+                        ? <CheckCircle2 size={18} className="text-green-500 flex-shrink-0 mt-0.5" />
+                        : <Circle size={18} className="text-gray-300 flex-shrink-0 mt-0.5" />
+                      }
+                      <span className={`font-body text-sm ${validated ? "text-green-700 line-through" : "text-slate-700"}`}>
+                        {c.label}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
