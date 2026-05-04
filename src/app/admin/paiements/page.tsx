@@ -1124,12 +1124,12 @@ export default function PaiementsPage() {
         </button>
       </div>
 
-      <div className="flex gap-1.5 mb-6 overflow-x-auto pb-1 -mx-1 px-1 hide-scrollbar">
-        {([["encaisser", "Encaisser", ShoppingCart], ["journal", "Journal", Receipt], ["historique", "Historique", Receipt], ["echeances", "Échéances", Receipt], ["impayes", "Impayés", Receipt], ["cheques_differes", "Chèques différés", Calendar], ["offerts", "Offerts", Gift], ["declarations", "Déclarations", Receipt]] as const).map(([id, label, Icon]) => (
+      <div className="flex gap-1 mb-6 overflow-x-auto pb-1 -mx-1 px-1 hide-scrollbar">
+        {([["encaisser", "Encaisser", ShoppingCart], ["journal", "Journal", Receipt], ["historique", "Historique", Receipt], ["echeances", "Échéances", Receipt], ["impayes", "Impayés", Receipt], ["cheques_differes", "Chèques diff.", Calendar], ["offerts", "Offerts", Gift], ["declarations", "Déclar.", Receipt]] as const).map(([id, label, Icon]) => (
           <button key={id} onClick={() => setTab(id as any)}
-            className={`flex items-center gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg border font-body text-xs sm:text-sm font-medium cursor-pointer transition-all whitespace-nowrap flex-shrink-0
+            className={`flex items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border font-body text-[11px] sm:text-xs font-medium cursor-pointer transition-all whitespace-nowrap flex-shrink-0
               ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
-            <Icon size={14} /> {label}
+            <Icon size={13} /> {label}
             {id === "impayes" && (() => {
               const todayBadge = new Date().toISOString().split("T")[0];
               const count = payments.filter(p => {
