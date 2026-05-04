@@ -355,6 +355,11 @@ service cloud.firestore {
       allow read: if isStaff();
       allow write: if isAdmin();
     }
+    // Modèles de stages multi-jours (nbJours, horaires, activité, moniteur,
+    // réutilisables pour générer rapidement plusieurs créneaux de stage)
+    match /modeles_stages/{docId} {
+      allow read, write: if isAdmin();
+    }
 
     // ── Mouvements registre ───────────────────────────────────────────────
     // Lecture : staff (cavalerie affiche le registre d'un équidé aux moniteurs)
