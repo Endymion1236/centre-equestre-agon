@@ -546,14 +546,27 @@ export default function ModelesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
             <div>
               <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Activité (de type stage)</label>
-              <select value={stageFormActivityId} onChange={e => setStageFormActivityId(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm focus:border-orange-500 focus:outline-none bg-white">
-                <option value="">— Sélectionner —</option>
-                {activities.filter((a: any) => a.type === "stage" || a.type === "stage_journee").map((a: any) => (
-                  <option key={a.id} value={a.id}>{a.title}</option>
-                ))}
-              </select>
-              <p className="font-body text-[10px] text-slate-400 mt-1">Seuls les types &quot;stage&quot; sont listés.</p>
+              {(() => {
+                const stageActivities = activities.filter((a: any) => a.type === "stage" || a.type === "stage_journee");
+                if (stageActivities.length === 0) {
+                  return (
+                    <div className="px-3 py-2.5 rounded-lg border border-orange-200 bg-orange-50 font-body text-xs text-orange-800">
+                      ⚠️ Aucune activité de type stage trouvée.
+                      <a href="/admin/activites" className="underline font-semibold ml-1">Créer une activité de type &laquo;&nbsp;Stage&nbsp;&raquo;</a>
+                    </div>
+                  );
+                }
+                return (
+                  <select value={stageFormActivityId} onChange={e => setStageFormActivityId(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm focus:border-orange-500 focus:outline-none bg-white">
+                    <option value="">— Sélectionner —</option>
+                    {stageActivities.map((a: any) => (
+                      <option key={a.id} value={a.id}>{a.title}{a.type === "stage_journee" ? " (journée)" : ""}</option>
+                    ))}
+                  </select>
+                );
+              })()}
+              <p className="font-body text-[10px] text-slate-400 mt-1">Seuls les types &quot;stage&quot; et &quot;stage journée&quot; sont listés. Modifiable dans /admin/activites.</p>
             </div>
             <div>
               <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Moniteur</label>
