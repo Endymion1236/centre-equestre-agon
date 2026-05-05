@@ -26,19 +26,20 @@ interface Modele {
 }
 
 /**
- * Créneau au sein d'un modèle de stage.
+ * Un STAGE au sein d'un modèle de semaine type.
  *
- * dayOffset = position du créneau dans la semaine de stages, J0 étant le
- * premier jour. À l'application, dateRéelle = dateDébut + dayOffset (en
- * sautant les weekends si l'option est cochée).
+ * Pensé comme une saisie unique pour un stage entier qui dure plusieurs
+ * jours (ex: "Stage 3/4 ans, du J1 au J5, 10h-12h, Anne, 6 places").
+ * À l'application, on génère un créneau planning pour chaque jour entre
+ * dayStart et dayEnd inclus.
  *
- * On peut avoir plusieurs créneaux pour le même dayOffset (ex: matin 10h-12h
- * et après-midi 14h-16h le même jour, voire avec des activités/moniteurs
- * différents : Stage 3/4 ans avec Anne le matin, Stage 6/7 ans avec
- * Emmeline l'après-midi).
+ * Pour avoir des horaires différents le même jour (matin/après-midi avec
+ * 2 stages distincts), il suffit de créer plusieurs entrées dans le
+ * tableau stages[] du modèle.
  */
-interface ModeleStageCreneau {
-  dayOffset: number; // 0 = J0 (premier jour), 1 = J1, etc.
+interface ModeleStageItem {
+  dayStart: number;       // Jour 1 = 0, Jour 2 = 1, etc. (interne, on affiche +1)
+  dayEnd: number;         // inclus
   startTime: string;
   endTime: string;
   activityId: string;
@@ -48,37 +49,51 @@ interface ModeleStageCreneau {
 }
 
 /**
- * Modèle de "semaine type de stages" (refonte option C).
+ * Modèle de "semaine type de stages" (refonte v2 — saisie par stage).
  *
- * Permet de définir une organisation complète sur N jours : plusieurs
- * activités, plusieurs horaires, plusieurs moniteurs. À l'application,
- * tous les créneaux sont générés dans le planning aux bonnes dates et
- * fonctionnent comme des créneaux classiques (inscription, encaissement,
- * facturation tout marche).
+ * Un modèle contient un tableau de stages[]. Chaque stage est défini comme
+ * une unité (du jour X au jour Y, à telle heure) — pas comme N créneaux
+ * séparés. À l'application, on développe : pour chaque stage on génère
+ * (dayEnd - dayStart + 1) créneaux dans le planning, tous avec la même
+ * activité/moniteur/horaire/places.
  *
- * Différence avec les modèles de reprise hebdo :
- * - dayOfWeek (lun/mar/...) remplacé par dayOffset (J0, J1, J2)
- * - Application = date de début + nb jours, pas une période open-ended
- *
- * Ancien format (nbJours + horaires uniques + 1 activité) automatiquement
- * migré vers ce nouveau format à l'ouverture en édition.
+ * Rétrocompat :
+ * - Format v1 (creneaux: ModeleStageCreneau[]) → regroupé en stages
+ *   contigus à l'ouverture (jours consécutifs avec même activité/moniteur/
+ *   horaires fusionnés en un stage).
+ * - Format v0 (startTime/endTime/activityId/... directement dans le doc)
+ *   → 1 stage couvrant tous les jours.
  */
 interface ModeleStage {
   id: string;
   name: string;
   description: string;
   nbJours: number;
-  creneaux: ModeleStageCreneau[];
+  stages: ModeleStageItem[]; // nouveau format v2
   status: "active" | "inactive";
   createdAt: any;
-  // Anciens champs (pré-refonte) — encore lus pour rétrocompatibilité,
-  // migrés vers creneaux à la première édition.
+  // Anciens champs gardés pour rétrocompat lecture (v0 + v1)
+  creneaux?: ModeleStageCreneau[];
   startTime?: string;
   endTime?: string;
   activityId?: string;
   activityTitle?: string;
   monitor?: string;
   maxPlaces?: number;
+}
+
+/**
+ * Format intermédiaire (v1) — gardé uniquement pour la migration.
+ * Représentait 1 créneau = 1 jour, ce qui était trop verbeux à saisir.
+ */
+interface ModeleStageCreneau {
+  dayOffset: number;
+  startTime: string;
+  endTime: string;
+  activityId: string;
+  activityTitle: string;
+  monitor: string;
+  maxPlaces: number;
 }
 
 const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
@@ -108,11 +123,11 @@ export default function ModelesPage() {
   const [formDesc, setFormDesc] = useState("");
   const [formCreneaux, setFormCreneaux] = useState<ModeleCreneau[]>([]);
 
-  // Form state — modèle stage (refonte option C : tableau de créneaux)
+  // Form state — modèle stage (v2 : saisie par stage, pas par créneau)
   const [stageFormName, setStageFormName] = useState("");
   const [stageFormDesc, setStageFormDesc] = useState("");
   const [stageFormNbJours, setStageFormNbJours] = useState(5);
-  const [stageFormCreneaux, setStageFormCreneaux] = useState<ModeleStageCreneau[]>([]);
+  const [stageFormStages, setStageFormStages] = useState<ModeleStageItem[]>([]);
 
   // Apply modal — reprise hebdo
   const [applyingId, setApplyingId] = useState<string | null>(null);
@@ -252,50 +267,105 @@ export default function ModelesPage() {
   };
 
   // ─── HANDLERS pour les modèles de stages multi-jours ────────────────────
+
+  /**
+   * Lit les stages depuis un modèle quel que soit son format de stockage.
+   * - v2 (stages[]) : retourné tel quel
+   * - v1 (creneaux[]) : regroupe les créneaux contigus avec mêmes
+   *   activité/moniteur/horaires en un seul stage (ex: 5 créneaux J0-J4
+   *   identiques → 1 stage J0→J4)
+   * - v0 (startTime/endTime directement) : 1 stage couvrant tous les jours
+   */
+  const readStagesFromModele = (s: ModeleStage): ModeleStageItem[] => {
+    // v2 : déjà au bon format
+    if (Array.isArray(s.stages) && s.stages.length > 0) return s.stages;
+
+    // v1 : regrouper les créneaux contigus
+    if (Array.isArray(s.creneaux) && s.creneaux.length > 0) {
+      // Tri par dayOffset puis startTime
+      const sorted = [...s.creneaux].sort((a, b) => {
+        if (a.dayOffset !== b.dayOffset) return a.dayOffset - b.dayOffset;
+        return a.startTime.localeCompare(b.startTime);
+      });
+      const stages: ModeleStageItem[] = [];
+      // Clé de regroupement : activityId|monitor|startTime|endTime|maxPlaces
+      const keyOf = (c: ModeleStageCreneau) =>
+        `${c.activityId}|${c.monitor}|${c.startTime}|${c.endTime}|${c.maxPlaces}`;
+      // On parcourt et on regroupe les jours consécutifs ayant la même clé
+      const byKey = new Map<string, ModeleStageCreneau[]>();
+      for (const c of sorted) {
+        if (!byKey.has(keyOf(c))) byKey.set(keyOf(c), []);
+        byKey.get(keyOf(c))!.push(c);
+      }
+      for (const [, group] of byKey) {
+        // Pour chaque groupe, détecter les plages contiguës de jours
+        const sortedDays = group.map(c => c.dayOffset).sort((a, b) => a - b);
+        let rangeStart = sortedDays[0];
+        let rangeEnd = sortedDays[0];
+        const first = group[0];
+        for (let i = 1; i < sortedDays.length; i++) {
+          if (sortedDays[i] === rangeEnd + 1) {
+            rangeEnd = sortedDays[i];
+          } else {
+            stages.push({
+              dayStart: rangeStart, dayEnd: rangeEnd,
+              startTime: first.startTime, endTime: first.endTime,
+              activityId: first.activityId, activityTitle: first.activityTitle,
+              monitor: first.monitor, maxPlaces: first.maxPlaces,
+            });
+            rangeStart = sortedDays[i];
+            rangeEnd = sortedDays[i];
+          }
+        }
+        stages.push({
+          dayStart: rangeStart, dayEnd: rangeEnd,
+          startTime: first.startTime, endTime: first.endTime,
+          activityId: first.activityId, activityTitle: first.activityTitle,
+          monitor: first.monitor, maxPlaces: first.maxPlaces,
+        });
+      }
+      return stages.sort((a, b) => a.dayStart - b.dayStart || a.startTime.localeCompare(b.startTime));
+    }
+
+    // v0 : un seul stage couvrant tous les jours
+    if (s.activityId && s.startTime && s.endTime) {
+      return [{
+        dayStart: 0,
+        dayEnd: s.nbJours - 1,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        activityId: s.activityId,
+        activityTitle: s.activityTitle || "",
+        monitor: s.monitor || "",
+        maxPlaces: s.maxPlaces || 8,
+      }];
+    }
+
+    return [];
+  };
+
   const openStageForm = (s?: ModeleStage) => {
     if (s) {
       setEditingStageId(s.id);
       setStageFormName(s.name);
       setStageFormDesc(s.description);
       setStageFormNbJours(s.nbJours);
-      // Migration ancien format → nouveau (rétrocompat)
-      // Si le modèle a déjà un tableau creneaux, on l'utilise tel quel.
-      // Sinon, on génère nbJours créneaux à partir des anciens champs
-      // (startTime/endTime/activityId/monitor/maxPlaces) pour ne pas perdre
-      // les modèles créés avant la refonte.
-      if (Array.isArray(s.creneaux) && s.creneaux.length > 0) {
-        setStageFormCreneaux(s.creneaux);
-      } else if (s.activityId && s.startTime && s.endTime) {
-        const migrated: ModeleStageCreneau[] = [];
-        for (let d = 0; d < s.nbJours; d++) {
-          migrated.push({
-            dayOffset: d,
-            startTime: s.startTime!,
-            endTime: s.endTime!,
-            activityId: s.activityId!,
-            activityTitle: s.activityTitle || "",
-            monitor: s.monitor || "",
-            maxPlaces: s.maxPlaces || 8,
-          });
-        }
-        setStageFormCreneaux(migrated);
-      } else {
-        setStageFormCreneaux([]);
-      }
+      setStageFormStages(readStagesFromModele(s));
     } else {
       setEditingStageId(null);
       setStageFormName("");
       setStageFormDesc("");
       setStageFormNbJours(5);
-      setStageFormCreneaux([]);
+      setStageFormStages([]);
     }
     setShowStageForm(true);
   };
 
-  // Helper : ajouter un nouveau créneau au modèle stage (par défaut J0)
-  const addStageCreneau = () => {
-    setStageFormCreneaux(prev => [...prev, {
-      dayOffset: 0,
+  // Helper : ajouter un nouveau stage (par défaut couvre tous les jours)
+  const addStageItem = () => {
+    setStageFormStages(prev => [...prev, {
+      dayStart: 0,
+      dayEnd: stageFormNbJours - 1,
       startTime: "10:00",
       endTime: "12:00",
       activityId: "",
@@ -305,54 +375,49 @@ export default function ModelesPage() {
     }]);
   };
 
-  // Helper : retirer un créneau par index
-  const removeStageCreneau = (idx: number) => {
-    setStageFormCreneaux(prev => prev.filter((_, i) => i !== idx));
+  const removeStageItem = (idx: number) => {
+    setStageFormStages(prev => prev.filter((_, i) => i !== idx));
   };
 
-  // Helper : mettre à jour un champ d'un créneau
-  const updateStageCreneau = (idx: number, field: keyof ModeleStageCreneau, value: any) => {
-    setStageFormCreneaux(prev => prev.map((c, i) => {
+  const updateStageItem = (idx: number, field: keyof ModeleStageItem, value: any) => {
+    setStageFormStages(prev => prev.map((c, i) => {
       if (i !== idx) return c;
       const next: any = { ...c, [field]: value };
-      // Si on change activityId, mettre aussi à jour activityTitle
       if (field === "activityId") {
         const act = activities.find((a: any) => a.id === value);
         if (act) {
           next.activityTitle = act.title;
-          // Auto-remplir maxPlaces si on a un défaut sur l'activité
           if (act.maxPlaces && c.maxPlaces === 8) next.maxPlaces = act.maxPlaces;
         }
       }
+      // Garde-fou : dayEnd ne peut pas être < dayStart
+      if (field === "dayStart" && next.dayEnd < value) next.dayEnd = value;
+      if (field === "dayEnd" && next.dayStart > value) next.dayStart = value;
       return next;
     }));
   };
 
   const handleStageSave = async () => {
-    if (!stageFormName || stageFormNbJours < 1 || stageFormCreneaux.length === 0) return;
-    // Validation : tous les créneaux doivent avoir une activité
-    const invalid = stageFormCreneaux.some(c => !c.activityId);
-    if (invalid) { alert("Chaque créneau doit avoir une activité sélectionnée."); return; }
-    // Validation : tous les dayOffset doivent être < nbJours
-    const outOfRange = stageFormCreneaux.some(c => c.dayOffset < 0 || c.dayOffset >= stageFormNbJours);
-    if (outOfRange) { alert(`Tous les créneaux doivent être entre J0 et J${stageFormNbJours - 1}.`); return; }
+    if (!stageFormName || stageFormNbJours < 1 || stageFormStages.length === 0) return;
+    const invalid = stageFormStages.some(s => !s.activityId);
+    if (invalid) { alert("Chaque stage doit avoir une activité sélectionnée."); return; }
+    const outOfRange = stageFormStages.some(s =>
+      s.dayStart < 0 || s.dayEnd >= stageFormNbJours || s.dayStart > s.dayEnd
+    );
+    if (outOfRange) { alert(`Les jours de chaque stage doivent être valides (entre Jour 1 et Jour ${stageFormNbJours}).`); return; }
 
     setSaving(true);
     const data: any = {
       name: stageFormName,
       description: stageFormDesc,
       nbJours: stageFormNbJours,
-      creneaux: stageFormCreneaux,
+      stages: stageFormStages,
       status: "active",
       updatedAt: serverTimestamp(),
-      // Nettoyage : on supprime les anciens champs (migration définitive)
-      // Firestore ne supporte pas FieldValue.delete dans data spread, donc
-      // on utilise update si édition pour gérer la suppression des champs.
     };
     if (editingStageId) {
-      // Mise à jour : on écrase aussi les anciens champs avec null pour les
-      // retirer du document (deleteField serait plus propre mais null suffit
-      // pour notre logique de lecture)
+      // Nettoyage des anciens champs v0/v1 (migration définitive)
+      data.creneaux = null;
       data.startTime = null;
       data.endTime = null;
       data.activityId = null;
@@ -381,46 +446,29 @@ export default function ModelesPage() {
   };
 
   /**
-   * Applique un modèle de semaine de stages à partir d'une date de début.
-   * Pour chaque dayOffset (J0, J1, ...), calcule la date réelle = date début + offset
-   * (en sautant les week-ends si l'option est cochée), et génère un créneau
-   * dans le planning par entrée du tableau creneaux.
+   * Applique un modèle de semaine type. Pour chaque stage de stages[], on
+   * développe en (dayEnd - dayStart + 1) créneaux planning aux dates réelles
+   * calculées à partir de la date de début (en sautant les weekends si demandé).
    *
-   * Un même dayOffset peut avoir plusieurs créneaux (ex: matin + après-midi),
-   * tous se génèrent à la même date réelle. Ils apparaissent dans le planning
-   * comme des créneaux classiques inscriptibles.
+   * Tous les jours d'un même stage partagent le même activityId, ce qui permet
+   * à EnrollPanel de les détecter comme un stage multi-jours et proposer
+   * l'inscription au stage entier.
    */
   const handleStageApply = async () => {
-    const stage = modelesStages.find(s => s.id === applyingStageId);
-    if (!stage || !stageApplyStart) return;
+    const modele = modelesStages.find(s => s.id === applyingStageId);
+    if (!modele || !stageApplyStart) return;
+    const stages = readStagesFromModele(modele);
+    if (stages.length === 0) { alert("Ce modèle ne contient aucun stage."); return; }
+
     setSaving(true);
 
-    // Compatibilité ancien format : si pas de tableau creneaux, on génère
-    // les créneaux à la volée à partir des anciens champs (1 par jour)
-    const creneauxToGen: ModeleStageCreneau[] = (stage.creneaux && stage.creneaux.length > 0)
-      ? stage.creneaux
-      : (stage.activityId && stage.startTime && stage.endTime)
-        ? Array.from({ length: stage.nbJours }, (_, d) => ({
-            dayOffset: d,
-            startTime: stage.startTime!,
-            endTime: stage.endTime!,
-            activityId: stage.activityId!,
-            activityTitle: stage.activityTitle || "",
-            monitor: stage.monitor || "",
-            maxPlaces: stage.maxPlaces || 8,
-          }))
-        : [];
-
-    if (creneauxToGen.length === 0) { alert("Ce modèle ne contient aucun créneau."); setSaving(false); return; }
-
     // Calcul des dates réelles pour chaque dayOffset (en sautant weekends si
-    // demandé). On calcule une fois pour tous les dayOffsets distincts pour
-    // garder la cohérence (deux créneaux du même J0 partagent la même date).
+    // demandé). Une seule passe pour tous les jours nécessaires.
     const start = new Date(stageApplyStart);
     const dateForOffset = new Map<number, string>();
+    const maxOffset = Math.max(...stages.map(s => s.dayEnd));
     let dayCount = 0;
     const cur = new Date(start);
-    const maxOffset = Math.max(...creneauxToGen.map(c => c.dayOffset));
     while (dayCount <= maxOffset) {
       const day = cur.getDay();
       const isWeekend = day === 0 || day === 6;
@@ -431,26 +479,29 @@ export default function ModelesPage() {
       cur.setDate(cur.getDate() + 1);
     }
 
+    // Pour chaque stage, générer 1 créneau planning par jour entre dayStart et dayEnd
     let created = 0;
-    for (const c of creneauxToGen) {
-      const d = dateForOffset.get(c.dayOffset);
-      if (!d) continue; // sécurité : ne devrait pas arriver
-      const act = activities.find((a: any) => a.id === c.activityId);
-      await addDoc(collection(db, "creneaux"), {
-        date: d,
-        startTime: c.startTime,
-        endTime: c.endTime,
-        activityId: c.activityId,
-        activityTitle: c.activityTitle,
-        activityType: act?.type || "stage",
-        monitor: c.monitor,
-        maxPlaces: c.maxPlaces,
-        enrolled: [],
-        status: "open",
-        source: `modele_stage:${stage.name}`,
-        createdAt: serverTimestamp(),
-      });
-      created++;
+    for (const stg of stages) {
+      const act = activities.find((a: any) => a.id === stg.activityId);
+      for (let d = stg.dayStart; d <= stg.dayEnd; d++) {
+        const dateStr = dateForOffset.get(d);
+        if (!dateStr) continue;
+        await addDoc(collection(db, "creneaux"), {
+          date: dateStr,
+          startTime: stg.startTime,
+          endTime: stg.endTime,
+          activityId: stg.activityId,
+          activityTitle: stg.activityTitle,
+          activityType: act?.type || "stage",
+          monitor: stg.monitor,
+          maxPlaces: stg.maxPlaces,
+          enrolled: [],
+          status: "open",
+          source: `modele_stage:${modele.name}`,
+          createdAt: serverTimestamp(),
+        });
+        created++;
+      }
     }
     const dates = Array.from(dateForOffset.values()).sort();
     alert(`✅ ${created} créneau${created > 1 ? "x" : ""} créé${created > 1 ? "s" : ""} dans le planning !\nDu ${new Date(dates[0]).toLocaleDateString("fr-FR")} au ${new Date(dates[dates.length - 1]).toLocaleDateString("fr-FR")}\n\nLes créneaux apparaissent maintenant dans /admin/planning et les familles peuvent s'inscrire.`);
@@ -644,15 +695,15 @@ export default function ModelesPage() {
             <p className="font-body text-[10px] text-slate-400 mt-1">Tu pourras ajouter plusieurs créneaux sur le même jour (matin/après-midi, ou activités différentes).</p>
           </div>
 
-          {/* Liste des créneaux du modèle */}
+          {/* Liste des stages du modèle */}
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
               <h4 className="font-body text-xs font-semibold text-slate-700 uppercase tracking-wide">
-                Créneaux ({stageFormCreneaux.length})
+                Stages ({stageFormStages.length})
               </h4>
-              <button onClick={addStageCreneau}
+              <button onClick={addStageItem}
                 className="flex items-center gap-1 font-body text-xs font-semibold text-orange-700 bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-200 cursor-pointer hover:bg-orange-100">
-                <Plus size={13}/> Ajouter un créneau
+                <Plus size={13}/> Ajouter un stage
               </button>
             </div>
 
@@ -666,74 +717,92 @@ export default function ModelesPage() {
                   </div>
                 );
               }
-              if (stageFormCreneaux.length === 0) {
+              if (stageFormStages.length === 0) {
                 return (
                   <div className="px-3 py-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 font-body text-xs text-slate-500 text-center italic">
-                    Aucun créneau pour le moment. Cliquez sur &laquo;&nbsp;Ajouter un créneau&nbsp;&raquo; pour commencer.
+                    Aucun stage pour le moment. Cliquez sur &laquo;&nbsp;Ajouter un stage&nbsp;&raquo; pour commencer.
                   </div>
                 );
               }
               return (
                 <div className="flex flex-col gap-2">
-                  {stageFormCreneaux.map((c, idx) => (
-                    <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-orange-50/30 rounded-lg p-2">
-                      {/* Jour relatif J0/J1/J2... */}
-                      <select value={c.dayOffset}
-                        onChange={e => updateStageCreneau(idx, "dayOffset", parseInt(e.target.value, 10))}
-                        className="col-span-2 px-2 py-2 rounded-lg border border-gray-200 font-body text-xs bg-white focus:border-orange-500 focus:outline-none">
-                        {Array.from({ length: stageFormNbJours }, (_, j) => (
-                          <option key={j} value={j}>Jour {j + 1}</option>
-                        ))}
-                      </select>
-                      {/* Heure début */}
-                      <input type="time" value={c.startTime}
-                        onChange={e => updateStageCreneau(idx, "startTime", e.target.value)}
-                        className="col-span-2 px-2 py-2 rounded-lg border border-gray-200 font-body text-xs focus:border-orange-500 focus:outline-none" />
-                      {/* Flèche → */}
-                      <span className="col-span-1 text-center text-slate-400 font-body text-xs">→</span>
-                      {/* Heure fin */}
-                      <input type="time" value={c.endTime}
-                        onChange={e => updateStageCreneau(idx, "endTime", e.target.value)}
-                        className="col-span-2 px-2 py-2 rounded-lg border border-gray-200 font-body text-xs focus:border-orange-500 focus:outline-none" />
-                      {/* Activité */}
-                      <select value={c.activityId}
-                        onChange={e => updateStageCreneau(idx, "activityId", e.target.value)}
-                        className="col-span-2 px-2 py-2 rounded-lg border border-gray-200 font-body text-xs bg-white focus:border-orange-500 focus:outline-none">
-                        <option value="">— Activité —</option>
-                        {stageActivities.map((a: any) => (
-                          <option key={a.id} value={a.id}>{a.title}</option>
-                        ))}
-                      </select>
-                      {/* Moniteur */}
-                      <select value={c.monitor}
-                        onChange={e => updateStageCreneau(idx, "monitor", e.target.value)}
-                        className="col-span-2 px-2 py-2 rounded-lg border border-gray-200 font-body text-xs bg-white focus:border-orange-500 focus:outline-none">
-                        {moniteurs.map(m => <option key={m} value={m}>{m}</option>)}
-                      </select>
-                      {/* Places + delete */}
-                      <div className="col-span-1 flex items-center gap-1">
-                        <input type="number" min={1} value={c.maxPlaces}
-                          onChange={e => updateStageCreneau(idx, "maxPlaces", Math.max(1, parseInt(e.target.value, 10) || 8))}
-                          title="Places max"
-                          className="w-10 px-1 py-2 rounded-lg border border-gray-200 font-body text-xs text-center focus:border-orange-500 focus:outline-none" />
-                        <button onClick={() => removeStageCreneau(idx)} title="Supprimer ce créneau"
-                          className="text-red-500 hover:text-red-700 bg-transparent border-none cursor-pointer p-1">
-                          <Trash2 size={13}/>
-                        </button>
+                  {stageFormStages.map((stg, idx) => {
+                    const totalCreneaux = stg.dayEnd - stg.dayStart + 1;
+                    return (
+                      <div key={idx} className="bg-orange-50/40 rounded-lg p-3 border border-orange-100">
+                        {/* Ligne 1 : activité + moniteur + places + delete */}
+                        <div className="grid grid-cols-12 gap-2 items-center mb-2">
+                          <select value={stg.activityId}
+                            onChange={e => updateStageItem(idx, "activityId", e.target.value)}
+                            className="col-span-5 px-2 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white focus:border-orange-500 focus:outline-none">
+                            <option value="">— Activité —</option>
+                            {stageActivities.map((a: any) => (
+                              <option key={a.id} value={a.id}>{a.title}</option>
+                            ))}
+                          </select>
+                          <select value={stg.monitor}
+                            onChange={e => updateStageItem(idx, "monitor", e.target.value)}
+                            className="col-span-4 px-2 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white focus:border-orange-500 focus:outline-none">
+                            {moniteurs.map(m => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                          <input type="number" min={1} value={stg.maxPlaces}
+                            onChange={e => updateStageItem(idx, "maxPlaces", Math.max(1, parseInt(e.target.value, 10) || 8))}
+                            title="Places max"
+                            className="col-span-2 px-2 py-2 rounded-lg border border-gray-200 font-body text-sm text-center focus:border-orange-500 focus:outline-none" />
+                          <button onClick={() => removeStageItem(idx)} title="Supprimer ce stage"
+                            className="col-span-1 text-red-500 hover:text-red-700 bg-transparent border-none cursor-pointer p-1 flex justify-center">
+                            <Trash2 size={14}/>
+                          </button>
+                        </div>
+                        {/* Ligne 2 : dayStart → dayEnd + horaires */}
+                        <div className="grid grid-cols-12 gap-2 items-center">
+                          <span className="col-span-1 font-body text-[11px] text-slate-500 text-right">Du</span>
+                          <select value={stg.dayStart}
+                            onChange={e => updateStageItem(idx, "dayStart", parseInt(e.target.value, 10))}
+                            className="col-span-2 px-2 py-2 rounded-lg border border-gray-200 font-body text-xs bg-white focus:border-orange-500 focus:outline-none">
+                            {Array.from({ length: stageFormNbJours }, (_, j) => (
+                              <option key={j} value={j}>Jour {j + 1}</option>
+                            ))}
+                          </select>
+                          <span className="col-span-1 font-body text-[11px] text-slate-500 text-center">au</span>
+                          <select value={stg.dayEnd}
+                            onChange={e => updateStageItem(idx, "dayEnd", parseInt(e.target.value, 10))}
+                            className="col-span-2 px-2 py-2 rounded-lg border border-gray-200 font-body text-xs bg-white focus:border-orange-500 focus:outline-none">
+                            {Array.from({ length: stageFormNbJours }, (_, j) => (
+                              <option key={j} value={j}>Jour {j + 1}</option>
+                            ))}
+                          </select>
+                          <input type="time" value={stg.startTime}
+                            onChange={e => updateStageItem(idx, "startTime", e.target.value)}
+                            className="col-span-2 px-2 py-2 rounded-lg border border-gray-200 font-body text-xs focus:border-orange-500 focus:outline-none" />
+                          <span className="col-span-1 text-center text-slate-400 font-body text-xs">→</span>
+                          <input type="time" value={stg.endTime}
+                            onChange={e => updateStageItem(idx, "endTime", e.target.value)}
+                            className="col-span-2 px-2 py-2 rounded-lg border border-gray-200 font-body text-xs focus:border-orange-500 focus:outline-none" />
+                          <span className="col-span-1 font-body text-[10px] text-orange-700 italic font-semibold text-right">
+                            ={totalCreneaux}j
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
+                  {/* Récap total créneaux générés */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mt-1">
+                    <span className="font-body text-xs text-blue-800">
+                      📊 À l&apos;application : <strong>{stageFormStages.reduce((s, st) => s + (st.dayEnd - st.dayStart + 1), 0)} créneaux</strong> seront générés dans le planning ({stageFormStages.length} stage{stageFormStages.length > 1 ? "s" : ""} × jours).
+                    </span>
+                  </div>
                 </div>
               );
             })()}
           </div>
 
           <p className="font-body text-[11px] text-slate-500 italic mb-4">
-            💡 Tu peux mettre plusieurs créneaux sur le même jour (matin + après-midi) avec des activités/moniteurs différents. À l&apos;application, tu choisiras la date de début et tous les créneaux apparaîtront dans le planning.
+            💡 Un stage = une saisie. Si tu as 7 stages dans la semaine (3 le matin + 3 l&apos;après-midi + 1 mercredi seul), tu fais 7 lignes. Pas besoin de remplir jour par jour.
           </p>
 
           <div className="flex gap-2">
-            <button onClick={handleStageSave} disabled={saving || !stageFormName || stageFormCreneaux.length === 0}
+            <button onClick={handleStageSave} disabled={saving || !stageFormName || stageFormStages.length === 0}
               className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-orange-500 px-5 py-2.5 rounded-xl border-none cursor-pointer hover:bg-orange-400 disabled:opacity-50">
               {saving ? <Loader2 size={16} className="animate-spin"/> : <Plus size={16}/>}
               {editingStageId ? "Enregistrer" : "Créer le modèle"}
@@ -755,27 +824,10 @@ export default function ModelesPage() {
           </h2>
           <div className="flex flex-col gap-3">
             {modelesStages.map(s => {
-              // Lire les créneaux : nouveau format si présent, sinon migration à la volée
-              const creneaux: ModeleStageCreneau[] = (s.creneaux && s.creneaux.length > 0)
-                ? s.creneaux
-                : (s.activityId && s.startTime && s.endTime)
-                  ? Array.from({ length: s.nbJours }, (_, d) => ({
-                      dayOffset: d,
-                      startTime: s.startTime!,
-                      endTime: s.endTime!,
-                      activityId: s.activityId!,
-                      activityTitle: s.activityTitle || "",
-                      monitor: s.monitor || "",
-                      maxPlaces: s.maxPlaces || 8,
-                    }))
-                  : [];
-              // Grouper par dayOffset pour affichage compact
-              const byDay = new Map<number, ModeleStageCreneau[]>();
-              for (const c of creneaux) {
-                if (!byDay.has(c.dayOffset)) byDay.set(c.dayOffset, []);
-                byDay.get(c.dayOffset)!.push(c);
-              }
-              const sortedDays = Array.from(byDay.keys()).sort((a, b) => a - b);
+              // Lire les stages au format unifié v2 (helper gère v0/v1/v2)
+              const stages: ModeleStageItem[] = readStagesFromModele(s);
+              // Total créneaux qui seront générés à l'application
+              const totalCreneaux = stages.reduce((sum, st) => sum + (st.dayEnd - st.dayStart + 1), 0);
               return (
                 <Card key={s.id} padding="md" className={s.status === "inactive" ? "opacity-50" : ""}>
                   <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
@@ -787,7 +839,7 @@ export default function ModelesPage() {
                         </Badge>
                       </div>
                       <p className="font-body text-xs text-slate-500">
-                        {s.nbJours} jour{s.nbJours > 1 ? "s" : ""} · {creneaux.length} créneau{creneaux.length > 1 ? "x" : ""} au total
+                        {s.nbJours} jour{s.nbJours > 1 ? "s" : ""} · {stages.length} stage{stages.length > 1 ? "s" : ""} · {totalCreneaux} créneau{totalCreneaux > 1 ? "x" : ""} au total
                       </p>
                       {s.description && <p className="font-body text-xs text-slate-400 italic mt-1">{s.description}</p>}
                     </div>
@@ -811,24 +863,32 @@ export default function ModelesPage() {
                     </div>
                   </div>
 
-                  {/* Détail des créneaux par jour */}
-                  {creneaux.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {sortedDays.map(d => (
-                        <div key={d} className="bg-orange-50 border border-orange-100 rounded-lg px-2 py-1">
-                          <div className="font-body text-[10px] font-semibold text-orange-700 mb-0.5">Jour {d + 1}</div>
-                          {byDay.get(d)!.map((c, i) => (
-                            <div key={i} className="font-body text-[11px] text-slate-700 flex items-center gap-1">
-                              <span className="font-mono">{c.startTime}–{c.endTime}</span>
-                              <span className="text-slate-500">·</span>
-                              <span>{c.activityTitle || "?"}</span>
-                              <span className="text-slate-500">·</span>
-                              <span className="text-slate-500">{c.monitor || "?"}</span>
-                              <span className="text-slate-400">({c.maxPlaces}pl)</span>
-                            </div>
-                          ))}
-                        </div>
-                      ))}
+                  {/* Détail : un bloc par stage */}
+                  {stages.length > 0 && (
+                    <div className="mt-2 flex flex-col gap-1">
+                      {stages.map((stg, i) => {
+                        const isOneDay = stg.dayStart === stg.dayEnd;
+                        const dayLabel = isOneDay
+                          ? `Jour ${stg.dayStart + 1}`
+                          : `Jour ${stg.dayStart + 1} → ${stg.dayEnd + 1}`;
+                        const nbDays = stg.dayEnd - stg.dayStart + 1;
+                        return (
+                          <div key={i} className="bg-orange-50/60 border border-orange-100 rounded-lg px-3 py-1.5 flex items-center gap-2 flex-wrap">
+                            <span className="font-body text-[11px] font-semibold text-orange-700">{dayLabel}</span>
+                            <span className="text-slate-300">·</span>
+                            <span className="font-mono text-[11px] text-slate-700">{stg.startTime}–{stg.endTime}</span>
+                            <span className="text-slate-300">·</span>
+                            <span className="font-body text-[12px] text-slate-700 font-medium">{stg.activityTitle || "?"}</span>
+                            <span className="text-slate-300">·</span>
+                            <span className="font-body text-[11px] text-slate-500">{stg.monitor || "?"}</span>
+                            <span className="text-slate-300">·</span>
+                            <span className="font-body text-[11px] text-slate-500">{stg.maxPlaces}pl</span>
+                            <span className="ml-auto font-body text-[10px] text-orange-700 italic">
+                              ={nbDays} créneau{nbDays > 1 ? "x" : ""}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </Card>
@@ -842,20 +902,9 @@ export default function ModelesPage() {
       {applyingStageId && (() => {
         const s = modelesStages.find(x => x.id === applyingStageId);
         if (!s) return null;
-        // Lire les créneaux : nouveau format ou migration ancien format
-        const creneaux: ModeleStageCreneau[] = (s.creneaux && s.creneaux.length > 0)
-          ? s.creneaux
-          : (s.activityId && s.startTime && s.endTime)
-            ? Array.from({ length: s.nbJours }, (_, d) => ({
-                dayOffset: d,
-                startTime: s.startTime!,
-                endTime: s.endTime!,
-                activityId: s.activityId!,
-                activityTitle: s.activityTitle || "",
-                monitor: s.monitor || "",
-                maxPlaces: s.maxPlaces || 8,
-              }))
-            : [];
+        // Lire les stages au format unifié v2
+        const stages: ModeleStageItem[] = readStagesFromModele(s);
+        const totalCreneaux = stages.reduce((sum, st) => sum + (st.dayEnd - st.dayStart + 1), 0);
 
         // Calcul preview de la date de fin pour l'utilisateur
         let endDateLabel = "—";
@@ -876,7 +925,7 @@ export default function ModelesPage() {
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
               <h3 className="font-display text-lg font-bold text-orange-700 mb-1">Appliquer &laquo;&nbsp;{s.name}&nbsp;&raquo;</h3>
               <p className="font-body text-xs text-slate-500 mb-4">
-                {s.nbJours} jour{s.nbJours > 1 ? "s" : ""} · {creneaux.length} créneau{creneaux.length > 1 ? "x" : ""} au total
+                {s.nbJours} jour{s.nbJours > 1 ? "s" : ""} · {stages.length} stage{stages.length > 1 ? "s" : ""} · {totalCreneaux} créneau{totalCreneaux > 1 ? "x" : ""} au total
               </p>
               <div className="mb-3">
                 <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Date de début *</label>
@@ -893,7 +942,7 @@ export default function ModelesPage() {
                     📅 Le stage ira du <strong>{new Date(stageApplyStart).toLocaleDateString("fr-FR")}</strong> au <strong>{endDateLabel}</strong>
                   </p>
                   <p className="font-body text-xs text-slate-500 mt-1">
-                    {creneaux.length} créneau{creneaux.length > 1 ? "x" : ""} sera{creneaux.length > 1 ? "ont" : ""} créé{creneaux.length > 1 ? "s" : ""} dans le planning. Les familles pourront s&apos;y inscrire normalement.
+                    {totalCreneaux} créneau{totalCreneaux > 1 ? "x" : ""} sera{totalCreneaux > 1 ? "ont" : ""} créé{totalCreneaux > 1 ? "s" : ""} dans le planning. Les familles pourront s&apos;y inscrire normalement.
                   </p>
                 </div>
               )}
