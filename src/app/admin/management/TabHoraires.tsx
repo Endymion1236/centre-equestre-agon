@@ -29,8 +29,33 @@ function getWeeksOfMonth(year: number, month: number): string[] {
   return weeks;
 }
 
-type RowData = { date: Date; jour: JourSemaine; debut: string; fin: string; duree: number; isSamedi: boolean; isoWeek: string };
+/**
+ * Données d'une ligne de la fiche horaire pour un jour.
+ *
+ * Si la journée a une pause (= trou >= seuil entre deux tâches consécutives),
+ * on remplit les 4 champs début/fin matin et début/fin après-midi. Sinon,
+ * seuls debut et fin sont remplis (matin == aprem == journée continue).
+ *
+ * Le `duree` ne compte JAMAIS la pause — c'est la durée réelle travaillée.
+ */
+type RowData = {
+  date: Date;
+  jour: JourSemaine;
+  debut: string;        // début matin OU début unique si pas de pause
+  fin: string;          // fin matin OU fin unique si pas de pause
+  debutAprem: string;   // vide si pas de pause détectée
+  finAprem: string;     // vide si pas de pause détectée
+  pauseMin: number;     // 0 si pas de pause, sinon durée pause en minutes
+  duree: number;        // durée travaillée (pause exclue)
+  isSamedi: boolean;
+  isoWeek: string;
+};
 type WeekSummary = { isoWeek: string; total: number; hSup: number };
+
+// Seuil minimal pour qu'un trou entre 2 tâches consécutives soit considéré
+// comme une "pause déjeuner" (pas une simple respiration entre 2 tâches).
+// 30 min = on considère que c'est une vraie coupure repas/repos.
+const SEUIL_PAUSE_MIN = 30;
 
 export default function TabHoraires({ semaine, setSemaine, taches, salaries }: Props) {
   const lundi = getLundideSemaine(semaine);
@@ -85,8 +110,27 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
         .sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
 
       if (dayTaches.length === 0) {
-        rows.push({ date, jour, debut: "", fin: "", duree: 0, isSamedi: dow === 5, isoWeek });
+        rows.push({ date, jour, debut: "", fin: "", debutAprem: "", finAprem: "", pauseMin: 0, duree: 0, isSamedi: dow === 5, isoWeek });
         return;
+      }
+
+      // Détection d'une pause : on cherche le plus grand trou entre
+      // 2 tâches consécutives. Si ce trou >= SEUIL_PAUSE_MIN, on coupe
+      // la journée en matin / après-midi.
+      //
+      // Exemple : tâches 9h-12h puis 14h-17h
+      // → trou 12h→14h = 120min (>= 30) → pause détectée
+      // → matin 9h-12h, aprem 14h-17h, durée totale 6h, pause 2h
+      let biggestGapMin = 0;
+      let biggestGapIdx = -1; // index de la tâche AVANT le trou
+      for (let i = 0; i < dayTaches.length - 1; i++) {
+        const finCurrente = heureToMin(dayTaches[i].heureDebut) + dayTaches[i].dureeMinutes;
+        const debutSuivante = heureToMin(dayTaches[i + 1].heureDebut);
+        const gap = debutSuivante - finCurrente;
+        if (gap > biggestGapMin) {
+          biggestGapMin = gap;
+          biggestGapIdx = i;
+        }
       }
 
       const debut = dayTaches[0].heureDebut;
@@ -94,7 +138,30 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
       const fin = minToHeure(heureToMin(lastT.heureDebut) + lastT.dureeMinutes);
       const duree = dayTaches.reduce((s, t) => s + t.dureeMinutes, 0);
       totalMois += duree;
-      rows.push({ date, jour, debut, fin, duree, isSamedi: dow === 5, isoWeek });
+
+      if (biggestGapMin >= SEUIL_PAUSE_MIN && biggestGapIdx >= 0) {
+        // Pause détectée : on coupe en matin / après-midi
+        const tacheAvantPause = dayTaches[biggestGapIdx];
+        const tacheApresPause = dayTaches[biggestGapIdx + 1];
+        const finMatin = minToHeure(heureToMin(tacheAvantPause.heureDebut) + tacheAvantPause.dureeMinutes);
+        const debutAprem = tacheApresPause.heureDebut;
+        rows.push({
+          date, jour, isSamedi: dow === 5, isoWeek,
+          debut, fin: finMatin,
+          debutAprem, finAprem: fin,
+          pauseMin: biggestGapMin,
+          duree,
+        });
+      } else {
+        // Journée continue, pas de pause significative
+        rows.push({
+          date, jour, isSamedi: dow === 5, isoWeek,
+          debut, fin,
+          debutAprem: "", finAprem: "",
+          pauseMin: 0,
+          duree,
+        });
+      }
     });
 
     // Heures par semaine
@@ -219,14 +286,32 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                         <td style={{ padding: "2px 4px", borderBottom: "1px solid #eef2f7", color: row.isSamedi ? "#3b82f6" : "#64748b", textTransform: "capitalize" }}>
                           {JOURS_LABELS[row.jour].slice(0, 3)}
                         </td>
-                        <td style={{ padding: "2px 4px", borderBottom: "1px solid #eef2f7", textAlign: "center", fontWeight: 600, color: row.debut ? "#1e293b" : "#d1d5db" }}>
-                          {row.debut || "—"}
+                        {/* Début : si pause, on affiche "matin · aprem" sur 2 lignes pour rester compact */}
+                        <td style={{ padding: "2px 4px", borderBottom: "1px solid #eef2f7", textAlign: "center", fontWeight: 600, color: row.debut ? "#1e293b" : "#d1d5db", lineHeight: 1.15 }}>
+                          {row.debut
+                            ? row.debutAprem
+                              ? <>{row.debut}<span style={{ color: "#94a3b8", margin: "0 2px" }}>·</span>{row.debutAprem}</>
+                              : row.debut
+                            : "—"}
                         </td>
-                        <td style={{ padding: "2px 4px", borderBottom: "1px solid #eef2f7", textAlign: "center", fontWeight: 600, color: row.fin ? "#1e293b" : "#d1d5db" }}>
-                          {row.fin || "—"}
+                        {/* Fin : symétrique */}
+                        <td style={{ padding: "2px 4px", borderBottom: "1px solid #eef2f7", textAlign: "center", fontWeight: 600, color: row.fin ? "#1e293b" : "#d1d5db", lineHeight: 1.15 }}>
+                          {row.fin
+                            ? row.finAprem
+                              ? <>{row.fin}<span style={{ color: "#94a3b8", margin: "0 2px" }}>·</span>{row.finAprem}</>
+                              : row.fin
+                            : "—"}
                         </td>
-                        <td style={{ padding: "2px 4px", borderBottom: "1px solid #eef2f7", textAlign: "center", fontWeight: 700, color: row.duree > 0 ? "#1e3a5f" : "#d1d5db" }}>
-                          {row.duree > 0 ? fmtDuree(row.duree) : "—"}
+                        {/* Durée + indication pause si présente */}
+                        <td style={{ padding: "2px 4px", borderBottom: "1px solid #eef2f7", textAlign: "center", fontWeight: 700, color: row.duree > 0 ? "#1e3a5f" : "#d1d5db", lineHeight: 1.15 }}>
+                          {row.duree > 0 ? (
+                            <>
+                              {fmtDuree(row.duree)}
+                              {row.pauseMin > 0 && (
+                                <div style={{ fontSize: 7, fontWeight: 500, color: "#94a3b8" }}>pause {fmtDuree(row.pauseMin)}</div>
+                              )}
+                            </>
+                          ) : "—"}
                         </td>
                         <td style={{ padding: "2px 4px", borderBottom: "1px solid #eef2f7" }}>
                           {row.duree > 0 && <div style={{ borderBottom: "1px solid #cbd5e1", width: "80%", margin: "0 auto", height: 12 }} />}
