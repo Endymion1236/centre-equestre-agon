@@ -1,10 +1,10 @@
 "use client";
 import { useState, useMemo } from "react";
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { authFetch } from "@/lib/auth-fetch";
-import { Plus, Trash2, Check, ChevronLeft, ChevronRight, Printer, Save, LayoutTemplate } from "lucide-react";
+import { Plus, Trash2, Check, ChevronLeft, ChevronRight, Printer, Save, LayoutTemplate, AlignVerticalSpaceAround } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { Card } from "@/components/ui";
 import type { TacheType, TachePlanifiee, Salarie, JourSemaine, ModelePlanning, TacheModele } from "./types";
@@ -36,6 +36,9 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   const { toast } = useToast();
   const [addCell, setAddCell] = useState<{ salarieId: string; jour: JourSemaine } | null>(null);
   const [addForm, setAddForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30, joursSelectionnes: [] as JourSemaine[], enchainer: false });
+  // Édition d'une tâche existante : ouvre une modale de modification
+  const [editingTache, setEditingTache] = useState<TachePlanifiee | null>(null);
+  const [editForm, setEditForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30, notes: "" });
   const [saving, setSaving] = useState(false);
   const [showApplyModele, setShowApplyModele] = useState(false);
   const [showSaveModele, setShowSaveModele] = useState(false);
@@ -162,6 +165,203 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   const toggleDone = async (t: TachePlanifiee) => {
     await updateDoc(doc(db, "taches-planifiees", t.id), { done: !t.done, updatedAt: serverTimestamp() });
     onRefresh();
+  };
+
+  // ── Édition d'une tâche (clic sur une carte) ──────────────────────────
+  // Les tâches importées du planning (tacheTypeId === "__planning__") ne sont
+  // pas éditables ici : elles correspondent aux cours/stages dont les
+  // horaires sont imposés par /admin/planning. On affiche un toast pour
+  // rediriger l'admin si besoin.
+  const openEditTache = (t: TachePlanifiee) => {
+    if (t.tacheTypeId === "__planning__") {
+      toast("Cette tâche vient du planning général (cours/stage). Modifie-la dans la page Planning.", "info");
+      return;
+    }
+    setEditingTache(t);
+    setEditForm({
+      tacheTypeId: t.tacheTypeId,
+      heureDebut: t.heureDebut,
+      dureeMinutes: t.dureeMinutes,
+      notes: t.notes || "",
+    });
+  };
+
+  const saveEditTache = async () => {
+    if (!editingTache) return;
+    const tt = tachesType.find(t => t.id === editForm.tacheTypeId);
+    if (!tt) { toast("Type de tâche introuvable", "error"); return; }
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, "taches-planifiees", editingTache.id), {
+        tacheTypeId: editForm.tacheTypeId,
+        tacheLabel: tt.label,
+        categorie: tt.categorie,
+        heureDebut: editForm.heureDebut,
+        dureeMinutes: editForm.dureeMinutes,
+        notes: editForm.notes || null,
+        updatedAt: serverTimestamp(),
+      });
+      setEditingTache(null);
+      onRefresh();
+      toast(`"${tt.label}" mise à jour`, "success");
+    } catch (e: any) {
+      toast(`Erreur : ${e.message}`, "error");
+    }
+    setSaving(false);
+  };
+
+  // ── Compacter la journée d'un salarié ────────────────────────────────
+  /**
+   * Tasse les tâches manuelles dans la journée pour combler les trous,
+   * en respectant les tâches importées du planning (cours/stages) comme
+   * des "ancres" temporelles fixes.
+   *
+   * Algorithme :
+   * 1. Récupère toutes les tâches du salarié pour ce jour, triées par heure.
+   * 2. Identifie les "ancres" (tacheTypeId === "__planning__") : leurs
+   *    horaires sont imposés et ne bougent jamais.
+   * 3. Sépare les tâches manuelles en groupes selon leur position vs ancres :
+   *    - "avant la 1ère ancre"
+   *    - "entre ancre N et ancre N+1"
+   *    - "après la dernière ancre"
+   * 4. Dans chaque groupe : on tasse les tâches en partant de l'extrémité
+   *    de l'ancre précédente (ou de la 1ère heure si pas d'ancre avant).
+   *    Une tâche qui dépasserait sur l'ancre suivante n'est PAS rognée :
+   *    on prévient l'admin via toast et on la laisse à sa place originale.
+   *
+   * Cas particulier : la 1ère tâche manuelle "avant ancre" garde son heure
+   * de début si elle n'a pas de prédécesseur (elle sert de point de départ
+   * de la chaîne de compactage).
+   */
+  const [compactingKey, setCompactingKey] = useState<string | null>(null);
+  const compacterJournee = async (salarieId: string, jour: JourSemaine) => {
+    const key = `${salarieId}|${jour}`;
+    if (compactingKey === key) return;
+    setCompactingKey(key);
+    try {
+      // 1. Récupère toutes les tâches du jour pour ce salarié, triées
+      const dayTaches = taches
+        .filter(t => t.salarieId === salarieId && t.jour === jour)
+        .sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
+
+      if (dayTaches.length < 2) {
+        toast("Rien à compacter (moins de 2 tâches)", "info");
+        setCompactingKey(null);
+        return;
+      }
+
+      // 2. Indice des ancres dans le tableau trié
+      const ancreIndices: number[] = [];
+      dayTaches.forEach((t, i) => { if (t.tacheTypeId === "__planning__") ancreIndices.push(i); });
+
+      // 3. Calculer les nouveaux horaires en simulation (sans écrire)
+      const updates: { id: string; oldHeure: string; newHeure: string }[] = [];
+      const conflits: string[] = [];
+
+      // Helper : pour une plage [startMin, limitMin] et une liste d'indices
+      // de tâches manuelles, on les tasse en partant de startMin.
+      const tasserPlage = (indices: number[], startMin: number, limitMin: number | null) => {
+        let cursor = startMin;
+        for (const idx of indices) {
+          const t = dayTaches[idx];
+          const newDebut = cursor;
+          const newFin = newDebut + t.dureeMinutes;
+          if (limitMin !== null && newFin > limitMin) {
+            // La tâche déborderait sur l'ancre suivante : on ne la déplace pas
+            conflits.push(`${t.tacheLabel} (${t.heureDebut})`);
+            // On laisse cette tâche à sa place originale et on reprend après
+            cursor = heureToMin(t.heureDebut) + t.dureeMinutes;
+            continue;
+          }
+          const newHeure = minToHeure(newDebut);
+          if (newHeure !== t.heureDebut) {
+            updates.push({ id: t.id, oldHeure: t.heureDebut, newHeure });
+          }
+          cursor = newFin;
+        }
+      };
+
+      if (ancreIndices.length === 0) {
+        // Pas d'ancre : on tasse toutes les tâches manuelles depuis la
+        // 1ère, qui garde son heure de début comme point d'ancrage de chaîne.
+        const firstHeure = heureToMin(dayTaches[0].heureDebut);
+        const indices = dayTaches.map((_, i) => i).filter(i => dayTaches[i].tacheTypeId !== "__planning__");
+        tasserPlage(indices, firstHeure, null);
+      } else {
+        // Avant la 1ère ancre : on tasse en remontant depuis l'ancre
+        // (la dernière tâche manuelle finit pile à l'heure de l'ancre).
+        // Stratégie alternative plus simple : on garde la 1ère manuelle
+        // à son heure originale, on tasse les suivantes à la chaîne.
+        const before = dayTaches.slice(0, ancreIndices[0])
+          .map((_, i) => i).filter(i => dayTaches[i].tacheTypeId !== "__planning__");
+        if (before.length > 0) {
+          const firstHeure = heureToMin(dayTaches[before[0]].heureDebut);
+          const ancreHeure = heureToMin(dayTaches[ancreIndices[0]].heureDebut);
+          tasserPlage(before, firstHeure, ancreHeure);
+        }
+
+        // Entre chaque paire d'ancres : on tasse depuis la fin de l'ancre N
+        // jusqu'au début de l'ancre N+1.
+        for (let a = 0; a < ancreIndices.length - 1; a++) {
+          const ancreA = dayTaches[ancreIndices[a]];
+          const ancreFinMin = heureToMin(ancreA.heureDebut) + ancreA.dureeMinutes;
+          const ancreBmin = heureToMin(dayTaches[ancreIndices[a + 1]].heureDebut);
+          const between: number[] = [];
+          for (let i = ancreIndices[a] + 1; i < ancreIndices[a + 1]; i++) {
+            if (dayTaches[i].tacheTypeId !== "__planning__") between.push(i);
+          }
+          if (between.length > 0) tasserPlage(between, ancreFinMin, ancreBmin);
+        }
+
+        // Après la dernière ancre
+        const lastAncre = dayTaches[ancreIndices[ancreIndices.length - 1]];
+        const lastAncreFinMin = heureToMin(lastAncre.heureDebut) + lastAncre.dureeMinutes;
+        const after: number[] = [];
+        for (let i = ancreIndices[ancreIndices.length - 1] + 1; i < dayTaches.length; i++) {
+          if (dayTaches[i].tacheTypeId !== "__planning__") after.push(i);
+        }
+        if (after.length > 0) tasserPlage(after, lastAncreFinMin, null);
+      }
+
+      if (updates.length === 0) {
+        toast(conflits.length > 0
+          ? `Aucun changement possible (${conflits.length} tâche(s) bloquée(s))`
+          : "La journée est déjà compactée", "info");
+        setCompactingKey(null);
+        return;
+      }
+
+      // 4. Confirmation utilisateur
+      const sal = salaries.find(s => s.id === salarieId);
+      const recap = updates.slice(0, 5).map(u => {
+        const t = dayTaches.find(x => x.id === u.id)!;
+        return `• ${t.tacheLabel} : ${u.oldHeure} → ${u.newHeure}`;
+      }).join("\n");
+      const confirmed = confirm(
+        `Compacter ${JOURS_LABELS[jour]} pour ${sal?.nom} ?\n\n` +
+        `${updates.length} tâche(s) seront décalées :\n${recap}` +
+        (updates.length > 5 ? `\n… et ${updates.length - 5} autres` : "") +
+        (conflits.length > 0
+          ? `\n\n⚠️ ${conflits.length} tâche(s) ne peuvent pas être déplacées (déborderaient sur un cours)`
+          : "")
+      );
+      if (!confirmed) { setCompactingKey(null); return; }
+
+      // 5. Appliquer les updates en batch
+      const batch = writeBatch(db);
+      for (const u of updates) {
+        batch.update(doc(db, "taches-planifiees", u.id), {
+          heureDebut: u.newHeure,
+          updatedAt: serverTimestamp(),
+        });
+      }
+      await batch.commit();
+      toast(`✅ ${updates.length} tâche(s) recompactée(s)`, "success");
+      onRefresh();
+    } catch (e: any) {
+      toast(`Erreur : ${e.message}`, "error");
+    }
+    setCompactingKey(null);
   };
 
   const delTache = async (t: TachePlanifiee) => {
@@ -720,16 +920,22 @@ Réponds de façon concise et pratique, en français.`,
                     <div style={{display:"flex", flexDirection:"column", gap:3}}>
                       {cellTaches.map(t => {
                         const cat = getCat(t.categorie);
+                        const isFromPlanning = t.tacheTypeId === "__planning__";
                         return (
-                          <div key={t.id} title={`${t.tacheLabel}\n${t.heureDebut}→${minToHeure(heureToMin(t.heureDebut) + t.dureeMinutes)}${t.notes ? "\n" + t.notes : ""}`} style={{
+                          <div key={t.id} title={`${t.tacheLabel}\n${t.heureDebut}→${minToHeure(heureToMin(t.heureDebut) + t.dureeMinutes)}${t.notes ? "\n" + t.notes : ""}${isFromPlanning ? "\n(importée du planning — non éditable ici)" : "\n(cliquer pour modifier)"}`} style={{
                             display:"flex", alignItems:"flex-start", gap:3, padding:"3px 5px",
                             borderRadius:6, background: t.done ? "#f0fdf4" : (getTaskColor(t)+"18"),
                             border:`1px solid ${getTaskColor(t)+"30"}`,
                             opacity: t.done ? 0.6 : 1,
                           }}>
                             <span style={{fontSize:10, marginTop:1}}>{cat?.emoji}</span>
-                            <div style={{flex:1, minWidth:0}}>
-                              <div style={{fontFamily:"sans-serif", fontSize:10, fontWeight:600, color: t.done?"#16a34a":getTaskColor(t), textDecoration:t.done?"line-through":"none", lineHeight:"1.3", wordBreak:"break-word"}}>
+                            {/* Zone cliquable : label + horaires. Pour les tâches importées
+                                du planning, on désactive le pointer mais on laisse l'onClick
+                                qui montre un toast explicatif. */}
+                            <div onClick={() => openEditTache(t)}
+                              style={{flex:1, minWidth:0, cursor: isFromPlanning ? "not-allowed" : "pointer"}}>
+                              <div style={{fontFamily:"sans-serif", fontSize:10, fontWeight:600, color: t.done?"#16a34a":getTaskColor(t), textDecoration:t.done?"line-through":"none", lineHeight:"1.3", wordBreak:"break-word", display:"flex", alignItems:"center", gap:3}}>
+                                {isFromPlanning && <span style={{fontSize:8, color:"#94a3b8"}} title="Vient du planning">🔒</span>}
                                 {t.tacheLabel}
                               </div>
                               <div style={{fontFamily:"sans-serif", fontSize:8, color:"#94a3b8"}}>
@@ -903,10 +1109,23 @@ Réponds de façon concise et pratique, en français.`,
                           </div>
                         </div>
                       ) : (
-                        <button onClick={()=>openAdd(sal.id,jour)}
-                          style={{padding:"3px 0",borderRadius:6,border:"1px dashed #cbd5e1",background:"transparent",color:"#94a3b8",fontFamily:"sans-serif",fontSize:11,cursor:"pointer",width:"100%"}}>
-                          + Ajouter
-                        </button>
+                        <div style={{display:"flex", gap:3}}>
+                          <button onClick={()=>openAdd(sal.id,jour)}
+                            style={{flex:1, padding:"3px 0",borderRadius:6,border:"1px dashed #cbd5e1",background:"transparent",color:"#94a3b8",fontFamily:"sans-serif",fontSize:11,cursor:"pointer"}}>
+                            + Ajouter
+                          </button>
+                          {/* Bouton Compacter visible uniquement si la cellule a au moins 2 tâches.
+                              Sert à tasser les tâches manuelles et combler les trous, en
+                              respectant les cours/stages comme ancres temporelles fixes. */}
+                          {cellTaches.length >= 2 && (
+                            <button onClick={() => compacterJournee(sal.id, jour)}
+                              disabled={compactingKey === `${sal.id}|${jour}`}
+                              title="Compacter la journée (tasser les tâches sans toucher aux cours)"
+                              style={{padding:"3px 6px", borderRadius:6, border:"1px dashed #cbd5e1", background:"transparent", color:"#64748b", fontFamily:"sans-serif", fontSize:11, cursor:"pointer", display:"flex", alignItems:"center", gap:2}}>
+                              <AlignVerticalSpaceAround size={11}/>
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </td>
@@ -1622,6 +1841,95 @@ Réponds de façon concise et pratique, en français.`,
           @page { size: A4 landscape; margin: 8mm; }
         }
       `}</style>
+
+      {/* ─── Modale d'édition d'une tâche ──────────────────────────────────── */}
+      {editingTache && (
+        <div onClick={() => setEditingTache(null)}
+          style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", backdropFilter:"blur(2px)", zIndex:50, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
+          <div onClick={e => e.stopPropagation()}
+            style={{background:"white", borderRadius:16, boxShadow:"0 20px 60px rgba(0,0,0,0.2)", width:"100%", maxWidth:500, padding:24, maxHeight:"90vh", overflowY:"auto"}}>
+            <h3 style={{fontFamily:"serif", fontSize:18, fontWeight:700, color:"#1e3a5f", marginBottom:4}}>
+              Modifier une tâche
+            </h3>
+            <p style={{fontFamily:"sans-serif", fontSize:12, color:"#94a3b8", marginBottom:16}}>
+              {editingTache.salarieName} · {JOURS_LABELS[editingTache.jour]}
+            </p>
+
+            {/* Sélecteur tâche type */}
+            <label style={{fontFamily:"sans-serif", fontSize:11, fontWeight:600, color:"#475569", display:"block", marginBottom:4}}>
+              Tâche
+            </label>
+            <select value={editForm.tacheTypeId}
+              onChange={e => {
+                const tt = tachesType.find(t => t.id === e.target.value);
+                setEditForm({ ...editForm, tacheTypeId: e.target.value, dureeMinutes: tt?.dureeMinutes || editForm.dureeMinutes });
+              }}
+              style={{width:"100%", padding:"8px 10px", borderRadius:8, border:"1px solid #e2e8f0", fontFamily:"sans-serif", fontSize:13, background:"white", marginBottom:12}}>
+              {CATEGORIES.map(cat => {
+                const items = tachesType.filter(t => t.categorie === cat.id);
+                if (!items.length) return null;
+                return (
+                  <optgroup key={cat.id} label={`${cat.emoji} ${cat.label}`}>
+                    {items.map(t => (
+                      <option key={t.id} value={t.id}>
+                        {cat.emoji} {t.label} ({t.dureeMinutes < 60 ? `${t.dureeMinutes}min` : `${Math.floor(t.dureeMinutes/60)}h${t.dureeMinutes%60>0?t.dureeMinutes%60:""}`})
+                      </option>
+                    ))}
+                  </optgroup>
+                );
+              })}
+            </select>
+
+            {/* Heure début + durée côte à côte */}
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12}}>
+              <div>
+                <label style={{fontFamily:"sans-serif", fontSize:11, fontWeight:600, color:"#475569", display:"block", marginBottom:4}}>
+                  Heure de début
+                </label>
+                <input type="time" value={editForm.heureDebut}
+                  onChange={e => setEditForm({ ...editForm, heureDebut: e.target.value })}
+                  style={{width:"100%", padding:"8px 10px", borderRadius:8, border:"1px solid #e2e8f0", fontFamily:"sans-serif", fontSize:13}} />
+              </div>
+              <div>
+                <label style={{fontFamily:"sans-serif", fontSize:11, fontWeight:600, color:"#475569", display:"block", marginBottom:4}}>
+                  Durée (minutes)
+                </label>
+                <input type="number" min={5} step={5} value={editForm.dureeMinutes}
+                  onChange={e => setEditForm({ ...editForm, dureeMinutes: Math.max(5, parseInt(e.target.value, 10) || 30) })}
+                  style={{width:"100%", padding:"8px 10px", borderRadius:8, border:"1px solid #e2e8f0", fontFamily:"sans-serif", fontSize:13}} />
+              </div>
+            </div>
+
+            {/* Récap horaire calculé */}
+            <div style={{background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:8, padding:"8px 10px", marginBottom:12, fontFamily:"sans-serif", fontSize:12, color:"#64748b"}}>
+              ⏱️ De <strong>{editForm.heureDebut}</strong> à <strong>{minToHeure(heureToMin(editForm.heureDebut) + editForm.dureeMinutes)}</strong>
+              {" "}({editForm.dureeMinutes < 60 ? `${editForm.dureeMinutes} min` : `${Math.floor(editForm.dureeMinutes/60)}h${editForm.dureeMinutes%60>0?editForm.dureeMinutes%60:""}`})
+            </div>
+
+            {/* Notes */}
+            <label style={{fontFamily:"sans-serif", fontSize:11, fontWeight:600, color:"#475569", display:"block", marginBottom:4}}>
+              Notes (optionnel)
+            </label>
+            <textarea value={editForm.notes}
+              onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
+              rows={2}
+              placeholder="Précisions, rappels…"
+              style={{width:"100%", padding:"8px 10px", borderRadius:8, border:"1px solid #e2e8f0", fontFamily:"sans-serif", fontSize:13, marginBottom:16, resize:"vertical"}} />
+
+            {/* Boutons */}
+            <div style={{display:"flex", gap:8}}>
+              <button onClick={saveEditTache} disabled={saving || !editForm.tacheTypeId}
+                style={{flex:1, padding:"10px 16px", background:"#3b82f6", color:"white", border:"none", borderRadius:10, fontFamily:"sans-serif", fontSize:13, fontWeight:600, cursor:"pointer", opacity: (saving || !editForm.tacheTypeId) ? 0.5 : 1}}>
+                {saving ? "Enregistrement…" : "Enregistrer"}
+              </button>
+              <button onClick={() => setEditingTache(null)}
+                style={{padding:"10px 16px", background:"#f1f5f9", color:"#475569", border:"none", borderRadius:10, fontFamily:"sans-serif", fontSize:13, fontWeight:500, cursor:"pointer"}}>
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
