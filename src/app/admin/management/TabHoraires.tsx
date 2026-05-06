@@ -252,8 +252,10 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                   <tr style={{ background: "#f1f5f9" }}>
                     <th style={{ padding: "3px 4px", textAlign: "left", fontWeight: 700, color: "#475569", borderBottom: "2px solid #e2e8f0" }}>Date</th>
                     <th style={{ padding: "3px 4px", textAlign: "left", fontWeight: 700, color: "#475569", borderBottom: "2px solid #e2e8f0" }}>Jour</th>
-                    <th style={{ padding: "3px 4px", textAlign: "center", fontWeight: 700, color: "#475569", borderBottom: "2px solid #e2e8f0" }}>Début</th>
-                    <th style={{ padding: "3px 4px", textAlign: "center", fontWeight: 700, color: "#475569", borderBottom: "2px solid #e2e8f0" }}>Fin</th>
+                    <th style={{ padding: "3px 4px", textAlign: "center", fontWeight: 700, color: "#475569", borderBottom: "2px solid #e2e8f0" }}>Matin début</th>
+                    <th style={{ padding: "3px 4px", textAlign: "center", fontWeight: 700, color: "#475569", borderBottom: "2px solid #e2e8f0" }}>Matin fin</th>
+                    <th style={{ padding: "3px 4px", textAlign: "center", fontWeight: 700, color: "#475569", borderBottom: "2px solid #e2e8f0" }}>Aprem début</th>
+                    <th style={{ padding: "3px 4px", textAlign: "center", fontWeight: 700, color: "#475569", borderBottom: "2px solid #e2e8f0" }}>Aprem fin</th>
                     <th style={{ padding: "3px 4px", textAlign: "center", fontWeight: 700, color: "#475569", borderBottom: "2px solid #e2e8f0" }}>Durée</th>
                     <th style={{ padding: "3px 4px", textAlign: "center", fontWeight: 700, color: "#475569", borderBottom: "2px solid #e2e8f0", width: "15%" }}>Signature</th>
                   </tr>
@@ -269,7 +271,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                     return [
                       weekSummaryRow && (
                         <tr key={`ws-${weekSummaryRow.isoWeek}`} style={{ background: "#eef2ff" }}>
-                          <td colSpan={4} style={{ padding: "3px 6px", textAlign: "right", fontWeight: 700, color: "#1e3a5f", borderBottom: "2px solid #cbd5e1", fontSize: 9 }}>
+                          <td colSpan={6} style={{ padding: "3px 6px", textAlign: "right", fontWeight: 700, color: "#1e3a5f", borderBottom: "2px solid #cbd5e1", fontSize: 9 }}>
                             Sem. {weekSummaryRow.isoWeek.split("-W")[1]}
                           </td>
                           <td style={{ padding: "3px 4px", textAlign: "center", fontWeight: 800, color: "#1e3a5f", borderBottom: "2px solid #cbd5e1", fontSize: 9 }}>
@@ -286,22 +288,45 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                         <td style={{ padding: "2px 4px", borderBottom: "1px solid #eef2f7", color: row.isSamedi ? "#3b82f6" : "#64748b", textTransform: "capitalize" }}>
                           {JOURS_LABELS[row.jour].slice(0, 3)}
                         </td>
-                        {/* Début : si pause, on affiche "matin · aprem" sur 2 lignes pour rester compact */}
-                        <td style={{ padding: "2px 4px", borderBottom: "1px solid #eef2f7", textAlign: "center", fontWeight: 600, color: row.debut ? "#1e293b" : "#d1d5db", lineHeight: 1.15 }}>
-                          {row.debut
-                            ? row.debutAprem
-                              ? <>{row.debut}<span style={{ color: "#94a3b8", margin: "0 2px" }}>·</span>{row.debutAprem}</>
-                              : row.debut
-                            : "—"}
-                        </td>
-                        {/* Fin : symétrique */}
-                        <td style={{ padding: "2px 4px", borderBottom: "1px solid #eef2f7", textAlign: "center", fontWeight: 600, color: row.fin ? "#1e293b" : "#d1d5db", lineHeight: 1.15 }}>
-                          {row.fin
-                            ? row.finAprem
-                              ? <>{row.fin}<span style={{ color: "#94a3b8", margin: "0 2px" }}>·</span>{row.finAprem}</>
-                              : row.fin
-                            : "—"}
-                        </td>
+                        {/* Détermination matin / après-midi pour la répartition des cellules.
+                            - Si pause détectée : on a directement debut/fin (matin) et debutAprem/finAprem (aprem)
+                            - Si pas de pause : on regarde si la plage commence avant 13h
+                              → oui = matin uniquement, aprem vide
+                              → non = aprem uniquement, matin vide
+                            (un salarié qui ne travaille que l'après-midi ne doit pas
+                            voir ses heures dans la colonne 'Matin') */}
+                        {(() => {
+                          let matinDeb = "", matinFin = "", apremDeb = "", apremFin = "";
+                          if (row.debut) {
+                            if (row.debutAprem) {
+                              // Pause détectée → 4 cellules remplies
+                              matinDeb = row.debut;
+                              matinFin = row.fin;
+                              apremDeb = row.debutAprem;
+                              apremFin = row.finAprem;
+                            } else {
+                              // Journée continue, classement selon l'heure de début
+                              const debutMin = heureToMin(row.debut);
+                              if (debutMin < 13 * 60) {
+                                // Commence avant 13h → considéré matin (même si déborde sur l'aprem)
+                                matinDeb = row.debut;
+                                matinFin = row.fin;
+                              } else {
+                                // Commence après 13h → uniquement aprem
+                                apremDeb = row.debut;
+                                apremFin = row.fin;
+                              }
+                            }
+                          }
+                          const cellStyle = { padding: "2px 4px", borderBottom: "1px solid #eef2f7", textAlign: "center" as const, fontWeight: 600 };
+                          const colorIf = (v: string) => v ? "#1e293b" : "#d1d5db";
+                          return <>
+                            <td style={{ ...cellStyle, color: colorIf(matinDeb) }}>{matinDeb || "—"}</td>
+                            <td style={{ ...cellStyle, color: colorIf(matinFin) }}>{matinFin || "—"}</td>
+                            <td style={{ ...cellStyle, color: colorIf(apremDeb) }}>{apremDeb || "—"}</td>
+                            <td style={{ ...cellStyle, color: colorIf(apremFin) }}>{apremFin || "—"}</td>
+                          </>;
+                        })()}
                         {/* Durée + indication pause si présente */}
                         <td style={{ padding: "2px 4px", borderBottom: "1px solid #eef2f7", textAlign: "center", fontWeight: 700, color: row.duree > 0 ? "#1e3a5f" : "#d1d5db", lineHeight: 1.15 }}>
                           {row.duree > 0 ? (
@@ -325,7 +350,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                     if (!lastWs) return null;
                     return (
                       <tr style={{ background: "#eef2ff" }}>
-                        <td colSpan={4} style={{ padding: "3px 6px", textAlign: "right", fontWeight: 700, color: "#1e3a5f", borderBottom: "2px solid #cbd5e1", fontSize: 9 }}>
+                        <td colSpan={6} style={{ padding: "3px 6px", textAlign: "right", fontWeight: 700, color: "#1e3a5f", borderBottom: "2px solid #cbd5e1", fontSize: 9 }}>
                           Sem. {lastWs.isoWeek.split("-W")[1]}
                         </td>
                         <td style={{ padding: "3px 4px", textAlign: "center", fontWeight: 800, color: "#1e3a5f", borderBottom: "2px solid #cbd5e1", fontSize: 9 }}>
@@ -339,7 +364,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                 </tbody>
                 <tfoot>
                   <tr style={{ background: "#f1f5f9" }}>
-                    <td colSpan={4} style={{ padding: "4px 6px", fontWeight: 800, color: "#1e3a5f", textAlign: "right", borderTop: "2px solid #e2e8f0", fontSize: 10 }}>
+                    <td colSpan={6} style={{ padding: "4px 6px", fontWeight: 800, color: "#1e3a5f", textAlign: "right", borderTop: "2px solid #e2e8f0", fontSize: 10 }}>
                       Total du mois
                     </td>
                     <td style={{ padding: "4px 4px", fontWeight: 800, color: "#1e3a5f", textAlign: "center", borderTop: "2px solid #e2e8f0", fontSize: 10 }}>
@@ -349,7 +374,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                   </tr>
                   {totalHSup > 0 && (
                     <tr style={{ background: "#fef2f2" }}>
-                      <td colSpan={4} style={{ padding: "4px 6px", fontWeight: 800, color: "#dc2626", textAlign: "right", fontSize: 10 }}>
+                      <td colSpan={6} style={{ padding: "4px 6px", fontWeight: 800, color: "#dc2626", textAlign: "right", fontSize: 10 }}>
                         Heures supplémentaires (&gt;35h/sem.)
                       </td>
                       <td style={{ padding: "4px 4px", fontWeight: 800, color: "#dc2626", textAlign: "center", fontSize: 10 }}>
