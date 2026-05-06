@@ -28,6 +28,9 @@ export interface TacheType {
   horairesDefaut?: string[];  // horaires de début standards ex: ["08:45","09:00","10:00"]
   obligatoire?: boolean;      // tâche obligatoire — vérifiée par l'IA
   joursObligatoires?: JourSemaine[]; // jours où la tâche est obligatoire
+  binomeRequis?: boolean;     // tâche qui nécessite 2 personnes (ex: rentrer les chevaux,
+                              // ramasser les crottins). À l'assignation, on propose
+                              // automatiquement d'ajouter un 2e salarié sur le même créneau.
   notes?: string;
   createdAt?: any;
 }

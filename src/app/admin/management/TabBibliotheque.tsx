@@ -130,7 +130,11 @@ function TacheForm({ form, editId, saving, onChange, onSave, onCancel }: FormPro
         </label>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={!!form.obligatoire} onChange={e => onChange({ ...form, obligatoire: e.target.checked, joursObligatoires: e.target.checked ? (form.joursObligatoires || form.joursDefaut || []) : [] })} className="accent-red-500 w-4 h-4" />
-          <span className="font-body text-xs text-slate-600">Obligatoire <span className="text-red-400">(vérifiée par l'IA)</span></span>
+          <span className="font-body text-xs text-slate-600">Obligatoire <span className="text-red-400">(vérifiée par l&apos;IA)</span></span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={!!form.binomeRequis} onChange={e => onChange({ ...form, binomeRequis: e.target.checked })} className="accent-purple-500 w-4 h-4" />
+          <span className="font-body text-xs text-slate-600">Binôme requis <span className="text-purple-400">👥 (2 personnes)</span></span>
         </label>
       </div>
       {form.obligatoire && (
@@ -252,6 +256,7 @@ export default function TabBibliotheque({ taches, onRefresh }: Props) {
                     {t.obligatoire && <span className="font-body text-[9px] bg-red-50 text-red-500 px-1.5 py-0.5 rounded-full font-semibold">
                       obligatoire {(t.joursObligatoires || []).length > 0 && (t.joursObligatoires || []).length < 6 ? `(${(t.joursObligatoires || []).map(j => JOURS_LABELS[j].slice(0,2)).join(" ")})` : ""}
                     </span>}
+                    {t.binomeRequis && <span className="font-body text-[9px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded-full font-semibold">👥 binôme</span>}
                     {(t.horairesDefaut && t.horairesDefaut.length > 0) && (
                       <div className="flex flex-wrap gap-0.5">
                         {t.horairesDefaut.sort().map(h => (

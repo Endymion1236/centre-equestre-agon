@@ -45,7 +45,10 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   const { isAdmin } = useAuth();
   const { toast } = useToast();
   const [addCell, setAddCell] = useState<{ salarieId: string; jour: JourSemaine } | null>(null);
-  const [addForm, setAddForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30, joursSelectionnes: [] as JourSemaine[], enchainer: false });
+  // binomeIds : si la tache est marquée binomeRequis, contient les ids des salariés
+  // additionnels à assigner sur le même créneau. La tache du salarié principal +
+  // une tache identique pour chaque binôme sont créées en une fois.
+  const [addForm, setAddForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30, joursSelectionnes: [] as JourSemaine[], enchainer: false, binomeIds: [] as string[] });
   // Édition d'une tâche existante : ouvre une modale de modification
   const [editingTache, setEditingTache] = useState<TachePlanifiee | null>(null);
   const [editForm, setEditForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30, notes: "" });
@@ -117,6 +120,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       dureeMinutes: defaultTache?.dureeMinutes || 30,
       joursSelectionnes: [] as JourSemaine[],
       enchainer: false,
+      binomeIds: [] as string[],
     });
     setAddCell({ salarieId, jour });
   };
@@ -130,11 +134,17 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       ? addForm.joursSelectionnes
       : [addCell.jour];
 
+    // Liste complète des salariés à assigner : le principal + les binômes choisis.
+    // Si la tâche n'est pas marquée binomeRequis OU qu'aucun binôme n'a été sélectionné,
+    // c'est juste le salarié principal (comportement historique).
+    const allSalIds = [addCell.salarieId, ...addForm.binomeIds.filter(id => id && id !== addCell.salarieId)];
+
     try {
       const batch: Promise<any>[] = [];
       const details: string[] = [];
       for (const jour of joursToAdd) {
-        // Calculer l'heure de début pour ce jour
+        // Calculer l'heure de début pour ce jour (basée sur le planning du
+        // salarié principal — les binômes le rejoignent à la même heure).
         let heureDebut = addForm.heureDebut;
         if (addForm.enchainer && joursToAdd.length > 1) {
           const jourTaches = taches
@@ -148,23 +158,31 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
 
         details.push(`${JOURS_LABELS[jour].slice(0, 3)} ${heureDebut}`);
 
-        batch.push(addDoc(collection(db, "taches-planifiees"), {
-          tacheTypeId: addForm.tacheTypeId,
-          tacheLabel: tt.label,
-          categorie: tt.categorie,
-          salarieId: addCell.salarieId,
-          salarieName: sal?.nom || "",
-          jour,
-          heureDebut,
-          dureeMinutes: addForm.dureeMinutes || roundToQuarter(tt.dureeMinutes),
-          semaine,
-          done: false,
-          createdAt: serverTimestamp(),
-        }));
+        // Une tache par salarié assigné (principal + binômes), même heure et durée.
+        for (const salId of allSalIds) {
+          const salObj = salaries.find(s => s.id === salId);
+          if (!salObj) continue;
+          batch.push(addDoc(collection(db, "taches-planifiees"), {
+            tacheTypeId: addForm.tacheTypeId,
+            tacheLabel: tt.label,
+            categorie: tt.categorie,
+            salarieId: salId,
+            salarieName: salObj.nom,
+            jour,
+            heureDebut,
+            dureeMinutes: addForm.dureeMinutes || roundToQuarter(tt.dureeMinutes),
+            semaine,
+            done: false,
+            createdAt: serverTimestamp(),
+          }));
+        }
       }
       await Promise.all(batch);
-      if (joursToAdd.length > 1) {
-        toast(`${tt.label} ajoutée : ${details.join(", ")}`, "success");
+      // Toast récap : on précise s'il y a binôme + nombre de jours
+      const nbBinomes = allSalIds.length - 1;
+      const recapBinome = nbBinomes > 0 ? ` (👥 ${nbBinomes + 1} pers.)` : "";
+      if (joursToAdd.length > 1 || nbBinomes > 0) {
+        toast(`${tt.label}${recapBinome} ajoutée : ${details.join(", ")}`, "success");
       }
       setAddCell(null);
       onRefresh();
@@ -1111,6 +1129,48 @@ Réponds de façon concise et pratique, en français.`,
                               )}
                             </div>
                           )}
+                          {/* Zone binôme : visible uniquement si la tâche choisie est marquée
+                              binomeRequis dans la bibliothèque. Permet d'assigner un (ou plusieurs)
+                              salariés supplémentaires sur le même créneau. */}
+                          {(() => {
+                            const ttSel = tachesType.find(t => t.id === addForm.tacheTypeId);
+                            if (!ttSel?.binomeRequis) return null;
+                            const otherSals = salaries.filter(s => s.actif && s.id !== addCell?.salarieId);
+                            return (
+                              <div style={{background:"#faf5ff", border:"1px solid #e9d5ff", borderRadius:6, padding:6}}>
+                                <div style={{fontFamily:"sans-serif", fontSize:10, fontWeight:600, color:"#7c3aed", marginBottom:4, display:"flex", alignItems:"center", gap:3}}>
+                                  👥 Cette tâche nécessite un binôme
+                                </div>
+                                <div style={{display:"flex", flexWrap:"wrap", gap:3}}>
+                                  {otherSals.map(s => {
+                                    const selected = addForm.binomeIds.includes(s.id);
+                                    return (
+                                      <button key={s.id}
+                                        onClick={() => {
+                                          const curr = addForm.binomeIds;
+                                          setAddForm({...addForm, binomeIds: selected ? curr.filter(x => x !== s.id) : [...curr, s.id]});
+                                        }}
+                                        style={{
+                                          padding:"3px 8px", borderRadius:5,
+                                          border: selected ? "1px solid #7c3aed" : "1px solid #e2e8f0",
+                                          background: selected ? "#7c3aed" : "white",
+                                          color: selected ? "white" : "#475569",
+                                          fontFamily:"sans-serif", fontSize:10, fontWeight:600,
+                                          cursor:"pointer",
+                                        }}>
+                                        {selected ? "✓ " : "+ "}{s.nom}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                {addForm.binomeIds.length > 0 && (
+                                  <div style={{fontFamily:"sans-serif", fontSize:9, color:"#7c3aed", marginTop:4, fontStyle:"italic"}}>
+                                    {addForm.binomeIds.length + 1} personnes assignées sur le même créneau
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                           <div style={{display:"flex",gap:4}}>
                             <button onClick={addTache} disabled={saving||!addForm.tacheTypeId}
                               style={{flex:1,padding:"4px 0",borderRadius:6,border:"none",
