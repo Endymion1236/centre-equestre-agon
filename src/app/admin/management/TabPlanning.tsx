@@ -29,6 +29,16 @@ const TIME_SLOTS = Array.from({length: (20-7)*4+1}, (_,i) => {
 function heureToMin(h: string) { const [hh,mm] = h.split(":").map(Number); return hh*60+mm; }
 function minToHeure(m: number) { return `${String(Math.floor(m/60)).padStart(2,"0")}:${String(m%60).padStart(2,"0")}`; }
 
+/**
+ * Arrondit une duree au quart d'heure le plus proche, avec un minimum de
+ * 15 min. Utilise pour les pre-remplissages depuis tachesType (qui peuvent
+ * avoir des durees non-multiples de 15 comme 5, 10 ou 20 min).
+ */
+function roundToQuarter(min: number): number {
+  if (min <= 15) return 15;
+  return Math.round(min / 15) * 15;
+}
+
 const COULEURS_SALARIE = ["#2050A0","#16a34a","#dc2626","#d97706","#7c3aed","#0891b2","#be185d","#374151"];
 
 export default function TabPlanning({ semaine, setSemaine, taches, tachesType, salaries, creneaux, modeles, onRefresh }: Props) {
@@ -146,7 +156,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
           salarieName: sal?.nom || "",
           jour,
           heureDebut,
-          dureeMinutes: addForm.dureeMinutes || tt.dureeMinutes,
+          dureeMinutes: addForm.dureeMinutes || roundToQuarter(tt.dureeMinutes),
           semaine,
           done: false,
           createdAt: serverTimestamp(),
@@ -955,7 +965,7 @@ Réponds de façon concise et pratique, en français.`,
                           <select value={addForm.tacheTypeId} onChange={e=>{
                             const tt=tachesType.find(t=>t.id===e.target.value);
                             const firstHoraire = tt?.horairesDefaut?.sort()[0];
-                            setAddForm({...addForm, tacheTypeId:e.target.value, dureeMinutes:tt?.dureeMinutes||30, heureDebut: firstHoraire || addForm.heureDebut});
+                            setAddForm({...addForm, tacheTypeId:e.target.value, dureeMinutes:roundToQuarter(tt?.dureeMinutes||30), heureDebut: firstHoraire || addForm.heureDebut});
                           }} style={{width:"100%",padding:"4px 6px",borderRadius:6,border:"1px solid #bfdbfe",fontFamily:"sans-serif",fontSize:11,background:"white"}}>
                             <option value="">— Choisir une tâche —</option>
                             {CATEGORIES.map(cat => {
@@ -1002,7 +1012,13 @@ Réponds de façon concise et pratique, en français.`,
                             </select>
                             <select value={addForm.dureeMinutes} onChange={e=>setAddForm({...addForm,dureeMinutes:parseInt(e.target.value)})}
                               style={{flex:1,padding:"3px 4px",borderRadius:6,border:"1px solid #bfdbfe",fontFamily:"sans-serif",fontSize:10,background:"white"}}>
-                              {[15,30,45,60,90,120,180,240].map(d=><option key={d} value={d}>{d<60?`${d}m`:`${d/60}h`}</option>)}
+                              {/* Toutes durees au quart d'heure : de 15 min a 4h, par pas de 15 min */}
+                              {[15,30,45,60,75,90,105,120,135,150,165,180,195,210,225,240].map(d=>{
+                                const h = Math.floor(d/60);
+                                const m = d%60;
+                                const label = h === 0 ? `${m}min` : (m === 0 ? `${h}h` : `${h}h${String(m).padStart(2,"0")}`);
+                                return <option key={d} value={d}>{label}</option>;
+                              })}
                             </select>
                             {/* Bouton enchaîner après la précédente */}
                             {(() => {
@@ -1862,7 +1878,7 @@ Réponds de façon concise et pratique, en français.`,
             <select value={editForm.tacheTypeId}
               onChange={e => {
                 const tt = tachesType.find(t => t.id === e.target.value);
-                setEditForm({ ...editForm, tacheTypeId: e.target.value, dureeMinutes: tt?.dureeMinutes || editForm.dureeMinutes });
+                setEditForm({ ...editForm, tacheTypeId: e.target.value, dureeMinutes: tt?.dureeMinutes ? roundToQuarter(tt.dureeMinutes) : editForm.dureeMinutes });
               }}
               style={{width:"100%", padding:"8px 10px", borderRadius:8, border:"1px solid #e2e8f0", fontFamily:"sans-serif", fontSize:13, background:"white", marginBottom:12}}>
               {CATEGORIES.map(cat => {
@@ -1892,11 +1908,26 @@ Réponds de façon concise et pratique, en français.`,
               </div>
               <div>
                 <label style={{fontFamily:"sans-serif", fontSize:11, fontWeight:600, color:"#475569", display:"block", marginBottom:4}}>
-                  Durée (minutes)
+                  Durée
                 </label>
-                <input type="number" min={5} step={5} value={editForm.dureeMinutes}
-                  onChange={e => setEditForm({ ...editForm, dureeMinutes: Math.max(5, parseInt(e.target.value, 10) || 30) })}
-                  style={{width:"100%", padding:"8px 10px", borderRadius:8, border:"1px solid #e2e8f0", fontFamily:"sans-serif", fontSize:13}} />
+                <select value={editForm.dureeMinutes}
+                  onChange={e => setEditForm({ ...editForm, dureeMinutes: parseInt(e.target.value, 10) })}
+                  style={{width:"100%", padding:"8px 10px", borderRadius:8, border:"1px solid #e2e8f0", fontFamily:"sans-serif", fontSize:13, background:"white"}}>
+                  {/* Pas de 15 min de 15min a 4h. Si la duree actuelle de la tache n'est
+                      pas un multiple de 15 (ex: ancienne tache a 20min), on l'ajoute en tete
+                      pour ne pas la perdre lors de l'edition. */}
+                  {(() => {
+                    const standard = [15,30,45,60,75,90,105,120,135,150,165,180,195,210,225,240];
+                    const current = editForm.dureeMinutes;
+                    const all = standard.includes(current) ? standard : [current, ...standard].sort((a,b)=>a-b);
+                    return all.map(d => {
+                      const h = Math.floor(d/60);
+                      const m = d%60;
+                      const label = h === 0 ? `${m} min` : (m === 0 ? `${h}h` : `${h}h${String(m).padStart(2,"0")}`);
+                      return <option key={d} value={d}>{label}</option>;
+                    });
+                  })()}
+                </select>
               </div>
             </div>
 
