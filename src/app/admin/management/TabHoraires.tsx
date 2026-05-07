@@ -32,30 +32,28 @@ function getWeeksOfMonth(year: number, month: number): string[] {
 /**
  * Données d'une ligne de la fiche horaire pour un jour.
  *
- * Si la journée a une pause (= trou >= seuil entre deux tâches consécutives),
- * on remplit les 4 champs début/fin matin et début/fin après-midi. Sinon,
- * seuls debut et fin sont remplis (matin == aprem == journée continue).
+ * Les pauses sont marquées **explicitement** (catégorie "pause") par l'admin
+ * dans le planning. Elles sont exclues du temps de travail calculé.
  *
- * Le `duree` ne compte JAMAIS la pause — c'est la durée réelle travaillée.
+ * Si la journée contient au moins une tâche "pause", on coupe l'affichage
+ * matin / après-midi autour de la première pause. Sinon, journée continue.
+ *
+ * Le `duree` ne compte JAMAIS les pauses — c'est la durée réelle travaillée
+ * (= amplitude de la journée moins la somme des durées des pauses explicites).
  */
 type RowData = {
   date: Date;
   jour: JourSemaine;
   debut: string;        // début matin OU début unique si pas de pause
   fin: string;          // fin matin OU fin unique si pas de pause
-  debutAprem: string;   // vide si pas de pause détectée
-  finAprem: string;     // vide si pas de pause détectée
-  pauseMin: number;     // 0 si pas de pause, sinon durée pause en minutes
-  duree: number;        // durée travaillée (pause exclue)
+  debutAprem: string;   // vide si pas de pause explicite
+  finAprem: string;     // vide si pas de pause explicite
+  pauseMin: number;     // 0 si pas de pause, sinon somme des pauses en minutes
+  duree: number;        // durée travaillée (pauses exclues)
   isSamedi: boolean;
   isoWeek: string;
 };
 type WeekSummary = { isoWeek: string; total: number; hSup: number };
-
-// Seuil minimal pour qu'un trou entre 2 tâches consécutives soit considéré
-// comme une "pause déjeuner" (pas une simple respiration entre 2 tâches).
-// 30 min = on considère que c'est une vraie coupure repas/repos.
-const SEUIL_PAUSE_MIN = 30;
 
 export default function TabHoraires({ semaine, setSemaine, taches, salaries }: Props) {
   const lundi = getLundideSemaine(semaine);
@@ -106,54 +104,48 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
       if (dow > 6) return; // skip invalid
       const jour = JOURS[dow] as JourSemaine;
       const isoWeek = getISOWeek(date);
-      const dayTaches = salTaches.filter(t => t.semaine === isoWeek && t.jour === jour && t.categorie !== "pause")
+
+      // Toutes les tâches du jour, triées par heure de début
+      const dayTaches = salTaches.filter(t => t.semaine === isoWeek && t.jour === jour)
         .sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
 
-      if (dayTaches.length === 0) {
+      // Sépare pauses explicites (catégorie "pause") du travail
+      const pauses = dayTaches.filter(t => t.categorie === "pause");
+      const travail = dayTaches.filter(t => t.categorie !== "pause");
+
+      if (travail.length === 0) {
         rows.push({ date, jour, debut: "", fin: "", debutAprem: "", finAprem: "", pauseMin: 0, duree: 0, isSamedi: dow === 5, isoWeek });
         return;
       }
 
-      // Détection d'une pause : on cherche le plus grand trou entre
-      // 2 tâches consécutives. Si ce trou >= SEUIL_PAUSE_MIN, on coupe
-      // la journée en matin / après-midi.
-      //
-      // Exemple : tâches 9h-12h puis 14h-17h
-      // → trou 12h→14h = 120min (>= 30) → pause détectée
-      // → matin 9h-12h, aprem 14h-17h, durée totale 6h, pause 2h
-      let biggestGapMin = 0;
-      let biggestGapIdx = -1; // index de la tâche AVANT le trou
-      for (let i = 0; i < dayTaches.length - 1; i++) {
-        const finCurrente = heureToMin(dayTaches[i].heureDebut) + dayTaches[i].dureeMinutes;
-        const debutSuivante = heureToMin(dayTaches[i + 1].heureDebut);
-        const gap = debutSuivante - finCurrente;
-        if (gap > biggestGapMin) {
-          biggestGapMin = gap;
-          biggestGapIdx = i;
-        }
-      }
-
-      const debut = dayTaches[0].heureDebut;
-      const lastT = dayTaches[dayTaches.length - 1];
+      // Amplitude = première tâche de travail → fin de la dernière tâche de travail
+      const debut = travail[0].heureDebut;
+      const lastT = travail[travail.length - 1];
       const fin = minToHeure(heureToMin(lastT.heureDebut) + lastT.dureeMinutes);
-      const duree = dayTaches.reduce((s, t) => s + t.dureeMinutes, 0);
+      const amplitudeMin = heureToMin(fin) - heureToMin(debut);
+
+      // Somme des durées de TOUTES les pauses explicites
+      const pauseMin = pauses.reduce((s, p) => s + p.dureeMinutes, 0);
+
+      // Durée travaillée = amplitude − pauses explicites
+      // (les battements courts entre tâches de travail sont comptés en travail)
+      const duree = Math.max(0, amplitudeMin - pauseMin);
       totalMois += duree;
 
-      if (biggestGapMin >= SEUIL_PAUSE_MIN && biggestGapIdx >= 0) {
-        // Pause détectée : on coupe en matin / après-midi
-        const tacheAvantPause = dayTaches[biggestGapIdx];
-        const tacheApresPause = dayTaches[biggestGapIdx + 1];
-        const finMatin = minToHeure(heureToMin(tacheAvantPause.heureDebut) + tacheAvantPause.dureeMinutes);
-        const debutAprem = tacheApresPause.heureDebut;
+      if (pauses.length > 0) {
+        // On coupe l'affichage matin/aprem autour de la PREMIÈRE pause de la journée
+        const premierePause = pauses[0];
+        const finMatin = premierePause.heureDebut;
+        const debutAprem = minToHeure(heureToMin(premierePause.heureDebut) + premierePause.dureeMinutes);
         rows.push({
           date, jour, isSamedi: dow === 5, isoWeek,
           debut, fin: finMatin,
           debutAprem, finAprem: fin,
-          pauseMin: biggestGapMin,
+          pauseMin,
           duree,
         });
       } else {
-        // Journée continue, pas de pause significative
+        // Aucune pause explicite : journée continue
         rows.push({
           date, jour, isSamedi: dow === 5, isoWeek,
           debut, fin,
@@ -289,7 +281,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                           {JOURS_LABELS[row.jour].slice(0, 3)}
                         </td>
                         {/* Détermination matin / après-midi pour la répartition des cellules.
-                            - Si pause détectée : on a directement debut/fin (matin) et debutAprem/finAprem (aprem)
+                            - Si pause explicite : on a directement debut/fin (matin) et debutAprem/finAprem (aprem)
                             - Si pas de pause : on regarde si la plage commence avant 13h
                               → oui = matin uniquement, aprem vide
                               → non = aprem uniquement, matin vide
@@ -299,7 +291,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                           let matinDeb = "", matinFin = "", apremDeb = "", apremFin = "";
                           if (row.debut) {
                             if (row.debutAprem) {
-                              // Pause détectée → 4 cellules remplies
+                              // Pause explicite → 4 cellules remplies
                               matinDeb = row.debut;
                               matinFin = row.fin;
                               apremDeb = row.debutAprem;
