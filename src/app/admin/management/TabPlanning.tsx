@@ -8,7 +8,7 @@ import { Plus, Trash2, Check, ChevronLeft, ChevronRight, Printer, Save, LayoutTe
 import { useToast } from "@/components/ui/Toast";
 import { Card } from "@/components/ui";
 import type { TacheType, TachePlanifiee, Salarie, JourSemaine, ModelePlanning, TacheModele } from "./types";
-import { CATEGORIES, JOURS, JOURS_LABELS, getLundideSemaine, getISOWeek, formatDateCourte, fmtDuree } from "./types";
+import { CATEGORIES, JOURS, JOURS_LABELS, getLundideSemaine, getISOWeek, formatDateCourte, fmtDuree, calcTempsTravailJour } from "./types";
 
 interface Props {
   semaine: string;
@@ -512,7 +512,8 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   };
 
   // Calcul charge par salarié (minutes totales / semaine)
-  // Charge par salarié = temps effectif (début première tâche → fin dernière tâche) - pauses
+  // Charge par salarié = somme par jour de (amplitude première→dernière tâche − pauses explicites).
+  // Cohérent avec TabHoraires : les battements courts entre tâches non-pause sont comptés.
   const [inclureDimanche, setInclureDimanche] = useState(false);
   const nbJours = inclureDimanche ? 7 : 6;
   const joursActifs = JOURS.slice(0, nbJours) as JourSemaine[];
@@ -520,13 +521,15 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     const map: Record<string, number> = {};
     const salIds = [...new Set(taches.map(t => t.salarieId))];
     for (const salId of salIds) {
-      // Somme des durées de toutes les tâches sauf les pauses
-      map[salId] = taches
-        .filter(t => t.salarieId === salId && t.categorie !== "pause")
-        .reduce((sum, t) => sum + t.dureeMinutes, 0);
+      let total = 0;
+      for (const jour of joursActifs) {
+        const dayT = taches.filter(t => t.salarieId === salId && t.jour === jour);
+        total += calcTempsTravailJour(dayT);
+      }
+      map[salId] = total;
     }
     return map;
-  }, [taches]);
+  }, [taches, joursActifs]);
 
   // ── Importer les cours/stages du planning dans les tâches ───────────────
   const [importing, setImporting] = useState(false);
@@ -738,7 +741,10 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
         const salTaches = sal
           ? taches.filter(t => t.salarieId === sal.id).sort((a, b) => JOURS.indexOf(a.jour) - JOURS.indexOf(b.jour) || a.heureDebut.localeCompare(b.heureDebut))
           : [];
-        const totalCharge = salTaches.filter(t => t.categorie !== "pause").reduce((s, t) => s + t.dureeMinutes, 0);
+        const totalCharge = joursLabels.reduce((sum, { jour }) => {
+          const dayT = salTaches.filter(t => t.jour === jour);
+          return sum + calcTempsTravailJour(dayT);
+        }, 0);
 
         // Construire le tableau style management (jours en colonnes, tâches en cartes)
         const jourHeaders = joursLabels.map(({ jour, date }) =>
@@ -763,8 +769,8 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
 
         // Résumé charge par jour
         const chargeCells = joursLabels.map(({ jour }) => {
-          const dayT = salTaches.filter(t => t.jour === jour && t.categorie !== "pause");
-          const charge = dayT.reduce((s, t) => s + t.dureeMinutes, 0);
+          const dayT = salTaches.filter(t => t.jour === jour);
+          const charge = calcTempsTravailJour(dayT);
           return `<td style="padding:4px;text-align:center;font-size:9px;font-weight:700;color:${charge > 0 ? "#1e3a5f" : "#d1d5db"};border-top:1px solid #e2e8f0;">${charge > 0 ? fmtDuree(charge) : "—"}</td>`;
         }).join("");
 
@@ -1385,9 +1391,7 @@ Réponds de façon concise et pratique, en français.`,
               );
               return !alreadyImported;
             }).sort((a: any, b: any) => heureToMin(a.startTime) - heureToMin(b.startTime));
-            const dayCharge = dayTaches
-              .filter(t => t.categorie !== "pause")
-              .reduce((s, t) => s + t.dureeMinutes, 0);
+            const dayCharge = calcTempsTravailJour(dayTaches);
             const jourComplet = date.toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" });
             const isEmpty = dayTaches.length === 0 && dayActivities.length === 0;
 

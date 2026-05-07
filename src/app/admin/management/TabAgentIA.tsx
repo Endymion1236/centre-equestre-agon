@@ -5,7 +5,7 @@ import { db } from "@/lib/firebase";
 import { Sparkles, Loader2, Check, RefreshCw } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import type { TacheType, Salarie, TachePlanifiee, JourSemaine } from "./types";
-import { JOURS, JOURS_LABELS, getLundideSemaine, formatDateCourte } from "./types";
+import { JOURS, JOURS_LABELS, getLundideSemaine, formatDateCourte, calcTempsTravailJour } from "./types";
 import { authFetch } from "@/lib/auth-fetch";
 
 interface Props {
@@ -40,9 +40,13 @@ export default function TabAgentIA({ semaine, tachesType, salaries, tachesExista
     return acc;
   }, {} as Record<string, string[]>);
 
-  // Charge actuelle par salarié
+  // Charge actuelle par salarié (somme par jour de amplitude - pauses)
   const chargeActuelle = salaries.reduce((acc, sal) => {
-    const mins = tachesExistantes.filter(t=>t.salarieId===sal.id).reduce((s,t)=>s+t.dureeMinutes,0);
+    let mins = 0;
+    for (const jour of JOURS) {
+      const dayT = tachesExistantes.filter(t => t.salarieId === sal.id && t.jour === jour);
+      mins += calcTempsTravailJour(dayT);
+    }
     acc[sal.nom] = Math.round(mins/60*10)/10;
     return acc;
   }, {} as Record<string, number>);

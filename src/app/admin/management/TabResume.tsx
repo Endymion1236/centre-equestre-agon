@@ -2,7 +2,7 @@
 import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { TachePlanifiee, Salarie, JourSemaine } from "./types";
-import { CATEGORIES, JOURS, JOURS_LABELS, getLundideSemaine, getISOWeek, formatDateCourte, fmtDuree } from "./types";
+import { CATEGORIES, JOURS, JOURS_LABELS, getLundideSemaine, getISOWeek, formatDateCourte, fmtDuree, calcTempsTravailJour } from "./types";
 
 interface Props {
   semaine: string;
@@ -41,9 +41,8 @@ export default function TabResume({ semaine, setSemaine, taches, salaries }: Pro
       const jours: Record<string, number> = {};
       let total = 0;
       for (const { jour } of jourDates) {
-        const charge = taches
-          .filter(t => t.salarieId === sal.id && t.jour === jour && t.categorie !== "pause")
-          .reduce((s, t) => s + t.dureeMinutes, 0);
+        const dayT = taches.filter(t => t.salarieId === sal.id && t.jour === jour);
+        const charge = calcTempsTravailJour(dayT);
         jours[jour] = charge;
         total += charge;
       }
@@ -133,7 +132,10 @@ export default function TabResume({ semaine, setSemaine, taches, salaries }: Pro
           return jourDiff !== 0 ? jourDiff : a.heureDebut.localeCompare(b.heureDebut);
         });
         if (salTaches.length === 0) return null;
-        const totalCharge = salTaches.filter(t => t.categorie !== "pause").reduce((s, t) => s + t.dureeMinutes, 0);
+        const totalCharge = jourDates.reduce((sum, { jour }) => {
+          const dayT = salTaches.filter(t => t.jour === jour);
+          return sum + calcTempsTravailJour(dayT);
+        }, 0);
 
         return (
           <div key={sal.id} className="bg-white rounded-xl border border-gray-100 p-5">
@@ -148,7 +150,7 @@ export default function TabResume({ semaine, setSemaine, taches, salaries }: Pro
             {jourDates.map(({ jour, date }) => {
               const dayTaches = salTaches.filter(t => t.jour === jour);
               if (dayTaches.length === 0) return null;
-              const dayCharge = dayTaches.filter(t => t.categorie !== "pause").reduce((s, t) => s + t.dureeMinutes, 0);
+              const dayCharge = calcTempsTravailJour(dayTaches);
               const firstTask = dayTaches[0];
               const lastTask = dayTaches[dayTaches.length - 1];
               const amplitude = `${firstTask.heureDebut}→${minToHeure(heureToMin(lastTask.heureDebut) + lastTask.dureeMinutes)}`;

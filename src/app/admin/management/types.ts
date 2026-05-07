@@ -130,3 +130,42 @@ export function fmtDuree(minutes: number): string {
 export function formatDateCourte(date: Date): string {
   return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
+
+/**
+ * Convertit "HH:MM" en minutes depuis minuit. Helper interne au calcul.
+ */
+function _heureToMin(h: string): number {
+  const [hh, mm] = h.split(":").map(Number);
+  return hh * 60 + mm;
+}
+
+/**
+ * Temps de travail effectif d'un ensemble de tâches **du même jour** :
+ *
+ *   amplitude (fin de la dernière tâche non-pause − début de la première)
+ *     − somme des durées des tâches de catégorie "pause"
+ *
+ * Cohérent avec la logique d'affichage de TabHoraires : les pauses sont
+ * marquées **explicitement** par l'admin (catégorie `"pause"`). Les battements
+ * courts entre deux tâches non-pause sont comptés en travail (puisqu'ils sont
+ * dans l'amplitude et pas déduits).
+ *
+ * ⚠️ Pour un cumul semaine, sommer le résultat sur chaque jour. NE PAS appeler
+ * avec toutes les tâches de la semaine : l'amplitude couvrirait plusieurs
+ * jours et donnerait un résultat erroné.
+ */
+export function calcTempsTravailJour(
+  tachesDuJour: { heureDebut: string; dureeMinutes: number; categorie: string }[]
+): number {
+  const travail = tachesDuJour.filter(t => t.categorie !== "pause");
+  if (travail.length === 0) return 0;
+  const sorted = [...travail].sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
+  const debutMin = _heureToMin(sorted[0].heureDebut);
+  const lastT = sorted[sorted.length - 1];
+  const finMin = _heureToMin(lastT.heureDebut) + lastT.dureeMinutes;
+  const amplitude = finMin - debutMin;
+  const pauseMin = tachesDuJour
+    .filter(t => t.categorie === "pause")
+    .reduce((s, t) => s + t.dureeMinutes, 0);
+  return Math.max(0, amplitude - pauseMin);
+}
