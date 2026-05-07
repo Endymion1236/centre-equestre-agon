@@ -15,6 +15,7 @@ const activityTypes = [
   { id: "cours",         label: "Cours régulier" },
   { id: "stage",         label: "Stage semaine" },
   { id: "stage_journee", label: "Stage journée" },
+  { id: "cycle",         label: "Cycle" },
   { id: "balade",        label: "Promenade" },
   { id: "competition",   label: "Compétition" },
   { id: "anniversaire",  label: "Anniversaire" },

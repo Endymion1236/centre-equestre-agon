@@ -112,7 +112,7 @@ export default function BonsRecupPage() {
     return b.childName?.toLowerCase().includes(q) || b.familyName?.toLowerCase().includes(q);
   });
 
-  const typeColors: Record<string, string> = { stage: "#27ae60", balade: "#e67e22", cours: "#2050A0", competition: "#7c3aed" };
+  const typeColors: Record<string, string> = { stage: "#27ae60", balade: "#e67e22", cours: "#2050A0", competition: "#7c3aed", cycle: "#0ea5e9" };
 
   return (
     <div>
