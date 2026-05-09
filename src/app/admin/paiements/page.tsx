@@ -986,6 +986,8 @@ export default function PaiementsPage() {
     if (broadcastRows.length === 0) return;
     setBroadcastSending(true);
     let ok = 0; let err = 0;
+    let totalInscriptionsCompet = 0; // Nombre d'inscriptions compétition réussies
+    let inscriptionsCompetErr = 0;   // Erreurs d'inscription (créneau introuvable, déjà plein, etc.)
     for (const row of broadcastRows) {
       try {
         // Recalculer les items avec les overrides de prix
@@ -1014,6 +1016,50 @@ export default function PaiementsPage() {
           updatedAt: serverTimestamp(),
         });
         ok++;
+
+        // ── Inscription au créneau compétition ──────────────────────────────
+        // Pour les items de type "competition", on réinscrit l'enfant au même
+        // créneau que celui de la commande source (1 compet = 1 événement unique
+        // donc tous les enfants du broadcast vont sur le même créneau).
+        // On déduplique par creneauId pour éviter d'inscrire 2 fois si l'item
+        // engagement et l'item coaching pointent sur le même créneau.
+        const creneauxAInscrire = new Set<string>();
+        const sourceItems = broadcastSource?.items || [];
+        sourceItems.forEach((srcItem: any) => {
+          if (srcItem.activityType === "competition" && srcItem.creneauId) {
+            creneauxAInscrire.add(srcItem.creneauId);
+          }
+        });
+
+        for (const creneauId of creneauxAInscrire) {
+          try {
+            const slotRef = doc(db, "creneaux", creneauId);
+            const slotSnap = await getDoc(slotRef);
+            if (!slotSnap.exists()) {
+              console.warn(`[broadcast] créneau ${creneauId} introuvable pour ${row.familyName}`);
+              inscriptionsCompetErr++;
+              continue;
+            }
+            const slot = slotSnap.data() as any;
+            const enrolled: any[] = slot.enrolled || [];
+            // Déduplication : ne réinscrit pas si l'enfant est déjà sur le créneau
+            if (enrolled.some((e: any) => e.childId === row.childId)) continue;
+            await updateDoc(slotRef, {
+              enrolled: [...enrolled, {
+                childId: row.childId,
+                childName: row.childName,
+                familyId: row.familyId,
+                familyName: row.familyName,
+                enrolledAt: new Date().toISOString(),
+              }],
+              enrolledCount: enrolled.length + 1,
+            });
+            totalInscriptionsCompet++;
+          } catch (e) {
+            console.error(`[broadcast] erreur inscription créneau ${creneauId} pour ${row.familyName}`, e);
+            inscriptionsCompetErr++;
+          }
+        }
       } catch (e) { console.error("Erreur broadcast famille", row.familyName, e); err++; }
     }
     setBroadcastSending(false);
@@ -1021,7 +1067,12 @@ export default function PaiementsPage() {
     setBroadcastRows([]);
     setBroadcastSearch("");
     await refreshAll();
-    toast(`${ok} commande${ok > 1 ? "s" : ""} créée${ok > 1 ? "s" : ""} dans Impayés${err > 0 ? ` — ${err} erreur(s)` : ""}.`);
+    // Toast récapitulatif : commandes + inscriptions compétition
+    const partsToast: string[] = [`${ok} commande${ok > 1 ? "s" : ""} créée${ok > 1 ? "s" : ""} dans Impayés`];
+    if (totalInscriptionsCompet > 0) partsToast.push(`${totalInscriptionsCompet} inscription${totalInscriptionsCompet > 1 ? "s" : ""} compétition`);
+    if (err > 0) partsToast.push(`${err} erreur(s) commande`);
+    if (inscriptionsCompetErr > 0) partsToast.push(`${inscriptionsCompetErr} inscription(s) compétition échouée(s)`);
+    toast(partsToast.join(" — ") + ".");
   };
 
   // Toggle une famille dans la sélection broadcast
