@@ -385,17 +385,49 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [extraSlotSearch, setExtraSlotSearch] = useState("");
   const prixForfaitAnnuel = frequenceCours === 3 ? inscParams.forfait3x : frequenceCours === 2 ? inscParams.forfait2x : inscParams.forfait1x;
   const totalSessionsSaison = inscParams.totalSessionsSaison * frequenceCours;
-  const dateFinSaison = inscParams.dateFinSaison;
+  const dateFinSaisonRef = inscParams.dateFinSaison;
 
-  // Calculer les séances restantes entre aujourd'hui et le 30 juin
-  // pour le jour de la semaine du créneau
+  /**
+   * Calcule la fin de saison "effective" pour un créneau donné.
+   *
+   * Une saison court de septembre à juin (fin = 30/06 par convention).
+   * - Si le créneau est dans la saison en cours (avant `dateFinSaisonRef`),
+   *   on garde la fin de saison de référence définie dans les paramètres.
+   * - Si le créneau est postérieur (ex: pré-inscription pour la saison
+   *   suivante en septembre), on bascule sur la fin de saison N+1 :
+   *   30/06 de l'année qui suit le 1er septembre précédant le créneau.
+   *
+   * Cela permet de pré-inscrire un cavalier pour la saison suivante au
+   * tarif plein, sans avoir à modifier les paramètres globaux.
+   */
+  const dateFinSaisonEffective = useMemo(() => {
+    const refFin = new Date(dateFinSaisonRef);
+    const creneauDate = new Date(creneau.date);
+    if (creneauDate <= refFin) return refFin;
+    // Créneau dans une saison future — calculer le 30/06 qui suit
+    const m = creneauDate.getMonth(); // 0-11
+    const y = creneauDate.getFullYear();
+    // Saison qui démarre en septembre Y_start et finit le 30/06 Y_start+1
+    const yearStart = m >= 8 ? y : y - 1;
+    return new Date(yearStart + 1, 5, 30); // mois 5 = juin
+  }, [dateFinSaisonRef, creneau.date]);
+
+  // Calculer les séances restantes pour le jour de la semaine du créneau
+  // - Point de départ : max(aujourd'hui, date du créneau) — utile pour les
+  //   pré-inscriptions où le créneau est dans le futur
+  // - Point d'arrivée : fin de saison effective (saison du créneau)
   const sessionsRestantes = useMemo(() => {
     const today = new Date();
-    const fin = new Date(dateFinSaison);
+    today.setHours(0, 0, 0, 0);
+    const fin = dateFinSaisonEffective;
     const creneauDate = new Date(creneau.date);
+    creneauDate.setHours(0, 0, 0, 0);
     const jourSemaine = creneauDate.getDay(); // 0=dim, 1=lun, ... 6=sam
+    // Si le créneau est dans le futur, on part de la date du créneau
+    // (pas d'aujourd'hui) — cas d'une pré-inscription saison suivante
+    const start = creneauDate > today ? creneauDate : today;
     let count = 0;
-    const cursor = new Date(today);
+    const cursor = new Date(start);
     // Aller au prochain jour correspondant
     while (cursor.getDay() !== jourSemaine) cursor.setDate(cursor.getDate() + 1);
     // Compter les occurrences jusqu'à fin de saison
@@ -404,7 +436,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       cursor.setDate(cursor.getDate() + 7);
     }
     return count;
-  }, [creneau.date]);
+  }, [creneau.date, dateFinSaisonEffective]);
 
   const prorata = sessionsRestantes / (inscParams.totalSessionsSaison || 35);
   const prixForfaitBrut = Math.round(prixForfaitAnnuel * prorata);
@@ -1022,9 +1054,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     if (inscriptionMode === "annuel") {
       // Inscrire dans TOUS les créneaux futurs du même cours (même jour + même heure + même activité)
       // IMPORTANT: allCreneaux ne contient que la semaine affichée, on charge tous les futurs
-      const today = new Date().toISOString().split("T")[0];
+      // Bornes :
+      //   - début = la date du créneau cliqué (pas "aujourd'hui") — pour le cas
+      //     d'une pré-inscription saison N+1 où l'on ne veut PAS inscrire le cavalier
+      //     dans les dernières séances de la saison en cours
+      //   - fin = dateFinSaisonEffective (saison du créneau, calculée plus haut)
+      const startDate = creneau.date; // borne basse incluse
+      const endDate = dateFinSaisonEffective.toISOString().split("T")[0]; // borne haute incluse
       const allFutureSnap = await getDocs(
-        query(collection(db, "creneaux"), where("date", ">=", today))
+        query(collection(db, "creneaux"), where("date", ">=", startDate), where("date", "<=", endDate))
       );
       const allFutureCreneaux = allFutureSnap.docs.map(d => ({ id: d.id, ...d.data() })) as (Creneau & { id: string })[];
 
@@ -1032,13 +1070,12 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       // Ne PAS filtrer par moniteur — il peut changer en cours de saison (remplacements)
       const dow = new Date(creneau.date + "T12:00:00").getDay();
       const slotsToEnroll = allFutureCreneaux.filter(c =>
-        c.date >= today &&
         new Date(c.date + "T12:00:00").getDay() === dow &&
         c.startTime === creneau.startTime &&
         c.activityTitle === creneau.activityTitle
       );
 
-      console.log(`📋 Inscription annuelle : ${slotsToEnroll.length} séances pour "${creneau.activityTitle}" (jour ${dow}, ${creneau.startTime})`);
+      console.log(`📋 Inscription annuelle : ${slotsToEnroll.length} séances pour "${creneau.activityTitle}" (jour ${dow}, ${creneau.startTime}) du ${startDate} au ${endDate}`);
 
       for (const slot of slotsToEnroll) {
         await onEnroll(slot.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, undefined, { skipPayment: true, skipEmail: true });
@@ -1061,8 +1098,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         }
 
         const extraDow = new Date(refCreneau.date + "T12:00:00").getDay();
+        // Même bornage que pour le créneau principal : on utilise allFutureCreneaux
+        // qui est déjà borné par [startDate, endDate]. Inutile de re-filtrer par date,
+        // sauf à respecter le startDate (cas où le créneau extra du jour serait avant).
         const extraCreneaux = allFutureCreneaux.filter(c =>
-          c.date >= today &&
+          c.date >= startDate &&
           new Date(c.date + "T12:00:00").getDay() === extraDow &&
           c.startTime === refCreneau.startTime &&
           c.activityTitle === refCreneau.activityTitle
