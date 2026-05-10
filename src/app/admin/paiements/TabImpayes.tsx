@@ -4,7 +4,7 @@ import { updateDoc, getDoc, setDoc, doc, serverTimestamp } from "firebase/firest
 import { db } from "@/lib/firebase";
 import { safeNumber, generateOrderId } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
-import { Loader2, Search, X, AlertTriangle, Receipt, Check, ChevronDown, Plus, Trash2 } from "lucide-react";
+import { Loader2, Search, X, AlertTriangle, Receipt, Check, ChevronDown, Plus, Trash2, FileText, Calendar } from "lucide-react";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
 import { emailTemplates } from "@/lib/email-templates";
 import { paymentModes } from "./types";
@@ -45,6 +45,8 @@ export function TabImpayes({
 }: TabImpayesProps) {
   const [impayesSearch, setImpayesSearch] = useState("");
   const [impayesExpanded, setImpayesExpanded] = useState<Set<string>>(new Set());
+  // Filtre par type : 'all' = tout, 'invoice' = factures simples, 'echeance' = échéances en retard
+  const [typeFilter, setTypeFilter] = useState<"all" | "invoice" | "echeance">("all");
   const inputCls = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
 
   return (
@@ -67,20 +69,32 @@ export function TabImpayes({
       });
       const totalDue = unpaid.reduce((s, p) => s + ((p.totalTTC || 0) - (p.paidAmount || 0)), 0);
 
+      // ── Compteurs par type (avant filtrage par recherche/type) ──
+      const nbInvoice = unpaid.filter(p => !((p as any).echeancesTotal > 1)).length;
+      const nbEcheance = unpaid.filter(p => (p as any).echeancesTotal > 1).length;
+
       // ── Recherche ──
       const search = impayesSearch;
       const setSearch = setImpayesSearch;
       const expanded = impayesExpanded;
 
-      const filtered = search.trim()
-        ? unpaid.filter(p => {
-            const q = search.toLowerCase();
-            const inName = (p.familyName || "").toLowerCase().includes(q);
-            const inItems = (p.items || []).some((i: any) => (i.activityTitle || "").toLowerCase().includes(q) || (i.childName || "").toLowerCase().includes(q));
-            const inDate = p.date?.seconds ? new Date(p.date.seconds * 1000).toLocaleDateString("fr-FR").includes(q) : false;
-            return inName || inItems || inDate;
-          })
-        : unpaid;
+      const filtered = unpaid
+        .filter(p => {
+          // Filtre par type
+          const isEch = (p as any).echeancesTotal > 1;
+          if (typeFilter === "invoice" && isEch) return false;
+          if (typeFilter === "echeance" && !isEch) return false;
+          return true;
+        })
+        .filter(p => {
+          // Filtre recherche texte
+          if (!search.trim()) return true;
+          const q = search.toLowerCase();
+          const inName = (p.familyName || "").toLowerCase().includes(q);
+          const inItems = (p.items || []).some((i: any) => (i.activityTitle || "").toLowerCase().includes(q) || (i.childName || "").toLowerCase().includes(q));
+          const inDate = p.date?.seconds ? new Date(p.date.seconds * 1000).toLocaleDateString("fr-FR").includes(q) : false;
+          return inName || inItems || inDate;
+        });
 
       const toggle = (id: string) => setImpayesExpanded(prev => {
         const next = new Set(prev);
@@ -98,7 +112,7 @@ export function TabImpayes({
           </Card>
 
           {/* Barre de recherche */}
-          <div className="relative mb-4">
+          <div className="relative mb-3">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
             <input data-testid="impaye-search-input" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Rechercher par nom, activité, date..."
@@ -106,7 +120,35 @@ export function TabImpayes({
             {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer"><X size={14}/></button>}
           </div>
 
-          {filtered.length === 0 && <p className="font-body text-sm text-slate-500 text-center py-8">Aucun résultat pour "{search}"</p>}
+          {/* Filtres par type — n'apparaissent que si on a au moins un de chaque type */}
+          {nbInvoice > 0 && nbEcheance > 0 && (
+            <div className="flex gap-2 mb-4 flex-wrap">
+              <button
+                onClick={() => setTypeFilter("all")}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${typeFilter === "all" ? "bg-blue-500 text-white" : "bg-blue-50 text-blue-700 hover:bg-blue-100"}`}>
+                Tous <span className="bg-white/20 px-1.5 py-0.5 rounded text-[10px]">{unpaid.length}</span>
+              </button>
+              <button
+                onClick={() => setTypeFilter("invoice")}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${typeFilter === "invoice" ? "bg-red-500 text-white" : "bg-red-50 text-red-600 hover:bg-red-100"}`}>
+                <FileText size={12} /> Factures <span className={`px-1.5 py-0.5 rounded text-[10px] ${typeFilter === "invoice" ? "bg-white/20" : "bg-white/60"}`}>{nbInvoice}</span>
+              </button>
+              <button
+                onClick={() => setTypeFilter("echeance")}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${typeFilter === "echeance" ? "bg-orange-500 text-white" : "bg-orange-50 text-orange-600 hover:bg-orange-100"}`}>
+                <Calendar size={12} /> Échéances en retard <span className={`px-1.5 py-0.5 rounded text-[10px] ${typeFilter === "echeance" ? "bg-white/20" : "bg-white/60"}`}>{nbEcheance}</span>
+              </button>
+            </div>
+          )}
+
+          {filtered.length === 0 && (
+            <p className="font-body text-sm text-slate-500 text-center py-8">
+              {search ? `Aucun résultat pour "${search}"` :
+                typeFilter === "invoice" ? "Aucune facture impayée." :
+                typeFilter === "echeance" ? "Aucune échéance en retard." :
+                "Aucun impayé."}
+            </p>
+          )}
 
           <div className="flex flex-col gap-2">
             {filtered.map(p => {
@@ -120,11 +162,16 @@ export function TabImpayes({
                 ? Math.floor((Date.now() - new Date(echeanceDateStr).getTime()) / 86400000)
                 : daysLate;
               return (
-                <Card key={p.id} padding="md" className="overflow-hidden">
+                <Card key={p.id} padding="md" className={`overflow-hidden border-l-4 ${isEcheance ? "border-l-orange-400" : "border-l-red-400"}`}>
                   {/* ── En-tête accordéon (toujours visible) ── */}
                   <button onClick={() => toggle(p.id)} className="w-full flex items-center justify-between gap-3 bg-transparent border-none cursor-pointer text-left p-0">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
+                        {isEcheance ? (
+                          <Calendar size={14} className="text-orange-500 flex-shrink-0" aria-label="Échéance d'un échéancier" />
+                        ) : (
+                          <FileText size={14} className="text-red-500 flex-shrink-0" aria-label="Facture impayée" />
+                        )}
                         <span className="font-body text-sm font-semibold text-blue-800">{p.familyName}</span>
                         {isEcheance ? (
                           <Badge color="orange">Échéance {(p as any).echeance}/{(p as any).echeancesTotal}</Badge>
