@@ -412,31 +412,63 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     return new Date(yearStart + 1, 5, 30); // mois 5 = juin
   }, [dateFinSaisonRef, creneau.date]);
 
-  // Calculer les séances restantes pour le jour de la semaine du créneau
-  // - Point de départ : max(aujourd'hui, date du créneau) — utile pour les
-  //   pré-inscriptions où le créneau est dans le futur
-  // - Point d'arrivée : fin de saison effective (saison du créneau)
-  const sessionsRestantes = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const fin = dateFinSaisonEffective;
-    const creneauDate = new Date(creneau.date);
-    creneauDate.setHours(0, 0, 0, 0);
-    const jourSemaine = creneauDate.getDay(); // 0=dim, 1=lun, ... 6=sam
-    // Si le créneau est dans le futur, on part de la date du créneau
-    // (pas d'aujourd'hui) — cas d'une pré-inscription saison suivante
-    const start = creneauDate > today ? creneauDate : today;
-    let count = 0;
-    const cursor = new Date(start);
-    // Aller au prochain jour correspondant
-    while (cursor.getDay() !== jourSemaine) cursor.setDate(cursor.getDate() + 1);
-    // Compter les occurrences jusqu'à fin de saison
-    while (cursor <= fin) {
-      count++;
-      cursor.setDate(cursor.getDate() + 7);
-    }
-    return count;
-  }, [creneau.date, dateFinSaisonEffective]);
+  // Calculer les séances restantes en interrogeant Firestore plutôt que par
+  // calcul calendaire. Cela évite de surévaluer le total quand le calendaire
+  // donne 41-43 semaines (saison sept-juin) alors que les vacances scolaires
+  // ramènent le vrai compte à ~35 séances.
+  //
+  // Bornes :
+  //   - début = max(today, creneau.date) : pour les pré-inscriptions saison N+1,
+  //     on part de la date du créneau pour ne PAS compter la fin de saison en cours
+  //   - fin = dateFinSaisonEffective (saison du créneau)
+  //
+  // Critères de comptage : même activityTitle + même startTime + même jour de
+  // semaine que le créneau cliqué. Pas de filtre moniteur (changements possibles).
+  const [sessionsRestantes, setSessionsRestantes] = useState<number>(0);
+  const [loadingSessions, setLoadingSessions] = useState<boolean>(true);
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingSessions(true);
+    const computeSessionsRestantes = async () => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const creneauDate = new Date(creneau.date);
+      creneauDate.setHours(0, 0, 0, 0);
+      const start = creneauDate > today ? creneauDate : today;
+      const startStr = start.toISOString().split("T")[0];
+      const endStr = dateFinSaisonEffective.toISOString().split("T")[0];
+      const jourSemaineRef = creneauDate.getDay(); // 0=dim, 1=lun, ... 6=sam
+
+      try {
+        const snap = await getDocs(query(
+          collection(db, "creneaux"),
+          where("date", ">=", startStr),
+          where("date", "<=", endStr),
+        ));
+        const matchingCount = snap.docs.reduce((acc, d) => {
+          const c = d.data() as any;
+          if (c.activityTitle !== creneau.activityTitle) return acc;
+          if (c.startTime !== creneau.startTime) return acc;
+          // Reconstituer le jour de semaine du créneau Firestore
+          const cdow = new Date(c.date + "T12:00:00").getDay();
+          if (cdow !== jourSemaineRef) return acc;
+          return acc + 1;
+        }, 0);
+        if (!cancelled) {
+          setSessionsRestantes(matchingCount);
+          setLoadingSessions(false);
+        }
+      } catch (e) {
+        console.error("Erreur calcul sessionsRestantes", e);
+        if (!cancelled) {
+          setSessionsRestantes(0);
+          setLoadingSessions(false);
+        }
+      }
+    };
+    computeSessionsRestantes();
+    return () => { cancelled = true; };
+  }, [creneau.id, creneau.date, creneau.activityTitle, creneau.startTime, dateFinSaisonEffective]);
 
   const prorata = sessionsRestantes / (inscParams.totalSessionsSaison || 35);
   const prixForfaitBrut = Math.round(prixForfaitAnnuel * prorata);
@@ -2004,9 +2036,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   }}
                     className={`p-3 rounded-lg border-2 text-left cursor-pointer transition-all ${inscriptionMode === "annuel" ? "border-green-500 bg-green-50" : "border-gray-200 bg-white"}`}>
                     <div className="font-body text-sm font-semibold text-green-700">Forfait à l'année</div>
-                    <div className="font-body text-xs text-slate-500 mt-0.5">{sessionsRestantes} séances restantes × {frequenceCours}× ({sessionsRestantes * frequenceCours} total)</div>
-                    <div className="font-body text-lg font-bold text-green-600 mt-1">{totalAnnuel.toFixed(2)}€</div>
-                    {prorata < 1 && <div className="font-body text-[10px] text-orange-500 mt-0.5">Prorata : {Math.round(prorata * 100)}% du tarif annuel</div>}
+                    {loadingSessions ? (
+                      <div className="font-body text-xs text-slate-400 mt-0.5 italic">Calcul des séances restantes…</div>
+                    ) : (
+                      <>
+                        <div className="font-body text-xs text-slate-500 mt-0.5">{sessionsRestantes} séances restantes × {frequenceCours}× ({sessionsRestantes * frequenceCours} total)</div>
+                        <div className="font-body text-lg font-bold text-green-600 mt-1">{totalAnnuel.toFixed(2)}€</div>
+                        {prorata < 1 && <div className="font-body text-[10px] text-orange-500 mt-0.5">Prorata : {Math.round(prorata * 100)}% du tarif annuel</div>}
+                      </>
+                    )}
                   </button>
                 </div>
 
