@@ -341,10 +341,26 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
         <div className="bg-blue-50 rounded-lg p-3 mb-4">
           <div className="font-body text-sm font-semibold text-blue-800 mb-1">✨ {allCreneaux.length} séances à générer</div>
           <div className="font-body text-xs text-gray-500">
-            {slots.filter(s => s.activityId).map((s, i) => {
+            {slots.map((s, slotIdx) => {
+              if (!s.activityId) return null;
               const act = activities.find(a => a.id === s.activityId);
-              const count = allCreneaux.filter(c => c.activityId === s.activityId && c.startTime === s.startTime).length;
-              return <div key={i}>{act?.title} — {dayNamesFull[s.day]} {s.startTime}–{s.endTime} — <strong>{count} séances</strong></div>;
+              if (!act) return null;
+              // Compter par INDEX du slot (et pas par activityId+heure) pour gérer
+              // correctement le cas où plusieurs slots utilisent la même activité
+              // au même horaire mais sur des jours différents.
+              const count = allCreneaux.filter(c =>
+                c.activityId === s.activityId
+                && c.startTime === s.startTime
+                && c.endTime === s.endTime
+                && (() => {
+                  // Reconstituer le dow du créneau pour matcher avec s.day
+                  if (!c.date) return false;
+                  const d = new Date(c.date);
+                  const dow = (d.getDay() + 6) % 7;
+                  return dow === s.day;
+                })()
+              ).length;
+              return <div key={slotIdx}>{act.title} — {dayNamesFull[s.day]} {s.startTime}–{s.endTime} — <strong>{count} séances/an</strong></div>;
             })}
           </div>
         </div>
