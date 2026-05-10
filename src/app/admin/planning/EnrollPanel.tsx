@@ -412,24 +412,25 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     return new Date(yearStart + 1, 5, 30); // mois 5 = juin
   }, [dateFinSaisonRef, creneau.date]);
 
-  // Calculer les séances restantes en interrogeant Firestore plutôt que par
-  // calcul calendaire. Cela évite de surévaluer le total quand le calendaire
-  // donne 41-43 semaines (saison sept-juin) alors que les vacances scolaires
-  // ramènent le vrai compte à ~35 séances.
+  // Calculer 2 compteurs depuis Firestore en une seule requête :
+  //   - sessionsTotalSaison : nombre de séances générées pour ce cours sur
+  //     toute la saison du créneau (du 1er septembre au 30 juin). Sert de
+  //     référence pour le prorata.
+  //   - sessionsRestantes : nombre de séances entre [start, finSaison].
   //
-  // Bornes :
-  //   - début = max(today, creneau.date) : pour les pré-inscriptions saison N+1,
-  //     on part de la date du créneau pour ne PAS compter la fin de saison en cours
-  //   - fin = dateFinSaisonEffective (saison du créneau)
+  // Le prorata = sessionsRestantes / sessionsTotalSaison reflète le ratio
+  // entre ce que le cavalier fera réellement et ce qu'il aurait fait en
+  // s'inscrivant au début de la saison. Si on l'inscrit au début → 100%.
   //
   // Critères de comptage : même activityTitle + même startTime + même jour de
   // semaine que le créneau cliqué. Pas de filtre moniteur (changements possibles).
   const [sessionsRestantes, setSessionsRestantes] = useState<number>(0);
+  const [sessionsTotalSaison, setSessionsTotalSaison] = useState<number>(inscParams.totalSessionsSaison || 35);
   const [loadingSessions, setLoadingSessions] = useState<boolean>(true);
   useEffect(() => {
     let cancelled = false;
     setLoadingSessions(true);
-    const computeSessionsRestantes = async () => {
+    const computeSessions = async () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const creneauDate = new Date(creneau.date);
@@ -439,38 +440,54 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       const endStr = dateFinSaisonEffective.toISOString().split("T")[0];
       const jourSemaineRef = creneauDate.getDay(); // 0=dim, 1=lun, ... 6=sam
 
+      // Borne basse de la SAISON (1er septembre de l'année où démarre la saison).
+      // Saison sept-juin : si dateFinSaisonEffective = 30/06/Y, début saison = 01/09/(Y-1)
+      const finYear = dateFinSaisonEffective.getFullYear();
+      const debutSaison = new Date(finYear - 1, 8, 1); // mois 8 = septembre
+      const debutSaisonStr = debutSaison.toISOString().split("T")[0];
+
       try {
+        // Une seule requête : tous les créneaux de la saison entière.
+        // On filtre ensuite côté client pour les 2 compteurs.
         const snap = await getDocs(query(
           collection(db, "creneaux"),
-          where("date", ">=", startStr),
+          where("date", ">=", debutSaisonStr),
           where("date", "<=", endStr),
         ));
-        const matchingCount = snap.docs.reduce((acc, d) => {
+        let totalSaison = 0;
+        let restantes = 0;
+        for (const d of snap.docs) {
           const c = d.data() as any;
-          if (c.activityTitle !== creneau.activityTitle) return acc;
-          if (c.startTime !== creneau.startTime) return acc;
-          // Reconstituer le jour de semaine du créneau Firestore
+          if (c.activityTitle !== creneau.activityTitle) continue;
+          if (c.startTime !== creneau.startTime) continue;
           const cdow = new Date(c.date + "T12:00:00").getDay();
-          if (cdow !== jourSemaineRef) return acc;
-          return acc + 1;
-        }, 0);
+          if (cdow !== jourSemaineRef) continue;
+          totalSaison++;
+          if (c.date >= startStr) restantes++;
+        }
         if (!cancelled) {
-          setSessionsRestantes(matchingCount);
+          setSessionsRestantes(restantes);
+          // Garde-fou : si aucun créneau trouvé pour la saison, on retombe
+          // sur le paramètre statique pour éviter une division par zéro.
+          setSessionsTotalSaison(totalSaison > 0 ? totalSaison : (inscParams.totalSessionsSaison || 35));
           setLoadingSessions(false);
         }
       } catch (e) {
-        console.error("Erreur calcul sessionsRestantes", e);
+        console.error("Erreur calcul sessions", e);
         if (!cancelled) {
           setSessionsRestantes(0);
+          setSessionsTotalSaison(inscParams.totalSessionsSaison || 35);
           setLoadingSessions(false);
         }
       }
     };
-    computeSessionsRestantes();
+    computeSessions();
     return () => { cancelled = true; };
-  }, [creneau.id, creneau.date, creneau.activityTitle, creneau.startTime, dateFinSaisonEffective]);
+  }, [creneau.id, creneau.date, creneau.activityTitle, creneau.startTime, dateFinSaisonEffective, inscParams.totalSessionsSaison]);
 
-  const prorata = sessionsRestantes / (inscParams.totalSessionsSaison || 35);
+  // Prorata = ratio sur la saison REELLE (créneaux générés), plafonné à 100%
+  // pour gérer le cas où le cavalier s'inscrit au tout début (start <= debut saison).
+  const prorata = Math.min(1, sessionsTotalSaison > 0 ? sessionsRestantes / sessionsTotalSaison : 0);
   const prixForfaitBrut = Math.round(prixForfaitAnnuel * prorata);
 
   // Adhésion dégressive : compter enfants déjà inscrits en forfait annuel cette saison
@@ -2277,7 +2294,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         <span className="font-body text-sm font-semibold text-blue-500">{prixForfait}€</span>
                       </div>
                       <div className="font-body text-[10px] text-slate-500 mt-0.5">
-                        {sessionsRestantes * frequenceCours} séances restantes ({frequenceCours}×/sem) — prorata {Math.round(prorata*100)}%
+                        {sessionsRestantes * frequenceCours} séances restantes / {sessionsTotalSaison * frequenceCours} sur la saison ({frequenceCours}×/sem) — prorata {Math.round(prorata*100)}%
                         {prorata < 1 && <> · {prixForfaitAnnuel}€ × {Math.round(prorata*100)}% = {prixForfait}€</>}
                         {prorata >= 1 && <> · Tarif plein (début de saison)</>}
                       </div>
