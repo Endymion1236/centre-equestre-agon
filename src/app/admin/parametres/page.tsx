@@ -37,7 +37,7 @@ export default function ParametresPage() {
     setAgentContext({ module_actif: "parametres", description: "moniteurs, tarifs, infos centre" });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [section, setSection] = useState<"centre" | "tarifs" | "reductions" | "degressivite" | "vacances" | "annulation" | "comptable" | "horaires" | "moniteurs" | "fidelite" | "inscription" | "epreuves" | "progression" | "maintenance" | "notifications" | "marees">("centre");
+  const [section, setSection] = useState<"centre" | "reductions" | "degressivite" | "vacances" | "annulation" | "comptable" | "horaires" | "moniteurs" | "fidelite" | "inscription" | "epreuves" | "progression" | "maintenance" | "notifications" | "marees">("centre");
   const [notifSettings, setNotifSettings] = useState({
     nouvelle_inscription: true,
     nouveau_paiement: true,
@@ -70,6 +70,16 @@ export default function ParametresPage() {
   });
   const [centreSaved, setCentreSaved] = useState(false);
 
+  // ─── Type d'une ligne optionnelle libre ───
+  // Ces lignes apparaissent dans l'inscription annuelle et la famille peut les cocher.
+  type CustomInscriptionLine = {
+    id: string;            // identifiant stable (timestamp ou uuid simple)
+    label: string;         // ex. "Forfait compétition", "Tenue club"
+    priceTTC: number;      // montant TTC en euros
+    tvaRate: number;       // 0, 5.5, 10 ou 20
+    accountCode: string;   // code du plan comptable (ex. 70611000)
+  };
+
   // ─── Paramètres inscription annuelle ───
   const [inscriptionParams, setInscriptionParams] = useState({
     // Forfaits par fréquence
@@ -84,11 +94,15 @@ export default function ParametresPage() {
     // Licence FFE
     licenceMoins18: 25,
     licencePlus18: 36,
+    licenceTvaRate: 0,           // TVA appliquée à la licence FFE (typiquement 0%)
+    licenceAccountCode: "70100000", // code comptable de la licence
     // Saison
     totalSessionsSaison: 35,
     dateFinSaison: "2026-06-30",
     // Stages
     assuranceOccasionnelle: 10,
+    // Lignes libres optionnelles (forfait compétition, options, suppléments...)
+    customLines: [] as CustomInscriptionLine[],
   });
   const [inscriptionSaved, setInscriptionSaved] = useState(false);
 
@@ -257,7 +271,6 @@ export default function ParametresPage() {
       }
     }).catch(console.error);
   }, []);
-  const [loadingTarifs, setLoadingTarifs] = useState(true);
 
   // ─── Réductions & codes promo ───
   type PromoType = "code" | "premiere_annee" | "anniversaire" | "parrainage";
@@ -301,31 +314,22 @@ export default function ParametresPage() {
     } catch (e) { console.error(e); alert("Erreur sauvegarde"); }
   };
 
-  // ─── Tarifs annuels (sauvegardés dans Firestore settings/tarifs) ───
-  const [tarifs, setTarifs] = useState<{ id: string; label: string; priceTTC: number; tvaRate: number; accountCode: string; obligatoire: boolean; category: "licence" | "adhesion" | "forfait" | "option" }[]>([
-    { id: "licence_ffe", label: "Licence FFE", priceTTC: 25, tvaRate: 0, accountCode: "70100000", obligatoire: true, category: "licence" },
-    { id: "adhesion_club", label: "Adhésion club", priceTTC: 80, tvaRate: 5.5, accountCode: "70611110", obligatoire: true, category: "adhesion" },
-    { id: "forfait_1cours", label: "Forfait 1 cours/semaine", priceTTC: 700, tvaRate: 5.5, accountCode: "70611000", obligatoire: false, category: "forfait" },
-    { id: "forfait_2cours", label: "Forfait 2 cours/semaine", priceTTC: 1050, tvaRate: 5.5, accountCode: "70611000", obligatoire: false, category: "forfait" },
-    { id: "forfait_competition", label: "Forfait compétition", priceTTC: 1200, tvaRate: 5.5, accountCode: "70611000", obligatoire: false, category: "forfait" },
-  ]);
-
-  // Charger les tarifs depuis Firestore
+  // Charger les paramètres depuis Firestore
+  // NB : la collection settings/tarifs (legacy de l'ancien onglet "Tarifs annuels")
+  // n'est plus lue ici. Les données qui y sont restent en base au cas où mais
+  // seul settings/inscription est désormais la source de vérité.
   useEffect(() => {
-    const loadTarifs = async () => {
+    const loadSettings = async () => {
       try {
-        const [tarifSnap, inscSnap, centreSnap] = await Promise.all([
-          getDoc(doc(db, "settings", "tarifs")),
+        const [inscSnap, centreSnap] = await Promise.all([
           getDoc(doc(db, "settings", "inscription")),
           getDoc(doc(db, "settings", "centre")),
         ]);
-        if (tarifSnap.exists() && tarifSnap.data().items) setTarifs(tarifSnap.data().items);
         if (inscSnap.exists()) setInscriptionParams(prev => ({ ...prev, ...inscSnap.data() }));
         if (centreSnap.exists()) setCentreParams(prev => ({ ...prev, ...centreSnap.data() }));
-      } catch (e) { console.error("Erreur chargement tarifs:", e); }
-      setLoadingTarifs(false);
+      } catch (e) { console.error("Erreur chargement paramètres:", e); }
     };
-    loadTarifs();
+    loadSettings();
   }, []);
 
   const saveCentre = async () => {
@@ -373,15 +377,6 @@ export default function ParametresPage() {
     } catch (e) { console.error(e); }
   };
 
-  // Sauvegarder les tarifs
-  const saveTarifs = async () => {
-    try {
-      await setDoc(doc(db, "settings", "tarifs"), { items: tarifs, updatedAt: new Date() });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (e) { console.error(e); alert("Erreur sauvegarde"); }
-  };
-
   const handleSave = async () => {
     setSavingDegress(true);
     try {
@@ -410,7 +405,6 @@ export default function ParametresPage() {
       <div className="flex flex-wrap gap-2 mb-6">
         {([
           ["centre", "🏠 Centre"],
-          ["tarifs", "Tarifs annuels"],
           ["inscription", "📋 Inscription annuelle"],
           ["reductions", "Réductions & promos"],
           ["degressivite", "Dégressivité"],
@@ -513,128 +507,6 @@ export default function ParametresPage() {
             className="flex items-center justify-center gap-2 py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none cursor-pointer">
             {centreSaved ? "✅ Sauvegardé !" : "Sauvegarder les infos du centre"}
           </button>
-        </div>
-      )}
-
-      {section === "tarifs" && (
-        <div className="flex flex-col gap-5">
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-2">Tarifs des inscriptions annuelles</h3>
-            <p className="font-body text-xs text-gray-400 mb-4">
-              Ces tarifs sont utilisés automatiquement dans le formulaire des forfaits annuels.
-              Les lignes marquées &quot;obligatoire&quot; sont ajoutées automatiquement à chaque inscription.
-            </p>
-
-            {loadingTarifs ? (
-              <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto" /></div>
-            ) : (
-              <>
-                {/* Obligatoires */}
-                <div className="font-body text-xs font-semibold text-red-500 uppercase tracking-wider mb-2">Lignes obligatoires (ajoutées automatiquement)</div>
-                <div className="flex flex-col gap-2 mb-5">
-                  {tarifs.filter(t => t.obligatoire).map((t, i) => (
-                    <div key={t.id} className="flex items-center gap-3 bg-red-50/30 border border-red-100 rounded-lg px-4 py-3">
-                      <Badge color="red">Obligatoire</Badge>
-                      <input value={t.label} onChange={e => { const up = [...tarifs]; const idx = tarifs.findIndex(x => x.id === t.id); up[idx] = { ...t, label: e.target.value }; setTarifs(up); }}
-                        className={`${inputCls} flex-1 !text-left`} />
-                      <div className="flex items-center gap-1">
-                        <input type="number" value={t.priceTTC} onChange={e => { const up = [...tarifs]; const idx = tarifs.findIndex(x => x.id === t.id); up[idx] = { ...t, priceTTC: parseFloat(e.target.value) || 0 }; setTarifs(up); }}
-                          className={`${inputCls} w-20`} />
-                        <span className="font-body text-xs text-gray-400">€ TTC</span>
-                      </div>
-                      <select value={t.tvaRate} onChange={e => { const up = [...tarifs]; const idx = tarifs.findIndex(x => x.id === t.id); up[idx] = { ...t, tvaRate: parseFloat(e.target.value) }; setTarifs(up); }}
-                        className={`${inputCls} w-24`}>
-                        <option value={0}>0% TVA</option>
-                        <option value={5.5}>5.50%</option>
-                        <option value={20}>20%</option>
-                      </select>
-                      <input value={t.accountCode} onChange={e => { const up = [...tarifs]; const idx = tarifs.findIndex(x => x.id === t.id); up[idx] = { ...t, accountCode: e.target.value }; setTarifs(up); }}
-                        className={`${inputCls} w-28`} placeholder="Compte" />
-                    </div>
-                  ))}
-                </div>
-
-                {/* Forfaits */}
-                <div className="font-body text-xs font-semibold text-blue-500 uppercase tracking-wider mb-2">Forfaits cours (le client en choisit un)</div>
-                <div className="flex flex-col gap-2 mb-5">
-                  {tarifs.filter(t => t.category === "forfait").map((t) => (
-                    <div key={t.id} className="flex items-center gap-3 bg-blue-50/30 border border-blue-100 rounded-lg px-4 py-3">
-                      <Badge color="blue">Forfait</Badge>
-                      <input value={t.label} onChange={e => { const up = [...tarifs]; const idx = tarifs.findIndex(x => x.id === t.id); up[idx] = { ...t, label: e.target.value }; setTarifs(up); }}
-                        className={`${inputCls} flex-1 !text-left`} />
-                      <div className="flex items-center gap-1">
-                        <input type="number" value={t.priceTTC} onChange={e => { const up = [...tarifs]; const idx = tarifs.findIndex(x => x.id === t.id); up[idx] = { ...t, priceTTC: parseFloat(e.target.value) || 0 }; setTarifs(up); }}
-                          className={`${inputCls} w-20`} />
-                        <span className="font-body text-xs text-gray-400">€ TTC</span>
-                      </div>
-                      <select value={t.tvaRate} onChange={e => { const up = [...tarifs]; const idx = tarifs.findIndex(x => x.id === t.id); up[idx] = { ...t, tvaRate: parseFloat(e.target.value) }; setTarifs(up); }}
-                        className={`${inputCls} w-24`}>
-                        <option value={5.5}>5.50%</option>
-                        <option value={20}>20%</option>
-                      </select>
-                      <button onClick={() => setTarifs(tarifs.filter(x => x.id !== t.id))}
-                        className="w-8 h-8 rounded-lg bg-red-50 text-red-400 flex items-center justify-center border-none cursor-pointer hover:bg-red-100">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ))}
-                  <button onClick={() => setTarifs([...tarifs, {
-                    id: `forfait_${Date.now()}`, label: "Nouveau forfait", priceTTC: 0, tvaRate: 5.5, accountCode: "70611000", obligatoire: false, category: "forfait",
-                  }])} className="font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1 mt-1">
-                    <Plus size={14} /> Ajouter un forfait
-                  </button>
-                </div>
-
-                {/* Options */}
-                <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Options (facultatives)</div>
-                <div className="flex flex-col gap-2 mb-5">
-                  {tarifs.filter(t => t.category === "option").map((t) => (
-                    <div key={t.id} className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
-                      <Badge color="gray">Option</Badge>
-                      <input value={t.label} onChange={e => { const up = [...tarifs]; const idx = tarifs.findIndex(x => x.id === t.id); up[idx] = { ...t, label: e.target.value }; setTarifs(up); }}
-                        className={`${inputCls} flex-1 !text-left`} />
-                      <div className="flex items-center gap-1">
-                        <input type="number" value={t.priceTTC} onChange={e => { const up = [...tarifs]; const idx = tarifs.findIndex(x => x.id === t.id); up[idx] = { ...t, priceTTC: parseFloat(e.target.value) || 0 }; setTarifs(up); }}
-                          className={`${inputCls} w-20`} />
-                        <span className="font-body text-xs text-gray-400">€ TTC</span>
-                      </div>
-                      <button onClick={() => setTarifs(tarifs.filter(x => x.id !== t.id))}
-                        className="w-8 h-8 rounded-lg bg-red-50 text-red-400 flex items-center justify-center border-none cursor-pointer hover:bg-red-100">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ))}
-                  <button onClick={() => setTarifs([...tarifs, {
-                    id: `option_${Date.now()}`, label: "Nouvelle option", priceTTC: 0, tvaRate: 5.5, accountCode: "70605000", obligatoire: false, category: "option",
-                  }])} className="font-body text-xs text-gray-500 bg-transparent border-none cursor-pointer flex items-center gap-1 mt-1">
-                    <Plus size={14} /> Ajouter une option
-                  </button>
-                </div>
-
-                {/* Aperçu total */}
-                <Card padding="sm" className="bg-blue-50 border-blue-500/8">
-                  <div className="font-body text-xs text-blue-800">
-                    <strong>Exemple de total inscription annuelle :</strong><br />
-                    {tarifs.filter(t => t.obligatoire).map(t => `${t.label} : ${t.priceTTC}€`).join(" + ")}
-                    {" + "}
-                    {tarifs.filter(t => t.category === "forfait").length > 0
-                      ? `[${tarifs.filter(t => t.category === "forfait").map(t => `${t.label} ${t.priceTTC}€`).join(" ou ")}]`
-                      : "Forfait cours"}
-                    {" = "}
-                    <strong>
-                      {tarifs.filter(t => t.obligatoire).reduce((s, t) => s + t.priceTTC, 0) + (tarifs.find(t => t.category === "forfait")?.priceTTC || 0)}€
-                      {" à "}
-                      {tarifs.filter(t => t.obligatoire).reduce((s, t) => s + t.priceTTC, 0) + (tarifs.filter(t => t.category === "forfait").sort((a, b) => b.priceTTC - a.priceTTC)[0]?.priceTTC || 0)}€
-                    </strong>
-                  </div>
-                </Card>
-
-                <button onClick={saveTarifs} className="mt-4 self-start flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-6 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400">
-                  <Save size={16} /> Enregistrer les tarifs
-                </button>
-              </>
-            )}
-          </Card>
         </div>
       )}
 
@@ -1245,6 +1117,31 @@ export default function ParametresPage() {
                   onChange={e => setInscriptionParams(prev => ({ ...prev, dateFinSaison: e.target.value }))}
                   className="px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
               </div>
+
+              {/* TVA + code compta de la licence FFE (utilisés pour la facturation) */}
+              <div className="mt-2 pt-3 border-t border-blue-500/8">
+                <div className="font-body text-xs text-slate-400 mb-2">Paramètres comptables — appliqués aux deux licences</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-body text-xs text-slate-500 block mb-1">Taux de TVA</label>
+                    <select value={inscriptionParams.licenceTvaRate}
+                      onChange={e => setInscriptionParams(prev => ({ ...prev, licenceTvaRate: parseFloat(e.target.value) }))}
+                      className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none">
+                      <option value={0}>0 %</option>
+                      <option value={5.5}>5,5 %</option>
+                      <option value={10}>10 %</option>
+                      <option value={20}>20 %</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="font-body text-xs text-slate-500 block mb-1">Code comptable</label>
+                    <input value={inscriptionParams.licenceAccountCode}
+                      onChange={e => setInscriptionParams(prev => ({ ...prev, licenceAccountCode: e.target.value }))}
+                      placeholder="ex. 70100000"
+                      className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
+                  </div>
+                </div>
+              </div>
             </div>
           </Card>
 
@@ -1263,6 +1160,93 @@ export default function ParametresPage() {
                 <span className="font-body text-sm text-slate-400">€</span>
               </div>
             </div>
+          </Card>
+
+          {/* Lignes optionnelles libres (forfait compétition, suppléments, options...) */}
+          <Card padding="md">
+            <h3 className="font-body text-base font-semibold text-blue-800 mb-1">➕ Lignes optionnelles</h3>
+            <p className="font-body text-xs text-slate-500 mb-4">
+              Ajoutez ici des forfaits ou options proposés en plus à l&apos;inscription (forfait compétition, tenue club, etc.).
+              Ces lignes apparaîtront comme options cochables dans le formulaire d&apos;inscription annuelle.
+            </p>
+            <div className="flex flex-col gap-2 mb-3">
+              {(inscriptionParams.customLines || []).length === 0 && (
+                <div className="font-body text-xs text-slate-400 italic py-2">Aucune ligne optionnelle — cliquez sur « Ajouter une ligne » pour en créer une.</div>
+              )}
+              {(inscriptionParams.customLines || []).map((line, idx) => (
+                <div key={line.id} className="grid grid-cols-12 gap-2 items-center bg-blue-50/30 border border-blue-100 rounded-lg p-3">
+                  <input
+                    value={line.label}
+                    onChange={e => {
+                      const next = [...(inscriptionParams.customLines || [])];
+                      next[idx] = { ...line, label: e.target.value };
+                      setInscriptionParams(prev => ({ ...prev, customLines: next }));
+                    }}
+                    placeholder="Nom de la ligne"
+                    className="col-span-5 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none" />
+                  <div className="col-span-2 flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={line.priceTTC}
+                      onChange={e => {
+                        const next = [...(inscriptionParams.customLines || [])];
+                        next[idx] = { ...line, priceTTC: parseFloat(e.target.value) || 0 };
+                        setInscriptionParams(prev => ({ ...prev, customLines: next }));
+                      }}
+                      className="w-full px-2 py-2 rounded-lg border border-blue-500/8 font-body text-sm text-right bg-white focus:border-blue-500 focus:outline-none" />
+                    <span className="font-body text-xs text-slate-400">€</span>
+                  </div>
+                  <select
+                    value={line.tvaRate}
+                    onChange={e => {
+                      const next = [...(inscriptionParams.customLines || [])];
+                      next[idx] = { ...line, tvaRate: parseFloat(e.target.value) };
+                      setInscriptionParams(prev => ({ ...prev, customLines: next }));
+                    }}
+                    className="col-span-2 px-2 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none">
+                    <option value={0}>0%</option>
+                    <option value={5.5}>5,5%</option>
+                    <option value={10}>10%</option>
+                    <option value={20}>20%</option>
+                  </select>
+                  <input
+                    value={line.accountCode}
+                    onChange={e => {
+                      const next = [...(inscriptionParams.customLines || [])];
+                      next[idx] = { ...line, accountCode: e.target.value };
+                      setInscriptionParams(prev => ({ ...prev, customLines: next }));
+                    }}
+                    placeholder="Code compta"
+                    className="col-span-2 px-2 py-2 rounded-lg border border-blue-500/8 font-body text-xs bg-white focus:border-blue-500 focus:outline-none" />
+                  <button
+                    onClick={() => {
+                      const next = (inscriptionParams.customLines || []).filter(l => l.id !== line.id);
+                      setInscriptionParams(prev => ({ ...prev, customLines: next }));
+                    }}
+                    className="col-span-1 text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer flex items-center justify-center"
+                    title="Supprimer">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => {
+                const newLine: CustomInscriptionLine = {
+                  id: `line_${Date.now()}`,
+                  label: "",
+                  priceTTC: 0,
+                  tvaRate: 5.5,
+                  accountCode: "70611000",
+                };
+                setInscriptionParams(prev => ({
+                  ...prev,
+                  customLines: [...(prev.customLines || []), newLine],
+                }));
+              }}
+              className="self-start flex items-center gap-2 font-body text-sm font-semibold text-blue-700 bg-blue-100 hover:bg-blue-200 px-4 py-2 rounded-lg border-none cursor-pointer">
+              <Plus size={14} /> Ajouter une ligne
+            </button>
           </Card>
 
           <button onClick={saveInscription}
