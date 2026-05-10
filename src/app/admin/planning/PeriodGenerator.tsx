@@ -1,12 +1,26 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, deleteDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card } from "@/components/ui";
-import { Loader2, Plus, X, Trash2, Calendar } from "lucide-react";
+import { Loader2, Plus, X, Trash2, Calendar, Save, FolderOpen } from "lucide-react";
 import type { Activity } from "@/types";
 import { Creneau, Period, SlotDef, dayNames, dayNamesFull, fmtDate } from "./types";
 import ActivityPicker from "./ActivityPicker";
+
+/**
+ * Document Firestore représentant une saison sauvegardée.
+ * Stocké dans la collection `saisons`. Permet de réutiliser la même
+ * configuration (périodes + plages horaires) d'une année à l'autre.
+ */
+type SaisonDoc = {
+  id: string;
+  name: string;
+  periods: Period[];
+  slots: SlotDef[];
+  // Timestamp Firestore — typé en `any` pour éviter d'importer le type côté client.
+  updatedAt?: any;
+};
 
 function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Activity[]; onGenerate: (creneaux: Partial<Creneau>[]) => Promise<void>; onCancel: () => void; }) {
   const [periods, setPeriods] = useState<Period[]>([
@@ -20,6 +34,14 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
   const [saving, setSaving] = useState(false);
   const [moniteurs, setMoniteurs] = useState<string[]>([]);
 
+  // ─── Saisons sauvegardées ──────────────────────────────────────────────
+  const [saisons, setSaisons] = useState<SaisonDoc[]>([]);
+  const [selectedSaisonId, setSelectedSaisonId] = useState<string>("");
+  const [showNewSaisonInput, setShowNewSaisonInput] = useState(false);
+  const [newSaisonName, setNewSaisonName] = useState("");
+  const [savingSaison, setSavingSaison] = useState(false);
+  const [saisonFeedback, setSaisonFeedback] = useState<string>("");
+
   useEffect(() => {
     getDocs(collection(db, "moniteurs")).then(snap => {
       const noms = snap.docs.map(d => (d.data() as any).name).filter(Boolean).sort();
@@ -28,6 +50,99 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
       if (noms.length > 0) setSlots(s => s.map(slot => slot.monitor ? slot : { ...slot, monitor: noms[0] }));
     });
   }, []);
+
+  // Charger les saisons sauvegardées
+  const loadSaisons = async () => {
+    try {
+      const snap = await getDocs(query(collection(db, "saisons"), orderBy("name", "desc")));
+      const docs: SaisonDoc[] = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+      setSaisons(docs);
+      // Pré-sélection : saison de l'année en cours si elle existe (ex: "2025-2026" en oct 2025)
+      const today = new Date();
+      const currentYear = today.getFullYear();
+      // Saison scolaire = courte sept→août : avant septembre on est dans l'année scolaire (n-1)-(n)
+      const startYear = today.getMonth() >= 8 ? currentYear : currentYear - 1;
+      const expectedName = `${startYear}-${startYear + 1}`;
+      const match = docs.find(s => s.name === expectedName);
+      if (match) setSelectedSaisonId(match.id);
+    } catch (e) { console.error("Erreur chargement saisons", e); }
+  };
+  useEffect(() => { loadSaisons(); }, []);
+
+  /**
+   * Charger une saison dans le formulaire.
+   * Filtre les slots dont l'activité a été supprimée entre-temps et alerte
+   * l'utilisateur si c'est le cas (sinon les créneaux générés seraient vides).
+   */
+  const loadSaisonInForm = (saison: SaisonDoc) => {
+    setSelectedSaisonId(saison.id);
+    setPeriods(saison.periods?.length ? saison.periods : [{ startDate: "", endDate: "" }]);
+    const validIds = new Set(activities.map(a => a.id));
+    const validSlots = (saison.slots || []).filter(s => !s.activityId || validIds.has(s.activityId));
+    const droppedCount = (saison.slots || []).length - validSlots.length;
+    setSlots(validSlots.length ? validSlots : [{ activityId: "", day: 2, startTime: "10:00", endTime: "11:00", monitor: moniteurs[0] || "", maxPlaces: 8 }]);
+    if (droppedCount > 0) {
+      setSaisonFeedback(`⚠️ ${droppedCount} plage${droppedCount > 1 ? "s" : ""} ignorée${droppedCount > 1 ? "s" : ""} (activité supprimée).`);
+    } else {
+      setSaisonFeedback(`✅ Saison « ${saison.name} » chargée.`);
+    }
+    setTimeout(() => setSaisonFeedback(""), 4000);
+  };
+
+  /**
+   * Enregistrer la configuration courante.
+   * - Si `selectedSaisonId` est défini → écrase la saison existante.
+   * - Sinon → crée une nouvelle saison (nécessite `newSaisonName`).
+   */
+  const saveSaison = async (asNewWithName?: string) => {
+    const isNew = !!asNewWithName;
+    const name = asNewWithName || saisons.find(s => s.id === selectedSaisonId)?.name || "";
+    if (!name.trim()) {
+      setSaisonFeedback("⚠️ Donnez d'abord un nom à la saison.");
+      setTimeout(() => setSaisonFeedback(""), 3000);
+      return;
+    }
+    setSavingSaison(true);
+    try {
+      // ID stable basé sur le nom (un nom = une saison) — évite les doublons accidentels
+      const id = isNew ? `saison_${name.replace(/\s+/g, "_").toLowerCase()}_${Date.now()}` : selectedSaisonId;
+      await setDoc(doc(db, "saisons", id), {
+        name: name.trim(),
+        periods,
+        slots,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      await loadSaisons();
+      setSelectedSaisonId(id);
+      setShowNewSaisonInput(false);
+      setNewSaisonName("");
+      setSaisonFeedback(`✅ Saison « ${name} » enregistrée.`);
+      setTimeout(() => setSaisonFeedback(""), 3000);
+    } catch (e) {
+      console.error("Erreur sauvegarde saison", e);
+      setSaisonFeedback("❌ Erreur lors de l'enregistrement.");
+      setTimeout(() => setSaisonFeedback(""), 3000);
+    }
+    setSavingSaison(false);
+  };
+
+  const deleteSaison = async () => {
+    if (!selectedSaisonId) return;
+    const saison = saisons.find(s => s.id === selectedSaisonId);
+    if (!saison) return;
+    if (!confirm(`Supprimer la saison « ${saison.name} » ?\n\nCette action est définitive (les créneaux déjà générés ne sont pas affectés).`)) return;
+    try {
+      await deleteDoc(doc(db, "saisons", selectedSaisonId));
+      setSelectedSaisonId("");
+      await loadSaisons();
+      setSaisonFeedback(`🗑️ Saison « ${saison.name} » supprimée.`);
+      setTimeout(() => setSaisonFeedback(""), 3000);
+    } catch (e) {
+      console.error("Erreur suppression saison", e);
+      setSaisonFeedback("❌ Erreur lors de la suppression.");
+      setTimeout(() => setSaisonFeedback(""), 3000);
+    }
+  };
 
   const addPeriod = () => setPeriods([...periods, { startDate: "", endDate: "" }]);
   const removePeriod = (i: number) => setPeriods(periods.filter((_, j) => j !== i));
@@ -74,10 +189,90 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
   const handleGenerate = async () => { setSaving(true); await onGenerate(allCreneaux); setSaving(false); };
   const inp = "px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
 
+  const selectedSaison = saisons.find(s => s.id === selectedSaisonId);
+
   return (
     <Card padding="md" className="mb-6 border-gold-400/20 bg-gold-50/30">
       <div className="flex justify-between items-center mb-4"><h3 className="font-body text-base font-semibold text-blue-800 flex items-center gap-2"><Calendar size={18}/>Générateur de séances (périodes)</h3><button onClick={onCancel} className="text-gray-400 bg-transparent border-none cursor-pointer"><X size={20}/></button></div>
       <p className="font-body text-xs text-gray-500 mb-4">Comme dans Celeris : définissez les périodes de cours et les plages horaires, tout sera généré automatiquement.</p>
+
+      {/* ─── Gestion des saisons ─────────────────────────────────────── */}
+      <div className="mb-5 bg-white rounded-lg p-3 border border-blue-500/8">
+        <div className="font-body text-sm font-semibold text-blue-800 mb-2 flex items-center gap-2">
+          <FolderOpen size={14}/>Saisons sauvegardées
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={selectedSaisonId}
+            onChange={e => {
+              const id = e.target.value;
+              if (!id) { setSelectedSaisonId(""); return; }
+              const s = saisons.find(x => x.id === id);
+              if (s) loadSaisonInForm(s);
+            }}
+            className={`${inp} flex-1 min-w-[180px]`}>
+            <option value="">— Aucune saison —</option>
+            {saisons.map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+
+          {selectedSaisonId && (
+            <>
+              <button
+                onClick={() => saveSaison()}
+                disabled={savingSaison}
+                title="Mettre à jour la saison sélectionnée avec la configuration actuelle"
+                className="flex items-center gap-1 px-3 py-2 rounded-lg font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-400 border-none cursor-pointer disabled:bg-gray-300">
+                <Save size={12}/>{savingSaison ? "..." : "Mettre à jour"}
+              </button>
+              <button
+                onClick={deleteSaison}
+                title="Supprimer cette saison"
+                className="flex items-center gap-1 px-3 py-2 rounded-lg font-body text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 border-none cursor-pointer">
+                <Trash2 size={12}/>
+              </button>
+            </>
+          )}
+
+          {!showNewSaisonInput ? (
+            <button
+              onClick={() => setShowNewSaisonInput(true)}
+              className="flex items-center gap-1 px-3 py-2 rounded-lg font-body text-xs font-semibold text-blue-700 bg-blue-100 hover:bg-blue-200 border-none cursor-pointer">
+              <Plus size={12}/>Nouvelle saison
+            </button>
+          ) : (
+            <>
+              <input
+                value={newSaisonName}
+                onChange={e => setNewSaisonName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && newSaisonName.trim()) saveSaison(newSaisonName); }}
+                placeholder="Nom (ex: 2026-2027)"
+                autoFocus
+                className={`${inp} w-44`} />
+              <button
+                onClick={() => saveSaison(newSaisonName)}
+                disabled={!newSaisonName.trim() || savingSaison}
+                className="flex items-center gap-1 px-3 py-2 rounded-lg font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-400 border-none cursor-pointer disabled:bg-gray-300">
+                <Save size={12}/>Enregistrer
+              </button>
+              <button
+                onClick={() => { setShowNewSaisonInput(false); setNewSaisonName(""); }}
+                className="text-gray-400 bg-transparent border-none cursor-pointer">
+                <X size={16}/>
+              </button>
+            </>
+          )}
+        </div>
+        {saisonFeedback && (
+          <div className="font-body text-xs text-blue-700 mt-2">{saisonFeedback}</div>
+        )}
+        {selectedSaison && (
+          <div className="font-body text-[11px] text-gray-400 mt-1.5">
+            Saison sélectionnée — {selectedSaison.periods?.length || 0} période{(selectedSaison.periods?.length || 0) > 1 ? "s" : ""} · {selectedSaison.slots?.length || 0} plage{(selectedSaison.slots?.length || 0) > 1 ? "s" : ""}
+          </div>
+        )}
+      </div>
       
       {/* Periods */}
       <div className="mb-5">

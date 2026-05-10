@@ -126,7 +126,7 @@ const adminOnlyCollections = [
   "email-templates", "bons-cadeaux", "salaries-management",
   "taches-planifiees", "payment_declarations", "mouvements_registre",
   "modeles", "modeles-planning", "emailsReprise", "doc_templates",
-  "rdv_pro", "remises",
+  "rdv_pro", "remises", "saisons",
 ];
 
 for (const col of adminOnlyCollections) {

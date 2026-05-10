@@ -161,6 +161,11 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // ── Saisons sauvegardées (générateur de séances : périodes + plages) ──
+    match /saisons/{docId} {
+      allow read, write: if isAdmin();
+    }
+
     // ── Challenges / Compétitions ─────────────────────────────────────────
     match /challenges/{docId} {
       allow read: if isAuth();
