@@ -6,6 +6,7 @@ import { safeNumber } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, ChevronDown, Check, X, AlertTriangle, CreditCard, Search } from "lucide-react";
 import { paymentModes } from "./types";
+import { authFetch } from "@/lib/auth-fetch";
 
 interface TabEcheancesProps {
   loading: boolean;
@@ -278,13 +279,66 @@ export function TabEcheances({ loading, payments, toast, setPayments, refreshAll
                   {nbPayes < nbTotal && (
                     <button
                       onClick={async () => {
-                        if (!confirm(`Annuler l'échéancier de ${first.familyName} ?\n\n${nbPayes} échéance(s) déjà payée(s) sur ${nbTotal}.\nLes échéances non payées seront supprimées.\n\nConfirmer ?`)) return;
+                        // Récupérer les enfants liés à ce forfait pour la désinscription
+                        // (on regarde tous les items de toutes les échéances pour être exhaustif)
+                        const childIdsSet = new Set<string>();
+                        const childInfoMap = new Map<string, string>(); // childId → childName
+                        echs.forEach((e: any) => {
+                          (e.items || []).forEach((it: any) => {
+                            if (it.childId) {
+                              childIdsSet.add(it.childId);
+                              if (it.childName) childInfoMap.set(it.childId, it.childName);
+                            }
+                          });
+                        });
+                        const childIds = [...childIdsSet];
+                        const childNames = childIds.map(id => childInfoMap.get(id) || "").filter(Boolean);
+
+                        // Message de confirmation enrichi : on annonce TOUT ce qui va se passer
+                        const lines: string[] = [
+                          `Annuler l'échéancier de ${first.familyName} ?`,
+                          "",
+                          `• ${nbPayes} échéance${nbPayes > 1 ? "s" : ""} déjà payée${nbPayes > 1 ? "s" : ""} sur ${nbTotal} → CONSERVÉE${nbPayes > 1 ? "S" : ""} (cours déjà rendus)`,
+                          `• ${nbTotal - nbPayes} échéance${(nbTotal - nbPayes) > 1 ? "s" : ""} non payée${(nbTotal - nbPayes) > 1 ? "s" : ""} → SUPPRIMÉE${(nbTotal - nbPayes) > 1 ? "S" : ""}`,
+                        ];
+                        if (childNames.length > 0) {
+                          lines.push(`• ${childNames.join(", ")} → DÉSINSCRIT${childNames.length > 1 ? "S" : ""} des créneaux futurs`);
+                        }
+                        lines.push("", "Confirmer ?");
+
+                        if (!confirm(lines.join("\n"))) return;
+
+                        // 1. Désinscription des cavaliers des créneaux futurs (forfait annuel)
+                        let unenrolledOk = 0;
+                        let unenrolledErr = 0;
+                        for (const childId of childIds) {
+                          const childName = childInfoMap.get(childId) || "";
+                          try {
+                            await authFetch("/api/admin/unenroll-annual", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ childId, childName, familyId: first.familyId }),
+                            });
+                            unenrolledOk++;
+                          } catch (err) {
+                            console.error(`Erreur désinscription de ${childName}:`, err);
+                            unenrolledErr++;
+                          }
+                        }
+
+                        // 2. Suppression des échéances non payées (les payées restent intactes)
                         const unpaidEchs = echs.filter((e: any) => e.status !== "paid");
                         for (const e of unpaidEchs) {
                           await deleteDoc(doc(db, "payments", e.id));
                         }
+
                         await refreshAll();
-                        toast(`Échéancier annulé — ${unpaidEchs.length} échéance(s) supprimée(s)`, "success");
+
+                        // Toast récapitulatif
+                        const parts: string[] = [`Échéancier annulé — ${unpaidEchs.length} échéance(s) supprimée(s)`];
+                        if (unenrolledOk > 0) parts.push(`${unenrolledOk} cavalier(s) désinscrit(s)`);
+                        if (unenrolledErr > 0) parts.push(`${unenrolledErr} désinscription(s) échouée(s)`);
+                        toast(parts.join(" — "), unenrolledErr > 0 ? "warning" : "success");
                       }}
                       className="font-body text-[10px] text-red-500 bg-red-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-red-100 flex items-center gap-1"
                     >
