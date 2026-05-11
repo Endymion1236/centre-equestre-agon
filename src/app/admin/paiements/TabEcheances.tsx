@@ -296,7 +296,6 @@ export function TabEcheances({ loading, payments, toast, setPayments, refreshAll
                 {echs.map((e: any) => {
                   const isPaid = e.status === "paid";
                   const isOverdue = !isPaid && e.echeanceDate && e.echeanceDate < today;
-                  const isCurrent = !isPaid && !isOverdue;
                   return (
                     <div key={e.id} className={`flex items-center justify-between px-3 py-2 rounded-lg ${isPaid ? "bg-green-50" : isOverdue ? "bg-red-50" : "bg-sand"}`}>
                       <div className="flex items-center gap-2">
@@ -332,7 +331,9 @@ export function TabEcheances({ loading, payments, toast, setPayments, refreshAll
                         <span className={`font-body text-sm font-bold ${isPaid ? "text-green-600" : isOverdue ? "text-red-500" : "text-blue-500"}`}>{(e.totalTTC || 0).toFixed(2)}€</span>
                         {isPaid && <Badge color="green">Payé</Badge>}
                         {isOverdue && <Badge color="red">En retard</Badge>}
-                        {isCurrent && !isPaid && (
+                        {/* Boutons d'encaissement : sur TOUTE échéance non payée
+                            (incluant les retards — c'est même prioritaire) */}
+                        {!isPaid && (
                           <div className="flex gap-1 flex-wrap">
                             {[
                               { id: "cb_terminal", label: "CB", color: "bg-blue-500" },
