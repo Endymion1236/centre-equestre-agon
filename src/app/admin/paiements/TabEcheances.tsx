@@ -26,6 +26,14 @@ export function TabEcheances({ loading, payments, toast, setPayments, refreshAll
   const [onlyOverdue, setOnlyOverdue] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("retard");
 
+  // ─── Dates d'encaissement personnalisées par échéance ───
+  // Map<echeanceId, dateYYYYMMDD> : si l'utilisateur a explicitement choisi une date
+  // pour cet échéance, on l'utilise au moment du clic CB/Chq/Esp/Vir. Sinon, on
+  // utilise par défaut min(date d'échéance, aujourd'hui) — voir computeDefaultDate.
+  const [encaissementDates, setEncaissementDates] = useState<Record<string, string>>({});
+  // Set<echeanceId> : ids des échéances dont l'éditeur de date est ouvert
+  const [editingDate, setEditingDate] = useState<Set<string>>(new Set());
+
   // ─── Filtrage et regroupement (memoizé pour ne pas recalculer à chaque render) ──
   const { groupesList, statsRecap, hasOverdue } = useMemo(() => {
     const today = new Date().toISOString().split("T")[0];
@@ -125,6 +133,17 @@ export function TabEcheances({ loading, payments, toast, setPayments, refreshAll
       hasOverdue,
     };
   }, [payments, search, onlyOverdue, sortMode]);
+
+  // ─── Helper : calcule la date d'encaissement par défaut pour une échéance ───
+  // Logique : on prend la date d'échéance par défaut (= cas typique : l'admin clique
+  // après que le prélèvement SEPA a eu lieu, ou il enregistre un chèque reçu).
+  // Sauf si la date d'échéance est dans le futur (= pré-encaissement anticipé),
+  // auquel cas on prend la date du jour pour ne pas dater dans le futur.
+  const computeDefaultDate = (echeanceDate: string | undefined): string => {
+    const todayStr = new Date().toISOString().split("T")[0];
+    if (!echeanceDate) return todayStr;
+    return echeanceDate < todayStr ? echeanceDate : todayStr;
+  };
 
   if (loading) {
     return (
@@ -334,23 +353,71 @@ export function TabEcheances({ loading, payments, toast, setPayments, refreshAll
                         {/* Boutons d'encaissement : sur TOUTE échéance non payée
                             (incluant les retards — c'est même prioritaire) */}
                         {!isPaid && (
-                          <div className="flex gap-1 flex-wrap">
-                            {[
-                              { id: "cb_terminal", label: "CB", color: "bg-blue-500" },
-                              { id: "cheque", label: "Chq", color: "bg-orange-500" },
-                              { id: "especes", label: "Esp", color: "bg-green-600" },
-                              { id: "virement", label: "Vir", color: "bg-purple-500" },
-                            ].map(m => (
-                              <button key={m.id} onClick={async () => {
-                                await enregistrerEncaissement(e.id, e, e.totalTTC || 0, m.id, "",
-                                  (e as any).forfaitRef || (first as any).forfaitRef || (e.items || []).map((i: any) => i.activityTitle).join(", "));
-                                await refreshAll();
-                                toast(`${(e.totalTTC || 0).toFixed(2)}€ encaissé (${m.label})`, "success");
-                              }}
-                                className={`font-body text-[9px] font-semibold text-white ${m.color} px-2 py-1 rounded border-none cursor-pointer`}>
-                                {m.label}
-                              </button>
-                            ))}
+                          <div className="flex flex-col gap-1 items-end">
+                            <div className="flex gap-1 flex-wrap">
+                              {[
+                                { id: "cb_terminal", label: "CB", color: "bg-blue-500" },
+                                { id: "cheque", label: "Chq", color: "bg-orange-500" },
+                                { id: "especes", label: "Esp", color: "bg-green-600" },
+                                { id: "virement", label: "Vir", color: "bg-purple-500" },
+                              ].map(m => (
+                                <button key={m.id} onClick={async () => {
+                                  // Date utilisée pour l'encaissement :
+                                  //   - celle saisie par l'utilisateur si présente,
+                                  //   - sinon la date par défaut (échéance ou aujourd'hui)
+                                  const encDate = encaissementDates[e.id] || computeDefaultDate(e.echeanceDate);
+                                  await enregistrerEncaissement(e.id, e, e.totalTTC || 0, m.id, "",
+                                    (e as any).forfaitRef || (first as any).forfaitRef || (e.items || []).map((i: any) => i.activityTitle).join(", "),
+                                    encDate);
+                                  await refreshAll();
+                                  const dateLabel = new Date(encDate + "T12:00:00").toLocaleDateString("fr-FR");
+                                  toast(`${(e.totalTTC || 0).toFixed(2)}€ encaissé (${m.label}) le ${dateLabel}`, "success");
+                                  // Nettoyer la date custom après encaissement
+                                  setEncaissementDates(prev => { const c = { ...prev }; delete c[e.id]; return c; });
+                                  setEditingDate(prev => { const n = new Set(prev); n.delete(e.id); return n; });
+                                }}
+                                  className={`font-body text-[9px] font-semibold text-white ${m.color} px-2 py-1 rounded border-none cursor-pointer`}>
+                                  {m.label}
+                                </button>
+                              ))}
+                            </div>
+                            {/* Ligne 'date d'encaissement' : éditable au clic */}
+                            <div className="flex items-center gap-1.5 text-[9px]">
+                              <span className="text-slate-400">📅</span>
+                              {editingDate.has(e.id) ? (
+                                <>
+                                  <input
+                                    type="date"
+                                    value={encaissementDates[e.id] || computeDefaultDate(e.echeanceDate)}
+                                    onChange={ev => setEncaissementDates(prev => ({ ...prev, [e.id]: ev.target.value }))}
+                                    className="font-body text-[10px] text-slate-700 border border-blue-400 rounded px-1 py-0.5 bg-white focus:outline-none cursor-pointer"
+                                  />
+                                  <button
+                                    onClick={() => {
+                                      setEditingDate(prev => { const n = new Set(prev); n.delete(e.id); return n; });
+                                      setEncaissementDates(prev => { const c = { ...prev }; delete c[e.id]; return c; });
+                                    }}
+                                    title="Annuler la date personnalisée"
+                                    className="text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer p-0">
+                                    <X size={10} />
+                                  </button>
+                                </>
+                              ) : encaissementDates[e.id] ? (
+                                // Date personnalisée saisie mais éditeur refermé : on l'affiche
+                                <button
+                                  onClick={() => setEditingDate(prev => { const n = new Set(prev); n.add(e.id); return n; })}
+                                  className="font-body text-[10px] text-blue-600 underline bg-transparent border-none cursor-pointer p-0">
+                                  Encaissé le {new Date(encaissementDates[e.id] + "T12:00:00").toLocaleDateString("fr-FR")}
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => setEditingDate(prev => { const n = new Set(prev); n.add(e.id); return n; })}
+                                  className="font-body text-[10px] text-slate-500 hover:text-blue-600 bg-transparent border-none cursor-pointer p-0 underline-offset-2 hover:underline"
+                                  title={`Date d'encaissement par défaut : ${new Date(computeDefaultDate(e.echeanceDate) + "T12:00:00").toLocaleDateString("fr-FR")}`}>
+                                  Modifier la date
+                                </button>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
