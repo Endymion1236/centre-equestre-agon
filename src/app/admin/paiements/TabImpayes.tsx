@@ -96,6 +96,54 @@ export function TabImpayes({
           return inName || inItems || inDate;
         });
 
+      // ─── Regroupement par événement ─────────────────────────────────────
+      // Critère : même date de créneau (items[0].date) + même activityTitle.
+      // Permet d'avoir cote a cote toutes les commandes d'un même événement
+      // (typiquement les commandes broadcastées d'un concours, d'une balade...).
+      //
+      // Les commandes sans date de créneau (factures classiques) tombent dans
+      // un groupe "_orphan_" trié en bas par date de création.
+      type Group = { key: string; label: string; eventDate: string; payments: typeof filtered; isOrphan: boolean };
+      const groupsMap = new Map<string, Group>();
+      for (const p of filtered) {
+        const firstItem = (p.items || []).find((i: any) => i.date);
+        if (firstItem?.date) {
+          // Plusieurs items dans une commande peuvent référer à des dates différentes
+          // (ex: stage 3 jours). On groupe sur la 1ère date trouvée + activityTitle 1er item.
+          const activityTitle = (p.items?.[0]?.activityTitle || "").trim();
+          const key = `${firstItem.date}_${activityTitle}`;
+          if (!groupsMap.has(key)) {
+            const dt = new Date(firstItem.date + "T12:00:00");
+            const dateLabel = dt.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+            groupsMap.set(key, {
+              key,
+              label: `${activityTitle} · ${dateLabel}`,
+              eventDate: firstItem.date,
+              payments: [],
+              isOrphan: false,
+            });
+          }
+          groupsMap.get(key)!.payments.push(p);
+        } else {
+          // Commande sans date de créneau → groupe orphelin
+          if (!groupsMap.has("_orphan_")) {
+            groupsMap.set("_orphan_", { key: "_orphan_", label: "Autres factures", eventDate: "9999-99-99", payments: [], isOrphan: true });
+          }
+          groupsMap.get("_orphan_")!.payments.push(p);
+        }
+      }
+      // Tri inter-groupes : par date d'événement croissante (les plus proches d'abord),
+      // orphelins en dernier.
+      const groups = [...groupsMap.values()].sort((a, b) => a.eventDate.localeCompare(b.eventDate));
+      // Tri intra-groupe : par nom de famille A→Z (orphelins : par date de création desc)
+      for (const g of groups) {
+        if (g.isOrphan) {
+          g.payments.sort((a: any, b: any) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
+        } else {
+          g.payments.sort((a: any, b: any) => (a.familyName || "").localeCompare(b.familyName || "", "fr"));
+        }
+      }
+
       const toggle = (id: string) => setImpayesExpanded(prev => {
         const next = new Set(prev);
         next.has(id) ? next.delete(id) : next.add(id);
@@ -150,8 +198,25 @@ export function TabImpayes({
             </p>
           )}
 
-          <div className="flex flex-col gap-2">
-            {filtered.map(p => {
+          <div className="flex flex-col gap-5">
+            {groups.map(g => (
+              <div key={g.key}>
+                {/* En-tête de groupe — pas de header si tout est dans 'Autres factures' seul */}
+                {!(groups.length === 1 && g.isOrphan) && (
+                  <div className="flex items-baseline gap-2 mb-2 px-1">
+                    <span className={`font-display text-sm font-bold ${g.isOrphan ? "text-slate-400" : "text-blue-800"}`}>
+                      {g.label}
+                    </span>
+                    <span className="font-body text-[11px] text-slate-500">
+                      · {g.payments.length} commande{g.payments.length > 1 ? "s" : ""}
+                      {g.payments.length > 1 && (
+                        <> · {g.payments.reduce((s, p) => s + ((p.totalTTC || 0) - (p.paidAmount || 0)), 0).toFixed(2)}€</>
+                      )}
+                    </span>
+                  </div>
+                )}
+                <div className="flex flex-col gap-2">
+                  {g.payments.map(p => {
               const date = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
               const due = (p.totalTTC || 0) - (p.paidAmount || 0);
               const daysLate = Math.floor((Date.now() - date.getTime()) / 86400000);
@@ -187,10 +252,22 @@ export function TabImpayes({
                         )}
                       </div>
                       <div className="font-body text-xs text-slate-500 truncate mt-0.5">
-                        {isEcheance
-                          ? `${(p as any).forfaitRef || (p.items||[]).map((i:any)=>i.activityTitle).join(", ")} · Échéance du ${echeanceDateStr ? new Date(echeanceDateStr).toLocaleDateString("fr-FR") : "—"}`
-                          : `${(p.items||[]).map((i:any)=>i.activityTitle).join(", ")} · ${date.toLocaleDateString("fr-FR")}`
-                        }
+                        {(() => {
+                          // Date à afficher en sous-titre :
+                          // - Pour une échéance : date d'échéance (= date de prélèvement)
+                          // - Pour une commande "événement" (concours, stage, balade...) :
+                          //     date du 1er item si elle existe (= date du créneau)
+                          // - Sinon : fallback sur la date de création
+                          if (isEcheance) {
+                            return `${(p as any).forfaitRef || (p.items||[]).map((i:any)=>i.activityTitle).join(", ")} · Échéance du ${echeanceDateStr ? new Date(echeanceDateStr).toLocaleDateString("fr-FR") : "—"}`;
+                          }
+                          const items = p.items || [];
+                          const firstItemWithDate = items.find((i: any) => i.date);
+                          const displayDate = firstItemWithDate?.date
+                            ? new Date(firstItemWithDate.date + "T12:00:00").toLocaleDateString("fr-FR")
+                            : date.toLocaleDateString("fr-FR");
+                          return `${items.map((i:any)=>i.activityTitle).join(", ")} · ${displayDate}`;
+                        })()}
                       </div>
                     </div>
                     <div className="flex items-center gap-3 flex-shrink-0">
@@ -337,6 +414,9 @@ export function TabImpayes({
                 </Card>
               );
             })}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       );
