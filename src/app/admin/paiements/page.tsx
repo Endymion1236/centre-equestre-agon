@@ -1084,19 +1084,37 @@ export default function PaiementsPage() {
     }
     if (!broadcastSource) return;
     const children = family.children || [];
-    // Mapper les items du source sur les enfants de la famille cible
-    const items = (broadcastSource.items || []).map((item: any, idx: number) => {
-      const child = children[idx] || children[0];
-      return {
-        ...item,
-        childId: child?.id || "",
-        childName: child?.firstName || "",
-        creneauId: "",
-        reservationId: "",
-      };
-    });
+    // Pour une compétition broadcastée, TOUS les items (engagement + coaching)
+    // concernent le MÊME enfant (= une seule inscription au concours).
+    // Par défaut on prend le premier enfant. L'admin peut le changer ensuite
+    // via le sélecteur dans la modale.
+    const defaultChild = children[0];
+    const items = (broadcastSource.items || []).map((item: any) => ({
+      ...item,
+      childId: defaultChild?.id || "",
+      childName: defaultChild?.firstName || "",
+      creneauId: "",
+      reservationId: "",
+    }));
     const totalTTC = round2(items.reduce((s: number, i: any) => s + safeNumber(i.priceTTC), 0));
-    setBroadcastRows([...broadcastRows, { familyId: family.firestoreId, familyName: family.parentName || "", childId: children[0]?.id || "", childName: children[0]?.firstName || "", items, totalTTC, overrides: {} }]);
+    setBroadcastRows([...broadcastRows, { familyId: family.firestoreId, familyName: family.parentName || "", childId: defaultChild?.id || "", childName: defaultChild?.firstName || "", items, totalTTC, overrides: {} }]);
+  };
+
+  /**
+   * Change l'enfant sélectionné pour une famille du broadcast.
+   * Tous les items de la commande sont réaffectés à ce même enfant
+   * (cohérent : 1 compétition = 1 enfant qui fait engagement + coaching).
+   */
+  const setBroadcastChild = (familyId: string, childId: string, childName: string) => {
+    setBroadcastRows(prev => prev.map(r => {
+      if (r.familyId !== familyId) return r;
+      return {
+        ...r,
+        childId,
+        childName,
+        items: r.items.map((it: any) => ({ ...it, childId, childName })),
+      };
+    }));
   };
   const basketSubtotal = basket.reduce((s, i) => s + i.priceTTC, 0);
   const promoDiscount = appliedPromo
@@ -1549,13 +1567,34 @@ export default function PaiementsPage() {
                       {/* Détail ajustable si coché */}
                       {checked && (
                         <div className="px-4 pb-3 pt-0 border-t border-orange-200 mt-0">
+                          {/* Sélecteur d'enfant pour la compétition (1 enfant = engagement + coaching) */}
+                          {(f.children || []).length > 1 ? (
+                            <div className="flex items-center gap-2 mt-3">
+                              <span className="font-body text-xs text-slate-600 flex-shrink-0">Cavalier participant :</span>
+                              <select
+                                value={row!.childId}
+                                onChange={(e) => {
+                                  const c = (f.children || []).find((ch: any) => ch.id === e.target.value);
+                                  if (c) setBroadcastChild(f.firestoreId, c.id, c.firstName);
+                                }}
+                                className="flex-1 px-2 py-1 rounded border border-orange-300 font-body text-xs font-semibold text-blue-700 bg-white focus:outline-none focus:border-orange-500 cursor-pointer">
+                                {(f.children || []).map((c: any) => (
+                                  <option key={c.id} value={c.id}>{c.firstName}</option>
+                                ))}
+                              </select>
+                            </div>
+                          ) : (f.children || []).length === 1 ? (
+                            <div className="flex items-center gap-2 mt-3">
+                              <span className="font-body text-xs text-slate-600">Cavalier :</span>
+                              <span className="font-body text-xs font-semibold text-blue-700">{(f.children || [])[0]?.firstName}</span>
+                            </div>
+                          ) : null}
                           {row!.items.map((item: any, idx: number) => {
                             const currentPrice = row!.overrides[idx] !== undefined ? row!.overrides[idx] : safeNumber(item.priceTTC);
                             return (
                               <div key={idx} className="flex items-center gap-3 mt-2">
                                 <span className="font-body text-xs text-gray-600 flex-1 truncate">
-                                  {item.childName ? <span className="text-blue-500 font-semibold">{item.childName}</span> : null}
-                                  {item.childName ? " — " : ""}{item.activityTitle}
+                                  {item.activityTitle}
                                 </span>
                                 <div className="flex items-center gap-1 flex-shrink-0">
                                   <input
