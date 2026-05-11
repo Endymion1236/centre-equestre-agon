@@ -132,9 +132,13 @@ export function TabImpayes({
           groupsMap.get("_orphan_")!.payments.push(p);
         }
       }
-      // Tri inter-groupes : par date d'événement croissante (les plus proches d'abord),
-      // orphelins en dernier.
-      const groups = [...groupsMap.values()].sort((a, b) => a.eventDate.localeCompare(b.eventDate));
+      // Tri inter-groupes : par date d'événement DÉCROISSANTE (plus récent en haut),
+      // orphelins en dernier (eventDate = "9999-99-99" donc déjà en dernier en desc inverse,
+      // on les force quand même pour être explicite).
+      const groups = [...groupsMap.values()].sort((a, b) => {
+        if (a.isOrphan !== b.isOrphan) return a.isOrphan ? 1 : -1;
+        return b.eventDate.localeCompare(a.eventDate);
+      });
       // Tri intra-groupe : par nom de famille A→Z (orphelins : par date de création desc)
       for (const g of groups) {
         if (g.isOrphan) {
