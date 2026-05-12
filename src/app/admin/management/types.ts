@@ -57,6 +57,13 @@ export interface TachePlanifiee {
   done: boolean;
   notes?: string;
   createdAt?: any;
+  // ── Traçabilité d'import (modèle de semaine) ───────────────────────
+  // Permet de retrouver toutes les tâches issues d'un même import pour
+  // pouvoir l'annuler en bloc ou détecter des doublons lors d'un ré-import.
+  importBatchId?: string;        // UUID unique pour chaque application de modèle
+  importedFromModeleId?: string; // id du modèle source
+  importedFromModeleNom?: string;// nom du modèle source (au cas où renommé/supprimé)
+  importedAt?: any;              // serverTimestamp
 }
 
 export interface PlanningISemaine {

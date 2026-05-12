@@ -4,7 +4,7 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { authFetch } from "@/lib/auth-fetch";
-import { Plus, Trash2, Check, ChevronLeft, ChevronRight, Printer, Save, LayoutTemplate, AlignVerticalSpaceAround } from "lucide-react";
+import { Plus, Trash2, Check, ChevronLeft, ChevronRight, Printer, Save, LayoutTemplate, AlignVerticalSpaceAround, AlertTriangle, Undo2, RotateCcw, X } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { Card } from "@/components/ui";
 import type { TacheType, TachePlanifiee, Salarie, JourSemaine, ModelePlanning, TacheModele } from "./types";
@@ -58,6 +58,15 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   const [saveModeleName, setSaveModeleName] = useState("");
   const [saveModeleType, setSaveModeleType] = useState<"scolaire" | "vacances" | "autre">("scolaire");
   const [applyingModele, setApplyingModele] = useState(false);
+  // ── Modale de gestion des conflits lors de l'application d'un modèle ─
+  // Quand on applique un modèle sur une semaine non vide, on liste les
+  // doublons et on propose : remplacer / ajouter quand même / annuler.
+  // Une tâche est en doublon si même (salarieId, jour, heureDebut, tacheTypeId).
+  const [conflictDialog, setConflictDialog] = useState<{
+    modele: ModelePlanning;
+    duplicates: { existante: TachePlanifiee; nouvelle: TacheModele }[];
+    nouvelles: TacheModele[]; // tâches du modèle qui ne sont pas en doublon
+  } | null>(null);
   // Vue par défaut : 'tableau' pour admin, 'fiche' pour moniteur
   // (seule info utile à une monitrice : son horaire et ses tâches individuelles)
   const [view, setView] = useState<"tableau" | "horaire" | "fiche">(isAdmin ? "tableau" : "fiche");
@@ -470,18 +479,75 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   };
 
   // ── Appliquer un modèle sur la semaine courante ─────────────────────
+  // Étape 1 : on détecte les doublons (même salarié + jour + heure + tâche)
+  //   - 0 doublon → on applique direct (avec confirm classique)
+  //   - 1+ doublons → on ouvre la modale de conflits (3 choix possibles)
   const handleApplyModele = async (modele: ModelePlanning) => {
-    const msg = taches.length > 0
-      ? `Appliquer "${modele.nom}" sur la semaine ${semaine} ?\n\nLes ${taches.length} tâches existantes seront conservées, les tâches du modèle seront AJOUTÉES.`
-      : `Appliquer "${modele.nom}" sur la semaine ${semaine} ?`;
-    if (!confirm(msg)) return;
+    // Détection des doublons
+    const duplicates: { existante: TachePlanifiee; nouvelle: TacheModele }[] = [];
+    const nouvelles: TacheModele[] = [];
+    for (const tm of modele.taches) {
+      const existante = taches.find(t =>
+        t.salarieId === tm.salarieId &&
+        t.jour === tm.jour &&
+        t.heureDebut === tm.heureDebut &&
+        t.tacheTypeId === tm.tacheTypeId
+      );
+      if (existante) duplicates.push({ existante, nouvelle: tm });
+      else nouvelles.push(tm);
+    }
 
+    // Cas simple : pas de doublons → confirmation rapide puis ajout
+    if (duplicates.length === 0) {
+      const msg = taches.length > 0
+        ? `Appliquer "${modele.nom}" sur la semaine ${semaine} ?\n\nLes ${taches.length} tâches existantes seront conservées, les ${modele.taches.length} tâches du modèle seront AJOUTÉES.`
+        : `Appliquer "${modele.nom}" sur la semaine ${semaine} ?\n\n${modele.taches.length} tâches seront créées.`;
+      if (!confirm(msg)) return;
+      await doApplyModele(modele, modele.taches, []);
+      return;
+    }
+
+    // Cas avec conflits : ouvrir la modale dédiée
+    setConflictDialog({ modele, duplicates, nouvelles });
+    setShowApplyModele(false);
+  };
+
+  // ── Exécution effective de l'application d'un modèle ────────────────
+  // - tachesAjouter : liste des TacheModele à créer
+  // - tachesASupprimer : liste des TachePlanifiee existantes à effacer avant ajout
+  //   (utilisé pour le mode "Remplacer les doublons")
+  // Toutes les tâches créées portent le même importBatchId pour permettre
+  // une annulation propre ensuite (bouton "Annuler le dernier import").
+  const doApplyModele = async (
+    modele: ModelePlanning,
+    tachesAjouter: TacheModele[],
+    tachesASupprimer: TachePlanifiee[]
+  ) => {
     setApplyingModele(true);
     try {
+      // ── 1. Suppression des doublons (si mode "Remplacer") ─────────────
+      // On utilise writeBatch pour la cohérence (tout ou rien sur les delete)
+      if (tachesASupprimer.length > 0) {
+        // Firestore batch max 500 ops, on découpe par 400 pour avoir de la marge
+        for (let i = 0; i < tachesASupprimer.length; i += 400) {
+          const batch = writeBatch(db);
+          tachesASupprimer.slice(i, i + 400).forEach(t => {
+            batch.delete(doc(db, "taches-planifiees", t.id));
+          });
+          await batch.commit();
+        }
+      }
+
+      // ── 2. Génération d'un identifiant unique pour ce batch d'import ──
+      // crypto.randomUUID est dispo dans tous les navigateurs récents
+      const importBatchId = (typeof crypto !== "undefined" && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `imp_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
+      // ── 3. Création des nouvelles tâches par chunks de 50 ─────────────
       let count = 0;
-      // Batch par groupes de 50
-      for (let i = 0; i < modele.taches.length; i += 50) {
-        const chunk = modele.taches.slice(i, i + 50);
+      for (let i = 0; i < tachesAjouter.length; i += 50) {
+        const chunk = tachesAjouter.slice(i, i + 50);
         const promises = chunk.map(t =>
           addDoc(collection(db, "taches-planifiees"), {
             tacheTypeId: t.tacheTypeId,
@@ -496,20 +562,115 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
             semaine,
             done: false,
             createdAt: serverTimestamp(),
+            // Traçabilité : permet l'annulation en bloc et la détection de
+            // ré-imports involontaires.
+            importBatchId,
+            importedFromModeleId: modele.id,
+            importedFromModeleNom: modele.nom,
+            importedAt: serverTimestamp(),
           })
         );
         await Promise.all(promises);
         count += chunk.length;
       }
 
-      toast(`Modèle "${modele.nom}" appliqué : ${count} tâches ajoutées`, "success");
+      // ── 4. Toast récap ────────────────────────────────────────────────
+      const parts: string[] = [];
+      if (tachesASupprimer.length > 0) parts.push(`${tachesASupprimer.length} doublon(s) remplacé(s)`);
+      parts.push(`${count} tâche(s) ajoutée(s)`);
+      toast(`Modèle "${modele.nom}" appliqué · ${parts.join(" · ")}`, "success");
+
       setShowApplyModele(false);
+      setConflictDialog(null);
       onRefresh();
     } catch (e: any) {
+      console.error(e);
       toast("Erreur lors de l'application du modèle", "error");
     }
     setApplyingModele(false);
   };
+
+  // ── Actions de la modale de conflits ──────────────────────────────────
+
+  /** Supprime les doublons existants puis ajoute TOUTES les tâches du modèle */
+  const conflictRemplacer = async () => {
+    if (!conflictDialog) return;
+    const { modele, duplicates, nouvelles } = conflictDialog;
+    const aSupprimer = duplicates.map(d => d.existante);
+    // On réajoute aussi les "nouvelles + doublons" pour reconstituer le modèle complet
+    const aAjouter = [...nouvelles, ...duplicates.map(d => d.nouvelle)];
+    await doApplyModele(modele, aAjouter, aSupprimer);
+  };
+
+  /** Ajoute toutes les tâches du modèle SANS supprimer les doublons (comportement legacy) */
+  const conflictAjouterQuandMeme = async () => {
+    if (!conflictDialog) return;
+    const { modele } = conflictDialog;
+    await doApplyModele(modele, modele.taches, []);
+  };
+
+  /** Ferme la modale sans rien faire */
+  const conflictAnnuler = () => setConflictDialog(null);
+
+  // ── Annuler le dernier import (ou un import spécifique par batchId) ─
+  // Supprime toutes les tâches de la semaine courante qui portent cet
+  // importBatchId. Utile si on s'aperçoit après coup qu'on a appliqué le
+  // mauvais modèle ou qu'on a importé deux fois la même semaine.
+  const handleUndoImport = async (importBatchId: string, nomModele?: string) => {
+    const aSupprimer = taches.filter(t => t.importBatchId === importBatchId);
+    if (aSupprimer.length === 0) {
+      toast("Aucune tâche à annuler pour cet import", "info");
+      return;
+    }
+    if (!confirm(
+      `Annuler l'import${nomModele ? ` du modèle "${nomModele}"` : ""} ?\n\n` +
+      `${aSupprimer.length} tâche(s) seront supprimées.\n\n` +
+      `⚠️ Cette action est irréversible.`
+    )) return;
+
+    setApplyingModele(true);
+    try {
+      for (let i = 0; i < aSupprimer.length; i += 400) {
+        const batch = writeBatch(db);
+        aSupprimer.slice(i, i + 400).forEach(t => {
+          batch.delete(doc(db, "taches-planifiees", t.id));
+        });
+        await batch.commit();
+      }
+      toast(`✅ Import annulé · ${aSupprimer.length} tâche(s) supprimée(s)`, "success");
+      onRefresh();
+    } catch (e) {
+      console.error(e);
+      toast("Erreur lors de l'annulation", "error");
+    }
+    setApplyingModele(false);
+  };
+
+  // ── Liste des imports distincts de la semaine (pour le bouton "Annuler") ──
+  // Regroupe les tâches par importBatchId pour proposer une annulation ciblée.
+  const importsDeLaSemaine = useMemo(() => {
+    const groups: Record<string, { batchId: string; nom: string; count: number; date: Date | null }> = {};
+    for (const t of taches) {
+      if (!t.importBatchId) continue;
+      const key = t.importBatchId;
+      if (!groups[key]) {
+        const importedAt = t.importedAt?.toDate?.() || null;
+        groups[key] = {
+          batchId: key,
+          nom: t.importedFromModeleNom || "Modèle inconnu",
+          count: 0,
+          date: importedAt,
+        };
+      }
+      groups[key].count++;
+    }
+    // Tri du plus récent au plus ancien (les imports sans date à la fin)
+    return Object.values(groups).sort((a, b) => {
+      if (!a.date) return 1;
+      if (!b.date) return -1;
+      return b.date.getTime() - a.date.getTime();
+    });
+  }, [taches]);
 
   // Calcul charge par salarié (minutes totales / semaine)
   // Charge par salarié = somme par jour de (amplitude première→dernière tâche − pauses explicites).
@@ -1736,6 +1897,43 @@ Réponds de façon concise et pratique, en français.`,
                 )}
               </div>
 
+              {/* ── Annuler un import (rollback ciblé) ─────────────────────
+                  Affiche la liste des modèles appliqués sur cette semaine et
+                  permet de tout effacer en bloc. Utile si on a appliqué le
+                  mauvais modèle ou importé 2 fois la même semaine. */}
+              {importsDeLaSemaine.length > 0 && (
+                <div className="flex flex-col gap-3 p-4 rounded-2xl border-2 border-orange-100 bg-orange-50 hover:border-orange-200 transition-all">
+                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm">
+                    <Undo2 size={20} className="text-orange-500" />
+                  </div>
+                  <div>
+                    <div className="font-display text-sm font-bold text-orange-800">Annuler un import</div>
+                    <div className="font-body text-xs text-orange-600 mt-0.5">
+                      {importsDeLaSemaine.length} import{importsDeLaSemaine.length > 1 ? "s" : ""} sur cette semaine
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1 max-h-[140px] overflow-y-auto">
+                    {importsDeLaSemaine.map(imp => (
+                      <button
+                        key={imp.batchId}
+                        onClick={() => handleUndoImport(imp.batchId, imp.nom)}
+                        disabled={applyingModele}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white hover:bg-orange-50 cursor-pointer border border-orange-200 hover:border-orange-400 text-left transition-colors disabled:opacity-40"
+                      >
+                        <Undo2 size={12} className="text-orange-500" />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-body text-xs font-semibold text-orange-800 truncate">{imp.nom}</div>
+                          <div className="font-body text-[9px] text-gray-400">
+                            {imp.count} tâche{imp.count > 1 ? "s" : ""}
+                            {imp.date && ` · ${imp.date.toLocaleDateString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
             </div>
           </Card>
         )}
@@ -2019,6 +2217,147 @@ Réponds de façon concise et pratique, en français.`,
               </button>
               <button onClick={() => setEditingTache(null)}
                 style={{padding:"10px 16px", background:"#f1f5f9", color:"#475569", border:"none", borderRadius:10, fontFamily:"sans-serif", fontSize:13, fontWeight:500, cursor:"pointer"}}>
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODALE DE CONFLITS LORS DE L'APPLICATION D'UN MODÈLE ─────────
+          S'ouvre quand on applique un modèle qui a au moins une tâche en
+          doublon avec la semaine actuelle (même salarié + même jour +
+          même heure + même tâche). 3 options : remplacer / ajouter / annuler. */}
+      {conflictDialog && (
+        <div
+          onClick={conflictAnnuler}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 16, zIndex: 80,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: "white", borderRadius: 18, maxWidth: 560, width: "100%",
+              maxHeight: "90vh", display: "flex", flexDirection: "column",
+              boxShadow: "0 24px 60px rgba(0,0,0,0.2)",
+            }}
+          >
+            {/* En-tête */}
+            <div style={{ padding: "20px 22px 14px", borderBottom: "1px solid #f1f5f9" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 10, background: "#fef3c7",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <AlertTriangle size={18} color="#d97706" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: "sans-serif", fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
+                    Conflit détecté
+                  </div>
+                  <div style={{ fontFamily: "sans-serif", fontSize: 12, color: "#64748b" }}>
+                    Modèle « {conflictDialog.modele.nom} » · semaine {semaine}
+                  </div>
+                </div>
+                <button
+                  onClick={conflictAnnuler}
+                  style={{
+                    background: "transparent", border: "none", padding: 4,
+                    cursor: "pointer", color: "#94a3b8",
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <p style={{ fontFamily: "sans-serif", fontSize: 13, color: "#475569", margin: "10px 0 0", lineHeight: 1.5 }}>
+                <strong>{conflictDialog.duplicates.length}</strong> tâche{conflictDialog.duplicates.length > 1 ? "s" : ""} du modèle existe{conflictDialog.duplicates.length > 1 ? "nt" : ""} déjà dans la semaine
+                {conflictDialog.nouvelles.length > 0 && (
+                  <> · <strong>{conflictDialog.nouvelles.length}</strong> nouvelle{conflictDialog.nouvelles.length > 1 ? "s" : ""} à ajouter</>
+                )}
+              </p>
+            </div>
+
+            {/* Liste des doublons */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "14px 22px" }}>
+              <div style={{ fontFamily: "sans-serif", fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+                Doublons ({conflictDialog.duplicates.length})
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {conflictDialog.duplicates.slice(0, 20).map((d, i) => {
+                  const cat = CATEGORIES.find(c => c.id === d.nouvelle.categorie);
+                  return (
+                    <div key={i} style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      background: "#fef9c3", border: "1px solid #fde047", borderRadius: 8,
+                      padding: "8px 12px",
+                    }}>
+                      <span style={{ fontSize: 14 }}>{cat?.emoji || "📌"}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: "sans-serif", fontSize: 13, fontWeight: 600, color: "#0f172a" }}>
+                          {d.nouvelle.tacheLabel}
+                        </div>
+                        <div style={{ fontFamily: "sans-serif", fontSize: 11, color: "#64748b" }}>
+                          {JOURS_LABELS[d.nouvelle.jour]} · {d.nouvelle.heureDebut} · {d.nouvelle.salarieName}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {conflictDialog.duplicates.length > 20 && (
+                  <div style={{ fontFamily: "sans-serif", fontSize: 12, color: "#94a3b8", fontStyle: "italic", paddingLeft: 8 }}>
+                    … et {conflictDialog.duplicates.length - 20} autre{conflictDialog.duplicates.length - 20 > 1 ? "s" : ""}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div style={{ padding: "14px 22px 20px", borderTop: "1px solid #f1f5f9", display: "flex", flexDirection: "column", gap: 8 }}>
+              <button
+                onClick={conflictRemplacer}
+                disabled={applyingModele}
+                style={{
+                  width: "100%", padding: "12px 14px",
+                  background: "#3b82f6", color: "white", border: "none", borderRadius: 10,
+                  fontFamily: "sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  opacity: applyingModele ? 0.5 : 1,
+                }}
+              >
+                <RotateCcw size={15} />
+                Remplacer les doublons ({conflictDialog.duplicates.length})
+              </button>
+              <div style={{ fontFamily: "sans-serif", fontSize: 11, color: "#94a3b8", textAlign: "center", margin: "-2px 0 4px" }}>
+                Recommandé · les tâches existantes sont supprimées puis recréées
+              </div>
+
+              <button
+                onClick={conflictAjouterQuandMeme}
+                disabled={applyingModele}
+                style={{
+                  width: "100%", padding: "10px 14px",
+                  background: "white", color: "#d97706",
+                  border: "1px solid #fcd34d", borderRadius: 10,
+                  fontFamily: "sans-serif", fontSize: 13, fontWeight: 500, cursor: "pointer",
+                  opacity: applyingModele ? 0.5 : 1,
+                }}
+              >
+                Ajouter quand même (créera des doublons)
+              </button>
+
+              <button
+                onClick={conflictAnnuler}
+                disabled={applyingModele}
+                style={{
+                  width: "100%", padding: "10px 14px",
+                  background: "#f1f5f9", color: "#475569",
+                  border: "none", borderRadius: 10,
+                  fontFamily: "sans-serif", fontSize: 13, fontWeight: 500, cursor: "pointer",
+                }}
+              >
                 Annuler
               </button>
             </div>
