@@ -55,6 +55,14 @@ service cloud.firestore {
                 .hasOnly(['enrolled', 'enrolledCount']));
     }
 
+    // ── Notes pédagogiques de séance ──────────────────────────────────────
+    // Historique des notes (et plans associés) attaché à chaque créneau.
+    // Réservé au staff : seuls moniteurs et admins lisent/écrivent.
+    // Les cavaliers ne voient PAS ces notes (notes internes du staff).
+    match /notes-seance/{docId} {
+      allow read, create, update, delete: if isStaff();
+    }
+
     // ── Paiements / Encaissements ─────────────────────────────────────────
     match /payments/{docId} {
       allow read: if isStaff() || (isAuth() && resource.data.familyId == request.auth.uid);

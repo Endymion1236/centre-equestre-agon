@@ -1,8 +1,8 @@
 "use client";
 import { useState, useEffect, useMemo, useRef } from "react";
-import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, query, where, orderBy, serverTimestamp } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { emailTemplates } from "@/lib/email-templates";
@@ -61,7 +61,7 @@ import {
   fetchVacationPeriods, fetchDiscountSettings,
   type VacationPeriod, type DiscountSettings,
 } from "@/lib/discounts";
-import { X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera, FileImage, Mail, Sparkles, Send, FileText, Printer } from "lucide-react";
+import { X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera, FileImage, Mail, Sparkles, Send, FileText, Printer, StickyNote, ChevronDown, ChevronUp, Clock } from "lucide-react";
 import type { Activity, Family } from "@/types";
 import { Creneau, EnrolledChild, payModes, typeColors, fmtDate, itemMatchesCreneau } from "./types";
 import { authFetch } from "@/lib/auth-fetch";
@@ -73,7 +73,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   onUnenroll: (id: string, childId: string) => Promise<void>;
 }) {
   const { toast: panelToast } = useToast();
-  const { isAdmin, isMoniteur } = useAuth();
+  const { isAdmin, isMoniteur, user } = useAuth();
   const [search, setSearch] = useState(""); const [selFam, setSelFam] = useState(""); const [selChild, setSelChild] = useState("");
   const [enrolling, setEnrolling] = useState(false); const [justEnrolled, setJustEnrolled] = useState("");
   const [showPay, setShowPay] = useState(false); const [payMode, setPayMode] = useState("cb_terminal"); const [unenrolling, setUnenrolling] = useState("");
@@ -134,9 +134,57 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [planUrl, setPlanUrl] = useState<string | null>((creneau as any).planSeanceUrl || null);
   const [planType, setPlanType] = useState<string | null>((creneau as any).planSeanceType || null);
   const planInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Notes pédagogiques de la séance (historique) ─────────────────────
+  // Chaque note enregistre le texte + un snapshot du plan de séance courant
+  // au moment de l'enregistrement (URL/path/type). Permet de retrouver
+  // l'historique des notes ET des plans utilisés au fil des séances.
+  type NoteSeance = {
+    id: string;
+    creneauId: string;
+    texte: string;
+    planSeanceUrl?: string | null;
+    planSeancePath?: string | null;
+    planSeanceType?: string | null;
+    createdAt?: any;
+    createdByEmail?: string | null;
+    createdByName?: string | null;
+  };
+  const [notes, setNotes] = useState<NoteSeance[]>([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [noteTexte, setNoteTexte] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [showHistorique, setShowHistorique] = useState(false);
+
   // Liste d'attente
   const [waitlist, setWaitlist] = useState<any[]>([]);
   const [waitlistLoading, setWaitlistLoading] = useState(false);
+
+  // ── Chargement de l'historique des notes pour ce créneau ─────────────
+  useEffect(() => {
+    if (!creneau.id) return;
+    setNotesLoading(true);
+    // Tri serveur : du plus récent au plus ancien
+    getDocs(query(
+      collection(db, "notes-seance"),
+      where("creneauId", "==", creneau.id),
+      orderBy("createdAt", "desc")
+    ))
+      .then(snap => setNotes(snap.docs.map(d => ({ id: d.id, ...d.data() } as NoteSeance))))
+      .catch(e => {
+        console.warn("Notes load:", e);
+        // Index composite manquant → fallback sans orderBy
+        getDocs(query(collection(db, "notes-seance"), where("creneauId", "==", creneau.id)))
+          .then(snap => {
+            const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as NoteSeance));
+            // Tri client par createdAt desc
+            items.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+            setNotes(items);
+          })
+          .catch(() => setNotes([]));
+      })
+      .finally(() => setNotesLoading(false));
+  }, [creneau.id]);
 
   useEffect(() => {
     if (!creneau.id) return;
@@ -296,10 +344,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       });
       const url = await getDownloadURL(snapshot.ref);
 
-      // Supprimer l'ancien fichier si existant
-      if ((creneau as any).planSeancePath) {
-        try { await deleteObject(ref(storage, (creneau as any).planSeancePath)); } catch {}
-      }
+      // ⚠️ NE PAS supprimer l'ancien fichier : il peut être référencé par une
+      // note pédagogique dans l'historique. Le Storage garde donc tous les
+      // plans (~quelques Mo par séance, négligeable). Pour la suppression
+      // groupée, il faudra un script de nettoyage qui vérifie qu'aucune note
+      // ne pointe vers un fichier avant de l'effacer.
 
       await updateDoc(doc(db, "creneaux", creneau.id), {
         planSeanceUrl: url,
@@ -316,11 +365,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   };
 
   const deletePlan = async () => {
-    if (!creneau.id || !confirm("Supprimer le plan de séance ?")) return;
-    // Supprimer le fichier du Storage
-    if ((creneau as any).planSeancePath) {
-      try { await deleteObject(ref(storage, (creneau as any).planSeancePath)); } catch {}
-    }
+    if (!creneau.id || !confirm("Retirer le plan de séance courant ?\n\nLe fichier reste accessible dans l'historique des notes pédagogiques (si une note y fait référence).")) return;
+    // ⚠️ On NE supprime PAS le fichier du Storage : il peut être référencé
+    // par une note dans l'historique. Seule la référence courante est retirée.
     await updateDoc(doc(db, "creneaux", creneau.id), {
       planSeanceUrl: null,
       planSeancePath: null,
@@ -328,6 +375,65 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     });
     setPlanUrl(null);
     setPlanType(null);
+  };
+
+  // ── Enregistrer une note pédagogique ────────────────────────────────
+  // Snapshot du plan courant (URL/path/type) pour construire l'historique.
+  // Si aucun plan n'est uploadé, les champs plan* sont à null sur la note.
+  const saveNote = async () => {
+    if (!creneau.id) return;
+    const texte = noteTexte.trim();
+    if (!texte) { panelToast("Note vide", "info"); return; }
+    setNoteSaving(true);
+    try {
+      const docData: any = {
+        creneauId: creneau.id,
+        texte,
+        // Snapshot du plan courant au moment de la note
+        planSeanceUrl: planUrl || null,
+        planSeancePath: (creneau as any).planSeancePath || null,
+        planSeanceType: planType || null,
+        // Métadonnées de traçabilité
+        createdAt: serverTimestamp(),
+        createdByEmail: user?.email || null,
+        createdByName: user?.displayName || null,
+        // Contexte du créneau (utile pour requêtes transversales futures)
+        creneauDate: creneau.date,
+        creneauActivityTitle: creneau.activityTitle,
+        creneauMonitor: creneau.monitor,
+      };
+      const ref = await addDoc(collection(db, "notes-seance"), docData);
+      // Mise à jour optimiste de l'historique avec un createdAt approximatif
+      // (le serverTimestamp réel sera celui du serveur, mais on n'attend pas
+      // un refetch pour montrer la note dans la liste).
+      setNotes(prev => [{
+        id: ref.id,
+        ...docData,
+        // Approximation : Firestore Timestamp { seconds, nanoseconds } pour
+        // le tri client en attendant le serverTimestamp réel.
+        createdAt: { seconds: Math.floor(Date.now() / 1000), nanoseconds: 0 },
+      }, ...prev]);
+      setNoteTexte("");
+      setShowHistorique(true);
+      panelToast("✅ Note enregistrée", "success");
+    } catch (e: any) {
+      console.error(e);
+      panelToast("Erreur lors de l'enregistrement", "error");
+    }
+    setNoteSaving(false);
+  };
+
+  // ── Supprimer une note de l'historique ──────────────────────────────
+  const deleteNote = async (noteId: string) => {
+    if (!confirm("Supprimer cette note de l'historique ?\n\nCette action est irréversible.")) return;
+    try {
+      await deleteDoc(doc(db, "notes-seance", noteId));
+      setNotes(prev => prev.filter(n => n.id !== noteId));
+      panelToast("Note supprimée", "success");
+    } catch (e) {
+      console.error(e);
+      panelToast("Erreur suppression", "error");
+    }
   };
   const fam = allFamilies.find(f => f.firestoreId === selFam); const children = fam?.children || [];
   const available = children.filter((c: any) => {
@@ -1454,6 +1560,140 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 <Camera size={20} className="text-slate-400 mx-auto mb-1" />
                 <p className="font-body text-xs text-slate-500">Photo ou PDF du plan de séance</p>
                 <p className="font-body text-[10px] text-slate-400 mt-0.5">Tous formats image · PDF · max 10 Mo</p>
+              </div>
+            )}
+          </div>
+
+          {/* ── Notes pédagogiques (avec historique) ─────────────────────
+              Notes textuelles libres attachées à la séance. À chaque
+              enregistrement, on capture aussi le plan de séance courant
+              pour conserver l'historique complet (note + plan associé). */}
+          <div className="mt-3 pt-3 border-t border-blue-500/8">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-body text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                <StickyNote size={12} /> Notes de séance
+                {notes.length > 0 && (
+                  <span className="font-body text-[10px] text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-full normal-case tracking-normal">
+                    {notes.length}
+                  </span>
+                )}
+              </span>
+              {notes.length > 0 && (
+                <button
+                  onClick={() => setShowHistorique(v => !v)}
+                  className="flex items-center gap-1 font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer hover:underline"
+                >
+                  {showHistorique ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                  Historique
+                </button>
+              )}
+            </div>
+
+            {/* Champ d'ajout de note */}
+            <textarea
+              value={noteTexte}
+              onChange={e => setNoteTexte(e.target.value)}
+              placeholder="Ajouter une note pédagogique sur cette séance (ressenti, comportement de groupe, exercices à refaire…)"
+              rows={3}
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 font-body text-xs resize-none focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-300"
+            />
+            <div className="flex items-center justify-between mt-1.5">
+              <span className="font-body text-[10px] text-slate-400">
+                {planUrl
+                  ? "✓ Le plan de séance courant sera associé à la note"
+                  : "Aucun plan associé"}
+              </span>
+              <button
+                onClick={saveNote}
+                disabled={noteSaving || !noteTexte.trim()}
+                className="flex items-center gap-1 font-body text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-500 text-white border-none cursor-pointer hover:bg-blue-400 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {noteSaving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                Enregistrer
+              </button>
+            </div>
+
+            {/* Historique des notes */}
+            {showHistorique && (
+              <div className="mt-3 space-y-2 max-h-96 overflow-y-auto">
+                {notesLoading && (
+                  <div className="flex items-center justify-center py-4 text-slate-400">
+                    <Loader2 size={14} className="animate-spin" />
+                  </div>
+                )}
+                {!notesLoading && notes.length === 0 && (
+                  <div className="text-center py-4 font-body text-xs text-slate-400">
+                    Aucune note encore enregistrée
+                  </div>
+                )}
+                {notes.map(n => {
+                  const date = n.createdAt?.toDate
+                    ? n.createdAt.toDate()
+                    : n.createdAt?.seconds
+                    ? new Date(n.createdAt.seconds * 1000)
+                    : null;
+                  return (
+                    <div key={n.id} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <div className="font-body text-[10px] text-slate-500 flex items-center gap-1.5">
+                          <Clock size={10} />
+                          {date
+                            ? date.toLocaleString("fr-FR", {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "—"}
+                          {n.createdByName && (
+                            <span className="text-slate-400">· {n.createdByName}</span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => deleteNote(n.id)}
+                          className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer p-0.5"
+                          title="Supprimer cette note"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                      <p className="font-body text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
+                        {n.texte}
+                      </p>
+                      {/* Miniature du plan associé à cette note (snapshot historique) */}
+                      {n.planSeanceUrl && (
+                        <div className="mt-2 pt-2 border-t border-slate-200">
+                          <div className="font-body text-[10px] text-slate-400 mb-1">Plan associé :</div>
+                          {n.planSeanceType === "application/pdf" ? (
+                            <a
+                              href={n.planSeanceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-2 py-1 bg-red-50 border border-red-100 rounded-lg no-underline hover:bg-red-100"
+                            >
+                              <FileImage size={12} className="text-red-500" />
+                              <span className="font-body text-[11px] text-red-700">Plan PDF</span>
+                            </a>
+                          ) : (
+                            <a
+                              href={n.planSeanceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-block"
+                            >
+                              <img
+                                src={n.planSeanceUrl}
+                                alt="Plan associé"
+                                className="h-20 rounded-lg border border-slate-200 hover:opacity-80 cursor-zoom-in object-cover"
+                              />
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
