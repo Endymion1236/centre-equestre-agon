@@ -112,24 +112,93 @@ export async function POST(req: NextRequest) {
     }
     if (payBatchCount > 0) await payBatch.commit();
 
-    // ── 4b. Créer un avoir pour les sommes déjà encaissées ───────────────────
+    // ── 4b. Créer un avoir au PRORATA des séances restantes ─────────────────
+    // ⚠️ HISTORIQUE BUG : avant cette correction, le code additionnait
+    // aveuglément TOUS les paiements 'paid' concernant l'enfant. Si l'enfant
+    // avait été inscrit/réinscrit plusieurs fois, ou si plusieurs forfaits
+    // existaient, l'avoir pouvait largement dépasser le montant réellement
+    // dû (cas Eliot : avoir de 1518€ pour un forfait de 735€).
+    //
+    // Nouvelle logique :
+    //   1. Identifier les paiements 'paid' liés au FORFAIT (items contenant
+    //      "Forfait" ou "Adhésion" ou ayant un forfaitRef), pas tous les
+    //      paiements de l'enfant
+    //   2. Calculer un prorata = séances retirées / séances totales depuis
+    //      le début de l'inscription
+    //   3. Plafonner à la somme effectivement payée ET au prix du forfait
     let avoirCreated = 0;
     let avoirAmount = 0;
+    const avoirDetails: { paymentId: string; total: number; counted: number; reason: string }[] = [];
     try {
       const paidSnap = await adminDb.collection("payments")
         .where("familyId", "==", familyId)
         .where("status", "==", "paid")
         .get();
 
+      // ── Calcul du nombre de séances total vs futures retirées ──
+      // Le prorata se base sur le ratio "séances qui ne seront pas
+      // effectuées" / "séances totales du forfait sur la saison".
+      // On approxime "séances totales" en cherchant les enrolled passés
+      // ET futurs du même enfant sur des créneaux de type cours.
+      const allCreneauxSnap = await adminDb.collection("creneaux").get();
+      let seancesTotales = 0;
+      let seancesPassees = 0;
+      for (const cd of allCreneauxSnap.docs) {
+        const cdata = cd.data();
+        if (cdata.activityType === "stage" || cdata.activityType === "stage_journee") continue;
+        const wasEnrolled = (cdata.enrolled || []).some((e: any) => e.childId === childId);
+        // Aussi : créneaux où il vient d'être retiré dans cette désinscription
+        const wasJustUnenrolled = creneauxToUpdate.some(u => u.ref.id === cd.id);
+        if (!wasEnrolled && !wasJustUnenrolled) continue;
+        seancesTotales++;
+        if ((cdata.date || "9999-12-31") < today) seancesPassees++;
+      }
+      const seancesRetirees = unenrolledCount;
+      // Garde-fou : si on ne peut pas calculer un prorata sain, on
+      // refuse de créer un avoir (l'admin créera manuellement).
+      const prorata = seancesTotales > 0 ? seancesRetirees / seancesTotales : 0;
+
+      console.log("[unenroll-annual] Prorata calcul:", {
+        childId, childName, seancesTotales, seancesPassees, seancesRetirees, prorata,
+      });
+
       for (const doc of paidSnap.docs) {
         const p = doc.data();
-        const concernsChild = (p.items || []).some((i: any) => i.childId === childId);
-        if (!concernsChild) continue;
-        // Montant payé pour cet enfant dans ce paiement
-        const childItems = (p.items || []).filter((i: any) => i.childId === childId);
-        const paid = childItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
-        if (paid > 0) avoirAmount += paid;
+        // Items concernant cet enfant ET liés à un forfait/adhésion
+        const childForfaitItems = (p.items || []).filter((i: any) => {
+          if (i.childId !== childId) return false;
+          const title = (i.activityTitle || "").toLowerCase();
+          // Filtrage strict : on ne compte que les items 'Forfait' ou 'Adhésion'
+          // (pas les cours ponctuels, pas les stages, pas les bons d'amitié).
+          return title.includes("forfait") || title.includes("adhésion") || title.includes("adhesion") || p.forfaitRef;
+        });
+        if (childForfaitItems.length === 0) continue;
+        const paid = childForfaitItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
+        if (paid <= 0) continue;
+        // Avoir au prorata des séances retirées sur ce paiement
+        const counted = Math.round(paid * prorata * 100) / 100;
+        avoirAmount += counted;
+        avoirDetails.push({
+          paymentId: doc.id,
+          total: paid,
+          counted,
+          reason: childForfaitItems.map((i: any) => i.activityTitle).join(", "),
+        });
       }
+
+      console.log("[unenroll-annual] Avoir details:", avoirDetails);
+
+      // ── Garde-fou final ───────────────────────────────────────────
+      // Ne JAMAIS créer un avoir plus gros que la somme effectivement
+      // payée par la famille pour le forfait. C'est notre dernier rempart
+      // contre un calcul foireux.
+      const totalForfaitsPaid = avoirDetails.reduce((s, d) => s + d.total, 0);
+      if (avoirAmount > totalForfaitsPaid) {
+        console.warn("[unenroll-annual] Avoir plafonne au paiement reel:", { avoirAmount, totalForfaitsPaid });
+        avoirAmount = totalForfaitsPaid;
+      }
+      // Arrondi final au centime
+      avoirAmount = Math.round(avoirAmount * 100) / 100;
 
       if (avoirAmount > 0) {
         // Récupérer infos famille
@@ -147,11 +216,19 @@ export async function POST(req: NextRequest) {
           amount: avoirAmount,
           usedAmount: 0,
           remainingAmount: avoirAmount,
-          reason: `Désinscription annuelle — ${childName}`,
+          reason: `Désinscription annuelle — ${childName} (prorata ${Math.round(prorata * 100)}%)`,
           reference: `AV-${Date.now().toString(36).toUpperCase()}`,
           expiryDate: expiryDate.toISOString(),
           status: "actif",
           usageHistory: [],
+          // Audit trail pour pouvoir retrouver d'où vient le calcul
+          _audit: {
+            seancesTotales,
+            seancesPassees,
+            seancesRetirees,
+            prorata,
+            details: avoirDetails,
+          },
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
