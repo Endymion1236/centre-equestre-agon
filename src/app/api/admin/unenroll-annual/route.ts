@@ -170,31 +170,82 @@ export async function POST(req: NextRequest) {
         .get();
 
 
+      // ── 1. Identifier les paiements forfait et sommer la somme payée ──
+      // On somme TOUS les paiements 'paid' contenant un item forfait/adhésion
+      // pour cet enfant. Le prorata ne s'applique qu'UNE FOIS sur le total,
+      // pas paiement par paiement (sinon des paiements dupliqués gonflaient
+      // l'avoir : 2 paiements 735€ → avoir 2×735×0.93 = 1368€ au lieu de 684€).
+      const paymentLines: { paymentId: string; total: number; reason: string }[] = [];
       for (const doc of paidSnap.docs) {
         const p = doc.data();
-        // Items concernant cet enfant ET liés à un forfait/adhésion
         const childForfaitItems = (p.items || []).filter((i: any) => {
           if (i.childId !== childId) return false;
           const title = (i.activityTitle || "").toLowerCase();
-          // Filtrage strict : on ne compte que les items 'Forfait' ou 'Adhésion'
-          // (pas les cours ponctuels, pas les stages, pas les bons d'amitié).
-          return title.includes("forfait") || title.includes("adhésion") || title.includes("adhesion") || p.forfaitRef;
+          // Filtrage strict : forfait, adhésion, licence
+          return title.includes("forfait") || title.includes("adhésion") || title.includes("adhesion") || title.includes("licence") || p.forfaitRef;
         });
         if (childForfaitItems.length === 0) continue;
         const paid = childForfaitItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
         if (paid <= 0) continue;
-        // Avoir au prorata des séances retirées sur ce paiement
-        const counted = Math.round(paid * prorata * 100) / 100;
-        avoirAmount += counted;
-        avoirDetails.push({
+        paymentLines.push({
           paymentId: doc.id,
           total: paid,
-          counted,
           reason: childForfaitItems.map((i: any) => i.activityTitle).join(", "),
         });
       }
 
-      console.log("[unenroll-annual] Avoir details:", avoirDetails);
+      // Total réellement payé par la famille pour ce forfait
+      const totalPayeForfait = paymentLines.reduce((s, l) => s + l.total, 0);
+
+      // ── 2. Lecture du prix officiel du forfait depuis la collection ──
+      // Sert de plafond : l'avoir ne peut JAMAIS dépasser ce que coûte
+      // le forfait, même si des paiements en double existent en base.
+      let prixForfaitOfficiel = 0;
+      try {
+        const forfaitsActifsSnap = await adminDb.collection("forfaits")
+          .where("childId", "==", childId)
+          .where("familyId", "==", familyId)
+          .get();
+        for (const fd of forfaitsActifsSnap.docs) {
+          const fdata = fd.data();
+          // On prend le prix le plus récent / le plus élevé (cas multi-forfaits)
+          const prix = fdata.forfaitPriceTTC || 0;
+          if (prix > prixForfaitOfficiel) prixForfaitOfficiel = prix;
+        }
+      } catch (e) {
+        console.warn("[unenroll-annual] Lecture prix forfait:", e);
+      }
+
+      // ── 3. Calcul de l'avoir : prorata appliqué UNE fois sur le total ──
+      // On plafonne d'abord au prix officiel du forfait (anti-doublons),
+      // puis on applique le prorata.
+      const basePourAvoir = prixForfaitOfficiel > 0
+        ? Math.min(totalPayeForfait, prixForfaitOfficiel)
+        : totalPayeForfait;
+      avoirAmount = Math.round(basePourAvoir * prorata * 100) / 100;
+
+      // Pour la traçabilité, on enregistre chaque ligne avec sa quote-part
+      // calculée (proportionnelle au montant payé).
+      for (const line of paymentLines) {
+        const counted = totalPayeForfait > 0
+          ? Math.round((line.total / totalPayeForfait) * avoirAmount * 100) / 100
+          : 0;
+        avoirDetails.push({
+          paymentId: line.paymentId,
+          total: line.total,
+          counted,
+          reason: line.reason,
+        });
+      }
+
+      console.log("[unenroll-annual] Avoir details:", {
+        totalPayeForfait,
+        prixForfaitOfficiel,
+        basePourAvoir,
+        prorata,
+        avoirAmount,
+        details: avoirDetails,
+      });
 
       // ── Garde-fou final ───────────────────────────────────────────
       // Ne JAMAIS créer un avoir plus gros que la somme effectivement
