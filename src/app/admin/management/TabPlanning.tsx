@@ -1506,11 +1506,12 @@ Réponds de façon concise et pratique, en français.`,
           .subtitle { font-size: 12px; color: #64748b; margin-bottom: 20px; }
           .day-section { margin-bottom: 18px; page-break-inside: avoid; }
           .day-title { font-size: 14px; font-weight: 800; color: #1e3a5f; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 8px; }
-          .task-row { display: flex; align-items: center; padding: 6px 0; border-bottom: 1px solid #f1f5f9; }
+          .task-row { display: flex; align-items: flex-start; padding: 6px 0; border-bottom: 1px solid #f1f5f9; }
           .task-time { width: 70px; font-size: 13px; font-weight: 700; color: #475569; flex-shrink: 0; }
           .task-name { flex: 1; font-size: 13px; font-weight: 600; }
           .task-dur { width: 60px; font-size: 11px; color: #64748b; text-align: right; flex-shrink: 0; }
           .task-cat { font-size: 10px; color: #94a3b8; margin-left: 8px; }
+          .task-note { font-size: 11px; color: #92400e; background: #fef3c7; border-left: 3px solid #f59e0b; padding: 4px 8px; margin: 4px 0 4px 50px; border-radius: 0 4px 4px 0; white-space: pre-wrap; line-height: 1.4; }
           .activity-row { display: flex; align-items: center; padding: 5px 0; border-bottom: 1px solid #f1f5f9; background: #f0f7ff; margin: 0 -8px; padding: 5px 8px; border-radius: 4px; }
           .activity-row .task-name { color: #1d4ed8; }
           .total { margin-top: 6px; font-size: 12px; font-weight: 700; color: #475569; text-align: right; }
@@ -1601,27 +1602,51 @@ Réponds de façon concise et pratique, en français.`,
                       const cat = getCat(t.categorie);
                       const fin = minToHeure(heureToMin(t.heureDebut) + t.dureeMinutes);
                       return (
-                        <div key={t.id}
-                          style={{display:"flex", alignItems:"center", padding:"6px 4px", borderBottom:"1px solid #f1f5f9", cursor:"pointer", opacity: t.done ? 0.5 : 1, gap: 6, minWidth: 0}}
-                          onClick={() => toggleDone(t)}>
-                          {/* Heure de début — largeur réduite sur mobile */}
-                          <div style={{width:50, fontSize:13, fontWeight:700, color:"#475569", flexShrink:0}}>{t.heureDebut}</div>
-                          {/* Label de tâche — prend l'espace disponible, ellipsis si trop long */}
-                          <div style={{flex:1, display:"flex", alignItems:"center", gap:6, minWidth: 0, flexWrap: "wrap"}}>
-                            <span style={{fontSize:14, flexShrink:0}}>{cat?.emoji}</span>
-                            <span style={{fontSize:13, fontWeight:600, color: t.done ? "#94a3b8" : getTaskColor(t), textDecoration: t.done ? "line-through" : "none", overflow:"hidden", textOverflow:"ellipsis"}}>
-                              {t.tacheLabel}
-                            </span>
-                            <span style={{fontSize:10, color:"#94a3b8", flexShrink:0}}>{cat?.label}</span>
+                        <div key={t.id}>
+                          <div
+                            style={{display:"flex", alignItems:"center", padding:"6px 4px", borderBottom: t.notes ? "none" : "1px solid #f1f5f9", cursor:"pointer", opacity: t.done ? 0.5 : 1, gap: 6, minWidth: 0}}
+                            onClick={() => toggleDone(t)}>
+                            {/* Heure de début — largeur réduite sur mobile */}
+                            <div style={{width:50, fontSize:13, fontWeight:700, color:"#475569", flexShrink:0}}>{t.heureDebut}</div>
+                            {/* Label de tâche — prend l'espace disponible, ellipsis si trop long */}
+                            <div style={{flex:1, display:"flex", alignItems:"center", gap:6, minWidth: 0, flexWrap: "wrap"}}>
+                              <span style={{fontSize:14, flexShrink:0}}>{cat?.emoji}</span>
+                              <span style={{fontSize:13, fontWeight:600, color: t.done ? "#94a3b8" : getTaskColor(t), textDecoration: t.done ? "line-through" : "none", overflow:"hidden", textOverflow:"ellipsis"}}>
+                                {t.tacheLabel}
+                              </span>
+                              <span style={{fontSize:10, color:"#94a3b8", flexShrink:0}}>{cat?.label}</span>
+                            </div>
+                            {/* Durée → fin — cachée sur mobile (<480px) pour éviter le débordement */}
+                            <div className="hide-on-mobile" style={{fontSize:11, color:"#64748b", textAlign:"right", flexShrink:0, whiteSpace:"nowrap"}}>
+                              {fmtDuree(t.dureeMinutes)} → {fin}
+                            </div>
+                            {/* Checkbox — taille réduite sur mobile pour garantir qu'elle reste visible */}
+                            <div style={{width:22, height:22, borderRadius:6, border:`2px solid ${t.done?"#16a34a":"#d1d5db"}`, background:t.done?"#16a34a":"white", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0}}>
+                              {t.done && <Check size={13} color="white"/>}
+                            </div>
                           </div>
-                          {/* Durée → fin — cachée sur mobile (<480px) pour éviter le débordement */}
-                          <div className="hide-on-mobile" style={{fontSize:11, color:"#64748b", textAlign:"right", flexShrink:0, whiteSpace:"nowrap"}}>
-                            {fmtDuree(t.dureeMinutes)} → {fin}
-                          </div>
-                          {/* Checkbox — taille réduite sur mobile pour garantir qu'elle reste visible */}
-                          <div style={{width:22, height:22, borderRadius:6, border:`2px solid ${t.done?"#16a34a":"#d1d5db"}`, background:t.done?"#16a34a":"white", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0}}>
-                            {t.done && <Check size={13} color="white"/>}
-                          </div>
+                          {/* Note de l'admin pour cette tâche ─────────────────
+                              Affichée en-dessous, en retrait sous l'horaire, fond
+                              ambré pour bien la distinguer. Visible aussi dans
+                              la version imprimée (via la classe .task-note). */}
+                          {t.notes && (
+                            <div
+                              className="task-note"
+                              style={{
+                                fontSize: 11, color: "#92400e",
+                                background: "#fef3c7",
+                                borderLeft: "3px solid #f59e0b",
+                                padding: "4px 8px",
+                                margin: "4px 0 4px 50px",
+                                borderRadius: "0 4px 4px 0",
+                                whiteSpace: "pre-wrap",
+                                lineHeight: 1.4,
+                                borderBottom: "1px solid #f1f5f9",
+                              }}
+                            >
+                              📝 {t.notes}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
