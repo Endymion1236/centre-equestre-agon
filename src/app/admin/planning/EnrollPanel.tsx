@@ -2632,8 +2632,20 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               const totalTTC = priceTTC * nbSel;
               const suffixe = isMulti ? ` (${nbSel} cavaliers)` : "";
               return (
-              <button onClick={handleEnroll} disabled={!selChild||enrolling||(inscriptionMode==="annuel"&&frequenceCours>=2&&extraSlots.length<frequenceCours-1)} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${(!selChild||enrolling||(inscriptionMode==="annuel"&&frequenceCours>=2&&extraSlots.length<frequenceCours-1))?"bg-gray-200 text-slate-500":inscriptionMode==="annuel"?"bg-green-600 text-white hover:bg-green-500":"bg-blue-500 text-white hover:bg-blue-400"}`}>
-                {enrolling ? "..." : inscriptionMode === "annuel" ? `Inscrire à l'année (${totalAnnuel.toFixed(2)}€)` : (allCartes.some((c: any) => c.status === "active" && (c.remainingSessions || 0) > 0 && (c.childId === selChild || (c.familiale && c.familyId === selFam)))) ? `Inscrire 🎟️ (débit carte à la clôture)${suffixe}` : showPay ? `Inscrire + Encaisser (${totalTTC.toFixed(2)}€)${suffixe}` : totalTTC > 0 ? `Inscrire — paiement${isMulti ? "s" : ""} en attente (${totalTTC.toFixed(2)}€)${suffixe}` : `Inscrire${suffixe}`}
+              <button onClick={handleEnroll} disabled={!selChild||enrolling||(inscriptionMode==="annuel"&&frequenceCours>=2&&extraSlots.length<frequenceCours-1)} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${(!selChild||enrolling||(inscriptionMode==="annuel"&&frequenceCours>=2&&extraSlots.length<frequenceCours-1))?"bg-gray-200 text-slate-500":useRattrapage?"bg-purple-600 text-white hover:bg-purple-500":inscriptionMode==="annuel"?"bg-green-600 text-white hover:bg-green-500":"bg-blue-500 text-white hover:bg-blue-400"}`}>
+                {enrolling ? "..."
+                  // ── Priorité 1 : un rattrapage est sélectionné ───
+                  // Aucun paiement ne sera créé (handleEnroll côté page
+                  // marque juste le rattrapage 'used'), donc le label doit
+                  // refléter qu'aucun montant n'est dû. Sans ce cas, le label
+                  // affichait "Inscrire + Encaisser" alors que cliquer ne
+                  // crée bien aucun paiement → confusion utilisateur.
+                  : useRattrapage ? `🔄 Inscrire en rattrapage (gratuit)${suffixe}`
+                  : inscriptionMode === "annuel" ? `Inscrire à l'année (${totalAnnuel.toFixed(2)}€)`
+                  : (allCartes.some((c: any) => c.status === "active" && (c.remainingSessions || 0) > 0 && (c.childId === selChild || (c.familiale && c.familyId === selFam)))) ? `Inscrire 🎟️ (débit carte à la clôture)${suffixe}`
+                  : showPay ? `Inscrire + Encaisser (${totalTTC.toFixed(2)}€)${suffixe}`
+                  : totalTTC > 0 ? `Inscrire — paiement${isMulti ? "s" : ""} en attente (${totalTTC.toFixed(2)}€)${suffixe}`
+                  : `Inscrire${suffixe}`}
               </button>
               );
             })()}
