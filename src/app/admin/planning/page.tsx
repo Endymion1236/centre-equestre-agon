@@ -905,6 +905,101 @@ export default function PlanningPage() {
     const child = (c.enrolled || []).find((e: any) => e.childId === childId);
     if (!child) return;
 
+    // ── Détection inscription via forfait annuel ────────────────────────
+    // Si l'enfant est inscrit via un forfait annuel actif couvrant CE
+    // créneau, le paiement annuel a déjà été encaissé et reste valable
+    // pour tous les autres créneaux de l'année. Une désinscription d'UN
+    // créneau ne doit JAMAIS générer d'avoir : on crée seulement un
+    // rattrapage que la famille pourra utiliser sur un autre créneau,
+    // et on retire l'enfant uniquement de ce créneau-ci.
+    //
+    // Bug historique : avant cette correction, handleUnenroll trouvait
+    // le paiement annuel via findLinkedPayment et créait un avoir au
+    // prorata du restant (ex: 303€ sur 388€), désinscrivant l'enfant
+    // alors qu'il aurait juste dû avoir un rattrapage. Détection robuste
+    // qui marche aussi pour les enfants inscrits AVANT cette correction
+    // (sans paymentSource=forfait sur l'enrolled).
+    const forfaitActif = (() => {
+      if (isStageType) return null; // les stages ne sont jamais couverts par un forfait annuel
+      // Heuristique 1 : marqueur explicite sur l'enrolled (futures inscriptions)
+      if (child.paymentSource === "forfait" && child.forfaitId) {
+        return allForfaits.find((f: any) => f.id === child.forfaitId) || null;
+      }
+      // Heuristique 2 : recherche d'un forfait actif compatible (rétrocompat)
+      // Match : même enfant + même activité + même jour de la semaine + même heure
+      const dayOfWeek = new Date(c.date + "T12:00:00").getDay();
+      const dayMap = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+      const dayLabel = dayMap[dayOfWeek];
+      return allForfaits.find((f: any) => {
+        if (f.childId !== childId) return false;
+        if (f.status !== "actif" && f.status !== "active") return false;
+        // Le forfait doit cibler ce créneau (matche activité + jour + heure)
+        const matchActivity = (f.activityTitle || "").toLowerCase() === (c.activityTitle || "").toLowerCase();
+        const matchDay = (f.dayLabel || "").toLowerCase() === dayLabel;
+        const matchTime = (f.startTime || "") === (c.startTime || "");
+        return matchActivity && matchDay && matchTime;
+      }) || null;
+    })();
+
+    // ── BIFURCATION : forfait actif → rattrapage, pas d'avoir ──────────
+    if (forfaitActif) {
+      const dateStr = new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+      const msgForfait =
+        `${child.childName} est inscrit(e) via le forfait annuel.\n\n` +
+        `Désinscrire pour le ${dateStr} ?\n\n` +
+        `✓ Un rattrapage sera créé (à utiliser plus tard)\n` +
+        `✓ Le forfait annuel et le paiement restent intacts\n` +
+        `✓ L'enfant reste inscrit aux autres séances`;
+      if (!confirm(msgForfait)) return;
+
+      try {
+        // 1. Retirer l'enfant de CE créneau uniquement
+        await removeChildFromCreneau(cid, childId);
+        await deleteReservations(cid, childId);
+
+        // 2. Anti-doublon : éviter de créer plusieurs rattrapages pour le même créneau
+        const existingSnap = await getDocs(query(
+          collection(db, "rattrapages"),
+          where("childId", "==", childId),
+          where("sourceCreneauId", "==", cid),
+        ));
+
+        if (existingSnap.empty) {
+          // 3. Calcul de la fin du trimestre en cours (cohérent avec montoir)
+          const now = new Date();
+          const currentMonth = now.getMonth(); // 0-11
+          const trimestreEnd = new Date(now.getFullYear(), Math.ceil((currentMonth + 1) / 3) * 3, 0);
+
+          await addDoc(collection(db, "rattrapages"), {
+            childId,
+            childName: child.childName,
+            familyId: child.familyId,
+            familyName: child.familyName,
+            forfaitId: forfaitActif.id,
+            sourceCreneauId: cid,
+            sourceDate: c.date,
+            sourceActivity: c.activityTitle,
+            sourceTime: `${c.startTime}–${c.endTime}`,
+            status: "pending",
+            usedOnCreneauId: null,
+            usedOnDate: null,
+            expiryDate: trimestreEnd.toISOString().split("T")[0],
+            createdAt: serverTimestamp(),
+            source: "unenroll_admin", // pour distinguer des rattrapages du montoir
+          });
+          toast(`${child.childName} désinscrit(e) du ${dateStr} — Rattrapage créé`, "success");
+        } else {
+          toast(`${child.childName} désinscrit(e) du ${dateStr} — Rattrapage déjà existant`, "info");
+        }
+
+        await fetchData();
+      } catch (e: any) {
+        console.error("[handleUnenroll forfait]", e);
+        toast("Erreur lors de la désinscription", "error");
+      }
+      return;
+    }
+
     // Trouver les créneaux à désinscrire (stage = tous les jours par défaut)
     let creneauxIds = [cid];
     let isPartialStageUnenroll = false; // true si on désinscrit 1 jour seulement d'un stage

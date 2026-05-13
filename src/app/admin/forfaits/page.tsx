@@ -256,6 +256,9 @@ export default function ForfaitsPage() {
     try {
       // 1. Batch enroll child in all creneaux for selected slots
       const allCreneauIds = selectedSlotsData.flatMap(s => s.creneauIds);
+      // Précalcul des forfaitIds par slotKey (rempli après la création des forfaits)
+      // En attendant, on marque l'enrolled avec paymentSource pour que la
+      // désinscription d'UN créneau crée un rattrapage et non un avoir.
       for (const creneauId of allCreneauIds) {
         const creneau = creneaux.find(c => c.id === creneauId);
         if (!creneau) continue;
@@ -266,6 +269,13 @@ export default function ForfaitsPage() {
           familyId: selFamily,
           familyName: fam.parentName || "—",
           enrolledAt: new Date().toISOString(),
+          // Marqueur : inscription couverte par un forfait annuel.
+          // handleUnenroll utilise ce flag pour ne PAS créer d'avoir
+          // mais un simple rattrapage. forfaitId reste null ici car le
+          // forfait est créé juste après ; la détection par activité +
+          // jour + heure prendra le relais si besoin.
+          paymentSource: "forfait",
+          forfaitId: null,
         }];
         await updateDoc(doc(db, "creneaux", creneauId), {
           enrolled: newEnrolled,

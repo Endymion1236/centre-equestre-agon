@@ -197,6 +197,11 @@ export default function InscriptionAnnuellePage() {
           familyId: user.uid,
           familyName: family.parentName || "—",
           enrolledAt: new Date().toISOString(),
+          // Marqueur : inscription couverte par un forfait annuel.
+          // Évite qu'une désinscription d'UN créneau crée un avoir
+          // alors que le paiement annuel reste valide pour le reste.
+          paymentSource: "forfait",
+          forfaitId: null,
         }];
         await updateDoc(doc(db, "creneaux", creneauId), {
           enrolled: newEnrolled,
