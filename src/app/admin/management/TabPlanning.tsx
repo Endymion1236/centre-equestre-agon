@@ -1132,10 +1132,27 @@ Réponds de façon concise et pratique, en français.`,
                               <div style={{fontFamily:"sans-serif", fontSize:10, fontWeight:600, color: t.done?"#16a34a":getTaskColor(t), textDecoration:t.done?"line-through":"none", lineHeight:"1.3", wordBreak:"break-word", display:"flex", alignItems:"center", gap:3}}>
                                 {isFromPlanning && <span style={{fontSize:8, color:"#94a3b8"}} title="Vient du planning">🔒</span>}
                                 {t.tacheLabel}
+                                {/* Indicateur visible qu'une note existe :
+                                    📝 avant n'apparaissait que dans le tooltip
+                                    (invisible sur mobile). Cet indicateur cliquable
+                                    rappelle qu'il y a une consigne associée. */}
+                                {t.notes && <span style={{fontSize:9}} title={t.notes}>📝</span>}
                               </div>
                               <div style={{fontFamily:"sans-serif", fontSize:8, color:"#94a3b8"}}>
                                 {t.heureDebut}→{minToHeure(heureToMin(t.heureDebut) + t.dureeMinutes)} ({t.dureeMinutes<60?`${t.dureeMinutes}min`:`${Math.floor(t.dureeMinutes/60)}h${t.dureeMinutes%60>0?t.dureeMinutes%60:""}`})
                               </div>
+                              {/* Aperçu de la note (1 ligne max, ellipsis) pour
+                                  voir le contenu sans avoir à ouvrir la modale */}
+                              {t.notes && (
+                                <div style={{
+                                  fontFamily:"sans-serif", fontSize:9, color:"#92400e",
+                                  background:"#fef3c7", borderRadius:3, padding:"1px 4px",
+                                  marginTop:2, overflow:"hidden", textOverflow:"ellipsis",
+                                  whiteSpace:"nowrap", lineHeight:"1.3",
+                                }} title={t.notes}>
+                                  {t.notes}
+                                </div>
+                              )}
                             </div>
                             <button onClick={()=>toggleDone(t)} style={{width:18,height:18,borderRadius:4,border:"1px solid "+(t.done?"#16a34a":"#d1d5db"),background:t.done?"#16a34a":"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,padding:0}}>
                               {t.done && <Check size={10} color="white"/>}

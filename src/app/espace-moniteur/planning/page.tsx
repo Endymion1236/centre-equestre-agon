@@ -157,6 +157,10 @@ export default function EspaceMoniteurPlanning() {
                     ) : dayTaches.map(t => {
                       const color = getTaskColor(t);
                       const cat = getCat(t.categorie);
+                      // Tooltip enrichi avec la note pour que le moniteur puisse
+                      // la lire en entier au survol (utile si tronquée à l'écran).
+                      const tooltipBase = isMe ? (t.done ? "Marquer comme non fait" : "Marquer comme fait") : "";
+                      const tooltip = t.notes ? `📝 ${t.notes}${tooltipBase ? `\n\n${tooltipBase}` : ""}` : tooltipBase;
                       return (
                         <div key={t.id}
                           onClick={() => isMe && toggleDone(t)}
@@ -167,13 +171,27 @@ export default function EspaceMoniteurPlanning() {
                             opacity: t.done ? 0.6 : 1,
                             cursor: isMe ? "pointer" : "default",
                           }}
-                          title={isMe ? (t.done ? "Marquer comme non fait" : "Marquer comme fait") : ""}>
+                          title={tooltip}>
                           <div style={{ fontFamily: "sans-serif", fontSize: 9, fontWeight: 600, color: t.done ? "#16a34a" : color, textDecoration: t.done ? "line-through" : "none", lineHeight: "1.3", wordBreak: "break-word" }}>
                             {t.done && "✓ "}{t.tacheLabel}
                           </div>
                           <div style={{ fontFamily: "sans-serif", fontSize: 8, color: "#94a3b8" }}>
                             {t.heureDebut}→{minToHeure(heureToMin(t.heureDebut) + t.dureeMinutes)}
                           </div>
+                          {/* Note de l'admin (consigne pour le moniteur) ─────
+                              Affichée sous l'horaire avec un fond légèrement
+                              ambré pour la distinguer du reste. Pas tronquée :
+                              on veut que la consigne soit lisible en entier. */}
+                          {t.notes && (
+                            <div style={{
+                              fontFamily: "sans-serif", fontSize: 9, color: "#92400e",
+                              background: "#fef3c7", border: "1px solid #fde68a",
+                              borderRadius: 3, padding: "2px 4px", marginTop: 2,
+                              lineHeight: "1.3", whiteSpace: "pre-wrap", wordBreak: "break-word",
+                            }}>
+                              📝 {t.notes}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
