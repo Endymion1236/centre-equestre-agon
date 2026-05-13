@@ -48,21 +48,25 @@ function PaymentDot({ enrolled, payments, childId, childName, creneauId, activit
   enrolled: any; payments: any[]; childId: string; childName: string; creneauId: string; activityTitle: string;
 }) {
   const isCard = enrolled.paymentSource === "card";
+  // paymentSource: 'forfait' = inscription couverte par un forfait annuel
+  // (paiement attaché à un seul créneau mais valant pour toute la saison)
+  const isForfait = enrolled.paymentSource === "forfait";
   const matchesThis = (i: any) => itemMatchesCreneau(i, enrolled, { id: creneauId, activityTitle });
-  const hasPaid = isCard || payments.some((p: any) =>
+  const hasPaid = isCard || isForfait || payments.some((p: any) =>
     p.familyId === enrolled.familyId && p.status === "paid" &&
     (p.items || []).some(matchesThis)
   );
-  const hasPending = !hasPaid && !isCard && payments.some((p: any) =>
+  const hasPending = !hasPaid && !isCard && !isForfait && payments.some((p: any) =>
     p.familyId === enrolled.familyId &&
     (p.status === "pending" || p.status === "partial") &&
     (p.items || []).some(matchesThis)
   );
   return (
     <span
-      title={`${childName} — ${isCard ? "carte" : hasPaid ? "réglé" : hasPending ? "en attente" : "non réglé"}`}
+      title={`${childName} — ${isCard ? "carte" : isForfait ? "forfait" : hasPaid ? "réglé" : hasPending ? "en attente" : "non réglé"}`}
       className={`w-3 h-3 rounded-full flex-shrink-0 border ${
         isCard ? "bg-blue-400 border-blue-500"
+        : isForfait ? "bg-emerald-400 border-emerald-500"
         : hasPaid ? "bg-green-400 border-green-500"
         : hasPending ? "bg-orange-300 border-orange-400"
         : "bg-gray-200 border-gray-300"
@@ -82,17 +86,18 @@ function CreneauCard({ c, payments, onSelect, onDelete, onEdit }: {
 
   const unpaidCount = en.filter((e: any) => {
     const isCard = e.paymentSource === "card";
+    const isForfait = e.paymentSource === "forfait";
     const matchesThis = (i: any) => itemMatchesCreneau(i, e, c);
-    const hasPaid = isCard || payments.some((p: any) =>
+    const hasPaid = isCard || isForfait || payments.some((p: any) =>
       p.familyId === e.familyId && p.status === "paid" &&
       (p.items || []).some(matchesThis)
     );
-    const hasPending = !hasPaid && !isCard && payments.some((p: any) =>
+    const hasPending = !hasPaid && !isCard && !isForfait && payments.some((p: any) =>
       p.familyId === e.familyId &&
       (p.status === "pending" || p.status === "partial") &&
       (p.items || []).some(matchesThis)
     );
-    return !hasPaid && !hasPending && !isCard;
+    return !hasPaid && !hasPending && !isCard && !isForfait;
   }).length;
 
   return (

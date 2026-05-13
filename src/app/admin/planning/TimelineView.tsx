@@ -233,13 +233,16 @@ export default function TimelineView({
                                 {en.length > 0 && (
                                   <div style={{ display: "flex", gap: 1 }}>
                                     {en.slice(0, 5).map((e: any) => {
+                                      const isCard = e.paymentSource === "card";
+                                      const isForfait = e.paymentSource === "forfait";
                                       const matchesThis = (i: any) => itemMatchesCreneau(i, e, c);
-                                      const hasPaid = payments.some((p: any) =>
+                                      const hasPaid = isCard || isForfait || payments.some((p: any) =>
                                         p.familyId === e.familyId &&
                                         p.status === "paid" &&
                                         (p.items || []).some(matchesThis)
                                       );
-                                      return <span key={e.childId} style={{ width: 6, height: 6, borderRadius: "50%", background: hasPaid ? "#22c55e" : "#fb923c", display: "inline-block" }} />;
+                                      const dotColor = isForfait ? "#10b981" : hasPaid ? "#22c55e" : "#fb923c";
+                                      return <span key={e.childId} style={{ width: 6, height: 6, borderRadius: "50%", background: dotColor, display: "inline-block" }} />;
                                     })}
                                   </div>
                                 )}

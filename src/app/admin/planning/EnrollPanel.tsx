@@ -1769,8 +1769,17 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           {enrolled.length === 0 ? <p className="font-body text-sm text-slate-500 italic mb-4">Aucun</p> :
           <div className="flex flex-col gap-2 mb-4">{enrolled.map((e: any) => {
             const isCard = e.paymentSource === "card";
+            // ── Cas forfait annuel ─────────────────────────────────────
+            // Quand l'enfant est inscrit via un forfait annuel, le paiement
+            // (388€/an etc) est attaché à UN seul créneau (le premier
+            // cliqué). Pour les autres créneaux de la saison, itemMatches
+            // ne retourne pas true → l'UI les affiche en "non réglé" et
+            // les compte comme impayés. Solution : si paymentSource =
+            // "forfait", on considère l'inscription comme couverte sans
+            // matching strict (le forfait sert de garantie de paiement).
+            const isForfait = e.paymentSource === "forfait";
             const matchesThisEnrollment = (item: any) => itemMatchesCreneau(item, e, creneau);
-            const hasPaid = isCard || payments.some((p: any) =>
+            const hasPaid = isCard || isForfait || payments.some((p: any) =>
               p.familyId === e.familyId &&
               p.status === "paid" &&
               (p.items || []).some(matchesThisEnrollment)
@@ -1784,8 +1793,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             const enrolledChild = (enrolledFam?.children || []).find((c: any) => c.id === e.childId);
             const age = calcAge(enrolledChild?.birthDate);
             const galop = (enrolledChild as any)?.galopLevel || "—";
-            const statusLabel = isCard ? "carte" : hasPaid ? "réglé" : hasPending ? "en attente" : "";
-            const statusColor = isCard ? "bg-blue-500" : hasPaid ? "bg-green-500" : hasPending ? "bg-orange-400" : "bg-gray-300";
+            // Label/couleur : carte > forfait > réglé > en attente > rien
+            const statusLabel = isCard ? "carte" : isForfait ? "forfait" : hasPaid ? "réglé" : hasPending ? "en attente" : "";
+            const statusColor = isCard ? "bg-blue-500" : isForfait ? "bg-emerald-500" : hasPaid ? "bg-green-500" : hasPending ? "bg-orange-400" : "bg-gray-300";
             return (
               <div key={e.childId} className="flex items-center justify-between bg-sand rounded-lg px-3 py-2">
                 <div className="flex items-center gap-2.5 min-w-0">
@@ -1804,7 +1814,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   </a>
                   {age && <span className="font-body text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full flex-shrink-0">{age}</span>}
                   {galop && galop !== "—" && <span className="font-body text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full flex-shrink-0">{galop}</span>}
-                  {statusLabel && <span className={`font-body text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${hasPaid ? "text-green-700 bg-green-50" : "text-orange-600 bg-orange-50"}`}>{statusLabel}</span>}
+                  {statusLabel && <span className={`font-body text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${isForfait ? "text-emerald-700 bg-emerald-50" : hasPaid ? "text-green-700 bg-green-50" : "text-orange-600 bg-orange-50"}`}>{statusLabel}</span>}
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <a
