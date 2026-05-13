@@ -16,7 +16,26 @@ export async function POST(req: NextRequest) {
 
     const today = new Date().toISOString().split("T")[0];
 
-    // ── 1. Retirer l'enfant de tous les créneaux futurs ──────────────────────
+    // ── 0. Calcul du prorata AVANT toute modification ──────────────────
+    // On compte les séances déjà effectuées (= créneaux clôturés avec
+    // presence='present') AVANT de retirer l'enfant des futurs créneaux.
+    // Sinon, l'étape 1 efface ces enrolled et le calcul retombe à 0.
+    let seancesEffectuees = 0;
+    const allCreneauxSnap = await adminDb.collection("creneaux").get();
+    for (const cd of allCreneauxSnap.docs) {
+      const cdata = cd.data();
+      if (cdata.activityType === "stage" || cdata.activityType === "stage_journee") continue;
+      if (cdata.status !== "closed") continue;
+      const wasPresent = (cdata.enrolled || []).some((e: any) =>
+        e.childId === childId && e.presence === "present"
+      );
+      if (wasPresent) seancesEffectuees++;
+    }
+
+    // ── 1. Retirer l'enfant des créneaux futurs NON-CLÔTURÉS ────────────
+    // On épargne les créneaux clôturés : la séance a eu lieu (présence
+    // attestée), retirer Eliot effacerait l'historique pédagogique et
+    // fausserait les statistiques de fréquentation.
     const creneauxSnap = await adminDb
       .collection("creneaux")
       .where("date", ">=", today)
@@ -27,6 +46,8 @@ export async function POST(req: NextRequest) {
 
     for (const doc of creneauxSnap.docs) {
       const data = doc.data();
+      // On ignore les créneaux clôturés : la trace de la séance reste
+      if (data.status === "closed") continue;
       const enrolled = data.enrolled || [];
       if (enrolled.some((e: any) => e.childId === childId)) {
         const newEnrolled = enrolled.filter((e: any) => e.childId !== childId);
@@ -130,35 +151,9 @@ export async function POST(req: NextRequest) {
     let avoirAmount = 0;
     const avoirDetails: { paymentId: string; total: number; counted: number; reason: string }[] = [];
     try {
-      // ── Calcul du nombre de séances effectuées vs retirées ──
-      // Politique métier : un cavalier qui a déjà effectué N séances ne
-      // récupère pas l'argent de ces séances. L'avoir = (séances restantes)
-      // / (séances totales du forfait) × montant payé.
-      //
-      // Définitions :
-      //  - seancesEffectuees = créneaux CLÔTURÉS (status === "closed") où
-      //    l'enfant figure dans enrolled[] avec presence === "present".
-      //    On ne se base PAS sur la date (un créneau futur peut être
-      //    cloturé en simulation ; un créneau passé peut ne pas l'être).
-      //    L'élément déterminant, c'est la clôture qui acte la séance.
-      //  - seancesRetirees = créneaux d'où on vient de retirer l'enfant
-      //    par cette désinscription (= unenrolledCount, déjà calculé)
-      //  - seancesTotales = effectuees + retirees = ce que le forfait
-      //    couvrait au moment de l'achat (en pratique : tout le reste
-      //    de la saison + ce qui a déjà été consommé)
-      const allCreneauxSnap = await adminDb.collection("creneaux").get();
-      let seancesEffectuees = 0;
-      for (const cd of allCreneauxSnap.docs) {
-        const cdata = cd.data();
-        if (cdata.activityType === "stage" || cdata.activityType === "stage_journee") continue;
-        // Le créneau est-il clôturé ?
-        if (cdata.status !== "closed") continue;
-        // L'enfant y est-il enregistré comme présent ?
-        const wasPresent = (cdata.enrolled || []).some((e: any) =>
-          e.childId === childId && e.presence === "present"
-        );
-        if (wasPresent) seancesEffectuees++;
-      }
+      // ── Reprend le calcul du prorata fait en début (avant retrait) ──
+      // seancesEffectuees a été calculé à la phase 0 (status='closed' +
+      // presence='present'), avant que les enrolled ne soient modifiés.
       const seancesRetirees = unenrolledCount;
       const seancesTotales = seancesEffectuees + seancesRetirees;
       // Prorata = part de l'argent à rembourser = retirees / totales
