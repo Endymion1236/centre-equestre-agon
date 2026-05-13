@@ -147,6 +147,20 @@ export default function EspaceMoniteurPlanning() {
             <div className="grid grid-cols-6 gap-2">
               {jourDates.map(({ jour }) => {
                 const dayTaches = salTaches.filter(t => t.jour === jour).sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
+                // ── Récap journée ────────────────────────────────────────
+                // Calcul de l'heure de fin de la journée + durée travaillée
+                // (pauses exclues). Utile pour que la monitrice sache d'un
+                // coup d'œil quand elle finit, sans avoir à regarder chaque
+                // tâche individuellement.
+                const dureeTravailJour = dayTaches
+                  .filter(t => t.categorie !== "pause")
+                  .reduce((s, t) => s + t.dureeMinutes, 0);
+                const heureFinJour = dayTaches.length > 0
+                  ? minToHeure(Math.max(...dayTaches.map(t => heureToMin(t.heureDebut) + t.dureeMinutes)))
+                  : "";
+                const heureDebutJour = dayTaches.length > 0
+                  ? dayTaches[0].heureDebut
+                  : "";
                 return (
                   <div key={jour} className="flex flex-col gap-1">
                     <div className="font-body text-[10px] font-semibold text-slate-400 text-center mb-0.5">
@@ -161,22 +175,28 @@ export default function EspaceMoniteurPlanning() {
                       // la lire en entier au survol (utile si tronquée à l'écran).
                       const tooltipBase = isMe ? (t.done ? "Marquer comme non fait" : "Marquer comme fait") : "";
                       const tooltip = t.notes ? `📝 ${t.notes}${tooltipBase ? `\n\n${tooltipBase}` : ""}` : tooltipBase;
+                      // Horaire de fin de cette tâche (utilisé dans l'affichage
+                      // et la duplication évite un recalcul à chaque rendu).
+                      const heureFin = minToHeure(heureToMin(t.heureDebut) + t.dureeMinutes);
                       return (
                         <div key={t.id}
                           onClick={() => isMe && toggleDone(t)}
                           style={{
-                            padding: "3px 4px", borderRadius: 5,
+                            padding: "4px 5px", borderRadius: 5,
                             background: t.done ? "#f0fdf4" : color + "12",
                             border: `1px solid ${t.done ? "#bbf7d0" : color + "25"}`,
                             opacity: t.done ? 0.6 : 1,
                             cursor: isMe ? "pointer" : "default",
                           }}
                           title={tooltip}>
-                          <div style={{ fontFamily: "sans-serif", fontSize: 9, fontWeight: 600, color: t.done ? "#16a34a" : color, textDecoration: t.done ? "line-through" : "none", lineHeight: "1.3", wordBreak: "break-word" }}>
+                          <div style={{ fontFamily: "sans-serif", fontSize: 10, fontWeight: 600, color: t.done ? "#16a34a" : color, textDecoration: t.done ? "line-through" : "none", lineHeight: "1.3", wordBreak: "break-word" }}>
                             {t.done && "✓ "}{t.tacheLabel}
                           </div>
-                          <div style={{ fontFamily: "sans-serif", fontSize: 8, color: "#94a3b8" }}>
-                            {t.heureDebut}→{minToHeure(heureToMin(t.heureDebut) + t.dureeMinutes)}
+                          {/* Horaire début - fin (en clair, pas la flèche
+                              unicode qui rend mal sur certains téléphones,
+                              et taille augmentée pour vraie lisibilité). */}
+                          <div style={{ fontFamily: "sans-serif", fontSize: 10, color: "#64748b", fontWeight: 500, marginTop: 1 }}>
+                            {t.heureDebut} - {heureFin}
                           </div>
                           {/* Note de l'admin (consigne pour le moniteur) ─────
                               Affichée sous l'horaire avec un fond légèrement
@@ -184,7 +204,7 @@ export default function EspaceMoniteurPlanning() {
                               on veut que la consigne soit lisible en entier. */}
                           {t.notes && (
                             <div style={{
-                              fontFamily: "sans-serif", fontSize: 9, color: "#92400e",
+                              fontFamily: "sans-serif", fontSize: 10, color: "#92400e",
                               background: "#fef3c7", border: "1px solid #fde68a",
                               borderRadius: 3, padding: "2px 4px", marginTop: 2,
                               lineHeight: "1.3", whiteSpace: "pre-wrap", wordBreak: "break-word",
@@ -195,6 +215,26 @@ export default function EspaceMoniteurPlanning() {
                         </div>
                       );
                     })}
+                    {/* ── Récap fin de journée ─────────────────────────────
+                        En bas de chaque colonne : heure de début, heure de
+                        fin, et durée travaillée (pauses exclues). Évite que
+                        la monitrice doive chercher la dernière tâche pour
+                        savoir quand elle termine. */}
+                    {dayTaches.length > 0 && (
+                      <div style={{
+                        marginTop: 4, padding: "4px 5px",
+                        background: "#f1f5f9", borderRadius: 5,
+                        border: "1px dashed #cbd5e1",
+                        textAlign: "center",
+                      }}>
+                        <div style={{ fontFamily: "sans-serif", fontSize: 9, color: "#64748b", fontWeight: 500 }}>
+                          {heureDebutJour} → {heureFinJour}
+                        </div>
+                        <div style={{ fontFamily: "sans-serif", fontSize: 10, color: "#0f172a", fontWeight: 700, marginTop: 1 }}>
+                          {fmtDuree(dureeTravailJour)}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
