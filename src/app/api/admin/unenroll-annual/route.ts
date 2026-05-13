@@ -130,37 +130,50 @@ export async function POST(req: NextRequest) {
     let avoirAmount = 0;
     const avoirDetails: { paymentId: string; total: number; counted: number; reason: string }[] = [];
     try {
+      // ── Calcul du nombre de séances effectuées vs retirées ──
+      // Politique métier : un cavalier qui a déjà effectué N séances ne
+      // récupère pas l'argent de ces séances. L'avoir = (séances restantes)
+      // / (séances totales du forfait) × montant payé.
+      //
+      // Définitions :
+      //  - seancesEffectuees = créneaux CLÔTURÉS (status === "closed") où
+      //    l'enfant figure dans enrolled[] avec presence === "present".
+      //    On ne se base PAS sur la date (un créneau futur peut être
+      //    cloturé en simulation ; un créneau passé peut ne pas l'être).
+      //    L'élément déterminant, c'est la clôture qui acte la séance.
+      //  - seancesRetirees = créneaux d'où on vient de retirer l'enfant
+      //    par cette désinscription (= unenrolledCount, déjà calculé)
+      //  - seancesTotales = effectuees + retirees = ce que le forfait
+      //    couvrait au moment de l'achat (en pratique : tout le reste
+      //    de la saison + ce qui a déjà été consommé)
+      const allCreneauxSnap = await adminDb.collection("creneaux").get();
+      let seancesEffectuees = 0;
+      for (const cd of allCreneauxSnap.docs) {
+        const cdata = cd.data();
+        if (cdata.activityType === "stage" || cdata.activityType === "stage_journee") continue;
+        // Le créneau est-il clôturé ?
+        if (cdata.status !== "closed") continue;
+        // L'enfant y est-il enregistré comme présent ?
+        const wasPresent = (cdata.enrolled || []).some((e: any) =>
+          e.childId === childId && e.presence === "present"
+        );
+        if (wasPresent) seancesEffectuees++;
+      }
+      const seancesRetirees = unenrolledCount;
+      const seancesTotales = seancesEffectuees + seancesRetirees;
+      // Prorata = part de l'argent à rembourser = retirees / totales
+      // (les seances effectuees n'ouvrent droit à aucun avoir).
+      const prorata = seancesTotales > 0 ? seancesRetirees / seancesTotales : 0;
+
+      console.log("[unenroll-annual] Prorata calcul:", {
+        childId, childName, seancesTotales, seancesEffectuees, seancesRetirees, prorata,
+      });
+
       const paidSnap = await adminDb.collection("payments")
         .where("familyId", "==", familyId)
         .where("status", "==", "paid")
         .get();
 
-      // ── Calcul du nombre de séances total vs futures retirées ──
-      // Le prorata se base sur le ratio "séances qui ne seront pas
-      // effectuées" / "séances totales du forfait sur la saison".
-      // On approxime "séances totales" en cherchant les enrolled passés
-      // ET futurs du même enfant sur des créneaux de type cours.
-      const allCreneauxSnap = await adminDb.collection("creneaux").get();
-      let seancesTotales = 0;
-      let seancesPassees = 0;
-      for (const cd of allCreneauxSnap.docs) {
-        const cdata = cd.data();
-        if (cdata.activityType === "stage" || cdata.activityType === "stage_journee") continue;
-        const wasEnrolled = (cdata.enrolled || []).some((e: any) => e.childId === childId);
-        // Aussi : créneaux où il vient d'être retiré dans cette désinscription
-        const wasJustUnenrolled = creneauxToUpdate.some(u => u.ref.id === cd.id);
-        if (!wasEnrolled && !wasJustUnenrolled) continue;
-        seancesTotales++;
-        if ((cdata.date || "9999-12-31") < today) seancesPassees++;
-      }
-      const seancesRetirees = unenrolledCount;
-      // Garde-fou : si on ne peut pas calculer un prorata sain, on
-      // refuse de créer un avoir (l'admin créera manuellement).
-      const prorata = seancesTotales > 0 ? seancesRetirees / seancesTotales : 0;
-
-      console.log("[unenroll-annual] Prorata calcul:", {
-        childId, childName, seancesTotales, seancesPassees, seancesRetirees, prorata,
-      });
 
       for (const doc of paidSnap.docs) {
         const p = doc.data();
@@ -224,7 +237,7 @@ export async function POST(req: NextRequest) {
           // Audit trail pour pouvoir retrouver d'où vient le calcul
           _audit: {
             seancesTotales,
-            seancesPassees,
+            seancesEffectuees,
             seancesRetirees,
             prorata,
             details: avoirDetails,
