@@ -407,10 +407,14 @@ export default function MontoirPage() {
         ));
         if (!existingSnap.empty) continue;
 
-        // Calculer la fin du trimestre en cours
-        const now = new Date();
-        const currentMonth = now.getMonth(); // 0-11
-        const trimestreEnd = new Date(now.getFullYear(), Math.ceil((currentMonth + 1) / 3) * 3, 0); // dernier jour du trimestre
+        // Date d'expiration = date d'absence + 3 mois (politique métier)
+        // Cohérent avec la désinscription forfait depuis planning admin.
+        // Évite l'aberration "fin trimestre civil" qui pouvait être avant
+        // la date même de l'absence pour une absence en fin d'année.
+        const absenceDate = new Date(c.date + "T12:00:00");
+        const expiry = new Date(absenceDate);
+        expiry.setMonth(expiry.getMonth() + 3);
+        const expiryDateStr = `${expiry.getFullYear()}-${String(expiry.getMonth() + 1).padStart(2, "0")}-${String(expiry.getDate()).padStart(2, "0")}`;
 
         await addDoc(collection(db, "rattrapages"), {
           childId: child.childId,
@@ -425,7 +429,7 @@ export default function MontoirPage() {
           status: "pending", // pending | used | expired
           usedOnCreneauId: null,
           usedOnDate: null,
-          expiryDate: trimestreEnd.toISOString().split("T")[0],
+          expiryDate: expiryDateStr,
           createdAt: serverTimestamp(),
         });
         rattrapagesCreated++;

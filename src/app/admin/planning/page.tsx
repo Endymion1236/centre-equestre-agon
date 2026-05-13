@@ -984,10 +984,18 @@ export default function PlanningPage() {
         ));
 
         if (existingSnap.empty) {
-          // 3. Calcul de la fin du trimestre en cours (cohérent avec montoir)
-          const now = new Date();
-          const currentMonth = now.getMonth(); // 0-11
-          const trimestreEnd = new Date(now.getFullYear(), Math.ceil((currentMonth + 1) / 3) * 3, 0);
+          // 3. Calcul de la date d'expiration : date d'absence + 3 mois.
+          //    Politique métier : un cavalier qui rate une séance a 3 mois
+          //    à partir de la date de cette séance pour utiliser son rattrapage.
+          //    Bien plus adapté qu'un calcul "fin de trimestre civil" qui
+          //    pouvait expirer le rattrapage AVANT même la date de l'absence
+          //    (cas typique : absence en novembre, calcul donnait fin juin).
+          const absenceDate = new Date(c.date + "T12:00:00");
+          const expiry = new Date(absenceDate);
+          expiry.setMonth(expiry.getMonth() + 3);
+          // toISOString avec midi local évite tout décalage UTC qui ferait
+          // basculer la date d'un jour (ex 29 vs 30 selon le fuseau).
+          const expiryDateStr = `${expiry.getFullYear()}-${String(expiry.getMonth() + 1).padStart(2, "0")}-${String(expiry.getDate()).padStart(2, "0")}`;
 
           await addDoc(collection(db, "rattrapages"), {
             childId,
@@ -1002,7 +1010,7 @@ export default function PlanningPage() {
             status: "pending",
             usedOnCreneauId: null,
             usedOnDate: null,
-            expiryDate: trimestreEnd.toISOString().split("T")[0],
+            expiryDate: expiryDateStr,
             createdAt: serverTimestamp(),
             source: "unenroll_admin", // pour distinguer des rattrapages du montoir
           });
