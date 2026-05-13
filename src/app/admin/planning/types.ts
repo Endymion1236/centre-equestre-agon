@@ -24,6 +24,17 @@ export interface EnrolledChild {
   familyId: string;
   familyName: string;
   enrolledAt: string;
+  // ── Marquage source de paiement (couverture inscription) ─────────────
+  // Permet à l'UI de savoir comment l'inscription est couverte
+  // financièrement, sans devoir matcher un item de paiement précis :
+  //  - 'card'    : carte de séances (débit à la clôture)
+  //  - 'forfait' : forfait annuel (un seul paiement couvre toute la saison)
+  //  - undefined : paiement classique au créneau (suppose un match par creneauId)
+  paymentSource?: "card" | "forfait";
+  forfaitId?: string | null;
+  cardId?: string | null;
+  presence?: "present" | "absent" | null;
+  stageKey?: string;
 }
 
 export interface Period {

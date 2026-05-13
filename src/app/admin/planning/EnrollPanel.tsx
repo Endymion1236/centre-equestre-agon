@@ -1233,7 +1233,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       console.log(`📋 Inscription annuelle : ${slotsToEnroll.length} séances pour "${creneau.activityTitle}" (jour ${dow}, ${creneau.startTime}) du ${startDate} au ${endDate}`);
 
       for (const slot of slotsToEnroll) {
-        await onEnroll(slot.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, undefined, { skipPayment: true, skipEmail: true });
+        // Marqueur paymentSource:"forfait" → l'enrolled est reconnu comme
+        // couvert sur TOUS les créneaux de la saison (pas seulement le 1er),
+        // ce qui évite l'apparence "gris/impayé" sur les autres mercredis.
+        await onEnroll(slot.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString(), paymentSource: "forfait" }, undefined, { skipPayment: true, skipEmail: true });
       }
 
       // Inscrire dans les créneaux supplémentaires (2ème, 3ème)
@@ -1266,7 +1269,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
         console.log(`📋 Créneau supplémentaire : ${extraCreneaux.length} séances pour "${refCreneau.activityTitle}" (jour ${extraDow}, ${refCreneau.startTime})`);
         for (const slot of extraCreneaux) {
-          await onEnroll(slot.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, undefined, { skipPayment: true, skipEmail: true });
+          // Idem : marqueur paymentSource:"forfait" pour les créneaux
+          // supplémentaires d'un forfait 2x ou 3x par semaine.
+          await onEnroll(slot.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString(), paymentSource: "forfait" }, undefined, { skipPayment: true, skipEmail: true });
         }
       }
     } else {
