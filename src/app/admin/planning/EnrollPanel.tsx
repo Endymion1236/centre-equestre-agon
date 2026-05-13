@@ -63,7 +63,7 @@ import {
 } from "@/lib/discounts";
 import { X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera, FileImage, Mail, Sparkles, Send, FileText, Printer, StickyNote, ChevronDown, ChevronUp, Clock } from "lucide-react";
 import type { Activity, Family } from "@/types";
-import { Creneau, EnrolledChild, payModes, typeColors, fmtDate, itemMatchesCreneau } from "./types";
+import { Creneau, EnrolledChild, payModes, typeColors, fmtDate, itemMatchesCreneau, isForfaitChildPaye } from "./types";
 import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/lib/auth-context";
 
@@ -1775,32 +1775,44 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           <div className="flex flex-col gap-2 mb-4">{enrolled.map((e: any) => {
             const isCard = e.paymentSource === "card";
             // ── Cas forfait annuel ─────────────────────────────────────
-            // Quand l'enfant est inscrit via un forfait annuel, le paiement
-            // (388€/an etc) est attaché à UN seul créneau (le premier
-            // cliqué). Pour les autres créneaux de la saison, itemMatches
-            // ne retourne pas true → l'UI les affiche en "non réglé" et
-            // les compte comme impayés. Solution : si paymentSource =
-            // "forfait", on considère l'inscription comme couverte sans
-            // matching strict (le forfait sert de garantie de paiement).
+            // Quand l'enfant est inscrit via un forfait annuel, on
+            // distingue 2 sous-cas selon que le forfait est encaisse ou pas :
+            //  - forfait paye    → vert emeraude "forfait" (couvert)
+            //  - forfait pending → orange "forfait en attente" (commande
+            //    cree mais non encore encaissee)
+            // Sans cette distinction, on avait un faux positif (vert)
+            // sur tous les creneaux d'un eleve qui n'avait pas encore paye.
             const isForfait = e.paymentSource === "forfait";
+            const isForfaitPaid = isForfait && isForfaitChildPaye(payments, e.familyId, e.childId);
+            const isForfaitPending = isForfait && !isForfaitPaid;
             const matchesThisEnrollment = (item: any) => itemMatchesCreneau(item, e, creneau);
-            const hasPaid = isCard || isForfait || payments.some((p: any) =>
+            const hasPaid = isCard || isForfaitPaid || payments.some((p: any) =>
               p.familyId === e.familyId &&
               p.status === "paid" &&
               (p.items || []).some(matchesThisEnrollment)
             );
-            const hasPending = !hasPaid && payments.some((p: any) =>
+            const hasPending = !hasPaid && (isForfaitPending || payments.some((p: any) =>
               p.familyId === e.familyId &&
               (p.status === "pending" || p.status === "partial") &&
               (p.items || []).some(matchesThisEnrollment)
-            );
+            ));
             const enrolledFam = allFamilies.find(f => f.firestoreId === e.familyId);
             const enrolledChild = (enrolledFam?.children || []).find((c: any) => c.id === e.childId);
             const age = calcAge(enrolledChild?.birthDate);
             const galop = (enrolledChild as any)?.galopLevel || "—";
-            // Label/couleur : carte > forfait > réglé > en attente > rien
-            const statusLabel = isCard ? "carte" : isForfait ? "forfait" : hasPaid ? "réglé" : hasPending ? "en attente" : "";
-            const statusColor = isCard ? "bg-blue-500" : isForfait ? "bg-emerald-500" : hasPaid ? "bg-green-500" : hasPending ? "bg-orange-400" : "bg-gray-300";
+            // Label : carte > forfait payé > forfait en attente > réglé > en attente > rien
+            const statusLabel = isCard ? "carte"
+              : isForfaitPaid ? "forfait"
+              : isForfaitPending ? "forfait à régler"
+              : hasPaid ? "réglé"
+              : hasPending ? "en attente"
+              : "";
+            const statusColor = isCard ? "bg-blue-500"
+              : isForfaitPaid ? "bg-emerald-500"
+              : isForfaitPending ? "bg-amber-500"
+              : hasPaid ? "bg-green-500"
+              : hasPending ? "bg-orange-400"
+              : "bg-gray-300";
             return (
               <div key={e.childId} className="flex items-center justify-between bg-sand rounded-lg px-3 py-2">
                 <div className="flex items-center gap-2.5 min-w-0">
@@ -1819,7 +1831,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   </a>
                   {age && <span className="font-body text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full flex-shrink-0">{age}</span>}
                   {galop && galop !== "—" && <span className="font-body text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full flex-shrink-0">{galop}</span>}
-                  {statusLabel && <span className={`font-body text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${isForfait ? "text-emerald-700 bg-emerald-50" : hasPaid ? "text-green-700 bg-green-50" : "text-orange-600 bg-orange-50"}`}>{statusLabel}</span>}
+                  {statusLabel && <span className={`font-body text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${isForfaitPaid ? "text-emerald-700 bg-emerald-50" : isForfaitPending ? "text-amber-700 bg-amber-50" : hasPaid ? "text-green-700 bg-green-50" : "text-orange-600 bg-orange-50"}`}>{statusLabel}</span>}
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <a

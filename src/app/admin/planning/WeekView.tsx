@@ -1,6 +1,6 @@
 "use client";
 import { ChevronLeft, ChevronRight, Loader2, Users, Trash2, Settings } from "lucide-react";
-import { fmtDate, fmtDateFR, fmtMonthFR, typeColors, compareCreneaux, itemMatchesCreneau } from "./types";
+import { fmtDate, fmtDateFR, fmtMonthFR, typeColors, compareCreneaux, itemMatchesCreneau, isForfaitChildPaye } from "./types";
 import type { Creneau } from "./types";
 import type { EditForm } from "./EditCreneauModal";
 
@@ -49,24 +49,27 @@ function PaymentDot({ enrolled, payments, childId, childName, creneauId, activit
 }) {
   const isCard = enrolled.paymentSource === "card";
   // paymentSource: 'forfait' = inscription couverte par un forfait annuel
-  // (paiement attaché à un seul créneau mais valant pour toute la saison)
+  // Distinction forfait payé vs en attente d'encaissement.
   const isForfait = enrolled.paymentSource === "forfait";
+  const isForfaitPaid = isForfait && isForfaitChildPaye(payments, enrolled.familyId, childId);
+  const isForfaitPending = isForfait && !isForfaitPaid;
   const matchesThis = (i: any) => itemMatchesCreneau(i, enrolled, { id: creneauId, activityTitle });
-  const hasPaid = isCard || isForfait || payments.some((p: any) =>
+  const hasPaid = isCard || isForfaitPaid || payments.some((p: any) =>
     p.familyId === enrolled.familyId && p.status === "paid" &&
     (p.items || []).some(matchesThis)
   );
-  const hasPending = !hasPaid && !isCard && !isForfait && payments.some((p: any) =>
+  const hasPending = !hasPaid && !isCard && (isForfaitPending || payments.some((p: any) =>
     p.familyId === enrolled.familyId &&
     (p.status === "pending" || p.status === "partial") &&
     (p.items || []).some(matchesThis)
-  );
+  ));
   return (
     <span
-      title={`${childName} — ${isCard ? "carte" : isForfait ? "forfait" : hasPaid ? "réglé" : hasPending ? "en attente" : "non réglé"}`}
+      title={`${childName} — ${isCard ? "carte" : isForfaitPaid ? "forfait" : isForfaitPending ? "forfait à régler" : hasPaid ? "réglé" : hasPending ? "en attente" : "non réglé"}`}
       className={`w-3 h-3 rounded-full flex-shrink-0 border ${
         isCard ? "bg-blue-400 border-blue-500"
-        : isForfait ? "bg-emerald-400 border-emerald-500"
+        : isForfaitPaid ? "bg-emerald-400 border-emerald-500"
+        : isForfaitPending ? "bg-amber-400 border-amber-500"
         : hasPaid ? "bg-green-400 border-green-500"
         : hasPending ? "bg-orange-300 border-orange-400"
         : "bg-gray-200 border-gray-300"
@@ -87,17 +90,23 @@ function CreneauCard({ c, payments, onSelect, onDelete, onEdit }: {
   const unpaidCount = en.filter((e: any) => {
     const isCard = e.paymentSource === "card";
     const isForfait = e.paymentSource === "forfait";
+    const isForfaitPaid = isForfait && isForfaitChildPaye(payments, e.familyId, e.childId);
+    const isForfaitPending = isForfait && !isForfaitPaid;
     const matchesThis = (i: any) => itemMatchesCreneau(i, e, c);
-    const hasPaid = isCard || isForfait || payments.some((p: any) =>
+    const hasPaid = isCard || isForfaitPaid || payments.some((p: any) =>
       p.familyId === e.familyId && p.status === "paid" &&
       (p.items || []).some(matchesThis)
     );
-    const hasPending = !hasPaid && !isCard && !isForfait && payments.some((p: any) =>
+    const hasPending = !hasPaid && !isCard && (isForfaitPending || payments.some((p: any) =>
       p.familyId === e.familyId &&
       (p.status === "pending" || p.status === "partial") &&
       (p.items || []).some(matchesThis)
-    );
-    return !hasPaid && !hasPending && !isCard && !isForfait;
+    ));
+    // Compte comme impayé : pas payé ET pas pending non plus
+    // (un forfait pending compte aussi comme impayé ici car la commande
+    // n'a pas encore été encaissée - on ne met pas le drapeau rouge mais
+    // l'orange "en attente" via PaymentDot)
+    return !hasPaid && !hasPending && !isCard;
   }).length;
 
   return (

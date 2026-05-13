@@ -168,3 +168,35 @@ export function itemMatchesCreneau(
   // 4. Très ancien : fallback activityTitle
   return String(item.activityTitle || "").includes(creneau.activityTitle);
 }
+
+// ─── Forfait : couverture financière effective ──────────────────────────────
+// Vérifie si le forfait annuel d'un enfant a été ENCAISSÉ (au moins
+// partiellement). Sans ça, on aurait des inscriptions affichées "forfait"
+// (vert émeraude) alors que la commande est encore en attente d'encaissement.
+//
+// Stratégie : on cherche dans les paiements de la famille un paiement
+// `paid` qui contient un item "Forfait" pour CET enfant. On considère
+// que ça atteste d'un encaissement (peu importe le montant exact —
+// pour les 3x/10x, on accepte qu'une seule échéance soit payée).
+//
+// Pour un check strict (montant total atteint), il faudrait sommer
+// tous les paiements paid avec forfaitRef ou item "Forfait" et comparer
+// à forfaitPriceTTC. Pas fait pour l'instant : le but est juste de
+// distinguer "rien encore encaissé" vs "au moins un encaissement".
+export function isForfaitChildPaye(
+  payments: any[],
+  familyId: string,
+  childId: string,
+): boolean {
+  return payments.some((p: any) => {
+    if (p.familyId !== familyId) return false;
+    if (p.status !== "paid") return false;
+    return (p.items || []).some((i: any) => {
+      if (i.childId !== childId) return false;
+      const t = String(i.activityTitle || "").toLowerCase();
+      // Match : item "Forfait XXX", ou un paiement explicitement lié
+      // à un forfait via forfaitRef (cas des échéances 3x/10x).
+      return t.includes("forfait") || !!p.forfaitRef;
+    });
+  });
+}
