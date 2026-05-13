@@ -90,7 +90,93 @@ export default function ResetBasePage() {
   const [resetResult, setResetResult] = useState<any>(null);
   const [backupDone, setBackupDone] = useState(false);
 
+  // ── Reset financier d'une seule famille (préserve enfants + inscriptions) ──
+  // Sous-fonctionnalité distincte du reset par collection : utile pour
+  // remettre à zéro un compte de test sans toucher au reste de la base.
+  const [familyResetId, setFamilyResetId] = useState("");
+  const [familyResetDryRun, setFamilyResetDryRun] = useState<any>(null);
+  const [familyResetWorking, setFamilyResetWorking] = useState(false);
+  const [familyResetResult, setFamilyResetResult] = useState<any>(null);
+  const [familyList, setFamilyList] = useState<{ id: string; parentName: string; parentEmail: string }[]>([]);
+
   useEffect(() => { fetchCounts(); /* eslint-disable-next-line */ }, []);
+
+  // Chargement de la liste des familles (pour le sélecteur de reset par famille)
+  useEffect(() => {
+    if (!isAdmin) return;
+    (async () => {
+      try {
+        const { collection, getDocs } = await import("firebase/firestore");
+        const { db } = await import("@/lib/firebase");
+        const snap = await getDocs(collection(db, "families"));
+        const fams = snap.docs
+          .map(d => ({
+            id: d.id,
+            parentName: (d.data().parentName || d.data().name || "—") as string,
+            parentEmail: (d.data().parentEmail || "") as string,
+          }))
+          .sort((a, b) => a.parentName.localeCompare(b.parentName));
+        setFamilyList(fams);
+      } catch (e) {
+        console.error("Charge familles:", e);
+      }
+    })();
+  }, [isAdmin]);
+
+  // ── Reset financier d'une famille — dry-run ────────────────────────
+  async function handleFamilyDryRun() {
+    if (!familyResetId) {
+      toast("Sélectionne une famille", "warning");
+      return;
+    }
+    setFamilyResetWorking(true);
+    setFamilyResetDryRun(null);
+    setFamilyResetResult(null);
+    try {
+      const res = await authFetch("/api/admin/reset-family-financial", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ familyId: familyResetId, apply: false }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erreur");
+      setFamilyResetDryRun(data);
+      toast("Simulation effectuée", "success");
+    } catch (e: any) {
+      toast(`Erreur : ${e.message}`, "error");
+    } finally {
+      setFamilyResetWorking(false);
+    }
+  }
+
+  // ── Reset financier d'une famille — exécution réelle ───────────────
+  async function handleFamilyApply() {
+    if (!familyResetDryRun) return;
+    const fam = familyList.find(f => f.id === familyResetId);
+    if (!confirm(
+      `⚠️ Confirmer la suppression de ${familyResetDryRun.totalDocs} document(s) financiers ` +
+      `pour la famille "${fam?.parentName || familyResetId}" ?\n\n` +
+      `Les inscriptions aux créneaux, les enfants et la fiche famille seront PRÉSERVÉS.\n\n` +
+      `Action irréversible.`
+    )) return;
+    setFamilyResetWorking(true);
+    try {
+      const res = await authFetch("/api/admin/reset-family-financial", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ familyId: familyResetId, apply: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erreur");
+      setFamilyResetResult(data);
+      setFamilyResetDryRun(null);
+      toast(data.message || "Reset effectué", "success");
+    } catch (e: any) {
+      toast(`Erreur : ${e.message}`, "error");
+    } finally {
+      setFamilyResetWorking(false);
+    }
+  }
 
   async function fetchCounts() {
     setLoading(true);
@@ -277,6 +363,97 @@ export default function ResetBasePage() {
         </button>
         {backupDone && (
           <Badge color="green" className="ml-2 mt-2">✓ Sauvegarde téléchargée</Badge>
+        )}
+      </Card>
+
+      {/* ── Reset financier d'une seule famille (cas tests) ────────────
+          Cas d'usage : nettoyer toutes les donnees financieres d'un
+          compte de test sans devoir supprimer puis recreer la famille.
+          Préserve : enfants, inscriptions aux créneaux, fiche famille.
+          Supprime : payments, avoirs, rattrapages, forfaits, cartes,
+          mandats/échéances SEPA, réservations, bonsRecup. */}
+      <Card padding="md" className="mb-4">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="w-6 h-6 rounded-full bg-amber-500 text-white font-bold text-xs flex items-center justify-center">↻</span>
+          <h2 className="font-display text-base font-bold text-amber-700">Reset financier d'une famille (test)</h2>
+        </div>
+        <p className="font-body text-xs text-slate-600 mb-3">
+          Supprime <strong>uniquement les données financières</strong> d'une famille (paiements, avoirs,
+          rattrapages, forfaits, cartes, SEPA, réservations). Les enfants, la fiche famille
+          et les inscriptions aux créneaux sont <strong>préservés</strong>.
+          Utile pour repartir d'un état propre avec un compte de test.
+        </p>
+
+        <div className="flex flex-wrap items-end gap-3 mb-3">
+          <div className="flex-1 min-w-[260px]">
+            <label className="font-body text-xs font-semibold text-slate-600 block mb-1">
+              Famille à réinitialiser
+            </label>
+            <select
+              value={familyResetId}
+              onChange={e => { setFamilyResetId(e.target.value); setFamilyResetDryRun(null); setFamilyResetResult(null); }}
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 font-body text-sm bg-white"
+            >
+              <option value="">— Choisir une famille —</option>
+              {familyList.map(f => (
+                <option key={f.id} value={f.id}>
+                  {f.parentName}{f.parentEmail ? ` · ${f.parentEmail}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={handleFamilyDryRun}
+            disabled={!familyResetId || familyResetWorking}
+            className="flex items-center gap-2 bg-slate-700 hover:bg-slate-800 text-white font-body text-sm font-semibold px-4 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50"
+          >
+            {familyResetWorking ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
+            Simuler
+          </button>
+        </div>
+
+        {familyResetDryRun && (
+          <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 mb-3">
+            <div className="font-body text-sm font-semibold text-amber-900 mb-2">
+              📊 Aperçu : {familyResetDryRun.totalDocs} document(s) seront supprimés pour {familyResetDryRun.familyName}
+            </div>
+            <ul className="font-body text-xs text-slate-700 ml-2 space-y-0.5">
+              {Object.entries(familyResetDryRun.inventory || {})
+                .filter(([_, v]: any) => v.count > 0)
+                .map(([col, v]: any) => (
+                  <li key={col}>• <strong>{col}</strong> : {v.count}</li>
+                ))}
+              {familyResetDryRun.totalDocs === 0 && (
+                <li className="italic text-slate-500">Aucune donnée financière à supprimer pour cette famille.</li>
+              )}
+            </ul>
+            {familyResetDryRun.totalDocs > 0 && (
+              <button
+                onClick={handleFamilyApply}
+                disabled={familyResetWorking}
+                className="mt-3 flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-body text-sm font-semibold px-4 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50"
+              >
+                {familyResetWorking ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                Confirmer la suppression
+              </button>
+            )}
+          </div>
+        )}
+
+        {familyResetResult && (
+          <div className="bg-green-50 border border-green-300 rounded-lg p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <CheckCircle2 size={16} className="text-green-600" />
+              <span className="font-body text-sm font-semibold text-green-800">{familyResetResult.message}</span>
+            </div>
+            <ul className="font-body text-xs text-slate-700 ml-6 space-y-0.5">
+              {Object.entries(familyResetResult.deletedByCollection || {})
+                .filter(([_, n]: any) => n > 0)
+                .map(([col, n]: any) => (
+                  <li key={col}>• {col} : {n} supprimé(s)</li>
+                ))}
+            </ul>
+          </div>
         )}
       </Card>
 
