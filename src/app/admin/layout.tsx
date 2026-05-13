@@ -29,6 +29,7 @@ import {
   LayoutTemplate,
   Send,
   Ticket,
+  TicketCheck,
   Heart,
   TrendingUp,
   Wallet,
@@ -61,6 +62,7 @@ const navItems = [
   { href: "/admin/forfaits", icon: CalendarDays, label: "Forfaits" },
   { href: "/admin/cartes", icon: CreditCard, label: "Cartes" },
   { href: "/admin/avoirs", icon: Wallet, label: "Avoirs" },
+  { href: "/admin/bons-recup", icon: TicketCheck, label: "Rattrapages" },
   { href: "/admin/sepa", icon: Building2, label: "Prélèvements SEPA" },
   // ─── Gestion ───
   { separator: true, label: "Gestion" },
