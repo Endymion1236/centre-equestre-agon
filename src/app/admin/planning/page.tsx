@@ -65,6 +65,25 @@ export default function PlanningPage() {
   const [showSimple, setShowSimple] = useState(false); const [showGenerator, setShowGenerator] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string|undefined>();
   const [selectedCreneau, setSelectedCreneau] = useState<(Creneau & { id: string })|null>(null);
+
+  // ── Synchro selectedCreneau avec la liste rechargée ─────────────────
+  // Quand handleEnroll/handleUnenroll appelle fetchData(), la liste
+  // `creneaux` est mise à jour mais `selectedCreneau` (utilisé par
+  // EnrollPanel) garde sa copie obsolète → l'UI affichait les anciennes
+  // données jusqu'à fermer/rouvrir le panel. Ce useEffect remplace la
+  // copie à chaque fois qu'on détecte un changement sur le même id.
+  useEffect(() => {
+    if (!selectedCreneau) return;
+    const fresh = creneaux.find(c => c.id === selectedCreneau.id);
+    if (!fresh) return;
+    // Comparaison sommaire (longueur d'enrolled + count) pour éviter
+    // un setState à chaque render. Un changement de ces deux valeurs
+    // couvre 99% des cas d'inscription/désinscription.
+    const dirty =
+      (fresh.enrolled?.length || 0) !== (selectedCreneau.enrolled?.length || 0) ||
+      (fresh.enrolledCount || 0) !== (selectedCreneau.enrolledCount || 0);
+    if (dirty) setSelectedCreneau(fresh as any);
+  }, [creneaux, selectedCreneau]);
   const [editCreneau, setEditCreneau] = useState<(Creneau & { id: string })|null>(null);
   const [editForm, setEditForm] = useState<any>({});
   const [editSaving, setEditSaving] = useState(false);

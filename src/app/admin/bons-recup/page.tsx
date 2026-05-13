@@ -19,6 +19,11 @@ interface BonRecup {
   usedActivity?: string;
   expiresAt: string;
   createdAt: any;
+  // ── Champ technique pour gérer les deux collections en parallèle ─────
+  // 'bonsRecup' = collection historique (legacy)
+  // 'rattrapages' = collection canonique utilisée par montoir + planning
+  // Permet aux mutations (markUsed) de cibler la bonne collection.
+  _source?: "bonsRecup" | "rattrapages";
 }
 
 export default function BonsRecupPage() {
@@ -39,11 +44,55 @@ export default function BonsRecupPage() {
 
   const fetchData = async () => {
     try {
-      const [bonSnap, crSnap] = await Promise.all([
+      // Chargement parallèle des deux collections + créneaux du jour.
+      // - bonsRecup : collection historique (montoir manuel, ancien système)
+      // - rattrapages : collection canonique alimentée par montoir et
+      //   désinscription forfait, mappée vers le shape BonRecup.
+      const [bonSnap, rattSnap, crSnap] = await Promise.all([
         getDocs(collection(db, "bonsRecup")),
+        getDocs(collection(db, "rattrapages")),
         getDocs(query(collection(db, "creneaux"), where("date", "==", dateStr))),
       ]);
-      setBons(bonSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)) as BonRecup[]);
+
+      // Items issus de bonsRecup → conservés tels quels
+      const fromBons: BonRecup[] = bonSnap.docs.map(d => ({
+        id: d.id,
+        ...(d.data() as any),
+        _source: "bonsRecup" as const,
+      }));
+
+      // Items issus de rattrapages → normalisation des noms de champs
+      // pour qu'ils s'affichent comme des bons standards. status mapping :
+      // pending → active, used → used, expired → expired.
+      const fromRatt: BonRecup[] = rattSnap.docs.map(d => {
+        const data = d.data() as any;
+        const mappedStatus =
+          data.status === "pending" ? "active" :
+          data.status === "used" ? "used" :
+          data.status === "expired" ? "expired" : "active";
+        return {
+          id: d.id,
+          childName: data.childName || "",
+          familyName: data.familyName || "",
+          familyId: data.familyId || "",
+          originalDate: data.sourceDate || "",
+          originalActivity: data.sourceActivity || "",
+          originalCreneauId: data.sourceCreneauId || "",
+          reason: data.source === "unenroll_admin" ? "Désinscription forfait" : "Absence",
+          status: mappedStatus,
+          usedDate: data.usedOnDate || undefined,
+          usedActivity: undefined,
+          expiresAt: data.expiryDate || "",
+          createdAt: data.createdAt,
+          _source: "rattrapages" as const,
+        };
+      });
+
+      // Fusion + tri par date de création décroissante
+      const merged = [...fromBons, ...fromRatt].sort(
+        (a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
+      );
+      setBons(merged);
       setCreneaux(crSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => a.startTime?.localeCompare(b.startTime)));
     } catch (e) { console.error(e); }
     setLoading(false);
@@ -93,17 +142,35 @@ export default function BonsRecupPage() {
 
   const markUsed = async (bonId: string, activity: string) => {
     if (!activity.trim()) return;
-    await updateDoc(doc(db, "bonsRecup", bonId), {
-      status: "used",
-      usedDate: new Date().toISOString().split("T")[0],
-      usedActivity: activity,
-    });
+    // Trouve le bon pour savoir dans quelle collection écrire
+    const bon = bons.find(b => b.id === bonId);
+    if (!bon) return;
+    const today = new Date().toISOString().split("T")[0];
+    if (bon._source === "rattrapages") {
+      // Collection rattrapages utilise des noms de champs différents
+      // (usedOnDate au lieu de usedDate, status 'used') et pas de
+      // champ usedActivity → on conserve l'activité dans un champ libre.
+      await updateDoc(doc(db, "rattrapages", bonId), {
+        status: "used",
+        usedOnDate: today,
+        usedActivity: activity, // ajout pour traçabilité
+      });
+    } else {
+      await updateDoc(doc(db, "bonsRecup", bonId), {
+        status: "used",
+        usedDate: today,
+        usedActivity: activity,
+      });
+    }
     setUsedBon(null);
     fetchData();
   };
 
   const markExpired = async (bonId: string) => {
-    await updateDoc(doc(db, "bonsRecup", bonId), { status: "expired" });
+    const bon = bons.find(b => b.id === bonId);
+    if (!bon) return;
+    const targetCollection = bon._source === "rattrapages" ? "rattrapages" : "bonsRecup";
+    await updateDoc(doc(db, targetCollection, bonId), { status: "expired" });
     fetchData();
   };
 
