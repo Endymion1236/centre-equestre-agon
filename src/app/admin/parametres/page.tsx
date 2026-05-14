@@ -198,6 +198,7 @@ export default function ParametresPage() {
   const [familyDiscount, setFamilyDiscount] = useState([
     { nth: 2, discount: 5 },
     { nth: 3, discount: 10 },
+    { nth: 4, discount: 15 },
   ]);
   const [cancellation, setCancellation] = useState({ hours: 72, retention: 50 });
 
@@ -697,7 +698,10 @@ export default function ParametresPage() {
       {section === "degressivite" && (
         <div className="flex flex-col gap-5">
           <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-4">Réductions multi-stages (même enfant)</h3>
+            <h3 className="font-body text-base font-semibold text-blue-800 mb-1">Réductions multi-stages (même enfant)</h3>
+            <p className="font-body text-xs text-slate-500 mb-4">
+              S'applique <strong>uniquement aux stages</strong> : un même enfant qui s'inscrit à plusieurs stages dans la même période de vacances bénéficie d'une réduction sur les inscriptions suivantes.
+            </p>
             <div className="flex flex-col gap-3">
               {multiStage.map((r, i) => (
                 <div key={i} className="flex items-center gap-4">
@@ -723,11 +727,15 @@ export default function ParametresPage() {
           </Card>
 
           <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-4">Réductions famille (enfants supplémentaires)</h3>
+            <h3 className="font-body text-base font-semibold text-blue-800 mb-1">Réductions famille (forfaits annuels + stages)</h3>
+            <p className="font-body text-xs text-slate-500 mb-4">
+              S'applique aux <strong>forfaits annuels</strong> (selon le rang du nouvel enfant inscrit dans la famille)
+              et aux <strong>stages</strong> sur une même période de vacances scolaires.
+            </p>
             <div className="flex flex-col gap-3">
               {familyDiscount.map((r, i) => (
                 <div key={i} className="flex items-center gap-4">
-                  <span className="font-body text-sm text-gray-500 flex-1">{r.nth}ème enfant inscrit (même semaine)</span>
+                  <span className="font-body text-sm text-gray-500 flex-1">{r.nth}ème enfant {r.nth === 2 ? "(2ème)" : r.nth === 3 ? "(3ème)" : `(${r.nth}ème+)`}</span>
                   <div className="flex items-center gap-2">
                     <span className="font-body text-sm text-gray-400">-</span>
                     <input type="number" value={r.discount} onChange={(e) => {
@@ -741,6 +749,10 @@ export default function ParametresPage() {
                     className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={14} /></button>
                 </div>
               ))}
+              <button onClick={() => setFamilyDiscount([...familyDiscount, { nth: (familyDiscount[familyDiscount.length - 1]?.nth || 1) + 1, discount: 0 }])}
+                className="flex items-center gap-1 font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer mt-1">
+                <Plus size={14} /> Ajouter un palier
+              </button>
             </div>
           </Card>
 
