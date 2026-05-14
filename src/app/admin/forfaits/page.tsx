@@ -463,15 +463,30 @@ export default function ForfaitsPage() {
       console.log(`📋 Désinscrit de ${removed} créneaux (${skippedClosed} clôturés préservés)`);
 
       // 2. Inscrire dans les nouveaux créneaux (tous les futurs du même jour+heure+activité)
-      // Skip ceux qui sont pleins ou déjà clôturés. Marquage paymentSource:'forfait'
-      // pour que le badge soit vert émeraude (sinon : gris/impayé partout).
+      // Match plus tolérant que l'exact match du titre, pour gérer :
+      //  - les renommages d'activités entre saisons (ex: "Galop 3-5" → "Galop 3-5 ados")
+      //  - les accents et casse différents
+      // Stratégie : activityId identique OU titre normalisé identique.
+      // Normalisation : lowercase + suppression des accents + trim + espaces multiples.
+      const normalize = (s: string) =>
+        (s || "")
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "") // accents
+          .replace(/\s+/g, " ")
+          .trim();
+      const newSlotTitleNorm = normalize(newSlot.activityTitle);
+
       let added = 0;
       let skippedFull = 0;
       for (const d of futureSnap.docs) {
         const data = d.data();
         if (data.status === "closed") continue; // pas de réinscription sur clôturé
+        // Match : activityId identique OU titre normalisé identique
+        const matchByActivityId = data.activityId && newSlot.activityId && data.activityId === newSlot.activityId;
+        const matchByTitle = normalize(data.activityTitle) === newSlotTitleNorm;
         if (
-          data.activityTitle === newSlot.activityTitle &&
+          (matchByActivityId || matchByTitle) &&
           data.startTime === newSlot.startTime &&
           new Date(data.date + "T12:00:00").getDay() === newSlot.dayOfWeek &&
           data.date >= today
