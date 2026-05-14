@@ -437,12 +437,21 @@ export default function ForfaitsPage() {
     if (!confirm(`Changer le créneau de ${forfait.childName} ?\n\n❌ Ancien : ${forfait.slotKey}\n✅ Nouveau : ${newSlot.activityTitle} — ${newSlot.dayLabel} ${newSlot.startTime}\n\nLes paiements ne sont PAS modifiés.`)) return;
     setSlotChanging(true);
     try {
-      // 1. Désinscrire de TOUS les créneaux futurs
+      // 1. Désinscrire de TOUS les créneaux futurs NON-CLÔTURÉS
+      // Les clôturés gardent la trace de présence (séance déjà effectuée,
+      // historique pédagogique, statistiques). Cohérent avec unenroll-annual.
       const today = new Date().toISOString().split("T")[0];
       const futureSnap = await getDocs(query(collection(db, "creneaux"), where("date", ">=", today)));
       let removed = 0;
+      let skippedClosed = 0;
       for (const d of futureSnap.docs) {
         const data = d.data();
+        // Ignorer les créneaux clôturés (l'historique reste intact)
+        if (data.status === "closed") {
+          const hasChildClosed = (data.enrolled || []).some((e: any) => e.childId === forfait.childId);
+          if (hasChildClosed) skippedClosed++;
+          continue;
+        }
         const enrolled = data.enrolled || [];
         const hasChild = enrolled.some((e: any) => e.childId === forfait.childId);
         if (hasChild && data.activityType !== "stage" && data.activityType !== "stage_journee") {
@@ -451,12 +460,16 @@ export default function ForfaitsPage() {
           removed++;
         }
       }
-      console.log(`📋 Désinscrit de ${removed} créneaux`);
+      console.log(`📋 Désinscrit de ${removed} créneaux (${skippedClosed} clôturés préservés)`);
 
       // 2. Inscrire dans les nouveaux créneaux (tous les futurs du même jour+heure+activité)
+      // Skip ceux qui sont pleins ou déjà clôturés. Marquage paymentSource:'forfait'
+      // pour que le badge soit vert émeraude (sinon : gris/impayé partout).
       let added = 0;
+      let skippedFull = 0;
       for (const d of futureSnap.docs) {
         const data = d.data();
+        if (data.status === "closed") continue; // pas de réinscription sur clôturé
         if (
           data.activityTitle === newSlot.activityTitle &&
           data.startTime === newSlot.startTime &&
@@ -464,18 +477,26 @@ export default function ForfaitsPage() {
           data.date >= today
         ) {
           const enrolled = data.enrolled || [];
+          // Vérifier la capacité du créneau (ne pas surcharger un cours plein)
+          if (enrolled.length >= (data.maxPlaces || 99)) {
+            skippedFull++;
+            continue;
+          }
           if (!enrolled.some((e: any) => e.childId === forfait.childId)) {
             enrolled.push({
               childId: forfait.childId, childName: forfait.childName,
               familyId: forfait.familyId, familyName: forfait.familyName,
               enrolledAt: new Date().toISOString(),
+              // Marquage forfait pour visibilité (badge vert émeraude au lieu de gris)
+              paymentSource: "forfait",
+              forfaitId: forfait.id,
             });
             await updateDoc(doc(db, "creneaux", d.id), { enrolled, enrolledCount: enrolled.length });
             added++;
           }
         }
       }
-      console.log(`📋 Inscrit dans ${added} nouveaux créneaux`);
+      console.log(`📋 Inscrit dans ${added} nouveaux créneaux${skippedFull > 0 ? ` (${skippedFull} pleins ignorés)` : ""}`);
 
       // 3. Mettre à jour le forfait
       const newSlotKey = `${newSlot.activityTitle} — ${newSlot.dayLabel} ${newSlot.startTime}`;
@@ -488,7 +509,18 @@ export default function ForfaitsPage() {
         updatedAt: serverTimestamp(),
       });
 
-      alert(`✅ Créneau modifié !\n\n${forfait.childName} est maintenant inscrit(e) en ${newSlot.activityTitle} — ${newSlot.dayLabel} ${newSlot.startTime}\n\n${removed} ancien(s) créneau(x) retiré(s)\n${added} nouveau(x) créneau(x) ajouté(s)\n\nPaiements inchangés.`);
+      const parts = [
+        `✅ Créneau modifié !`,
+        ``,
+        `${forfait.childName} est maintenant inscrit(e) en ${newSlot.activityTitle} — ${newSlot.dayLabel} ${newSlot.startTime}`,
+        ``,
+        `${removed} ancien(s) créneau(x) retiré(s)`,
+        `${added} nouveau(x) créneau(x) ajouté(s)`,
+      ];
+      if (skippedClosed > 0) parts.push(`${skippedClosed} créneau(x) clôturé(s) préservé(s) (historique intact)`);
+      if (skippedFull > 0) parts.push(`⚠️ ${skippedFull} créneau(x) ignoré(s) car COMPLET(S)`);
+      parts.push(``, `Paiements inchangés.`);
+      alert(parts.join("\n"));
       setSlotChange(null);
       fetchData();
     } catch (e: any) {
