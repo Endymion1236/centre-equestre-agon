@@ -21,7 +21,7 @@ import { useAgentContext } from "@/hooks/useAgentContext";
 import { emailTemplates } from "@/lib/email-templates";
 import PoneyChargeView from "./PoneyChargeView";
 import ThemeSuggestion from "./ThemeSuggestion";
-import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Printer, ClipboardList, Mic, MicOff, Sparkles,
+import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, XCircle, AlertCircle, Printer, ClipboardList, Mic, MicOff, Sparkles,
 } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 
@@ -76,6 +76,7 @@ export default function MontoirPage() {
           inscrits: (c.enrolled||[]).length,
           presents: (c.enrolled||[]).filter((e:any) => e.presence === "present").length,
           absents: (c.enrolled||[]).filter((e:any) => e.presence === "absent").length,
+          absents_non_justifies: (c.enrolled||[]).filter((e:any) => e.presence === "absent_nonjustified").length,
           non_pointes: (c.enrolled||[]).filter((e:any) => !e.presence).length,
           statut: c.status || "planned",
         })),
@@ -236,6 +237,9 @@ export default function MontoirPage() {
 
     const presents = (c.enrolled || []).filter((e: any) => e.presence === "present");
     const absents = (c.enrolled || []).filter((e: any) => e.presence === "absent");
+    // Absences non justifiées : décomptées séparément, AUCUN rattrapage à la clôture
+    // (politique : la séance est perdue). Cohérent avec le 3ème bouton ambre.
+    const absentsNonJustified = (c.enrolled || []).filter((e: any) => e.presence === "absent_nonjustified");
     const nonPointes = (c.enrolled || []).filter((e: any) => !e.presence);
 
     if (nonPointes.length > 0) {
@@ -243,7 +247,8 @@ export default function MontoirPage() {
     }
 
     const msg = `Clôturer "${c.activityTitle}" (${c.startTime}) ?\n\n` +
-      `${presents.length} présent${presents.length > 1 ? "s" : ""}, ${absents.length} absent${absents.length > 1 ? "s" : ""}`;
+      `${presents.length} présent${presents.length > 1 ? "s" : ""}, ${absents.length} absent${absents.length > 1 ? "s" : ""}` +
+      (absentsNonJustified.length > 0 ? `, ${absentsNonJustified.length} non justifié${absentsNonJustified.length > 1 ? "s" : ""}` : "");
     if (!confirm(msg)) return;
 
     // 1. Clôturer le créneau
@@ -387,6 +392,48 @@ export default function MontoirPage() {
       } catch (e) { console.error("Erreur trace absent carte:", e); }
     }
 
+    // 4b-bis. Absents NON JUSTIFIÉS : débiter la carte (séance perdue).
+    // Politique : pas prévenu ou trop tard → la séance est consommée même
+    // sans présence. Cohérent avec le 3ème bouton "Absent non justifié".
+    // Sans ça, le cavalier serait "récompensé" de son absence : la carte
+    // garderait sa séance, comme pour une absence légitime.
+    let cartesDebiteesNJ = 0;
+    for (const child of absentsNonJustified) {
+      if ((child as any).paymentSource !== "card" || !(child as any).cardId) continue;
+      const carteId = (child as any).cardId;
+      try {
+        await runTransaction(db, async (tx) => {
+          const freshSnap = await tx.get(doc(db, "cartes", carteId));
+          if (!freshSnap.exists()) throw new Error("Carte introuvable");
+          const freshData = freshSnap.data();
+          if ((freshData.remainingSessions || 0) <= 0) throw new Error("Carte épuisée");
+          // Anti-doublon
+          if ((freshData.history || []).some((h: any) => h.creneauId === cid && !h.credit && h.childName === child.childName)) {
+            throw new Error("Déjà débité");
+          }
+          const updatedHistory = [...(freshData.history || []), {
+            date: new Date().toISOString(),
+            activityTitle: c.activityTitle,
+            creneauId: cid, creneauDate: c.date, startTime: c.startTime,
+            horseName: (child as any).horseName || (child as any).equideName || "",
+            childName: child.childName,
+            presence: "absent_nonjustified",
+            reason: "Séance perdue (absence non justifiée)",
+            auto: true,
+          }];
+          const newRem = (freshData.remainingSessions || 0) - 1;
+          tx.update(doc(db, "cartes", carteId), {
+            remainingSessions: newRem,
+            usedSessions: (freshData.usedSessions || 0) + 1,
+            history: updatedHistory,
+            status: newRem <= 0 ? "used" : "active",
+            updatedAt: serverTimestamp(),
+          });
+        });
+        cartesDebiteesNJ++;
+      } catch (e) { console.error("Erreur débit carte (non justifié):", e); }
+    }
+
     // 4c. Créer des crédits rattrapage pour les absents ayant un forfait actif
     let rattrapagesCreated = 0;
     for (const child of absents) {
@@ -444,7 +491,12 @@ export default function MontoirPage() {
     const parts = [`Reprise clôturée.`];
     if (notesCreated > 0) parts.push(`${notesCreated} trace${notesCreated > 1 ? "s" : ""} péda.`);
     if (cartesDebitees > 0) parts.push(`${cartesDebitees} carte${cartesDebitees > 1 ? "s" : ""} débitée${cartesDebitees > 1 ? "s" : ""}.`);
+    if (cartesDebiteesNJ > 0) parts.push(`${cartesDebiteesNJ} séance${cartesDebiteesNJ > 1 ? "s" : ""} perdue${cartesDebiteesNJ > 1 ? "s" : ""} (NJ).`);
     if (rattrapagesCreated > 0) parts.push(`${rattrapagesCreated} rattrapage${rattrapagesCreated > 1 ? "s" : ""} créé${rattrapagesCreated > 1 ? "s" : ""}.`);
+    if (absentsNonJustified.length > rattrapagesCreated && absentsNonJustified.length > 0) {
+      // Mention discrète : ces absences ne génèrent ni rattrapage ni recrédit
+      parts.push(`${absentsNonJustified.length} non justifié${absentsNonJustified.length > 1 ? "s" : ""} (séance perdue).`);
+    }
     toast(parts.join(" "), "success");
     fetchData();
   };
@@ -808,11 +860,15 @@ export default function MontoirPage() {
                     </div>
                   );
                 })() : <span className="font-body text-xs font-semibold text-blue-800">{displayFromHorseName(e.horseName) || "—"}</span>}</span>
-                <span className="w-20 sm:w-24 flex justify-center gap-1 sm:gap-2">{!closed ? <>
-                  <button onClick={()=>togglePresence(c,e.childId,"present")} className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="present"?"bg-green-500 text-white":"bg-gray-100 text-slate-600 hover:bg-green-100"}`}><CheckCircle2 size={18}/></button>
-                  <button onClick={()=>togglePresence(c,e.childId,"absent")} className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent"?"bg-red-500 text-white":"bg-gray-100 text-slate-600 hover:bg-red-100"}`}><XCircle size={18}/></button>
-                  <span className="hidden print:inline font-body text-xs font-semibold">{e.presence==="present"?"✓ Présent":e.presence==="absent"?"✗ Absent":"—"}</span>
-                </> : <Badge color={e.presence==="present"?"green":e.presence==="absent"?"red":"gray"}>{e.presence==="present"?"Présent":e.presence==="absent"?"Absent":"—"}</Badge>}</span>
+                <span className="w-28 sm:w-32 flex justify-center gap-1 sm:gap-2">{!closed ? <>
+                  <button onClick={()=>togglePresence(c,e.childId,"present")} title="Présent" className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="present"?"bg-green-500 text-white":"bg-gray-100 text-slate-600 hover:bg-green-100"}`}><CheckCircle2 size={18}/></button>
+                  <button onClick={()=>togglePresence(c,e.childId,"absent")} title="Absent (rattrapage offert)" className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent"?"bg-red-500 text-white":"bg-gray-100 text-slate-600 hover:bg-red-100"}`}><XCircle size={18}/></button>
+                  {/* 3ème bouton : absence non justifiée → séance perdue, AUCUN rattrapage généré à la clôture.
+                      Utilisé pour les cavaliers qui ne préviennent pas (ou trop tard). Couleur ambre/orange
+                      pour le distinguer visuellement du rouge "absent justifié". */}
+                  <button onClick={()=>togglePresence(c,e.childId,"absent_nonjustified")} title="Absent non justifié (séance perdue, pas de rattrapage)" className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent_nonjustified"?"bg-amber-500 text-white":"bg-gray-100 text-slate-600 hover:bg-amber-100"}`}><AlertCircle size={18}/></button>
+                  <span className="hidden print:inline font-body text-xs font-semibold">{e.presence==="present"?"✓ Présent":e.presence==="absent"?"✗ Absent":e.presence==="absent_nonjustified"?"⚠ NJ":"—"}</span>
+                </> : <Badge color={e.presence==="present"?"green":e.presence==="absent"?"red":e.presence==="absent_nonjustified"?"orange":"gray"}>{e.presence==="present"?"Présent":e.presence==="absent"?"Absent":e.presence==="absent_nonjustified"?"Absent non justifié":"—"}</Badge>}</span>
               </div>
             ))}
           </div>}
