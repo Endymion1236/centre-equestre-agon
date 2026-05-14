@@ -1379,7 +1379,16 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       const payInfo = useRattrapage ? " — 🔄 rattrapage utilisé" : freeEnroll ? ` — 🎁 offert (${freeReason})` : showPay ? " — encaissé ✅" : priceTTC > 0 ? " — paiement en attente" : "";
       setJustEnrolled(`${childName}${payInfo}`);
     }
-    setSelChild(""); setSelFam(""); setSearch(""); setEnrolling(false); setShowPay(false); setFreeEnroll(false); setFreeReason("Rattrapage"); setUseRattrapage(null); setInscriptionMode("ponctuel"); setExtraSlots([]); setExtraSlotSearch(""); setAnnualPayMode("cb_terminal");
+    // Reset complet du formulaire pour permettre une nouvelle inscription
+    // dans la foulee (cas frequent : inscrire toute une fratrie l'un apres
+    // l'autre sans fermer le panel).
+    // CRITICAL : selectedChildren doit aussi etre vide, sinon en mode annuel
+    // le re-clic sur un autre enfant additionne au precedent puis le
+    // useEffect-like de cleanup garde le PREMIER (= l'ancien). Resultat :
+    // l'inscription suivante reutilise l'ancien enfant. Bug rapporte par
+    // Nicolas : a inscrit Suzanne puis click Marianne, mais Suzanne inscrite
+    // 2x.
+    setSelChild(""); setSelectedChildren([]); setSelFam(""); setSearch(""); setEnrolling(false); setShowPay(false); setFreeEnroll(false); setFreeReason("Rattrapage"); setUseRattrapage(null); setInscriptionMode("ponctuel"); setExtraSlots([]); setExtraSlotSearch(""); setAnnualPayMode("cb_terminal");
     setTimeout(() => setJustEnrolled(""), 5000);
   };
 
