@@ -423,7 +423,20 @@ export async function computeTropPercu(paymentId: string, newTotal: number): Pro
   return Math.max(0, totalEncaisse - safeNumber(newTotal));
 }
 
-/** Crée un avoir famille */
+/** Crée un avoir famille, en fusionnant automatiquement avec les avoirs
+ * actifs existants de la même famille pour éviter la dispersion
+ * (politique : 1 avoir par famille, plus simple à utiliser).
+ *
+ * Stratégie :
+ *  1. On cherche tous les avoirs 'actif' ou 'actif_partiel' de la famille
+ *  2. Si on en trouve, on additionne leur remainingAmount au nouveau montant
+ *  3. On marque les anciens en status 'fusionne' (champ mergedInto pour audit)
+ *  4. Le nouvel avoir contient _audit.mergedFrom avec la liste des fusionnés
+ *  5. La raison du NOUVEAU est gardée (la plus récente) + lister les autres
+ *     dans _audit.mergedReasons (pour ne rien perdre)
+ *
+ * Ainsi, après chaque création d'avoir, la famille n'a qu'UN avoir actif.
+ */
 export async function createAvoir(
   familyId: string,
   familyName: string,
@@ -432,20 +445,49 @@ export async function createAvoir(
   sourcePaymentId?: string,
   sourceType?: string,
 ) {
-  const ref = `AV-${Date.now().toString(36).toUpperCase()}`;
+  const newRef = `AV-${Date.now().toString(36).toUpperCase()}`;
   const expiry = new Date();
   expiry.setFullYear(expiry.getFullYear() + 1);
-  const amount = Math.round(montant * 100) / 100;
+  const baseAmount = Math.round(montant * 100) / 100;
 
-  await addDoc(collection(db, "avoirs"), {
+  // ── Fusion silencieuse avec les avoirs actifs existants ─────────────
+  // Évite à la famille de jongler avec plusieurs avoirs au moment de
+  // les utiliser. Logique idempotente : on ne touche qu'aux avoirs
+  // dont remainingAmount > 0 (donc utilisables).
+  let mergedAmount = 0;
+  const toMerge: { id: string; data: any }[] = [];
+  try {
+    const activeSnap = await getDocs(query(
+      collection(db, "avoirs"),
+      where("familyId", "==", familyId),
+      where("status", "in", ["actif", "actif_partiel"]),
+    ));
+    for (const d of activeSnap.docs) {
+      const data = d.data();
+      const remaining = Math.round((data.remainingAmount || 0) * 100) / 100;
+      if (remaining <= 0) continue; // déjà épuisé, on ignore
+      mergedAmount += remaining;
+      toMerge.push({ id: d.id, data });
+    }
+  } catch (e) {
+    // En cas d'erreur de lecture (index manquant par ex), on continue
+    // sans fusion : c'est dégradé mais pas bloquant. Le helper reste
+    // fonctionnel comme avant le fix.
+    console.warn("[createAvoir] Lecture avoirs actifs:", e);
+  }
+
+  const finalAmount = Math.round((baseAmount + mergedAmount) * 100) / 100;
+
+  // Construire le doc avoir final (avec audit des fusions le cas échéant)
+  const avoirDoc: any = {
     familyId,
     familyName,
     type: "avoir",
-    amount,
+    amount: finalAmount,
     usedAmount: 0,
-    remainingAmount: amount,
-    reason,
-    reference: ref,
+    remainingAmount: finalAmount,
+    reason, // raison du nouveau (la plus récente) — politique métier
+    reference: newRef,
     sourcePaymentId: sourcePaymentId || "",
     sourceType: sourceType || "desinscription",
     expiryDate: expiry,
@@ -453,24 +495,60 @@ export async function createAvoir(
     usageHistory: [],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  });
+  };
+  if (toMerge.length > 0) {
+    // _audit : audit trail des avoirs fusionnés (pour traçabilité comptable)
+    avoirDoc._audit = {
+      mergedAt: new Date().toISOString(),
+      mergedAmount,
+      newAmount: baseAmount,
+      mergedFrom: toMerge.map(m => ({
+        avoirId: m.id,
+        reference: m.data.reference || "",
+        remaining: m.data.remainingAmount || 0,
+        reason: m.data.reason || "",
+        createdAt: m.data.createdAt?.toDate?.()?.toISOString() || null,
+      })),
+    };
+  }
+
+  const newAvoirRef = await addDoc(collection(db, "avoirs"), avoirDoc);
+
+  // Marquer les anciens avoirs comme fusionnés (status = 'fusionne')
+  // L'historique reste consultable mais ils n'apparaissent plus comme actifs.
+  for (const m of toMerge) {
+    try {
+      await updateDoc(doc(db, "avoirs", m.id), {
+        status: "fusionne",
+        remainingAmount: 0, // ne peut plus être utilisé
+        mergedInto: newAvoirRef.id,
+        mergedIntoRef: newRef,
+        mergedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.warn("[createAvoir] Marquage fusionne:", m.id, e);
+    }
+  }
 
   // Trace dans le journal des encaissements (montant négatif = avoir)
+  // Note : on n'enregistre QUE le baseAmount (la part vraiment nouvelle),
+  // pas le total fusionné. Les anciens avaient déjà été journalisés.
   await addDoc(collection(db, "encaissements"), {
     paymentId: sourcePaymentId || "",
     familyId,
     familyName,
-    montant: -amount,
+    montant: -baseAmount,
     mode: "avoir",
     modeLabel: `Avoir (${sourceType || "désinscription"})`,
-    ref,
+    ref: newRef,
     activityTitle: reason,
     date: serverTimestamp(),
     isAvoir: true,
-    avoirRef: ref,
+    avoirRef: newRef,
   });
 
-  return ref;
+  return newRef;
 }
 
 // ═══ DUPLICATION ═══

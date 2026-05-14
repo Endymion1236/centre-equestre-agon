@@ -267,16 +267,40 @@ export async function POST(req: NextRequest) {
 
         const expiryDate = new Date();
         expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+        const newRef = `AV-${Date.now().toString(36).toUpperCase()}`;
 
-        await adminDb.collection("avoirs").add({
+        // ── Fusion silencieuse avec les avoirs actifs existants ─────────
+        // Cohérent avec createAvoir() côté client : on ne laisse jamais
+        // 2 avoirs actifs sur la même famille pour éviter la dispersion.
+        let mergedAmount = 0;
+        const toMerge: { id: string; data: any }[] = [];
+        try {
+          const activeSnap = await adminDb.collection("avoirs")
+            .where("familyId", "==", familyId)
+            .where("status", "in", ["actif", "actif_partiel"])
+            .get();
+          for (const d of activeSnap.docs) {
+            const data = d.data();
+            const remaining = Math.round((data.remainingAmount || 0) * 100) / 100;
+            if (remaining <= 0) continue;
+            mergedAmount += remaining;
+            toMerge.push({ id: d.id, data });
+          }
+        } catch (e) {
+          console.warn("[unenroll-annual] Lecture avoirs actifs:", e);
+        }
+
+        const finalAmount = Math.round((avoirAmount + mergedAmount) * 100) / 100;
+
+        const avoirDocData: any = {
           familyId,
           familyName,
           type: "avoir",
-          amount: avoirAmount,
+          amount: finalAmount,
           usedAmount: 0,
-          remainingAmount: avoirAmount,
+          remainingAmount: finalAmount,
           reason: `Désinscription annuelle — ${childName} (prorata ${Math.round(prorata * 100)}%)`,
-          reference: `AV-${Date.now().toString(36).toUpperCase()}`,
+          reference: newRef,
           expiryDate: expiryDate.toISOString(),
           status: "actif",
           usageHistory: [],
@@ -287,10 +311,41 @@ export async function POST(req: NextRequest) {
             seancesRetirees,
             prorata,
             details: avoirDetails,
+            // Si fusion : conserver l'origine des montants additionnels
+            ...(toMerge.length > 0 ? {
+              mergedAt: new Date().toISOString(),
+              mergedAmount,
+              newAmount: avoirAmount,
+              mergedFrom: toMerge.map(m => ({
+                avoirId: m.id,
+                reference: m.data.reference || "",
+                remaining: m.data.remainingAmount || 0,
+                reason: m.data.reason || "",
+              })),
+            } : {}),
           },
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-        });
+        };
+
+        const newAvoirRef = await adminDb.collection("avoirs").add(avoirDocData);
+
+        // Marquer les anciens avoirs comme fusionnés
+        for (const m of toMerge) {
+          try {
+            await adminDb.collection("avoirs").doc(m.id).update({
+              status: "fusionne",
+              remainingAmount: 0,
+              mergedInto: newAvoirRef.id,
+              mergedIntoRef: newRef,
+              mergedAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            });
+          } catch (e) {
+            console.warn("[unenroll-annual] Marquage fusionne:", m.id, e);
+          }
+        }
+
         avoirCreated = 1;
       }
     } catch (e) {
