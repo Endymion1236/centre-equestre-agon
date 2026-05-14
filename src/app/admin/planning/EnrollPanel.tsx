@@ -596,16 +596,46 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const prorata = Math.min(1, sessionsTotalSaison > 0 ? sessionsRestantes / sessionsTotalSaison : 0);
   const prixForfaitBrut = Math.round(prixForfaitAnnuel * prorata);
 
-  // Adhésion dégressive : compter enfants déjà inscrits en forfait annuel cette saison
+  // ── Helper : déduire la saison FFE d'une date ──────────────────────
+  // La saison FFE va du 1er septembre Y au 30 juin Y+1.
+  // - mois >= 8 (sept-déc) → saison Y/Y+1, on retourne Y
+  // - mois <= 7 (janv-août) → saison Y-1/Y, on retourne Y-1
+  const seasonOf = (dateStr: string | Date | { seconds: number }): number => {
+    let d: Date;
+    if (typeof dateStr === "string") d = new Date(dateStr);
+    else if (dateStr instanceof Date) d = dateStr;
+    else if (dateStr && (dateStr as any).seconds) d = new Date((dateStr as any).seconds * 1000);
+    else return 0;
+    if (isNaN(d.getTime())) return 0;
+    return d.getMonth() >= 8 ? d.getFullYear() : d.getFullYear() - 1;
+  };
+
+  // Adhésion dégressive : compter enfants déjà inscrits en forfait annuel
+  // POUR LA MÊME SAISON que le créneau qu'on est en train d'inscrire.
+  // Sans ce filtre, le code comptait aussi les forfaits de la saison
+  // précédente — donc un 1er enfant d'une nouvelle saison apparaissait
+  // comme N+1 si la famille avait des forfaits encore actifs de l'an
+  // dernier (non encore passés en 'completed').
+  //
+  // Source de la saison cible : la date du créneau cliqué.
+  // Source de la saison d'un forfait existant : son createdAt à défaut
+  // d'un champ dédié (les anciens forfaits n'avaient pas seasonStartYear).
   const rangEnfantFamille = useMemo(() => {
     if (!fam) return 1;
+    const targetSeason = seasonOf(creneau.date);
     const enfantsInscrits = new Set<string>();
-    // Chercher dans les forfaits actifs de cette famille
-    allForfaits.filter((f: any) => f.familyId === fam.firestoreId).forEach((f: any) => {
-      if (f.childId && f.childId !== selChild) enfantsInscrits.add(f.childId);
-    });
-    return enfantsInscrits.size + 1; // rang = nb déjà inscrits + 1
-  }, [fam, allForfaits, selChild]);
+    allForfaits
+      .filter((f: any) => f.familyId === fam.firestoreId)
+      .forEach((f: any) => {
+        if (!f.childId || f.childId === selChild) return;
+        // Comparaison de saison : on accepte le forfait si sa saison
+        // (champ dédié ou createdAt) correspond à celle du créneau cible.
+        const forfaitSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
+        if (forfaitSeason !== targetSeason) return;
+        enfantsInscrits.add(f.childId);
+      });
+    return enfantsInscrits.size + 1;
+  }, [fam, allForfaits, selChild, creneau.date]);
 
   // Réduction famille sur le forfait (chargée depuis settings/degressivite)
   const [familyDiscountRules, setFamilyDiscountRules] = useState<{ nth: number; discount: number }[]>([]);
@@ -1064,6 +1094,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           totalPaidTTC: 0,
           paymentPlan: payPlan,
           status: "actif",
+          // Saison FFE du forfait (1er sept Y → 30 juin Y+1).
+          // Déduite de la date du créneau cliqué : si mois >= sept,
+          // saison Y/Y+1 → on stocke Y. Sinon (janv-août), Y-1/Y → Y-1.
+          // Permet de filtrer rangEnfantFamille par saison côté admin
+          // pour ne pas confondre forfaits saison passée et saison nouvelle.
+          seasonStartYear: (() => {
+            const d = new Date(creneau.date);
+            return d.getMonth() >= 8 ? d.getFullYear() : d.getFullYear() - 1;
+          })(),
           createdAt: serverTimestamp(),
         });
         // Créer les items pour cet enfant

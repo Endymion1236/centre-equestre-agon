@@ -284,6 +284,10 @@ export default function ForfaitsPage() {
       }
 
       // 2. Create forfait document(s)
+      // Saison FFE de la création : aujourd'hui → si mois >= sept, Y, sinon Y-1.
+      // Sert au filtrage rangEnfantFamille pour ne pas mélanger les saisons.
+      const _now = new Date();
+      const _seasonStartYear = _now.getMonth() >= 8 ? _now.getFullYear() : _now.getFullYear() - 1;
       for (const sp of slotsPrices) {
         await addDoc(collection(db, "forfaits"), {
           familyId: selFamily,
@@ -306,6 +310,7 @@ export default function ForfaitsPage() {
           status: "active",
           frequence,
           creneauIds: sp.slot.creneauIds,
+          seasonStartYear: _seasonStartYear,
           createdAt: serverTimestamp(),
         });
       }
