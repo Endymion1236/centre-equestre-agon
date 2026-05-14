@@ -437,11 +437,26 @@ export default function ForfaitsPage() {
     if (!confirm(`Changer le créneau de ${forfait.childName} ?\n\n❌ Ancien : ${forfait.slotKey}\n✅ Nouveau : ${newSlot.activityTitle} — ${newSlot.dayLabel} ${newSlot.startTime}\n\nLes paiements ne sont PAS modifiés.`)) return;
     setSlotChanging(true);
     try {
-      // 1. Désinscrire de TOUS les créneaux futurs NON-CLÔTURÉS
+      // 1. Désinscrire de tous les créneaux futurs NON-CLÔTURÉS de la SAISON COURANTE
+      // Le forfait couvre la saison FFE en cours (sept→juin). On ne touche pas
+      // aux créneaux d'éventuelles saisons à venir : ce sera une nouvelle
+      // inscription à part avec son propre paiement. Limite : 30/06 de l'année
+      // de fin de saison (calculée plus bas avec seasonEndStr).
       // Les clôturés gardent la trace de présence (séance déjà effectuée,
       // historique pédagogique, statistiques). Cohérent avec unenroll-annual.
       const today = new Date().toISOString().split("T")[0];
-      const futureSnap = await getDocs(query(collection(db, "creneaux"), where("date", ">=", today)));
+      // Calcul de la fin de saison courante (1er sept → 30 juin)
+      const _todayDate = new Date();
+      const _todayMonth = _todayDate.getMonth();
+      const _todayYear = _todayDate.getFullYear();
+      const _seasonEndYear = _todayMonth >= 8 ? _todayYear + 1 : _todayYear;
+      const _seasonEndStr = `${_seasonEndYear}-06-30`;
+
+      const futureSnap = await getDocs(query(
+        collection(db, "creneaux"),
+        where("date", ">=", today),
+        where("date", "<=", _seasonEndStr),
+      ));
       let removed = 0;
       let skippedClosed = 0;
       for (const d of futureSnap.docs) {
@@ -460,7 +475,7 @@ export default function ForfaitsPage() {
           removed++;
         }
       }
-      console.log(`📋 Désinscrit de ${removed} créneaux (${skippedClosed} clôturés préservés)`);
+      console.log(`📋 Désinscrit de ${removed} créneaux (${skippedClosed} clôturés préservés, borne ${_seasonEndStr})`);
 
       // 2. Inscrire dans les nouveaux créneaux (tous les futurs du même jour+heure+activité)
       // Match plus tolérant que l'exact match du titre, pour gérer :
@@ -477,11 +492,36 @@ export default function ForfaitsPage() {
           .trim();
       const newSlotTitleNorm = normalize(newSlot.activityTitle);
 
+      // ── Borne de fin de saison ─────────────────────────────────────
+      // Un transfert mai 2026 ne doit PAS inscrire l'enfant pour la saison
+      // 2026-27 (qui sera une nouvelle inscription avec nouveau paiement).
+      // Saison FFE = 1er sept → 30 juin. Si aujourd'hui ≤ 30 juin, la saison
+      // courante finit le 30 juin de l'année en cours. Sinon, 30 juin Y+1.
+      const todayDate = new Date();
+      const todayMonth = todayDate.getMonth(); // 0-11
+      const todayYear = todayDate.getFullYear();
+      // Si on est entre sept et déc, la saison finit en juin Y+1. Sinon (janv-août), juin Y.
+      const seasonEndYear = todayMonth >= 8 ? todayYear + 1 : todayYear;
+      const seasonEndStr = `${seasonEndYear}-06-30`;
+
       let added = 0;
       let skippedFull = 0;
+      let skippedOffSeason = 0;
       for (const d of futureSnap.docs) {
         const data = d.data();
         if (data.status === "closed") continue; // pas de réinscription sur clôturé
+        // Borne fin de saison : ignorer tout créneau au-delà du 30 juin
+        if (data.date > seasonEndStr) {
+          // On ne compte que ceux qui matchent par ailleurs (sinon le compteur
+          // exploserait avec tous les créneaux de la prochaine saison).
+          const matchAct = (data.activityId && newSlot.activityId && data.activityId === newSlot.activityId)
+            || normalize(data.activityTitle) === newSlotTitleNorm;
+          if (matchAct && data.startTime === newSlot.startTime
+              && new Date(data.date + "T12:00:00").getDay() === newSlot.dayOfWeek) {
+            skippedOffSeason++;
+          }
+          continue;
+        }
         // Match : activityId identique OU titre normalisé identique
         const matchByActivityId = data.activityId && newSlot.activityId && data.activityId === newSlot.activityId;
         const matchByTitle = normalize(data.activityTitle) === newSlotTitleNorm;
@@ -511,7 +551,7 @@ export default function ForfaitsPage() {
           }
         }
       }
-      console.log(`📋 Inscrit dans ${added} nouveaux créneaux${skippedFull > 0 ? ` (${skippedFull} pleins ignorés)` : ""}`);
+      console.log(`📋 Inscrit dans ${added} nouveaux créneaux (borne saison ${seasonEndStr})${skippedFull > 0 ? ` (${skippedFull} pleins ignorés)` : ""}${skippedOffSeason > 0 ? ` (${skippedOffSeason} hors saison ignorés)` : ""}`);
 
       // 3. Mettre à jour le forfait
       const newSlotKey = `${newSlot.activityTitle} — ${newSlot.dayLabel} ${newSlot.startTime}`;
