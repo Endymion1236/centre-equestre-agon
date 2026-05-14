@@ -96,6 +96,38 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [payPlan, setPayPlan] = useState<"1x" | "3x" | "10x">("1x");
   const [annualPayMode, setAnnualPayMode] = useState<string>("cb_terminal");
 
+  // ── Protection contre fermeture involontaire du panel ──────────────
+  // Bug rapporte : un clic mal place sur le fond noir (ou un raccourci
+  // navigateur) fermait le panel et faisait perdre la saisie en cours.
+  // On considere qu'une saisie est "en cours" des qu'une famille est
+  // selectionnee — c'est suffisant pour proteger les cas courants.
+  // hasFormChanges centralise ce check.
+  const hasFormChanges = !!(selFam || selChild);
+
+  // confirmClose : remplace les appels onClose() directs. Si une saisie
+  // est en cours, demande une confirmation native avant fermeture.
+  const confirmClose = () => {
+    if (hasFormChanges && !confirm("Une saisie est en cours. Quitter sans enregistrer ?")) {
+      return;
+    }
+    onClose();
+  };
+
+  // beforeunload : si l'utilisateur ferme l'onglet, recharge la page,
+  // ferme le navigateur ou suit un lien externe pendant qu'une saisie
+  // est en cours, on lui montre l'avertissement natif du navigateur.
+  // (Texte personnalise non supporte par les navigateurs modernes mais
+  // l'evenement bloque la sortie le temps que l'utilisateur confirme.)
+  useEffect(() => {
+    if (!hasFormChanges) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = ""; // requis pour Chrome
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasFormChanges]);
+
   // ── Création famille inline ──
   const [showNewFamily, setShowNewFamily] = useState(false);
   const [newFam, setNewFam] = useState({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
@@ -1540,11 +1572,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   };
 
   return (
-    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={confirmClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex-1 overflow-auto">
         <div className="p-5 border-b border-blue-500/8" style={{ borderLeftWidth: 4, borderLeftColor: color }}>
-          <div className="flex justify-between items-start"><div><div className="font-body text-sm font-semibold" style={{ color }}>{creneau.startTime}–{creneau.endTime}</div><h2 className="font-display text-lg font-bold text-blue-800">{creneau.activityTitle}</h2><div className="font-body text-xs text-slate-500 mt-1">{new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · {creneau.monitor}{displayPrice > 0 ? ` · ${displayPrice.toFixed(2)}€${isStage ? "" : "/séance"}` : ""}</div></div><button onClick={onClose} className="text-slate-500 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button></div>
+          <div className="flex justify-between items-start"><div><div className="font-body text-sm font-semibold" style={{ color }}>{creneau.startTime}–{creneau.endTime}</div><h2 className="font-display text-lg font-bold text-blue-800">{creneau.activityTitle}</h2><div className="font-body text-xs text-slate-500 mt-1">{new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · {creneau.monitor}{displayPrice > 0 ? ` · ${displayPrice.toFixed(2)}€${isStage ? "" : "/séance"}` : ""}</div></div><button onClick={confirmClose} className="text-slate-500 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button></div>
           <div className="flex items-center gap-3 mt-3">
             <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>{spots > 0 ? `${spots} place${spots > 1 ? "s" : ""}` : "COMPLET"}</Badge>
             <span className="font-body text-xs text-slate-500">{enrolled.length}/{creneau.maxPlaces}</span>
