@@ -2374,6 +2374,26 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         })}</div>}
                         {!showPay && !freeEnroll && (
                           <div className="mt-2 ml-6 flex flex-col gap-1.5">
+                            {/* ── Avoir disponible : raccourci d'utilisation ─────
+                                L'avoir n'apparaissait que dans la liste des modes
+                                d'encaissement, donc invisible si l'admin ne cochait
+                                pas "Encaisser maintenant". Or l'avoir EST l'argent
+                                de la famille — il devrait être proposé en évidence
+                                dès qu'il existe. Le clic active automatiquement le
+                                mode encaissement + sélectionne 'avoir', réutilisant
+                                toute la mécanique existante. */}
+                            {(avoirSolde[selFam] || 0) > 0 && !useRattrapage && (
+                              <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                                <div className="font-body text-xs font-semibold text-blue-700">💰 Avoir disponible : {(avoirSolde[selFam] || 0).toFixed(2)}€</div>
+                                <button
+                                  onClick={() => { setShowPay(true); setPayMode("avoir"); setFreeEnroll(false); }}
+                                  className="flex items-center justify-between w-full mt-1.5 px-2 py-1.5 rounded bg-white border border-blue-100 font-body text-[10px] text-blue-700 cursor-pointer hover:bg-blue-50 text-left"
+                                >
+                                  <span>Déduire de l'avoir famille</span>
+                                  <span className="text-blue-500 font-semibold ml-2">Utiliser →</span>
+                                </button>
+                              </div>
+                            )}
                             {childRattrapages.length > 0 && !useRattrapage && (
                               <div className="bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
                                 <div className="font-body text-xs font-semibold text-purple-700">🔄 {childRattrapages.length} rattrapage{childRattrapages.length > 1 ? "s" : ""} disponible{childRattrapages.length > 1 ? "s" : ""}</div>
@@ -2620,6 +2640,19 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     <div className="font-body text-[10px] text-slate-500 mt-1 ml-6">
                       {showPay ? "Le paiement sera enregistré immédiatement." : "Ajouté aux impayés de la famille."}
                     </div>
+                    {/* Raccourci avoir disponible (visible aussi quand encaissement non coché) */}
+                    {!showPay && (avoirSolde[selFam] || 0) > 0 && (
+                      <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                        <div className="font-body text-xs font-semibold text-blue-700">💰 Avoir disponible : {(avoirSolde[selFam] || 0).toFixed(2)}€</div>
+                        <button
+                          onClick={() => { setShowPay(true); setPayMode("avoir"); }}
+                          className="flex items-center justify-between w-full mt-1.5 px-2 py-1.5 rounded bg-white border border-blue-100 font-body text-[10px] text-blue-700 cursor-pointer hover:bg-blue-50 text-left"
+                        >
+                          <span>Déduire de l'avoir famille</span>
+                          <span className="text-blue-500 font-semibold ml-2">Utiliser →</span>
+                        </button>
+                      </div>
+                    )}
                     {showPay && <div className="flex flex-wrap gap-1.5 mt-2">{payModes.map(m=>{
                           const isAvoir = m.id === "avoir";
                           const solde = isAvoir ? (avoirSolde[selFam] || 0) : 0;
