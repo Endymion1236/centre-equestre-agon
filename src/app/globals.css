@@ -66,6 +66,15 @@ input, select, textarea {
   font-size: 14px;
 }
 
+/* Options de select : sur certains navigateurs (Firefox surtout), les
+   <option> n'heritent pas de la couleur du <select> parent quand le
+   menu deroulant est ouvert. Sur fond blanc, ca peut donner texte blanc
+   = invisible. On force explicitement le texte fonce et fond blanc. */
+option {
+  color: #1C2A3E;
+  background: #ffffff;
+}
+
 h1, h2, h3, h4 {
   font-family: var(--font-display);
 }
