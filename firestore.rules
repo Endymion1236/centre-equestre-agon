@@ -260,6 +260,16 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ── Pensions équidés ─────────────────────────────────────────────────
+    // Lecture : staff (besoin pour la cavalerie, le montoir, le planning)
+    //           + famille concernée (consulte ses propres contrats de pension)
+    // Écriture : admin uniquement (la création/modification engage la
+    //            facturation, ne doit pas être déléguée aux familles).
+    match /pensions/{docId} {
+      allow read: if isStaff() || (isAuth() && resource.data.familyId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
     // ── Activités (catalogue) ─────────────────────────────────────────────
     match /activities/{docId} {
       allow read: if isAuth();

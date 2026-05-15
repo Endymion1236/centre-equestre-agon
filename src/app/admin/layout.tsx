@@ -42,6 +42,7 @@ import {
   ChevronDown,
   Search,
   BookMarked,
+  Home,
 } from "lucide-react";
 
 const navItems = [
@@ -52,6 +53,7 @@ const navItems = [
   { href: "/admin/montoir", icon: ClipboardList, label: "Montoir" },
   { href: "/admin/competitions", icon: Ticket, label: "Compétitions" },
   { href: "/admin/cavalerie", icon: Heart, label: "Cavalerie" },
+  { href: "/admin/pensions", icon: Home, label: "Pensions" },
   { href: "/admin/pedagogie", icon: GraduationCap, label: "Suivi péda." },
   { href: "/admin/management", icon: ClipboardList, label: "Management" },
   // ─── Commercial ───
