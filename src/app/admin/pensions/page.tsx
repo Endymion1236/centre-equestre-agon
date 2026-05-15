@@ -90,9 +90,17 @@ export default function PensionsPage() {
       const ps = pSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as Pension[];
       const fs = fSnap.docs.map(d => ({ firestoreId: d.id, ...(d.data() as any) })) as Family[];
       const es = eSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as Equide[];
+      console.log("[Pensions] Charge :", { pensions: ps.length, families: fs.length, equides: es.length });
       setPensions(ps.sort((a, b) => (a.familyName || "").localeCompare(b.familyName || "")));
       setFamilies(fs.sort((a: any, b: any) => (a.parentName || "").localeCompare(b.parentName || "")));
-      setEquides(es.filter(e => e.statut !== "sortie").sort((a, b) => (a.nom || "").localeCompare(b.nom || "")));
+      // Filtre : exclure les statuts qui empêchent une pension (sorti, décédé)
+      // mais accepter tous les autres y compris 'actif', 'en_formation',
+      // 'indisponible', 'retraite' (cas potentiel d'un retraité chez la famille).
+      // Si le champ statut est absent (vieux équidés), on accepte aussi.
+      setEquides(es
+        .filter(e => !e.statut || (e.statut !== "sorti" && e.statut !== "deces"))
+        .sort((a, b) => (a.nom || "").localeCompare(b.nom || ""))
+      );
     } catch (e) {
       console.error("Chargement pensions:", e);
       showToast("Erreur de chargement", "error");
