@@ -456,10 +456,11 @@ function PensionModal({ pension, families, equides, onClose, onSaved }: {
             <label className="block font-body text-xs font-semibold text-slate-700 mb-1">Famille propriétaire</label>
             <select value={familyId} onChange={e => { setFamilyId(e.target.value); setEquideId(""); }}
               disabled={isEdit}
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white disabled:bg-gray-50">
-              <option value="">— Choisir —</option>
+              style={{ color: "#1C2A3E", backgroundColor: "#ffffff" }}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm disabled:bg-gray-50">
+              <option value="" style={{ color: "#1C2A3E", backgroundColor: "#ffffff" }}>— Choisir —</option>
               {families.map((f: any) => (
-                <option key={f.firestoreId} value={f.firestoreId}>{f.parentName || f.name}</option>
+                <option key={f.firestoreId} value={f.firestoreId} style={{ color: "#1C2A3E", backgroundColor: "#ffffff" }}>{f.parentName || f.name}</option>
               ))}
             </select>
           </div>
@@ -469,13 +470,16 @@ function PensionModal({ pension, families, equides, onClose, onSaved }: {
             <label className="block font-body text-xs font-semibold text-slate-700 mb-1">Équidé en pension</label>
             <select value={equideId} onChange={e => setEquideId(e.target.value)}
               disabled={isEdit || !familyId}
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white disabled:bg-gray-50">
-              <option value="">— Choisir —</option>
+              style={{ color: "#1C2A3E", backgroundColor: "#ffffff" }}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm disabled:bg-gray-50">
+              <option value="" style={{ color: "#1C2A3E", backgroundColor: "#ffffff" }}>— Choisir —</option>
               {equidesDisponibles.map(e => (
-                <option key={e.id} value={e.id}>{e.nom}{e.familyId && e.familyId !== familyId ? " (autre famille)" : ""}</option>
+                <option key={e.id} value={e.id} style={{ color: "#1C2A3E", backgroundColor: "#ffffff" }}>
+                  {e.nom}{e.familyId && e.familyId !== familyId ? " (autre famille)" : ""}
+                </option>
               ))}
             </select>
-            <p className="font-body text-[10px] text-slate-500 mt-1">L'équidé sera lié à cette famille dans la cavalerie.</p>
+            <p className="font-body text-[10px] text-slate-500 mt-1">L'équidé sera lié à cette famille dans la cavalerie. ({equidesDisponibles.length} disponibles)</p>
           </div>
 
           {/* Formule et tarif */}
