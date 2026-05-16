@@ -34,6 +34,11 @@ export function TabEcheances({ loading, payments, toast, setPayments, refreshAll
   const [encaissementDates, setEncaissementDates] = useState<Record<string, string>>({});
   // Set<echeanceId> : ids des échéances dont l'éditeur de date est ouvert
   const [editingDate, setEditingDate] = useState<Set<string>>(new Set());
+  // ID de l'echeance en cours d'encaissement (anti double-clic). On stocke
+  // l'ID plutot qu'un booleen pour que l'admin puisse encaisser plusieurs
+  // echeances en parallele dans la liste sans qu'un click sur l'une bloque
+  // les autres.
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
 
   // ─── Filtrage et regroupement (memoizé pour ne pas recalculer à chaque render) ──
   const { groupesList, statsRecap, hasOverdue } = useMemo(() => {
@@ -414,26 +419,41 @@ export function TabEcheances({ loading, payments, toast, setPayments, refreshAll
                                 { id: "cheque", label: "Chq", color: "bg-orange-500" },
                                 { id: "especes", label: "Esp", color: "bg-green-600" },
                                 { id: "virement", label: "Vir", color: "bg-purple-500" },
-                              ].map(m => (
-                                <button key={m.id} onClick={async () => {
-                                  // Date utilisée pour l'encaissement :
-                                  //   - celle saisie par l'utilisateur si présente,
-                                  //   - sinon la date par défaut (échéance ou aujourd'hui)
-                                  const encDate = encaissementDates[e.id] || computeDefaultDate(e.echeanceDate);
-                                  await enregistrerEncaissement(e.id, e, e.totalTTC || 0, m.id, "",
-                                    (e as any).forfaitRef || (first as any).forfaitRef || (e.items || []).map((i: any) => i.activityTitle).join(", "),
-                                    encDate);
-                                  await refreshAll();
-                                  const dateLabel = new Date(encDate + "T12:00:00").toLocaleDateString("fr-FR");
-                                  toast(`${(e.totalTTC || 0).toFixed(2)}€ encaissé (${m.label}) le ${dateLabel}`, "success");
-                                  // Nettoyer la date custom après encaissement
-                                  setEncaissementDates(prev => { const c = { ...prev }; delete c[e.id]; return c; });
-                                  setEditingDate(prev => { const n = new Set(prev); n.delete(e.id); return n; });
+                              ].map(m => {
+                                // Protection anti double-clic : si cette echeance est en cours
+                                // d'encaissement (submittingId === e.id), on bloque tous ses
+                                // boutons. Sans ca, 3 clics rapides creent 3 encaissements
+                                // distincts (bug rapporte par Nicolas : 148.50 encaisse 3x).
+                                const isSubmitting = submittingId === e.id;
+                                return (
+                                <button key={m.id}
+                                  disabled={isSubmitting}
+                                  onClick={async () => {
+                                  if (submittingId === e.id) return; // double protection
+                                  setSubmittingId(e.id);
+                                  try {
+                                    // Date utilisée pour l'encaissement :
+                                    //   - celle saisie par l'utilisateur si présente,
+                                    //   - sinon la date par défaut (échéance ou aujourd'hui)
+                                    const encDate = encaissementDates[e.id] || computeDefaultDate(e.echeanceDate);
+                                    await enregistrerEncaissement(e.id, e, e.totalTTC || 0, m.id, "",
+                                      (e as any).forfaitRef || (first as any).forfaitRef || (e.items || []).map((i: any) => i.activityTitle).join(", "),
+                                      encDate);
+                                    await refreshAll();
+                                    const dateLabel = new Date(encDate + "T12:00:00").toLocaleDateString("fr-FR");
+                                    toast(`${(e.totalTTC || 0).toFixed(2)}€ encaissé (${m.label}) le ${dateLabel}`, "success");
+                                    // Nettoyer la date custom après encaissement
+                                    setEncaissementDates(prev => { const c = { ...prev }; delete c[e.id]; return c; });
+                                    setEditingDate(prev => { const n = new Set(prev); n.delete(e.id); return n; });
+                                  } finally {
+                                    setSubmittingId(null);
+                                  }
                                 }}
-                                  className={`font-body text-[9px] font-semibold text-white ${m.color} px-2 py-1 rounded border-none cursor-pointer`}>
-                                  {m.label}
+                                  className={`font-body text-[9px] font-semibold text-white ${m.color} px-2 py-1 rounded border-none cursor-pointer disabled:opacity-50 disabled:cursor-wait`}>
+                                  {isSubmitting ? "…" : m.label}
                                 </button>
-                              ))}
+                                );
+                              })}
                             </div>
                             {/* Ligne 'date d'encaissement' : éditable au clic */}
                             <div className="flex items-center gap-1.5 text-[9px]">
