@@ -246,12 +246,30 @@ export async function computeStageReductionsAsync(params: {
       for (const r of msRule) if (r.nth <= nthMultiStage) pctMulti = r.discount;
     }
     const totalPct = Math.min(pctFamille + pctMulti, 50);
-    const discountAmount = Math.round((prixBase * totalPct) / 100 * 100) / 100;
-    const prixReduit = Math.max(0, Math.round((prixBase - discountAmount) * 100) / 100);
+    const rawDiscount = Math.round((prixBase * totalPct) / 100 * 100) / 100;
+    let prixReduit = Math.max(0, Math.round((prixBase - rawDiscount) * 100) / 100);
+
+    // Appliquer le prix plancher (config admin) — meme logique que dans
+    // lib/discounts.ts > applyDiscounts. Si le prix calcule est sous le
+    // plancher, on remonte au plancher.
+    const plancher = (settings as any).prixPlancherStage || 0;
+    let plancherApplied = false;
+    if (plancher > 0 && prixReduit < plancher) {
+      prixReduit = Math.round(plancher * 100) / 100;
+      plancherApplied = true;
+    }
+
+    // Recalcul de la remise effective apres plancher (peut etre inferieure
+    // au rawDiscount si le plancher a remonte le prix).
+    const discountAmount = Math.round((prixBase - prixReduit) * 100) / 100;
+    const effectivePct = prixBase > 0
+      ? Math.round((discountAmount / prixBase) * 10000) / 100
+      : 0;
 
     const reasons: string[] = [];
     if (pctFamille > 0) reasons.push(`${nthFamille}ème enfant famille (-${pctFamille}%)`);
     if (pctMulti > 0) reasons.push(`${nthMultiStage}ème stage (-${pctMulti}%)`);
+    if (plancherApplied) reasons.push(`(plafond au prix plancher ${plancher}€)`);
 
     results.push({
       childId,
@@ -260,7 +278,7 @@ export async function computeStageReductionsAsync(params: {
       remiseEuros: discountAmount,
       rang: nthFamille || 1,
       prixReduit,
-      discountPercent: totalPct,
+      discountPercent: effectivePct,
       discountReasons: reasons,
       originalPriceTTC: prixBase,
     });
