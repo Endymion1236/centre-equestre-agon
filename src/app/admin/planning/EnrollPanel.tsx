@@ -67,10 +67,13 @@ import { Creneau, EnrolledChild, payModes, typeColors, fmtDate, itemMatchesCrene
 import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/lib/auth-context";
 
-function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allForfaits, onClose, onEnroll, onUnenroll }: {
+function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allForfaits, onClose, onEnroll, onUnenroll, onRefresh }: {
   creneau: Creneau & { id: string }; families: (Family & { firestoreId: string })[]; allCreneaux: (Creneau & { id: string })[]; payments: any[]; allCartes: any[]; allForfaits: any[];  onClose: () => void;
-  onEnroll: (id: string, c: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean; freeReason?: string; rattrapageId?: string }) => Promise<void>;
+  onEnroll: (id: string, c: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean; freeReason?: string; rattrapageId?: string; skipRefresh?: boolean }) => Promise<void>;
   onUnenroll: (id: string, childId: string) => Promise<void>;
+  // Optionnel : si fourni, appele apres une boucle d'inscriptions (annuel)
+  // pour rafraichir creneaux + forfaits une seule fois au lieu de N fois.
+  onRefresh?: () => Promise<void>;
 }) {
   const { toast: panelToast } = useToast();
   const { isAdmin, isMoniteur, user } = useAuth();
@@ -1307,7 +1310,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         // Marqueur paymentSource:"forfait" → l'enrolled est reconnu comme
         // couvert sur TOUS les créneaux de la saison (pas seulement le 1er),
         // ce qui évite l'apparence "gris/impayé" sur les autres mercredis.
-        await onEnroll(slot.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString(), paymentSource: "forfait" }, undefined, { skipPayment: true, skipEmail: true });
+        // skipRefresh:true → un refresh global a la fin de la boucle, sinon
+        // 114 refreshs successifs prennent plusieurs minutes.
+        await onEnroll(slot.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString(), paymentSource: "forfait" }, undefined, { skipPayment: true, skipEmail: true, skipRefresh: true });
       }
 
       // Inscrire dans les créneaux supplémentaires (2ème, 3ème)
@@ -1342,9 +1347,13 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         for (const slot of extraCreneaux) {
           // Idem : marqueur paymentSource:"forfait" pour les créneaux
           // supplémentaires d'un forfait 2x ou 3x par semaine.
-          await onEnroll(slot.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString(), paymentSource: "forfait" }, undefined, { skipPayment: true, skipEmail: true });
+          // skipRefresh:true comme pour la boucle principale.
+          await onEnroll(slot.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString(), paymentSource: "forfait" }, undefined, { skipPayment: true, skipEmail: true, skipRefresh: true });
         }
       }
+      // Refresh global une seule fois apres tous les onEnroll
+      // (qui ont tous skipRefresh:true). Sans ca, l'UI ne se met pas a jour.
+      try { await onRefresh?.(); } catch (e) { console.warn("Refresh post-annual:", e); }
     } else {
       // ── Mode Compétition : items engagement + coaching libres ──
       if (isCompetition) {

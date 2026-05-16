@@ -472,7 +472,7 @@ export default function PlanningPage() {
   };
   const refreshCreneaux = async () => { const s=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[0]); const e=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[6]); const snap=await getDocs(query(collection(db,"creneaux"),where("date",">=",s),where("date","<=",e))); const fresh=snap.docs.map(d=>({id:d.id,...d.data()})) as (Creneau&{id:string})[]; setCreneaux(fresh); return fresh; };
 
-  const handleEnroll = async (cid: string, child: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean; freeReason?: string; rattrapageId?: string; competitionItems?: any[] }) => {
+  const handleEnroll = async (cid: string, child: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean; freeReason?: string; rattrapageId?: string; competitionItems?: any[]; skipRefresh?: boolean }) => {
     const enrolled = await enrollChildInCreneau(cid, child);
     if (!enrolled) return;
 
@@ -884,12 +884,19 @@ export default function PlanningPage() {
       } catch (e) { console.error("Email confirmation cours:", e); }
       }
     }
-    const fresh = await refreshCreneaux(); const upd = fresh.find(x => x.id === cid); if (upd) setSelectedCreneau(upd);
-    // Recharger allForfaits pour que rangEnfantFamille soit correct pour le prochain enfant
-    try {
-      const forfaitsSnap = await getDocs(query(collection(db, "forfaits"), where("status", "==", "actif")));
-      setAllForfaits(forfaitsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch(e) { console.error("Erreur refresh forfaits:", e); }
+    // ── Refresh des donnees apres inscription ─────────────────────────
+    // Skip si demande (boucle d'inscription annuelle ou batch) : le refresh
+    // sera fait une seule fois a la fin. Sinon, chaque iteration retelecharge
+    // tous les creneaux + tous les forfaits = ~2-3s d'attente par appel, qui
+    // se cumulent (114 seances * 3s = ~6 minutes pour une saison 3x/sem).
+    if (!options?.skipRefresh) {
+      const fresh = await refreshCreneaux(); const upd = fresh.find(x => x.id === cid); if (upd) setSelectedCreneau(upd);
+      // Recharger allForfaits pour que rangEnfantFamille soit correct pour le prochain enfant
+      try {
+        const forfaitsSnap = await getDocs(query(collection(db, "forfaits"), where("status", "==", "actif")));
+        setAllForfaits(forfaitsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch(e) { console.error("Erreur refresh forfaits:", e); }
+    }
     } catch (error) {
       console.error("Erreur handleEnroll, rollback:", error);
       try {
@@ -1680,7 +1687,7 @@ export default function PlanningPage() {
         />
       )}
 
-      {selectedCreneau&&<EnrollPanel creneau={selectedCreneau as any} families={families} allCreneaux={creneaux} payments={payments} allCartes={allCartes} allForfaits={allForfaits} onClose={()=>{setSelectedCreneau(null);fetchData();}} onEnroll={handleEnroll} onUnenroll={handleUnenroll}/>}
+      {selectedCreneau&&<EnrollPanel creneau={selectedCreneau as any} families={families} allCreneaux={creneaux} payments={payments} allCartes={allCartes} allForfaits={allForfaits} onClose={()=>{setSelectedCreneau(null);fetchData();}} onEnroll={handleEnroll} onUnenroll={handleUnenroll} onRefresh={async ()=>{await refreshCreneaux(); try { const fs = await getDocs(query(collection(db, "forfaits"), where("status", "==", "actif"))); setAllForfaits(fs.docs.map(d => ({ id: d.id, ...d.data() }))); } catch(e){} }}/>}
 
       {/* ── Modal suppression créneau ── */}
       {deleteCreneau && (
