@@ -200,6 +200,9 @@ export default function ParametresPage() {
     { nth: 3, discount: 10 },
     { nth: 4, discount: 15 },
   ]);
+  // Prix plancher par stage (configurable admin). 0 = pas de plancher.
+  // Voir lib/discounts.ts > applyDiscounts pour l'application.
+  const [prixPlancherStage, setPrixPlancherStage] = useState<number>(0);
   const [cancellation, setCancellation] = useState({ hours: 72, retention: 50 });
 
   // ═══ Vacances scolaires ═══
@@ -269,6 +272,7 @@ export default function ParametresPage() {
         if (data.multiStage) setMultiStage(data.multiStage);
         if (data.familyDiscount) setFamilyDiscount(data.familyDiscount);
         if (data.cancellation) setCancellation(data.cancellation);
+        if (typeof data.prixPlancherStage === "number") setPrixPlancherStage(data.prixPlancherStage);
       }
     }).catch(console.error);
   }, []);
@@ -385,6 +389,7 @@ export default function ParametresPage() {
         multiStage,
         familyDiscount,
         cancellation,
+        prixPlancherStage,
         updatedAt: new Date(),
       });
       setSaved(true);
@@ -756,9 +761,28 @@ export default function ParametresPage() {
             </div>
           </Card>
 
+          <Card padding="md">
+            <h3 className="font-body text-base font-semibold text-blue-800 mb-1">Prix plancher par stage</h3>
+            <p className="font-body text-xs text-slate-500 mb-4">
+              Garde-fou : même si les réductions cumulées (famille + multi-stages) dépassent ce seuil,
+              le prix d'un stage ne descendra jamais sous ce montant. Utile car un stage de plusieurs jours
+              compte aujourd'hui comme plusieurs réservations, ce qui peut gonfler le rang multi-stages.
+              <strong> Mettre 0 pour désactiver le plancher.</strong>
+            </p>
+            <div className="flex items-center gap-4">
+              <span className="font-body text-sm text-gray-500 flex-1">Prix minimum par stage</span>
+              <div className="flex items-center gap-2">
+                <input type="number" min={0} step={1} value={prixPlancherStage}
+                  onChange={e => setPrixPlancherStage(parseFloat(e.target.value) || 0)}
+                  className={`${inputCls} w-24`} />
+                <span className="font-body text-sm text-gray-400">€</span>
+              </div>
+            </div>
+          </Card>
+
           <Card padding="sm" className="bg-blue-50 border-blue-500/8">
             <div className="font-body text-sm text-blue-800">
-              💡 <strong>Cumul possible :</strong> un 2ème enfant à son 3ème stage bénéficie de -{familyDiscount[0]?.discount || 0}% (famille) + -{multiStage[1]?.discount || 0}% ({multiStage[1]?.nth || 3}ème stage) = -{(familyDiscount[0]?.discount || 0) + (multiStage[1]?.discount || 0)}%.
+              💡 <strong>Cumul possible :</strong> un 2ème enfant à son 3ème stage bénéficie de -{familyDiscount[0]?.discount || 0}% (famille) + -{multiStage[1]?.discount || 0}% ({multiStage[1]?.nth || 3}ème stage) = -{(familyDiscount[0]?.discount || 0) + (multiStage[1]?.discount || 0)}%.{prixPlancherStage > 0 && <> Plafond au prix plancher : <strong>{prixPlancherStage}€</strong>.</>}
             </div>
           </Card>
 

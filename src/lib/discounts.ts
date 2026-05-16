@@ -56,6 +56,12 @@ export interface DiscountRule {
 export interface DiscountSettings {
   familyDiscount: DiscountRule[]; // ex: [{ nth: 2, discount: 20 }, { nth: 3, discount: 30 }]
   multiStageDiscount: DiscountRule[]; // ex: [{ nth: 2, discount: 10 }, { nth: 3, discount: 15 }]
+  // Prix plancher par stage : meme si les pourcentages cumules donnent un
+  // tarif inferieur, on ne descend jamais en-dessous. 0 = pas de plancher.
+  // Utile pour borner les reductions sans modifier toute la logique de calcul,
+  // notamment quand un stage de 5 jours compte comme 5 reservations donc
+  // gonfle le nth multi-stages artificiellement.
+  prixPlancherStage?: number;
 }
 
 export interface StageInscription {
@@ -353,8 +359,25 @@ export async function applyDiscounts(params: {
   // Plafond de sécurité à 50% pour éviter les dérives
   const cappedPercent = Math.min(totalPercent, 50);
 
-  const discountAmount = Math.round(originalPriceTTC * cappedPercent) / 100;
-  const finalPriceTTC = Math.round((originalPriceTTC - discountAmount) * 100) / 100;
+  const rawDiscount = Math.round(originalPriceTTC * cappedPercent) / 100;
+  let finalPriceTTC = Math.round((originalPriceTTC - rawDiscount) * 100) / 100;
+
+  // Prix plancher (config admin) : meme si tous les barèmes cumulent fort,
+  // le prix final ne peut pas descendre sous ce seuil. Utile pour borner
+  // les cas multi-jours (1 stage 5j compte comme 5 reservations donc nth
+  // multi-stages monte vite). 0 ou undefined = pas de plancher applique.
+  const plancher = params.settings.prixPlancherStage || 0;
+  let plancherApplied = false;
+  if (plancher > 0 && finalPriceTTC < plancher) {
+    finalPriceTTC = Math.round(plancher * 100) / 100;
+    plancherApplied = true;
+  }
+
+  // Recalcul du discountAmount/Percent reel apres plancher
+  const discountAmount = Math.round((originalPriceTTC - finalPriceTTC) * 100) / 100;
+  const effectivePercent = originalPriceTTC > 0
+    ? Math.round((discountAmount / originalPriceTTC) * 10000) / 100
+    : 0;
 
   const reasons: string[] = [];
   if (family.percent > 0) {
@@ -366,12 +389,15 @@ export async function applyDiscounts(params: {
   if (cappedPercent < totalPercent) {
     reasons.push(`(plafonné à 50%)`);
   }
+  if (plancherApplied) {
+    reasons.push(`(plafond au prix plancher ${plancher}€)`);
+  }
 
   return {
     originalPriceTTC,
     finalPriceTTC,
-    discountPercent: cappedPercent,
-    discountAmount: Math.round(discountAmount * 100) / 100,
+    discountPercent: effectivePercent,
+    discountAmount,
     reasons,
   };
 }
@@ -462,6 +488,8 @@ export async function fetchDiscountSettings(): Promise<DiscountSettings> {
       multiStageDiscount: Array.isArray(data.multiStage) && data.multiStage.length > 0
         ? data.multiStage
         : defaults.multiStageDiscount,
+      // Prix plancher : 0 ou undefined = pas de plancher applique
+      prixPlancherStage: typeof data.prixPlancherStage === "number" ? data.prixPlancherStage : 0,
     };
   } catch (e) {
     console.error("[discounts] fetchDiscountSettings failed, using defaults:", e);
