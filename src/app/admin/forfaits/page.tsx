@@ -562,8 +562,41 @@ export default function ForfaitsPage() {
         if (candidatesMatched === 0) details.push(`Aucun créneau ${slot.dayLabel} ${slot.startTime} trouvé sur la saison du forfait.`);
         if (skippedNotEnrolled > 0) details.push(`${skippedNotEnrolled} créneaux trouvés mais ${f.childName} n'y est pas inscrit(e).`);
         if (skippedTitleMismatch > 0) details.push(`${skippedTitleMismatch} créneaux trouvés mais avec un autre titre (voir console).`);
-        if (skippedClosed > 0) details.push(`${skippedClosed} séances clôturées (préservées).`);
-        alert(`⚠️ Aucune séance retirée.\n\n${details.join("\n")}`);
+        if (skippedClosed > 0) {
+          details.push(`${skippedClosed} séance(s) où ${f.childName} est inscrit(e) mais clôturée(s) (préservées par défaut).`);
+        }
+        // Si le SEUL cas qui restait est "clôturé" : proposer de forcer
+        if (skippedClosed > 0 && skippedNotEnrolled === 0 || (skippedClosed > 0 && removed === 0)) {
+          const force = confirm(
+            `⚠️ Aucune séance retirée.\n\n${details.join("\n")}\n\n` +
+            `Forcer le retrait des ${skippedClosed} séance(s) clôturée(s) ?\n` +
+            `Attention : ces séances ne devraient normalement pas être clôturées dans le futur. ` +
+            `Forcer leur retrait peut être une bonne idée si c'est un résidu de test.`
+          );
+          if (force) {
+            let forcedRemoved = 0;
+            for (const c of creneaux) {
+              const cAny = c as any;
+              if (cAny.date < today || cAny.date > seasonEnd) continue;
+              if (cAny.status !== "closed") continue;
+              const dow = new Date(cAny.date + "T12:00:00").getDay();
+              if (dow !== slotDow) continue;
+              if (cAny.startTime !== slot.startTime) continue;
+              if (normalize(cAny.activityTitle) !== slotTitleNorm) continue;
+              const enrolled = cAny.enrolled || [];
+              if (!enrolled.some((e: any) => e.childId === f.childId)) continue;
+              const newEnrolled = enrolled.filter((e: any) => e.childId !== f.childId);
+              await updateDoc(doc(db, "creneaux", cAny.id), { enrolled: newEnrolled, enrolledCount: newEnrolled.length });
+              forcedRemoved++;
+            }
+            alert(`✅ ${forcedRemoved} séance(s) clôturée(s) forcée(s) en retrait.`);
+            await fetchData();
+            setSlotChanging(false);
+            return;
+          }
+        } else {
+          alert(`⚠️ Aucune séance retirée.\n\n${details.join("\n")}`);
+        }
       } else {
         alert(`✅ ${f.childName} retiré(e) de ${removed} séance(s) sur ${slot.dayLabel} ${slot.startTime}`);
       }
