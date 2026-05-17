@@ -2067,17 +2067,50 @@ export default function PaiementsPage() {
                       let avoirMsg = "";
                       if (overpayment > 0) {
                         try {
+                          // Reference + expiration cohérentes avec les autres créations d'avoir
+                          // (voir lignes 679-695 dans le même fichier pour le format de référence)
+                          const avoirRef_str = `AV-${Date.now().toString(36).toUpperCase()}`;
+                          const avoirExpiry = new Date();
+                          avoirExpiry.setFullYear(avoirExpiry.getFullYear() + 1);
+
                           const avoirRef = await addDoc(collection(db, "avoirs"), {
                             familyId: editPayment.familyId,
                             familyName: editPayment.familyName,
+                            type: "avoir",
                             amount: overpayment,
+                            usedAmount: 0,
                             remainingAmount: overpayment,
                             reason: `Trop-perçu suite modification commande ${editPayment.orderId || editPayment.id.slice(-6)} (total ${(editPayment.totalTTC || 0).toFixed(2)}€ → ${newTotal.toFixed(2)}€)`,
+                            reference: avoirRef_str,
                             sourcePaymentId: editPayment.id,
-                            status: "active",
+                            sourceType: "trop_percu",
+                            expiryDate: avoirExpiry,
+                            status: "actif", // IMPORTANT: 'actif' (fr) et non 'active' (en) — la page Avoirs filtre sur 'actif'
+                            usageHistory: [],
                             createdAt: serverTimestamp(),
+                            updatedAt: serverTimestamp(),
                           });
-                          avoirMsg = ` — Avoir de ${overpayment.toFixed(2)}€ créé (réf. ${avoirRef.id.slice(-6)})`;
+                          avoirMsg = ` — Avoir de ${overpayment.toFixed(2)}€ créé (réf. ${avoirRef_str})`;
+
+                          // Trace dans le journal des encaissements (montant négatif = avoir)
+                          // Cohérent avec annulerCommande (ligne 698) : permet à l'avoir
+                          // d'apparaître dans le Journal et de tracer le trop-perçu.
+                          try {
+                            await createEncaissement({
+                              paymentId: editPayment.id,
+                              familyId: editPayment.familyId,
+                              familyName: editPayment.familyName,
+                              montant: -overpayment,
+                              mode: "avoir",
+                              modeLabel: "Avoir (trop-perçu suite modification)",
+                              ref: avoirRef_str,
+                              activityTitle: (editItems || []).map((i: any) => i.activityTitle).join(", "),
+                              isAvoir: true,
+                              avoirRef: avoirRef_str,
+                            });
+                          } catch (encErr) {
+                            console.error("[paiements] échec trace encaissement avoir:", encErr);
+                          }
                         } catch (avoirErr) {
                           console.error("[paiements] échec création avoir trop-perçu:", avoirErr);
                           toast(`⚠️ Commande modifiée mais avoir non créé — à faire manuellement (${overpayment.toFixed(2)}€)`, "warning");
