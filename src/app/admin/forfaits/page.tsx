@@ -438,6 +438,93 @@ export default function ForfaitsPage() {
     setUnenrolling(null);
   };
 
+  // ── Helper : derive les "slots hebdo" reels d'un forfait depuis Firestore ──
+  // Un forfait stocke seulement son cr\u00e9neau principal (slotKey). Si l'enfant
+  // est inscrit en 2x ou 3x par semaine, les autres cr\u00e9neaux ne sont pas
+  // visibles dans le doc forfait — ils sont identifiables par enrolled[].
+  // paymentSource === 'forfait' sur les cr\u00e9neaux futurs de la saison.
+  // Cette fonction agr\u00e8ge les inscriptions et regroupe par slot hebdo unique.
+  const detectActualSlots = (f: Forfait): { key: string; dayLabel: string; startTime: string; endTime: string; activityTitle: string; count: number; isPrincipal: boolean }[] => {
+    const today = new Date().toISOString().split("T")[0];
+    // Saison du forfait : on prend seasonStartYear si pr\u00e9sent, sinon fallback createdAt
+    let seasonEnd = "";
+    if ((f as any).seasonStartYear) {
+      seasonEnd = `${(f as any).seasonStartYear + 1}-06-30`;
+    } else {
+      // Fallback : juin de l'annee en cours ou suivante selon le mois
+      const now = new Date();
+      seasonEnd = `${now.getMonth() >= 8 ? now.getFullYear() + 1 : now.getFullYear()}-06-30`;
+    }
+
+    const slotMap = new Map<string, { key: string; dayLabel: string; startTime: string; endTime: string; activityTitle: string; count: number; isPrincipal: boolean }>();
+    const dayNames = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+
+    for (const c of creneaux) {
+      const cAny = c as any;
+      if (cAny.date < today || cAny.date > seasonEnd) continue;
+      const enrolled = cAny.enrolled || [];
+      const isEnrolled = enrolled.some((e: any) =>
+        e.childId === f.childId && e.paymentSource === "forfait"
+      );
+      if (!isEnrolled) continue;
+
+      const dow = new Date(cAny.date + "T12:00:00").getDay();
+      const dayLabel = dayNames[dow];
+      const key = `${dow}-${cAny.startTime}-${cAny.activityTitle}`;
+      const isPrincipal = f.startTime === cAny.startTime && f.activityTitle === cAny.activityTitle;
+      const existing = slotMap.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        slotMap.set(key, { key, dayLabel, startTime: cAny.startTime, endTime: cAny.endTime, activityTitle: cAny.activityTitle, count: 1, isPrincipal });
+      }
+    }
+    // Tri par jour de semaine
+    return Array.from(slotMap.values()).sort((a, b) => {
+      const dayA = dayNames.indexOf(a.dayLabel);
+      const dayB = dayNames.indexOf(b.dayLabel);
+      if (dayA !== dayB) return dayA - dayB;
+      return a.startTime.localeCompare(b.startTime);
+    });
+  };
+
+  // Retirer UN seul cr\u00e9neau hebdo (les futurs cours du m\u00eame jour+heure+activit\u00e9
+  // jusqu'a la fin de saison), sans toucher au forfait ni au paiement.
+  const handleRemoveSlot = async (f: Forfait, slot: { key: string; dayLabel: string; startTime: string; activityTitle: string }) => {
+    if (!confirm(`Retirer ${f.childName} du cr\u00e9neau ${slot.dayLabel} ${slot.startTime} (${slot.activityTitle}) ?\n\nLes autres cr\u00e9neaux du forfait restent inchang\u00e9s.\nAucun avoir n'est cr\u00e9\u00e9 (suppression simple).`)) return;
+    setSlotChanging(true);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const seasonEnd = (f as any).seasonStartYear
+        ? `${(f as any).seasonStartYear + 1}-06-30`
+        : `${new Date().getMonth() >= 8 ? new Date().getFullYear() + 1 : new Date().getFullYear()}-06-30`;
+      const dayNames = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+      const slotDow = dayNames.indexOf(slot.dayLabel);
+
+      let removed = 0;
+      for (const c of creneaux) {
+        const cAny = c as any;
+        if (cAny.date < today || cAny.date > seasonEnd) continue;
+        if (cAny.status === "closed") continue;
+        const dow = new Date(cAny.date + "T12:00:00").getDay();
+        if (dow !== slotDow) continue;
+        if (cAny.startTime !== slot.startTime) continue;
+        if (cAny.activityTitle !== slot.activityTitle) continue;
+        const enrolled = cAny.enrolled || [];
+        if (!enrolled.some((e: any) => e.childId === f.childId)) continue;
+        const newEnrolled = enrolled.filter((e: any) => e.childId !== f.childId);
+        await updateDoc(doc(db, "creneaux", cAny.id), { enrolled: newEnrolled, enrolledCount: newEnrolled.length });
+        removed++;
+      }
+      alert(`\u2705 ${f.childName} retir\u00e9(e) de ${removed} s\u00e9ance(s) sur ${slot.dayLabel} ${slot.startTime}`);
+      await fetchData();
+    } catch (e: any) {
+      console.error(e);
+      alert(`Erreur: ${e.message || e}`);
+    }
+    setSlotChanging(false);
+  };
+
   const handleSlotChange = async (forfait: Forfait, newSlot: WeeklySlot) => {
     if (!confirm(`Changer le créneau de ${forfait.childName} ?\n\n❌ Ancien : ${forfait.slotKey}\n✅ Nouveau : ${newSlot.activityTitle} — ${newSlot.dayLabel} ${newSlot.startTime}\n\nLes paiements ne sont PAS modifiés.`)) return;
     setSlotChanging(true);
@@ -938,6 +1025,55 @@ export default function ForfaitsPage() {
                     </div>
 
                     <div className="flex flex-wrap gap-2 pt-2">
+                      {(() => {
+                        const slots = detectActualSlots(f);
+                        if (slots.length === 0) return null;
+                        return (
+                          <div className="w-full mb-2 bg-blue-50/50 border border-blue-200 rounded-lg p-3">
+                            <div className="font-body text-[10px] uppercase text-slate-600 font-semibold mb-2">
+                              Cr\u00e9neaux r\u00e9els ({slots.length}{slots.length > 1 ? " — forfait multi-jours" : ""})
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                              {slots.map(slot => (
+                                <div key={slot.key} className="flex items-center justify-between gap-2 bg-white rounded px-2 py-1.5 border border-gray-100">
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    {slot.isPrincipal && (
+                                      <span className="font-body text-[9px] font-bold uppercase text-blue-500 bg-blue-100 px-1.5 py-0.5 rounded shrink-0">Principal</span>
+                                    )}
+                                    <span className="font-body text-xs text-blue-800 truncate">
+                                      <span className="capitalize">{slot.dayLabel}</span> {slot.startTime}\u2013{slot.endTime} \u00b7 {slot.activityTitle}
+                                    </span>
+                                    <span className="font-body text-[10px] text-slate-400 shrink-0">{slot.count} s\u00e9ances</span>
+                                  </div>
+                                  <div className="flex gap-1 shrink-0">
+                                    <button
+                                      onClick={() => setSlotChange({ forfait: f, newSlotSearch: "" })}
+                                      disabled={slotChanging || saving}
+                                      title="Changer ce cr\u00e9neau pour un autre"
+                                      className="font-body text-[10px] text-blue-500 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded border-none cursor-pointer">
+                                      Changer
+                                    </button>
+                                    {slots.length > 1 && (
+                                      <button
+                                        onClick={() => handleRemoveSlot(f, slot)}
+                                        disabled={slotChanging || saving}
+                                        title={slot.isPrincipal ? "Retirer le cr\u00e9neau principal (le forfait restera mais sans cr\u00e9neau principal)" : "Retirer ce cr\u00e9neau"}
+                                        className="font-body text-[10px] text-red-500 bg-red-50 hover:bg-red-100 px-2 py-1 rounded border-none cursor-pointer">
+                                        Retirer
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            {slots.length > 1 && (
+                              <p className="font-body text-[10px] text-slate-500 italic mt-2">
+                                \U0001F4A1 Les boutons "Changer de cr\u00e9neau" et "D\u00e9sinscrire" en dessous agissent globalement sur tout le forfait. Pour modifier un seul cr\u00e9neau, utilisez les boutons ci-dessus.
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
                       {(f.status === "active" || f.status === "actif") && (
                         <button onClick={() => handleStatusChange(f.id, "suspended")} disabled={saving}
                           className="flex items-center gap-1.5 font-body text-xs text-orange-500 bg-orange-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-orange-100">
