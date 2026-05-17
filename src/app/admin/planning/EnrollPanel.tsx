@@ -1306,21 +1306,17 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
       console.log(`📋 Inscription annuelle : ${slotsToEnroll.length} séances pour "${creneau.activityTitle}" (jour ${dow}, ${creneau.startTime}) du ${startDate} au ${endDate}`);
 
-      for (const slot of slotsToEnroll) {
-        // Marqueur paymentSource:"forfait" → l'enrolled est reconnu comme
-        // couvert sur TOUS les créneaux de la saison (pas seulement le 1er),
-        // ce qui évite l'apparence "gris/impayé" sur les autres mercredis.
-        // skipRefresh:true → un refresh global a la fin de la boucle, sinon
-        // 114 refreshs successifs prennent plusieurs minutes.
-        await onEnroll(slot.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString(), paymentSource: "forfait" }, undefined, { skipPayment: true, skipEmail: true, skipRefresh: true });
-      }
+      // ── Collecte de TOUS les slots a inscrire (principal + extras) ───
+      // Au lieu d'enchainer les onEnroll en sequence (250ms x 114 = 30s),
+      // on les collecte tous puis on lance Promise.all en parallele
+      // (~3-5s total). Pas de risque de concurrence car chaque slot est un
+      // doc Firestore distinct, et runTransaction protege chaque doc
+      // individuellement.
+      const allSlotsToEnroll: { id: string }[] = [...slotsToEnroll.map(s => ({ id: s.id! }))];
 
-      // Inscrire dans les créneaux supplémentaires (2ème, 3ème)
-      // La clé = "dow-startTime-activityTitle-monitor"
-      // Au lieu de parser la clé (fragile), on retrouve le slot dans allCreneaux
+      // Resoudre les creneaux supplementaires (2x ou 3x par semaine) avant
+      // le Promise.all global
       for (const slotKey of extraSlots) {
-        // Chercher un créneau de la semaine qui correspond à cette clé
-        // Utiliser weekCreneaux (toute la semaine) plutôt qu'allCreneaux (vue courante)
         const refCreneau = weekCreneaux.find(c => {
           const cdow = new Date(c.date + "T12:00:00").getDay();
           return `${cdow}-${c.startTime}-${c.activityTitle}-${c.monitor || ""}` === slotKey;
@@ -1332,25 +1328,43 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         }
 
         const extraDow = new Date(refCreneau.date + "T12:00:00").getDay();
-        // Même bornage que pour le créneau principal : on utilise allFutureCreneaux
-        // qui est déjà borné par [startDate, endDate]. Inutile de re-filtrer par date,
-        // sauf à respecter le startDate (cas où le créneau extra du jour serait avant).
         const extraCreneaux = allFutureCreneaux.filter(c =>
           c.date >= startDate &&
           new Date(c.date + "T12:00:00").getDay() === extraDow &&
           c.startTime === refCreneau.startTime &&
           c.activityTitle === refCreneau.activityTitle
-          // Pas de filtre monitor — peut changer en cours de saison
         );
 
         console.log(`📋 Créneau supplémentaire : ${extraCreneaux.length} séances pour "${refCreneau.activityTitle}" (jour ${extraDow}, ${refCreneau.startTime})`);
         for (const slot of extraCreneaux) {
-          // Idem : marqueur paymentSource:"forfait" pour les créneaux
-          // supplémentaires d'un forfait 2x ou 3x par semaine.
-          // skipRefresh:true comme pour la boucle principale.
-          await onEnroll(slot.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString(), paymentSource: "forfait" }, undefined, { skipPayment: true, skipEmail: true, skipRefresh: true });
+          allSlotsToEnroll.push({ id: slot.id! });
         }
       }
+
+      console.log(`📋 Total : ${allSlotsToEnroll.length} séances à inscrire (parallele Promise.all)`);
+      const enrollPayload = {
+        childId: selChild, childName,
+        familyId: fam.firestoreId, familyName: fam.parentName || "—",
+        enrolledAt: new Date().toISOString(),
+        paymentSource: "forfait" as const,
+      };
+
+      // Promise.all : toutes les ecritures partent en meme temps. Firestore
+      // peut absorber facilement 100+ requetes paralleles. Si une echoue
+      // (ex. concurrence detectee), elle echoue isolement sans bloquer les
+      // autres. allSettled plutot que all pour ne pas tout perdre si 1 fail.
+      const results = await Promise.allSettled(
+        allSlotsToEnroll.map(s =>
+          onEnroll(s.id, enrollPayload, undefined, {
+            skipPayment: true, skipEmail: true, skipRefresh: true,
+          })
+        )
+      );
+      const failedCount = results.filter(r => r.status === "rejected").length;
+      if (failedCount > 0) {
+        console.warn(`⚠️ ${failedCount}/${allSlotsToEnroll.length} inscriptions ont echoue`);
+      }
+
       // Refresh global une seule fois apres tous les onEnroll
       // (qui ont tous skipRefresh:true). Sans ca, l'UI ne se met pas a jour.
       try { await onRefresh?.(); } catch (e) { console.warn("Refresh post-annual:", e); }
