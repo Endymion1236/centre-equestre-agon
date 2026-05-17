@@ -2132,13 +2132,29 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               <div>
                 {available.length > 1 && (
                   <div className="font-body text-xs font-semibold text-slate-500 mb-2">
-                    Sélectionner les cavaliers {selectedChildren.length > 1 ? "(un paiement séparé par enfant)" : ""}
+                    {inscriptionMode === "annuel"
+                      ? "Sélectionner le cavalier"
+                      : `Sélectionner les cavaliers ${selectedChildren.length > 1 ? "(un paiement séparé par enfant)" : ""}`}
+                  </div>
+                )}
+                {/* En mode annuel : indication que l'inscription est mono-enfant */}
+                {inscriptionMode === "annuel" && fam && available.length > 0 && (
+                  <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 mb-2">
+                    <div className="font-body text-xs text-blue-700">
+                      <span className="font-semibold">Mode annuel :</span> inscription d'un seul cavalier à la fois. Pour inscrire plusieurs enfants, faites-le un par un.
+                    </div>
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2">{available.map((c:any) => {
                   const sel = selectedChildren.includes(c.id);
                   return (
                     <button key={c.id} onClick={() => {
+                      // En mode annuel : mono-selection (remplace) plutot que multi
+                      if (inscriptionMode === "annuel") {
+                        setSelectedChildren([c.id]);
+                        setSelChild(c.id);
+                        return;
+                      }
                       if (sel) {
                         // Désélectionner
                         const next = selectedChildren.filter(x => x !== c.id);
