@@ -49,6 +49,13 @@ const COLLECTIONS_BY_FAMILYID = [
   "mandats-sepa",
   "reservations",
   "bonsRecup",
+  "fidelite_transactions", // Historique des gains/conso de points
+  "recurrences",           // Pensions et autres prestations recurrentes
+];
+
+// Collections où le doc ID EST le familyId (1 doc max par famille)
+const COLLECTIONS_BY_DOC_ID = [
+  "fidelite", // Solde de points stocké à fidelite/{familyId}
 ];
 
 export async function POST(req: NextRequest) {
@@ -85,6 +92,16 @@ export async function POST(req: NextRequest) {
         count: snap.size,
         ids: snap.docs.map(d => d.id),
       };
+    }
+
+    // Collections ou le doc ID EST le familyId : check existence direct
+    for (const colName of COLLECTIONS_BY_DOC_ID) {
+      const docSnap = await adminDb.collection(colName).doc(familyId).get();
+      if (docSnap.exists) {
+        inventory[colName] = { count: 1, ids: [familyId] };
+      } else {
+        inventory[colName] = { count: 0, ids: [] };
+      }
     }
 
     const totalDocs = Object.values(inventory).reduce((s, x) => s + x.count, 0);
