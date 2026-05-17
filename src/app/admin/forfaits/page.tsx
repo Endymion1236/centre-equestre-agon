@@ -509,22 +509,64 @@ export default function ForfaitsPage() {
       const dayNames = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
       const slotDow = dayNames.indexOf(slot.dayLabel);
 
+      // Normalisation tolérante (apostrophes typographiques, accents, casse)
+      const normalize = (s: string) =>
+        (s || "")
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/['']/g, "'")
+          .replace(/\s+/g, " ")
+          .trim();
+      const slotTitleNorm = normalize(slot.activityTitle);
+
+      // Compteurs de debug pour comprendre pourquoi le retrait peut renvoyer 0
       let removed = 0;
+      let candidatesMatched = 0;
+      let skippedClosed = 0;
+      let skippedNotEnrolled = 0;
+      let skippedTitleMismatch = 0;
+
       for (const c of creneaux) {
         const cAny = c as any;
         if (cAny.date < today || cAny.date > seasonEnd) continue;
-        if (cAny.status === "closed") continue;
         const dow = new Date(cAny.date + "T12:00:00").getDay();
         if (dow !== slotDow) continue;
         if (cAny.startTime !== slot.startTime) continue;
-        if (cAny.activityTitle !== slot.activityTitle) continue;
+        // A ce point on a un créneau qui matche jour+heure ; on regarde si
+        // c'est bien la bonne activite et si Eliot est inscrit
+        candidatesMatched++;
         const enrolled = cAny.enrolled || [];
-        if (!enrolled.some((e: any) => e.childId === f.childId)) continue;
+        if (!enrolled.some((e: any) => e.childId === f.childId)) {
+          skippedNotEnrolled++;
+          continue;
+        }
+        // Match plus tolérant : normalize avec apostrophes/accents
+        if (normalize(cAny.activityTitle) !== slotTitleNorm) {
+          skippedTitleMismatch++;
+          console.warn("[handleRemoveSlot] Title mismatch:", { creneau: cAny.activityTitle, slot: slot.activityTitle });
+          continue;
+        }
+        if (cAny.status === "closed") {
+          skippedClosed++;
+          continue;
+        }
         const newEnrolled = enrolled.filter((e: any) => e.childId !== f.childId);
         await updateDoc(doc(db, "creneaux", cAny.id), { enrolled: newEnrolled, enrolledCount: newEnrolled.length });
         removed++;
       }
-      alert(`✅ ${f.childName} retiré(e) de ${removed} séance(s) sur ${slot.dayLabel} ${slot.startTime}`);
+      console.log(`[handleRemoveSlot] Retiré ${removed} ; candidats=${candidatesMatched}, !inscrit=${skippedNotEnrolled}, !titre=${skippedTitleMismatch}, clôturés=${skippedClosed}`);
+
+      if (removed === 0) {
+        const details: string[] = [];
+        if (candidatesMatched === 0) details.push(`Aucun créneau ${slot.dayLabel} ${slot.startTime} trouvé sur la saison du forfait.`);
+        if (skippedNotEnrolled > 0) details.push(`${skippedNotEnrolled} créneaux trouvés mais ${f.childName} n'y est pas inscrit(e).`);
+        if (skippedTitleMismatch > 0) details.push(`${skippedTitleMismatch} créneaux trouvés mais avec un autre titre (voir console).`);
+        if (skippedClosed > 0) details.push(`${skippedClosed} séances clôturées (préservées).`);
+        alert(`⚠️ Aucune séance retirée.\n\n${details.join("\n")}`);
+      } else {
+        alert(`✅ ${f.childName} retiré(e) de ${removed} séance(s) sur ${slot.dayLabel} ${slot.startTime}`);
+      }
       await fetchData();
     } catch (e: any) {
       console.error(e);
