@@ -439,14 +439,14 @@ export default function ForfaitsPage() {
   };
 
   // ── Helper : derive les "slots hebdo" reels d'un forfait depuis Firestore ──
-  // Un forfait stocke seulement son cr\u00e9neau principal (slotKey). Si l'enfant
-  // est inscrit en 2x ou 3x par semaine, les autres cr\u00e9neaux ne sont pas
+  // Un forfait stocke seulement son créneau principal (slotKey). Si l'enfant
+  // est inscrit en 2x ou 3x par semaine, les autres créneaux ne sont pas
   // visibles dans le doc forfait — ils sont identifiables par enrolled[].
-  // paymentSource === 'forfait' sur les cr\u00e9neaux futurs de la saison.
-  // Cette fonction agr\u00e8ge les inscriptions et regroupe par slot hebdo unique.
+  // paymentSource === 'forfait' sur les créneaux futurs de la saison.
+  // Cette fonction agrège les inscriptions et regroupe par slot hebdo unique.
   const detectActualSlots = (f: Forfait): { key: string; dayLabel: string; startTime: string; endTime: string; activityTitle: string; count: number; isPrincipal: boolean }[] => {
     const today = new Date().toISOString().split("T")[0];
-    // Saison du forfait : on prend seasonStartYear si pr\u00e9sent, sinon fallback createdAt
+    // Saison du forfait : on prend seasonStartYear si présent, sinon fallback createdAt
     let seasonEnd = "";
     if ((f as any).seasonStartYear) {
       seasonEnd = `${(f as any).seasonStartYear + 1}-06-30`;
@@ -488,10 +488,10 @@ export default function ForfaitsPage() {
     });
   };
 
-  // Retirer UN seul cr\u00e9neau hebdo (les futurs cours du m\u00eame jour+heure+activit\u00e9
+  // Retirer UN seul créneau hebdo (les futurs cours du même jour+heure+activité
   // jusqu'a la fin de saison), sans toucher au forfait ni au paiement.
   const handleRemoveSlot = async (f: Forfait, slot: { key: string; dayLabel: string; startTime: string; activityTitle: string }) => {
-    if (!confirm(`Retirer ${f.childName} du cr\u00e9neau ${slot.dayLabel} ${slot.startTime} (${slot.activityTitle}) ?\n\nLes autres cr\u00e9neaux du forfait restent inchang\u00e9s.\nAucun avoir n'est cr\u00e9\u00e9 (suppression simple).`)) return;
+    if (!confirm(`Retirer ${f.childName} du créneau ${slot.dayLabel} ${slot.startTime} (${slot.activityTitle}) ?\n\nLes autres créneaux du forfait restent inchangés.\nAucun avoir n'est créé (suppression simple).`)) return;
     setSlotChanging(true);
     try {
       const today = new Date().toISOString().split("T")[0];
@@ -516,7 +516,7 @@ export default function ForfaitsPage() {
         await updateDoc(doc(db, "creneaux", cAny.id), { enrolled: newEnrolled, enrolledCount: newEnrolled.length });
         removed++;
       }
-      alert(`\u2705 ${f.childName} retir\u00e9(e) de ${removed} s\u00e9ance(s) sur ${slot.dayLabel} ${slot.startTime}`);
+      alert(`✅ ${f.childName} retiré(e) de ${removed} séance(s) sur ${slot.dayLabel} ${slot.startTime}`);
       await fetchData();
     } catch (e: any) {
       console.error(e);
@@ -526,18 +526,18 @@ export default function ForfaitsPage() {
   };
 
   const handleSlotChange = async (forfait: Forfait, newSlot: WeeklySlot, oldSlot?: { dayOfWeek: number; startTime: string; activityTitle: string }) => {
-    // Si oldSlot est fourni, on ne change QUE ce cr\u00e9neau pr\u00e9cis.
-    // Sinon (comportement legacy), on remplace TOUS les cr\u00e9neaux du forfait
+    // Si oldSlot est fourni, on ne change QUE ce créneau précis.
+    // Sinon (comportement legacy), on remplace TOUS les créneaux du forfait
     // par le nouveau (cas forfait 1x/sem qui change de jour).
     const confirmMsg = oldSlot
-      ? `Changer UN cr\u00e9neau du forfait de ${forfait.childName} ?\n\n\u274C Ancien : ${["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"][oldSlot.dayOfWeek]} ${oldSlot.startTime} \u2014 ${oldSlot.activityTitle}\n\u2705 Nouveau : ${newSlot.activityTitle} \u2014 ${newSlot.dayLabel} ${newSlot.startTime}\n\nLes autres cr\u00e9neaux du forfait restent inchang\u00e9s.\nLes paiements ne sont PAS modifi\u00e9s.`
-      : `Changer le cr\u00e9neau de ${forfait.childName} ?\n\n\u274C Ancien : ${forfait.slotKey}\n\u2705 Nouveau : ${newSlot.activityTitle} \u2014 ${newSlot.dayLabel} ${newSlot.startTime}\n\nLes paiements ne sont PAS modifi\u00e9s.`;
+      ? `Changer UN créneau du forfait de ${forfait.childName} ?\n\n❌ Ancien : ${["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"][oldSlot.dayOfWeek]} ${oldSlot.startTime} — ${oldSlot.activityTitle}\n✅ Nouveau : ${newSlot.activityTitle} — ${newSlot.dayLabel} ${newSlot.startTime}\n\nLes autres créneaux du forfait restent inchangés.\nLes paiements ne sont PAS modifiés.`
+      : `Changer le créneau de ${forfait.childName} ?\n\n❌ Ancien : ${forfait.slotKey}\n✅ Nouveau : ${newSlot.activityTitle} — ${newSlot.dayLabel} ${newSlot.startTime}\n\nLes paiements ne sont PAS modifiés.`;
     if (!confirm(confirmMsg)) return;
     setSlotChanging(true);
     try {
-      // 1. D\u00e9sinscrire de tous les cr\u00e9neaux futurs NON-CL\u00d4TUR\u00c9S de la SAISON DU FORFAIT
+      // 1. Désinscrire de tous les créneaux futurs NON-CLÔTURÉS de la SAISON DU FORFAIT
       // Si oldSlot fourni : on filtre AUSSI par jour+heure+activite pour ne
-      // toucher qu'au cr\u00e9neau pr\u00e9cis qu'on change.
+      // toucher qu'au créneau précis qu'on change.
       const today = new Date().toISOString().split("T")[0];
       // ── Borne fin de saison : depend du forfait, pas d'aujourd'hui ─────
       // Le forfait stocke seasonStartYear (annee de debut de saison FFE).
@@ -571,9 +571,9 @@ export default function ForfaitsPage() {
           if (hasChildClosed) skippedClosed++;
           continue;
         }
-        // Si oldSlot fourni : ne toucher QUE les cr\u00e9neaux qui correspondent
-        // au slot precis qu'on change (m\u00eame jour, m\u00eame heure, m\u00eame activite).
-        // Sans oldSlot : on touche tous les cr\u00e9neaux ou l'enfant est inscrit
+        // Si oldSlot fourni : ne toucher QUE les créneaux qui correspondent
+        // au slot precis qu'on change (même jour, même heure, même activite).
+        // Sans oldSlot : on touche tous les créneaux ou l'enfant est inscrit
         // (comportement legacy pour les forfaits 1x/sem qui changent de jour).
         if (oldSlot) {
           const dow = new Date(data.date + "T12:00:00").getDay();
@@ -589,7 +589,7 @@ export default function ForfaitsPage() {
           removed++;
         }
       }
-      console.log(`\u{1F4CB} D\u00e9sinscrit de ${removed} cr\u00e9neaux (${skippedClosed} cl\u00f4tur\u00e9s pr\u00e9serv\u00e9s, borne ${_seasonEndStr}${oldSlot ? ", slot pr\u00e9cis" : ", tous slots"})`);
+      console.log(`📋 Désinscrit de ${removed} créneaux (${skippedClosed} clôturés préservés, borne ${_seasonEndStr}${oldSlot ? ", slot précis" : ", tous slots"})`);
 
       // 2. Inscrire dans les nouveaux créneaux (tous les futurs du même jour+heure+activité)
       // Match plus tolérant que l'exact match du titre, pour gérer :
@@ -607,7 +607,7 @@ export default function ForfaitsPage() {
       const newSlotTitleNorm = normalize(newSlot.activityTitle);
 
       // ── Borne de fin de saison ─────────────────────────────────────
-      // On reutilise la m\u00eame borne que pour la phase de desinscription
+      // On reutilise la même borne que pour la phase de desinscription
       // (calculee plus haut, _seasonEndStr). Le but : que le transfert reste
       // dans la SAISON DU FORFAIT, et n'aille pas deborder sur saison
       // suivante (qui sera une nouvelle inscription a part).
@@ -1048,7 +1048,7 @@ export default function ForfaitsPage() {
                         return (
                           <div className="w-full mb-2 bg-blue-50/50 border border-blue-200 rounded-lg p-3">
                             <div className="font-body text-[10px] uppercase text-slate-600 font-semibold mb-2">
-                              Cr\u00e9neaux r\u00e9els ({slots.length}{slots.length > 1 ? " — forfait multi-jours" : ""})
+                              Créneaux réels ({slots.length}{slots.length > 1 ? " — forfait multi-jours" : ""})
                             </div>
                             <div className="flex flex-col gap-1.5">
                               {slots.map(slot => (
@@ -1058,9 +1058,9 @@ export default function ForfaitsPage() {
                                       <span className="font-body text-[9px] font-bold uppercase text-blue-500 bg-blue-100 px-1.5 py-0.5 rounded shrink-0">Principal</span>
                                     )}
                                     <span className="font-body text-xs text-blue-800 truncate">
-                                      <span className="capitalize">{slot.dayLabel}</span> {slot.startTime}\u2013{slot.endTime} \u00b7 {slot.activityTitle}
+                                      <span className="capitalize">{slot.dayLabel}</span> {slot.startTime}–{slot.endTime} · {slot.activityTitle}
                                     </span>
-                                    <span className="font-body text-[10px] text-slate-400 shrink-0">{slot.count} s\u00e9ances</span>
+                                    <span className="font-body text-[10px] text-slate-400 shrink-0">{slot.count} séances</span>
                                   </div>
                                   <div className="flex gap-1 shrink-0">
                                     <button
@@ -1078,7 +1078,7 @@ export default function ForfaitsPage() {
                                         });
                                       }}
                                       disabled={slotChanging || saving}
-                                      title="Changer ce cr\u00e9neau pour un autre"
+                                      title="Changer ce créneau pour un autre"
                                       className="font-body text-[10px] text-blue-500 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded border-none cursor-pointer">
                                       Changer
                                     </button>
@@ -1086,7 +1086,7 @@ export default function ForfaitsPage() {
                                       <button
                                         onClick={() => handleRemoveSlot(f, slot)}
                                         disabled={slotChanging || saving}
-                                        title={slot.isPrincipal ? "Retirer le cr\u00e9neau principal (le forfait restera mais sans cr\u00e9neau principal)" : "Retirer ce cr\u00e9neau"}
+                                        title={slot.isPrincipal ? "Retirer le créneau principal (le forfait restera mais sans créneau principal)" : "Retirer ce créneau"}
                                         className="font-body text-[10px] text-red-500 bg-red-50 hover:bg-red-100 px-2 py-1 rounded border-none cursor-pointer">
                                         Retirer
                                       </button>
@@ -1097,7 +1097,7 @@ export default function ForfaitsPage() {
                             </div>
                             {slots.length > 1 && (
                               <p className="font-body text-[10px] text-slate-500 italic mt-2">
-                                \U0001F4A1 Les boutons "Changer de cr\u00e9neau" et "D\u00e9sinscrire" en dessous agissent globalement sur tout le forfait. Pour modifier un seul cr\u00e9neau, utilisez les boutons ci-dessus.
+                                💡 Les boutons "Changer de créneau" et "Désinscrire" en dessous agissent globalement sur tout le forfait. Pour modifier un seul créneau, utilisez les boutons ci-dessus.
                               </p>
                             )}
                           </div>
