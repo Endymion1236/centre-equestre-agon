@@ -527,7 +527,12 @@ export default function ReserverPage() {
       setCart([]);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 5000);
-    } catch (e) { console.error(e); alert("Erreur. Veuillez réessayer."); }
+    } catch (e: any) {
+      console.error("[handlePay] Erreur complete:", e);
+      // Afficher un message d'erreur explicite plutot que generique
+      const errMsg = e?.message || e?.code || String(e) || "Erreur inconnue";
+      alert(`❌ Erreur lors du paiement :\n\n${errMsg}\n\nDétails dans la console (F12).`);
+    }
     setPaying(false);
   };
 
