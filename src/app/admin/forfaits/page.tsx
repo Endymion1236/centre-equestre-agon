@@ -545,20 +545,28 @@ export default function ForfaitsPage() {
       // Si seasonStartYear absent (forfaits anciens), fallback sur aujourd'hui :
       //   - mois >= sept → Y/Y+1, fin = juin Y+1
       //   - mois < sept → Y-1/Y, fin = juin Y
+      let _seasonStartYear: number;
       let _seasonEndYear: number;
       if ((forfait as any).seasonStartYear) {
-        _seasonEndYear = (forfait as any).seasonStartYear + 1;
+        _seasonStartYear = (forfait as any).seasonStartYear;
+        _seasonEndYear = _seasonStartYear + 1;
       } else {
         const _todayDate = new Date();
         const _todayMonth = _todayDate.getMonth();
         const _todayYear = _todayDate.getFullYear();
-        _seasonEndYear = _todayMonth >= 8 ? _todayYear + 1 : _todayYear;
+        _seasonStartYear = _todayMonth >= 8 ? _todayYear : _todayYear - 1;
+        _seasonEndYear = _seasonStartYear + 1;
       }
+      const _seasonStartStr = `${_seasonStartYear}-09-01`;
       const _seasonEndStr = `${_seasonEndYear}-06-30`;
+      // Borne basse effective : si le forfait est pour une saison future, on
+      // veut quand meme respecter today (pas inscrire dans le passe). Si la
+      // saison du forfait a deja commence, on prend max(seasonStart, today).
+      const _effectiveStartStr = today > _seasonStartStr ? today : _seasonStartStr;
 
       const futureSnap = await getDocs(query(
         collection(db, "creneaux"),
-        where("date", ">=", today),
+        where("date", ">=", _effectiveStartStr),
         where("date", "<=", _seasonEndStr),
       ));
       let removed = 0;
@@ -638,7 +646,7 @@ export default function ForfaitsPage() {
           (matchByActivityId || matchByTitle) &&
           data.startTime === newSlot.startTime &&
           new Date(data.date + "T12:00:00").getDay() === newSlot.dayOfWeek &&
-          data.date >= today
+          data.date >= _effectiveStartStr
         ) {
           const enrolled = data.enrolled || [];
           // Vérifier la capacité du créneau (ne pas surcharger un cours plein)
