@@ -391,6 +391,20 @@ export default function ReserverPage() {
         // Réservations — une par jour pour les stages, une seule pour les cours
         if (item.isStage) {
           for (const cid of creneauIdsToEnroll) {
+            // Idempotence : si une reservation existe deja pour ce trio
+            // (familyId, childId, creneauId), on ne la duplique pas. Protege
+            // contre les double-clics sur 'Payer', les items ajoutes 2 fois
+            // au panier par erreur, ou les retries reseau.
+            const existingResa = await getDocs(query(
+              collection(db, "reservations"),
+              where("familyId", "==", user.uid),
+              where("childId", "==", item.childId),
+              where("creneauId", "==", cid),
+            ));
+            if (!existingResa.empty) {
+              console.log(`[handlePay] Reservation deja existante, skip : ${item.childName} - creneau ${cid}`);
+              continue;
+            }
             const crSnap = await getDoc(doc(db, "creneaux", cid));
             const crData = crSnap.exists() ? crSnap.data() : null;
             await addDoc(collection(db, "reservations"), {
@@ -408,19 +422,30 @@ export default function ReserverPage() {
             });
           }
         } else {
-          const firstCreneau = creneaux.find(c => c.id === item.creneauIds[0]);
-          await addDoc(collection(db, "reservations"), {
-            familyId: user.uid, familyName: family.parentName,
-            ...((item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
-            childId: item.childId, childName: item.childName,
-            activityTitle: item.activityTitle, activityType: "cours",
-            creneauId: item.creneauIds[0],
-            date: firstCreneau?.date || new Date().toISOString().split("T")[0],
-            startTime: firstCreneau?.startTime || "",
-            endTime: firstCreneau?.endTime || "",
-            priceTTC: item.prixFinal, status: "pending_payment", source: "client",
-            createdAt: serverTimestamp(),
-          });
+          // Idempotence cours : meme check que pour les stages
+          const existingCourseResa = await getDocs(query(
+            collection(db, "reservations"),
+            where("familyId", "==", user.uid),
+            where("childId", "==", item.childId),
+            where("creneauId", "==", item.creneauIds[0]),
+          ));
+          if (existingCourseResa.empty) {
+            const firstCreneau = creneaux.find(c => c.id === item.creneauIds[0]);
+            await addDoc(collection(db, "reservations"), {
+              familyId: user.uid, familyName: family.parentName,
+              ...((item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
+              childId: item.childId, childName: item.childName,
+              activityTitle: item.activityTitle, activityType: "cours",
+              creneauId: item.creneauIds[0],
+              date: firstCreneau?.date || new Date().toISOString().split("T")[0],
+              startTime: firstCreneau?.startTime || "",
+              endTime: firstCreneau?.endTime || "",
+              priceTTC: item.prixFinal, status: "pending_payment", source: "client",
+              createdAt: serverTimestamp(),
+            });
+          } else {
+            console.log(`[handlePay] Reservation cours deja existante, skip : ${item.childName} - creneau ${item.creneauIds[0]}`);
+          }
         }
       }
 
