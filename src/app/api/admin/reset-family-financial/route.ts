@@ -143,8 +143,35 @@ export async function POST(req: NextRequest) {
 
     const totalDeleted = Object.values(deletedByCollection).reduce((s, n) => s + n, 0);
 
+    // ── Phase 3 : nettoyer creneaux.enrolled[] ──────────────────────
+    // Le reset des reservations a supprime les docs, mais l'inscription
+    // au niveau du creneau (enrolled[]) doit aussi etre purgee, sinon :
+    // - L'admin voit la famille toujours inscrite
+    // - Les places restantes sont incorrectes
+    // - Cote client, l'enfant est inscrit dans le creneau mais pas dans
+    //   ses reservations (incoherent)
+    //
+    // On scanne tous les creneaux et on retire les entries ou familyId
+    // matche. On ne touche qu'aux creneaux qui ont effectivement un
+    // enrolled[] non-vide pour cette famille (perf).
+    let creneauxCleaned = 0;
+    const allCreneauxSnap = await adminDb.collection("creneaux").get();
+    for (const doc of allCreneauxSnap.docs) {
+      const data = doc.data();
+      const enrolled = (data.enrolled || []) as any[];
+      if (enrolled.length === 0) continue;
+      const filtered = enrolled.filter(e => e.familyId !== familyId);
+      if (filtered.length === enrolled.length) continue; // pas concerne
+      // Mise a jour : nouveau enrolled + enrolledCount
+      await doc.ref.update({
+        enrolled: filtered,
+        enrolledCount: filtered.length,
+      });
+      creneauxCleaned++;
+    }
+
     // Audit log
-    console.log(`[reset-family-financial] Famille "${familyName}" (${familyId}) :`, deletedByCollection);
+    console.log(`[reset-family-financial] Famille "${familyName}" (${familyId}) :`, deletedByCollection, `+ ${creneauxCleaned} creneaux purges`);
 
     return NextResponse.json({
       success: true,
@@ -153,7 +180,8 @@ export async function POST(req: NextRequest) {
       familyName,
       totalDeleted,
       deletedByCollection,
-      message: `✅ ${totalDeleted} document(s) supprimés pour la famille "${familyName}". Les inscriptions aux créneaux et la fiche famille sont préservées.`,
+      creneauxCleaned,
+      message: `✅ ${totalDeleted} document(s) supprimés pour la famille "${familyName}". ${creneauxCleaned} créneau(x) purgé(s) des inscriptions. La fiche famille est préservée.`,
     });
   } catch (error: any) {
     console.error("[reset-family-financial] Erreur:", error);
