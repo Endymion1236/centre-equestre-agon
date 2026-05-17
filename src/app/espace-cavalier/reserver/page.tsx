@@ -115,11 +115,39 @@ export default function ReserverPage() {
     const load = async () => {
       setLoading(true);
       try {
-        const [crSnap, actSnap] = await Promise.all([
+        // Borne haute pour les STAGES seulement : 6 mois en avant
+        // (les stages sont souvent programmes des mois a l'avance, le
+        // bandeau 'Stages disponibles' doit etre detecte des l'ouverture
+        // meme si on est en mai et les stages en juillet).
+        const stagesEnd = new Date(currentMonth);
+        stagesEnd.setMonth(stagesEnd.getMonth() + 6);
+
+        const [crSnap, actSnap, stagesSnap] = await Promise.all([
           getDocs(query(collection(db, "creneaux"), where("date", ">=", fmtDate(startDate)), where("date", "<=", fmtDate(endDate)))),
           getDocs(collection(db, "activities")),
+          // Requete dediee aux stages dans une fenetre large
+          getDocs(query(
+            collection(db, "creneaux"),
+            where("date", ">=", fmtDate(startDate)),
+            where("date", "<=", fmtDate(stagesEnd)),
+          )),
         ]);
-        setCreneaux(crSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Creneau[]);
+
+        // Merge des 2 requetes : on garde les creneaux du mois courant (cours)
+        // + tous les stages des 6 mois. Dedoublonnage par id.
+        const baseDocs = crSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Creneau[];
+        const stageDocs = stagesSnap.docs
+          .map(d => ({ id: d.id, ...d.data() }) as Creneau)
+          .filter(c => c.activityType === "stage" || c.activityType === "stage_journee");
+        const seen = new Set(baseDocs.map(c => c.id));
+        const merged = [...baseDocs];
+        for (const s of stageDocs) {
+          if (!seen.has(s.id)) {
+            merged.push(s);
+            seen.add(s.id);
+          }
+        }
+        setCreneaux(merged);
         setActivities(actSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       } catch (e) { console.error(e); }
       setLoading(false);
@@ -631,7 +659,7 @@ export default function ReserverPage() {
                   <div className="font-body text-base font-bold text-white">
                     {Object.keys(stageGroups).length} stage{Object.keys(stageGroups).length > 1 ? "s" : ""} disponible{Object.keys(stageGroups).length > 1 ? "s" : ""}
                   </div>
-                  <div className="font-body text-xs text-green-100 mt-0.5">Vacances de Pâques · Inscriptions semaine ou à la journée</div>
+                  <div className="font-body text-xs text-green-100 mt-0.5">Inscriptions semaine ou à la journée</div>
                 </div>
               </div>
               <div className="flex items-center gap-1.5 bg-white text-green-700 font-body text-sm font-bold px-4 py-2 rounded-xl flex-shrink-0">
