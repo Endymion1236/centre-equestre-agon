@@ -447,21 +447,29 @@ export default function ForfaitsPage() {
   const detectActualSlots = (f: Forfait): { key: string; dayLabel: string; startTime: string; endTime: string; activityTitle: string; count: number; isPrincipal: boolean }[] => {
     const today = new Date().toISOString().split("T")[0];
     // Saison du forfait : on prend seasonStartYear si présent, sinon fallback createdAt
+    let seasonStart = "";
     let seasonEnd = "";
     if ((f as any).seasonStartYear) {
+      seasonStart = `${(f as any).seasonStartYear}-09-01`;
       seasonEnd = `${(f as any).seasonStartYear + 1}-06-30`;
     } else {
-      // Fallback : juin de l'annee en cours ou suivante selon le mois
+      // Fallback : 1er sept et 30 juin de la saison en cours
       const now = new Date();
-      seasonEnd = `${now.getMonth() >= 8 ? now.getFullYear() + 1 : now.getFullYear()}-06-30`;
+      const startY = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+      seasonStart = `${startY}-09-01`;
+      seasonEnd = `${startY + 1}-06-30`;
     }
+    // Borne basse effective : max(today, seasonStart). Si la saison du forfait
+    // est dans le futur, on prend seasonStart. Si elle est commencee, on prend
+    // today (pour ne pas afficher des seances deja passees).
+    const effectiveStart = today > seasonStart ? today : seasonStart;
 
     const slotMap = new Map<string, { key: string; dayLabel: string; startTime: string; endTime: string; activityTitle: string; count: number; isPrincipal: boolean }>();
     const dayNames = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
 
     for (const c of creneaux) {
       const cAny = c as any;
-      if (cAny.date < today || cAny.date > seasonEnd) continue;
+      if (cAny.date < effectiveStart || cAny.date > seasonEnd) continue;
       const enrolled = cAny.enrolled || [];
       const isEnrolled = enrolled.some((e: any) =>
         e.childId === f.childId && e.paymentSource === "forfait"
