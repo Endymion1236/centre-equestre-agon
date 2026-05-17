@@ -87,12 +87,20 @@ export default function ReserverPage() {
 
   const endDate = useMemo(() => {
     const d = new Date(currentMonth);
+    // Si on filtre par stage : on charge 6 mois pour ne rater aucun stage
+    // futur (les stages sont souvent programmes plusieurs mois a l'avance,
+    // et tu ne sais pas quel mois cliquer si tu cherches 'cet ete').
+    // Sinon : 1 mois + 7 jours (comportement original pour cours).
+    if (filter === "stage" || filter === "stage_journee") {
+      d.setMonth(d.getMonth() + 6);
+      return d;
+    }
     d.setMonth(d.getMonth() + 1);
     d.setDate(0); // dernier jour du mois
     // Ajouter 7 jours pour couvrir les stages à cheval sur 2 mois
     d.setDate(d.getDate() + 7);
     return d;
-  }, [currentMonth]);
+  }, [currentMonth, filter]);
 
   const fmtDate = (d: Date) => {
     const y = d.getFullYear();
@@ -117,7 +125,7 @@ export default function ReserverPage() {
       setLoading(false);
     };
     load();
-  }, [monthOffset]);
+  }, [monthOffset, filter]);
 
   // Sous-catégories disponibles pour le filtre courant
   const availableSubcats = useMemo(() => {
