@@ -72,9 +72,23 @@ service cloud.firestore {
             && request.resource.data.familyId == request.auth.uid
             && request.resource.data.status == "pending"
             && (request.resource.data.paidAmount == 0 || !('paidAmount' in request.resource.data)));
-      // Seul le staff peut modifier un paiement (statut, montant encaissé, etc.)
+      // Le cavalier peut updater SON propre paiement pending tant qu'il n'est pas
+      // encaisse, sur un set ferme de champs metadata (stage info + acompte). Ca
+      // permet a l'espace client de completer le paiement avant le checkout CAWL
+      // sans necessiter un appel API admin. Empeche toute modification de
+      // amount/familyId/status/etc.
+      allow update: if isAdmin()
+        || (isAuth()
+            && resource.data.familyId == request.auth.uid
+            && resource.data.status == "pending"
+            && resource.data.paidAmount == 0
+            && request.resource.data.familyId == resource.data.familyId
+            && request.resource.data.status == resource.data.status
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['stageDate', 'stageTitle', 'acompteAmount', 'soldeAmount']));
+      // Seul l'admin peut supprimer un paiement
       // Les confirmations CAWL passent par adminDb (bypass rules)
-      allow update, delete: if isAdmin();
+      allow delete: if isAdmin();
     }
     match /encaissements/{docId} {
       allow read: if isAdmin();
