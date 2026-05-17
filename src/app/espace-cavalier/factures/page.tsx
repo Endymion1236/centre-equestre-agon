@@ -156,10 +156,24 @@ export default function FacturesPage() {
       } catch { /* pas de fidélité */ }
 
       // Famille (pour adresse facture)
+      // Recherche par docId d'abord (pattern : doc(db, 'families', user.uid)),
+      // car c'est la convention. Fallback sur where uid== ou authUid== pour
+      // les anciens docs qui n'avaient pas le docId aligne.
       try {
-        const famSnap = await getDocs(query(collection(db, "families"), where("uid", "==", user.uid)));
-        if (!famSnap.empty) setFamilyData({ id: famSnap.docs[0].id, ...famSnap.docs[0].data() });
-      } catch { /* pas grave */ }
+        const directDoc = await getDoc(doc(db, "families", user.uid));
+        if (directDoc.exists()) {
+          setFamilyData({ id: directDoc.id, ...directDoc.data() });
+        } else {
+          const famSnap = await getDocs(query(collection(db, "families"), where("uid", "==", user.uid)));
+          if (!famSnap.empty) {
+            setFamilyData({ id: famSnap.docs[0].id, ...famSnap.docs[0].data() });
+          } else {
+            // 2eme fallback : authUid (legacy)
+            const famSnap2 = await getDocs(query(collection(db, "families"), where("authUid", "==", user.uid)));
+            if (!famSnap2.empty) setFamilyData({ id: famSnap2.docs[0].id, ...famSnap2.docs[0].data() });
+          }
+        }
+      } catch (e) { console.error("Famille non trouvee:", e); }
 
       setLoading(false);
     };
