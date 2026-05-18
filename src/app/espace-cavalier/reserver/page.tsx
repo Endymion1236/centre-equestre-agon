@@ -114,13 +114,13 @@ export default function ReserverPage() {
 
   const monthLabel = currentMonth.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
 
-  // Charger le prix plancher (settings/discounts) au montage.
+  // Charger le prix plancher (settings/degressivite) au montage.
   // Sert a empecher les tarifs en dessous d'un seuil quand plusieurs reductions
   // s'accumulent (famille + multi-stages).
   useEffect(() => {
     const loadPlancher = async () => {
       try {
-        const snap = await getDoc(doc(db, "settings", "discounts"));
+        const snap = await getDoc(doc(db, "settings", "degressivite"));
         if (snap.exists()) {
           const data = snap.data();
           if (typeof data.prixPlancherStage === "number") {
