@@ -178,6 +178,22 @@ export default function PaiementsPage() {
     )).then(snap => setQuickMandatActif(!snap.empty)).catch(() => setQuickMandatActif(false));
   }, [quickEncaisser]);
 
+  // ── Avoirs actifs de la famille (pour permettre encaissement par avoir) ──
+  // Affichés dans la modale "Encaisser" comme un mode de paiement supplementaire
+  // si la famille a un solde d'avoir disponible (status='actif' et remainingAmount>0).
+  const [quickAvoirs, setQuickAvoirs] = useState<any[]>([]);
+  useEffect(() => {
+    if (!quickEncaisser) { setQuickAvoirs([]); return; }
+    getDocs(query(collection(db, "avoirs"),
+      where("familyId", "==", quickEncaisser.payment.familyId)
+    )).then(snap => {
+      const list = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }) as any)
+        .filter(a => a.status === "actif" && (a.remainingAmount || 0) > 0);
+      setQuickAvoirs(list);
+    }).catch(() => setQuickAvoirs([]));
+  }, [quickEncaisser]);
+
   // Pré-remplir la grille de chèques différés avec le montant dû quand la modale s'ouvre
   useEffect(() => {
     if (!quickEncaisser) return;
@@ -316,6 +332,76 @@ export default function PaiementsPage() {
         });
 
         toast(`✅ ${nbEch} échéances SEPA créées pour ${p.familyName} (${montant.toFixed(2)}€)`, "success");
+        setQuickEncaisser(null);
+        setQuickMontant(""); setQuickRef("");
+        setQuickDate(new Date().toISOString().split("T")[0]);
+        await refreshAll();
+        setQuickSaving(false);
+        return;
+      }
+
+      // ── Mode AVOIR : consommer l'avoir au lieu d'encaisser de l'argent ──
+      // Deduit le montant des avoirs actifs de la famille (FIFO : le plus ancien
+      // d'abord). Cree un encaissement de mode 'avoir' (montant positif, mais
+      // mode='avoir' pour distinguer) puis decremente le remainingAmount sur
+      // chaque avoir consomme.
+      if (quickMode === "avoir") {
+        const totalAvoirDispo = quickAvoirs.reduce((s, a) => s + (a.remainingAmount || 0), 0);
+        if (montant > totalAvoirDispo + 0.005) {
+          toast(`Avoir insuffisant : ${totalAvoirDispo.toFixed(2)}€ disponible, ${montant.toFixed(2)}€ demandé`, "warning");
+          setQuickSaving(false);
+          return;
+        }
+        let restant = montant;
+        const sortedAvoirs = [...quickAvoirs].sort((a, b) => {
+          // Plus ancien d'abord (FIFO)
+          const da = a.createdAt?.toMillis?.() || a.createdAt?.seconds * 1000 || 0;
+          const db_ = b.createdAt?.toMillis?.() || b.createdAt?.seconds * 1000 || 0;
+          return da - db_;
+        });
+        const refsUsed: string[] = [];
+        for (const a of sortedAvoirs) {
+          if (restant <= 0.005) break;
+          const dispo = a.remainingAmount || 0;
+          const utilise = Math.min(dispo, restant);
+          const newRemaining = Math.round((dispo - utilise) * 100) / 100;
+          const newUsed = Math.round((a.usedAmount || 0) * 100) / 100 + utilise;
+          const newStatus = newRemaining <= 0.005 ? "utilise" : "actif";
+          await updateDoc(doc(db, "avoirs", a.id), {
+            usedAmount: Math.round(newUsed * 100) / 100,
+            remainingAmount: newRemaining,
+            status: newStatus,
+            usageHistory: [...(a.usageHistory || []), {
+              date: new Date().toISOString(),
+              paymentId: p.id,
+              montant: utilise,
+            }],
+            updatedAt: serverTimestamp(),
+          });
+          refsUsed.push(a.reference || a.id.slice(-6));
+          restant = Math.round((restant - utilise) * 100) / 100;
+        }
+        // Mettre a jour le payment (paidAmount + status)
+        const newPaid = Math.round(((p.paidAmount || 0) + montant) * 100) / 100;
+        const newStatus = newPaid >= (p.totalTTC || 0) ? "paid" : "partial";
+        await updateDoc(doc(db, "payments", p.id), {
+          paidAmount: newPaid,
+          status: newStatus,
+          updatedAt: serverTimestamp(),
+        });
+        // Trace dans le journal des encaissements
+        await createEncaissement({
+          paymentId: p.id,
+          familyId: p.familyId,
+          familyName: p.familyName,
+          montant: montant,
+          mode: "avoir",
+          modeLabel: `Avoir (${refsUsed.join(", ")})`,
+          ref: refsUsed.join(", "),
+          activityTitle: (p.items || []).map((i: any) => i.activityTitle).join(", "),
+          isAvoir: true,
+        });
+        toast(`✅ ${montant.toFixed(2)}€ payé par avoir (${refsUsed.join(", ")}) pour ${p.familyName}${newStatus === "paid" ? " — Tout réglé !" : ""}`, "success");
         setQuickEncaisser(null);
         setQuickMontant(""); setQuickRef("");
         setQuickDate(new Date().toISOString().split("T")[0]);
@@ -1681,6 +1767,20 @@ export default function PaiementsPage() {
               {/* Mode */}
               <div>
                 <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Mode de paiement</label>
+                {quickAvoirs.length > 0 && (() => {
+                  const totalAvoir = quickAvoirs.reduce((s, a) => s + (a.remainingAmount || 0), 0);
+                  return (
+                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-2.5 mb-2">
+                      <button
+                        onClick={() => setQuickMode("avoir")}
+                        className={`w-full text-left font-body text-sm font-semibold cursor-pointer border-none bg-transparent ${
+                          quickMode === "avoir" ? "text-purple-700" : "text-purple-600"
+                        }`}>
+                        💜 Utiliser l'avoir ({totalAvoir.toFixed(2)}€ disponible) {quickMode === "avoir" && "✓"}
+                      </button>
+                    </div>
+                  );
+                })()}
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { id: "cheque", label: "Chèque", icon: "📝" },
