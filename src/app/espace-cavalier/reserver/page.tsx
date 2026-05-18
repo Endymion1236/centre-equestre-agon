@@ -467,6 +467,11 @@ export default function ReserverPage() {
             stageSchedule: i.isStage ? (formatStageSchedule(stageCrs as any) ?? null) : null,
             stageDates: i.isStage ? stageCrs.map((c: any) => ({ date: c.date, startTime: c.startTime, endTime: c.endTime })) : null,
             priceHT: i.prixFinal / 1.055, tva: 5.5, priceTTC: i.prixFinal,
+            // Prix plein (avant degressivite) : sert au recalcul des rangs si
+            // un enfant est supprime de la commande plus tard (admin > Modifier).
+            // Sans ce champ, on ne peut pas recalculer correctement le tarif
+            // des enfants restants qui remontent en rang.
+            originalPriceTTC: i.prixBase || i.prixFinal,
             date: firstCr?.date || null,
             startTime: firstCr?.startTime || null,
             endTime: firstCr?.endTime || null,

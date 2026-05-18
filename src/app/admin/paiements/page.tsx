@@ -15,6 +15,7 @@ import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Rece
 import { openHtmlInTab } from "@/lib/open-html-tab";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
 import { downloadAvoirPdf } from "@/lib/download-avoir";
+import { fetchDiscountSettings, calculateFamilyDiscount, calculateMultiStageDiscount } from "@/lib/discounts";
 import type { Family, Activity } from "@/types";
 import { normalizePayment, loadPayments } from "./utils";
 import { BasketItem, Payment, PaymentMode, paymentModes } from "./types";
@@ -2047,6 +2048,105 @@ export default function PaiementsPage() {
                   onClick={async () => {
                     setEditSaving(true);
                     try {
+                      // ─── Recalcul des prix selon nouveaux rangs ─────────
+                      // Quand on supprime un enfant d'une commande payée, les autres
+                      // enfants 'remontent' en rang. Exemple : Eliot 1er, Ambre 2e,
+                      // John 3e. Si Eliot est supprimé : Ambre passe 1er, John 2e.
+                      // Les tarifs dégressifs doivent être recalculés en conséquence.
+                      const oldItemsForRank = editPayment.items || [];
+                      const removedChildIds = new Set(
+                        oldItemsForRank
+                          .filter((oi: any) =>
+                            !editItems.some(ni =>
+                              ni.childId === oi.childId &&
+                              (ni.creneauId === oi.creneauId || (ni.stageKey && ni.stageKey === oi.stageKey))
+                            )
+                          )
+                          .map((oi: any) => oi.childId)
+                      );
+
+                      let priceRecalcMsg = "";
+                      // Seulement recalculer si au moins un item supprimé ET il s'agit d'un stage
+                      // (la dégressivité famille s'applique uniquement aux stages dans une période vacances)
+                      const isStageContext = oldItemsForRank.some((oi: any) =>
+                        oi.activityType === "stage" || oi.activityType === "stage_journee" || oi.stageKey
+                      );
+                      if (removedChildIds.size > 0 && isStageContext) {
+                        try {
+                          const settings = await fetchDiscountSettings();
+                          // Recompose les "existingStages" du point de vue du nouveau rang :
+                          // chaque enfant conservé apparaît UNE FOIS dans l'ordre d'origine
+                          const orderedChildIds: string[] = [];
+                          for (const oi of oldItemsForRank) {
+                            if (removedChildIds.has(oi.childId)) continue;
+                            if (!orderedChildIds.includes(oi.childId)) {
+                              orderedChildIds.push(oi.childId);
+                            }
+                          }
+                          // Pour chaque item conservé : recalcul son prix selon son nouveau rang famille
+                          const recalculated = editItems.map((it: any) => {
+                            if (!it.childId) return it; // ligne libre (remise/ajustement) -> on touche pas
+                            const isStage = (it.activityType === "stage" || it.activityType === "stage_journee" || it.stageKey);
+                            if (!isStage) return it; // cours et autres -> pas concerné par dégressivité famille stage
+                            // Reconstituer existingStages comme si on inscrivait cet enfant
+                            // dans l'ordre orderedChildIds (donc enfants qui le précèdent dans l'ordre)
+                            const childIdx = orderedChildIds.indexOf(it.childId);
+                            if (childIdx < 0) return it;
+                            const previousChildIds = orderedChildIds.slice(0, childIdx);
+                            const fakeExistingStages = previousChildIds.map(cid => ({
+                              childId: cid,
+                              childName: "fake",
+                              familyId: editPayment.familyId,
+                              stageDate: "2026-01-01",
+                              stageTitle: "fake",
+                              creneauId: "fake",
+                              activityType: "stage" as const,
+                              activityTitle: "fake",
+                              date: "2026-01-01",
+                            } as any));
+                            const fd = calculateFamilyDiscount(fakeExistingStages, it.childId, settings.familyDiscount);
+                            // Prix de base = priceTTC actuel / (1 - ancien %)
+                            // Mais c'est plus simple de retrouver le prix plein depuis stageBasePrice si présent,
+                            // sinon estimer en remontant le pourcentage actuel.
+                            // Pour simplicité : si l'item a originalPrice, on l'utilise. Sinon on garde tel quel.
+                            const originalPrice = it.originalPriceTTC || it.originalPrice || it.priceBase || null;
+                            if (!originalPrice) return it; // pas d'info -> on ne touche pas (risque trop élevé)
+                            // Multi-stages : recalculer aussi si même enfant a plusieurs stages dans la commande
+                            const sameChildStages = editItems.filter((x: any) =>
+                              x.childId === it.childId &&
+                              (x.activityType === "stage" || x.activityType === "stage_journee" || x.stageKey)
+                            );
+                            const md = sameChildStages.length > 1
+                              ? calculateMultiStageDiscount(fakeExistingStages.filter(s => s.childId === it.childId), it.childId, settings.multiStageDiscount)
+                              : { percent: 0, nth: 1 };
+                            const totalPct = Math.min(fd.percent + md.percent, 50);
+                            let newPrice = Math.round((originalPrice * (100 - totalPct)) / 100 * 100) / 100;
+                            // Plancher
+                            if (settings.prixPlancherStage && newPrice < settings.prixPlancherStage) {
+                              newPrice = settings.prixPlancherStage;
+                            }
+                            // Mise à jour titre pour refléter la nouvelle réduction
+                            const baseTitle = (it.activityTitle || "").replace(/\s*\(-[\d.]+€\)$/, "").replace(/\s*—\s*\d+\.?\d*€$/, "");
+                            const remise = Math.round((originalPrice - newPrice) * 100) / 100;
+                            const newTitle = remise > 0 ? `${baseTitle} (-${remise.toFixed(2)}€)` : baseTitle;
+                            return {
+                              ...it,
+                              priceTTC: newPrice,
+                              priceHT: Math.round((newPrice / (1 + (it.tva || 5.5) / 100)) * 100) / 100,
+                              activityTitle: newTitle,
+                            };
+                          });
+                          // Si au moins un item a changé : on remplace
+                          const changedCount = recalculated.filter((r: any, i: number) => r.priceTTC !== editItems[i].priceTTC).length;
+                          if (changedCount > 0) {
+                            editItems.splice(0, editItems.length, ...recalculated);
+                            priceRecalcMsg = ` (${changedCount} prix recalculé${changedCount > 1 ? 's' : ''} selon nouveaux rangs)`;
+                          }
+                        } catch (recalcErr) {
+                          console.warn("[edit-payment] Recalcul rang échoué (non bloquant):", recalcErr);
+                        }
+                      }
+
                       const newTotal = Math.round(editItems.reduce((s, i) => s + (i.priceTTC || 0), 0) * 100) / 100;
                       const previousPaid = editPayment.paidAmount || 0;
                       const overpayment = Math.round((previousPaid - newTotal) * 100) / 100;
@@ -2188,7 +2288,7 @@ export default function PaiementsPage() {
                         ? { ...p, items: editItems, totalTTC: newTotal, paidAmount: newPaid, status: newStatus }
                         : p
                       ));
-                      toast(`✅ Commande mise à jour — ${newTotal.toFixed(2)}€${avoirMsg}`, "success");
+                      toast(`✅ Commande mise à jour — ${newTotal.toFixed(2)}€${avoirMsg}${priceRecalcMsg}`, "success");
                       setEditPayment(null);
                     } catch (e) { console.error(e); toast("Erreur lors de la sauvegarde", "error"); }
                     setEditSaving(false);
