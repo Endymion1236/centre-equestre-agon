@@ -2055,6 +2055,72 @@ export default function PaiementsPage() {
                       const newPaid = Math.min(previousPaid, newTotal);
                       const newStatus = newPaid >= newTotal ? "paid" : newPaid > 0 ? "partial" : "pending";
 
+                      // ─── Désinscription des items SUPPRIMÉS ─────────────
+                      // Identifie les items qui étaient présents avant et ne le sont
+                      // plus après modification. Pour chacun :
+                      // - Retire l'enfant des creneaux.enrolled[] (créneau principal + creneauIds[] pour stages)
+                      // - Supprime les réservations liées (creneauId match + childId match)
+                      // Sans ça, Eliot resterait inscrit dans le stage du 6 juillet en "non payé"
+                      // alors que sa ligne facture a été supprimée.
+                      const oldItems = editPayment.items || [];
+                      const removedItems = oldItems.filter((oi: any) => {
+                        // Match strict sur childId + creneauId (ou stageKey si stage multi-jours)
+                        return !editItems.some(ni =>
+                          ni.childId === oi.childId &&
+                          (ni.creneauId === oi.creneauId || (ni.stageKey && ni.stageKey === oi.stageKey))
+                        );
+                      });
+
+                      let creneauxUpdated = 0;
+                      let reservationsDeleted = 0;
+                      for (const removed of removedItems) {
+                        // Liste des creneaux concernés (cours = 1, stage = N jours)
+                        const creneauIds: string[] = removed.creneauIds && Array.isArray(removed.creneauIds) && removed.creneauIds.length > 0
+                          ? removed.creneauIds
+                          : (removed.creneauId ? [removed.creneauId] : []);
+
+                        for (const cid of creneauIds) {
+                          try {
+                            const cSnap = await getDoc(doc(db, "creneaux", cid));
+                            if (!cSnap.exists()) continue;
+                            const cData = cSnap.data();
+                            const enrolled = cData.enrolled || [];
+                            // On retire uniquement les inscriptions de CET enfant pour CETTE famille
+                            const newEnrolled = enrolled.filter((e: any) =>
+                              !(e.childId === removed.childId && e.familyId === editPayment.familyId)
+                            );
+                            if (newEnrolled.length !== enrolled.length) {
+                              await updateDoc(doc(db, "creneaux", cid), {
+                                enrolled: newEnrolled,
+                                enrolledCount: newEnrolled.length,
+                              });
+                              creneauxUpdated++;
+                            }
+                          } catch (e) {
+                            console.error(`[edit-payment] Désinscription créneau ${cid} échouée:`, e);
+                          }
+
+                          // Supprimer les réservations correspondantes
+                          try {
+                            const resaSnap = await getDocs(query(
+                              collection(db, "reservations"),
+                              where("familyId", "==", editPayment.familyId),
+                              where("childId", "==", removed.childId),
+                              where("creneauId", "==", cid),
+                            ));
+                            for (const r of resaSnap.docs) {
+                              await deleteDoc(r.ref);
+                              reservationsDeleted++;
+                            }
+                          } catch (e) {
+                            console.error(`[edit-payment] Suppression réservation échouée:`, e);
+                          }
+                        }
+                      }
+                      if (removedItems.length > 0) {
+                        console.log(`[edit-payment] ${removedItems.length} item(s) retiré(s) → ${creneauxUpdated} créneau(x) mis à jour, ${reservationsDeleted} réservation(s) supprimée(s)`);
+                      }
+
                       await updateDoc(doc(db, "payments", editPayment.id), {
                         items: editItems,
                         totalTTC: newTotal,
