@@ -131,20 +131,20 @@ export async function POST(req: NextRequest) {
     }
 
     // ─── 3. Rate limit ──────────────────────────────────────────
-    // Pas plus d'un reset toutes les 10 minutes.
+    // Pas plus d'un reset toutes les 30 secondes.
     // Note : on filtre uniquement par createdAt (1 condition) pour eviter
     // de necessiter un index composite Firestore. Le filtre dryRun est
     // applique cote JS apres recuperation des resultats.
-    const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000);
+    const cooldownAgo = new Date(Date.now() - 30 * 1000);
     const recentSnap = await adminDb
       .collection("resetLogs")
-      .where("createdAt", ">=", tenMinAgo)
+      .where("createdAt", ">=", cooldownAgo)
       .limit(20)
       .get();
     const realResetRecent = recentSnap.docs.some(d => d.data()?.dryRun === false);
     if (!dryRun && realResetRecent) {
       return NextResponse.json({
-        error: "Un reset a déjà été effectué dans les 10 dernières minutes. Veuillez patienter.",
+        error: "Un reset a déjà été effectué dans les 30 dernières secondes. Veuillez patienter.",
       }, { status: 429 });
     }
 
