@@ -656,8 +656,18 @@ export default function ReserverPage() {
           if (user?.uid) {
             try {
               const aSnap = await getDocs(query(collection(db, "avoirs"), where("familyId", "==", user.uid)));
-              setFamilyAvoirs(aSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((a: any) => a.status === "actif" && (a.remainingAmount || 0) > 0));
-            } catch { setFamilyAvoirs([]); }
+              const allDocs = aSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+              const filtered = allDocs.filter((a: any) => a.status === "actif" && (a.remainingAmount || 0) > 0);
+              console.log("[DEBUG avoirs]", {
+                user_uid: user.uid,
+                nbDocsFound: allDocs.length,
+                allStatuses: allDocs.map((a: any) => ({ id: a.id, status: a.status, familyId: a.familyId, remaining: a.remainingAmount })),
+                nbAfterFilter: filtered.length,
+              });
+              setFamilyAvoirs(filtered);
+            } catch (e) { console.error("[DEBUG avoirs] error:", e); setFamilyAvoirs([]); }
+          } else {
+            console.warn("[DEBUG avoirs] user.uid manquant");
           }
         }} className="relative flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600">
           <ShoppingCart size={16} /> Panier
