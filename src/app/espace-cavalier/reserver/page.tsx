@@ -273,31 +273,72 @@ export default function ReserverPage() {
 
     // Filtrer les enfants déjà dans le panier OU deja inscrits au stage
     const firstCrId = stageCreneaux[0]?.id;
+
+    // Helper : 2 plages horaires se chevauchent-elles le meme jour ?
+    // Compare date + intersection [start,end]. Renvoie true si chevauchement.
+    const overlap = (a: { date: string; startTime: string; endTime: string }, b: { date: string; startTime: string; endTime: string }) => {
+      if (a.date !== b.date) return false;
+      // Comparaison HH:MM en string fonctionne tant qu'on a le format "HH:MM" ou "HH:MM:SS"
+      const aStart = a.startTime || "00:00";
+      const aEnd = a.endTime || "23:59";
+      const bStart = b.startTime || "00:00";
+      const bEnd = b.endTime || "23:59";
+      // Pas de chevauchement si a finit avant que b commence, ou b finit avant a
+      return !(aEnd <= bStart || bEnd <= aStart);
+    };
+
+    // Recuperer pour un enfant la liste de tous ses creneaux deja "pris" :
+    // - inscriptions deja payees (enrolled[] des creneaux en base)
+    // - items dans le panier (stages et cours)
+    const getChildBusySlots = (childId: string): { date: string; startTime: string; endTime: string }[] => {
+      const slots: { date: string; startTime: string; endTime: string }[] = [];
+      // 1. Inscriptions deja payees : on parcourt creneaux qui ont enrolled[]
+      for (const c of creneaux) {
+        if ((c.enrolled || []).some((e: any) => e.childId === childId && e.familyId === familyId)) {
+          slots.push({ date: c.date, startTime: c.startTime, endTime: c.endTime });
+        }
+      }
+      // 2. Items du panier : parcourir creneauIds[] et resoudre vers le creneau
+      for (const item of cart) {
+        if (item.childId !== childId) continue;
+        for (const cid of (item.creneauIds || [])) {
+          const cr = creneaux.find(c => c.id === cid);
+          if (cr) slots.push({ date: cr.date, startTime: cr.startTime, endTime: cr.endTime });
+        }
+      }
+      return slots;
+    };
+
+    const conflits: { childName: string; date: string }[] = [];
     const childrenToAdd = selectedChildren.filter(childId => {
       const alreadyInCart = cart.some(i => i.childId === childId && i.creneauIds.includes(firstCrId));
       if (alreadyInCart) {
         console.log(`Doublon panier ignoré: childId=${childId} créneau=${firstCrId}`);
         return false;
       }
-      // Verifier aussi dans les enrolled[] des creneaux : si l'enfant a deja
-      // une inscription dans CE creneau pour CETTE famille, on l'ignore
-      // (sinon double inscription = 2 paiements pour le meme service).
-      const dejaInscrit = stageCreneaux.some(c =>
-        (c.enrolled || []).some((e: any) => e.childId === childId && e.familyId === familyId)
-      );
-      if (dejaInscrit) {
-        console.log(`Deja inscrit au stage, ignore: childId=${childId} creneau=${firstCrId}`);
+      // Verifier conflit horaire : un des creneaux qu'on veut ajouter chevauche
+      // un creneau ou l'enfant est deja inscrit (panier ou base)
+      const busySlots = getChildBusySlots(childId);
+      for (const targetCr of stageCreneaux) {
+        const target = { date: targetCr.date, startTime: targetCr.startTime, endTime: targetCr.endTime };
+        for (const busy of busySlots) {
+          if (overlap(target, busy)) {
+            const child = children.find((c: any) => c.id === childId);
+            const dateFr = new Date(targetCr.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+            conflits.push({ childName: (child as any)?.firstName || "?", date: `${dateFr} (${target.startTime}-${target.endTime})` });
+            console.log(`Conflit horaire ignore: ${childId} ${targetCr.date} ${target.startTime}-${target.endTime} vs deja inscrit ${busy.date} ${busy.startTime}-${busy.endTime}`);
+            return false;
+          }
+        }
       }
-      return !dejaInscrit;
+      return true;
     });
 
-    // Message clair si tous les enfants selectionnes sont deja inscrits
-    if (selectedChildren.length > 0 && childrenToAdd.length === 0) {
-      const dejaIncritsNames = selectedChildren.map(cid => {
-        const c = children.find((ch: any) => ch.id === cid);
-        return (c as any)?.firstName || "?";
-      }).join(", ");
-      alert(`${dejaIncritsNames} sont déjà inscrit(s) à ce stage. Vous ne pouvez pas les inscrire à nouveau.`);
+    // Message clair si certains enfants ont des conflits
+    if (conflits.length > 0) {
+      const details = conflits.slice(0, 5).map(c => `• ${c.childName} : ${c.date}`).join("\n");
+      const plus = conflits.length > 5 ? `\n... et ${conflits.length - 5} autre(s)` : "";
+      alert(`⚠️ Conflit d'horaires détecté :\n\n${details}${plus}\n\nCet enfant est déjà inscrit à un autre stage/cours à ce moment-là. Désinscrivez-le d'abord ou choisissez une autre période.`);
       setSelectedChildren([]);
       setSelectedCreneau(null);
       return;
