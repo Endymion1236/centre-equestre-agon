@@ -51,6 +51,9 @@ export default function ReserverPage() {
   const [stageBookingMode, setStageBookingMode] = useState<"semaine" | "jour">("semaine");
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [expandedStageDetail, setExpandedStageDetail] = useState<string | null>(null); // key du stage dont le détail est ouvert
+  // Prix plancher pour un stage (configurable cote admin Reglages > Reductions).
+  // Le tarif degressif ne peut pas descendre en dessous de ce montant.
+  const [prixPlancherStage, setPrixPlancherStage] = useState<number>(0);
 
   // Tous les cavaliers disponibles = propres + liés
   const ownChildren = family?.children || [];
@@ -110,6 +113,24 @@ export default function ReserverPage() {
   };
 
   const monthLabel = currentMonth.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+
+  // Charger le prix plancher (settings/discounts) au montage.
+  // Sert a empecher les tarifs en dessous d'un seuil quand plusieurs reductions
+  // s'accumulent (famille + multi-stages).
+  useEffect(() => {
+    const loadPlancher = async () => {
+      try {
+        const snap = await getDoc(doc(db, "settings", "discounts"));
+        if (snap.exists()) {
+          const data = snap.data();
+          if (typeof data.prixPlancherStage === "number") {
+            setPrixPlancherStage(data.prixPlancherStage);
+          }
+        }
+      } catch { /* fallback 0 = pas de plancher */ }
+    };
+    loadPlancher();
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -250,16 +271,33 @@ export default function ReserverPage() {
 
     const dates = stageCreneaux.map(c => new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short" })).join(", ");
 
-    // Filtrer les enfants déjà dans le panier pour ce stage
+    // Filtrer les enfants déjà dans le panier OU deja inscrits au stage
     const firstCrId = stageCreneaux[0]?.id;
     const childrenToAdd = selectedChildren.filter(childId => {
       const alreadyInCart = cart.some(i => i.childId === childId && i.creneauIds.includes(firstCrId));
-      if (alreadyInCart) console.log(`Doublon panier ignoré: childId=${childId} créneau=${firstCrId}`);
-      return !alreadyInCart;
+      if (alreadyInCart) {
+        console.log(`Doublon panier ignoré: childId=${childId} créneau=${firstCrId}`);
+        return false;
+      }
+      // Verifier aussi dans les enrolled[] des creneaux : si l'enfant a deja
+      // une inscription dans CE creneau pour CETTE famille, on l'ignore
+      // (sinon double inscription = 2 paiements pour le meme service).
+      const dejaInscrit = stageCreneaux.some(c =>
+        (c.enrolled || []).some((e: any) => e.childId === childId && e.familyId === familyId)
+      );
+      if (dejaInscrit) {
+        console.log(`Deja inscrit au stage, ignore: childId=${childId} creneau=${firstCrId}`);
+      }
+      return !dejaInscrit;
     });
 
-    if (childrenToAdd.length === 0) {
-      alert("Cet enfant est déjà dans le panier pour ce stage.");
+    // Message clair si tous les enfants selectionnes sont deja inscrits
+    if (selectedChildren.length > 0 && childrenToAdd.length === 0) {
+      const dejaIncritsNames = selectedChildren.map(cid => {
+        const c = children.find((ch: any) => ch.id === cid);
+        return (c as any)?.firstName || "?";
+      }).join(", ");
+      alert(`${dejaIncritsNames} sont déjà inscrit(s) à ce stage. Vous ne pouvez pas les inscrire à nouveau.`);
       setSelectedChildren([]);
       setSelectedCreneau(null);
       return;
@@ -275,6 +313,16 @@ export default function ReserverPage() {
       const remiseSemaine = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
       // Prorata de la remise si mode jour
       const remise = isJourMode ? Math.round(remiseSemaine * stageCreneaux.length / nbJoursSemaine * 100) / 100 : remiseSemaine;
+      let prixFinal = Math.max(0, Math.round((prixBase - remise) * 100) / 100);
+      let remiseEffective = remise;
+      // Plancher : si le tarif degressif tombe en dessous du seuil configure,
+      // on plafonne au plancher. On recalcule alors la remise effective pour
+      // l'affichage et la facturation.
+      if (prixPlancherStage > 0 && prixFinal < prixPlancherStage) {
+        prixFinal = prixPlancherStage;
+        remiseEffective = Math.round((prixBase - prixPlancherStage) * 100) / 100;
+        remiseEffective = Math.max(0, remiseEffective);
+      }
       return {
         creneauIds: stageCreneaux.map(c => c.id),
         activityTitle: first.activityTitle,
@@ -282,9 +330,9 @@ export default function ReserverPage() {
         childId,
         childName: (child as any)?.firstName || "?",
         prixBase: Math.round(prixBase * 100) / 100,
-        remiseEuros: remise,
+        remiseEuros: remiseEffective,
         rang: rang + 1,
-        prixFinal: Math.max(0, Math.round((prixBase - remise) * 100) / 100),
+        prixFinal,
         isStage: true,
       };
     });
@@ -656,18 +704,8 @@ export default function ReserverPage() {
           if (user?.uid) {
             try {
               const aSnap = await getDocs(query(collection(db, "avoirs"), where("familyId", "==", user.uid)));
-              const allDocs = aSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-              const filtered = allDocs.filter((a: any) => a.status === "actif" && (a.remainingAmount || 0) > 0);
-              console.log("[DEBUG avoirs]", {
-                user_uid: user.uid,
-                nbDocsFound: allDocs.length,
-                allStatuses: allDocs.map((a: any) => ({ id: a.id, status: a.status, familyId: a.familyId, remaining: a.remainingAmount })),
-                nbAfterFilter: filtered.length,
-              });
-              setFamilyAvoirs(filtered);
-            } catch (e) { console.error("[DEBUG avoirs] error:", e); setFamilyAvoirs([]); }
-          } else {
-            console.warn("[DEBUG avoirs] user.uid manquant");
+              setFamilyAvoirs(aSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((a: any) => a.status === "actif" && (a.remainingAmount || 0) > 0));
+            } catch { setFamilyAvoirs([]); }
           }
         }} className="relative flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600">
           <ShoppingCart size={16} /> Panier
@@ -958,8 +996,14 @@ export default function ReserverPage() {
                                 const child = children.find((c: any) => c.id === childId);
                                 const rang = existingStageCount + idx;
                                 const remiseSemaine = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
-                                const remise = isJourMode ? Math.round(remiseSemaine / joursUniques.length * selectedDays.length * 100) / 100 : remiseSemaine;
-                                const prixFinal = Math.max(0, Math.round((prixEffectif - remise) * 100) / 100);
+                                const remiseInitiale = isJourMode ? Math.round(remiseSemaine / joursUniques.length * selectedDays.length * 100) / 100 : remiseSemaine;
+                                let prixFinal = Math.max(0, Math.round((prixEffectif - remiseInitiale) * 100) / 100);
+                                let remise = remiseInitiale;
+                                // Plancher (coherent avec addStageToCart)
+                                if (prixPlancherStage > 0 && prixFinal < prixPlancherStage) {
+                                  prixFinal = prixPlancherStage;
+                                  remise = Math.max(0, Math.round((prixEffectif - prixPlancherStage) * 100) / 100);
+                                }
                                 return (
                                   <div key={childId} className="flex justify-between font-body text-sm py-1">
                                     <div className="flex items-center gap-2">
