@@ -93,6 +93,75 @@ function formatIban(iban: string): string {
   return iban.replace(/\s/g, "").replace(/(.{4})/g, "$1 ").trim();
 }
 
+/**
+ * Validation IBAN par algorithme officiel ISO 13616 (modulo 97).
+ *
+ * Etapes :
+ * 1. Retirer espaces, mettre en majuscules
+ * 2. Verifier longueur attendue par pays (FR=27, BE=16, etc.)
+ * 3. Deplacer les 4 premiers caracteres a la fin
+ * 4. Convertir chaque lettre en 2 chiffres (A=10, B=11, ..., Z=35)
+ * 5. Calculer le modulo 97 de la chaine de chiffres
+ * 6. Si resultat = 1, l'IBAN est valide
+ *
+ * Renvoie { valid: boolean, error: string | null }
+ */
+function validateIban(iban: string): { valid: boolean; error: string | null } {
+  if (!iban) return { valid: false, error: "IBAN manquant" };
+  const clean = iban.replace(/\s/g, "").toUpperCase();
+
+  // Longueurs IBAN par pays (extrait pour les principaux)
+  const expectedLengths: Record<string, number> = {
+    FR: 27, MC: 27, // France, Monaco
+    BE: 16,         // Belgique
+    DE: 22,         // Allemagne
+    CH: 21,         // Suisse
+    LU: 20,         // Luxembourg
+    IT: 27,         // Italie
+    ES: 24,         // Espagne
+    NL: 18,         // Pays-Bas
+    GB: 22,         // UK
+    PT: 25,         // Portugal
+  };
+
+  // Format de base : 2 lettres + 2 chiffres + reste
+  if (!/^[A-Z]{2}[0-9]{2}[A-Z0-9]+$/.test(clean)) {
+    return { valid: false, error: "Format invalide (doit commencer par 2 lettres + 2 chiffres)" };
+  }
+
+  const country = clean.substring(0, 2);
+  const expected = expectedLengths[country];
+  if (expected && clean.length !== expected) {
+    return { valid: false, error: `Longueur incorrecte pour ${country} : ${clean.length} caractères au lieu de ${expected}` };
+  }
+
+  // Algorithme modulo 97 : deplacer les 4 premiers caracteres a la fin
+  const rearranged = clean.substring(4) + clean.substring(0, 4);
+
+  // Convertir lettres en chiffres (A=10, B=11, ..., Z=35)
+  let numeric = "";
+  for (const ch of rearranged) {
+    if (/[0-9]/.test(ch)) {
+      numeric += ch;
+    } else {
+      numeric += (ch.charCodeAt(0) - 55).toString();
+    }
+  }
+
+  // Modulo 97 par traitement par blocs (BigInt non necessaire si on fait par blocs de 9 chiffres)
+  let remainder = 0;
+  for (let i = 0; i < numeric.length; i += 9) {
+    const block = remainder.toString() + numeric.substring(i, i + 9);
+    remainder = parseInt(block, 10) % 97;
+  }
+
+  if (remainder !== 1) {
+    return { valid: false, error: "Checksum invalide — vérifiez votre saisie" };
+  }
+
+  return { valid: true, error: null };
+}
+
 // ═══ Composant principal ═══
 export default function SepaPage() {
   const { toast } = useToast();
@@ -144,10 +213,19 @@ export default function SepaPage() {
   // ─── Créer un mandat ───
   const handleCreateMandat = async () => {
     if (!newMandat.familyId || !newMandat.iban || !newMandat.titulaire) return;
+
+    // Validation IBAN par checksum (ISO 13616, modulo 97)
+    // Empeche les saisies erronees qui causeraient un rejet bancaire plus tard.
+    const cleanIban = newMandat.iban.replace(/\s/g, "").toUpperCase();
+    const ibanCheck = validateIban(cleanIban);
+    if (!ibanCheck.valid) {
+      toast(`IBAN invalide : ${ibanCheck.error}`, "error");
+      return;
+    }
+
     setSaving(true);
     try {
       const family = families.find(f => f.firestoreId === newMandat.familyId);
-      const cleanIban = newMandat.iban.replace(/\s/g, "").toUpperCase();
       const bic = newMandat.bic || lookupBic(cleanIban);
       const nextMandatNum = mandats.length + 1;
       const mandatId = `CEDC${nextMandatNum}MD${Math.floor(Math.random() * 9000) + 1000}`;
