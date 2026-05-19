@@ -182,13 +182,13 @@ export default function FacturesPage() {
       // On charge meme si pas de mandat, pour que l'onglet sache afficher
       // 'Aucun pr\u00e9l\u00e8vement en cours' au lieu d'un onglet manquant.
       try {
-        const [mSnap, eSnap] = await Promise.all([
-          getDocs(query(collection(db, "mandats-sepa"), where("familyId", "==", user.uid))),
-          getDocs(query(collection(db, "echeances-sepa"), where("familyId", "==", user.uid))),
-        ]);
+        const mSnap = await getDocs(query(collection(db, "mandats-sepa"), where("familyId", "==", user.uid)));
         setSepaMandats(mSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (e) { console.error("[espace-cavalier] charge mandats-sepa echec:", e); setSepaMandats([]); }
+      try {
+        const eSnap = await getDocs(query(collection(db, "echeances-sepa"), where("familyId", "==", user.uid)));
         setSepaEcheances(eSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (e) { console.error("[espace-cavalier] charge SEPA echec:", e); }
+      } catch (e) { console.error("[espace-cavalier] charge echeances-sepa echec:", e); setSepaEcheances([]); }
 
       setLoading(false);
     };

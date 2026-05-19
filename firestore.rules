@@ -172,7 +172,9 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     match /echeances-sepa/{docId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin()
+        || (isAuth() && resource.data.familyId == request.auth.uid);
+      allow write: if isAdmin();
     }
     match /remises-sepa/{docId} {
       allow read, write: if isAdmin();
