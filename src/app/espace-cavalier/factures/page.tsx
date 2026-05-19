@@ -72,13 +72,16 @@ export default function FacturesPage() {
   const [declareDateEncaissement, setDeclareDateEncaissement] = useState("");
   const [declareSending, setDeclareSending] = useState(false);
   const [declareSuccess, setDeclareSuccess] = useState(false); // paymentId en cours
-  const [tab, setTab] = useState<"factures" | "reservations" | "cartes" | "fidelite">("factures");
+  const [tab, setTab] = useState<"factures" | "reservations" | "cartes" | "fidelite" | "sepa">("factures");
   const [clientAvoirs, setClientAvoirs] = useState<any[]>([]);
   const [openCardId, setOpenCardId] = useState<string | null>(null);
   const [fidelite, setFidelite] = useState<any>(null);
   const [fideliteSettings, setFideliteSettings] = useState<{ taux: number; minPoints: number; enabled: boolean } | null>(null);
   const [convertingPoints, setConvertingPoints] = useState(false);
   const [familyData, setFamilyData] = useState<any>(null);
+  // SEPA : mandats actifs + echeances a venir/passees pour la famille
+  const [sepaMandats, setSepaMandats] = useState<any[]>([]);
+  const [sepaEcheances, setSepaEcheances] = useState<any[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -175,6 +178,18 @@ export default function FacturesPage() {
         }
       } catch (e) { console.error("Famille non trouvee:", e); }
 
+      // SEPA : mandats + echeances pour cette famille
+      // On charge meme si pas de mandat, pour que l'onglet sache afficher
+      // 'Aucun pr\u00e9l\u00e8vement en cours' au lieu d'un onglet manquant.
+      try {
+        const [mSnap, eSnap] = await Promise.all([
+          getDocs(query(collection(db, "mandats-sepa"), where("familyId", "==", user.uid))),
+          getDocs(query(collection(db, "echeances-sepa"), where("familyId", "==", user.uid))),
+        ]);
+        setSepaMandats(mSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setSepaEcheances(eSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (e) { console.error("[espace-cavalier] charge SEPA echec:", e); }
+
       setLoading(false);
     };
     fetchAll();
@@ -217,6 +232,18 @@ export default function FacturesPage() {
             {id === "factures" && payments.length > 0 && <span className="bg-white/20 text-[10px] px-1.5 py-0.5 rounded-full">{payments.length}</span>}
           </button>
         ))}
+        {/* Onglet SEPA : visible uniquement si la famille a au moins un mandat actif */}
+        {sepaMandats.some((m: any) => m.status === "active") && (() => {
+          const pendingCount = sepaEcheances.filter((e: any) => e.status === "pending").length;
+          return (
+            <button onClick={() => setTab("sepa")}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all whitespace-nowrap
+                ${tab === "sepa" ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
+              🏦 Prélèvements SEPA
+              {pendingCount > 0 && <span className={`${tab === "sepa" ? "bg-white/20" : "bg-blue-100"} text-[10px] px-1.5 py-0.5 rounded-full`}>{pendingCount}</span>}
+            </button>
+          );
+        })()}
       </div>
 
       {loading ? (
@@ -701,6 +728,122 @@ export default function FacturesPage() {
                   </div>
                 </Card>
               )}
+            </div>
+          )}
+
+          {/* ─── SEPA : mandat + échéancier ─── */}
+          {tab === "sepa" && (
+            <div className="flex flex-col gap-4">
+              {/* Bandeau mandat actif */}
+              {(() => {
+                const mandatActif = sepaMandats.find((m: any) => m.status === "active");
+                if (!mandatActif) {
+                  return (
+                    <Card padding="md">
+                      <p className="font-body text-sm text-gray-600">Aucun mandat SEPA actif pour votre famille.</p>
+                    </Card>
+                  );
+                }
+                // Mask iban (FR76 XXXX XXXX XXXX XXXX 1234) pour la securite
+                const iban = (mandatActif.iban || "").replace(/\s/g, "");
+                const ibanMasked = iban.length > 8
+                  ? `${iban.substring(0, 4)} •••• •••• •••• ${iban.substring(iban.length - 4)}`
+                  : iban;
+                return (
+                  <Card padding="md">
+                    <div className="flex items-start gap-3">
+                      <div className="text-2xl">🏦</div>
+                      <div className="flex-1">
+                        <div className="font-display text-base font-bold text-blue-800">Mandat SEPA actif</div>
+                        <div className="font-body text-xs text-gray-600 mt-1">
+                          Titulaire : <span className="font-semibold">{mandatActif.titulaire}</span>
+                        </div>
+                        <div className="font-body text-xs text-gray-600">
+                          IBAN : <span className="font-mono">{ibanMasked}</span>
+                        </div>
+                        <div className="font-body text-xs text-gray-600">
+                          Référence : <span className="font-mono">{mandatActif.mandatId}</span>
+                          {mandatActif.dateSignature && ` · Signé le ${new Date(mandatActif.dateSignature).toLocaleDateString("fr-FR")}`}
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })()}
+
+              {/* Liste des échéances à venir + historique */}
+              {(() => {
+                const toEcheanceDate = (e: any) => e.dateEcheance || "";
+                const aVenir = sepaEcheances
+                  .filter((e: any) => e.status === "pending")
+                  .sort((a: any, b: any) => toEcheanceDate(a).localeCompare(toEcheanceDate(b)));
+                const passees = sepaEcheances
+                  .filter((e: any) => e.status !== "pending")
+                  .sort((a: any, b: any) => toEcheanceDate(b).localeCompare(toEcheanceDate(a)));
+                const totalAVenir = aVenir.reduce((s: number, e: any) => s + (e.montant || 0), 0);
+
+                if (sepaEcheances.length === 0) {
+                  return (
+                    <Card padding="md">
+                      <p className="font-body text-sm text-gray-600">Aucun prélèvement programmé actuellement.</p>
+                      <p className="font-body text-xs text-gray-500 mt-1">Lorsqu&apos;un échéancier sera mis en place, vous le verrez ici.</p>
+                    </Card>
+                  );
+                }
+
+                return (
+                  <>
+                    {aVenir.length > 0 && (
+                      <Card padding="md">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="font-body text-xs font-semibold text-gray-600 uppercase tracking-wider">Prélèvements à venir</div>
+                          <div className="font-body text-sm font-bold text-blue-800">{totalAVenir.toFixed(2)}€ au total</div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          {aVenir.map((e: any) => {
+                            const date = e.dateEcheance ? new Date(e.dateEcheance) : null;
+                            const dateLabel = date ? date.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) : "—";
+                            return (
+                              <div key={e.id} className="flex items-center justify-between py-2 px-3 bg-blue-50 rounded-lg">
+                                <div>
+                                  <div className="font-body text-sm font-semibold text-blue-800">{e.description || "Échéance"}</div>
+                                  <div className="font-body text-xs text-gray-600">Prélevé le {dateLabel}</div>
+                                </div>
+                                <div className="font-body text-base font-bold text-blue-800">{(e.montant || 0).toFixed(2)}€</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="font-body text-[11px] text-gray-500 mt-3">
+                          💡 Ces montants seront prélevés automatiquement sur votre compte bancaire aux dates indiquées. Vous n&apos;avez rien à faire.
+                        </div>
+                      </Card>
+                    )}
+
+                    {passees.length > 0 && (
+                      <Card padding="md">
+                        <div className="font-body text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">Historique</div>
+                        <div className="flex flex-col gap-1">
+                          {passees.slice(0, 12).map((e: any) => {
+                            const date = e.dateEcheance ? new Date(e.dateEcheance) : null;
+                            const dateLabel = date ? date.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : "—";
+                            const statusLabel = e.status === "preleve" ? "✅ Prélevé" : e.status === "rejete" ? "❌ Rejeté" : e.status === "remis" ? "🏦 Remis en banque" : e.status;
+                            return (
+                              <div key={e.id} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
+                                <div>
+                                  <div className="font-body text-xs font-semibold text-gray-700">{e.description || "Échéance"}</div>
+                                  <div className="font-body text-[10px] text-gray-500">{dateLabel} · {statusLabel}</div>
+                                </div>
+                                <div className="font-body text-sm font-semibold text-gray-700">{(e.montant || 0).toFixed(2)}€</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </Card>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
         </>
