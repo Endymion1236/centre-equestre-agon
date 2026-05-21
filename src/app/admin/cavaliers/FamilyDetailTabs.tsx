@@ -125,7 +125,10 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <Badge color={child.galopLevel && child.galopLevel !== "—" ? "blue" : "gray"}>{child.galopLevel && child.galopLevel !== "—" ? child.galopLevel : "Débutant"}</Badge>
-                {child.sanitaryForm ? <Badge color="green">Fiche OK</Badge> : <Badge color="red">Fiche manquante</Badge>}
+                {(!child.firstName?.trim() || !child.lastName?.trim() || !bd || isNaN(bd.getTime())) && (
+                  <Badge color="red">Profil incomplet</Badge>
+                )}
+                {child.sanitaryForm ? <Badge color="green">Attestation OK</Badge> : <Badge color="red">Attestation médicale manquante</Badge>}
               </div>
             </div>
             {/* Actions */}

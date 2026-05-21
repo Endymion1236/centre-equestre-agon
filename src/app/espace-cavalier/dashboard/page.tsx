@@ -425,16 +425,24 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <Badge color={child.galopLevel && child.galopLevel !== "—" ? "blue" : "gray"}>
                       {child.galopLevel && child.galopLevel !== "—"
                         ? `Galop ${child.galopLevel}`
                         : "Débutant"}
                     </Badge>
+                    {(() => {
+                      const lastName = (child as any).lastName || "";
+                      const birthDate = (child as any).birthDate;
+                      const isProfileIncomplete = !child.firstName?.trim() || !lastName.trim() || !birthDate;
+                      return isProfileIncomplete ? (
+                        <Badge color="red">Profil incomplet</Badge>
+                      ) : null;
+                    })()}
                     {child.sanitaryForm ? (
-                      <Badge color="green">Fiche OK</Badge>
+                      <Badge color="green">Attestation OK</Badge>
                     ) : (
-                      <Badge color="red">Fiche manquante</Badge>
+                      <Badge color="red">Attestation médicale manquante</Badge>
                     )}
                   </div>
                 </div>

@@ -506,11 +506,19 @@ export default function ProfilPage() {
                     <div className="font-body text-xs text-gray-600">Niveau : {child.galopLevel || "—"}</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {(() => {
+                    const lastName = (child as any).lastName || "";
+                    const birthDate = (child as any).birthDate;
+                    const isProfileIncomplete = !child.firstName?.trim() || !lastName.trim() || !birthDate;
+                    return isProfileIncomplete ? (
+                      <Badge color="red">⚠ Profil incomplet</Badge>
+                    ) : null;
+                  })()}
                   {child.sanitaryForm ? (
-                    <Badge color="green">✓ Fiche sanitaire OK</Badge>
+                    <Badge color="green">✓ Attestation OK</Badge>
                   ) : (
-                    <Badge color="red">⚠ Fiche manquante</Badge>
+                    <Badge color="red">⚠ Attestation médicale manquante</Badge>
                   )}
                   <button onClick={() => startEditChild(child)}
                     className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
