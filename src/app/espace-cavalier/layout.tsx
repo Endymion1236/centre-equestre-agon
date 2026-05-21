@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation";
 import VoiceAssistant from "@/components/VoiceAssistant";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, query, where } from "firebase/firestore";
+import { toLocalDateString, addDaysLocal } from "@/lib/date-local";
 import {
   Home,
   Calendar,
@@ -372,9 +373,8 @@ export default function EspaceCavalierLayout({
       try {
         const now = new Date();
         // Prochains 30 jours
-        const todayStr = now.toISOString().split("T")[0];
-        const in30 = new Date(now); in30.setDate(in30.getDate() + 30);
-        const in30Str = in30.toISOString().split("T")[0];
+        const todayStr = toLocalDateString(now);
+        const in30Str = addDaysLocal(30, now);
 
         const [creneauxSnap, activitiesSnap] = await Promise.all([
           getDocs(query(

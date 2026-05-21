@@ -11,6 +11,7 @@ import { useSearchParams } from "next/navigation";
 import { authFetch } from "@/lib/auth-fetch";
 import { formatStageSchedule } from "@/lib/format-stage";
 import { compareCreneauxByDate } from "@/lib/creneau-sort";
+import { todayLocalString } from "@/lib/date-local";
 
 interface Creneau { id: string; activityId: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolled: any[]; enrolledCount: number; priceHT: number; priceTTC?: number; tvaTaux: number; }
 
@@ -502,7 +503,7 @@ export default function ReserverPage() {
               childId: item.childId, childName: item.childName,
               activityTitle: item.activityTitle, activityType: "stage",
               creneauId: cid,
-              date: crData?.date || new Date().toISOString().split("T")[0],
+              date: crData?.date || todayLocalString(),
               startTime: crData?.startTime || "",
               endTime: crData?.endTime || "",
               priceTTC: 0, // prix global sur la 1ère réservation uniquement
@@ -526,7 +527,7 @@ export default function ReserverPage() {
               childId: item.childId, childName: item.childName,
               activityTitle: item.activityTitle, activityType: "cours",
               creneauId: item.creneauIds[0],
-              date: firstCreneau?.date || new Date().toISOString().split("T")[0],
+              date: firstCreneau?.date || todayLocalString(),
               startTime: firstCreneau?.startTime || "",
               endTime: firstCreneau?.endTime || "",
               priceTTC: item.prixFinal, status: "pending_payment", source: "client",
@@ -1480,7 +1481,7 @@ export default function ReserverPage() {
                                 childId: item.childId, childName: item.childName,
                                 activityTitle: item.activityTitle, activityType: item.isStage ? "stage" : "cours",
                                 creneauId: item.creneauIds[0],
-                                date: firstCr?.date || new Date().toISOString().split("T")[0],
+                                date: firstCr?.date || todayLocalString(),
                                 startTime: firstCr?.startTime || "", endTime: firstCr?.endTime || "",
                                 priceTTC: item.prixFinal, status: "pending_payment", source: "client",
                                 createdAt: serverTimestamp(),

@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Calendar, Check, Clock, XCircle } from "lucide-react";
 import { useSearchParams } from "next/navigation";
+import { todayLocalString } from "@/lib/date-local";
 
 interface Reservation {
   id: string;
@@ -66,7 +67,7 @@ export default function ReservationsPage() {
   }, [user]);
 
   // Group by upcoming / past
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayLocalString();
   const upcoming = reservations.filter((r) => r.date >= today).sort((a, b) => a.date.localeCompare(b.date));
   const past = reservations.filter((r) => r.date < today).sort((a, b) => b.date.localeCompare(a.date));
   const pendingPayment = reservations.filter((r) => (r.status as string) === "pending_payment");

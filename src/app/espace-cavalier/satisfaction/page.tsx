@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ui";
 import { Star, Send, CheckCircle2, Loader2, ChevronDown } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
+import { todayLocalString, addDaysLocal } from "@/lib/date-local";
 
 const ASPECTS = [
   { id: "moniteur", label: "Moniteur / encadrement" },
@@ -51,11 +52,9 @@ export default function SatisfactionPage() {
   useEffect(() => {
     if (!user) { setLoading(false); return; }
     (async () => {
-      const today = new Date().toISOString().split("T")[0];
+      const today = todayLocalString();
       // Réservations passées (30 derniers jours)
-      const dateLimit = new Date();
-      dateLimit.setDate(dateLimit.getDate() - 30);
-      const dateLimitStr = dateLimit.toISOString().split("T")[0];
+      const dateLimitStr = addDaysLocal(-30);
 
       let resSnap: any = { docs: [] };
       let avisSnap: any = { docs: [] };

@@ -8,6 +8,7 @@ import { Calendar, Receipt, Users, Star, CreditCard, Wallet, Bell, BellOff } fro
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { todayLocalString } from "@/lib/date-local";
 
 export default function DashboardPage() {
   const { user, family } = useAuth();
@@ -26,7 +27,7 @@ export default function DashboardPage() {
     const load = async () => {
       try {
         // Réservations à venir
-        const today = new Date().toISOString().split("T")[0];
+        const today = todayLocalString();
         let resCount = 0;
         try {
           const resSnap = await getDocs(query(collection(db, "reservations"), where("familyId", "==", user.uid)));

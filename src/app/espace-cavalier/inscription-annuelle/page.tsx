@@ -8,6 +8,7 @@ import { Card, Badge } from "@/components/ui";
 import { Check, ChevronRight, AlertTriangle, Calculator, CreditCard, Loader2, Calendar, Plus, Search } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { compareCreneauxByDow } from "@/lib/creneau-sort";
+import { todayLocalString } from "@/lib/date-local";
 
 interface Creneau {
   id: string;
@@ -70,7 +71,7 @@ export default function InscriptionAnnuellePage() {
   useEffect(() => {
     const fetchCreneaux = async () => {
       try {
-        const today = new Date().toISOString().split("T")[0];
+        const today = todayLocalString();
         const snap = await getDocs(
           query(collection(db, "creneaux"), where("activityType", "==", "cours"), where("date", ">=", today))
         );
@@ -78,7 +79,7 @@ export default function InscriptionAnnuellePage() {
       } catch {
         try {
           const snap = await getDocs(collection(db, "creneaux"));
-          const today = new Date().toISOString().split("T")[0];
+          const today = todayLocalString();
           setCreneaux(
             (snap.docs.map(d => ({ id: d.id, ...d.data() })) as Creneau[])
               .filter(c => c.activityType === "cours" && c.date >= today)

@@ -7,6 +7,7 @@ import { db } from "@/lib/firebase";
 import { Card, Badge, Button } from "@/components/ui";
 import { Plus, ChevronDown, ChevronUp, Edit3, Save, Loader2, Users, Building2, AlertTriangle, AlertCircle } from "lucide-react";
 import type { Child, SanitaryForm } from "@/types";
+import { toLocalDateString } from "@/lib/date-local";
 
 function AddChildForm({ onAdd }: { onAdd: () => void }) {
   const { user } = useAuth();
@@ -269,7 +270,7 @@ export default function ProfilPage() {
     setEditingChildForm({
       firstName: child.firstName,
       lastName: (child as any).lastName || "",
-      birthDate: child.birthDate ? new Date(child.birthDate).toISOString().slice(0, 10) : "",
+      birthDate: child.birthDate ? toLocalDateString(new Date(child.birthDate)) : "",
     });
   };
 
