@@ -28,6 +28,7 @@
     "test:api": "./scripts/run-tests.sh api",
     "test:rapport": "./scripts/run-tests.sh rapport",
     "test:all": "./scripts/run-tests.sh all",
+    "test:unit": "npx tsx tests/unit/sepa-validation.test.ts",
     "validate:rules": "node scripts/validate-rules.mjs"
   },
   "dependencies": {
