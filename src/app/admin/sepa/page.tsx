@@ -162,6 +162,49 @@ function validateIban(iban: string): { valid: boolean; error: string | null } {
   return { valid: true, error: null };
 }
 
+/**
+ * Validation BIC (Bank Identifier Code) selon ISO 9362.
+ *
+ * Format attendu :
+ * - 8 ou 11 caracteres
+ * - 4 lettres : code banque (ex: AGRI pour Credit Agricole)
+ * - 2 lettres : code pays (ex: FR pour France) — DOIT matcher avec le pays de l'IBAN
+ * - 2 chars alphanumeriques : code emplacement
+ * - 3 chars alphanumeriques OPTIONNELS : code succursale
+ *
+ * Si countryFromIban est fourni, on verifie que le pays du BIC est coherent
+ * (sinon refus). Empeche des erreurs frequentes ou` on copie un BIC d'une autre
+ * banque par megarde.
+ *
+ * Limite : on ne peut PAS valider que le BIC pointe vers une vraie succursale
+ * existante (necessiterait une API externe). On valide juste la coherence
+ * structurelle + cohérence pays avec l'IBAN.
+ */
+function validateBic(bic: string, countryFromIban?: string): { valid: boolean; error: string | null } {
+  if (!bic) return { valid: false, error: "BIC manquant" };
+  const clean = bic.replace(/\s/g, "").toUpperCase();
+
+  // Format : 8 chars (AAAA-BB-CC) ou 11 chars (AAAA-BB-CC-DDD)
+  if (clean.length !== 8 && clean.length !== 11) {
+    return { valid: false, error: `BIC doit faire 8 ou 11 caractères (vous avez ${clean.length})` };
+  }
+
+  // Structure : 4 lettres + 2 lettres + 2 alphanumeriques [+ 3 alphanumeriques]
+  if (!/^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(clean)) {
+    return { valid: false, error: "Format invalide (4 lettres banque + 2 lettres pays + 2 caractères agence)" };
+  }
+
+  // Verification de la coherence pays avec l'IBAN si fournie
+  if (countryFromIban) {
+    const bicCountry = clean.substring(4, 6);
+    if (bicCountry !== countryFromIban) {
+      return { valid: false, error: `Pays du BIC (${bicCountry}) ne correspond pas au pays de l'IBAN (${countryFromIban})` };
+    }
+  }
+
+  return { valid: true, error: null };
+}
+
 // ═══ Composant principal ═══
 export default function SepaPage() {
   const { toast } = useToast();
@@ -226,7 +269,21 @@ export default function SepaPage() {
     setSaving(true);
     try {
       const family = families.find(f => f.firestoreId === newMandat.familyId);
-      const bic = newMandat.bic || lookupBic(cleanIban);
+      // Validation BIC : on prend le BIC fourni OU on auto-complete depuis l'IBAN
+      const bicProvided = newMandat.bic?.replace(/\s/g, "").toUpperCase();
+      const bicAuto = lookupBic(cleanIban);
+      const bic = bicProvided || bicAuto;
+      // Si on a un BIC (fourni ou auto), on le valide structurellement.
+      // L'IBAN ayant deja ete valide plus haut, on connait son pays.
+      if (bic) {
+        const countryFromIban = cleanIban.substring(0, 2);
+        const bicCheck = validateBic(bic, countryFromIban);
+        if (!bicCheck.valid) {
+          toast(`BIC invalide : ${bicCheck.error}`, "error");
+          setSaving(false);
+          return;
+        }
+      }
       const nextMandatNum = mandats.length + 1;
       const mandatId = `CEDC${nextMandatNum}MD${Math.floor(Math.random() * 9000) + 1000}`;
 
