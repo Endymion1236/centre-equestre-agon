@@ -8,6 +8,7 @@ import { Card, Badge } from "@/components/ui";
 import { Loader2, Receipt, CreditCard, Ticket, Download } from "lucide-react";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
 import { authFetch } from "@/lib/auth-fetch";
+import { useToast } from "@/components/ui/Toast";
 
 interface Payment {
   id: string;
@@ -59,6 +60,7 @@ const modeLabels: Record<string, string> = {
 
 export default function FacturesPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [cards, setCards] = useState<Card10[]>([]);
@@ -682,8 +684,8 @@ export default function FacturesPage() {
                           updatedAt: serverTimestamp(),
                         });
                         setFidelite({ ...fidelite, points: newPoints });
-                        alert(`✅ ${montantAvoir.toFixed(2)}€ d'avoir créé ! Il apparaît dans vos paiements.`);
-                      } catch (e) { console.error(e); alert("Erreur lors de la conversion."); }
+                        toast(`${montantAvoir.toFixed(2)}€ d'avoir créé ! Il apparaît dans vos paiements.`, "success");
+                      } catch (e) { console.error(e); toast("Erreur lors de la conversion.", "error"); }
                       setConvertingPoints(false);
                     }}
                     className="w-full py-3 rounded-xl font-body text-sm font-bold text-white bg-yellow-500 border-none cursor-pointer hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed">
@@ -986,7 +988,7 @@ export default function FacturesPage() {
                             }),
                           }).catch(() => {});
                           setDeclareSuccess(true);
-                        } catch (e) { console.error(e); alert("Erreur. Réessayez."); }
+                        } catch (e) { console.error(e); toast("Erreur. Réessayez.", "error"); }
                         setDeclareSending(false);
                       }}
                       className={`flex-1 py-2.5 rounded-xl font-body text-sm font-semibold border-none cursor-pointer flex items-center justify-center gap-2 ${declareSending || !declareMontant ? "bg-gray-200 text-slate-600" : "bg-blue-500 text-white hover:bg-blue-600"}`}>

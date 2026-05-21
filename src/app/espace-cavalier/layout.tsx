@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import VoiceAssistant from "@/components/VoiceAssistant";
+import { ToastProvider } from "@/components/ui/Toast";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { toLocalDateString, addDaysLocal } from "@/lib/date-local";
@@ -354,7 +355,7 @@ function CavalierSidebar() {
   );
 }
 
-export default function EspaceCavalierLayout({
+function EspaceCavalierLayoutInner({
   children,
 }: {
   children: React.ReactNode;
@@ -604,5 +605,13 @@ export default function EspaceCavalierLayout({
         </button>
       </div>
     </div>
+  );
+}
+
+export default function EspaceCavalierLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <ToastProvider>
+      <EspaceCavalierLayoutInner>{children}</EspaceCavalierLayoutInner>
+    </ToastProvider>
   );
 }

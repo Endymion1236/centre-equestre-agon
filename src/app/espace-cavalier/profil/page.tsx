@@ -7,7 +7,8 @@ import { db } from "@/lib/firebase";
 import { Card, Badge, Button } from "@/components/ui";
 import { Plus, ChevronDown, ChevronUp, Edit3, Save, Loader2, Users, Building2, AlertTriangle, AlertCircle } from "lucide-react";
 import type { Child, SanitaryForm } from "@/types";
-import { toLocalDateString } from "@/lib/date-local";
+import { toLocalDateString, todayLocalString } from "@/lib/date-local";
+import { useToast } from "@/components/ui/Toast";
 
 function AddChildForm({ onAdd }: { onAdd: () => void }) {
   const { user } = useAuth();
@@ -84,6 +85,7 @@ function AddChildForm({ onAdd }: { onAdd: () => void }) {
             <input
               type="date"
               value={birthDate}
+              max={todayLocalString()}
               onChange={(e) => setBirthDate(e.target.value)}
               className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
             />
@@ -156,6 +158,7 @@ function AddChildForm({ onAdd }: { onAdd: () => void }) {
 
 export default function ProfilPage() {
   const { user, family } = useAuth();
+  const { toast } = useToast();
   const [showAddChild, setShowAddChild] = useState(false);
   const [expandedChild, setExpandedChild] = useState<string | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
@@ -243,7 +246,7 @@ export default function ProfilPage() {
       });
       setEditingProfile(false);
       window.location.reload();
-    } catch (e) { console.error(e); alert("Erreur de sauvegarde."); }
+    } catch (e) { console.error(e); toast("Erreur de sauvegarde.", "error"); }
     setSavingProfile(false);
   };
 
@@ -545,7 +548,7 @@ export default function ProfilPage() {
                     </div>
                     <div>
                       <label className="font-body text-xs text-gray-600 block mb-1">Date de naissance</label>
-                      <input type="date" value={editingChildForm.birthDate} onChange={e => setEditingChildForm({ ...editingChildForm, birthDate: e.target.value })}
+                      <input type="date" value={editingChildForm.birthDate} max={todayLocalString()} onChange={e => setEditingChildForm({ ...editingChildForm, birthDate: e.target.value })}
                         className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400" />
                     </div>
                   </div>

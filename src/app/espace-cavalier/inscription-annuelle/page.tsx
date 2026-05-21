@@ -9,6 +9,7 @@ import { Check, ChevronRight, AlertTriangle, Calculator, CreditCard, Loader2, Ca
 import { authFetch } from "@/lib/auth-fetch";
 import { compareCreneauxByDow } from "@/lib/creneau-sort";
 import { todayLocalString } from "@/lib/date-local";
+import { useToast } from "@/components/ui/Toast";
 
 interface Creneau {
   id: string;
@@ -50,6 +51,7 @@ const ADHESION = { label: "Adhésion au club", price: 50, description: "Cotisati
 
 export default function InscriptionAnnuellePage() {
   const { user, family } = useAuth();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [creneaux, setCreneaux] = useState<Creneau[]>([]);
@@ -302,7 +304,7 @@ export default function InscriptionAnnuellePage() {
       window.location.href = "/espace-cavalier/reservations?success=true";
     } catch (e) {
       console.error("Erreur inscription:", e);
-      alert("Erreur lors de l'inscription. Veuillez réessayer.");
+      toast("Erreur lors de l'inscription. Veuillez réessayer.", "error");
     } finally {
       setSubmitting(false);
     }

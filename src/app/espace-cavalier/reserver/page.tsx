@@ -12,6 +12,7 @@ import { authFetch } from "@/lib/auth-fetch";
 import { formatStageSchedule } from "@/lib/format-stage";
 import { compareCreneauxByDate } from "@/lib/creneau-sort";
 import { todayLocalString } from "@/lib/date-local";
+import { useToast } from "@/components/ui/Toast";
 
 interface Creneau { id: string; activityId: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolled: any[]; enrolledCount: number; priceHT: number; priceTTC?: number; tvaTaux: number; }
 
@@ -25,6 +26,7 @@ const typeLabels: Record<string, { label: string; color: string }> = {
 
 export default function ReserverPage() {
   const { user, family } = useAuth();
+  const { toast } = useToast();
   const searchParams = useSearchParams();
   const initialFilter = searchParams.get("filter") || "all";
   const initialDate = searchParams.get("date") || null; // date ISO depuis l'assistant vocal
@@ -388,7 +390,7 @@ export default function ReserverPage() {
   const addCoursToCart = (creneau: Creneau, childId: string) => {
     // Bloquer le doublon panier
     if (cart.some(i => i.childId === childId && i.creneauIds.includes(creneau.id))) {
-      alert("Cet enfant est déjà dans le panier pour ce créneau.");
+      toast("Cet enfant est déjà dans le panier pour ce créneau.", "warning");
       return;
     }
     const child = children.find((c: any) => c.id === childId);
@@ -672,7 +674,7 @@ export default function ReserverPage() {
         where("familyId", "==", user.uid)
       ));
       if (!existing.empty) {
-        alert("Vous êtes déjà en liste d'attente pour ce créneau.");
+        toast("Vous êtes déjà en liste d'attente pour ce créneau.", "warning");
         setWaitlistLoading(null); return;
       }
       await addDoc(collection(db, "waitlist"), {
@@ -694,7 +696,7 @@ export default function ReserverPage() {
       });
       setWaitlistSuccess(c.id);
       setTimeout(() => setWaitlistSuccess(null), 4000);
-    } catch (e) { console.error(e); alert("Erreur. Réessayez."); }
+    } catch (e) { console.error(e); toast("Erreur. Réessayez.", "error"); }
     setWaitlistLoading(null);
   };
 
@@ -1525,7 +1527,7 @@ export default function ReserverPage() {
                             }).catch(() => {});
                             setCartPaySuccess(true);
                             setCart([]);
-                          } catch (e) { console.error(e); alert("Erreur. Réessayez."); }
+                          } catch (e) { console.error(e); toast("Erreur. Réessayez.", "error"); }
                           setPaying(false);
                         }} disabled={paying}
                           className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50">

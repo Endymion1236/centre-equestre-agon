@@ -9,9 +9,11 @@ import { collection, getDocs, query, where, doc, getDoc, updateDoc, addDoc, serv
 import { db } from "@/lib/firebase";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { todayLocalString } from "@/lib/date-local";
+import { useToast } from "@/components/ui/Toast";
 
 export default function DashboardPage() {
   const { user, family } = useAuth();
+  const { toast } = useToast();
   const firstName = user?.displayName?.split(" ")[0] || "Bonjour";
   const [stats, setStats] = useState({ reservations: 0, resteDu: 0, avoir: 0, totalPaye: 0 });
   const { permission, loading, error: pushError, requestPermission } = usePushNotifications(user?.uid || null);
@@ -316,8 +318,8 @@ export default function DashboardPage() {
                         updatedAt: serverTimestamp(),
                       });
                       setFidelite({ ...fidelite, points: newPts });
-                      alert(`✅ ${montant.toFixed(2)}€ d'avoir créé !`);
-                    } catch (e) { console.error(e); alert("Erreur."); }
+                      toast(`${montant.toFixed(2)}€ d'avoir créé !`, "success");
+                    } catch (e) { console.error(e); toast("Erreur lors de la conversion.", "error"); }
                     setConvertingPoints(false);
                   }}
                   className="w-full py-3 rounded-xl font-body text-sm font-bold text-white bg-yellow-500 border-none cursor-pointer hover:bg-yellow-600 disabled:opacity-50">
