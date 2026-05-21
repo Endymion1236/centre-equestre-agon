@@ -539,7 +539,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         )}
 
-        <div className="p-4 md:p-8 max-w-[960px] relative">
+        <div className="p-3 md:p-8 max-w-[960px] relative">
           {children}
         </div>
 
