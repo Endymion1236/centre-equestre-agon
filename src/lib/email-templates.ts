@@ -49,11 +49,25 @@ export const emailTemplates = {
     totalTTC: number;
     acompte?: number;
     solde?: number;
+    paiementConfirme?: boolean; // Optionnel : true si paiement deja regle (webhook CAWL)
+    montantRegle?: number; // Optionnel : montant effectivement regle si different du total
   }) => ({
-    subject: `Inscription confirmée — ${vars.stageTitle}`,
+    subject: vars.paiementConfirme
+      ? `✅ Paiement confirmé — ${vars.stageTitle}`
+      : `Inscription confirmée — ${vars.stageTitle}`,
     html: wrap(`
       <p style="color:#333;font-size:15px;">Bonjour <strong>${vars.parentName}</strong>,</p>
+      ${vars.paiementConfirme ? `
+      <!-- Bandeau PAIEMENT CONFIRME en haut, tres visible -->
+      <div style="background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);color:white;padding:20px 24px;border-radius:12px;margin:16px 0;text-align:center;box-shadow:0 4px 12px rgba(22,163,74,0.25);">
+        <div style="font-size:32px;line-height:1;margin-bottom:6px;">✅</div>
+        <div style="font-size:18px;font-weight:bold;letter-spacing:0.5px;margin-bottom:4px;">PAIEMENT CONFIRMÉ</div>
+        <div style="font-size:22px;font-weight:bold;margin-top:8px;">${(vars.montantRegle ?? vars.totalTTC).toFixed(2)}€ réglé</div>
+      </div>
+      <p style="color:#555;">L'inscription au stage <strong style="color:#1e3a5f;">${vars.stageTitle}</strong> est validée et payée.</p>
+      ` : `
       <p style="color:#555;">L'inscription au stage <strong style="color:#1e3a5f;">${vars.stageTitle}</strong> est confirmée.</p>
+      `}
       <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
         <p style="margin:0 0 8px;color:#166534;font-weight:600;font-size:13px;">📅 ${vars.dates}</p>
         <table style="width:100%;border-collapse:collapse;">
@@ -67,7 +81,7 @@ export const emailTemplates = {
           </tr>
         </table>
       </div>
-      ${vars.acompte && vars.solde && vars.solde > 0 ? `
+      ${!vars.paiementConfirme && vars.acompte && vars.solde && vars.solde > 0 ? `
       <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:16px 0;">
         <p style="margin:0 0 6px;color:#1e40af;font-weight:600;font-size:13px;">💳 Modalités de paiement</p>
         <p style="margin:0;color:#555;font-size:13px;">Acompte à régler maintenant : <strong style="color:#1e3a5f;">${vars.acompte.toFixed(2)}€</strong></p>

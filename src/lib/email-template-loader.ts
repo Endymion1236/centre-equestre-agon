@@ -35,17 +35,23 @@ function wrapHtml(content: string): string {
 // ── Templates par défaut (fallback si rien dans Firestore) ──
 const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }> = {
   confirmationStage: {
-    subject: "Inscription confirmée — {stageTitle}",
-    body: `<p>Bonjour <strong>{parentName}</strong>,</p>
-<p>L'inscription au stage <strong style="color:#1e3a5f;">{stageTitle}</strong> est confirmée !</p>
+    subject: "✅ Paiement confirmé — {stageTitle}",
+    body: `<!-- Bandeau PAIEMENT CONFIRMÉ très visible en haut -->
+<div style="background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);color:white;padding:20px 24px;border-radius:12px;margin:0 0 20px 0;text-align:center;box-shadow:0 4px 12px rgba(22,163,74,0.25);">
+  <div style="font-size:32px;line-height:1;margin-bottom:6px;">✅</div>
+  <div style="font-size:18px;font-weight:bold;letter-spacing:0.5px;margin-bottom:4px;">PAIEMENT CONFIRMÉ</div>
+  <div style="font-size:22px;font-weight:bold;margin-top:8px;">{montant}€ réglé</div>
+</div>
+<p>Bonjour <strong>{parentName}</strong>,</p>
+<p>Votre paiement a bien été reçu. L'inscription au stage <strong style="color:#1e3a5f;">{stageTitle}</strong> est validée et payée. 🐴</p>
 <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
   <p style="margin:0 0 8px;color:#166534;font-weight:600;">📅 {dates}</p>
   <p style="margin:0;color:#166534;font-weight:600;">🕐 {horaires}</p>
   <p style="margin:8px 0 0;color:#555;font-size:13px;">👧 {enfants}</p>
-  <p style="margin:8px 0 0;color:#1e3a5f;font-weight:bold;font-size:16px;">{montant}€</p>
+  <p style="margin:8px 0 0;color:#1e3a5f;font-weight:bold;font-size:16px;">Total : {montant}€</p>
 </div>
 <p style="color:#555;font-size:13px;"><strong>À prévoir :</strong> bottes, bombe, pantalon long. Prévoir un goûter et de l'eau.</p>
-<p style="color:#555;">À bientôt au centre équestre ! 🐴</p>`,
+<p style="color:#555;">À bientôt au centre équestre !</p>`,
   },
   confirmationCours: {
     subject: "Réservation confirmée — {coursTitle}",
@@ -99,12 +105,19 @@ const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }> = {
   },
   // Confirmation paiement reçu
   confirmationPaiement: {
-    subject: "Paiement reçu — {montant}€",
-    body: `<p>Bonjour <strong>{parentName}</strong>,</p>
-<p>Nous avons bien reçu votre paiement :</p>
+    subject: "✅ Paiement confirmé — {montant}€",
+    body: `<!-- Bandeau PAIEMENT CONFIRMÉ très visible en haut -->
+<div style="background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);color:white;padding:20px 24px;border-radius:12px;margin:0 0 20px 0;text-align:center;box-shadow:0 4px 12px rgba(22,163,74,0.25);">
+  <div style="font-size:32px;line-height:1;margin-bottom:6px;">✅</div>
+  <div style="font-size:18px;font-weight:bold;letter-spacing:0.5px;margin-bottom:4px;">PAIEMENT CONFIRMÉ</div>
+  <div style="font-size:22px;font-weight:bold;margin-top:8px;">{montant}€ réglé</div>
+</div>
+<p>Bonjour <strong>{parentName}</strong>,</p>
+<p>Votre paiement a bien été reçu.</p>
 <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
-  <p style="margin:0;color:#166534;font-weight:600;font-size:18px;">✅ {montant}€ reçus</p>
-  <p style="margin:6px 0 0;color:#555;font-size:13px;">{prestations}</p>
+  <p style="margin:0 0 6px;color:#1e3a5f;font-weight:600;font-size:14px;">📋 Prestations</p>
+  <p style="margin:0;color:#555;font-size:13px;">{prestations}</p>
+  <p style="margin:8px 0 0;color:#555;font-size:13px;">Mode de paiement : <strong>{mode}</strong></p>
 </div>
 <p style="color:#555;">À bientôt au centre équestre !</p>`,
   },

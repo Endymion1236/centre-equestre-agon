@@ -165,16 +165,22 @@ export async function POST(req: NextRequest) {
                 parentName,
                 montant: totalTTC.toFixed(2),
                 prestations,
+                mode: "Carte bancaire en ligne (CAWL)",
               };
 
               if (hasStage) {
                 templateKey = "confirmationStage";
+                // Variables au format attendu par loadTemplate (remplacement {key}
+                // texte simple). Le template par defaut affiche un gros bandeau
+                // 'PAIEMENT CONFIRME - {montant}€ réglé' en haut + détails plus bas.
+                const enfantsList = (pData.items || [])
+                  .map((i: any) => i.childName).filter(Boolean).join(", ") || "Cavalier(s)";
                 vars = {
                   parentName,
                   stageTitle: pData.items?.[0]?.activityTitle || "Stage",
-                  dates: prestations,
-                  horaires: "",
-                  enfants: (pData.items || []).map((i: any) => i.childName).filter(Boolean).join(", "),
+                  dates: pData.stageDate || prestations,
+                  horaires: pData.items?.[0]?.stageSchedule || "",
+                  enfants: enfantsList,
                   montant: totalTTC.toFixed(2),
                 };
               }
