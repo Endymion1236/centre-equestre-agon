@@ -495,6 +495,65 @@ export default function SepaPage() {
     fetchAll();
   };
 
+  // ─── Decaler toutes les echeances d'une serie a partir d'une nouvelle date ───
+  // Cas d'usage : on inscrit en mai mais on veut que le 1er prelevement parte
+  // en septembre. Au lieu de modifier 10 dates a la main, on choisit la nouvelle
+  // date de la 1ere echeance, les autres suivent automatiquement (+1 mois).
+  //
+  // Identifie les echeances de la meme serie via orderId (et famille au cas ou).
+  // Trie par numero d'echeance (echeance: 1, 2, 3, ...).
+  // Pour chaque echeance i, met dateEcheance = nouvelleDateBase + i mois.
+  const handleShiftSeries = async (firstEcheance: EcheanceSepa) => {
+    const orderId = firstEcheance.orderId;
+    if (!orderId) {
+      toast("Cette échéance n'a pas d'identifiant de série (legacy)", "warning");
+      return;
+    }
+    const nouvelleDateStr = prompt(
+      `Décaler toute la série (${firstEcheance.echeancesTotal || "?"} échéances) :\n\nNouvelle date de la 1ère échéance ?\n(Format : AAAA-MM-JJ, ex : 2026-09-01)`,
+      firstEcheance.dateEcheance
+    );
+    if (!nouvelleDateStr) return;
+    // Validation format date
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(nouvelleDateStr)) {
+      toast("Format invalide. Utilisez AAAA-MM-JJ (ex: 2026-09-01)", "error");
+      return;
+    }
+    const baseDate = new Date(nouvelleDateStr + "T12:00:00"); // midi pour eviter timezone
+    if (isNaN(baseDate.getTime())) {
+      toast("Date invalide", "error");
+      return;
+    }
+    // Recuperer toutes les echeances de cette serie (meme orderId, status pending)
+    const seriesEcheances = echeances
+      .filter(e => e.orderId === orderId && e.status === "pending")
+      .sort((a, b) => (a.echeance || 0) - (b.echeance || 0));
+    if (seriesEcheances.length === 0) {
+      toast("Aucune échéance pending pour cette série", "warning");
+      return;
+    }
+    if (!confirm(`Décaler ${seriesEcheances.length} échéance(s) à partir du ${nouvelleDateStr} ?\n\nLes échéances seront espacées de 1 mois.`)) return;
+    let updated = 0;
+    for (const ech of seriesEcheances) {
+      const idx = (ech.echeance || 1) - 1; // 1ere echeance = index 0
+      const newDate = new Date(baseDate);
+      newDate.setMonth(newDate.getMonth() + idx);
+      // Format YYYY-MM-DD (eviter toISOString qui peut decaler en UTC)
+      const yyyy = newDate.getFullYear();
+      const mm = String(newDate.getMonth() + 1).padStart(2, "0");
+      const dd = String(newDate.getDate()).padStart(2, "0");
+      const newDateStr = `${yyyy}-${mm}-${dd}`;
+      try {
+        await updateDoc(doc(db, "echeances-sepa", ech.id), { dateEcheance: newDateStr });
+        updated++;
+      } catch (e) {
+        console.error(`Echec maj echeance ${ech.id}:`, e);
+      }
+    }
+    toast(`✅ ${updated} échéance(s) décalée(s) à partir du ${nouvelleDateStr}`, "success");
+    fetchAll();
+  };
+
   // ─── Filtres ───
   const filteredMandats = mandats.filter(m => {
     if (!search) return true;
@@ -888,6 +947,15 @@ export default function SepaPage() {
                       </div>
                       <div className="w-24 text-right font-body text-sm font-semibold text-blue-800">{ech.montant.toFixed(2)}€</div>
                       <div className="w-36 font-body text-xs text-gray-500 truncate pl-3">{ech.description}</div>
+                      {/* Bouton "Décaler la série" uniquement sur la 1ere échéance d'une série multi */}
+                      {ech.echeance === 1 && (ech.echeancesTotal || 0) > 1 && (
+                        <button
+                          onClick={() => handleShiftSeries(ech)}
+                          title={`Décaler les ${ech.echeancesTotal} échéances de cette série`}
+                          className="w-8 flex justify-center text-blue-400 hover:text-blue-600 bg-transparent border-none cursor-pointer">
+                          📅
+                        </button>
+                      )}
                       <button onClick={() => handleDeleteEcheance(ech.id)} className="w-10 flex justify-end text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer">
                         <Trash2 size={13} />
                       </button>
