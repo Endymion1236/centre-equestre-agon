@@ -312,17 +312,28 @@ export default function FacturesPage() {
                               </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-3 flex-wrap">
                             <span className="font-body text-lg font-bold text-blue-500">{(p.totalTTC || 0).toFixed(2)}€</span>
-                            <Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "pending_confirmation" ? "orange" : "gray"}>
-                              {p.status === "paid" ? "Payé" : p.status === "partial" ? "Partiel" : p.status === "pending_confirmation" ? "Déclaré" : "En attente"}
-                            </Badge>
+                            {p.paymentMode === "prelevement_sepa" && p.status !== "paid" ? (
+                              <Badge color="blue">🏦 Prélèvement SEPA programmé</Badge>
+                            ) : (
+                              <Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "pending_confirmation" ? "orange" : "gray"}>
+                                {p.status === "paid" ? "Payé" : p.status === "partial" ? "Partiel" : p.status === "pending_confirmation" ? "Déclaré" : "En attente"}
+                              </Badge>
+                            )}
                             {p.status === "pending_confirmation" && (
                               <span className="flex items-center gap-1 font-body text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded-lg">
                                 ⏳ En attente de confirmation par le centre
                               </span>
                             )}
-                            {(p.status === "pending" || p.status === "partial") && (
+                            {p.paymentMode === "prelevement_sepa" && p.status !== "paid" && (
+                              <button
+                                onClick={() => setTab("sepa")}
+                                className="flex items-center gap-1.5 font-body text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border-none cursor-pointer">
+                                Voir l'échéancier →
+                              </button>
+                            )}
+                            {p.paymentMode !== "prelevement_sepa" && (p.status === "pending" || p.status === "partial") && (
                               <>
                                 <button
                                   disabled={payingOnline === p.id}
