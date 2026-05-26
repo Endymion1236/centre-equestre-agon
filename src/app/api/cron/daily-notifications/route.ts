@@ -4,6 +4,7 @@ import { sendPush } from "@/lib/push";
 import { loadTemplate } from "@/lib/email-template-loader";
 import { compareCreneaux } from "@/lib/creneau-sort";
 import { logEmail } from "@/lib/email-log";
+import { addDaysParis } from "@/lib/date-local";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -38,9 +39,9 @@ export async function GET(req: NextRequest) {
     // ══════════════════════════════════════
     // JOB 1 : RÉCAP MONITEURS (planning du jour cible)
     // ══════════════════════════════════════
-    const today = new Date();
-    today.setDate(today.getDate() + dayShift);
-    const todayStr = today.toISOString().split("T")[0];
+    const todayStr = addDaysParis(dayShift);
+    const [ty, tm, td] = todayStr.split("-").map(Number);
+    const today = new Date(ty, tm - 1, td, 12, 0, 0);
     const todayLabel = today.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 
     console.log(`\n📋 [JOB 1] Récap moniteurs — ${todayStr} (target=${target})`);
@@ -182,9 +183,9 @@ export async function GET(req: NextRequest) {
     // ══════════════════════════════════════
     // JOB 2 : RAPPELS J-1 FAMILLES (lendemain du jour cible)
     // ══════════════════════════════════════
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1 + dayShift);
-    const tomorrowStr = tomorrow.toISOString().split("T")[0];
+    const tomorrowStr = addDaysParis(1 + dayShift);
+    const [tomY, tomM, tomD] = tomorrowStr.split("-").map(Number);
+    const tomorrow = new Date(tomY, tomM - 1, tomD, 12, 0, 0);
     const tomorrowLabel = tomorrow.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 
     console.log(`\n🔔 [JOB 2] Rappels J-1 pour le ${tomorrowStr} (target=${target})`);
@@ -300,9 +301,9 @@ export async function GET(req: NextRequest) {
     // ══════════════════════════════════════
     // JOB 3 : RAPPEL SOLDE STAGE J-7
     // ══════════════════════════════════════
-    const j7 = new Date();
-    j7.setDate(j7.getDate() + 7);
-    const j7Str = j7.toISOString().split("T")[0];
+    const j7Str = addDaysParis(7);
+    const [j7y, j7m, j7d] = j7Str.split("-").map(Number);
+    const j7 = new Date(j7y, j7m - 1, j7d, 12, 0, 0);
     const j7Label = j7.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 
     console.log(`\n💳 [JOB 3] Rappels solde stage J-7 — stages du ${j7Str}`);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { logEmail } from "@/lib/email-log";
+import { addDaysParis } from "@/lib/date-local";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -15,11 +16,16 @@ export async function GET(req: NextRequest) {
   try {
     // target=tomorrow (défaut) → rappels pour demain (classique)
     // target=after-tomorrow → rappels pour après-demain (non utilisé pour l'instant)
-    // Depuis le cron du soir à 20h : target=tomorrow est exactement ce qu'il faut
+    // Depuis le cron du soir à 20h UTC (= 22h Paris en été) : target=tomorrow
+    // doit pointer sur le lendemain en fuseau Paris (pas en UTC du serveur Vercel).
     const target = new URL(req.url).searchParams.get("target") || "tomorrow";
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + (target === "after-tomorrow" ? 2 : 1));
-    const tomorrowStr = tomorrow.toISOString().split("T")[0];
+    const offsetDays = target === "after-tomorrow" ? 2 : 1;
+    const tomorrowStr = addDaysParis(offsetDays);
+    // Pour l'affichage humain dans l'email, on reconstruit un Date en heure
+    // Paris en parsant la string YYYY-MM-DD (interprétée midi local pour éviter
+    // tout cas limite près de minuit).
+    const [y, m, d] = tomorrowStr.split("-").map(Number);
+    const tomorrow = new Date(y, m - 1, d, 12, 0, 0);
 
     console.log(`🔔 Rappels J-1 pour le ${tomorrowStr} (target=${target})`);
 

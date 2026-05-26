@@ -3,6 +3,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { logEmail } from "@/lib/email-log";
 import { generateCAWLQR, generateSEPAQR } from "@/lib/payment-qr";
+import { addDaysParis } from "@/lib/date-local";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -39,9 +40,9 @@ export async function GET(req: NextRequest) {
 
   try {
     // Date J+7
-    const j7 = new Date();
-    j7.setDate(j7.getDate() + 7);
-    const j7Str = j7.toISOString().split("T")[0];
+    const j7Str = addDaysParis(7);
+    const [j7y, j7m, j7d] = j7Str.split("-").map(Number);
+    const j7 = new Date(j7y, j7m - 1, j7d, 12, 0, 0);
     const j7Label = j7.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 
     console.log(`\n💳 [charge-stage-balances] Soldes stage J-7 — stages du ${j7Str}`);

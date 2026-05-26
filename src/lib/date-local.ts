@@ -55,3 +55,47 @@ export function addDaysLocal(days: number, from: Date = new Date()): string {
   d.setDate(d.getDate() + days);
   return toLocalDateString(d);
 }
+
+// ─────────────────────────────────────────────────────────────────
+// Variantes "Paris" — pour code serveur (Vercel runs in UTC)
+// ─────────────────────────────────────────────────────────────────
+//
+// Les fonctions ci-dessus utilisent getFullYear/getMonth/getDate, qui
+// dépendent du fuseau du process Node. Sur Vercel le process tourne en
+// UTC, donc elles donnent la date UTC — pas ce qu'on veut pour les
+// crons qui doivent raisonner en heure de Paris (Europe/Paris).
+//
+// Les fonctions ci-dessous forcent le calcul en Europe/Paris via Intl.
+
+/**
+ * Renvoie la date au format YYYY-MM-DD en fuseau Europe/Paris,
+ * indépendamment du fuseau du process. À utiliser dans tout code
+ * serveur (routes API, crons).
+ *
+ * @example
+ *   // En UTC, à 22h30 le 24 mai (= 0h30 le 25 en France) :
+ *   toParisDateString(new Date())  →  "2026-05-25" ✅
+ *   toLocalDateString(new Date())  →  "2026-05-24" ❌ (donne l'UTC sur Vercel)
+ */
+export function toParisDateString(date: Date = new Date()): string {
+  // Intl.DateTimeFormat avec fuseau Paris donne directement les bons composants
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  // Le format "en-CA" donne déjà "YYYY-MM-DD"
+  return fmt.format(date);
+}
+
+/**
+ * Renvoie la date Paris dans N jours au format YYYY-MM-DD.
+ * Variante serveur de addDaysLocal.
+ */
+export function addDaysParis(days: number, from: Date = new Date()): string {
+  // 86400000 ms = 1 jour. Le calcul reste correct car on raisonne en
+  // décalage absolu, puis on reformate au fuseau Paris.
+  const d = new Date(from.getTime() + days * 86400000);
+  return toParisDateString(d);
+}

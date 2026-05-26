@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { compareCreneaux } from "@/lib/creneau-sort";
 import { logEmail } from "@/lib/email-log";
+import { addDaysParis } from "@/lib/date-local";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -22,9 +23,10 @@ export async function GET(req: NextRequest) {
     // target=tomorrow → envoyer le récap de DEMAIN (cas du cron du soir)
     // target=today (défaut) → récap d'aujourd'hui (cas de lancement manuel le matin)
     const target = new URL(req.url).searchParams.get("target") || "today";
-    const targetDate = new Date();
-    if (target === "tomorrow") targetDate.setDate(targetDate.getDate() + 1);
-    const todayStr = targetDate.toISOString().split("T")[0];
+    const offsetDays = target === "tomorrow" ? 1 : 0;
+    const todayStr = addDaysParis(offsetDays);
+    const [ty, tm, td] = todayStr.split("-").map(Number);
+    const targetDate = new Date(ty, tm - 1, td, 12, 0, 0);
     const dateLabel = targetDate.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 
     console.log(`📋 Récap quotidien moniteurs pour le ${todayStr} (target=${target})`);

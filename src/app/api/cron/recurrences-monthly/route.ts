@@ -15,6 +15,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
+import { toParisDateString } from "@/lib/date-local";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -29,10 +30,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth(); // 0-11
-  const day = now.getDate();
+  // Calculer la date en fuseau Paris (et non UTC du serveur Vercel)
+  const todayStr = toParisDateString();
+  const [year, month1, day] = todayStr.split("-").map(Number);
+  const month = month1 - 1; // 0-11 pour MOIS[]
   const moisKey = `${year}-${String(month + 1).padStart(2, "0")}`;
   const moisLabel = `${MOIS[month]} ${year}`;
 
@@ -57,7 +58,6 @@ export async function GET(req: NextRequest) {
 
       // Sauter si la date de début n'est pas encore atteinte
       const dateDebut = r.dateDebut || "";
-      const todayStr = now.toISOString().split("T")[0];
       if (dateDebut > todayStr) {
         skipped.push({ recurrenceId: recDoc.id, reason: `Date début ${dateDebut} > aujourd'hui` });
         continue;
