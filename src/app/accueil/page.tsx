@@ -7,13 +7,13 @@ import Link from "next/link";
 import {
   Waves, Baby, Trophy, TreePine,
   Star, Compass, CalendarDays, PartyPopper,
-  Award, Medal, Crown,
   MapPin, Phone, Clock,
   Heart,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import ActusBanner from "@/components/ActusBanner";
 import { ActivityCards } from "./ActivityCards";
+import { NextStagesBanner } from "./NextStagesBanner";
 
 export default function HomePage() {
   return (
@@ -113,40 +113,8 @@ export default function HomePage() {
         <ActivityCards />
       </section>
 
-      {/* ═══ STAGES VACANCES — CTA ═══ */}
-      <section className="py-20 px-6 bg-blue-800 relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_50%,rgba(240,160,16,0.08)_0%,transparent_50%)]" />
-        <div className="max-w-[900px] mx-auto relative z-10 flex flex-wrap items-center gap-12">
-          <div className="flex-1 min-w-[300px]">
-            <span className="font-body text-xs font-bold text-gold-400 uppercase tracking-widest mb-3 block">Stages Pâques 2026</span>
-            <h2 className="font-display text-3xl md:text-4xl font-bold text-white leading-tight mb-4">Les inscriptions<br />sont ouvertes !</h2>
-            <p className="font-body text-base text-white/60 leading-relaxed mb-6">
-              Semaines du 14 au 18 et du 21 au 25 avril. Baby Poney, Galop de Bronze, d&apos;Argent et d&apos;Or.
-              Places limitées à 6-8 cavaliers par groupe.
-            </p>
-            <div className="flex gap-4 flex-wrap">
-              <Link href="/espace-cavalier/reserver"><Button variant="primary" size="lg">Réserver maintenant</Button></Link>
-              <Link href="/tarifs" className="no-underline"><button className="glass px-8 py-4 rounded-xl font-body text-base font-medium text-white hover:bg-white/18 transition-all cursor-pointer border-none">Voir les tarifs</button></Link>
-            </div>
-          </div>
-          <div className="flex-1 min-w-[200px] flex justify-center">
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { icon: Baby, color: "text-pink-500", label: "Baby Poney", sub: "3-5 ans" },
-                { icon: Award, color: "text-amber-700", label: "Galop Bronze", sub: "6-8 ans" },
-                { icon: Medal, color: "text-gray-400", label: "Galop Argent", sub: "8-10 ans" },
-                { icon: Crown, color: "text-amber-500", label: "Galop d'Or", sub: "8+ ans" },
-              ].map((s, i) => (
-                <div key={i} className="bg-white/8 backdrop-blur-sm border border-white/10 rounded-xl p-4 text-center">
-                  {(() => { const Icon = s.icon; return <Icon size={24} className={`${s.color} mx-auto mb-1`} />; })()}
-                  <div className="font-body text-xs font-semibold text-white">{s.label}</div>
-                  <div className="font-body text-[10px] text-white/40">{s.sub}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* ═══ STAGES VACANCES — CTA (détecté auto depuis le planning) ═══ */}
+      <NextStagesBanner />
 
       {/* ═══ MINI-FERME TEASER ═══ */}
       <section className="py-24 px-6 bg-cream">
