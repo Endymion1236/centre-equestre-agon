@@ -329,6 +329,10 @@ export interface Equide {
   maxReprisesPerDay: number;
   maxHeuresHebdo: number;
   notes: string;
+  /** Affiché en vedette sur la page publique Équipe (section "Nos poneys") */
+  featured?: boolean;
+  /** Description courte affichée sur la page publique (max ~120 caractères) */
+  publicDescription?: string;
   createdAt: Date;
   updatedAt: Date;
 }

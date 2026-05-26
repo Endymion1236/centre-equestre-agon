@@ -1,11 +1,14 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { SectionHeader, Card, Badge } from "@/components/ui";
 import { EditableImage } from "@/components/ui/EditableImage";
 import type { VitrineImageKey } from "@/hooks/useVitrineImages";
-import { Users, Heart, GraduationCap, Sparkles } from "lucide-react";
+import { Users, GraduationCap, Loader2 } from "lucide-react";
 
 
 
@@ -29,31 +32,59 @@ const team: { name: string; role: string; initials: string; imageKey: VitrineIma
   },
 ];
 
-const poneys = [
-  { name: "Sircee", type: "Poney", age: "", specialty: "Pony Games & CSO — polyvalente et vive, une vraie championne", level: "Confirmé" },
-  { name: "Batz", type: "Poney", age: "", specialty: "Baby Poney & débutants — doux et patient, le préféré des petits", level: "Débutant" },
-  { name: "Ultim", type: "Poney", age: "", specialty: "Compétition CSO — généreux et courageux sur les barres", level: "Confirmé" },
-  { name: "Rose", type: "Poney", age: "", specialty: "Stages tous niveaux — calme et rassurante, parfaite pour progresser", level: "Intermédiaire" },
-  { name: "Gucci", type: "Poney", age: "", specialty: "Pony Games — rapide et agile, idéale pour les jeux d'équipe", level: "Intermédiaire" },
-  { name: "Galaxy", type: "Poney", age: "", specialty: "Balades & compétition — endurant et fiable en extérieur", level: "Confirmé" },
-  { name: "Caramel", type: "Shetland", age: "", specialty: "Baby Poney — tout petit et tout doux, parfait pour les 3-5 ans", level: "Débutant" },
-  { name: "Java", type: "Poney", age: "", specialty: "Débutants — docile et prévisible, met en confiance rapidement", level: "Débutant" },
-  { name: "Joy", type: "Shetland", age: "", specialty: "Baby Poney — joyeuse et câline, les enfants l'adorent", level: "Débutant" },
-];
-
-const youngPoneys = [
-  { name: "Joey", status: "En formation" },
-  { name: "Joystar", status: "En formation" },
-  { name: "LPP", status: "En formation" },
-];
-
 const levelColors: Record<string, "green" | "blue" | "orange"> = {
   "Débutant": "green",
   "Intermédiaire": "blue",
   "Confirmé": "orange",
+  "Tous niveaux": "blue",
 };
 
+// Type minimal pour l'affichage public (sous-ensemble de Equide Firestore)
+interface FeaturedPoney {
+  id: string;
+  name: string;
+  type: string;
+  niveauCavalier: string;
+  publicDescription: string;
+  photo: string;
+}
+
 export default function EquipePage() {
+  const [featuredPoneys, setFeaturedPoneys] = useState<FeaturedPoney[]>([]);
+  const [loadingPoneys, setLoadingPoneys] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const snap = await getDocs(
+          query(collection(db, "equides"), where("featured", "==", true))
+        );
+        if (cancelled) return;
+        const items = snap.docs
+          .map(d => ({ id: d.id, ...d.data() } as any))
+          // Filtrage côté client : actif + photo présente
+          .filter(e => e.status === "actif" && e.photo && typeof e.photo === "string" && e.photo.trim() !== "")
+          .map(e => ({
+            id: e.id,
+            name: (e.surnom || e.name || "").trim(),
+            type: e.type === "shetland" ? "Shetland" : e.type === "cheval" ? "Cheval" : e.type === "ane" ? "Âne" : "Poney",
+            niveauCavalier: e.niveauCavalier || "Tous niveaux",
+            publicDescription: e.publicDescription || "",
+            photo: e.photo,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        setFeaturedPoneys(items);
+      } catch (e) {
+        console.error("Erreur chargement poneys vedettes :", e);
+        setFeaturedPoneys([]);
+      } finally {
+        if (!cancelled) setLoadingPoneys(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <>
       <Navbar />
@@ -108,44 +139,46 @@ export default function EquipePage() {
       </section>
 
       {/* Cavalerie */}
-      <section className="py-16 px-6 bg-sand">
-        <div className="max-w-[900px] mx-auto">
-          <SectionHeader tag="La cavalerie" title="Nos poneys" subtitle="Chaque poney a sa personnalité et ses spécialités. On les affecte en fonction du niveau et des objectifs de chaque cavalier." />
-          <div className="flex flex-col gap-4">
-            {poneys.map((p, i) => (
-              <Card key={i} padding="md">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0"><Heart size={24} className="text-blue-400" /></div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-1">
-                      <h3 className="font-display text-lg font-bold text-blue-800">{p.name}</h3>
-                      <Badge color="gray">{p.type}</Badge>
-                      <Badge color={levelColors[p.level] || "blue"}>{p.level}</Badge>
-                    </div>
-                    <p className="font-body text-sm text-gray-500">{p.specialty}</p>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
+      {(loadingPoneys || featuredPoneys.length > 0) && (
+        <section className="py-16 px-6 bg-sand">
+          <div className="max-w-[900px] mx-auto">
+            <SectionHeader tag="La cavalerie" title="Nos poneys" subtitle="Chaque poney a sa personnalité et ses spécialités. On les affecte en fonction du niveau et des objectifs de chaque cavalier." />
 
-          {/* Young poneys */}
-          <div className="mt-8">
-            <h3 className="font-display text-lg font-bold text-blue-800 mb-4 flex items-center gap-2"><Sparkles size={20} className="text-amber-400" /> La relève</h3>
-            <div className="flex gap-4 flex-wrap">
-              {youngPoneys.map((p, i) => (
-                <Card key={i} padding="sm" className="flex items-center gap-3">
-                  <Heart size={18} className="text-blue-400" />
-                  <div>
-                    <div className="font-body text-sm font-semibold text-blue-800">{p.name}</div>
-                    <div className="font-body text-xs text-gold-400">{p.status}</div>
-                  </div>
-                </Card>
-              ))}
-            </div>
+            {loadingPoneys ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                {featuredPoneys.map((p) => (
+                  <Card key={p.id} padding="md" className="!p-0 overflow-hidden">
+                    {/* Photo carrée en haut */}
+                    <div className="aspect-square w-full bg-blue-50 overflow-hidden">
+                      <img
+                        src={p.photo}
+                        alt={p.name}
+                        className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                        loading="lazy"
+                      />
+                    </div>
+                    {/* Infos */}
+                    <div className="p-5">
+                      <div className="flex items-center gap-2 flex-wrap mb-2">
+                        <h3 className="font-display text-xl font-bold text-blue-800">{p.name}</h3>
+                        <Badge color="gray">{p.type}</Badge>
+                        <Badge color={levelColors[p.niveauCavalier] || "blue"}>{p.niveauCavalier}</Badge>
+                      </div>
+                      {p.publicDescription && (
+                        <p className="font-body text-sm text-gray-500 leading-relaxed">{p.publicDescription}</p>
+                      )}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       <Footer />
     </>

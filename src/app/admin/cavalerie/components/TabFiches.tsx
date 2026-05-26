@@ -1,11 +1,13 @@
 "use client";
 import { useState, useEffect } from "react";
 import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, Timestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { db, storage } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import {
   Heart, Search, ChevronDown, ChevronUp, Edit3, Trash2,
   X, Save, Loader2, ClipboardList, Pill, Syringe, Wrench, Bone, Scissors, Stethoscope,
+  Image as ImageIcon, Upload,
 } from "lucide-react";
 import type { Equide, SoinRecord, DocumentEquide, MouvementRegistre, EquideType, EquideSex, EquideStatus } from "../types";
 import LastUpdated from "@/components/admin/LastUpdated";
@@ -93,6 +95,7 @@ export default function TabFiches({
   const [filterType, setFilterType] = useState<EquideType | "all">("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const emptyForm = {
     name: "", surnom: "", sire: "", puce: "", type: "poney" as EquideType, sex: "hongre" as EquideSex,
@@ -103,6 +106,7 @@ export default function TabFiches({
     status: "actif" as EquideStatus, available: true, niveauCavalier: "Débutant",
     disciplines: [] as string[], temperament: "", cavaliersFavoris: [] as string[],
     maxReprisesPerDay: 3, maxHeuresHebdo: 15, notes: "",
+    featured: false, publicDescription: "",
   };
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -124,6 +128,8 @@ export default function TabFiches({
         cavaliersFavoris: editingEquide.cavaliersFavoris || [],
         maxReprisesPerDay: editingEquide.maxReprisesPerDay || 3,
         maxHeuresHebdo: editingEquide.maxHeuresHebdo || 15, notes: editingEquide.notes || "",
+        featured: (editingEquide as any).featured || false,
+        publicDescription: (editingEquide as any).publicDescription || "",
       });
       setEditingId(editingEquide.id);
     } else {
@@ -160,7 +166,10 @@ export default function TabFiches({
         niveauCavalier: form.niveauCavalier, disciplines: form.disciplines,
         temperament: form.temperament, cavaliersFavoris: form.cavaliersFavoris,
         maxReprisesPerDay: form.maxReprisesPerDay, maxHeuresHebdo: form.maxHeuresHebdo,
-        notes: form.notes, updatedAt: serverTimestamp(),
+        notes: form.notes,
+        featured: !!form.featured,
+        publicDescription: form.publicDescription.trim(),
+        updatedAt: serverTimestamp(),
       };
       if (editingId) {
         await updateDoc(doc(db, "equides", editingId), data);
@@ -198,6 +207,56 @@ export default function TabFiches({
               {/* Identité */}
               <section>
                 <div className="font-body text-xs font-semibold text-blue-500 uppercase tracking-wider mb-3">Identité</div>
+
+                {/* Photo */}
+                <div className="flex items-start gap-4 mb-4">
+                  <label className="relative w-24 h-24 rounded-xl border-2 border-dashed border-blue-500/20 bg-cream hover:bg-blue-50 cursor-pointer flex flex-col items-center justify-center overflow-hidden transition-colors flex-shrink-0">
+                    {uploadingPhoto ? (
+                      <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                    ) : form.photo ? (
+                      <>
+                        <img src={form.photo} alt={form.name || "Photo"} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity">
+                          <span className="font-body text-xs font-semibold text-white">Changer</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <ImageIcon size={20} className="text-gray-400 mb-1" />
+                        <span className="font-body text-[10px] text-gray-400">Photo</span>
+                      </>
+                    )}
+                    <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 5 * 1024 * 1024) { alert("Photo trop lourde (max 5 Mo)"); return; }
+                      setUploadingPhoto(true);
+                      try {
+                        const safeName = (form.name || "equide").replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
+                        const storageRef = ref(storage, `equides/${safeName}_${Date.now()}_${file.name}`);
+                        const task = uploadBytesResumable(storageRef, file);
+                        await new Promise<void>((resolve, reject) => {
+                          task.on("state_changed", null, reject, () => resolve());
+                        });
+                        const url = await getDownloadURL(task.snapshot.ref);
+                        setForm(f => ({ ...f, photo: url }));
+                      } catch (err) { console.error(err); alert("Erreur upload photo"); }
+                      setUploadingPhoto(false);
+                    }} />
+                  </label>
+                  <div className="flex-1">
+                    <div className="font-body text-xs text-gray-500 mb-1">
+                      Photo de profil (JPG/PNG, max 5 Mo). Visible côté admin (montoir, fiches) et sur le site public si "Vedette" est activé.
+                    </div>
+                    {form.photo && (
+                      <button onClick={() => setForm(f => ({ ...f, photo: null }))} type="button"
+                        className="font-body text-xs text-red-600 hover:text-red-800 bg-transparent border-none cursor-pointer">
+                        Retirer la photo
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2 sm:col-span-1">
                     <label className={labelStyle}>Nom officiel *</label>
@@ -316,6 +375,35 @@ export default function TabFiches({
                   <label className={labelStyle}>Notes libres</label>
                   <textarea className={`${inputStyle} !h-16 resize-none`} value={form.notes}
                     onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Informations complémentaires…"/>
+                </div>
+
+                {/* ── Site public (vitrine) ── */}
+                <div className="mt-4 p-3 rounded-lg border border-blue-500/15 bg-blue-50/30">
+                  <div className="font-body text-xs font-semibold text-blue-500 uppercase tracking-wider mb-3">🌐 Site public</div>
+                  <label className="flex items-start gap-2 cursor-pointer mb-3">
+                    <input type="checkbox" checked={!!form.featured}
+                      onChange={e => setForm(f => ({ ...f, featured: e.target.checked }))}
+                      className="mt-0.5 w-4 h-4 cursor-pointer"/>
+                    <div>
+                      <div className="font-body text-sm font-semibold text-blue-800">Afficher en vedette sur le site public</div>
+                      <div className="font-body text-xs text-gray-500">Le poney apparaîtra dans la section "Nos poneys" de la page Équipe. Photo obligatoire.</div>
+                    </div>
+                  </label>
+                  {form.featured && (
+                    <>
+                      <label className={labelStyle}>Description publique (courte)</label>
+                      <textarea className={`${inputStyle} !h-16 resize-none`} value={form.publicDescription}
+                        onChange={e => setForm(f => ({ ...f, publicDescription: e.target.value.slice(0, 150) }))}
+                        placeholder="Ex: Pony Games & CSO — polyvalente et vive, une vraie championne"
+                        maxLength={150}/>
+                      <div className="font-body text-[10px] text-gray-400 mt-1">{form.publicDescription.length}/150 caractères</div>
+                      {!form.photo && (
+                        <div className="mt-2 font-body text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+                          ⚠️ Aucune photo. Ce poney ne sera pas affiché sur le site tant qu'une photo n'est pas uploadée.
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </section>
               {/* Mouvements (édition uniquement) */}
