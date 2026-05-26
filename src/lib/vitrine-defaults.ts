@@ -9,6 +9,7 @@ export const vitrineDefaults = {
       schedule: "Lun–Ven · 10h–12h",
       price: "175€ / semaine",
       description: "Une semaine magique pour les tout-petits ! Dans un univers imaginaire (pirates, fées, safari...), votre enfant découvre le poney en douceur. Maximum 6 enfants par groupe pour un encadrement optimal.",
+      image: "",
     },
     galop_bronze: {
       title: "Galop de Bronze",
@@ -16,6 +17,7 @@ export const vitrineDefaults = {
       schedule: "Lun–Ven · 10h–12h ou 14h–16h",
       price: "175€ / semaine",
       description: "Semaines thématiques (Star Wars, Pokémon, Harry Potter...) mêlant jeux à poney, soins aux animaux et découverte de l'équitation. L'enfant développe sa confiance et son autonomie.",
+      image: "",
     },
     galop_argent: {
       title: "Galop d'Argent",
@@ -23,6 +25,7 @@ export const vitrineDefaults = {
       schedule: "Lun–Ven · 10h–12h ou 14h–16h",
       price: "175€ / semaine",
       description: "Place à l'autonomie ! Les cavaliers approfondissent leur technique, apprennent à seller et brider seuls, et découvrent les bases du travail en carrière.",
+      image: "",
     },
     galop_or: {
       title: "Galop d'Or",
@@ -30,16 +33,26 @@ export const vitrineDefaults = {
       schedule: "Lun–Ven · 10h–12h ou 14h–16h",
       price: "175€ / semaine",
       description: "Multi-disciplines : CSO, dressage, Pony Games, cross... Un vrai perfectionnement technique pour les cavaliers réguliers du club.",
+      image: "",
     },
     balade: {
       title: "Balades à la plage",
       schedule: "Sur réservation · Toute l'année",
       description: "2h entre dunes, estuaire et plage. Découverte du littoral normand à cheval, au coucher du soleil c'est magique.",
+      image: "",
     },
     cours: {
       title: "Cours réguliers",
       schedule: "Toute l'année · Planning hebdomadaire",
       description: "Forfaits annuels, 1 ou 2 cours par semaine selon votre niveau. Progressez toute l'année avec nos moniteurs diplômés.",
+      image: "",
+    },
+    anniversaires: {
+      title: "Anniversaires",
+      ages: "Dès 4 ans",
+      schedule: "Sur réservation · Mercredi & samedi",
+      description: "Une fête au milieu des poneys ! Jeux à poney, balade, soins aux animaux et goûter inclus. Souvenirs garantis.",
+      image: "",
     },
   },
 
@@ -55,6 +68,10 @@ export const vitrineDefaults = {
       { label: "Coucher de soleil — débrouillés", level: "Galop 1-2", price: "57", note: "Avril à octobre" },
       { label: "Coucher de soleil — confirmés", level: "Galop 3+", price: "57", note: "Galop sur la plage" },
       { label: "Romantique privatisée", level: "Tous niveaux", price: "250", note: "Pour 2, guide privé" },
+    ],
+    cours_annuels: [
+      { label: "1 cours / semaine", level: "Tous niveaux", price: "450", freq: "Trimestre" },
+      { label: "2 cours / semaine", level: "Galop 1+", price: "780", freq: "Trimestre" },
     ],
     competitions: [
       { label: "Concours CSO interne", level: "Galop 3+", price: "25", freq: "Mensuel" },

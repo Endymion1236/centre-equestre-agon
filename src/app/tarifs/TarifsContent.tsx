@@ -68,6 +68,25 @@ export function TarifsContent() {
         </div>
       </section>
 
+      {/* Cours à l'année */}
+      {(t as any).cours_annuels && (t as any).cours_annuels.length > 0 && (
+        <section className="py-16 px-6 max-w-[700px] mx-auto">
+          <SectionHeader tag="Cours à l'année" title="Forfaits annuels"
+            subtitle="Progressez toute l'année avec nos moniteurs diplômés." />
+          <div className="flex flex-col gap-3">
+            {(t as any).cours_annuels.map((c: any, i: number) => (
+              <div key={i} className="flex items-center justify-between py-3 border-b border-blue-500/8 last:border-b-0">
+                <div>
+                  <div className="font-body text-sm font-semibold text-blue-800">{c.label}</div>
+                  <div className="font-body text-xs text-gray-400">{c.level}{c.freq && ` · ${c.freq}`}</div>
+                </div>
+                <div className="font-display text-xl font-bold text-blue-500">{c.price}€</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Compétitions */}
       <section className="py-16 px-6 max-w-[700px] mx-auto">
         <SectionHeader tag="Compétitions internes" title="Challenges & concours" subtitle="" />

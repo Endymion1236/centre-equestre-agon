@@ -45,6 +45,7 @@ export default function ContenuPage() {
             ...(d.tarifs || {}),
             balades: d.tarifs?.balades || prev.tarifs.balades,
             competitions: d.tarifs?.competitions || prev.tarifs.competitions,
+            cours_annuels: d.tarifs?.cours_annuels || prev.tarifs.cours_annuels,
           },
           infos: { ...prev.infos, ...(d.infos || {}) },
         }));
@@ -105,6 +106,34 @@ export default function ContenuPage() {
     });
   };
 
+  const setCoursAnnuel = (idx: number, field: string, value: string) => {
+    setData(prev => {
+      const cours_annuels = [...(prev.tarifs.cours_annuels || [])];
+      cours_annuels[idx] = { ...cours_annuels[idx], [field]: value };
+      return { ...prev, tarifs: { ...prev.tarifs, cours_annuels } };
+    });
+  };
+
+  const addCoursAnnuel = () => {
+    setData(prev => ({
+      ...prev,
+      tarifs: {
+        ...prev.tarifs,
+        cours_annuels: [...(prev.tarifs.cours_annuels || []), { label: "", level: "", price: "", freq: "" }],
+      },
+    }));
+  };
+
+  const removeCoursAnnuel = (idx: number) => {
+    setData(prev => ({
+      ...prev,
+      tarifs: {
+        ...prev.tarifs,
+        cours_annuels: (prev.tarifs.cours_annuels || []).filter((_, i) => i !== idx),
+      },
+    }));
+  };
+
   const setInfo = (field: string, value: string) => {
     setData(prev => ({ ...prev, infos: { ...prev.infos, [field]: value } }));
   };
@@ -159,33 +188,83 @@ export default function ContenuPage() {
             { key: "galop_or", emoji: "🥇", label: "Galop d'Or" },
             { key: "balade", emoji: "🌅", label: "Balades à la plage" },
             { key: "cours", emoji: "📅", label: "Cours réguliers" },
+            { key: "anniversaires", emoji: "🎉", label: "Anniversaires" },
           ].map(({ key, emoji, label: lbl }) => {
             const act = (data.activites as any)[key];
+            if (!act) return null; // sécurité si la clé n'existe pas encore (Firestore pas migré)
             return (
               <Card key={key} padding="md">
                 <div className="font-body text-sm font-semibold text-blue-800 mb-4">{emoji} {lbl}</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {act.title !== undefined && (
-                    <div><label className={label}>Titre</label>
-                      <input value={act.title} onChange={e => setActivite(key, "title", e.target.value)} className={inp} /></div>
-                  )}
-                  {act.ages !== undefined && (
-                    <div><label className={label}>Âges</label>
-                      <input value={act.ages} onChange={e => setActivite(key, "ages", e.target.value)} className={inp} /></div>
-                  )}
-                  {act.schedule !== undefined && (
-                    <div><label className={label}>Horaires</label>
-                      <input value={act.schedule} onChange={e => setActivite(key, "schedule", e.target.value)} className={inp} /></div>
-                  )}
-                  {act.price !== undefined && (
-                    <div><label className={label}>Tarif affiché</label>
-                      <input value={act.price} onChange={e => setActivite(key, "price", e.target.value)} className={inp} /></div>
-                  )}
+                <div className="flex flex-col sm:flex-row gap-4">
+                  {/* Visuel */}
+                  <div className="flex flex-col items-center flex-shrink-0">
+                    <label className={label}>Visuel</label>
+                    <label className="relative w-32 h-32 rounded-xl border-2 border-dashed border-blue-500/20 bg-cream hover:bg-blue-50 cursor-pointer flex flex-col items-center justify-center overflow-hidden transition-colors">
+                      {uploading === `activite-${key}` ? (
+                        <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                      ) : act.image ? (
+                        <>
+                          <img src={act.image} alt={act.title || lbl} className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity">
+                            <span className="font-body text-xs font-semibold text-white">Changer</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <ImageIcon size={24} className="text-gray-400 mb-1" />
+                          <span className="font-body text-[10px] text-gray-400">Cliquez pour ajouter</span>
+                        </>
+                      )}
+                      <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 5 * 1024 * 1024) { toast("Image trop lourde (max 5 Mo)", "error"); return; }
+                        setUploading(`activite-${key}`);
+                        try {
+                          const storageRef = ref(storage, `vitrine/activites/${key}_${Date.now()}_${file.name}`);
+                          const task = uploadBytesResumable(storageRef, file);
+                          await new Promise<void>((resolve, reject) => {
+                            task.on("state_changed", null, reject, () => resolve());
+                          });
+                          const url = await getDownloadURL(task.snapshot.ref);
+                          setActivite(key, "image", url);
+                        } catch (err) { console.error(err); toast("Erreur upload", "error"); }
+                        setUploading(null);
+                      }} />
+                    </label>
+                    {act.image && (
+                      <button onClick={() => setActivite(key, "image", "")}
+                        className="mt-1 font-body text-[10px] text-red-500 hover:text-red-700 border-none bg-transparent cursor-pointer">
+                        Retirer
+                      </button>
+                    )}
+                  </div>
+                  {/* Champs */}
+                  <div className="flex-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {act.title !== undefined && (
+                        <div><label className={label}>Titre</label>
+                          <input value={act.title} onChange={e => setActivite(key, "title", e.target.value)} className={inp} /></div>
+                      )}
+                      {act.ages !== undefined && (
+                        <div><label className={label}>Âges</label>
+                          <input value={act.ages} onChange={e => setActivite(key, "ages", e.target.value)} className={inp} /></div>
+                      )}
+                      {act.schedule !== undefined && (
+                        <div><label className={label}>Horaires</label>
+                          <input value={act.schedule} onChange={e => setActivite(key, "schedule", e.target.value)} className={inp} /></div>
+                      )}
+                      {act.price !== undefined && (
+                        <div><label className={label}>Tarif affiché</label>
+                          <input value={act.price} onChange={e => setActivite(key, "price", e.target.value)} className={inp} /></div>
+                      )}
+                    </div>
+                    {act.description !== undefined && (
+                      <div className="mt-3"><label className={label}>Description</label>
+                        <textarea value={act.description} onChange={e => setActivite(key, "description", e.target.value)} rows={3} className={ta} /></div>
+                    )}
+                  </div>
                 </div>
-                {act.description !== undefined && (
-                  <div className="mt-3"><label className={label}>Description</label>
-                    <textarea value={act.description} onChange={e => setActivite(key, "description", e.target.value)} rows={3} className={ta} /></div>
-                )}
               </Card>
             );
           })}
@@ -236,6 +315,41 @@ export default function ContenuPage() {
                 </div>
               ))}
             </div>
+          </Card>
+
+          {/* Cours à l'année */}
+          <Card padding="md">
+            <div className="flex items-center justify-between mb-4">
+              <div className="font-body text-sm font-semibold text-blue-800">📅 Tarifs cours à l'année</div>
+              <button onClick={addCoursAnnuel} className="font-body text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border-none cursor-pointer">
+                + Ajouter un forfait
+              </button>
+            </div>
+            {(data.tarifs.cours_annuels || []).length === 0 ? (
+              <div className="text-center py-6 font-body text-sm text-slate-400">
+                Aucun forfait. Cliquez sur "Ajouter un forfait" pour commencer.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {(data.tarifs.cours_annuels || []).map((c, idx) => (
+                  <div key={idx} className="grid grid-cols-2 sm:grid-cols-5 gap-2 p-3 bg-sand rounded-lg items-end">
+                    <div><label className={label}>Libellé</label>
+                      <input value={c.label} onChange={e => setCoursAnnuel(idx, "label", e.target.value)} className={inp} placeholder="ex : 1 cours / semaine" /></div>
+                    <div><label className={label}>Niveau</label>
+                      <input value={c.level} onChange={e => setCoursAnnuel(idx, "level", e.target.value)} className={inp} placeholder="ex : Tous niveaux" /></div>
+                    <div><label className={label}>Prix (€)</label>
+                      <input type="number" value={c.price} onChange={e => setCoursAnnuel(idx, "price", e.target.value)} className={inp} /></div>
+                    <div><label className={label}>Fréquence</label>
+                      <input value={c.freq} onChange={e => setCoursAnnuel(idx, "freq", e.target.value)} className={inp} placeholder="Trimestre, Année, Mois..." /></div>
+                    <button
+                      onClick={() => removeCoursAnnuel(idx)}
+                      className="font-body text-xs font-semibold text-red-600 hover:text-red-800 bg-white hover:bg-red-50 px-3 py-2 rounded-lg border border-red-200 cursor-pointer self-end">
+                      Supprimer
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
 
           {/* Compétitions */}

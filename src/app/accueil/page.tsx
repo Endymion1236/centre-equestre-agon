@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import ActusBanner from "@/components/ActusBanner";
+import { ActivityCards } from "./ActivityCards";
 
 export default function HomePage() {
   return (
@@ -109,31 +110,7 @@ export default function HomePage() {
           title="Une aventure pour chaque cavalier"
           subtitle="Du baby poney dès 3 ans aux balades au galop sur la plage."
         />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {[
-            { icon: Star, title: "Stages vacances", desc: "Baby Poney, Galop de Bronze, d'Argent, d'Or... Semaines thématiques inoubliables.", age: "Dès 3 ans", price: "175", gradient: "from-blue-500 to-blue-400", href: "/activites" },
-            { icon: Compass, title: "Balades plage", desc: "2h entre dunes, estuaire et plage. Au coucher du soleil, c'est magique.", age: "Dès 12 ans", price: "53", gradient: "from-orange-500 to-orange-400", href: "/activites" },
-            { icon: CalendarDays, title: "Cours réguliers", desc: "Forfaits annuels, 1 ou 2 cours par semaine. Progressez toute l'année.", age: "Tous niveaux", gradient: "from-gold-400 to-gold-300", href: "/activites" },
-            { icon: PartyPopper, title: "Anniversaires", desc: "Une fête au milieu des poneys ! Jeux, balade et goûter inclus.", age: "Dès 4 ans", gradient: "from-red-400 to-orange-400", href: "/contact" },
-          ].map((activity, i) => (
-            <Link key={i} href={activity.href} className="no-underline">
-              <Card hover className="overflow-hidden !p-0 h-full">
-                <div className={`h-44 bg-gradient-to-br ${activity.gradient} relative flex items-center justify-center`}>
-                  {(() => { const Icon = activity.icon; return <Icon size={64} className="text-white/25" strokeWidth={1} />; })()}
-                  {activity.price && (
-                    <div className="absolute top-3 right-3 bg-white/95 rounded-lg px-3 py-1 font-body text-xs font-bold text-blue-500 shadow-sm">dès {activity.price}€</div>
-                  )}
-                  <div className="absolute bottom-3 left-3 font-body text-xs font-semibold text-white bg-blue-500/75 backdrop-blur-sm px-3 py-1 rounded-md">{activity.age}</div>
-                </div>
-                <div className="p-5">
-                  <h3 className="font-display text-lg font-bold text-blue-800 mb-2">{activity.title}</h3>
-                  <p className="font-body text-sm text-gray-500 leading-relaxed mb-4">{activity.desc}</p>
-                  <span className="font-body text-sm font-semibold text-blue-500 inline-flex items-center gap-1">En savoir plus <span>→</span></span>
-                </div>
-              </Card>
-            </Link>
-          ))}
-        </div>
+        <ActivityCards />
       </section>
 
       {/* ═══ STAGES VACANCES — CTA ═══ */}

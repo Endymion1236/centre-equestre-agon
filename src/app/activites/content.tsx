@@ -454,7 +454,7 @@ export function ActivitiesContent() {
   const dynamicActivities = activities.map(a => {
     const key = a.id === "baby" ? "baby_poney" : a.id === "bronze" ? "galop_bronze" : a.id === "argent" ? "galop_argent" : a.id === "or" ? "galop_or" : a.id === "balade" ? "balade" : a.id === "cours" ? "cours" : null;
     if (!key || !v[key]) return a;
-    return { ...a, title: v[key].title || a.title, ages: v[key].ages || a.ages, schedule: v[key].schedule || a.schedule, description: v[key].description || a.description, price: v[key].price || a.price };
+    return { ...a, title: v[key].title || a.title, ages: v[key].ages || a.ages, schedule: v[key].schedule || a.schedule, description: v[key].description || a.description, price: v[key].price || a.price, image: v[key].image || (a as any).image || "" };
   });
 
   const filtered = filter === "all" ? dynamicActivities : dynamicActivities.filter((a) => a.category === filter);
