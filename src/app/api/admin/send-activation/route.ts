@@ -23,26 +23,12 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { Resend } from "resend";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
-import { logEmail } from "@/lib/email-log";
+import { sendMagicLink } from "@/lib/magic-link";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
-const FROM_EMAIL_RAW = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
-const BCC = process.env.RESEND_BCC || "ceagon50@gmail.com";
-
-// Construction robuste du champ "from" Resend.
-// La variable RESEND_FROM_EMAIL peut etre soit :
-//   - une simple adresse  -> "ce@ce-agon.fr"          (on rajoute le nom)
-//   - deja formatee       -> "Centre Equestre <ce@ce-agon.fr>"  (on laisse tel quel)
-// Detection : presence de '<' dans la valeur.
-const FROM = FROM_EMAIL_RAW.includes("<")
-  ? FROM_EMAIL_RAW
-  : `Centre Équestre Agon <${FROM_EMAIL_RAW}>`;
 
 interface SendResult {
   familyId: string;
@@ -75,15 +61,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey && !dryRun) {
-      return NextResponse.json(
-        { error: "RESEND_API_KEY non configuree" },
-        { status: 500 },
-      );
-    }
-    const resend = apiKey ? new Resend(apiKey) : null;
-
     const results: SendResult[] = [];
 
     for (const familyId of familyIds) {
@@ -115,76 +92,27 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        // ── 3. Verifier/creer le user Firebase Auth
-        // Si le compte existe deja (la famille s'est deja connectee par
-        // Google, Facebook ou email/mdp), on ne fait rien : on lui envoie
-        // juste le lien magique qui marche aussi pour les comptes existants.
-        try {
-          await adminAuth.getUserByEmail(email);
-        } catch (e: any) {
-          if (e.code === "auth/user-not-found") {
-            // Pas de compte -> on le cree sans mot de passe. La famille
-            // pourra se connecter via le lien magique uniquement.
-            // displayName recupere parentName pour personnaliser un peu.
-            await adminAuth.createUser({
-              email,
-              displayName: parentName,
-              emailVerified: false, // sera passe a true au 1er signInWithEmailLink
-            });
-          } else {
-            throw e;
-          }
-        }
-
-        // ── 4. Generer le lien magique
-        const actionCodeSettings = {
-          // URL OU la famille atterrit apres clic. Doit etre dans la liste
-          // blanche Firebase Console -> Authentication -> Settings -> Authorized
-          // domains. centre-equestre-agon.vercel.app + centreequestreagon.com
-          // (a partir de septembre) doivent y figurer.
-          url: `${APP_URL}/connexion-magique?email=${encodeURIComponent(email)}`,
-
-          // true = le lien doit etre ouvert dans l'app/navigateur
-          // (et non un SMS / un lien profond). On veut le web.
-          handleCodeInApp: true,
-        };
-
-        const magicLink = await adminAuth.generateSignInWithEmailLink(email, actionCodeSettings);
-
-        // ── 5. Composer et envoyer l'email
-        const subject = "🐴 Active ton espace famille au Centre Équestre Agon";
-        const html = renderEmailHTML({ parentName, magicLink });
-
-        const send = await resend!.emails.send({
-          from: FROM,
-          to: email,
-          bcc: BCC ? [BCC] : undefined,
-          subject,
-          html,
+        // ── 3. Envoi via helper centralise (creation user Firebase auto,
+        //      generation magic link, template HTML, envoi Resend, log,
+        //      trace dans magic-link-events)
+        const result = await sendMagicLink({
+          email,
+          parentName,
+          context: "activation_pilote",
+          familyId,
+          sentBy: (auth as any)?.uid || "admin",
         });
 
-        if (send.error) {
-          results.push({ familyId, parentName, email, status: "failed", reason: send.error.message });
-          await logEmail({
-            to: email, subject, context: "activation_pilote",
-            template: "activation-magic-link",
-            status: "failed", error: send.error.message,
-            sentBy: (auth as any)?.uid || "admin",
-            familyId,
-          });
+        if (result.status === "failed") {
+          results.push({ familyId, parentName, email, status: "failed", reason: result.error });
           continue;
         }
 
         results.push({ familyId, parentName, email, status: "sent" });
-        await logEmail({
-          to: email, subject, context: "activation_pilote",
-          template: "activation-magic-link",
-          status: "sent",
-          sentBy: (auth as any)?.uid || "admin",
-          familyId,
-        });
 
-        // Trace dans une collection dediee pour reporting bascule prod
+        // Trace dediee phase pilote (en plus de magic-link-events, qui
+        // est general). Permet de filtrer specifiquement les envois
+        // d'activation initiale dans le reporting bascule prod.
         await adminDb.collection("activation-emails").add({
           familyId,
           parentName,
@@ -220,121 +148,4 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-//  Template HTML de l'email d'activation
-// ─────────────────────────────────────────────────────────────────────────
-// Reste sobre, mobile-friendly (largeur 600px max, fonts safe), grosse CTA
-// au milieu. On evite les images externes qui se font bloquer par Gmail.
-
-function renderEmailHTML({ parentName, magicLink }: { parentName: string; magicLink: string }) {
-  // Petite securite XSS sur parentName (probablement deja propre mais
-  // c'est gratuit)
-  const safeName = parentName.replace(/[<>&"']/g, c => ({
-    "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;",
-  }[c] || c));
-
-  return `<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Active ton espace famille</title>
-</head>
-<body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f8fafc;padding:32px 16px;">
-    <tr>
-      <td align="center">
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.05);max-width:600px;">
-
-          <!-- Header -->
-          <tr>
-            <td style="background:linear-gradient(135deg,#1e40af,#0ea5e9);padding:32px 24px;text-align:center;">
-              <div style="font-size:48px;margin-bottom:8px;">🐴</div>
-              <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;">Centre Équestre Agon</h1>
-              <p style="margin:8px 0 0;color:#dbeafe;font-size:14px;">Ton espace famille est prêt !</p>
-            </td>
-          </tr>
-
-          <!-- Body -->
-          <tr>
-            <td style="padding:32px 24px;color:#1e293b;">
-              <p style="margin:0 0 16px;font-size:16px;line-height:1.6;">
-                Bonjour <strong>${safeName}</strong>,
-              </p>
-              <p style="margin:0 0 16px;font-size:16px;line-height:1.6;">
-                On passe à un nouveau site pour la gestion des inscriptions et
-                des paiements du Centre Équestre Agon-Coutainville. Pour la
-                rentrée de septembre, on a déjà préparé ton compte avec toutes
-                tes infos familiales et la progression pédagogique de tes
-                enfants.
-              </p>
-              <p style="margin:0 0 24px;font-size:16px;line-height:1.6;">
-                Pour activer ton espace, clique simplement sur le bouton
-                ci-dessous. Pas de mot de passe à retenir : un clic suffit !
-              </p>
-
-              <!-- CTA -->
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
-                <tr>
-                  <td align="center" style="border-radius:12px;background:#2563eb;">
-                    <a href="${magicLink}"
-                       style="display:inline-block;padding:16px 32px;color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;border-radius:12px;">
-                      Activer mon espace famille
-                    </a>
-                  </td>
-                </tr>
-              </table>
-
-              <p style="margin:24px 0 16px;font-size:14px;color:#64748b;line-height:1.6;">
-                Si le bouton ne fonctionne pas, copie-colle ce lien dans ton
-                navigateur :
-              </p>
-              <p style="margin:0 0 24px;font-size:12px;color:#94a3b8;word-break:break-all;background:#f1f5f9;padding:12px;border-radius:8px;">
-                ${magicLink}
-              </p>
-
-              <div style="border-top:1px solid #e2e8f0;padding-top:24px;margin-top:24px;">
-                <p style="margin:0 0 8px;font-size:14px;color:#475569;line-height:1.6;">
-                  <strong>Ce que tu vas retrouver dans ton espace :</strong>
-                </p>
-                <ul style="margin:0 0 16px;padding-left:20px;font-size:14px;color:#475569;line-height:1.8;">
-                  <li>Les progressions de tes enfants (galops, objectifs)</li>
-                  <li>Le calendrier des reprises et stages</li>
-                  <li>Tes inscriptions en cours et à venir</li>
-                  <li>Tes factures et paiements</li>
-                </ul>
-              </div>
-
-              <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:4px;margin-top:24px;">
-                <p style="margin:0;font-size:13px;color:#78350f;line-height:1.5;">
-                  ⚠️ <strong>Ce lien expire dans 6 jours.</strong> Si tu n'arrives
-                  pas à activer ton espace, contacte-nous et on t'enverra un
-                  nouveau lien.
-                </p>
-              </div>
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="background:#f8fafc;padding:24px;text-align:center;border-top:1px solid #e2e8f0;">
-              <p style="margin:0;font-size:13px;color:#64748b;line-height:1.6;">
-                EARL Centre Équestre Poney Club d'Agon-Coutainville<br>
-                Une question ? <a href="mailto:ceagon@orange.fr" style="color:#2563eb;text-decoration:none;">ceagon@orange.fr</a>
-              </p>
-            </td>
-          </tr>
-        </table>
-
-        <p style="margin:16px 0 0;font-size:11px;color:#94a3b8;text-align:center;">
-          Tu reçois ce mail car tu es client·e du Centre Équestre Agon-Coutainville.<br>
-          Si tu n'attendais pas ce message, ignore-le.
-        </p>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
 }

@@ -39,12 +39,13 @@ const navItems = [
 
 function LoginScreen() {
   const { signInWithGoogle, signInWithFacebook, signInWithEmail, signUpWithEmail } = useAuth();
-  const [mode, setMode] = useState<"social" | "login" | "register">("social");
+  const [mode, setMode] = useState<"social" | "login" | "register" | "magic">("social");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [magicSent, setMagicSent] = useState(false);
 
   const handleLogin = async () => {
     setError("");
@@ -85,7 +86,36 @@ function LoginScreen() {
     }
   };
 
-  const resetForm = () => { setEmail(""); setPassword(""); setDisplayName(""); setError(""); };
+  const handleMagicLinkRequest = async () => {
+    setError("");
+    if (!email || !email.includes("@")) {
+      setError("Email invalide.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/request-magic-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      // Reponse generique cote serveur : on affiche toujours la confirmation,
+      // que l'email existe ou non, pour ne pas servir d'oracle d'enumeration.
+      if (res.ok) {
+        setMagicSent(true);
+      } else {
+        // En cas d'erreur explicite (400 = email malforme cote serveur), on affiche
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "Erreur. Reessaie dans quelques instants.");
+      }
+    } catch (e: any) {
+      setError("Erreur reseau. Reessaie dans quelques instants.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetForm = () => { setEmail(""); setPassword(""); setDisplayName(""); setError(""); setMagicSent(false); };
 
   return (
     <div className="min-h-screen bg-cream flex items-center justify-center px-6">
@@ -147,8 +177,72 @@ function LoginScreen() {
                 </svg>
                 Continuer avec un email
               </button>
+
+              {/* Mot de passe oublie / pas de mot de passe -> lien magique
+                  Solution recommandee pour les familles arrivees via lien
+                  d'activation initial (pas de mdp cree) : elles cliquent
+                  ici, saisissent leur email, recoivent un nouveau lien. */}
+              <button
+                onClick={() => { setMode("magic"); resetForm(); }}
+                className="w-full text-center font-body text-xs text-gray-500 hover:text-blue-600 cursor-pointer bg-transparent border-none mt-1 py-2"
+              >
+                🔑 Pas de mot de passe ? Recevoir un lien par email
+              </button>
             </div>
           )}
+
+          {mode === "magic" && (
+            <div className="flex flex-col gap-3">
+              <h2 className="font-display text-lg font-bold text-blue-800 text-center mb-1">
+                Lien de connexion
+              </h2>
+              {!magicSent ? (
+                <>
+                  <p className="font-body text-xs text-gray-500 text-center mb-2 leading-relaxed">
+                    Saisis ton email, on t'envoie un lien pour te connecter sans mot de passe.
+                  </p>
+                  <input
+                    type="email"
+                    placeholder="ton.email@exemple.fr"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleMagicLinkRequest()}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 font-body text-sm text-gray-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none"
+                    autoFocus
+                  />
+                  {error && <p className="font-body text-xs text-red-500 text-center">{error}</p>}
+                  <button
+                    onClick={handleMagicLinkRequest}
+                    disabled={loading}
+                    className="w-full px-6 py-3.5 rounded-xl bg-blue-600 font-body text-sm font-semibold text-white hover:bg-blue-700 transition-all cursor-pointer border-none disabled:opacity-50"
+                  >
+                    {loading ? "Envoi..." : "Recevoir mon lien"}
+                  </button>
+                </>
+              ) : (
+                <div className="flex flex-col items-center gap-3 py-4">
+                  <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center text-3xl">
+                    ✓
+                  </div>
+                  <p className="font-body text-sm font-semibold text-gray-800 text-center">
+                    Email envoyé !
+                  </p>
+                  <p className="font-body text-xs text-gray-500 text-center leading-relaxed px-2">
+                    Si un compte existe avec cette adresse, tu vas recevoir un email
+                    dans quelques minutes avec un lien pour te connecter. Pense à
+                    vérifier tes spams.
+                  </p>
+                </div>
+              )}
+              <button
+                onClick={() => { setMode("social"); resetForm(); }}
+                className="font-body text-xs text-gray-400 hover:text-gray-600 cursor-pointer bg-transparent border-none mt-2"
+              >
+                ← Retour
+              </button>
+            </div>
+          )}
+
 
           {mode === "login" && (
             <div className="flex flex-col gap-3">
@@ -177,7 +271,13 @@ function LoginScreen() {
               >
                 {loading ? "Connexion..." : "Se connecter"}
               </button>
-              <div className="text-center">
+              <div className="text-center flex flex-col gap-1">
+                <button
+                  onClick={() => { setMode("magic"); resetForm(); }}
+                  className="font-body text-xs text-blue-500 hover:text-blue-700 cursor-pointer bg-transparent border-none"
+                >
+                  Mot de passe oublié ? Recevoir un lien par email
+                </button>
                 <button
                   onClick={() => { setMode("register"); resetForm(); }}
                   className="font-body text-xs text-blue-500 hover:text-blue-700 cursor-pointer bg-transparent border-none"
