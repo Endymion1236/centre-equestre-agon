@@ -915,7 +915,16 @@ export function TabEncaisser({
           <button onClick={handlePayment} disabled={saving}
             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-body text-base font-semibold text-white bg-green-600 border-none cursor-pointer hover:bg-green-500 transition-colors">
             {saving ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
-            {saving ? "Enregistrement..." : `Valider le paiement — ${basketTotal.toFixed(2)}€`}
+            {(() => {
+              if (saving) return "Enregistrement...";
+              // Montant qu'on va REELLEMENT encaisser :
+              //  - si l'admin a saisi un montant partiel valide > 0, c'est lui
+              //  - sinon c'est le total du panier
+              const saisi = safeNumber(paidAmount);
+              const aEncaisser = (paidAmount && saisi > 0 && saisi < basketTotal) ? saisi : basketTotal;
+              const partiel = aEncaisser < basketTotal;
+              return `Valider le paiement — ${aEncaisser.toFixed(2)}€${partiel ? " (partiel)" : ""}`;
+            })()}
           </button>
         </Card>
       )}
