@@ -726,6 +726,55 @@ export default function ComptabilitePage() {
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const raw = ev.target?.result as string;
+
+      // ─────────────────────────────────────────────────────────────────────
+      //  Garde-fou : detection de la periode reellement contenue dans le CSV
+      // ─────────────────────────────────────────────────────────────────────
+      // Le Credit Agricole renvoie une ligne "Liste des operations du compte
+      // entre le DD/MM/YYYY et le DD/MM/YYYY" en debut de fichier. Si Nicolas
+      // se trompe dans son filtre cote banque (intervalle inverse, dates
+      // futures non encore comptabilisees, etc.), le CSV peut ne contenir
+      // qu'une periode tronquee, voire une seule journee.
+      // On lit cette ligne et on previent au moindre doute :
+      //   - periode tres courte (< 3 jours)
+      //   - date de fin tres ancienne (> 30 jours avant aujourd'hui)
+      // Confirmation requise avant de poursuivre l'import dans ces cas-la.
+      const periodeMatch = raw.match(/entre le (\d{2})\/(\d{2})\/(\d{4})\s+et le (\d{2})\/(\d{2})\/(\d{4})/i);
+      if (periodeMatch) {
+        const [, d1, m1, y1, d2, m2, y2] = periodeMatch;
+        const startStr = `${d1}/${m1}/${y1}`;
+        const endStr = `${d2}/${m2}/${y2}`;
+        const startDate = new Date(`${y1}-${m1}-${d1}T12:00:00`);
+        const endDate = new Date(`${y2}-${m2}-${d2}T12:00:00`);
+        const nbJours = Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000) + 1;
+        const now = new Date();
+        const joursDepuisFin = Math.round((now.getTime() - endDate.getTime()) / 86_400_000);
+
+        const alertes: string[] = [];
+        if (nbJours < 3) alertes.push(`• Periode tres courte : seulement ${nbJours} jour(s)`);
+        if (joursDepuisFin > 30) alertes.push(`• Derniere operation il y a ${joursDepuisFin} jours`);
+        if (nbJours <= 0) alertes.push(`• Periode invalide : fin (${endStr}) anterieure au debut (${startStr})`);
+
+        if (alertes.length > 0) {
+          const ok = window.confirm(
+            `⚠️ Periode lue dans le CSV : ${startStr} → ${endStr} (${nbJours} jour${nbJours > 1 ? "s" : ""})\n\n` +
+            alertes.join("\n") +
+            `\n\nCela peut indiquer un filtre de date incorrect cote banque ` +
+            `(intervalle inverse, dates futures, etc.).\n\n` +
+            `Continuer quand meme l'import ?`,
+          );
+          if (!ok) {
+            // L'admin annule -> on remet l'input file a zero et on s'arrete
+            e.target.value = "";
+            return;
+          }
+        } else {
+          // Periode OK : info discrete dans la console pour debug
+          console.log(`📅 CSV : ${startStr} → ${endStr} (${nbJours} jours)`);
+        }
+      }
+      // Si la ligne de periode est absente (autre banque que CA), on continue
+      // sans verification : le format simple n'a pas de header de periode.
       
       // ── Parser intelligent pour CSV bancaires (Crédit Agricole, etc.) ──
       // Détecte automatiquement le format :
