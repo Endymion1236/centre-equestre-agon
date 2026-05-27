@@ -32,8 +32,17 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+const FROM_EMAIL_RAW = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
 const BCC = process.env.RESEND_BCC || "ceagon50@gmail.com";
+
+// Construction robuste du champ "from" Resend.
+// La variable RESEND_FROM_EMAIL peut etre soit :
+//   - une simple adresse  -> "ce@ce-agon.fr"          (on rajoute le nom)
+//   - deja formatee       -> "Centre Equestre <ce@ce-agon.fr>"  (on laisse tel quel)
+// Detection : presence de '<' dans la valeur.
+const FROM = FROM_EMAIL_RAW.includes("<")
+  ? FROM_EMAIL_RAW
+  : `Centre Équestre Agon <${FROM_EMAIL_RAW}>`;
 
 interface SendResult {
   familyId: string;
@@ -147,7 +156,7 @@ export async function POST(req: NextRequest) {
         const html = renderEmailHTML({ parentName, magicLink });
 
         const send = await resend!.emails.send({
-          from: `Centre Équestre Agon <${FROM_EMAIL}>`,
+          from: FROM,
           to: email,
           bcc: BCC ? [BCC] : undefined,
           subject,

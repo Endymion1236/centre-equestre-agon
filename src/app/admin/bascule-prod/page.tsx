@@ -92,6 +92,22 @@ export default function BasculeProdPage() {
       return;
     }
     const action = dryRun ? "simuler" : "envoyer pour de vrai";
+
+    // En mode REEL : detection des emails qui ressemblent a des fiches test
+    // (laserbay, test, demo, fake, exemple). Avertissement supplementaire
+    // pour eviter d'envoyer par erreur a une fiche technique residuelle.
+    if (!dryRun) {
+      const suspects = families
+        .filter(f => selected.has(f.id))
+        .filter(f => /test|demo|fake|exemple|laserbay/i.test(f.parentEmail) || /test|demo|fake|exemple|laserbay/i.test(f.parentName));
+      if (suspects.length > 0) {
+        const lines = suspects.map(s => `  - ${s.parentName} (${s.parentEmail})`).join("\n");
+        if (!confirm(
+          `⚠️ ATTENTION — ${suspects.length} famille(s) selectionnee(s) ressemble(nt) a des fiches de test :\n\n${lines}\n\nEnvoyer quand meme un vrai email a ces adresses ?`,
+        )) return;
+      }
+    }
+
     if (!confirm(
       `Tu vas ${action} l'envoi d'un lien d'activation a ${selected.size} famille(s).\n\n` +
       (dryRun
