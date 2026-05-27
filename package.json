@@ -34,6 +34,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
     "@react-pdf/renderer": "^4.3.2",
+    "@sentry/nextjs": "^10.54.0",
     "driver.js": "^1.4.0",
     "elevenlabs": "^1.59.0",
     "firebase": "^11.10.0",

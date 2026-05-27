@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   // ─── Images ────────────────────────────────────────────────────────
@@ -36,4 +37,32 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
 };
 
-export default nextConfig;
+// ─── Sentry wrapper ────────────────────────────────────────────────────
+// Doit etre le dernier wrapper applique. Upload automatiquement les source
+// maps a chaque deploy pour que les stack traces dans Sentry pointent vers
+// du TypeScript lisible et non pas du JS minifie.
+export default withSentryConfig(nextConfig, {
+  // Identite du projet — alignee avec les variables d'env Vercel
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+
+  // Token Vercel pour upload source maps (skipped si absent : build OK
+  // mais pas de symbolication des stack traces — c'est gerable)
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+
+  // Pas de logs Sentry pendant le build : Vercel a deja des logs verbeux
+  silent: !process.env.CI,
+
+  // Tree-shake les logs Sentry verbeux en prod (gain ~5KB sur bundle final)
+  disableLogger: true,
+
+  // Tunnel : route les requetes Sentry via notre propre domaine pour
+  // contourner les bloqueurs de pub qui filtrent ingest.sentry.io. Sinon
+  // on perd 20-30% des erreurs des familles qui ont uBlock Origin.
+  tunnelRoute: "/monitoring",
+
+  // Pas d'upload des source maps si on est juste en preview, pour eviter
+  // de saturer le quota Sentry — on garde l'upload aux deploys prod
+  widenClientFileUpload: false,
+});
+
