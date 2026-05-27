@@ -778,6 +778,63 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const stageAcompte = showAcompte ? Math.min(ACOMPTE_PAR_ENFANT * stageLines.length, stageTotalTTC) : stageTotalTTC;
   const stageSolde = showAcompte ? Math.round((stageTotalTTC - stageAcompte) * 100) / 100 : 0;
 
+  // ─────────────────────────────────────────────────────────────────────
+  //  Alerte "créneau complet" après inscription
+  // ─────────────────────────────────────────────────────────────────────
+  // Demande Nicolas : quand une inscription remplit un stage (ou un cours)
+  // au max des places, on affiche un toast warning longue durée qui suggère
+  // d'ouvrir un nouveau créneau.
+  //
+  // Approche : on rafraîchit allCreneaux via onRefresh, puis on relit le
+  // créneau impacté dans Firestore pour avoir l'état réel (les onEnroll
+  // précédents peuvent avoir skipRefresh:true → allCreneaux pas à jour).
+  // Plus fiable que de tenter de calculer enrolled+1 nous-mêmes (cas des
+  // conflits horaires, doublons childId, etc. qui font qu'un onEnroll
+  // n'incrémente pas toujours le compteur).
+  const checkAndAlertIfFull = async (creneauIds: string[]) => {
+    if (creneauIds.length === 0) return;
+    try {
+      const checks = await Promise.all(creneauIds.map(async (cid) => {
+        try {
+          const snap = await getDoc(doc(db, "creneaux", cid));
+          if (!snap.exists()) return null;
+          const data = snap.data() as any;
+          const enrolledCount = (data.enrolled || []).length;
+          const maxPlaces = data.maxPlaces || 0;
+          if (maxPlaces > 0 && enrolledCount >= maxPlaces) {
+            return {
+              title: data.activityTitle || "Créneau",
+              date: data.date as string,
+              isStage: data.activityType === "stage" || data.activityType === "stage_journee",
+            };
+          }
+          return null;
+        } catch { return null; }
+      }));
+      const fulls = checks.filter(Boolean) as Array<{ title: string; date: string; isStage: boolean }>;
+      if (fulls.length === 0) return;
+
+      // Regrouper par titre pour ne pas spammer si un stage occupe plusieurs jours
+      const byTitle = new Map<string, { count: number; isStage: boolean }>();
+      for (const f of fulls) {
+        const cur = byTitle.get(f.title) || { count: 0, isStage: f.isStage };
+        cur.count += 1;
+        byTitle.set(f.title, cur);
+      }
+      byTitle.forEach(({ count, isStage }, title) => {
+        const label = isStage ? "Stage" : "Créneau";
+        const suffix = count > 1 ? ` (${count} jours)` : "";
+        panelToast(
+          `⚠️ ${label} "${title}"${suffix} COMPLET — pense à ouvrir un nouveau créneau`,
+          "warning",
+          10000, // 10s pour avoir le temps de lire
+        );
+      });
+    } catch (e) {
+      console.warn("checkAndAlertIfFull:", e);
+    }
+  };
+
   const handleEnroll = async () => {
     // Mode non-stage, non-compétition, ponctuel, 2+ enfants sélectionnés :
     // inscrire un par un avec un paiement séparé par enfant (plus simple pour
@@ -820,6 +877,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         const payInfo = freeEnroll ? ` — 🎁 offert (${freeReason})` : showPay ? " — encaissé ✅" : priceTTC > 0 ? " — paiement(s) en attente" : "";
         setJustEnrolled(`${enrolledNames.length} cavalier${enrolledNames.length > 1 ? "s" : ""} inscrit${enrolledNames.length > 1 ? "s" : ""} : ${enrolledNames.join(", ")}${payInfo}`);
         panelToast(`${enrolledNames.length} inscription${enrolledNames.length > 1 ? "s" : ""} créée${enrolledNames.length > 1 ? "s" : ""} — ${(priceTTC * enrolledNames.length).toFixed(2)}€ au total`, "success");
+        // Alerter si le creneau passe complet apres la salve d'inscriptions
+        await checkAndAlertIfFull([creneau.id!]);
       } finally {
         setSelChild(""); setSelectedChildren([]); setSelFam(""); setSearch("");
         setEnrolling(false); setShowPay(false); setFreeEnroll(false); setFreeReason("Rattrapage");
@@ -911,6 +970,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         if (conflictsFound.length > 0) {
           panelToast(`Conflits horaires ignorés : ${conflictsFound.join(", ")}`, "warning");
         }
+
+        // Alerter pour chaque jour du stage qui passe complet (demande Nicolas)
+        await checkAndAlertIfFull(creneauxAInscrire.map(c => c.id!).filter(Boolean));
 
         // Ajouter les lignes au panier de la famille (1 seul paiement pending)
         const scheduleDesc = formatStageSchedule(creneauxAInscrire);
@@ -1368,6 +1430,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       // Refresh global une seule fois apres tous les onEnroll
       // (qui ont tous skipRefresh:true). Sans ca, l'UI ne se met pas a jour.
       try { await onRefresh?.(); } catch (e) { console.warn("Refresh post-annual:", e); }
+
+      // Alerter pour chaque seance qui passe complete apres inscription annuelle
+      await checkAndAlertIfFull(allSlotsToEnroll.map(s => s.id));
     } else {
       // ── Mode Compétition : items engagement + coaching libres ──
       if (isCompetition) {
@@ -1393,6 +1458,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         const rattrapageOptions = useRattrapage ? { rattrapageId: useRattrapage, skipEmail: false } : undefined;
         await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, inscriptionMode === "ponctuel" && showPay && !freeEnroll && !useRattrapage ? payMode : undefined, enrollOptions || freeEnrollOptions || rattrapageOptions);
       }
+      // Alerter si le creneau (cours collectif ou competition) passe complet
+      await checkAndAlertIfFull([creneau.id!]);
     }
 
     if (inscriptionMode === "annuel") {
