@@ -697,7 +697,11 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
 
   const handleImportCreneaux = async () => {
     // Calculer les dates de la semaine
-    const dates = jourDates.slice(0, nbJours).map(({ jour, date }) => ({
+    // ⚠️ On importe TOUJOURS les 7 jours (lun→dim) indépendamment du toggle "Dim."
+    // d'affichage. Sinon, si le toggle est décoché, les cours/stages du dimanche
+    // ne seraient jamais importés en tâches → horaires du dimanche absents de
+    // la fiche horaires mensuelle (TabHoraires).
+    const dates = jourDates.map(({ jour, date }) => ({
       jour,
       dateStr: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,
     }));
@@ -784,6 +788,15 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
         }));
       }
       await Promise.all(createPromises);
+
+      // Si on a importé au moins un créneau le dimanche, on active l'affichage
+      // du dimanche pour que l'admin voie bien ce qui vient d'être créé.
+      // (sinon l'utilisateur peut croire que rien n'a été importé puisque la
+      // colonne dimanche est cachée par défaut)
+      const hasSunday = targetCreneaux.some(t => t.jour === "dimanche");
+      if (hasSunday && !inclureDimanche) {
+        setInclureDimanche(true);
+      }
 
       // ── 7. Toast récap ──
       const parts: string[] = [];
