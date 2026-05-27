@@ -21,7 +21,7 @@ import { useAgentContext } from "@/hooks/useAgentContext";
 import { emailTemplates } from "@/lib/email-templates";
 import PoneyChargeView from "./PoneyChargeView";
 import ThemeSuggestion from "./ThemeSuggestion";
-import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, XCircle, AlertCircle, Printer, ClipboardList, Mic, MicOff, Sparkles,
+import { Loader2, ChevronLeft, ChevronRight, XCircle, AlertCircle, Printer, ClipboardList, Mic, MicOff, Sparkles,
 } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 
@@ -68,16 +68,19 @@ export default function MontoirPage() {
       setFamilies(famSnap.docs.map(d=>({id:d.id,...d.data()})));
 
       // Contexte agent — données montoir du jour
+      // Nouvelle logique "presence par defaut" : un cavalier sans statut
+      // est considere present (pas besoin de cocher).
       setAgentContext({
         creneaux_du_jour: creneauxData.map((c: any) => ({
           id: c.id,
           titre: c.activityTitle,
           heure: `${c.startTime}-${c.endTime}`,
           inscrits: (c.enrolled||[]).length,
-          presents: (c.enrolled||[]).filter((e:any) => e.presence === "present").length,
+          presents: (c.enrolled||[]).filter((e:any) =>
+            e.presence !== "absent" && e.presence !== "absent_nonjustified"
+          ).length,
           absents: (c.enrolled||[]).filter((e:any) => e.presence === "absent").length,
           absents_non_justifies: (c.enrolled||[]).filter((e:any) => e.presence === "absent_nonjustified").length,
-          non_pointes: (c.enrolled||[]).filter((e:any) => !e.presence).length,
           statut: c.status || "planned",
         })),
         a_cloturer: creneauxData.filter((c: any) => c.status !== "closed").length,
@@ -138,7 +141,17 @@ export default function MontoirPage() {
   }, [equides, indisponibilites, dateStr]);
 
   const updateEnrolled = async (cid: string, enrolled: any[]) => { await updateDoc(doc(db,"creneaux",cid),{enrolled}); fetchData(); };
-  const togglePresence = (c: Creneau, childId: string, val: string) => { updateEnrolled(c.id, (c.enrolled||[]).map(e => e.childId===childId ? {...e, presence: val} : e)); };
+  // Toggle : si on reclique sur le meme statut, on l'efface (-> retour
+  // "present par defaut"). Sinon on applique le nouveau statut.
+  // Indispensable depuis qu'on a retire le bouton vert : sans toggle, une
+  // mauvaise saisie ne pourrait plus etre corrigee.
+  const togglePresence = (c: Creneau, childId: string, val: string) => {
+    updateEnrolled(c.id, (c.enrolled||[]).map(e =>
+      e.childId === childId
+        ? { ...e, presence: e.presence === val ? undefined : val }
+        : e
+    ));
+  };
   // ── Charge journalière des poneys (nb séances + nb heures aujourd'hui) ──────
   const poneyCharge = useMemo(() => {
     const charge: Record<string, { seances: number; heures: number }> = {};
@@ -235,16 +248,18 @@ export default function MontoirPage() {
     // Anti-duplication : si déjà clôturé, ne rien faire
     if (c.status === "closed") { toast("Cette reprise est déjà clôturée.", "warning"); return; }
 
-    const presents = (c.enrolled || []).filter((e: any) => e.presence === "present");
+    // Modele "presence par defaut" (mai 2026, demande Nicolas) :
+    // Tout cavalier qui n'est PAS explicitement marque absent ou absent
+    // non justifie est considere present. Plus besoin de cocher la
+    // presence un par un, on ne marque que les absents.
+    //
+    // -> presents inclut donc les anciens "present" ET ceux qui n'ont
+    //    pas de statut (anciennement "nonPointes"). C'est intentionnel.
     const absents = (c.enrolled || []).filter((e: any) => e.presence === "absent");
-    // Absences non justifiées : décomptées séparément, AUCUN rattrapage à la clôture
-    // (politique : la séance est perdue). Cohérent avec le 3ème bouton ambre.
     const absentsNonJustified = (c.enrolled || []).filter((e: any) => e.presence === "absent_nonjustified");
-    const nonPointes = (c.enrolled || []).filter((e: any) => !e.presence);
-
-    if (nonPointes.length > 0) {
-      if (!confirm(`${nonPointes.length} cavalier${nonPointes.length > 1 ? "s" : ""} non pointé${nonPointes.length > 1 ? "s" : ""}.\n\nClôturer quand même ?`)) return;
-    }
+    const presents = (c.enrolled || []).filter((e: any) =>
+      e.presence !== "absent" && e.presence !== "absent_nonjustified"
+    );
 
     const msg = `Clôturer "${c.activityTitle}" (${c.startTime}) ?\n\n` +
       `${presents.length} présent${presents.length > 1 ? "s" : ""}, ${absents.length} absent${absents.length > 1 ? "s" : ""}` +
@@ -688,7 +703,11 @@ export default function MontoirPage() {
   };
 
   const totalE = creneaux.reduce((s,c)=>s+(c.enrolled?.length||0),0);
-  const totalP = creneaux.reduce((s,c)=>s+(c.enrolled||[]).filter((e:any)=>e.presence==="present").length,0);
+  // Compte coherent avec la nouvelle logique "present par defaut" :
+  // sont presents tous ceux qui n'ont PAS ete marques absent/non justifie.
+  const totalP = creneaux.reduce((s,c)=>s+(c.enrolled||[]).filter(
+    (e:any)=>e.presence!=="absent" && e.presence!=="absent_nonjustified"
+  ).length,0);
 
   return (
     <div>
@@ -752,7 +771,7 @@ export default function MontoirPage() {
         </div>
       )}
       {creneaux.length === 0 ? <Card padding="lg" className="text-center"><div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><ClipboardList size={28} className="text-blue-300" /></div><p className="font-body text-sm text-slate-600">Aucune reprise ce jour.</p></Card> :
-      <div className="flex flex-col gap-6">{creneaux.map(c => { const en = c.enrolled||[]; const col = (c as any).color || typeColors[c.activityType]||"#666"; const closed = c.status==="closed"; const pres = en.filter((e:any)=>e.presence==="present").length; return (
+      <div className="flex flex-col gap-6">{creneaux.map(c => { const en = c.enrolled||[]; const col = (c as any).color || typeColors[c.activityType]||"#666"; const closed = c.status==="closed"; const pres = en.filter((e:any)=>e.presence!=="absent" && e.presence!=="absent_nonjustified").length; return (
         <Card key={c.id} padding="md" className={closed ? "border-gray-200 bg-gray-50/50" : ""}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-blue-500/8">
             <div className="flex items-center gap-4">
@@ -816,7 +835,7 @@ export default function MontoirPage() {
               <span className="w-8 hidden sm:block">#</span><span className="flex-1">Cavalier</span><span className="w-32 hidden sm:block">Famille</span><span className="w-28 sm:w-36">Poney</span><span className="w-20 sm:w-24 text-center">Présence</span>
             </div>
             {en.map((e:any, i:number) => (
-              <div key={e.childId} className={`flex items-center px-3 py-2.5 rounded-lg ${i%2===0?"bg-sand":""} ${e.presence==="absent"?"opacity-40":""}`}>
+              <div key={e.childId} className={`flex items-center px-3 py-2.5 rounded-lg ${i%2===0?"bg-sand":""} ${(e.presence==="absent"||e.presence==="absent_nonjustified")?"opacity-40":""}`}>
                 <span className="w-8 font-body text-xs hidden sm:block" style={{color:"#475569"}}>{i+1}</span>
                 <span className="flex-1 font-body text-sm font-semibold text-blue-800">
                   {e.childName}
@@ -861,14 +880,17 @@ export default function MontoirPage() {
                   );
                 })() : <span className="font-body text-xs font-semibold text-blue-800">{displayFromHorseName(e.horseName) || "—"}</span>}</span>
                 <span className="w-28 sm:w-32 flex justify-center gap-1 sm:gap-2">{!closed ? <>
-                  <button onClick={()=>togglePresence(c,e.childId,"present")} title="Présent" className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="present"?"bg-green-500 text-white":"bg-gray-100 text-slate-600 hover:bg-green-100"}`}><CheckCircle2 size={18}/></button>
-                  <button onClick={()=>togglePresence(c,e.childId,"absent")} title="Absent (rattrapage offert)" className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent"?"bg-red-500 text-white":"bg-gray-100 text-slate-600 hover:bg-red-100"}`}><XCircle size={18}/></button>
+                  {/* Bouton "Present" retire (mai 2026, demande Nicolas) :
+                      tout cavalier non explicitement marque absent/non
+                      justifie est considere present par defaut. On ne
+                      coche plus que les absences. */}
+                  <button onClick={()=>togglePresence(c,e.childId,"absent")} title="Absent (rattrapage offert) — recliquer pour annuler" className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent"?"bg-red-500 text-white":"bg-gray-100 text-slate-600 hover:bg-red-100"}`}><XCircle size={18}/></button>
                   {/* 3ème bouton : absence non justifiée → séance perdue, AUCUN rattrapage généré à la clôture.
                       Utilisé pour les cavaliers qui ne préviennent pas (ou trop tard). Couleur ambre/orange
                       pour le distinguer visuellement du rouge "absent justifié". */}
-                  <button onClick={()=>togglePresence(c,e.childId,"absent_nonjustified")} title="Absent non justifié (séance perdue, pas de rattrapage)" className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent_nonjustified"?"bg-amber-500 text-white":"bg-gray-100 text-slate-600 hover:bg-amber-100"}`}><AlertCircle size={18}/></button>
-                  <span className="hidden print:inline font-body text-xs font-semibold">{e.presence==="present"?"✓ Présent":e.presence==="absent"?"✗ Absent":e.presence==="absent_nonjustified"?"⚠ NJ":"—"}</span>
-                </> : <Badge color={e.presence==="present"?"green":e.presence==="absent"?"red":e.presence==="absent_nonjustified"?"orange":"gray"}>{e.presence==="present"?"Présent":e.presence==="absent"?"Absent":e.presence==="absent_nonjustified"?"Absent non justifié":"—"}</Badge>}</span>
+                  <button onClick={()=>togglePresence(c,e.childId,"absent_nonjustified")} title="Absent non justifié (séance perdue, pas de rattrapage) — recliquer pour annuler" className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent_nonjustified"?"bg-amber-500 text-white":"bg-gray-100 text-slate-600 hover:bg-amber-100"}`}><AlertCircle size={18}/></button>
+                  <span className="hidden print:inline font-body text-xs font-semibold">{e.presence==="absent"?"✗ Absent":e.presence==="absent_nonjustified"?"⚠ NJ":"✓ Présent"}</span>
+                </> : <Badge color={e.presence==="absent"?"red":e.presence==="absent_nonjustified"?"orange":"green"}>{e.presence==="absent"?"Absent":e.presence==="absent_nonjustified"?"Absent non justifié":"Présent"}</Badge>}</span>
               </div>
             ))}
           </div>}
