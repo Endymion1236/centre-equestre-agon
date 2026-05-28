@@ -225,9 +225,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }).catch(() => {});
   }, [user]);
 
-  const isAdmin = adminClaim !== null
-    ? adminClaim
-    : (user?.email ? ADMIN_EMAILS.includes(user.email) : false);
+  // isAdmin : custom claim Firebase OU email dans la liste admin.
+  // Important : le fallback email s'applique meme quand le claim vaut
+  // explicitement false (cas d'un environnement Firebase sans claims
+  // configures, ex: base de test gestion-2026-test). Sans ce OR, un
+  // admin connu par email mais sans claim ne serait jamais reconnu.
+  const isAdmin =
+    adminClaim === true ||
+    (user?.email ? ADMIN_EMAILS.includes(user.email) : false);
   
   const isMoniteur = moniteurClaim;
   const userRole: "admin" | "moniteur" | "cavalier" = isAdmin ? "admin" : isMoniteur ? "moniteur" : "cavalier";
