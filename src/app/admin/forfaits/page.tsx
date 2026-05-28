@@ -380,10 +380,10 @@ export default function ForfaitsPage() {
   // ── Existing logic ──
   const activeCount = forfaits.filter(f => f.status === "active" || f.status === "actif").length;
   const suspendedCount = forfaits.filter(f => f.status === "suspended").length;
-  const totalCA = forfaits.filter(f => f.status !== "cancelled").reduce((s, f) => s + (f.forfaitPriceTTC || 0), 0);
-  const totalPaid = forfaits.reduce((s, f) => s + (f.totalPaidTTC || 0), 0);
-  const totalDue = totalCA - totalPaid;
-
+  // Calcul du vrai montant paye pour un forfait (lit la collection payments,
+  // source de verite). Le champ f.totalPaidTTC stocke dans le doc forfait
+  // n'est PAS mis a jour a l'encaissement, donc on ne s'en sert pas pour
+  // les compteurs (sinon "encaisse" reste a 0 alors que c'est paye).
   const getPaidForForfait = (f: Forfait) => {
     const related = payments.filter(p =>
       p.familyId === f.familyId &&
@@ -392,6 +392,12 @@ export default function ForfaitsPage() {
     );
     return related.reduce((s, p) => s + (p.paidAmount || (p.status === "paid" ? p.totalTTC : 0) || 0), 0);
   };
+
+  const totalCA = forfaits.filter(f => f.status !== "cancelled").reduce((s, f) => s + (f.forfaitPriceTTC || 0), 0);
+  // totalPaid base sur le vrai paiement (getPaidForForfait), pas sur le champ
+  // totalPaidTTC obsolete. Coherent avec la barre de progression de chaque carte.
+  const totalPaid = forfaits.filter(f => f.status !== "cancelled").reduce((s, f) => s + getPaidForForfait(f), 0);
+  const totalDue = Math.max(0, totalCA - totalPaid);
 
   const filtered = useMemo(() => {
     let result = [...forfaits];
@@ -575,7 +581,7 @@ export default function ForfaitsPage() {
   // Retirer UN seul créneau hebdo (les futurs cours du même jour+heure+activité
   // jusqu'a la fin de saison), sans toucher au forfait ni au paiement.
   const handleRemoveSlot = async (f: Forfait, slot: { key: string; dayLabel: string; startTime: string; activityTitle: string }) => {
-    if (!confirm(`Retirer ${f.childName} du créneau ${slot.dayLabel} ${slot.startTime} (${slot.activityTitle}) ?\n\nLes autres créneaux du forfait restent inchangés.\nAucun avoir n'est créé (suppression simple).`)) return;
+    if (!confirm(`Retirer ${f.childName} du créneau ${slot.dayLabel} ${slot.startTime} (${slot.activityTitle}) ?\n\nLes autres créneaux du forfait restent inchangés.\nUn avoir pourra être proposé si le forfait est déjà payé.`)) return;
     setSlotChanging(true);
     try {
       const today = new Date().toISOString().split("T")[0];
@@ -675,6 +681,72 @@ export default function ForfaitsPage() {
         }
       } else {
         alert(`✅ ${f.childName} retiré(e) de ${removed} séance(s) sur ${slot.dayLabel} ${slot.startTime}`);
+
+        // ── Proposition d'avoir au cas par cas (demande Nicolas) ──
+        // Quand on retire UN cours d'un forfait DEJA PAYE, proposer un avoir.
+        // Montant suggere = prix paye / nb total de creneaux du forfait (part
+        // d'un cours). Pre-rempli mais modifiable, et entierement optionnel.
+        const dejaPaye = getPaidForForfait(f);
+        if (dejaPaye > 0) {
+          // Nombre de creneaux AVANT retrait (les slots actuels + celui qu'on
+          // vient de retirer). detectActualSlots reflete deja le retrait, donc
+          // on rajoute 1 pour avoir le total d'origine.
+          const slotsApres = detectActualSlots(f).length;
+          const slotsAvant = slotsApres + 1;
+          const partUnCours = slotsAvant > 0
+            ? Math.round((dejaPaye / slotsAvant) * 100) / 100
+            : 0;
+
+          if (partUnCours > 0) {
+            const proposer = confirm(
+              `Ce forfait est payé (${dejaPaye.toFixed(2)}€ pour ${slotsAvant} cours).\n\n` +
+              `Tu viens de retirer 1 cours. Veux-tu créer un AVOIR pour ce cours retiré ?\n` +
+              `Montant proposé : ${partUnCours.toFixed(2)}€ (part d'un cours)\n\n` +
+              `OK = créer l'avoir · Annuler = ne rien créer`
+            );
+            if (proposer) {
+              const saisie = prompt(`Montant de l'avoir en € (modifiable) :`, partUnCours.toFixed(2));
+              const montant = saisie !== null ? parseFloat(saisie.replace(",", ".")) : NaN;
+              if (!isNaN(montant) && montant > 0) {
+                try {
+                  const expiry = new Date();
+                  expiry.setMonth(expiry.getMonth() + 12);
+                  const refAvoir = `AV-${Date.now().toString(36).toUpperCase()}`;
+                  await addDoc(collection(db, "avoirs"), {
+                    familyId: f.familyId,
+                    familyName: f.familyName || f.childName || "",
+                    type: "avoir",
+                    amount: montant,
+                    usedAmount: 0,
+                    remainingAmount: montant,
+                    reason: `Retrait du cours ${slot.activityTitle} (${slot.dayLabel} ${slot.startTime}) — forfait ${f.activityTitle || ""}`,
+                    reference: refAvoir,
+                    expiryDate: Timestamp.fromDate(expiry),
+                    status: "actif",
+                    usageHistory: [],
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp(),
+                  });
+                  try {
+                    await createEncaissement({
+                      paymentId: "",
+                      familyId: f.familyId,
+                      familyName: f.childName || "",
+                      montant: -montant,
+                      mode: "avoir",
+                      modeLabel: "Avoir",
+                      raison: `Avoir ${refAvoir} — retrait cours forfait`,
+                    });
+                  } catch (e) { console.warn("Encaissement avoir:", e); }
+                  alert(`✅ Avoir de ${montant.toFixed(2)}€ créé (réf ${refAvoir}). Visible dans le menu Avoirs.`);
+                } catch (e) {
+                  console.error("Création avoir:", e);
+                  alert("⚠️ Le cours a été retiré mais la création de l'avoir a échoué. Crée-le manuellement dans le menu Avoirs.");
+                }
+              }
+            }
+          }
+        }
       }
       await fetchData();
     } catch (e: any) {
