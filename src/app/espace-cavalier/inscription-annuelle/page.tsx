@@ -11,7 +11,7 @@ import { compareCreneauxByDow } from "@/lib/creneau-sort";
 import { todayLocalString } from "@/lib/date-local";
 import { useToast } from "@/components/ui/Toast";
 import {
-  calculerForfaitAnnuel, seasonOf, inscriptionAnnuelleAutorisee,
+  calculerForfaitAnnuel, seasonOf,
   type ForfaitTarifs, type FamilyDiscountRule,
 } from "@/lib/forfait-pricing";
 
@@ -153,13 +153,18 @@ export default function InscriptionAnnuellePage() {
     })();
   }, [family?.id]);
 
-  // Group creneaux into weekly recurring slots
+  // Group creneaux into weekly recurring slots.
+  // IMPORTANT : la clé inclut la SAISON (seasonOf) pour ne pas fusionner un
+  // même cours de deux saisons differentes (ex: Galop d'or mercredi 10h qui
+  // existe en 2025-2026 ET 2026-2027). Sans ça, totalSessions cumulait les
+  // occurrences des deux saisons -> comptage et prorata faux.
   const weeklySlots = useMemo(() => {
-    const map: Record<string, WeeklySlot> = {};
+    const map: Record<string, WeeklySlot & { season: number }> = {};
     for (const c of creneaux) {
       const d = new Date(c.date);
       const dow = (d.getDay() + 6) % 7;
-      const key = `${c.activityId}-${dow}-${c.startTime}`;
+      const season = seasonOf(c.date);
+      const key = `${c.activityId}-${dow}-${c.startTime}-S${season}`;
       if (!map[key]) {
         map[key] = {
           key, activityId: c.activityId, activityTitle: c.activityTitle,
@@ -168,6 +173,7 @@ export default function InscriptionAnnuellePage() {
           monitor: c.monitor, maxPlaces: c.maxPlaces,
           totalSessions: 0, avgEnrolled: 0, spotsAvailable: 0, creneauIds: [],
           priceTTC: c.priceTTC || ((c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100)),
+          season,
         };
       }
       map[key].totalSessions++;
@@ -190,11 +196,7 @@ export default function InscriptionAnnuellePage() {
   // sont fermées pour la saison en cours, ouvertes seulement à partir de
   // septembre 2026. On regarde la date du 1er créneau de chaque slot.
   const filteredSlots = useMemo(() => {
-    const autorises = weeklySlots.filter(s => {
-      const d = creneaux.find(c => c.id === s.creneauIds[0])?.date;
-      if (!d) return false;
-      return inscriptionAnnuelleAutorisee(d, MIN_SEASON_INSCRIPTION);
-    });
+    const autorises = weeklySlots.filter(s => (s as any).season >= MIN_SEASON_INSCRIPTION);
     if (!slotSearch.trim()) return autorises;
     const q = slotSearch.toLowerCase();
     return autorises.filter(s =>
@@ -203,7 +205,7 @@ export default function InscriptionAnnuellePage() {
       s.startTime.includes(q) ||
       s.monitor.toLowerCase().includes(q)
     );
-  }, [weeklySlots, slotSearch, creneaux]);
+  }, [weeklySlots, slotSearch]);
 
   // How many slots required (1x, 2x ou 3x)
   const requiredSlots = forfaitType === "3x" ? 3 : forfaitType === "2x" ? 2 : 1;
@@ -566,6 +568,15 @@ export default function InscriptionAnnuellePage() {
                 </div>
               )}
 
+              {/* Rappel du tarif forfait (prix global, pas par créneau) */}
+              <div className="mb-4 p-3 bg-amber-50 rounded-xl border border-amber-200">
+                <span className="font-body text-sm text-amber-800">
+                  💡 Forfait {frequence}×/semaine : <strong>{calcul.prixForfaitAnnuelPlein}€/an</strong>
+                  {calcul.familyDiscountAmount > 0 && ` (− ${calcul.familyDiscountAmount.toFixed(0)}€ réduction famille)`}
+                  . Le prix ne dépend pas du créneau choisi mais du nombre de cours par semaine.
+                </span>
+              </div>
+
               {/* Search bar */}
               <div className="relative mb-4">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -611,9 +622,6 @@ export default function InscriptionAnnuellePage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="font-body text-sm font-semibold text-blue-500">
-                            {slot.priceTTC > 100 ? `${slot.priceTTC.toFixed(0)}€` : `${(slot.priceTTC * slot.totalSessions).toFixed(0)}€`}
-                          </span>
                           {isSelected && (
                             <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
                               <Check size={14} className="text-white" />
