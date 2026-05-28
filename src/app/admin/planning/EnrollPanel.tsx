@@ -191,6 +191,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [noteSaving, setNoteSaving] = useState(false);
   const [showHistorique, setShowHistorique] = useState(false);
 
+  // Note de PREPARATION : attachee au creneau (pas a l'historique), reste
+  // affichee et modifiable en permanence. Permet au moniteur de noter a
+  // l'avance ce qu'il a prevu pour la seance. Distincte des notes-seance
+  // (qui sont un journal horodate d'observations post-seance).
+  const [notePrepa, setNotePrepa] = useState<string>((creneau as any).notePreparation || "");
+  const [notePrepaSaving, setNotePrepaSaving] = useState(false);
+  const [notePrepaSaved, setNotePrepaSaved] = useState(false);
+
   // Liste d'attente
   const [waitlist, setWaitlist] = useState<any[]>([]);
   const [waitlistLoading, setWaitlistLoading] = useState(false);
@@ -225,6 +233,13 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     if (!creneau.id) return;
     getDocs(query(collection(db, "waitlist"), where("creneauId", "==", creneau.id), where("status", "==", "waiting")))
       .then(snap => setWaitlist(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))));
+  }, [creneau.id]);
+
+  // Resync de la note de preparation quand on ouvre un autre creneau
+  // (le composant EnrollPanel est reutilise d'un creneau a l'autre).
+  useEffect(() => {
+    setNotePrepa((creneau as any).notePreparation || "");
+    setNotePrepaSaved(false);
   }, [creneau.id]);
 
   // Charger le solde avoir quand on sélectionne une famille
@@ -415,6 +430,26 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // ── Enregistrer une note pédagogique ────────────────────────────────
   // Snapshot du plan courant (URL/path/type) pour construire l'historique.
   // Si aucun plan n'est uploadé, les champs plan* sont à null sur la note.
+  // Sauvegarde de la note de preparation (sur le doc creneau lui-meme).
+  // Appelee soit au clic du bouton, soit en auto-save au blur du textarea.
+  const saveNotePrepa = async () => {
+    if (!creneau.id) return;
+    setNotePrepaSaving(true);
+    try {
+      await updateDoc(doc(db, "creneaux", creneau.id), {
+        notePreparation: notePrepa.trim() || null,
+        notePreparationUpdatedAt: new Date().toISOString(),
+      });
+      setNotePrepaSaved(true);
+      // Le petit "✓ Enregistre" disparait apres 2s
+      setTimeout(() => setNotePrepaSaved(false), 2000);
+    } catch (e) {
+      console.error("saveNotePrepa:", e);
+      panelToast("Erreur enregistrement note de preparation", "error");
+    }
+    setNotePrepaSaving(false);
+  };
+
   const saveNote = async () => {
     if (!creneau.id) return;
     const texte = noteTexte.trim();
@@ -1762,6 +1797,41 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   Historique
                 </button>
               )}
+            </div>
+
+            {/* Note de PREPARATION (persistante, attachee au creneau) */}
+            <div className="mb-3 p-2.5 rounded-xl bg-amber-50/60 border border-amber-200/60">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="font-body text-[10px] font-semibold text-amber-700 uppercase tracking-wider flex items-center gap-1">
+                  📋 Note de préparation
+                </span>
+                {notePrepaSaved && (
+                  <span className="font-body text-[10px] text-green-600 flex items-center gap-0.5">
+                    <Check size={10} /> Enregistré
+                  </span>
+                )}
+              </div>
+              <textarea
+                value={notePrepa}
+                onChange={e => { setNotePrepa(e.target.value); setNotePrepaSaved(false); }}
+                onBlur={saveNotePrepa}
+                placeholder="Ce que tu as prévu pour cette séance (exercices, objectifs, matériel…). Reste affichée et modifiable à chaque fois."
+                rows={2}
+                className="w-full px-3 py-2 rounded-lg border border-amber-200 bg-white font-body text-xs resize-none focus:outline-none focus:ring-2 focus:ring-amber-300/40 focus:border-amber-300"
+              />
+              <div className="flex items-center justify-between mt-1">
+                <span className="font-body text-[10px] text-amber-600/70">
+                  Sauvegarde automatique
+                </span>
+                <button
+                  onClick={saveNotePrepa}
+                  disabled={notePrepaSaving}
+                  className="flex items-center gap-1 font-body text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-amber-500 text-white border-none cursor-pointer hover:bg-amber-400 disabled:opacity-40"
+                >
+                  {notePrepaSaving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+                  Enregistrer
+                </button>
+              </div>
             </div>
 
             {/* Champ d'ajout de note */}
