@@ -184,12 +184,23 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     createdAt?: any;
     createdByEmail?: string | null;
     createdByName?: string | null;
+    creneauDate?: string;
+    creneauActivityTitle?: string;
+    creneauMonitor?: string;
   };
   const [notes, setNotes] = useState<NoteSeance[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const [noteTexte, setNoteTexte] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
   const [showHistorique, setShowHistorique] = useState(false);
+
+  // Notes des seances PRECEDENTES du meme cours (meme activite + meme
+  // moniteur, autres dates). Permet de relire le fil pedagogique du groupe
+  // semaine apres semaine. Chargees separement des notes de la seance
+  // courante (qui restent dans `notes`).
+  const [notesPrecedentes, setNotesPrecedentes] = useState<NoteSeance[]>([]);
+  const [notesPrecLoading, setNotesPrecLoading] = useState(false);
+  const [showPrecedentes, setShowPrecedentes] = useState(false);
 
   // Note de PREPARATION : attachee au creneau (pas a l'historique), reste
   // affichee et modifiable en permanence. Permet au moniteur de noter a
@@ -228,6 +239,46 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       })
       .finally(() => setNotesLoading(false));
   }, [creneau.id]);
+
+  // Charge les notes des seances PRECEDENTES du meme cours (meme titre
+  // d'activite + meme moniteur, dates differentes de la seance courante).
+  useEffect(() => {
+    if (!creneau.id || !creneau.activityTitle) { setNotesPrecedentes([]); return; }
+    setNotesPrecLoading(true);
+    // On filtre par titre d'activite (champ stocke dans chaque note). On
+    // recupere large puis on affine cote client (exclure la seance courante,
+    // garder le meme moniteur, trier par date desc, limiter a 10).
+    getDocs(query(
+      collection(db, "notes-seance"),
+      where("creneauActivityTitle", "==", creneau.activityTitle),
+    ))
+      .then(snap => {
+        const items = snap.docs
+          .map(d => ({ id: d.id, ...d.data() } as NoteSeance))
+          // Exclure les notes de la seance courante (deja affichees au-dessus)
+          .filter(n => n.creneauId !== creneau.id)
+          // Garder le meme moniteur si renseigne (un meme creneau horaire peut
+          // etre tenu par des moniteurs differents selon les semaines ; on
+          // privilegie la continuite pedagogique du meme encadrant, mais on
+          // garde quand meme si le moniteur n'est pas renseigne)
+          .filter(n => !creneau.monitor || !n.creneauMonitor || n.creneauMonitor === creneau.monitor)
+          // Tri par date de seance desc (la plus recente d'abord)
+          .sort((a, b) => {
+            const da = a.creneauDate || "";
+            const db_ = b.creneauDate || "";
+            if (da !== db_) return db_.localeCompare(da);
+            // meme date : tri par createdAt desc
+            return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+          })
+          .slice(0, 10); // max 10 dernieres notes
+        setNotesPrecedentes(items);
+      })
+      .catch(e => {
+        console.warn("Notes precedentes load:", e);
+        setNotesPrecedentes([]);
+      })
+      .finally(() => setNotesPrecLoading(false));
+  }, [creneau.id, creneau.activityTitle, creneau.monitor]);
 
   useEffect(() => {
     if (!creneau.id) return;
@@ -1797,6 +1848,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   Historique
                 </button>
               )}
+              {notesPrecedentes.length > 0 && (
+                <button
+                  onClick={() => setShowPrecedentes(v => !v)}
+                  className="flex items-center gap-1 font-body text-xs text-violet-600 bg-transparent border-none cursor-pointer hover:underline"
+                >
+                  {showPrecedentes ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                  Séances précédentes ({notesPrecedentes.length})
+                </button>
+              )}
             </div>
 
             {/* Note de PREPARATION (persistante, attachee au creneau) */}
@@ -1941,10 +2001,58 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 })}
               </div>
             )}
+
+            {/* Notes des seances PRECEDENTES du meme cours */}
+            {showPrecedentes && (
+              <div className="mt-3 space-y-2 max-h-96 overflow-y-auto border-t border-violet-100 pt-3">
+                <div className="font-body text-[10px] text-violet-600 uppercase tracking-wider mb-1 flex items-center gap-1">
+                  🕘 Notes des semaines précédentes — {creneau.activityTitle}
+                </div>
+                {notesPrecLoading && (
+                  <div className="flex items-center justify-center py-4 text-slate-400">
+                    <Loader2 size={14} className="animate-spin" />
+                  </div>
+                )}
+                {!notesPrecLoading && notesPrecedentes.length === 0 && (
+                  <div className="text-center py-4 font-body text-xs text-slate-400">
+                    Aucune note sur les séances précédentes
+                  </div>
+                )}
+                {notesPrecedentes.map(n => {
+                  // Date de la SEANCE (creneauDate), pas de la saisie de la note
+                  const seanceDate = n.creneauDate ? new Date(n.creneauDate) : null;
+                  return (
+                    <div key={n.id} className="bg-violet-50/50 border border-violet-100 rounded-xl p-3">
+                      <div className="font-body text-[10px] text-violet-500 flex items-center gap-1.5 mb-1.5">
+                        <Clock size={10} />
+                        {seanceDate
+                          ? seanceDate.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+                          : "Date inconnue"}
+                        {n.createdByName && <span className="text-violet-400">· {n.createdByName}</span>}
+                      </div>
+                      <p className="font-body text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
+                        {n.texte}
+                      </p>
+                      {n.planSeanceUrl && (
+                        <div className="mt-2 pt-2 border-t border-violet-100">
+                          <a
+                            href={n.planSeanceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-2 py-1 bg-white border border-violet-200 rounded-lg no-underline hover:bg-violet-50"
+                          >
+                            <FileImage size={12} className="text-violet-500" />
+                            <span className="font-body text-[11px] text-violet-700">Plan de cette séance</span>
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
-
-        {/* Verrou si clôturée */}
         {(creneau as any).status === "closed" && (
           <div className="p-5 bg-gray-50 border-b border-gray-200">
             <p className="font-body text-sm text-slate-600 mb-2">Cette séance est clôturée. Les inscriptions et modifications sont verrouillées.</p>
