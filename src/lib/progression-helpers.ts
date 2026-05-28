@@ -31,8 +31,13 @@ export type Acquis = Record<string, AcquisValue>;
  * Domaines qui utilisent l'échelle 1-5. Les autres restent en binaire.
  * Modification de cette constante → impact sur ProgressionEditor + espace
  * cavalier + PDF. Centralisation pour ne pas avoir le test partout.
+ *
+ * Note rétrocompat : passer un domaine de binaire à échelle ne perd pas les
+ * données. Les anciennes valeurs `true` sont interprétées comme level: 5
+ * (cf getCompetenceLevel), donc une compétence soins déjà validée reste
+ * affichée "Acquis" (niveau 5).
  */
-export const DOMAINES_ECHELLE: Set<Domaine> = new Set(["pratique_cheval", "pratique_pied"]);
+export const DOMAINES_ECHELLE: Set<Domaine> = new Set(["pratique_cheval", "pratique_pied", "soins"]);
 
 export function isDomaineEchelle(domaine: Domaine): boolean {
   return DOMAINES_ECHELLE.has(domaine);
