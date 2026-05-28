@@ -583,6 +583,9 @@ export default function ForfaitsPage() {
   const handleRemoveSlot = async (f: Forfait, slot: { key: string; dayLabel: string; startTime: string; activityTitle: string }) => {
     if (!confirm(`Retirer ${f.childName} du créneau ${slot.dayLabel} ${slot.startTime} (${slot.activityTitle}) ?\n\nLes autres créneaux du forfait restent inchangés.\nUn avoir pourra être proposé si le forfait est déjà payé.`)) return;
     setSlotChanging(true);
+    // Nombre de créneaux distincts AVANT le retrait — mesuré maintenant, avant
+    // toute modification, pour un calcul d'avoir fiable (ne pas deduire par +1).
+    const slotsAvantRetrait = detectActualSlots(f).length;
     try {
       const today = new Date().toISOString().split("T")[0];
       const seasonEnd = (f as any).seasonStartYear
@@ -688,11 +691,9 @@ export default function ForfaitsPage() {
         // d'un cours). Pre-rempli mais modifiable, et entierement optionnel.
         const dejaPaye = getPaidForForfait(f);
         if (dejaPaye > 0) {
-          // Nombre de creneaux AVANT retrait (les slots actuels + celui qu'on
-          // vient de retirer). detectActualSlots reflete deja le retrait, donc
-          // on rajoute 1 pour avoir le total d'origine.
-          const slotsApres = detectActualSlots(f).length;
-          const slotsAvant = slotsApres + 1;
+          // Nombre de creneaux AVANT retrait, capture en debut de fonction
+          // (avant toute modif) -> fiable, contrairement a un "+1" deduit.
+          const slotsAvant = slotsAvantRetrait;
           const partUnCours = slotsAvant > 0
             ? Math.round((dejaPaye / slotsAvant) * 100) / 100
             : 0;
