@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { updateDoc, addDoc, getDoc, doc, collection, query, where, getDocs, serverTimestamp, Timestamp } from "firebase/firestore";
+import { updateDoc, addDoc, getDoc, doc, collection, query, where, getDocs, deleteDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { safeNumber, generateOrderId } from "@/lib/utils";
 import { createEncaissement } from "@/lib/compta-encaissement";
@@ -122,6 +122,35 @@ export function TabDeclarations({
                           });
                         }
                       }
+                      // Finalisation d'une inscription annuelle réglée chèque/espèces :
+                      // on lève le "pending" sur les créneaux, on confirme les
+                      // réservations et on crée les forfaits (contexte admin = autorisé).
+                      if (decl.type === "inscription_annuelle") {
+                        for (const pe of (decl.pendingEnrollments || [])) {
+                          try {
+                            const crRef = doc(db, "creneaux", pe.creneauId);
+                            const crSnap = await getDoc(crRef);
+                            if (crSnap.exists()) {
+                              const enrolled = (crSnap.data().enrolled || []).map((e: any) =>
+                                e.childId === pe.childId && e.pending ? { ...e, pending: false } : e
+                              );
+                              await updateDoc(crRef, { enrolled });
+                            }
+                          } catch (err) { console.error("Finalisation créneau:", err); }
+                        }
+                        for (const rid of (decl.reservationIds || [])) {
+                          try {
+                            await updateDoc(doc(db, "reservations", rid), {
+                              status: "confirmed", confirmedAt: serverTimestamp(),
+                            });
+                          } catch (err) { console.error("Confirmation réservation:", err); }
+                        }
+                        for (const fp of (decl.forfaitPayloads || [])) {
+                          try {
+                            await addDoc(collection(db, "forfaits"), { ...fp, createdAt: serverTimestamp() });
+                          } catch (err) { console.error("Création forfait:", err); }
+                        }
+                      }
                       // Marquer la déclaration comme confirmée
                       await updateDoc(doc(db, "payment_declarations", decl.id), {
                         status: "confirmed", confirmedAt: serverTimestamp(),
@@ -160,6 +189,29 @@ export function TabDeclarations({
                     {confirmingDeclId === decl.id ? "⏳ Confirmation..." : "✓ Confirmer réception"}
                   </button>
                   <button onClick={async () => {
+                    if (decl.type === "inscription_annuelle" && !confirm(`Rejeter cette inscription annuelle de ${decl.familyName} ? La/les place(s) réservée(s) seront libérée(s).`)) return;
+                    // Inscription annuelle en attente → on libère la place, on supprime
+                    // les réservations provisoires et le paiement pending associé.
+                    if (decl.type === "inscription_annuelle") {
+                      for (const pe of (decl.pendingEnrollments || [])) {
+                        try {
+                          const crRef = doc(db, "creneaux", pe.creneauId);
+                          const crSnap = await getDoc(crRef);
+                          if (crSnap.exists()) {
+                            const enrolled = (crSnap.data().enrolled || []).filter(
+                              (e: any) => !(e.childId === pe.childId && e.pending)
+                            );
+                            await updateDoc(crRef, { enrolled, enrolledCount: enrolled.length });
+                          }
+                        } catch (err) { console.error("Libération créneau:", err); }
+                      }
+                      for (const rid of (decl.reservationIds || [])) {
+                        try { await deleteDoc(doc(db, "reservations", rid)); } catch (err) { console.error("Suppression réservation:", err); }
+                      }
+                      if (decl.paymentId) {
+                        try { await deleteDoc(doc(db, "payments", decl.paymentId)); } catch (err) { console.error("Suppression paiement:", err); }
+                      }
+                    }
                     await updateDoc(doc(db, "payment_declarations", decl.id), { status: "rejected", rejectedAt: serverTimestamp() });
                     setDeclarations(prev => prev.filter(d => d.id !== decl.id));
                   }}

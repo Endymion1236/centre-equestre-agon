@@ -98,6 +98,13 @@ export default function InscriptionAnnuellePage() {
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
   const [forfaitType, setForfaitType] = useState<"1x" | "2x" | "3x">("1x");
   const [paymentPlan, setPaymentPlan] = useState<"1x" | "3x" | "10x">("1x");
+  // Moyen de paiement choisi par la famille :
+  //  - "cb"      : paiement en ligne immédiat via CAWL (place confirmée tout de suite)
+  //  - "cheque"  : règlement physique différé → inscription EN ATTENTE de validation admin
+  //  - "especes" : idem chèque (réglé au club)
+  const [moyenPaiement, setMoyenPaiement] = useState<"cb" | "cheque" | "especes">("cb");
+  // Écran de confirmation affiché après une déclaration chèque/espèces.
+  const [declaredSuccess, setDeclaredSuccess] = useState<null | { mode: "cheque" | "especes"; total: number; names: string }>(null);
   const [mode, setMode] = useState<"annuel" | "ponctuel">("annuel");
   const [slotSearch, setSlotSearch] = useState("");
 
@@ -517,8 +524,22 @@ export default function InscriptionAnnuellePage() {
 
   // ── Traite UN item (inscription d'un enfant) : créneaux + réservations +
   // forfait. NE crée PAS le paiement (fait une seule fois pour tout le panier).
-  const enrollOneItem = async (item: PanierItem) => {
-    if (!user || !family) return;
+  // Traite l'inscription d'UN enfant.
+  //  - payMethod "cb"  → place confirmée immédiatement, forfait créé tout de suite.
+  //  - payMethod différé (cheque/especes) → place tenue en "pending", réservation
+  //    "pending_validation", AUCUN forfait créé côté client (interdit par les règles
+  //    Firestore : forfaits = write admin only). Le payload du forfait est retourné
+  //    pour être recréé par l'admin au moment de la validation de la déclaration.
+  // Retourne les éléments à confirmer/annuler ultérieurement (mode différé).
+  const enrollOneItem = async (
+    item: PanierItem,
+    payMethod: "cb" | "cheque" | "especes" = "cb",
+  ): Promise<{ pendingEnrollments: { creneauId: string; childId: string }[]; reservationIds: string[]; forfaitPayload: any | null }> => {
+    if (!user || !family) return { pendingEnrollments: [], reservationIds: [], forfaitPayload: null };
+    const deferred = payMethod !== "cb";
+    const pendingEnrollments: { creneauId: string; childId: string }[] = [];
+    const reservationIds: string[] = [];
+
     // 1. Inscrire l'enfant dans tous les créneaux de ses slots
     for (const creneauId of item.creneauIds) {
       const creneau = creneaux.find(c => c.id === creneauId);
@@ -532,15 +553,19 @@ export default function InscriptionAnnuellePage() {
         enrolledAt: new Date().toISOString(),
         paymentSource: "forfait",
         forfaitId: null,
+        // Place tenue mais NON confirmée tant que l'admin n'a pas validé le règlement.
+        ...(deferred ? { pending: true, paymentMethod: payMethod } : {}),
       }];
       await updateDoc(doc(db, "creneaux", creneauId), {
         enrolled: newEnrolled,
         enrolledCount: newEnrolled.length,
       });
+      if (deferred) pendingEnrollments.push({ creneauId, childId: item.childId });
     }
+
     // 2. Réservations (une par slot)
     for (const s of item.slotsInfo) {
-      await addDoc(collection(db, "reservations"), {
+      const resRef = await addDoc(collection(db, "reservations"), {
         familyId: user.uid,
         familyName: family.parentName,
         childId: item.childId,
@@ -554,39 +579,46 @@ export default function InscriptionAnnuellePage() {
         endTime: s.endTime,
         totalSessions: s.totalSessions,
         creneauIds: s.creneauIds,
-        status: "confirmed",
+        status: deferred ? "pending_validation" : "confirmed",
+        ...(deferred ? { paymentMethod: payMethod } : {}),
         createdAt: serverTimestamp(),
       });
+      reservationIds.push(resRef.id);
     }
+
     // 3. Forfait (1 doc pour le créneau principal, comme l'admin)
     const principal = item.slotsInfo[0];
-    if (principal) {
-      const season = seasonOf(creneaux.find(c => c.id === principal.creneauIds[0])?.date || todayLocalString());
-      await addDoc(collection(db, "forfaits"), {
-        familyId: user.uid,
-        familyName: family.parentName || "—",
-        childId: item.childId,
-        childName: item.childName,
-        slotKey: `${principal.activityTitle} — ${principal.dayLabel} ${principal.startTime}`,
-        activityTitle: principal.activityTitle,
-        dayLabel: principal.dayLabel,
-        startTime: principal.startTime,
-        endTime: principal.endTime,
-        totalSessions: principal.totalSessions,
-        attendedSessions: 0,
-        licenceFFE: item.avecLicence,
-        licenceType: item.licenceMoins18 ? "moins18" : "plus18",
-        adhesion: item.avecAdhesion,
-        forfaitPriceTTC: item.totalAnnuel,
-        totalPaidTTC: 0,
-        paymentPlan,
-        status: "actif",
-        frequence: item.frequence,
-        seasonStartYear: season,
-        source: "client",
-        createdAt: serverTimestamp(),
-      });
+    const forfaitPayload = principal ? {
+      familyId: user.uid,
+      familyName: family.parentName || "—",
+      childId: item.childId,
+      childName: item.childName,
+      slotKey: `${principal.activityTitle} — ${principal.dayLabel} ${principal.startTime}`,
+      activityTitle: principal.activityTitle,
+      dayLabel: principal.dayLabel,
+      startTime: principal.startTime,
+      endTime: principal.endTime,
+      totalSessions: principal.totalSessions,
+      attendedSessions: 0,
+      licenceFFE: item.avecLicence,
+      licenceType: item.licenceMoins18 ? "moins18" : "plus18",
+      adhesion: item.avecAdhesion,
+      forfaitPriceTTC: item.totalAnnuel,
+      totalPaidTTC: 0,
+      paymentPlan,
+      status: "actif",
+      frequence: item.frequence,
+      seasonStartYear: seasonOf(creneaux.find(c => c.id === principal.creneauIds[0])?.date || todayLocalString()),
+      source: "client",
+    } : null;
+
+    // En mode CB on crée le forfait tout de suite. En différé il sera créé par
+    // l'admin à la validation (les règles interdisent la création côté famille).
+    if (!deferred && forfaitPayload) {
+      await addDoc(collection(db, "forfaits"), { ...forfaitPayload, createdAt: serverTimestamp() });
     }
+
+    return { pendingEnrollments, reservationIds, forfaitPayload };
   };
 
   // ── Valide TOUT le panier (+ l'inscription en cours si complète) ──
@@ -619,16 +651,27 @@ export default function InscriptionAnnuellePage() {
     if (items.length === 0) return;
     setSubmitting(true);
     try {
-      // 1. Créer toutes les inscriptions (créneaux + réservations + forfaits)
+      const deferred = moyenPaiement !== "cb";
+
+      // 1. Créer toutes les inscriptions (créneaux + réservations [+ forfaits si CB])
+      const allPending: { creneauId: string; childId: string }[] = [];
+      const allReservationIds: string[] = [];
+      const allForfaitPayloads: any[] = [];
       for (const it of items) {
-        await enrollOneItem(it);
+        const r = await enrollOneItem(it, moyenPaiement);
+        if (deferred) {
+          allPending.push(...r.pendingEnrollments);
+          allReservationIds.push(...r.reservationIds);
+          if (r.forfaitPayload) allForfaitPayloads.push(r.forfaitPayload);
+        }
       }
-      // 2. UN SEUL paiement groupé pour toute la fratrie
+
+      // 2. UN SEUL paiement groupé pour toute la fratrie (toujours créé en "pending")
       const totalGroupe = items.reduce((s, it) => s + it.totalAnnuel, 0);
       const paymentItems = items.flatMap(it => [
         ...it.detailLignes.map(l => ({ label: `${it.childName} — ${l.label}`, amount: l.montantTTC })),
       ]);
-      await addDoc(collection(db, "payments"), {
+      const payDoc = await addDoc(collection(db, "payments"), {
         familyId: user.uid,
         familyName: family.parentName,
         type: "inscription_annuelle",
@@ -637,13 +680,57 @@ export default function InscriptionAnnuellePage() {
         totalTTC: totalGroupe,
         paidAmount: 0,
         paymentPlan,
+        paymentMode: deferred ? moyenPaiement : "cb",
         status: "pending",
         skipPayment: true,
         source: "client",
         nbEnfants: items.length,
+        ...(deferred ? { awaitingValidation: true } : {}),
         createdAt: serverTimestamp(),
       });
-      // 3. UN SEUL checkout CAWL groupé
+
+      // 3a. Chèque / Espèces → déclaration à valider par l'admin (PAS de CAWL).
+      //     La/les place(s) restent "pending" jusqu'à la confirmation admin.
+      if (deferred) {
+        const names = items.map(it => it.childName).join(", ");
+        const modeLabel = moyenPaiement === "cheque" ? "chèque" : "espèces";
+        await addDoc(collection(db, "payment_declarations"), {
+          paymentId: payDoc.id,
+          familyId: user.uid,
+          familyName: family.parentName,
+          familyEmail: family.parentEmail || user.email || "",
+          montant: totalGroupe,
+          mode: moyenPaiement,
+          note: "",
+          activityTitle: `Inscription annuelle — ${names}`,
+          status: "pending_confirmation",
+          // Marqueurs spécifiques à l'inscription annuelle : permettent à l'admin
+          // de finaliser l'inscription (lever le pending, confirmer la résa, créer
+          // le forfait) lors de la confirmation de la déclaration.
+          type: "inscription_annuelle",
+          paymentPlan,
+          pendingEnrollments: allPending,
+          reservationIds: allReservationIds,
+          forfaitPayloads: allForfaitPayloads,
+          createdAt: serverTimestamp(),
+        });
+        // Email admin (non bloquant)
+        authFetch("/api/send-email", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: "ceagon50@gmail.com",
+            subject: `Inscription annuelle (${modeLabel}) à valider — ${family.parentName}`,
+            context: "espace_cavalier_declaration",
+            familyId: user.uid,
+            html: `<p><strong>${family.parentName}</strong> a inscrit ${names} à l'année et déclare un règlement de <strong>${totalGroupe.toFixed(2)}€</strong> par ${modeLabel} (${paymentPlan}).</p><p>👉 À valider dans <strong>Paiements → Déclarations</strong> pour confirmer la/les place(s).</p>`,
+          }),
+        }).catch(() => {});
+        setDeclaredSuccess({ mode: moyenPaiement, total: totalGroupe, names });
+        setSubmitting(false);
+        return;
+      }
+
+      // 3b. CB → UN SEUL checkout CAWL groupé
       try {
         const cawlItems = items.flatMap(it => [
           ...(it.prixAdhesion > 0 ? [{ name: `Adhésion — ${it.childName}`, description: `Enfant ${it.rangEnfant}`, priceInCents: Math.round(it.prixAdhesion * 100), quantity: 1 }] : []),
@@ -674,6 +761,33 @@ export default function InscriptionAnnuellePage() {
       setSubmitting(false);
     }
   };
+
+  if (declaredSuccess) {
+    const modeLabel = declaredSuccess.mode === "cheque" ? "chèque" : "espèces";
+    return (
+      <div className="max-w-lg mx-auto">
+        <Card padding="lg" className="text-center">
+          <div className="text-5xl mb-3">📨</div>
+          <h2 className="font-display text-xl font-bold text-blue-800 mb-2">Inscription enregistrée</h2>
+          <p className="font-body text-sm text-gray-600 mb-1">
+            {declaredSuccess.names} — <strong>{declaredSuccess.total.toFixed(2)}€</strong> par {modeLabel}.
+          </p>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 my-4 text-left">
+            <p className="font-body text-sm text-amber-800 font-semibold mb-1">⏳ En attente de validation</p>
+            <p className="font-body text-xs text-amber-700">
+              La/les place(s) sont réservées provisoirement. Le centre équestre confirmera l&apos;inscription
+              dès réception de votre règlement en {modeLabel}. Vous recevrez un email de confirmation.
+            </p>
+          </div>
+          <a href="/espace-cavalier/reservations" className="no-underline">
+            <button className="w-full py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 border-none cursor-pointer hover:bg-blue-600">
+              Voir mes inscriptions
+            </button>
+          </a>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -1068,10 +1182,37 @@ export default function InscriptionAnnuellePage() {
                 </div>
               </div>
 
-              {/* Payment plan (annual only) */}
+              {/* Moyen de paiement (toujours affiché au récap) */}
+              <div className="mb-5">
+                <div className="font-body text-sm font-semibold text-blue-800 mb-3">Moyen de paiement</div>
+                <div className="flex gap-3">
+                  {([
+                    ["cb", "💳", "Carte bancaire", "Paiement en ligne immédiat"],
+                    ["cheque", "📝", "Chèque", "Réglé au club"],
+                    ["especes", "💵", "Espèces", "Réglé au club"],
+                  ] as const).map(([id, icon, label, sub]) => (
+                    <button key={id} onClick={() => setMoyenPaiement(id)}
+                      className={`flex-1 py-3 px-2 rounded-xl border font-body text-sm font-medium cursor-pointer text-center transition-all
+                        ${moyenPaiement === id ? "border-blue-500 bg-blue-50 text-blue-500 font-semibold" : "border-gray-200 bg-white text-gray-500"}`}>
+                      <span className="block text-lg mb-0.5">{icon}</span>
+                      {label}
+                      <span className="block font-body text-[10px] font-normal text-gray-400 mt-0.5">{sub}</span>
+                    </button>
+                  ))}
+                </div>
+                {moyenPaiement !== "cb" && (
+                  <p className="font-body text-xs text-amber-600 mt-2">
+                    ⏳ La place est réservée provisoirement. L&apos;inscription sera confirmée par le centre dès réception de votre règlement en {moyenPaiement === "cheque" ? "chèque" : "espèces"}.
+                  </p>
+                )}
+              </div>
+
+              {/* Échéancier (annual only) */}
               {mode === "annuel" && grandTotal > 100 && (
                 <div className="mb-5">
-                  <div className="font-body text-sm font-semibold text-blue-800 mb-3">Mode de paiement</div>
+                  <div className="font-body text-sm font-semibold text-blue-800 mb-3">
+                    {moyenPaiement === "cheque" ? "Nombre de chèques" : "Échéancier"}
+                  </div>
                   <div className="flex gap-3">
                     {([["1x", `${grandTotal.toFixed(0)}€ en 1 fois`], ["3x", `3 × ${(grandTotal / 3).toFixed(0)}€`], ["10x", `10 × ${(grandTotal / 10).toFixed(0)}€`]] as const).map(([id, label]) => (
                       <button key={id} onClick={() => setPaymentPlan(id)}
@@ -1081,7 +1222,15 @@ export default function InscriptionAnnuellePage() {
                       </button>
                     ))}
                   </div>
-                  {paymentPlan !== "1x" && <p className="font-body text-xs text-gray-400 mt-2">Prélèvement SEPA ou CB automatique. Sans frais.</p>}
+                  {paymentPlan !== "1x" && (
+                    <p className="font-body text-xs text-gray-400 mt-2">
+                      {moyenPaiement === "cb"
+                        ? "Prélèvement CB automatique. Sans frais."
+                        : moyenPaiement === "cheque"
+                          ? `${paymentPlan === "3x" ? "3 chèques" : "10 chèques"} encaissés progressivement. Sans frais.`
+                          : "Échelonnement à convenir avec le centre. Sans frais."}
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -1098,8 +1247,10 @@ export default function InscriptionAnnuellePage() {
                     className="flex-1 py-4 rounded-xl font-body text-base font-semibold text-blue-800 bg-gold-400 border-none cursor-pointer hover:bg-gold-300 flex items-center justify-center gap-2 disabled:opacity-50">
                     {submitting ? (
                       <><Loader2 size={18} className="animate-spin" /> Inscription en cours...</>
-                    ) : (
+                    ) : moyenPaiement === "cb" ? (
                       <><CreditCard size={18} /> Payer {totalAPayer.toFixed(2)}€ {paymentPlan !== "1x" && mode === "annuel" ? `en ${paymentPlan}` : ""}</>
+                    ) : (
+                      <><Check size={18} /> Valider — règlement par {moyenPaiement === "cheque" ? "chèque" : "espèces"}</>
                     )}
                   </button>
                 </div>

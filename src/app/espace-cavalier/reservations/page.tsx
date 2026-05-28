@@ -27,6 +27,7 @@ const statusConfig: Record<string, { label: string; color: "green" | "orange" | 
   confirmed: { label: "Confirmée", color: "green", icon: Check },
   pending: { label: "En attente de paiement", color: "orange", icon: Clock },
   pending_payment: { label: "Paiement non finalisé", color: "orange", icon: Clock },
+  pending_validation: { label: "En attente de validation", color: "orange", icon: Clock },
   cancelled: { label: "Annulée", color: "red", icon: XCircle },
 };
 
