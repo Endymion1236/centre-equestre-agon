@@ -16,6 +16,7 @@
 import { Resend } from "resend";
 import { adminAuth, adminDb } from "./firebase-admin";
 import { logEmail } from "./email-log";
+import { createActivationToken } from "./activation-token";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
 const FROM_EMAIL_RAW = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
@@ -76,15 +77,19 @@ export async function sendMagicLink(opts: SendMagicLinkOptions): Promise<SendMag
     }
   }
 
-  // ── 2. Generer le magic link ──
-  const actionCodeSettings = {
-    url: `${APP_URL}/connexion-magique?email=${encodeURIComponent(emailNormalized)}`,
-    handleCodeInApp: true,
-  };
-
+  // ── 2. Generer le lien "maison" (token 7 jours) ──
+  // On n'utilise PLUS adminAuth.generateSignInWithEmailLink qui expire en ~1h
+  // (limite Firebase non configurable, inutilisable quand une famille clique
+  // le lendemain). A la place : token aleatoire stocke dans Firestore avec
+  // expiration 7 jours, echange contre un custom token au moment du clic.
   let magicLink: string;
   try {
-    magicLink = await adminAuth.generateSignInWithEmailLink(emailNormalized, actionCodeSettings);
+    const { token } = await createActivationToken({
+      email: emailNormalized,
+      familyId: opts.familyId,
+      ttlDays: 7,
+    });
+    magicLink = `${APP_URL}/connexion-magique?token=${token}`;
   } catch (e: any) {
     return { status: "failed", error: e.message || "Erreur generation lien", emailUsed: emailNormalized };
   }
@@ -237,7 +242,7 @@ function renderMagicLinkEmail({
 
               <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:4px;margin-top:24px;">
                 <p style="margin:0;font-size:13px;color:#78350f;line-height:1.5;">
-                  ⚠️ <strong>Ce lien expire dans 6 jours.</strong>
+                  ⚠️ <strong>Ce lien expire dans 7 jours.</strong>
                   ${isReconnect
                     ? "Si tu n'as pas demande ce lien, ignore simplement cet email."
                     : "Si tu n'arrives pas a activer ton espace, contacte-nous et on t'enverra un nouveau lien."}

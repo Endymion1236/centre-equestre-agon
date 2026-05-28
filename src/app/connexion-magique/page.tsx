@@ -22,7 +22,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signInWithEmailLink, isSignInWithEmailLink } from "firebase/auth";
+import { signInWithEmailLink, isSignInWithEmailLink, signInWithCustomToken } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 
 // Wrapper Suspense exige par Next 15 quand on utilise useSearchParams
@@ -47,32 +47,72 @@ function ConnexionMagiqueContent() {
   const [email, setEmail] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Au montage : verifier que l'URL est bien un lien magique Firebase
+  // Au montage : on regarde d'abord s'il y a un token "maison" (?token=...),
+  // qui est le nouveau systeme (duree 7 jours). Sinon on retombe sur l'ancien
+  // lien Firebase (?apiKey=...&oobCode=...) pour la retrocompatibilite avec
+  // d'eventuels liens deja envoyes.
   useEffect(() => {
     const url = window.location.href;
-    if (!isSignInWithEmailLink(auth, url)) {
-      setStatus("error");
-      setErrorMsg("Ce lien n'est pas valide ou a expiré. Demande un nouveau lien à l'équipe du centre équestre.");
+    const homemadeToken = params.get("token");
+
+    // ── Nouveau systeme : token maison ──
+    if (homemadeToken) {
+      connectWithHomemadeToken(homemadeToken);
       return;
     }
 
-    // Firebase peut avoir mis l'email en localStorage si la famille a clique
-    // sur le lien depuis le MEME appareil ou elle a recu l'email.
-    const storedEmail = window.localStorage.getItem("emailForSignIn");
-    if (storedEmail) {
-      // Pas besoin de redemander : on enchaine direct la connexion
-      connectWithEmail(storedEmail, url);
-    } else {
-      // Famille a probablement clique depuis un autre appareil que celui
-      // de reception (ex: mail recu sur PC, clic sur telephone) -> on
-      // doit redemander l'email pour confirmer l'identite.
-      setStatus("needEmail");
-      // Pre-remplir si on a l'email dans l'URL (envoye en parametre par
-      // l'admin pour faciliter, mais pas obligatoire)
-      const urlEmail = params.get("email");
-      if (urlEmail) setEmail(urlEmail);
+    // ── Ancien systeme : lien Firebase natif (fallback) ──
+    if (isSignInWithEmailLink(auth, url)) {
+      const storedEmail = window.localStorage.getItem("emailForSignIn");
+      if (storedEmail) {
+        connectWithEmail(storedEmail, url);
+      } else {
+        setStatus("needEmail");
+        const urlEmail = params.get("email");
+        if (urlEmail) setEmail(urlEmail);
+      }
+      return;
     }
+
+    // ── Ni l'un ni l'autre : lien invalide ──
+    setStatus("error");
+    setErrorMsg("Ce lien n'est pas valide ou a expiré. Demande un nouveau lien depuis la page de connexion (bouton « Recevoir un lien par email »).");
   }, [params]);
+
+  // Echange le token maison contre un custom token Firebase via notre API,
+  // puis connecte avec signInWithCustomToken.
+  const connectWithHomemadeToken = async (token: string) => {
+    setStatus("connecting");
+    try {
+      const res = await fetch("/api/verify-activation-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const data = await res.json();
+
+      if (!data.ok) {
+        setStatus("error");
+        if (data.error === "expired") {
+          setErrorMsg("Ce lien a expiré (il était valable 7 jours). Demande un nouveau lien depuis la page de connexion (bouton « Recevoir un lien par email »).");
+        } else if (data.error === "used") {
+          setErrorMsg("Ce lien a déjà été utilisé. Si tu as besoin de te reconnecter, demande un nouveau lien depuis la page de connexion (bouton « Recevoir un lien par email »).");
+        } else {
+          setErrorMsg("Ce lien n'est pas valide. Demande un nouveau lien depuis la page de connexion (bouton « Recevoir un lien par email »).");
+        }
+        return;
+      }
+
+      // Connexion Firebase via le custom token
+      await signInWithCustomToken(auth, data.customToken);
+      setStatus("success");
+      setTimeout(() => router.push("/espace-cavalier"), 1500);
+    } catch (err: any) {
+      console.error("connectWithHomemadeToken:", err);
+      setStatus("error");
+      setErrorMsg("Erreur de connexion. Réessaie ou demande un nouveau lien depuis la page de connexion.");
+    }
+  };
 
   const connectWithEmail = async (emailToUse: string, url: string) => {
     setStatus("connecting");
