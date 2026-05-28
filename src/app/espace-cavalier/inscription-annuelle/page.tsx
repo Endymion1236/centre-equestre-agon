@@ -101,6 +101,30 @@ export default function InscriptionAnnuellePage() {
   const [mode, setMode] = useState<"annuel" | "ponctuel">("annuel");
   const [slotSearch, setSlotSearch] = useState("");
 
+  // ── PANIER multi-enfants ──
+  // Chaque entrée = une inscription d'enfant validée mais pas encore payée.
+  // Permet d'inscrire plusieurs enfants d'une fratrie puis de payer en
+  // une seule fois (avec dégressivité famille appliquée au bon rang).
+  interface PanierItem {
+    childId: string;
+    childName: string;
+    forfaitType: "1x" | "2x" | "3x";
+    frequence: 1 | 2 | 3;
+    slotKeys: string[];
+    creneauIds: string[];
+    slotsInfo: { activityTitle: string; dayLabel: string; startTime: string; endTime: string; totalSessions: number; creneauIds: string[] }[];
+    avecAdhesion: boolean;
+    avecLicence: boolean;
+    licenceMoins18: boolean;
+    rangEnfant: number;          // rang figé au moment de l'ajout au panier
+    totalAnnuel: number;
+    detailLignes: { label: string; montantTTC: number }[];
+    prixAdhesion: number;
+    prixLicence: number;
+    prixForfaitNet: number;
+  }
+  const [panier, setPanier] = useState<PanierItem[]>([]);
+
   // Tarifs + règles, chargés depuis Firestore (source de vérité, comme l'admin)
   const [tarifs, setTarifs] = useState<ForfaitTarifs>(TARIFS_DEFAUT);
   const [totalSessionsSaison1x, setTotalSessionsSaison1x] = useState<number>(TOTAL_SESSIONS_SAISON_DEFAUT);
@@ -251,14 +275,19 @@ export default function InscriptionAnnuellePage() {
   const rangEnfant = useMemo(() => {
     if (!family?.id) return 1;
     const enfants = new Set<string>();
+    // Enfants déjà inscrits en base pour cette saison
     allForfaits.forEach((f: any) => {
       if (!f.childId || f.childId === selectedChild) return;
       const fSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
       if (fSeason !== targetSeason) return;
       enfants.add(f.childId);
     });
+    // + enfants déjà placés dans le panier (hors enfant courant)
+    panier.forEach(p => {
+      if (p.childId !== selectedChild) enfants.add(p.childId);
+    });
     return enfants.size + 1;
-  }, [allForfaits, selectedChild, targetSeason, family?.id]);
+  }, [allForfaits, selectedChild, targetSeason, family?.id, panier]);
 
   // ── Séances restantes / total saison pour le prorata ──
   // total saison = sessions du 1er créneau choisi (nb d'occurrences réelles
@@ -294,6 +323,57 @@ export default function InscriptionAnnuellePage() {
   const grandTotal = mode === "annuel"
     ? calcul.totalAnnuel
     : (calcul.prixAdhesion + calcul.prixLicence + (slotsPrices[0]?.slot.priceTTC || 0));
+
+  // Total du panier (toutes les inscriptions cumulées)
+  const totalPanier = panier.reduce((s, p) => s + p.totalAnnuel, 0);
+  // Total à payer = panier validé + inscription en cours (récap actuel)
+  const totalAPayer = totalPanier + grandTotal;
+
+  // Réinitialise le parcours pour inscrire un nouvel enfant (sans toucher au panier)
+  const resetParcours = () => {
+    setSelectedChild("");
+    setSelectedSlots([]);
+    setForfaitType("1x");
+    setLicenceOK(false);
+    setAdhesionOK(false);
+    setSlotSearch("");
+    setStep(1);
+  };
+
+  // Ajoute l'inscription en cours au panier puis réinitialise pour un autre enfant
+  const ajouterAuPanier = () => {
+    if (!child || selectedSlotsData.length === 0) return;
+    const item: PanierItem = {
+      childId: selectedChild,
+      childName: (child as any).firstName || "—",
+      forfaitType,
+      frequence,
+      slotKeys: selectedSlots,
+      creneauIds: selectedSlotsData.flatMap(s => s.creneauIds),
+      slotsInfo: selectedSlotsData.map(s => ({
+        activityTitle: s.activityTitle, dayLabel: s.dayLabel,
+        startTime: s.startTime, endTime: s.endTime,
+        totalSessions: s.totalSessions, creneauIds: s.creneauIds,
+      })),
+      avecAdhesion: adhesionOK,
+      avecLicence: licenceOK,
+      licenceMoins18,
+      rangEnfant,
+      totalAnnuel: grandTotal,
+      detailLignes: calcul.detailLignes,
+      prixAdhesion: calcul.prixAdhesion,
+      prixLicence: calcul.prixLicence,
+      prixForfaitNet: calcul.prixForfaitNet,
+    };
+    setPanier(prev => [...prev, item]);
+    resetParcours();
+    toast(`${item.childName} ajouté(e) au panier`, "success");
+  };
+
+  // Retire un enfant du panier
+  const retirerDuPanier = (childId: string) => {
+    setPanier(prev => prev.filter(p => p.childId !== childId));
+  };
 
   // Steps for annual mode
   const steps = mode === "annuel"
@@ -429,6 +509,166 @@ export default function InscriptionAnnuellePage() {
       window.location.href = "/espace-cavalier/reservations?success=true";
     } catch (e) {
       console.error("Erreur inscription:", e);
+      toast("Erreur lors de l'inscription. Veuillez réessayer.", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ── Traite UN item (inscription d'un enfant) : créneaux + réservations +
+  // forfait. NE crée PAS le paiement (fait une seule fois pour tout le panier).
+  const enrollOneItem = async (item: PanierItem) => {
+    if (!user || !family) return;
+    // 1. Inscrire l'enfant dans tous les créneaux de ses slots
+    for (const creneauId of item.creneauIds) {
+      const creneau = creneaux.find(c => c.id === creneauId);
+      if (!creneau) continue;
+      if ((creneau.enrolled || []).some((e: any) => e.childId === item.childId)) continue;
+      const newEnrolled = [...(creneau.enrolled || []), {
+        childId: item.childId,
+        childName: item.childName,
+        familyId: user.uid,
+        familyName: family.parentName || "—",
+        enrolledAt: new Date().toISOString(),
+        paymentSource: "forfait",
+        forfaitId: null,
+      }];
+      await updateDoc(doc(db, "creneaux", creneauId), {
+        enrolled: newEnrolled,
+        enrolledCount: newEnrolled.length,
+      });
+    }
+    // 2. Réservations (une par slot)
+    for (const s of item.slotsInfo) {
+      await addDoc(collection(db, "reservations"), {
+        familyId: user.uid,
+        familyName: family.parentName,
+        childId: item.childId,
+        childName: item.childName,
+        activityTitle: s.activityTitle,
+        activityType: "cours",
+        type: "annual",
+        forfaitType: item.forfaitType,
+        dayLabel: s.dayLabel,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        totalSessions: s.totalSessions,
+        creneauIds: s.creneauIds,
+        status: "confirmed",
+        createdAt: serverTimestamp(),
+      });
+    }
+    // 3. Forfait (1 doc pour le créneau principal, comme l'admin)
+    const principal = item.slotsInfo[0];
+    if (principal) {
+      const season = seasonOf(creneaux.find(c => c.id === principal.creneauIds[0])?.date || todayLocalString());
+      await addDoc(collection(db, "forfaits"), {
+        familyId: user.uid,
+        familyName: family.parentName || "—",
+        childId: item.childId,
+        childName: item.childName,
+        slotKey: `${principal.activityTitle} — ${principal.dayLabel} ${principal.startTime}`,
+        activityTitle: principal.activityTitle,
+        dayLabel: principal.dayLabel,
+        startTime: principal.startTime,
+        endTime: principal.endTime,
+        totalSessions: principal.totalSessions,
+        attendedSessions: 0,
+        licenceFFE: item.avecLicence,
+        licenceType: item.licenceMoins18 ? "moins18" : "plus18",
+        adhesion: item.avecAdhesion,
+        forfaitPriceTTC: item.totalAnnuel,
+        totalPaidTTC: 0,
+        paymentPlan,
+        status: "actif",
+        frequence: item.frequence,
+        seasonStartYear: season,
+        source: "client",
+        createdAt: serverTimestamp(),
+      });
+    }
+  };
+
+  // ── Valide TOUT le panier (+ l'inscription en cours si complète) ──
+  // Crée toutes les inscriptions puis UN SEUL paiement groupé + 1 checkout CAWL.
+  const handleEnrollAll = async () => {
+    if (!user || !family) return;
+    // Construire la liste finale : panier + inscription en cours (si valide)
+    const items: PanierItem[] = [...panier];
+    if (child && selectedSlotsData.length > 0) {
+      items.push({
+        childId: selectedChild,
+        childName: (child as any).firstName || "—",
+        forfaitType, frequence,
+        slotKeys: selectedSlots,
+        creneauIds: selectedSlotsData.flatMap(s => s.creneauIds),
+        slotsInfo: selectedSlotsData.map(s => ({
+          activityTitle: s.activityTitle, dayLabel: s.dayLabel,
+          startTime: s.startTime, endTime: s.endTime,
+          totalSessions: s.totalSessions, creneauIds: s.creneauIds,
+        })),
+        avecAdhesion: adhesionOK, avecLicence: licenceOK, licenceMoins18,
+        rangEnfant,
+        totalAnnuel: grandTotal,
+        detailLignes: calcul.detailLignes,
+        prixAdhesion: calcul.prixAdhesion,
+        prixLicence: calcul.prixLicence,
+        prixForfaitNet: calcul.prixForfaitNet,
+      });
+    }
+    if (items.length === 0) return;
+    setSubmitting(true);
+    try {
+      // 1. Créer toutes les inscriptions (créneaux + réservations + forfaits)
+      for (const it of items) {
+        await enrollOneItem(it);
+      }
+      // 2. UN SEUL paiement groupé pour toute la fratrie
+      const totalGroupe = items.reduce((s, it) => s + it.totalAnnuel, 0);
+      const paymentItems = items.flatMap(it => [
+        ...it.detailLignes.map(l => ({ label: `${it.childName} — ${l.label}`, amount: l.montantTTC })),
+      ]);
+      await addDoc(collection(db, "payments"), {
+        familyId: user.uid,
+        familyName: family.parentName,
+        type: "inscription_annuelle",
+        label: `Inscription annuelle — ${items.map(it => it.childName).join(", ")}`,
+        items: paymentItems,
+        totalTTC: totalGroupe,
+        paidAmount: 0,
+        paymentPlan,
+        status: "pending",
+        skipPayment: true,
+        source: "client",
+        nbEnfants: items.length,
+        createdAt: serverTimestamp(),
+      });
+      // 3. UN SEUL checkout CAWL groupé
+      try {
+        const cawlItems = items.flatMap(it => [
+          ...(it.prixAdhesion > 0 ? [{ name: `Adhésion — ${it.childName}`, description: `Enfant ${it.rangEnfant}`, priceInCents: Math.round(it.prixAdhesion * 100), quantity: 1 }] : []),
+          ...(it.prixLicence > 0 ? [{ name: `Licence FFE — ${it.childName}`, description: it.licenceMoins18 ? "-18 ans" : "+18 ans", priceInCents: Math.round(it.prixLicence * 100), quantity: 1 }] : []),
+          { name: `Forfait ${it.frequence}×/sem — ${it.childName}`, description: it.slotsInfo.map(s => `${s.dayLabel} ${s.startTime}`).join(", "), priceInCents: Math.round(it.prixForfaitNet * 100), quantity: 1 },
+        ]);
+        const res = await authFetch("/api/cawl/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            familyId: user.uid,
+            familyEmail: family.parentEmail,
+            familyName: family.parentName,
+            items: cawlItems,
+            metadata: { type: "inscription_annuelle_groupee", nbEnfants: items.length },
+          }),
+        });
+        const data = await res.json();
+        if (data.url) { window.location.href = data.url; return; }
+      } catch (cawlErr) {
+        console.error("CAWL checkout groupé (non-bloquant):", cawlErr);
+      }
+      window.location.href = "/espace-cavalier/reservations?success=true";
+    } catch (e) {
+      console.error("Erreur inscription groupée:", e);
       toast("Erreur lors de l'inscription. Veuillez réessayer.", "error");
     } finally {
       setSubmitting(false);
@@ -719,6 +959,39 @@ export default function InscriptionAnnuellePage() {
             <Card padding="md">
               <h2 className="font-body text-base font-semibold text-blue-800 mb-4">Récapitulatif</h2>
 
+              {/* Panier : enfants déjà ajoutés (en attente de paiement groupé) */}
+              {panier.length > 0 && (
+                <div className="mb-4 p-4 rounded-xl bg-green-50 border border-green-200">
+                  <div className="font-body text-sm font-semibold text-green-800 mb-2">
+                    👨‍👩‍👧‍👦 Déjà au panier ({panier.length} enfant{panier.length > 1 ? "s" : ""})
+                  </div>
+                  {panier.map((p) => (
+                    <div key={p.childId} className="flex items-center justify-between py-1.5 border-t border-green-200/60 first:border-t-0">
+                      <div>
+                        <span className="font-body text-sm font-semibold text-green-900">{p.childName}</span>
+                        <span className="font-body text-xs text-green-700 ml-2">Forfait {p.frequence}×/sem</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="font-body text-sm font-semibold text-green-800">{p.totalAnnuel.toFixed(2)}€</span>
+                        <button onClick={() => retirerDuPanier(p.childId)}
+                          className="font-body text-xs text-red-500 bg-white border border-red-200 px-2 py-1 rounded-lg cursor-pointer hover:bg-red-50">
+                          Retirer
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex justify-between pt-2 mt-1 border-t border-green-300">
+                    <span className="font-body text-xs text-green-700">Sous-total panier</span>
+                    <span className="font-body text-sm font-bold text-green-800">{totalPanier.toFixed(2)}€</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Titre de l'inscription en cours (l'enfant qu'on configure là) */}
+              {panier.length > 0 && (
+                <div className="font-body text-xs text-gray-400 mb-2 uppercase tracking-wide">Inscription en cours</div>
+              )}
+
               <div className="bg-blue-50/50 rounded-xl p-4 mb-5 flex flex-col gap-3">
                 {/* Child */}
                 <div className="flex justify-between">
@@ -730,7 +1003,7 @@ export default function InscriptionAnnuellePage() {
                 {mode === "annuel" && (
                   <div className="flex justify-between">
                     <span className="font-body text-sm text-gray-500">Forfait</span>
-                    <Badge color="blue">{forfaitType === "2x" ? "Compétition (2×/sem)" : "Loisir (1×/sem)"}</Badge>
+                    <Badge color="blue">{forfaitType === "3x" ? "3 cours/sem" : forfaitType === "2x" ? "2 cours/sem" : "1 cours/sem"}</Badge>
                   </div>
                 )}
 
@@ -812,16 +1085,24 @@ export default function InscriptionAnnuellePage() {
                 </div>
               )}
 
-              <div className="flex gap-3">
-                <button onClick={() => setStep(mode === "annuel" ? 4 : 2)} className="px-6 py-3 rounded-xl font-body text-sm text-gray-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
-                <button onClick={handleEnroll} disabled={submitting}
-                  className="flex-1 py-4 rounded-xl font-body text-base font-semibold text-blue-800 bg-gold-400 border-none cursor-pointer hover:bg-gold-300 flex items-center justify-center gap-2 disabled:opacity-50">
-                  {submitting ? (
-                    <><Loader2 size={18} className="animate-spin" /> Inscription en cours...</>
-                  ) : (
-                    <><CreditCard size={18} /> Payer {grandTotal.toFixed(2)}€ {paymentPlan !== "1x" && mode === "annuel" ? `en ${paymentPlan}` : ""}</>
-                  )}
-                </button>
+              <div className="flex flex-col gap-3">
+                {mode === "annuel" && (
+                  <button onClick={ajouterAuPanier} disabled={submitting || !slotsComplete}
+                    className="w-full py-3 rounded-xl font-body text-sm font-semibold text-blue-500 bg-blue-50 border border-blue-200 cursor-pointer hover:bg-blue-100 flex items-center justify-center gap-2 disabled:opacity-50">
+                    <Plus size={16} /> Ajouter un autre enfant
+                  </button>
+                )}
+                <div className="flex gap-3">
+                  <button onClick={() => setStep(mode === "annuel" ? 4 : 2)} className="px-6 py-3 rounded-xl font-body text-sm text-gray-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
+                  <button onClick={handleEnrollAll} disabled={submitting}
+                    className="flex-1 py-4 rounded-xl font-body text-base font-semibold text-blue-800 bg-gold-400 border-none cursor-pointer hover:bg-gold-300 flex items-center justify-center gap-2 disabled:opacity-50">
+                    {submitting ? (
+                      <><Loader2 size={18} className="animate-spin" /> Inscription en cours...</>
+                    ) : (
+                      <><CreditCard size={18} /> Payer {totalAPayer.toFixed(2)}€ {paymentPlan !== "1x" && mode === "annuel" ? `en ${paymentPlan}` : ""}</>
+                    )}
+                  </button>
+                </div>
               </div>
             </Card>
           )}
