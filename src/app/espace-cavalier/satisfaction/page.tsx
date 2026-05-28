@@ -99,24 +99,18 @@ export default function SatisfactionPage() {
         createdAt: serverTimestamp(),
       });
 
-      // Notifier l'admin par email (fire-and-forget)
-      const stars = "⭐".repeat(globalNote);
-      authFetch("/api/send-email", {
+      // Notifier l'admin par email (fire-and-forget) via la route dediee
+      // satisfaction-notify (accessible aux familles, contrairement a
+      // send-email qui est admin-only et rejetait l'appel en silence).
+      authFetch("/api/satisfaction-notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          to: process.env.NEXT_PUBLIC_OWNER_EMAIL || "ceagon50@gmail.com",
-          subject: `${stars} Avis satisfaction — ${family.parentName}`,
-          context: "espace_cavalier_satisfaction",
-          familyId: user.uid,
-          html: `<div style="font-family:sans-serif;max-width:520px;padding:24px;">
-            <p><strong>${family.parentName}</strong> a laissé un avis :</p>
-            <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:16px 0;">
-              <p style="margin:0;font-size:18px;">${stars} <strong>${globalNote}/5</strong></p>
-              ${selectedActivity ? `<p style="margin:8px 0 0;color:#555;font-size:13px;">Activité : ${selectedActivity}</p>` : ""}
-              ${commentaire ? `<p style="margin:8px 0 0;color:#333;font-size:14px;">"${commentaire}"</p>` : ""}
-            </div>
-          </div>`,
+          globalNote,
+          commentaire: commentaire.trim(),
+          activityTitle: selectedActivity || "Général",
+          parentName: family.parentName || "",
+          aspects,
         }),
       }).catch(() => {});
 
