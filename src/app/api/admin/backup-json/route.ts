@@ -8,6 +8,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb, adminAuth } from "@/lib/firebase-admin";
 
+const ADMIN_EMAILS = ["ceagon@orange.fr", "ceagon50@gmail.com", "emmelinelagy@gmail.com"];
+
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
@@ -29,7 +31,7 @@ export async function GET(req: NextRequest) {
     }
     const idToken = authHeader.slice(7);
     const decoded = await adminAuth.verifyIdToken(idToken);
-    if (!decoded.admin) {
+    if (!decoded.admin && !ADMIN_EMAILS.includes(decoded.email || "")) {
       return NextResponse.json({ error: "Admin requis" }, { status: 403 });
     }
 
