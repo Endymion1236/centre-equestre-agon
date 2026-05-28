@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { loadTemplate } from "@/lib/email-template-loader";
 import { awardLoyaltyPointsServer } from "@/lib/fidelite";
 import { confirmReservationsForPayment } from "@/lib/reservations";
+import { createForfaitsForPayment } from "@/lib/forfaits-server";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import { logEmail } from "@/lib/email-log";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
@@ -147,6 +148,14 @@ export async function POST(req: NextRequest) {
           await confirmReservationsForPayment({
             familyId: pData.familyId,
             items: pData.items || [],
+          });
+
+          // ── Créer les forfaits annuels (inscription CB) ───────────────
+          // Les payloads sont portés par le paiement (la famille ne peut pas
+          // écrire dans `forfaits`). Création serveur ici. No-op si absent.
+          await createForfaitsForPayment({
+            paymentId: payRef.id,
+            forfaitPayloads: pData.forfaitPayloads || [],
           });
 
           // ── Email de confirmation ─────────────────────────────────────

@@ -612,12 +612,10 @@ export default function InscriptionAnnuellePage() {
       source: "client",
     } : null;
 
-    // En mode CB on crée le forfait tout de suite. En différé il sera créé par
-    // l'admin à la validation (les règles interdisent la création côté famille).
-    if (!deferred && forfaitPayload) {
-      await addDoc(collection(db, "forfaits"), { ...forfaitPayload, createdAt: serverTimestamp() });
-    }
-
+    // Le forfait n'est PLUS créé côté client (les règles Firestore réservent
+    // l'écriture des forfaits au staff). Le payload est retourné puis :
+    //  - CB      → stocké sur le paiement, créé par le webhook/status CAWL (admin SDK)
+    //  - différé → stocké sur la déclaration, créé par l'admin à la validation
     return { pendingEnrollments, reservationIds, forfaitPayload };
   };
 
@@ -659,10 +657,10 @@ export default function InscriptionAnnuellePage() {
       const allForfaitPayloads: any[] = [];
       for (const it of items) {
         const r = await enrollOneItem(it, moyenPaiement);
+        if (r.forfaitPayload) allForfaitPayloads.push(r.forfaitPayload);
         if (deferred) {
           allPending.push(...r.pendingEnrollments);
           allReservationIds.push(...r.reservationIds);
-          if (r.forfaitPayload) allForfaitPayloads.push(r.forfaitPayload);
         }
       }
 
@@ -685,7 +683,7 @@ export default function InscriptionAnnuellePage() {
         skipPayment: true,
         source: "client",
         nbEnfants: items.length,
-        ...(deferred ? { awaitingValidation: true } : {}),
+        ...(deferred ? { awaitingValidation: true } : { forfaitPayloads: allForfaitPayloads }),
         createdAt: serverTimestamp(),
       });
 

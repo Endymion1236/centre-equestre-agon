@@ -147,7 +147,7 @@ export function TabDeclarations({
                         }
                         for (const fp of (decl.forfaitPayloads || [])) {
                           try {
-                            await addDoc(collection(db, "forfaits"), { ...fp, createdAt: serverTimestamp() });
+                            await addDoc(collection(db, "forfaits"), { ...fp, paymentId: decl.paymentId || null, createdAt: serverTimestamp() });
                           } catch (err) { console.error("Création forfait:", err); }
                         }
                       }

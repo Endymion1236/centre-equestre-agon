@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { loadTemplate } from "@/lib/email-template-loader";
 import { awardLoyaltyPointsServer } from "@/lib/fidelite";
 import { confirmReservationsForPayment } from "@/lib/reservations";
+import { createForfaitsForPayment } from "@/lib/forfaits-server";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import { logEmail } from "@/lib/email-log";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
@@ -246,6 +247,11 @@ export async function GET(req: NextRequest) {
         await confirmReservationsForPayment({
           familyId: familyId || pData.familyId,
           items: pData.items || [],
+        });
+        // Forfaits annuels (inscription CB) — création serveur. No-op si absent.
+        await createForfaitsForPayment({
+          paymentId: payRef.id,
+          forfaitPayloads: pData.forfaitPayloads || [],
         });
       }
 
