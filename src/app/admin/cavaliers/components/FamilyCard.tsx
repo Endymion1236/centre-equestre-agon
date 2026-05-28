@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { doc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import {
   ChevronDown, ChevronUp, Mail, Edit3, Trash2, GitMerge, UserPlus,
   Save, Loader2, CalendarDays, Users, Phone, Clock, Wallet, Receipt, Copy,
@@ -108,17 +108,55 @@ export default function FamilyCard({
       const computedName = lastName && firstName
         ? `${lastName} ${firstName}`
         : lastName || firstName || editForm.parentName.trim();
-      await updateDoc(doc(db, "families", family.firestoreId), {
-        civilite: editForm.civilite || null,
-        parentName: computedName,
-        lastName: lastName || null,
-        firstName: firstName || null,
-        parentEmail: editForm.parentEmail.trim(),
-        parentPhone: editForm.parentPhone.trim(), address: editForm.address.trim(),
-        zipCode: editForm.zipCode.trim(), city: editForm.city.trim(),
-        tags: editTags,
-        updatedAt: serverTimestamp(),
-      });
+
+      const newEmail = editForm.parentEmail.trim().toLowerCase();
+      const oldEmail = (family.parentEmail || "").trim().toLowerCase();
+      const emailChanged = newEmail !== oldEmail && newEmail.includes("@");
+
+      // Si l'email a change, on passe par la route admin dediee qui
+      // synchronise le compte Firebase Auth ET le champ Firestore. Sinon
+      // on risque une desynchro (la famille recevrait ses liens magiques
+      // sur le nouveau mail mais le compte de connexion garderait l'ancien).
+      if (emailChanged) {
+        const token = await auth.currentUser?.getIdToken();
+        const res = await fetch("/api/admin/change-family-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ familyId: family.firestoreId, newEmail }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast(data.error || "Erreur changement d'email", "error");
+          setSaving(false);
+          return;
+        }
+        // La route a deja mis a jour parentEmail cote Firestore. On met a
+        // jour le RESTE des champs (sans retoucher parentEmail).
+        await updateDoc(doc(db, "families", family.firestoreId), {
+          civilite: editForm.civilite || null,
+          parentName: computedName,
+          lastName: lastName || null,
+          firstName: firstName || null,
+          parentPhone: editForm.parentPhone.trim(), address: editForm.address.trim(),
+          zipCode: editForm.zipCode.trim(), city: editForm.city.trim(),
+          tags: editTags,
+          updatedAt: serverTimestamp(),
+        });
+        toast(data.message || "Email mis a jour", "success");
+      } else {
+        // Pas de changement d'email : update classique de tous les champs
+        await updateDoc(doc(db, "families", family.firestoreId), {
+          civilite: editForm.civilite || null,
+          parentName: computedName,
+          lastName: lastName || null,
+          firstName: firstName || null,
+          parentEmail: newEmail,
+          parentPhone: editForm.parentPhone.trim(), address: editForm.address.trim(),
+          zipCode: editForm.zipCode.trim(), city: editForm.city.trim(),
+          tags: editTags,
+          updatedAt: serverTimestamp(),
+        });
+      }
       setEditingFamily(false);
       onRefresh();
     } catch { toast("Erreur de sauvegarde", "error"); }
