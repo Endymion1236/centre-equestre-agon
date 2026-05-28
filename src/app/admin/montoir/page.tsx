@@ -140,17 +140,37 @@ export default function MontoirPage() {
     });
   }, [equides, indisponibilites, dateStr]);
 
-  const updateEnrolled = async (cid: string, enrolled: any[]) => { await updateDoc(doc(db,"creneaux",cid),{enrolled}); fetchData(); };
+  const updateEnrolled = async (cid: string, enrolled: any[]) => {
+    // Nettoyage anti-undefined : Firestore rejette les valeurs undefined.
+    // On retire toute cle dont la valeur est undefined dans chaque inscrit
+    // avant l'ecriture (sinon updateDoc peut echouer ou ignorer le champ).
+    const clean = enrolled.map(e => {
+      const o: any = {};
+      for (const k in e) if (e[k] !== undefined) o[k] = e[k];
+      return o;
+    });
+    await updateDoc(doc(db, "creneaux", cid), { enrolled: clean });
+    fetchData();
+  };
   // Toggle : si on reclique sur le meme statut, on l'efface (-> retour
   // "present par defaut"). Sinon on applique le nouveau statut.
   // Indispensable depuis qu'on a retire le bouton vert : sans toggle, une
   // mauvaise saisie ne pourrait plus etre corrigee.
   const togglePresence = (c: Creneau, childId: string, val: string) => {
-    updateEnrolled(c.id, (c.enrolled||[]).map(e =>
-      e.childId === childId
-        ? { ...e, presence: e.presence === val ? undefined : val }
-        : e
-    ));
+    updateEnrolled(c.id, (c.enrolled||[]).map(e => {
+      if (e.childId !== childId) return e;
+      // Re-clic sur le meme statut -> on retire la presence (= present par
+      // defaut). IMPORTANT : on SUPPRIME la cle plutot que de mettre
+      // undefined, car Firestore rejette/ignore les valeurs undefined dans
+      // les objets d'un array (le champ garderait alors son ancienne valeur
+      // -> la croix resterait cochee). On reconstruit donc l'objet sans la
+      // cle presence.
+      if (e.presence === val) {
+        const { presence, ...rest } = e;
+        return rest;
+      }
+      return { ...e, presence: val };
+    }));
   };
   // ── Charge journalière des poneys (nb séances + nb heures aujourd'hui) ──────
   const poneyCharge = useMemo(() => {
