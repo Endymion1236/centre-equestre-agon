@@ -23,6 +23,13 @@ import { adminDb, adminAuth } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { assertResetAllowed } from "@/lib/reset-guard";
 
+// Emails admin reconnus sans custom claim (aligne avec api-auth.ts).
+// Permet le reset sur une base sans claims (ex: base de test).
+const ADMIN_EMAILS = ["ceagon@orange.fr", "ceagon50@gmail.com", "emmelinelagy@gmail.com"];
+function isAdmin(d: any): boolean {
+  return d.admin === true || ADMIN_EMAILS.includes(d.email || "");
+}
+
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 minutes (Pro Vercel plan) pour laisser le temps aux suppressions
 
@@ -101,7 +108,7 @@ export async function POST(req: NextRequest) {
     } catch {
       return NextResponse.json({ error: "Token invalide" }, { status: 401 });
     }
-    if (!decoded.admin) {
+    if (!isAdmin(decoded)) {
       return NextResponse.json({ error: "Admin requis" }, { status: 403 });
     }
 
@@ -234,7 +241,7 @@ export async function GET(req: NextRequest) {
     }
     const idToken = authHeader.slice(7);
     const decoded = await adminAuth.verifyIdToken(idToken);
-    if (!decoded.admin) {
+    if (!isAdmin(decoded)) {
       return NextResponse.json({ error: "Admin requis" }, { status: 403 });
     }
 

@@ -23,10 +23,24 @@ import { adminAuth } from "@/lib/firebase-admin";
  */
 
 interface AuthOptions {
-  /** Si true, exige le custom claim `admin: true` */
+  /** Si true, exige le custom claim `admin: true` (ou email admin connu) */
   adminOnly?: boolean;
-  /** Si true, exige le custom claim `admin: true` OU `moniteur: true` */
+  /** Si true, exige le custom claim `admin: true`/`moniteur: true` (ou email admin) */
   staffOnly?: boolean;
+}
+
+// Emails admin reconnus meme sans custom claim. Doit rester aligne avec
+// ADMIN_EMAILS dans auth-context.tsx et la liste dans firestore.rules.
+// Permet a un admin connu par email d'acceder aux routes admin meme sur
+// une base Firebase sans claims configures (ex: base de test).
+const ADMIN_EMAILS = [
+  "ceagon@orange.fr",
+  "ceagon50@gmail.com",
+  "emmelinelagy@gmail.com",
+];
+
+function isAdminToken(decoded: any): boolean {
+  return decoded.admin === true || ADMIN_EMAILS.includes(decoded.email || "");
 }
 
 export async function verifyAuth(
@@ -47,14 +61,14 @@ export async function verifyAuth(
   try {
     const decoded = await adminAuth.verifyIdToken(token);
 
-    if (options?.adminOnly && decoded.admin !== true) {
+    if (options?.adminOnly && !isAdminToken(decoded)) {
       return NextResponse.json(
         { error: "Accès réservé aux administrateurs" },
         { status: 403 }
       );
     }
 
-    if (options?.staffOnly && decoded.admin !== true && decoded.moniteur !== true) {
+    if (options?.staffOnly && !isAdminToken(decoded) && decoded.moniteur !== true) {
       return NextResponse.json(
         { error: "Accès réservé au personnel" },
         { status: 403 }
