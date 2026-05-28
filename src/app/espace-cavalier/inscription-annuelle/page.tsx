@@ -30,6 +30,25 @@ const TARIFS_DEFAUT: ForfaitTarifs = {
 };
 const TOTAL_SESSIONS_SAISON_DEFAUT = 35;
 
+// Calcule l'âge à partir d'une date de naissance, en gérant les formats
+// variés (string ISO, Date, Firestore Timestamp {seconds}). Retourne null
+// si la date est absente ou invalide (évite l'affichage "NaN ans").
+function ageFromBirthDate(birthDate: any): number | null {
+  if (!birthDate) return null;
+  let d: Date;
+  if (typeof birthDate === "string") d = new Date(birthDate);
+  else if (birthDate instanceof Date) d = birthDate;
+  else if (birthDate?.seconds) d = new Date(birthDate.seconds * 1000);
+  else if (birthDate?.toDate) { try { d = birthDate.toDate(); } catch { return null; } }
+  else return null;
+  if (isNaN(d.getTime())) return null;
+  const now = new Date();
+  let age = now.getFullYear() - d.getFullYear();
+  const m = now.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+  return age >= 0 && age < 120 ? age : null;
+}
+
 interface Creneau {
   id: string;
   activityId: string;
@@ -248,11 +267,9 @@ export default function InscriptionAnnuellePage() {
 
   // ── Calcul du prix via le helper centralisé (= identique à l'admin) ──
   const licenceMoins18 = (() => {
-    const c = child as any;
-    if (!c?.birthDate) return true; // par défaut -18 (cas le plus courant en club)
-    const bd = new Date(c.birthDate);
-    const age = new Date().getFullYear() - bd.getFullYear();
-    return age < 18;
+    const a = ageFromBirthDate((child as any)?.birthDate);
+    if (a === null) return true; // par défaut -18 (cas le plus courant en club)
+    return a < 18;
   })();
 
   const calcul = useMemo(() => calculerForfaitAnnuel({
@@ -441,6 +458,18 @@ export default function InscriptionAnnuellePage() {
           {step === 1 && (
             <Card padding="md">
               <h2 className="font-body text-base font-semibold text-blue-800 mb-2">Quel cavalier inscrivez-vous ?</h2>
+              {/* Bandeau réduction 1ère inscription : visible UNIQUEMENT si la
+                  famille n'a aucun forfait existant (vraie première inscription).
+                  Réduction non automatique : invite à contacter le club. */}
+              {allForfaits.length === 0 && (
+                <div className="mb-4 p-4 rounded-xl bg-green-50 border border-green-200">
+                  <div className="font-body text-sm font-semibold text-green-800 mb-1">🎁 Première inscription ?</div>
+                  <p className="font-body text-xs text-green-700">
+                    Une réduction est prévue pour votre première inscription au club.
+                    Contactez-nous pour en savoir plus : <a href="mailto:ceagon@orange.fr" className="underline font-semibold">ceagon@orange.fr</a>.
+                  </p>
+                </div>
+              )}
               {children.length === 0 ? (
                 <div className="text-center py-8">
                   <span className="text-4xl block mb-3">👨‍👩‍👧‍👦</span>
@@ -458,7 +487,10 @@ export default function InscriptionAnnuellePage() {
                         <div>
                           <div className="font-body text-sm font-semibold text-blue-800">{c.firstName}</div>
                           <div className="font-body text-xs text-gray-400">
-                            {c.birthDate ? `${Math.floor((Date.now() - new Date(c.birthDate).getTime()) / 31557600000)} ans · ` : ""}
+                            {(() => {
+                              const a = ageFromBirthDate(c.birthDate);
+                              return a !== null ? `${a} ans · ` : "";
+                            })()}
                             {c.galopLevel ? `Galop ${c.galopLevel}` : "Débutant"}
                           </div>
                         </div>
