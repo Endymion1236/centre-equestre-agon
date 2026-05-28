@@ -39,6 +39,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
+import { assertResetAllowed } from "@/lib/reset-guard";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -226,6 +227,10 @@ export async function POST(req: NextRequest) {
       error: `Confirm token invalide. Attendu : "${expected}"`,
     }, { status: 403 });
   }
+
+  // Garde-fou anti-reset-prod (bloque sur gestion-2026 sans deblocage)
+  const guard = assertResetAllowed(body);
+  if (guard) return guard;
 
   try {
     const result = await applyReset();

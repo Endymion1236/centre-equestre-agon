@@ -34,6 +34,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { assertResetAllowed } from "@/lib/reset-guard";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -100,6 +101,14 @@ async function handleDelete(req: NextRequest): Promise<NextResponse> {
   }
 
   const apply = req.nextUrl.searchParams.get("apply") === "true";
+
+  // Garde-fou anti-suppression-prod (uniquement en mode apply).
+  // Deblocage prod via query param ?confirmProdReset=PHRASE
+  if (apply) {
+    const confirmProdReset = req.nextUrl.searchParams.get("confirmProdReset") || undefined;
+    const guard = assertResetAllowed({ confirmProdReset });
+    if (guard) return guard;
+  }
 
   const report: DeletionReport = {
     email,

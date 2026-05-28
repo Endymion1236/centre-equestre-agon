@@ -21,6 +21,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb, adminAuth } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { assertResetAllowed } from "@/lib/reset-guard";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 minutes (Pro Vercel plan) pour laisser le temps aux suppressions
@@ -111,6 +112,16 @@ export async function POST(req: NextRequest) {
       collections?: string[];
       dryRun?: boolean;
     };
+
+    // ─── 2bis. Garde-fou anti-reset-prod ─────────────────────────
+    // Bloque si on est sur la base de prod (gestion-2026) sans deblocage
+    // explicite. Protege contre une mauvaise config Vercel qui ferait
+    // pointer la branche test vers la prod. Pas applique en dry-run (qui
+    // ne supprime rien).
+    if (!dryRun) {
+      const guard = assertResetAllowed(body);
+      if (guard) return guard;
+    }
 
     if (!dryRun && confirmation !== CONFIRMATION_PHRASE) {
       return NextResponse.json({

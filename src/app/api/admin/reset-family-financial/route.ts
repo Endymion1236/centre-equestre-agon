@@ -34,6 +34,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
+import { assertResetAllowed } from "@/lib/reset-guard";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -64,10 +65,17 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const { familyId, apply } = await req.json();
+    const reqBody = await req.json();
+    const { familyId, apply } = reqBody;
 
     if (!familyId) {
       return NextResponse.json({ error: "familyId requis" }, { status: 400 });
+    }
+
+    // Garde-fou anti-reset-prod (uniquement en mode apply, pas en dry-run)
+    if (apply) {
+      const guard = assertResetAllowed(reqBody);
+      if (guard) return guard;
     }
 
     // Vérifier que la famille existe (sécurité supplémentaire)
