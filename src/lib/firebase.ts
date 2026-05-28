@@ -10,13 +10,21 @@ import {
 import { getStorage } from "firebase/storage";
 import { getMessaging, isSupported } from "firebase/messaging";
 
+// Config Firebase. Les valeurs viennent des variables d'env si presentes,
+// sinon fallback sur les valeurs de PROD (gestion-2026). Cela permet :
+//   - branche main / prod : pas de variables -> utilise gestion-2026 (fallback)
+//   - branche test : variables NEXT_PUBLIC_FIREBASE_* definies sur Vercel
+//     pour la branche test -> pointe vers gestion-2026-test
+// Important : ce sont des cles PUBLIQUES (cote client), il est normal et sans
+// risque qu'elles soient visibles. La securite repose sur les regles Firestore,
+// pas sur le secret de ces cles.
 const firebaseConfig = {
-  apiKey: "AIzaSyDy1vrJpa12CrnyGoDkR9t4c3E31CS7Ovc",
-  authDomain: "gestion-2026.firebaseapp.com",
-  projectId: "gestion-2026",
-  storageBucket: "gestion-2026.firebasestorage.app",
-  messagingSenderId: "785848912923",
-  appId: "1:785848912923:web:47f03aa109fa13eb1c7cbe",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyDy1vrJpa12CrnyGoDkR9t4c3E31CS7Ovc",
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "gestion-2026.firebaseapp.com",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "gestion-2026",
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "gestion-2026.firebasestorage.app",
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "785848912923",
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:785848912923:web:47f03aa109fa13eb1c7cbe",
 };
 
 // Initialize Firebase (singleton)
