@@ -2,7 +2,7 @@
 import { useAgentContext } from "@/hooks/useAgentContext";
 
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, addDoc, updateDoc, doc, getDoc, query, where, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, doc, getDoc, query, where, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import {
@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { Family } from "@/types";
 import { authFetch } from "@/lib/auth-fetch";
+import { createEncaissement } from "@/lib/compta-encaissement";
 import { compareCreneauxByDow } from "@/lib/creneau-sort";
 
 interface Forfait {
@@ -425,8 +426,83 @@ export default function ForfaitsPage() {
       });
       const data = await res.json();
       if (data.success) {
-        alert(`✅ ${data.message}`);
         await updateDoc(doc(db, "forfaits", f.id), { status: "cancelled", updatedAt: serverTimestamp() });
+
+        // ── Proposition d'avoir au prorata des seances non effectuees ──
+        // (demande Nicolas, option C : case a cocher + montant pre-rempli
+        // modifiable). On ne cree un avoir QUE si l'admin le confirme, car
+        // ce n'est pas systematique (depend du motif de depart et du
+        // reglement interieur du club).
+        const prix = f.forfaitPriceTTC || 0;
+        const dejaPaye = f.totalPaidTTC || 0;
+        const total = f.totalSessions || 0;
+        const faites = f.attendedSessions || 0;
+        const restantes = Math.max(0, total - faites);
+
+        // Prorata sur ce qui a ete REELLEMENT paye (on ne fait pas d'avoir
+        // sur de l'argent non encaisse). Arrondi a 2 decimales.
+        const prorataPaye = (dejaPaye > 0 && total > 0)
+          ? Math.round((dejaPaye / total) * restantes * 100) / 100
+          : 0;
+
+        if (dejaPaye > 0 && prorataPaye > 0) {
+          const proposer = confirm(
+            `✅ ${data.message}\n\n` +
+            `${f.childName} a payé ${dejaPaye.toFixed(2)}€ sur ${total} séances.\n` +
+            `Séances effectuées : ${faites} · non effectuées : ${restantes}\n\n` +
+            `Veux-tu créer un AVOIR pour les séances non effectuées ?\n` +
+            `Montant proposé (prorata) : ${prorataPaye.toFixed(2)}€\n\n` +
+            `OK = créer l'avoir · Annuler = ne rien créer`
+          );
+
+          if (proposer) {
+            // Permettre d'ajuster le montant (geste commercial, frais retenus...)
+            const saisie = prompt(
+              `Montant de l'avoir en € (modifiable) :`,
+              prorataPaye.toFixed(2)
+            );
+            const montant = saisie !== null ? parseFloat(saisie.replace(",", ".")) : NaN;
+            if (!isNaN(montant) && montant > 0) {
+              try {
+                const expiry = new Date();
+                expiry.setMonth(expiry.getMonth() + 12); // avoir valable 12 mois
+                const refAvoir = `AV-${Date.now().toString(36).toUpperCase()}`;
+                await addDoc(collection(db, "avoirs"), {
+                  familyId: f.familyId,
+                  familyName: f.childName ? `${f.childName}` : "",
+                  type: "avoir",
+                  amount: montant,
+                  usedAmount: 0,
+                  remainingAmount: montant,
+                  reason: `Désinscription forfait ${f.activityTitle || ""} — ${restantes} séance(s) non effectuée(s) sur ${total}`,
+                  reference: refAvoir,
+                  expiryDate: Timestamp.fromDate(expiry),
+                  status: "actif",
+                  usageHistory: [],
+                  createdAt: serverTimestamp(),
+                  updatedAt: serverTimestamp(),
+                });
+                // Trace comptable (encaissement negatif = dette envers la famille)
+                try {
+                  await createEncaissement({
+                    paymentId: "",
+                    familyId: f.familyId,
+                    familyName: f.childName || "",
+                    montant: -montant,
+                    mode: "avoir",
+                    modeLabel: "Avoir",
+                    raison: `Avoir ${refAvoir} — désinscription forfait`,
+                  });
+                } catch (e) { console.warn("Encaissement avoir:", e); }
+                alert(`✅ Avoir de ${montant.toFixed(2)}€ créé (réf ${refAvoir}). Visible dans le menu Avoirs.`);
+              } catch (e) {
+                console.error("Création avoir:", e);
+                alert("⚠️ La désinscription a réussi mais la création de l'avoir a échoué. Crée-le manuellement dans le menu Avoirs.");
+              }
+            }
+          }
+        }
+
         fetchData();
       } else {
         alert(`❌ Erreur : ${data.error}`);
