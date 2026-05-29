@@ -215,12 +215,30 @@ export async function GET(req: NextRequest) {
         );
       }
 
+      // Token Card On File : si CAWL renvoie un token réutilisable (tokenisation
+      // activée sur l'acompte), on le stocke pour permettre le prélèvement
+      // automatique du solde à J-7 (cf. cron charge-stage-balances + cawl-mit).
+      // Tant que la tokenisation n'est pas branchée, ces champs restent vides
+      // et le cron retombe sur l'email de rappel.
+      const cofToken = paymentOutput?.paymentOutput?.cardPaymentMethodSpecificOutput?.token
+        || paymentOutput?.cardPaymentMethodSpecificOutput?.token
+        || body?.createdPaymentOutput?.token
+        || "";
+      const cofSchemeTxId = paymentOutput?.paymentOutput?.cardPaymentMethodSpecificOutput?.schemeTransactionId
+        || paymentOutput?.cardPaymentMethodSpecificOutput?.schemeTransactionId
+        || "";
+      // Id CAWL du paiement initial (acompte) — référence pour le delayedCharge du solde.
+      const cofInitialPaymentId = paymentOutput?.id || paymentOutput?.paymentOutput?.references?.paymentReference || "";
+
       await payRef.update({
         status: isDeposit ? "partial" : "paid",
         paidAmount,
         paymentMode: "cb_online",
         cawlHostedCheckoutId: hostedCheckoutId,
         paymentRef: `CAWL-${hostedCheckoutId}`,
+        ...(cofToken ? { cofToken } : {}),
+        ...(cofSchemeTxId ? { cofSchemeTransactionId: cofSchemeTxId } : {}),
+        ...(cofInitialPaymentId ? { cofInitialPaymentId } : {}),
         updatedAt: FieldValue.serverTimestamp(),
       });
 
@@ -247,15 +265,17 @@ export async function GET(req: NextRequest) {
       });
 
       // ── Confirmer les réservations associées ──────────────────────
-      // Uniquement si le paiement est soldé (pas pour un acompte, le cavalier
-      // doit encore régler le solde avant que la résa soit définitivement
-      // confirmée)
+      // La place est garantie dès l'acompte payé (décision métier) : on
+      // confirme les réservations même pour un acompte. Le solde reste dû
+      // séparément (relance / prélèvement auto à J-7).
+      await confirmReservationsForPayment({
+        familyId: familyId || pData.familyId,
+        items: pData.items || [],
+      });
+
+      // Les forfaits annuels (inscription CB), eux, ne sont créés QUE sur un
+      // paiement complet — un acompte ne déclenche pas leur création.
       if (!isDeposit) {
-        await confirmReservationsForPayment({
-          familyId: familyId || pData.familyId,
-          items: pData.items || [],
-        });
-        // Forfaits annuels (inscription CB) — création serveur. No-op si absent.
         await createForfaitsForPayment({
           paymentId: payRef.id,
           forfaitPayloads: pData.forfaitPayloads || [],

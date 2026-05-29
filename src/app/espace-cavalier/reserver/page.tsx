@@ -480,38 +480,50 @@ export default function ReserverPage() {
           });
         }
 
-        // Réservations — une par jour pour les stages, une seule pour les cours
+        // Réservations — une SEULE réservation groupée pour les stages
+        // (couvre tous les jours du stage), une seule pour les cours.
         if (item.isStage) {
-          for (const cid of creneauIdsToEnroll) {
-            // Idempotence : si une reservation existe deja pour ce trio
-            // (familyId, childId, creneauId), on ne la duplique pas. Protege
-            // contre les double-clics sur 'Payer', les items ajoutes 2 fois
-            // au panier par erreur, ou les retries reseau.
-            const existingResa = await getDocs(query(
-              collection(db, "reservations"),
-              where("familyId", "==", user.uid),
-              where("childId", "==", item.childId),
-              where("creneauId", "==", cid),
-            ));
-            if (!existingResa.empty) {
-              console.log(`[handlePay] Reservation deja existante, skip : ${item.childName} - creneau ${cid}`);
-              continue;
+          // Idempotence : si une réservation stage existe déjà pour ce trio
+          // (familyId, childId, 1er créneau du stage), on ne duplique pas.
+          const existingResa = await getDocs(query(
+            collection(db, "reservations"),
+            where("familyId", "==", user.uid),
+            where("childId", "==", item.childId),
+            where("creneauId", "==", creneauIdsToEnroll[0]),
+          ));
+          if (existingResa.empty) {
+            // Dates de début/fin du stage à partir des créneaux
+            const crDates: string[] = [];
+            let startTime = "", endTime = "";
+            for (const cid of creneauIdsToEnroll) {
+              const crSnap = await getDoc(doc(db, "creneaux", cid));
+              if (crSnap.exists()) {
+                const d = crSnap.data();
+                if (d.date) crDates.push(d.date);
+                if (!startTime && d.startTime) startTime = d.startTime;
+                if (!endTime && d.endTime) endTime = d.endTime;
+              }
             }
-            const crSnap = await getDoc(doc(db, "creneaux", cid));
-            const crData = crSnap.exists() ? crSnap.data() : null;
+            crDates.sort();
             await addDoc(collection(db, "reservations"), {
               familyId: user.uid, familyName: family.parentName,
               ...((item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
               childId: item.childId, childName: item.childName,
               activityTitle: item.activityTitle, activityType: "stage",
-              creneauId: cid,
-              date: crData?.date || todayLocalString(),
-              startTime: crData?.startTime || "",
-              endTime: crData?.endTime || "",
-              priceTTC: 0, // prix global sur la 1ère réservation uniquement
+              type: "stage",
+              // créneau "principal" (1er jour) + liste complète pour le détail
+              creneauId: creneauIdsToEnroll[0],
+              creneauIds: creneauIdsToEnroll,
+              date: crDates[0] || todayLocalString(),
+              dateFin: crDates[crDates.length - 1] || crDates[0] || todayLocalString(),
+              nbJours: crDates.length,
+              startTime, endTime,
+              priceTTC: item.prixFinal,
               status: "pending_payment", source: "client",
               createdAt: serverTimestamp(),
             });
+          } else {
+            console.log(`[handlePay] Reservation stage deja existante, skip : ${item.childName}`);
           }
         } else {
           // Idempotence cours : meme check que pour les stages
