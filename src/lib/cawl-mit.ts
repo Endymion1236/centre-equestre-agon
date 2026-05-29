@@ -51,11 +51,13 @@ export interface MitChargeResult {
 }
 
 // Corps exact de la requête de prélèvement du solde (delayedCharge).
-// Exporté pour pouvoir être testé/loggé indépendamment de l'appel réseau.
+// ⚠️ La propriété du SDK installé est `subsequentcardPaymentMethodSpecificInput`
+// (card en minuscule — vérifié dans onlinepayments-sdk-nodejs), pas la casse
+// "Card" de la doc web. Exporté pour test/log.
 export function buildDelayedChargeBody(amountEuros: number) {
   return {
-    subsequentCardPaymentMethodSpecificInput: {
-      subsequentType: "delayedCharge" as const,
+    subsequentcardPaymentMethodSpecificInput: {
+      subsequentType: "delayedCharge",
     },
     order: {
       amountOfMoney: {
@@ -88,14 +90,15 @@ export async function chargeWithToken(params: MitChargeParams): Promise<MitCharg
   }
 
   // ── Appel réel CAWL (SubsequentPayment) ────────────────────────────────────
-  // Le SDK onlinepayments-sdk-nodejs n'expose pas toujours subsequentPayment de
-  // façon stable selon la version ; on tente la méthode SDK si présente. À
-  // VÉRIFIER EN PREPROD avant d'activer le flag en production.
+  // SDK onlinepayments-sdk-nodejs : la méthode est exposée via le client
+  // `subsequent` → cawlSdk.subsequent.subsequentPayment(merchantId, paymentId, body)
+  // (endpoint /v2/{merchantId}/payments/{paymentId}/subsequent). Vérifié dans
+  // le SDK installé. À tester en preprod avant d'activer le flag en production.
   try {
-    const paymentsApi: any = (cawlSdk as any)?.payments;
+    const subsequentApi: any = (cawlSdk as any)?.subsequent;
 
-    if (paymentsApi && typeof paymentsApi.subsequentPayment === "function") {
-      const resp = await paymentsApi.subsequentPayment(CAWL_PSPID, params.initialPaymentId, body);
+    if (subsequentApi && typeof subsequentApi.subsequentPayment === "function") {
+      const resp = await subsequentApi.subsequentPayment(CAWL_PSPID, params.initialPaymentId, body);
       const status = resp?.body?.payment?.status || resp?.body?.status || "";
       const ref = resp?.body?.payment?.id || resp?.body?.id || "";
       const ok = ["CAPTURED", "PENDING_CAPTURE", "PAID", "CAPTURE_REQUESTED", "AUTHORIZED"].includes(String(status).toUpperCase());
@@ -105,12 +108,10 @@ export async function chargeWithToken(params: MitChargeParams): Promise<MitCharg
       return { enabled: true, success: false, paymentReference: ref, statusCode: resp?.status, error: `Statut CAWL: ${status || "inconnu"}` };
     }
 
-    // Méthode SDK absente : on ne devine pas l'appel REST signé pour ne pas
-    // risquer une transaction mal formée.
     return {
       enabled: true,
       success: false,
-      error: "Méthode SDK subsequentPayment introuvable — endpoint REST à brancher après vérif preprod",
+      error: "Client SDK 'subsequent' introuvable — vérifier la version du SDK",
     };
   } catch (e: any) {
     console.error("[cawl-mit] Erreur appel SubsequentPayment:", e);
