@@ -265,15 +265,17 @@ export async function GET(req: NextRequest) {
       });
 
       // ── Confirmer les réservations associées ──────────────────────
-      // Uniquement si le paiement est soldé (pas pour un acompte, le cavalier
-      // doit encore régler le solde avant que la résa soit définitivement
-      // confirmée)
+      // La place est garantie dès l'acompte payé (décision métier) : on
+      // confirme les réservations même pour un acompte. Le solde reste dû
+      // séparément (relance / prélèvement auto à J-7).
+      await confirmReservationsForPayment({
+        familyId: familyId || pData.familyId,
+        items: pData.items || [],
+      });
+
+      // Les forfaits annuels (inscription CB), eux, ne sont créés QUE sur un
+      // paiement complet — un acompte ne déclenche pas leur création.
       if (!isDeposit) {
-        await confirmReservationsForPayment({
-          familyId: familyId || pData.familyId,
-          items: pData.items || [],
-        });
-        // Forfaits annuels (inscription CB) — création serveur. No-op si absent.
         await createForfaitsForPayment({
           paymentId: payRef.id,
           forfaitPayloads: pData.forfaitPayloads || [],
