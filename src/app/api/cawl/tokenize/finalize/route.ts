@@ -67,6 +67,8 @@ export async function POST(req: NextRequest) {
 
     const payResp = await payApi.createPayment(CAWL_PSPID, createReq);
     const payBody = payResp?.body || payResp;
+    // LOG DIAGNOSTIC TEMPORAIRE : structure complète de la réponse CAWL.
+    console.log("[cawl/tokenize/finalize] createPayment resp:", JSON.stringify({ status: payResp?.status, body: payBody })?.slice(0, 1500));
     const payment = payBody?.payment || payBody?.creationOutput?.payment || payBody?.createdPaymentOutput?.payment || {};
     // L'id peut se trouver à plusieurs endroits selon la forme de réponse.
     const cawlPaymentId =
