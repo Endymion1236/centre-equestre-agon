@@ -666,9 +666,21 @@ export default function InscriptionAnnuellePage() {
 
       // 2. UN SEUL paiement groupé pour toute la fratrie (toujours créé en "pending")
       const totalGroupe = items.reduce((s, it) => s + it.totalAnnuel, 0);
-      const paymentItems = items.flatMap(it => [
-        ...it.detailLignes.map(l => ({ label: `${it.childName} — ${l.label}`, amount: l.montantTTC })),
-      ]);
+      // Items à la forme attendue par l'admin (TabImpayes, retrait d'item,
+      // facture PDF) : childName / activityTitle / priceTTC. On garde label/amount
+      // en plus pour rétro-compatibilité avec d'éventuels autres lecteurs.
+      const paymentItems = items.flatMap(it =>
+        it.detailLignes.map(l => ({
+          childId: it.childId,
+          childName: it.childName,
+          activityTitle: l.label,
+          priceTTC: l.montantTTC,
+          priceHT: Math.round((l.montantTTC / 1.055) * 100) / 100,
+          tva: 5.5,
+          label: `${it.childName} — ${l.label}`,
+          amount: l.montantTTC,
+        }))
+      );
       const payDoc = await addDoc(collection(db, "payments"), {
         familyId: user.uid,
         familyName: family.parentName,

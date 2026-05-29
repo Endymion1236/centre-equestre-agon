@@ -1445,7 +1445,7 @@ export default function PaiementsPage() {
           broadcastRows={broadcastRows} setBroadcastRows={setBroadcastRows}
           broadcastSearch={broadcastSearch} setBroadcastSearch={setBroadcastSearch}
           broadcastSending={broadcastSending} setBroadcastSending={setBroadcastSending}
-          toast={toast} setPayments={setPayments}
+          toast={toast} setPayments={setPayments} refreshAll={refreshAll}
         />
       )}
 

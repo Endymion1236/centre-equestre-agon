@@ -29,13 +29,14 @@ interface TabDeclarationsProps {
   setBroadcastSending: React.Dispatch<React.SetStateAction<boolean>>;
   toast: (message: string, type?: "error" | "success" | "warning" | "info", duration?: number) => void;
   setPayments: React.Dispatch<React.SetStateAction<any[]>>;
+  refreshAll?: () => Promise<void>;
 }
 
 export function TabDeclarations({
   loading, payments, declarations, setDeclarations, families, avoirs,
   broadcastSource, setBroadcastSource, broadcastRows, setBroadcastRows,
   broadcastSearch, setBroadcastSearch, broadcastSending, setBroadcastSending,
-  toast, setPayments,
+  toast, setPayments, refreshAll,
 }: TabDeclarationsProps) {
   const inputCls = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
   const [confirmingDeclId, setConfirmingDeclId] = useState<string | null>(null);
@@ -180,6 +181,9 @@ export function TabDeclarations({
                         }).catch(() => {});
                       }
                       setDeclarations(prev => prev.filter(d => d.id !== decl.id));
+                      // Rafraîchir la liste des paiements pour que l'onglet Impayés
+                      // reflète immédiatement le nouveau statut (sinon état figé).
+                      if (refreshAll) { try { await refreshAll(); } catch { /* non bloquant */ } }
                       toast(`✅ Paiement de ${decl.familyName} confirmé`, "success");
                     } catch (e) { console.error("Erreur confirmation:", e); toast("Erreur lors de la confirmation", "error"); }
                     finally { setConfirmingDeclId(null); }
@@ -214,6 +218,7 @@ export function TabDeclarations({
                     }
                     await updateDoc(doc(db, "payment_declarations", decl.id), { status: "rejected", rejectedAt: serverTimestamp() });
                     setDeclarations(prev => prev.filter(d => d.id !== decl.id));
+                    if (refreshAll) { try { await refreshAll(); } catch { /* non bloquant */ } }
                   }}
                     className="font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer">
                     Rejeter
