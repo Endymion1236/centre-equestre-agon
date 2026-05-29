@@ -27,6 +27,7 @@ const statusConfig: Record<string, { label: string; color: "green" | "orange" | 
   confirmed: { label: "Confirmée", color: "green", icon: Check },
   pending: { label: "En attente de paiement", color: "orange", icon: Clock },
   pending_payment: { label: "Paiement non finalisé", color: "orange", icon: Clock },
+  pending_validation: { label: "En attente de validation", color: "orange", icon: Clock },
   cancelled: { label: "Annulée", color: "red", icon: XCircle },
 };
 
@@ -66,10 +67,17 @@ export default function ReservationsPage() {
     fetch();
   }, [user]);
 
+  // Les inscriptions annuelles sont récurrentes (même jour chaque semaine) et
+  // n'ont pas de champ `date` unique : on les sort de l'axe upcoming/past et on
+  // les affiche dans une section dédiée.
+  const isAnnual = (r: Reservation) => (r as any).type === "annual" || !(r as any).date;
+  const annual = reservations.filter(isAnnual);
+  const ponctuelles = reservations.filter((r) => !isAnnual(r));
+
   // Group by upcoming / past
   const today = todayLocalString();
-  const upcoming = reservations.filter((r) => r.date >= today).sort((a, b) => a.date.localeCompare(b.date));
-  const past = reservations.filter((r) => r.date < today).sort((a, b) => b.date.localeCompare(a.date));
+  const upcoming = ponctuelles.filter((r) => r.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+  const past = ponctuelles.filter((r) => r.date < today).sort((a, b) => b.date.localeCompare(a.date));
   const pendingPayment = reservations.filter((r) => (r.status as string) === "pending_payment");
 
   return (
@@ -125,6 +133,42 @@ export default function ReservationsPage() {
         </Card>
       ) : (
         <div className="flex flex-col gap-8">
+          {/* Inscriptions à l'année (récurrentes) */}
+          {annual.length > 0 && (
+            <div>
+              <h2 className="font-body text-sm font-bold text-blue-800 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <Calendar size={14} /> Inscriptions à l&apos;année ({annual.length})
+              </h2>
+              <div className="flex flex-col gap-3">
+                {annual.map((r) => {
+                  const status = statusConfig[r.status] || statusConfig.pending;
+                  const dayLabel = (r as any).dayLabel || "";
+                  return (
+                    <Card key={r.id} padding="md">
+                      <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-4">
+                          <div className="w-14 h-14 rounded-xl bg-blue-50 flex flex-col items-center justify-center shrink-0">
+                            <span className="text-xl">🐴</span>
+                          </div>
+                          <div>
+                            <div className="font-body text-base font-semibold text-blue-800">{r.activityTitle}</div>
+                            <div className="font-body text-xs text-gray-600">
+                              🧒 {r.childName}{dayLabel ? ` · tous les ${dayLabel.toLowerCase()}` : ""}{r.startTime ? ` · ${r.startTime}${r.endTime ? `–${r.endTime}` : ""}` : ""}
+                            </div>
+                            {(r as any).totalSessions ? (
+                              <div className="font-body text-xs text-gray-400">{(r as any).totalSessions} séances sur l&apos;année</div>
+                            ) : null}
+                          </div>
+                        </div>
+                        <Badge color={status.color}>{status.label}</Badge>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Upcoming */}
           {upcoming.length > 0 && (
             <div>

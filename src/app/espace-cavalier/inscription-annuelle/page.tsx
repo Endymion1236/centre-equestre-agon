@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, doc, getDoc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
@@ -10,6 +10,44 @@ import { authFetch } from "@/lib/auth-fetch";
 import { compareCreneauxByDow } from "@/lib/creneau-sort";
 import { todayLocalString } from "@/lib/date-local";
 import { useToast } from "@/components/ui/Toast";
+import {
+  calculerForfaitAnnuel, seasonOf,
+  type ForfaitTarifs, type FamilyDiscountRule,
+} from "@/lib/forfait-pricing";
+
+// Saison minimale autorisée pour les inscriptions annuelles en self-service.
+// Règle métier : on bloque la saison en cours, on n'ouvre qu'à partir de
+// septembre 2026 (saison 2026-2027). À ajuster chaque année si besoin (ou
+// à terme : lire depuis settings).
+const MIN_SEASON_INSCRIPTION = 2026;
+
+// Tarifs par défaut (fallback si settings/inscription absent). Alignés sur
+// EnrollPanel. La source réelle est Firestore settings/inscription.
+const TARIFS_DEFAUT: ForfaitTarifs = {
+  forfait1x: 650, forfait2x: 1100, forfait3x: 1400,
+  adhesion1: 60, adhesion2: 40, adhesion3: 20, adhesion4plus: 0,
+  licenceMoins18: 25, licencePlus18: 36,
+};
+const TOTAL_SESSIONS_SAISON_DEFAUT = 35;
+
+// Calcule l'âge à partir d'une date de naissance, en gérant les formats
+// variés (string ISO, Date, Firestore Timestamp {seconds}). Retourne null
+// si la date est absente ou invalide (évite l'affichage "NaN ans").
+function ageFromBirthDate(birthDate: any): number | null {
+  if (!birthDate) return null;
+  let d: Date;
+  if (typeof birthDate === "string") d = new Date(birthDate);
+  else if (birthDate instanceof Date) d = birthDate;
+  else if (birthDate?.seconds) d = new Date(birthDate.seconds * 1000);
+  else if (birthDate?.toDate) { try { d = birthDate.toDate(); } catch { return null; } }
+  else return null;
+  if (isNaN(d.getTime())) return null;
+  const now = new Date();
+  let age = now.getFullYear() - d.getFullYear();
+  const m = now.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+  return age >= 0 && age < 120 ? age : null;
+}
 
 interface Creneau {
   id: string;
@@ -46,9 +84,6 @@ interface WeeklySlot {
 
 const dayLabels = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 
-const LICENCE_FFE = { label: "Licence FFE", price: 25, description: "Obligatoire pour pratiquer en club" };
-const ADHESION = { label: "Adhésion au club", price: 50, description: "Cotisation annuelle" };
-
 export default function InscriptionAnnuellePage() {
   const { user, family } = useAuth();
   const { toast } = useToast();
@@ -59,12 +94,51 @@ export default function InscriptionAnnuellePage() {
   const [selectedChild, setSelectedChild] = useState("");
   const [licenceOK, setLicenceOK] = useState(false);
   const [adhesionOK, setAdhesionOK] = useState(false);
-  // Multi-slot selection for 2x/week
+  // Multi-slot selection for 2x/3x per week
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
-  const [forfaitType, setForfaitType] = useState<"1x" | "2x">("1x");
+  const [forfaitType, setForfaitType] = useState<"1x" | "2x" | "3x">("1x");
   const [paymentPlan, setPaymentPlan] = useState<"1x" | "3x" | "10x">("1x");
+  // Moyen de paiement choisi par la famille :
+  //  - "cb"      : paiement en ligne immédiat via CAWL (place confirmée tout de suite)
+  //  - "cheque"  : règlement physique différé → inscription EN ATTENTE de validation admin
+  //  - "especes" : idem chèque (réglé au club)
+  const [moyenPaiement, setMoyenPaiement] = useState<"cb" | "cheque" | "especes">("cb");
+  // Écran de confirmation affiché après une déclaration chèque/espèces.
+  const [declaredSuccess, setDeclaredSuccess] = useState<null | { mode: "cheque" | "especes"; total: number; names: string }>(null);
   const [mode, setMode] = useState<"annuel" | "ponctuel">("annuel");
   const [slotSearch, setSlotSearch] = useState("");
+
+  // ── PANIER multi-enfants ──
+  // Chaque entrée = une inscription d'enfant validée mais pas encore payée.
+  // Permet d'inscrire plusieurs enfants d'une fratrie puis de payer en
+  // une seule fois (avec dégressivité famille appliquée au bon rang).
+  interface PanierItem {
+    childId: string;
+    childName: string;
+    forfaitType: "1x" | "2x" | "3x";
+    frequence: 1 | 2 | 3;
+    slotKeys: string[];
+    creneauIds: string[];
+    slotsInfo: { activityTitle: string; dayLabel: string; startTime: string; endTime: string; totalSessions: number; creneauIds: string[] }[];
+    avecAdhesion: boolean;
+    avecLicence: boolean;
+    licenceMoins18: boolean;
+    rangEnfant: number;          // rang figé au moment de l'ajout au panier
+    seasonStartYear?: number;    // saison visée (pour détection licence/adhésion cross-panier)
+    frequenceDejaInscrite?: number; // heures/sem déjà inscrites (>0 = forfait complément)
+    totalAnnuel: number;
+    detailLignes: { label: string; montantTTC: number }[];
+    prixAdhesion: number;
+    prixLicence: number;
+    prixForfaitNet: number;
+  }
+  const [panier, setPanier] = useState<PanierItem[]>([]);
+
+  // Tarifs + règles, chargés depuis Firestore (source de vérité, comme l'admin)
+  const [tarifs, setTarifs] = useState<ForfaitTarifs>(TARIFS_DEFAUT);
+  const [totalSessionsSaison1x, setTotalSessionsSaison1x] = useState<number>(TOTAL_SESSIONS_SAISON_DEFAUT);
+  const [familyDiscountRules, setFamilyDiscountRules] = useState<FamilyDiscountRule[]>([]);
+  const [allForfaits, setAllForfaits] = useState<any[]>([]);
 
   const children = family?.children || [];
   const child = children.find((c: any) => c.id === selectedChild);
@@ -93,13 +167,56 @@ export default function InscriptionAnnuellePage() {
     fetchCreneaux();
   }, []);
 
-  // Group creneaux into weekly recurring slots
+  // Charger tarifs (settings/inscription), dégressivité famille
+  // (settings/degressivite) et forfaits existants (pour le rang enfant).
+  // Mêmes sources que l'espace admin → prix identiques garantis.
+  useEffect(() => {
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "settings", "inscription"));
+        if (snap.exists()) {
+          const d = snap.data() as any;
+          setTarifs({
+            forfait1x: d.forfait1x ?? TARIFS_DEFAUT.forfait1x,
+            forfait2x: d.forfait2x ?? TARIFS_DEFAUT.forfait2x,
+            forfait3x: d.forfait3x ?? TARIFS_DEFAUT.forfait3x,
+            adhesion1: d.adhesion1 ?? TARIFS_DEFAUT.adhesion1,
+            adhesion2: d.adhesion2 ?? TARIFS_DEFAUT.adhesion2,
+            adhesion3: d.adhesion3 ?? TARIFS_DEFAUT.adhesion3,
+            adhesion4plus: d.adhesion4plus ?? TARIFS_DEFAUT.adhesion4plus,
+            licenceMoins18: d.licenceMoins18 ?? TARIFS_DEFAUT.licenceMoins18,
+            licencePlus18: d.licencePlus18 ?? TARIFS_DEFAUT.licencePlus18,
+          });
+          if (d.totalSessionsSaison) setTotalSessionsSaison1x(d.totalSessionsSaison);
+        }
+      } catch (e) { console.warn("settings/inscription:", e); }
+      try {
+        const snap = await getDoc(doc(db, "settings", "degressivite"));
+        if (snap.exists() && snap.data().familyDiscount) {
+          setFamilyDiscountRules(snap.data().familyDiscount);
+        }
+      } catch (e) { console.warn("settings/degressivite:", e); }
+      try {
+        if (family?.id) {
+          const snap = await getDocs(query(collection(db, "forfaits"), where("familyId", "==", family.id)));
+          setAllForfaits(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        }
+      } catch (e) { console.warn("forfaits famille:", e); }
+    })();
+  }, [family?.id]);
+
+  // Group creneaux into weekly recurring slots.
+  // IMPORTANT : la clé inclut la SAISON (seasonOf) pour ne pas fusionner un
+  // même cours de deux saisons differentes (ex: Galop d'or mercredi 10h qui
+  // existe en 2025-2026 ET 2026-2027). Sans ça, totalSessions cumulait les
+  // occurrences des deux saisons -> comptage et prorata faux.
   const weeklySlots = useMemo(() => {
-    const map: Record<string, WeeklySlot> = {};
+    const map: Record<string, WeeklySlot & { season: number }> = {};
     for (const c of creneaux) {
       const d = new Date(c.date);
       const dow = (d.getDay() + 6) % 7;
-      const key = `${c.activityId}-${dow}-${c.startTime}`;
+      const season = seasonOf(c.date);
+      const key = `${c.activityId}-${dow}-${c.startTime}-S${season}`;
       if (!map[key]) {
         map[key] = {
           key, activityId: c.activityId, activityTitle: c.activityTitle,
@@ -108,6 +225,7 @@ export default function InscriptionAnnuellePage() {
           monitor: c.monitor, maxPlaces: c.maxPlaces,
           totalSessions: 0, avgEnrolled: 0, spotsAvailable: 0, creneauIds: [],
           priceTTC: c.priceTTC || ((c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100)),
+          season,
         };
       }
       map[key].totalSessions++;
@@ -124,45 +242,242 @@ export default function InscriptionAnnuellePage() {
   // Selected slots data
   const selectedSlotsData = weeklySlots.filter(s => selectedSlots.includes(s.key));
 
-  // Filtered slots for search
+  // Un slot est "déjà pris" si l'enfant sélectionné est déjà inscrit sur l'un
+  // de ses créneaux (en base) OU si ce slot est déjà dans le panier pour cet
+  // enfant. Évite la double inscription au MÊME cours (doublon créneau).
+  const childIdInPanierSlots = useMemo(() => {
+    const s = new Set<string>();
+    panier.forEach(p => { if (p.childId === selectedChild) p.slotKeys.forEach(k => s.add(k)); });
+    return s;
+  }, [panier, selectedChild]);
+  const slotDejaPris = (slot: any): boolean => {
+    if (!selectedChild) return false;
+    if (childIdInPanierSlots.has(slot.key)) return true;
+    return (slot.creneauIds || []).some((cid: string) => {
+      const cr = creneaux.find(c => c.id === cid);
+      return (cr?.enrolled || []).some((e: any) => e.childId === selectedChild);
+    });
+  };
+
+  // Filtered slots for search.
+  // BLOCAGE SAISON (étape 3) : on n'affiche QUE les créneaux dont la saison
+  // est >= MIN_SEASON_INSCRIPTION. Les inscriptions annuelles self-service
+  // sont fermées pour la saison en cours, ouvertes seulement à partir de
+  // septembre 2026. On regarde la date du 1er créneau de chaque slot.
   const filteredSlots = useMemo(() => {
-    if (!slotSearch.trim()) return weeklySlots;
+    const autorises = weeklySlots.filter(s => (s as any).season >= MIN_SEASON_INSCRIPTION && !slotDejaPris(s));
+    if (!slotSearch.trim()) return autorises;
     const q = slotSearch.toLowerCase();
-    return weeklySlots.filter(s =>
+    return autorises.filter(s =>
       s.activityTitle.toLowerCase().includes(q) ||
       s.dayLabel.toLowerCase().includes(q) ||
       s.startTime.includes(q) ||
       s.monitor.toLowerCase().includes(q)
     );
-  }, [weeklySlots, slotSearch]);
+  }, [weeklySlots, slotSearch, selectedChild, panier, creneaux]);
 
-  // How many slots required
-  const requiredSlots = forfaitType === "2x" ? 2 : 1;
+  // How many slots required (1x, 2x ou 3x)
+  const requiredSlots = forfaitType === "3x" ? 3 : forfaitType === "2x" ? 2 : 1;
   const slotsComplete = selectedSlots.length === requiredSlots;
+  const frequence: 1 | 2 | 3 = forfaitType === "3x" ? 3 : forfaitType === "2x" ? 2 : 1;
 
   // Toggle slot selection
   const toggleSlot = (key: string) => {
     setSelectedSlots(prev => {
-      if (prev.includes(key)) {
-        return prev.filter(k => k !== key);
-      }
-      // For 1x, replace; for 2x, add if under limit
+      if (prev.includes(key)) return prev.filter(k => k !== key);
       if (forfaitType === "1x") return [key];
-      if (prev.length >= 2) return prev; // Already have 2
+      if (prev.length >= requiredSlots) return prev; // limite atteinte
       return [...prev, key];
     });
   };
 
-  // Calculate prices for all selected slots
-  const slotsPrices = selectedSlotsData.map(slot => {
-    const price = slot.priceTTC || 0;
-    // If price > 100 it's likely an annual flat rate; otherwise multiply by sessions
-    const forfaitPrice = price > 100 ? price : price * slot.totalSessions;
-    return { slot, forfaitPrice, sessions: slot.totalSessions };
-  });
-  const totalForfait = slotsPrices.reduce((sum, s) => sum + s.forfaitPrice, 0);
-  const totalPrerequisites = LICENCE_FFE.price + ADHESION.price;
-  const grandTotal = mode === "annuel" ? totalPrerequisites + totalForfait : totalPrerequisites + (slotsPrices[0]?.slot.priceTTC || 0);
+  // ── Rang de l'enfant dans la famille pour la saison visée ──
+  // (= nb d'autres enfants déjà inscrits en forfait cette saison + 1)
+  // Même logique que l'admin (filtrage par saison).
+  const firstSlotDate = selectedSlotsData[0]
+    ? (creneaux.find(c => c.id === selectedSlotsData[0].creneauIds[0])?.date || todayLocalString())
+    : todayLocalString();
+  const targetSeason = selectedSlotsData[0] ? seasonOf(firstSlotDate) : MIN_SEASON_INSCRIPTION;
+  const rangEnfant = useMemo(() => {
+    if (!family?.id) return 1;
+    const enfants = new Set<string>();
+    // Enfants déjà inscrits en base pour cette saison
+    allForfaits.forEach((f: any) => {
+      if (!f.childId || f.childId === selectedChild) return;
+      const fSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
+      if (fSeason !== targetSeason) return;
+      enfants.add(f.childId);
+    });
+    // + enfants déjà placés dans le panier (hors enfant courant)
+    panier.forEach(p => {
+      if (p.childId !== selectedChild) enfants.add(p.childId);
+    });
+    return enfants.size + 1;
+  }, [allForfaits, selectedChild, targetSeason, family?.id, panier]);
+
+  // ── Détection des enfants DÉJÀ inscrits pour la saison d'inscription ──
+  // Empêche une double inscription (re-paiement licence/adhésion, rang faussé).
+  // On regarde la saison MIN_SEASON_INSCRIPTION (seule saison ouverte au
+  // self-service) : forfaits actifs en base + enfants déjà dans le panier.
+  const childIdsDejaInscrits = useMemo(() => {
+    const set = new Set<string>();
+    allForfaits.forEach((f: any) => {
+      if (!f.childId) return;
+      if (f.status && f.status !== "actif") return; // ignore les forfaits annulés
+      const fSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
+      if (fSeason !== MIN_SEASON_INSCRIPTION) return;
+      set.add(f.childId);
+    });
+    panier.forEach(p => set.add(p.childId));
+    return set;
+  }, [allForfaits, panier]);
+  const childDejaInscrit = (id: string) => childIdsDejaInscrits.has(id);
+
+  // ── Licence / adhésion déjà prises pour l'enfant courant cette saison ? ──
+  // Licence FFE et adhésion sont ANNUELLES : payées une seule fois par enfant
+  // et par saison. Si l'enfant a déjà un forfait actif portant la licence
+  // (resp. l'adhésion) sur la saison visée — en base OU dans le panier — on ne
+  // les re-facture pas sur une 2e inscription (2e cours). La saison de
+  // référence est celle réellement visée par le créneau choisi (targetSeason),
+  // pas la constante : robuste quelle que soit la date des créneaux.
+  const prereqDejaPris = useMemo(() => {
+    let licence = false, adhesion = false;
+    if (!selectedChild) return { licence, adhesion };
+    allForfaits.forEach((f: any) => {
+      if (f.childId !== selectedChild) return;
+      if (f.status && f.status !== "actif") return;
+      const fSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
+      if (fSeason !== targetSeason) return;
+      if (f.licenceFFE) licence = true;
+      if (f.adhesion) adhesion = true;
+    });
+    panier.forEach(p => {
+      if (p.childId !== selectedChild) return;
+      if ((p as any).seasonStartYear !== undefined && (p as any).seasonStartYear !== targetSeason) return;
+      if (p.avecLicence) licence = true;
+      if (p.avecAdhesion) adhesion = true;
+    });
+    return { licence, adhesion };
+  }, [allForfaits, panier, selectedChild, targetSeason]);
+
+  // ── Fréquence (cours/semaine) déjà inscrite pour l'enfant cette saison ──
+  // Somme des fréquences des forfaits actifs (base + panier) sur la saison
+  // visée. Sert à facturer une heure supplémentaire au DIFFÉRENTIEL (passage
+  // 1×→2× etc.) plutôt qu'à plein tarif, et à plafonner le choix à 3×/sem.
+  const frequenceDejaInscrite = useMemo(() => {
+    if (!selectedChild) return 0;
+    let total = 0;
+    allForfaits.forEach((f: any) => {
+      if (f.childId !== selectedChild) return;
+      if (f.status && f.status !== "actif") return;
+      const fSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
+      if (fSeason !== targetSeason) return;
+      total += Number(f.frequence) || 0;
+    });
+    panier.forEach(p => {
+      if (p.childId !== selectedChild) return;
+      if ((p as any).seasonStartYear !== undefined && (p as any).seasonStartYear !== targetSeason) return;
+      total += Number(p.frequence) || 0;
+    });
+    return total;
+  }, [allForfaits, panier, selectedChild, targetSeason]);
+
+  // Nombre d'heures/semaine encore disponibles (plafond 3×/sem cumulé).
+  const freqMaxAjoutable = Math.max(0, 3 - frequenceDejaInscrite);
+
+  // ── Séances restantes / total saison pour le prorata ──
+  // total saison = sessions du 1er créneau choisi (nb d'occurrences réelles
+  // du cours sur la saison). restantes = occurrences à partir d'aujourd'hui.
+  const sessionsParCreneau = selectedSlotsData[0]?.totalSessions || totalSessionsSaison1x;
+
+  // ── Calcul du prix via le helper centralisé (= identique à l'admin) ──
+  const licenceMoins18 = (() => {
+    const a = ageFromBirthDate((child as any)?.birthDate);
+    if (a === null) return true; // par défaut -18 (cas le plus courant en club)
+    return a < 18;
+  })();
+
+  // Facturation effective : si déjà prise cette saison, on ne refacture pas
+  // (le prérequis reste rempli, mais coût 0 sur ce 2e forfait).
+  const avecLicenceFacturee = licenceOK && !prereqDejaPris.licence;
+  const avecAdhesionFacturee = adhesionOK && !prereqDejaPris.adhesion;
+
+  const calcul = useMemo(() => calculerForfaitAnnuel({
+    frequence,
+    sessionsRestantes: sessionsParCreneau,
+    sessionsTotalSaison: sessionsParCreneau, // créneaux de septembre = saison pleine → prorata 100%
+    rangEnfant,
+    avecAdhesion: avecAdhesionFacturee,
+    avecLicence: avecLicenceFacturee,
+    licenceMoins18,
+    tarifs,
+    familyDiscountRules,
+    frequenceDejaInscrite,
+  }), [frequence, sessionsParCreneau, rangEnfant, avecAdhesionFacturee, avecLicenceFacturee, licenceMoins18, tarifs, familyDiscountRules, frequenceDejaInscrite]);
+
+  // Prix par créneau pour la création des items (réparti sur les créneaux)
+  const slotsPrices = selectedSlotsData.map(slot => ({
+    slot,
+    sessions: slot.totalSessions,
+    forfaitPrice: Math.round(calcul.prixForfaitNet / Math.max(1, selectedSlotsData.length)),
+  }));
+  const totalForfait = calcul.prixForfaitNet;
+  const grandTotal = mode === "annuel"
+    ? calcul.totalAnnuel
+    : (calcul.prixAdhesion + calcul.prixLicence + (slotsPrices[0]?.slot.priceTTC || 0));
+
+  // Total du panier (toutes les inscriptions cumulées)
+  const totalPanier = panier.reduce((s, p) => s + p.totalAnnuel, 0);
+  // Total à payer = panier validé + inscription en cours (récap actuel)
+  const totalAPayer = totalPanier + grandTotal;
+
+  // Réinitialise le parcours pour inscrire un nouvel enfant (sans toucher au panier)
+  const resetParcours = () => {
+    setSelectedChild("");
+    setSelectedSlots([]);
+    setForfaitType("1x");
+    setLicenceOK(false);
+    setAdhesionOK(false);
+    setSlotSearch("");
+    setStep(1);
+  };
+
+  // Ajoute l'inscription en cours au panier puis réinitialise pour un autre enfant
+  const ajouterAuPanier = () => {
+    if (!child || selectedSlotsData.length === 0) return;
+    const item: PanierItem = {
+      childId: selectedChild,
+      childName: (child as any).firstName || "—",
+      forfaitType,
+      frequence,
+      slotKeys: selectedSlots,
+      creneauIds: selectedSlotsData.flatMap(s => s.creneauIds),
+      slotsInfo: selectedSlotsData.map(s => ({
+        activityTitle: s.activityTitle, dayLabel: s.dayLabel,
+        startTime: s.startTime, endTime: s.endTime,
+        totalSessions: s.totalSessions, creneauIds: s.creneauIds,
+      })),
+      avecAdhesion: avecAdhesionFacturee,
+      avecLicence: avecLicenceFacturee,
+      licenceMoins18,
+      rangEnfant,
+      seasonStartYear: targetSeason,
+      frequenceDejaInscrite,
+      totalAnnuel: grandTotal,
+      detailLignes: calcul.detailLignes,
+      prixAdhesion: calcul.prixAdhesion,
+      prixLicence: calcul.prixLicence,
+      prixForfaitNet: calcul.prixForfaitNet,
+    };
+    setPanier(prev => [...prev, item]);
+    resetParcours();
+    toast(`${item.childName} ajouté(e) au panier`, "success");
+  };
+
+  // Retire un enfant du panier
+  const retirerDuPanier = (childId: string) => {
+    setPanier(prev => prev.filter(p => p.childId !== childId));
+  };
 
   // Steps for annual mode
   const steps = mode === "annuel"
@@ -244,13 +559,12 @@ export default function InscriptionAnnuellePage() {
           childName: (child as any).firstName || "—",
           type: "inscription_annuelle",
           forfaitType,
-          label: `Inscription annuelle ${forfaitType === "2x" ? "2×/sem" : "1×/sem"} — ${(child as any).firstName}`,
+          label: `Inscription annuelle ${forfaitType === "3x" ? "3×/sem" : forfaitType === "2x" ? "2×/sem" : "1×/sem"} — ${(child as any).firstName}`,
           items: [
-            { label: LICENCE_FFE.label, amount: LICENCE_FFE.price },
-            { label: ADHESION.label, amount: ADHESION.price },
+            ...calcul.detailLignes.map(l => ({ label: l.label, amount: l.montantTTC })),
             ...slotsPrices.map(sp => ({
               label: `${sp.slot.activityTitle} — ${sp.slot.dayLabel} ${sp.slot.startTime}–${sp.slot.endTime} (${sp.sessions} séances)`,
-              amount: sp.forfaitPrice,
+              amount: 0, // détail informatif ; le prix forfait est déjà dans detailLignes
             })),
           ],
           totalTTC: grandTotal,
@@ -274,14 +588,9 @@ export default function InscriptionAnnuellePage() {
             familyEmail: family.parentEmail,
             familyName: family.parentName,
             items: [
-              { name: LICENCE_FFE.label, description: LICENCE_FFE.description, priceInCents: LICENCE_FFE.price * 100, quantity: 1 },
-              { name: ADHESION.label, description: ADHESION.description, priceInCents: ADHESION.price * 100, quantity: 1 },
-              ...slotsPrices.map(sp => ({
-                name: `Forfait ${sp.slot.activityTitle}`,
-                description: `${sp.slot.dayLabel} ${sp.slot.startTime}–${sp.slot.endTime} · ${sp.sessions} séances`,
-                priceInCents: Math.round(sp.forfaitPrice * 100),
-                quantity: 1,
-              })),
+              ...(calcul.prixAdhesion > 0 ? [{ name: "Adhésion annuelle", description: `Adhésion club (enfant ${rangEnfant})`, priceInCents: Math.round(calcul.prixAdhesion * 100), quantity: 1 }] : []),
+              ...(calcul.prixLicence > 0 ? [{ name: "Licence FFE", description: licenceMoins18 ? "-18 ans" : "+18 ans", priceInCents: Math.round(calcul.prixLicence * 100), quantity: 1 }] : []),
+              { name: `Forfait ${frequence}×/semaine`, description: `${selectedSlotsData.map(s => `${s.dayLabel} ${s.startTime}`).join(", ")}`, priceInCents: Math.round(calcul.prixForfaitNet * 100), quantity: 1 },
             ],
             metadata: {
               type: "inscription_annuelle",
@@ -310,6 +619,294 @@ export default function InscriptionAnnuellePage() {
     }
   };
 
+  // ── Traite UN item (inscription d'un enfant) : créneaux + réservations +
+  // forfait. NE crée PAS le paiement (fait une seule fois pour tout le panier).
+  // Traite l'inscription d'UN enfant.
+  //  - payMethod "cb"  → place confirmée immédiatement, forfait créé tout de suite.
+  //  - payMethod différé (cheque/especes) → place tenue en "pending", réservation
+  //    "pending_validation", AUCUN forfait créé côté client (interdit par les règles
+  //    Firestore : forfaits = write admin only). Le payload du forfait est retourné
+  //    pour être recréé par l'admin au moment de la validation de la déclaration.
+  // Retourne les éléments à confirmer/annuler ultérieurement (mode différé).
+  const enrollOneItem = async (
+    item: PanierItem,
+    payMethod: "cb" | "cheque" | "especes" = "cb",
+  ): Promise<{ pendingEnrollments: { creneauId: string; childId: string }[]; reservationIds: string[]; forfaitPayload: any | null }> => {
+    if (!user || !family) return { pendingEnrollments: [], reservationIds: [], forfaitPayload: null };
+    const deferred = payMethod !== "cb";
+    const pendingEnrollments: { creneauId: string; childId: string }[] = [];
+    const reservationIds: string[] = [];
+
+    // 1. Inscrire l'enfant dans tous les créneaux de ses slots
+    for (const creneauId of item.creneauIds) {
+      const creneau = creneaux.find(c => c.id === creneauId);
+      if (!creneau) continue;
+      if ((creneau.enrolled || []).some((e: any) => e.childId === item.childId)) continue;
+      const newEnrolled = [...(creneau.enrolled || []), {
+        childId: item.childId,
+        childName: item.childName,
+        familyId: user.uid,
+        familyName: family.parentName || "—",
+        enrolledAt: new Date().toISOString(),
+        paymentSource: "forfait",
+        forfaitId: null,
+        // Place tenue mais NON confirmée tant que l'admin n'a pas validé le règlement.
+        ...(deferred ? { pending: true, paymentMethod: payMethod } : {}),
+      }];
+      await updateDoc(doc(db, "creneaux", creneauId), {
+        enrolled: newEnrolled,
+        enrolledCount: newEnrolled.length,
+      });
+      if (deferred) pendingEnrollments.push({ creneauId, childId: item.childId });
+    }
+
+    // 2. Réservations (une par slot)
+    for (const s of item.slotsInfo) {
+      const resRef = await addDoc(collection(db, "reservations"), {
+        familyId: user.uid,
+        familyName: family.parentName,
+        childId: item.childId,
+        childName: item.childName,
+        activityTitle: s.activityTitle,
+        activityType: "cours",
+        type: "annual",
+        forfaitType: item.forfaitType,
+        dayLabel: s.dayLabel,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        totalSessions: s.totalSessions,
+        creneauIds: s.creneauIds,
+        status: deferred ? "pending_validation" : "confirmed",
+        ...(deferred ? { paymentMethod: payMethod } : {}),
+        createdAt: serverTimestamp(),
+      });
+      reservationIds.push(resRef.id);
+    }
+
+    // 3. Forfait (1 doc pour le créneau principal, comme l'admin)
+    const principal = item.slotsInfo[0];
+    const forfaitPayload = principal ? {
+      familyId: user.uid,
+      familyName: family.parentName || "—",
+      childId: item.childId,
+      childName: item.childName,
+      slotKey: `${principal.activityTitle} — ${principal.dayLabel} ${principal.startTime}`,
+      activityTitle: principal.activityTitle,
+      dayLabel: principal.dayLabel,
+      startTime: principal.startTime,
+      endTime: principal.endTime,
+      totalSessions: principal.totalSessions,
+      attendedSessions: 0,
+      licenceFFE: item.avecLicence,
+      licenceType: item.licenceMoins18 ? "moins18" : "plus18",
+      adhesion: item.avecAdhesion,
+      forfaitPriceTTC: item.totalAnnuel,
+      totalPaidTTC: 0,
+      paymentPlan,
+      status: "actif",
+      frequence: item.frequence,
+      // Forfait "complément" : heures ajoutées à un forfait existant la même
+      // saison (facturé au différentiel). frequenceDejaInscrite = heures déjà
+      // prises avant celui-ci ; la fréquence cumulée réelle de l'enfant est
+      // frequenceDejaInscrite + frequence.
+      ...((item.frequenceDejaInscrite || 0) > 0 ? {
+        complement: true,
+        frequenceDejaInscrite: item.frequenceDejaInscrite,
+      } : {}),
+      seasonStartYear: seasonOf(creneaux.find(c => c.id === principal.creneauIds[0])?.date || todayLocalString()),
+      source: "client",
+    } : null;
+
+    // Le forfait n'est PLUS créé côté client (les règles Firestore réservent
+    // l'écriture des forfaits au staff). Le payload est retourné puis :
+    //  - CB      → stocké sur le paiement, créé par le webhook/status CAWL (admin SDK)
+    //  - différé → stocké sur la déclaration, créé par l'admin à la validation
+    return { pendingEnrollments, reservationIds, forfaitPayload };
+  };
+
+  // ── Valide TOUT le panier (+ l'inscription en cours si complète) ──
+  // Crée toutes les inscriptions puis UN SEUL paiement groupé + 1 checkout CAWL.
+  const handleEnrollAll = async () => {
+    if (!user || !family) return;
+    // Construire la liste finale : panier + inscription en cours (si valide)
+    const items: PanierItem[] = [...panier];
+    if (child && selectedSlotsData.length > 0) {
+      items.push({
+        childId: selectedChild,
+        childName: (child as any).firstName || "—",
+        forfaitType, frequence,
+        slotKeys: selectedSlots,
+        creneauIds: selectedSlotsData.flatMap(s => s.creneauIds),
+        slotsInfo: selectedSlotsData.map(s => ({
+          activityTitle: s.activityTitle, dayLabel: s.dayLabel,
+          startTime: s.startTime, endTime: s.endTime,
+          totalSessions: s.totalSessions, creneauIds: s.creneauIds,
+        })),
+        avecAdhesion: avecAdhesionFacturee, avecLicence: avecLicenceFacturee, licenceMoins18,
+        rangEnfant,
+        seasonStartYear: targetSeason,
+        frequenceDejaInscrite,
+        totalAnnuel: grandTotal,
+        detailLignes: calcul.detailLignes,
+        prixAdhesion: calcul.prixAdhesion,
+        prixLicence: calcul.prixLicence,
+        prixForfaitNet: calcul.prixForfaitNet,
+      });
+    }
+    if (items.length === 0) return;
+    setSubmitting(true);
+    try {
+      const deferred = moyenPaiement !== "cb";
+
+      // 1. Créer toutes les inscriptions (créneaux + réservations [+ forfaits si CB])
+      const allPending: { creneauId: string; childId: string }[] = [];
+      const allReservationIds: string[] = [];
+      const allForfaitPayloads: any[] = [];
+      for (const it of items) {
+        const r = await enrollOneItem(it, moyenPaiement);
+        if (r.forfaitPayload) allForfaitPayloads.push(r.forfaitPayload);
+        if (deferred) {
+          allPending.push(...r.pendingEnrollments);
+          allReservationIds.push(...r.reservationIds);
+        }
+      }
+
+      // 2. UN SEUL paiement groupé pour toute la fratrie (toujours créé en "pending")
+      const totalGroupe = items.reduce((s, it) => s + it.totalAnnuel, 0);
+      // Items à la forme attendue par l'admin (TabImpayes, retrait d'item,
+      // facture PDF) : childName / activityTitle / priceTTC. On garde label/amount
+      // en plus pour rétro-compatibilité avec d'éventuels autres lecteurs.
+      const paymentItems = items.flatMap(it =>
+        it.detailLignes.map(l => ({
+          childId: it.childId,
+          childName: it.childName,
+          activityTitle: l.label,
+          priceTTC: l.montantTTC,
+          priceHT: Math.round((l.montantTTC / 1.055) * 100) / 100,
+          tva: 5.5,
+          label: `${it.childName} — ${l.label}`,
+          amount: l.montantTTC,
+        }))
+      );
+      const payDoc = await addDoc(collection(db, "payments"), {
+        familyId: user.uid,
+        familyName: family.parentName,
+        type: "inscription_annuelle",
+        label: `Inscription annuelle — ${items.map(it => it.childName).join(", ")}`,
+        items: paymentItems,
+        totalTTC: totalGroupe,
+        paidAmount: 0,
+        paymentPlan,
+        paymentMode: deferred ? moyenPaiement : "cb",
+        status: "pending",
+        skipPayment: true,
+        source: "client",
+        nbEnfants: items.length,
+        ...(deferred ? { awaitingValidation: true } : { forfaitPayloads: allForfaitPayloads }),
+        createdAt: serverTimestamp(),
+      });
+
+      // 3a. Chèque / Espèces → déclaration à valider par l'admin (PAS de CAWL).
+      //     La/les place(s) restent "pending" jusqu'à la confirmation admin.
+      if (deferred) {
+        const names = items.map(it => it.childName).join(", ");
+        const modeLabel = moyenPaiement === "cheque" ? "chèque" : "espèces";
+        await addDoc(collection(db, "payment_declarations"), {
+          paymentId: payDoc.id,
+          familyId: user.uid,
+          familyName: family.parentName,
+          familyEmail: family.parentEmail || user.email || "",
+          montant: totalGroupe,
+          mode: moyenPaiement,
+          note: "",
+          activityTitle: `Inscription annuelle — ${names}`,
+          status: "pending_confirmation",
+          // Marqueurs spécifiques à l'inscription annuelle : permettent à l'admin
+          // de finaliser l'inscription (lever le pending, confirmer la résa, créer
+          // le forfait) lors de la confirmation de la déclaration.
+          type: "inscription_annuelle",
+          paymentPlan,
+          pendingEnrollments: allPending,
+          reservationIds: allReservationIds,
+          forfaitPayloads: allForfaitPayloads,
+          createdAt: serverTimestamp(),
+        });
+        // Email admin (non bloquant)
+        authFetch("/api/send-email", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: "ceagon50@gmail.com",
+            subject: `Inscription annuelle (${modeLabel}) à valider — ${family.parentName}`,
+            context: "espace_cavalier_declaration",
+            familyId: user.uid,
+            html: `<p><strong>${family.parentName}</strong> a inscrit ${names} à l'année et déclare un règlement de <strong>${totalGroupe.toFixed(2)}€</strong> par ${modeLabel} (${paymentPlan}).</p><p>👉 À valider dans <strong>Paiements → Déclarations</strong> pour confirmer la/les place(s).</p>`,
+          }),
+        }).catch(() => {});
+        setDeclaredSuccess({ mode: moyenPaiement, total: totalGroupe, names });
+        setSubmitting(false);
+        return;
+      }
+
+      // 3b. CB → UN SEUL checkout CAWL groupé
+      try {
+        const cawlItems = items.flatMap(it => [
+          ...(it.prixAdhesion > 0 ? [{ name: `Adhésion — ${it.childName}`, description: `Enfant ${it.rangEnfant}`, priceInCents: Math.round(it.prixAdhesion * 100), quantity: 1 }] : []),
+          ...(it.prixLicence > 0 ? [{ name: `Licence FFE — ${it.childName}`, description: it.licenceMoins18 ? "-18 ans" : "+18 ans", priceInCents: Math.round(it.prixLicence * 100), quantity: 1 }] : []),
+          { name: `Forfait ${it.frequence}×/sem — ${it.childName}`, description: it.slotsInfo.map(s => `${s.dayLabel} ${s.startTime}`).join(", "), priceInCents: Math.round(it.prixForfaitNet * 100), quantity: 1 },
+        ]);
+        const res = await authFetch("/api/cawl/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            paymentId: payDoc.id,
+            familyId: user.uid,
+            familyEmail: family.parentEmail,
+            familyName: family.parentName,
+            items: cawlItems,
+            metadata: { type: "inscription_annuelle_groupee", nbEnfants: items.length },
+          }),
+        });
+        const data = await res.json();
+        if (data.url) { window.location.href = data.url; return; }
+      } catch (cawlErr) {
+        console.error("CAWL checkout groupé (non-bloquant):", cawlErr);
+      }
+      window.location.href = "/espace-cavalier/reservations?success=true";
+    } catch (e) {
+      console.error("Erreur inscription groupée:", e);
+      toast("Erreur lors de l'inscription. Veuillez réessayer.", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (declaredSuccess) {
+    const modeLabel = declaredSuccess.mode === "cheque" ? "chèque" : "espèces";
+    return (
+      <div className="max-w-lg mx-auto">
+        <Card padding="lg" className="text-center">
+          <div className="text-5xl mb-3">📨</div>
+          <h2 className="font-display text-xl font-bold text-blue-800 mb-2">Inscription enregistrée</h2>
+          <p className="font-body text-sm text-gray-600 mb-1">
+            {declaredSuccess.names} — <strong>{declaredSuccess.total.toFixed(2)}€</strong> par {modeLabel}.
+          </p>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 my-4 text-left">
+            <p className="font-body text-sm text-amber-800 font-semibold mb-1">⏳ En attente de validation</p>
+            <p className="font-body text-xs text-amber-700">
+              La/les place(s) sont réservées provisoirement. Le centre équestre confirmera l&apos;inscription
+              dès réception de votre règlement en {modeLabel}. Vous recevrez un email de confirmation.
+            </p>
+          </div>
+          <a href="/espace-cavalier/reservations" className="no-underline">
+            <button className="w-full py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 border-none cursor-pointer hover:bg-blue-600">
+              Voir mes inscriptions
+            </button>
+          </a>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div>
       <h1 className="font-display text-2xl font-bold text-blue-800 mb-2">Inscription aux cours</h1>
@@ -333,6 +930,18 @@ export default function InscriptionAnnuellePage() {
           {step === 1 && (
             <Card padding="md">
               <h2 className="font-body text-base font-semibold text-blue-800 mb-2">Quel cavalier inscrivez-vous ?</h2>
+              {/* Bandeau réduction 1ère inscription : visible UNIQUEMENT si la
+                  famille n'a aucun forfait existant (vraie première inscription).
+                  Réduction non automatique : invite à contacter le club. */}
+              {allForfaits.length === 0 && (
+                <div className="mb-4 p-4 rounded-xl bg-green-50 border border-green-200">
+                  <div className="font-body text-sm font-semibold text-green-800 mb-1">🎁 Première inscription ?</div>
+                  <p className="font-body text-xs text-green-700">
+                    Une réduction est prévue pour votre première inscription au club.
+                    Contactez-nous pour en savoir plus : <a href="mailto:ceagon@orange.fr" className="underline font-semibold">ceagon@orange.fr</a>.
+                  </p>
+                </div>
+              )}
               {children.length === 0 ? (
                 <div className="text-center py-8">
                   <span className="text-4xl block mb-3">👨‍👩‍👧‍👦</span>
@@ -341,23 +950,31 @@ export default function InscriptionAnnuellePage() {
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {children.map((c: any) => (
+                  {children.map((c: any) => {
+                    const deja = childDejaInscrit(c.id);
+                    return (
                     <button key={c.id} onClick={() => setSelectedChild(c.id)}
-                      className={`flex items-center justify-between px-5 py-4 rounded-xl border text-left cursor-pointer transition-all
+                      className={`flex items-center justify-between px-5 py-4 rounded-xl border text-left transition-all cursor-pointer
                         ${selectedChild === c.id ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white hover:border-gray-300"}`}>
                       <div className="flex items-center gap-3">
                         <span className="text-2xl">🧒</span>
                         <div>
                           <div className="font-body text-sm font-semibold text-blue-800">{c.firstName}</div>
                           <div className="font-body text-xs text-gray-400">
-                            {c.birthDate ? `${Math.floor((Date.now() - new Date(c.birthDate).getTime()) / 31557600000)} ans · ` : ""}
+                            {(() => {
+                              const a = ageFromBirthDate(c.birthDate);
+                              return a !== null ? `${a} ans · ` : "";
+                            })()}
                             {c.galopLevel ? `Galop ${c.galopLevel}` : "Débutant"}
                           </div>
                         </div>
                       </div>
-                      {selectedChild === c.id && <Check size={20} className="text-blue-500" />}
+                      {deja ? (
+                        <span className="font-body text-[11px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-2 py-1 rounded-full">Déjà inscrit · 2e cours possible</span>
+                      ) : selectedChild === c.id && <Check size={20} className="text-blue-500" />}
                     </button>
-                  ))}
+                    );
+                  })}
                   <button onClick={() => selectedChild && setStep(mode === "annuel" ? 2 : 2)} disabled={!selectedChild}
                     className={`mt-3 w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer
                       ${selectedChild ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-400"}`}>
@@ -374,84 +991,150 @@ export default function InscriptionAnnuellePage() {
               <h2 className="font-body text-base font-semibold text-blue-800 mb-2">Prérequis obligatoires</h2>
               <p className="font-body text-xs text-gray-400 mb-4">Obligatoires pour pratiquer en club.</p>
               <div className="flex flex-col gap-3 mb-6">
-                <label className={`flex items-center justify-between px-5 py-4 rounded-xl border cursor-pointer ${licenceOK ? "border-green-500 bg-green-50" : "border-gray-200"}`}>
-                  <div className="flex items-center gap-3">
-                    <input type="checkbox" checked={licenceOK} onChange={e => setLicenceOK(e.target.checked)} className="accent-green-500 w-5 h-5" />
-                    <div><div className="font-body text-sm font-semibold text-blue-800">{LICENCE_FFE.label}</div><div className="font-body text-xs text-gray-400">{LICENCE_FFE.description}</div></div>
+                {prereqDejaPris.licence ? (
+                  <div className="flex items-center justify-between px-5 py-4 rounded-xl border border-green-200 bg-green-50">
+                    <div className="flex items-center gap-3">
+                      <Check size={20} className="text-green-600" />
+                      <div><div className="font-body text-sm font-semibold text-blue-800">Licence FFE</div><div className="font-body text-xs text-green-600">Déjà prise cette saison — non refacturée</div></div>
+                    </div>
+                    <span className="font-body text-xs font-semibold text-green-600">Incluse</span>
                   </div>
-                  <span className="font-body text-base font-bold text-blue-500">{LICENCE_FFE.price}€</span>
-                </label>
-                <label className={`flex items-center justify-between px-5 py-4 rounded-xl border cursor-pointer ${adhesionOK ? "border-green-500 bg-green-50" : "border-gray-200"}`}>
-                  <div className="flex items-center gap-3">
-                    <input type="checkbox" checked={adhesionOK} onChange={e => setAdhesionOK(e.target.checked)} className="accent-green-500 w-5 h-5" />
-                    <div><div className="font-body text-sm font-semibold text-blue-800">{ADHESION.label}</div><div className="font-body text-xs text-gray-400">{ADHESION.description}</div></div>
+                ) : (
+                  <label className={`flex items-center justify-between px-5 py-4 rounded-xl border cursor-pointer ${licenceOK ? "border-green-500 bg-green-50" : "border-gray-200"}`}>
+                    <div className="flex items-center gap-3">
+                      <input type="checkbox" checked={licenceOK} onChange={e => setLicenceOK(e.target.checked)} className="accent-green-500 w-5 h-5" />
+                      <div><div className="font-body text-sm font-semibold text-blue-800">Licence FFE</div><div className="font-body text-xs text-gray-400">Obligatoire pour pratiquer en club ({licenceMoins18 ? "-18 ans" : "+18 ans"})</div></div>
+                    </div>
+                    <span className="font-body text-base font-bold text-blue-500">{licenceMoins18 ? tarifs.licenceMoins18 : tarifs.licencePlus18}€</span>
+                  </label>
+                )}
+                {prereqDejaPris.adhesion ? (
+                  <div className="flex items-center justify-between px-5 py-4 rounded-xl border border-green-200 bg-green-50">
+                    <div className="flex items-center gap-3">
+                      <Check size={20} className="text-green-600" />
+                      <div><div className="font-body text-sm font-semibold text-blue-800">Adhésion au club</div><div className="font-body text-xs text-green-600">Déjà prise cette saison — non refacturée</div></div>
+                    </div>
+                    <span className="font-body text-xs font-semibold text-green-600">Incluse</span>
                   </div>
-                  <span className="font-body text-base font-bold text-blue-500">{ADHESION.price}€</span>
-                </label>
+                ) : (
+                  <label className={`flex items-center justify-between px-5 py-4 rounded-xl border cursor-pointer ${adhesionOK ? "border-green-500 bg-green-50" : "border-gray-200"}`}>
+                    <div className="flex items-center gap-3">
+                      <input type="checkbox" checked={adhesionOK} onChange={e => setAdhesionOK(e.target.checked)} className="accent-green-500 w-5 h-5" />
+                      <div><div className="font-body text-sm font-semibold text-blue-800">Adhésion au club</div><div className="font-body text-xs text-gray-400">Cotisation annuelle{rangEnfant > 1 ? ` (${rangEnfant}e enfant — tarif réduit)` : ""}</div></div>
+                    </div>
+                    <span className="font-body text-base font-bold text-blue-500">{calcul.prixAdhesion}€</span>
+                  </label>
+                )}
+                {(prereqDejaPris.licence || prereqDejaPris.adhesion) && (
+                  <p className="font-body text-xs text-blue-600">ℹ️ Cet enfant est déjà inscrit cette saison : la licence et/ou l&apos;adhésion ne sont pas refacturées sur ce 2e cours.</p>
+                )}
               </div>
               <div className="flex gap-3">
                 <button onClick={() => setStep(1)} className="px-6 py-3 rounded-xl font-body text-sm text-gray-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
-                <button onClick={() => setStep(3)} disabled={!licenceOK || !adhesionOK}
-                  className={`flex-1 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${licenceOK && adhesionOK ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-400"}`}>
-                  Continuer <ChevronRight size={16} className="inline ml-1" />
-                </button>
+                {(() => {
+                  const licencePrereqOK = prereqDejaPris.licence || licenceOK;
+                  const adhesionPrereqOK = prereqDejaPris.adhesion || adhesionOK;
+                  const prereqOK = licencePrereqOK && adhesionPrereqOK;
+                  return (
+                    <button onClick={() => setStep(3)} disabled={!prereqOK}
+                      className={`flex-1 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${prereqOK ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-400"}`}>
+                      Continuer <ChevronRight size={16} className="inline ml-1" />
+                    </button>
+                  );
+                })()}
               </div>
             </Card>
           )}
 
           {/* ─── Step 3 (annuel): Choose forfait type ─── */}
-          {step === 3 && mode === "annuel" && (
+          {step === 3 && mode === "annuel" && (() => {
+            const ajout = frequenceDejaInscrite > 0;
+            // Tarif différentiel affiché pour un ajout de n heure(s).
+            const tarifFreq = (f: number) => f >= 3 ? tarifs.forfait3x : f === 2 ? tarifs.forfait2x : tarifs.forfait1x;
+            const prixAffiche = (nNouveau: number) => {
+              if (!ajout) return tarifFreq(nNouveau);
+              const cumul = Math.min(3, frequenceDejaInscrite + nNouveau);
+              return Math.max(0, tarifFreq(cumul) - tarifFreq(frequenceDejaInscrite));
+            };
+            const options = ([
+              { type: "1x", freq: 1, emoji: "🐴", label: ajout ? "+1 cours" : "1 cours" },
+              { type: "2x", freq: 2, emoji: "🏇", label: ajout ? "+2 cours" : "2 cours" },
+              { type: "3x", freq: 3, emoji: "🏆", label: ajout ? "+3 cours" : "3 cours" },
+            ] as const).filter(o => o.freq <= freqMaxAjoutable);
+            return (
             <Card padding="md">
               <h2 className="font-body text-base font-semibold text-blue-800 mb-2">Type de forfait</h2>
-              <p className="font-body text-xs text-gray-400 mb-4">Combien de cours par semaine ?</p>
-              <div className="flex gap-3 mb-6">
-                <button onClick={() => { setForfaitType("1x"); setSelectedSlots([]); }}
-                  className={`flex-1 py-5 rounded-xl border font-body text-sm font-semibold cursor-pointer transition-all text-center
-                    ${forfaitType === "1x" ? "border-blue-500 bg-blue-50 text-blue-500" : "border-gray-200 bg-white text-gray-500"}`}>
-                  <span className="text-2xl block mb-1">🐴</span>
-                  Forfait Loisir
-                  <div className="font-body text-xs font-normal text-gray-400 mt-1">1 cours / semaine</div>
-                </button>
-                <button onClick={() => { setForfaitType("2x"); setSelectedSlots([]); }}
-                  className={`flex-1 py-5 rounded-xl border font-body text-sm font-semibold cursor-pointer transition-all text-center
-                    ${forfaitType === "2x" ? "border-blue-500 bg-blue-50 text-blue-500" : "border-gray-200 bg-white text-gray-500"}`}>
-                  <span className="text-2xl block mb-1">🏇</span>
-                  Forfait Compétition
-                  <div className="font-body text-xs font-normal text-gray-400 mt-1">2 cours / semaine</div>
-                </button>
-              </div>
+              <p className="font-body text-xs text-gray-400 mb-4">
+                {ajout ? "Combien d'heures ajouter par semaine ?" : "Combien de cours par semaine ?"}
+              </p>
+              {ajout && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                  <p className="font-body text-xs text-blue-800">
+                    🏇 Cet enfant a déjà <strong>{frequenceDejaInscrite}×/semaine</strong> cette saison. Les heures ajoutées sont facturées au <strong>tarif dégressif</strong> (différence vers le forfait {Math.min(3, frequenceDejaInscrite + 1)}×), pas à plein tarif.
+                  </p>
+                </div>
+              )}
+              {freqMaxAjoutable === 0 ? (
+                <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                  <p className="font-body text-sm text-amber-800">Cet enfant est déjà inscrit au maximum (3×/semaine) cette saison.</p>
+                </div>
+              ) : (
+                <div className={`grid gap-3 mb-6 ${options.length === 3 ? "grid-cols-3" : options.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}>
+                  {options.map(o => (
+                    <button key={o.type} onClick={() => { setForfaitType(o.type); setSelectedSlots([]); }}
+                      className={`py-5 rounded-xl border font-body text-sm font-semibold cursor-pointer transition-all text-center
+                        ${forfaitType === o.type ? "border-blue-500 bg-blue-50 text-blue-500" : "border-gray-200 bg-white text-gray-500"}`}>
+                      <span className="text-2xl block mb-1">{o.emoji}</span>
+                      {o.label}
+                      <div className="font-body text-xs font-normal text-gray-400 mt-1">{prixAffiche(o.freq)}€/an</div>
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex gap-3">
                 <button onClick={() => setStep(2)} className="px-6 py-3 rounded-xl font-body text-sm text-gray-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
-                <button onClick={() => setStep(4)}
-                  className="flex-1 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer bg-blue-500 text-white">
+                <button onClick={() => setStep(4)} disabled={freqMaxAjoutable === 0}
+                  className={`flex-1 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${freqMaxAjoutable === 0 ? "bg-gray-200 text-gray-400" : "bg-blue-500 text-white"}`}>
                   Continuer <ChevronRight size={16} className="inline ml-1" />
                 </button>
               </div>
             </Card>
-          )}
+            );
+          })()}
 
           {/* ─── Step 4 (annuel): Choose slot(s) ─── */}
           {step === 4 && mode === "annuel" && (
             <Card padding="md">
               <h2 className="font-body text-base font-semibold text-blue-800 mb-2">
-                {forfaitType === "2x" ? "Choisir vos 2 créneaux hebdomadaires" : "Choisir votre créneau hebdomadaire"}
+                {requiredSlots > 1 ? `Choisir vos ${requiredSlots} créneaux hebdomadaires` : "Choisir votre créneau hebdomadaire"}
               </h2>
               <p className="font-body text-xs text-gray-400 mb-4">
-                {forfaitType === "2x"
-                  ? "Sélectionnez 2 créneaux sur des jours différents. Ils se répètent chaque semaine."
+                {requiredSlots > 1
+                  ? `Sélectionnez ${requiredSlots} créneaux. Ils se répètent chaque semaine.`
                   : "Ce cours se répète chaque semaine pendant la saison (hors vacances)."}
               </p>
 
-              {/* Selection counter for 2x */}
-              {forfaitType === "2x" && (
+              {/* Selection counter for 2x/3x */}
+              {requiredSlots > 1 && (
                 <div className="flex items-center gap-2 mb-4 p-3 bg-blue-50 rounded-xl">
                   <Calculator size={16} className="text-blue-500" />
                   <span className="font-body text-sm text-blue-800">
-                    {selectedSlots.length}/2 créneaux sélectionnés
+                    {selectedSlots.length}/{requiredSlots} créneaux sélectionnés
                   </span>
-                  {selectedSlots.length === 2 && <Check size={16} className="text-green-500 ml-auto" />}
+                  {selectedSlots.length === requiredSlots && <Check size={16} className="text-green-500 ml-auto" />}
                 </div>
               )}
+
+              {/* Rappel du tarif forfait (prix global, pas par créneau) */}
+              <div className="mb-4 p-3 bg-amber-50 rounded-xl border border-amber-200">
+                <span className="font-body text-sm text-amber-800">
+                  {frequenceDejaInscrite > 0 ? (
+                    <>💡 Heure(s) supplémentaire(s) (passage {frequenceDejaInscrite}×→{Math.min(3, frequenceDejaInscrite + frequence)}×/sem) : <strong>{calcul.prixForfaitAnnuelPlein}€/an</strong>{calcul.familyDiscountAmount > 0 && ` (− ${calcul.familyDiscountAmount.toFixed(0)}€ réduction famille)`}. Tarif dégressif : seule la différence vers le forfait supérieur est facturée.</>
+                  ) : (
+                    <>💡 Forfait {frequence}×/semaine : <strong>{calcul.prixForfaitAnnuelPlein}€/an</strong>{calcul.familyDiscountAmount > 0 && ` (− ${calcul.familyDiscountAmount.toFixed(0)}€ réduction famille)`}. Le prix ne dépend pas du créneau choisi mais du nombre de cours par semaine.</>
+                  )}
+                </span>
+              </div>
 
               {/* Search bar */}
               <div className="relative mb-4">
@@ -498,9 +1181,6 @@ export default function InscriptionAnnuellePage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="font-body text-sm font-semibold text-blue-500">
-                            {slot.priceTTC > 100 ? `${slot.priceTTC.toFixed(0)}€` : `${(slot.priceTTC * slot.totalSessions).toFixed(0)}€`}
-                          </span>
                           {isSelected && (
                             <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
                               <Check size={14} className="text-white" />
@@ -566,6 +1246,39 @@ export default function InscriptionAnnuellePage() {
             <Card padding="md">
               <h2 className="font-body text-base font-semibold text-blue-800 mb-4">Récapitulatif</h2>
 
+              {/* Panier : enfants déjà ajoutés (en attente de paiement groupé) */}
+              {panier.length > 0 && (
+                <div className="mb-4 p-4 rounded-xl bg-green-50 border border-green-200">
+                  <div className="font-body text-sm font-semibold text-green-800 mb-2">
+                    👨‍👩‍👧‍👦 Déjà au panier ({panier.length} enfant{panier.length > 1 ? "s" : ""})
+                  </div>
+                  {panier.map((p) => (
+                    <div key={p.childId} className="flex items-center justify-between py-1.5 border-t border-green-200/60 first:border-t-0">
+                      <div>
+                        <span className="font-body text-sm font-semibold text-green-900">{p.childName}</span>
+                        <span className="font-body text-xs text-green-700 ml-2">Forfait {p.frequence}×/sem</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="font-body text-sm font-semibold text-green-800">{p.totalAnnuel.toFixed(2)}€</span>
+                        <button onClick={() => retirerDuPanier(p.childId)}
+                          className="font-body text-xs text-red-500 bg-white border border-red-200 px-2 py-1 rounded-lg cursor-pointer hover:bg-red-50">
+                          Retirer
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex justify-between pt-2 mt-1 border-t border-green-300">
+                    <span className="font-body text-xs text-green-700">Sous-total panier</span>
+                    <span className="font-body text-sm font-bold text-green-800">{totalPanier.toFixed(2)}€</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Titre de l'inscription en cours (l'enfant qu'on configure là) */}
+              {panier.length > 0 && (
+                <div className="font-body text-xs text-gray-400 mb-2 uppercase tracking-wide">Inscription en cours</div>
+              )}
+
               <div className="bg-blue-50/50 rounded-xl p-4 mb-5 flex flex-col gap-3">
                 {/* Child */}
                 <div className="flex justify-between">
@@ -577,26 +1290,48 @@ export default function InscriptionAnnuellePage() {
                 {mode === "annuel" && (
                   <div className="flex justify-between">
                     <span className="font-body text-sm text-gray-500">Forfait</span>
-                    <Badge color="blue">{forfaitType === "2x" ? "Compétition (2×/sem)" : "Loisir (1×/sem)"}</Badge>
+                    <Badge color="blue">{forfaitType === "3x" ? "3 cours/sem" : forfaitType === "2x" ? "2 cours/sem" : "1 cours/sem"}</Badge>
                   </div>
                 )}
 
-                {/* Prerequisites */}
-                {mode === "annuel" && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="font-body text-sm text-gray-500">{LICENCE_FFE.label}</span>
-                      <span className="font-body text-sm text-blue-500">{LICENCE_FFE.price}€</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="font-body text-sm text-gray-500">{ADHESION.label}</span>
-                      <span className="font-body text-sm text-blue-500">{ADHESION.price}€</span>
-                    </div>
-                  </>
-                )}
+                {/* Détail tarifaire (issu du calcul centralisé = identique admin) */}
+                {mode === "annuel" && calcul.detailLignes.map((l, i) => (
+                  <div key={i} className="flex justify-between">
+                    <span className="font-body text-sm text-gray-500">{l.label}</span>
+                    <span className={`font-body text-sm ${l.montantTTC < 0 ? "text-green-600" : "text-blue-500"}`}>
+                      {l.montantTTC < 0 ? "" : ""}{l.montantTTC.toFixed(2)}€
+                    </span>
+                  </div>
+                ))}
 
-                {/* Slots */}
-                {slotsPrices.map((sp, i) => (
+                {/* Créneaux choisis (informatif) */}
+                {mode === "annuel" && selectedSlotsData.map((s, i) => (
+                  <div key={i} className="flex justify-between items-start pt-2 border-t border-blue-500/8">
+                    <div>
+                      <span className="font-body text-sm font-semibold text-blue-800">Créneau {i + 1}</span>
+                      <div className="font-body text-xs text-gray-400">
+                        {s.activityTitle} — {s.dayLabel} {s.startTime}–{s.endTime}
+                      </div>
+                      <div className="font-body text-xs text-blue-500">{s.totalSessions} séances</div>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Mode ponctuel : afficher le créneau unique avec son prix */}
+                {mode === "ponctuel" && slotsPrices.map((sp, i) => (
+                  <div key={i} className="flex justify-between items-start pt-2 border-t border-blue-500/8">
+                    <div>
+                      <span className="font-body text-sm font-semibold text-blue-800">Séance ponctuelle</span>
+                      <div className="font-body text-xs text-gray-400">
+                        {sp.slot.activityTitle} — {sp.slot.dayLabel} {sp.slot.startTime}–{sp.slot.endTime}
+                      </div>
+                    </div>
+                    <span className="font-body text-sm font-semibold text-blue-500">
+                      {sp.slot.priceTTC.toFixed(2)}€
+                    </span>
+                  </div>
+                ))}
+                {false && slotsPrices.map((sp, i) => (
                   <div key={i} className="flex justify-between items-start pt-2 border-t border-blue-500/8">
                     <div>
                       <span className="font-body text-sm font-semibold text-blue-800">
@@ -620,10 +1355,37 @@ export default function InscriptionAnnuellePage() {
                 </div>
               </div>
 
-              {/* Payment plan (annual only) */}
+              {/* Moyen de paiement (toujours affiché au récap) */}
+              <div className="mb-5">
+                <div className="font-body text-sm font-semibold text-blue-800 mb-3">Moyen de paiement</div>
+                <div className="flex gap-3">
+                  {([
+                    ["cb", "💳", "Carte bancaire", "Paiement en ligne immédiat"],
+                    ["cheque", "📝", "Chèque", "Réglé au club"],
+                    ["especes", "💵", "Espèces", "Réglé au club"],
+                  ] as const).map(([id, icon, label, sub]) => (
+                    <button key={id} onClick={() => setMoyenPaiement(id)}
+                      className={`flex-1 py-3 px-2 rounded-xl border font-body text-sm font-medium cursor-pointer text-center transition-all
+                        ${moyenPaiement === id ? "border-blue-500 bg-blue-50 text-blue-500 font-semibold" : "border-gray-200 bg-white text-gray-500"}`}>
+                      <span className="block text-lg mb-0.5">{icon}</span>
+                      {label}
+                      <span className="block font-body text-[10px] font-normal text-gray-400 mt-0.5">{sub}</span>
+                    </button>
+                  ))}
+                </div>
+                {moyenPaiement !== "cb" && (
+                  <p className="font-body text-xs text-amber-600 mt-2">
+                    ⏳ La place est réservée provisoirement. L&apos;inscription sera confirmée par le centre dès réception de votre règlement en {moyenPaiement === "cheque" ? "chèque" : "espèces"}.
+                  </p>
+                )}
+              </div>
+
+              {/* Échéancier (annual only) */}
               {mode === "annuel" && grandTotal > 100 && (
                 <div className="mb-5">
-                  <div className="font-body text-sm font-semibold text-blue-800 mb-3">Mode de paiement</div>
+                  <div className="font-body text-sm font-semibold text-blue-800 mb-3">
+                    {moyenPaiement === "cheque" ? "Nombre de chèques" : "Échéancier"}
+                  </div>
                   <div className="flex gap-3">
                     {([["1x", `${grandTotal.toFixed(0)}€ en 1 fois`], ["3x", `3 × ${(grandTotal / 3).toFixed(0)}€`], ["10x", `10 × ${(grandTotal / 10).toFixed(0)}€`]] as const).map(([id, label]) => (
                       <button key={id} onClick={() => setPaymentPlan(id)}
@@ -633,20 +1395,38 @@ export default function InscriptionAnnuellePage() {
                       </button>
                     ))}
                   </div>
-                  {paymentPlan !== "1x" && <p className="font-body text-xs text-gray-400 mt-2">Prélèvement SEPA ou CB automatique. Sans frais.</p>}
+                  {paymentPlan !== "1x" && (
+                    <p className="font-body text-xs text-gray-400 mt-2">
+                      {moyenPaiement === "cb"
+                        ? "Prélèvement CB automatique. Sans frais."
+                        : moyenPaiement === "cheque"
+                          ? `${paymentPlan === "3x" ? "3 chèques" : "10 chèques"} encaissés progressivement. Sans frais.`
+                          : "Échelonnement à convenir avec le centre. Sans frais."}
+                    </p>
+                  )}
                 </div>
               )}
 
-              <div className="flex gap-3">
-                <button onClick={() => setStep(mode === "annuel" ? 4 : 2)} className="px-6 py-3 rounded-xl font-body text-sm text-gray-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
-                <button onClick={handleEnroll} disabled={submitting}
-                  className="flex-1 py-4 rounded-xl font-body text-base font-semibold text-blue-800 bg-gold-400 border-none cursor-pointer hover:bg-gold-300 flex items-center justify-center gap-2 disabled:opacity-50">
-                  {submitting ? (
-                    <><Loader2 size={18} className="animate-spin" /> Inscription en cours...</>
-                  ) : (
-                    <><CreditCard size={18} /> Payer {grandTotal.toFixed(2)}€ {paymentPlan !== "1x" && mode === "annuel" ? `en ${paymentPlan}` : ""}</>
-                  )}
-                </button>
+              <div className="flex flex-col gap-3">
+                {mode === "annuel" && (
+                  <button onClick={ajouterAuPanier} disabled={submitting || !slotsComplete}
+                    className="w-full py-3 rounded-xl font-body text-sm font-semibold text-blue-500 bg-blue-50 border border-blue-200 cursor-pointer hover:bg-blue-100 flex items-center justify-center gap-2 disabled:opacity-50">
+                    <Plus size={16} /> Ajouter un autre enfant
+                  </button>
+                )}
+                <div className="flex gap-3">
+                  <button onClick={() => setStep(mode === "annuel" ? 4 : 2)} className="px-6 py-3 rounded-xl font-body text-sm text-gray-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
+                  <button onClick={handleEnrollAll} disabled={submitting}
+                    className="flex-1 py-4 rounded-xl font-body text-base font-semibold text-blue-800 bg-gold-400 border-none cursor-pointer hover:bg-gold-300 flex items-center justify-center gap-2 disabled:opacity-50">
+                    {submitting ? (
+                      <><Loader2 size={18} className="animate-spin" /> Inscription en cours...</>
+                    ) : moyenPaiement === "cb" ? (
+                      <><CreditCard size={18} /> Payer {totalAPayer.toFixed(2)}€ {paymentPlan !== "1x" && mode === "annuel" ? `en ${paymentPlan}` : ""}</>
+                    ) : (
+                      <><Check size={18} /> Valider — règlement par {moyenPaiement === "cheque" ? "chèque" : "espèces"}</>
+                    )}
+                  </button>
+                </div>
               </div>
             </Card>
           )}
