@@ -215,12 +215,27 @@ export async function GET(req: NextRequest) {
         );
       }
 
+      // Token Card On File : si CAWL renvoie un token réutilisable (tokenisation
+      // activée sur l'acompte), on le stocke pour permettre le prélèvement
+      // automatique du solde à J-7 (cf. cron charge-stage-balances + cawl-mit).
+      // Tant que la tokenisation n'est pas branchée, ces champs restent vides
+      // et le cron retombe sur l'email de rappel.
+      const cofToken = paymentOutput?.paymentOutput?.cardPaymentMethodSpecificOutput?.token
+        || paymentOutput?.cardPaymentMethodSpecificOutput?.token
+        || body?.createdPaymentOutput?.token
+        || "";
+      const cofSchemeTxId = paymentOutput?.paymentOutput?.cardPaymentMethodSpecificOutput?.schemeTransactionId
+        || paymentOutput?.cardPaymentMethodSpecificOutput?.schemeTransactionId
+        || "";
+
       await payRef.update({
         status: isDeposit ? "partial" : "paid",
         paidAmount,
         paymentMode: "cb_online",
         cawlHostedCheckoutId: hostedCheckoutId,
         paymentRef: `CAWL-${hostedCheckoutId}`,
+        ...(cofToken ? { cofToken } : {}),
+        ...(cofSchemeTxId ? { cofSchemeTransactionId: cofSchemeTxId } : {}),
         updatedAt: FieldValue.serverTimestamp(),
       });
 
