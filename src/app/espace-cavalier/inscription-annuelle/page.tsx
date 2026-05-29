@@ -242,13 +242,30 @@ export default function InscriptionAnnuellePage() {
   // Selected slots data
   const selectedSlotsData = weeklySlots.filter(s => selectedSlots.includes(s.key));
 
+  // Un slot est "déjà pris" si l'enfant sélectionné est déjà inscrit sur l'un
+  // de ses créneaux (en base) OU si ce slot est déjà dans le panier pour cet
+  // enfant. Évite la double inscription au MÊME cours (doublon créneau).
+  const childIdInPanierSlots = useMemo(() => {
+    const s = new Set<string>();
+    panier.forEach(p => { if (p.childId === selectedChild) p.slotKeys.forEach(k => s.add(k)); });
+    return s;
+  }, [panier, selectedChild]);
+  const slotDejaPris = (slot: any): boolean => {
+    if (!selectedChild) return false;
+    if (childIdInPanierSlots.has(slot.key)) return true;
+    return (slot.creneauIds || []).some((cid: string) => {
+      const cr = creneaux.find(c => c.id === cid);
+      return (cr?.enrolled || []).some((e: any) => e.childId === selectedChild);
+    });
+  };
+
   // Filtered slots for search.
   // BLOCAGE SAISON (étape 3) : on n'affiche QUE les créneaux dont la saison
   // est >= MIN_SEASON_INSCRIPTION. Les inscriptions annuelles self-service
   // sont fermées pour la saison en cours, ouvertes seulement à partir de
   // septembre 2026. On regarde la date du 1er créneau de chaque slot.
   const filteredSlots = useMemo(() => {
-    const autorises = weeklySlots.filter(s => (s as any).season >= MIN_SEASON_INSCRIPTION);
+    const autorises = weeklySlots.filter(s => (s as any).season >= MIN_SEASON_INSCRIPTION && !slotDejaPris(s));
     if (!slotSearch.trim()) return autorises;
     const q = slotSearch.toLowerCase();
     return autorises.filter(s =>
@@ -257,7 +274,7 @@ export default function InscriptionAnnuellePage() {
       s.startTime.includes(q) ||
       s.monitor.toLowerCase().includes(q)
     );
-  }, [weeklySlots, slotSearch]);
+  }, [weeklySlots, slotSearch, selectedChild, panier, creneaux]);
 
   // How many slots required (1x, 2x ou 3x)
   const requiredSlots = forfaitType === "3x" ? 3 : forfaitType === "2x" ? 2 : 1;
@@ -841,6 +858,7 @@ export default function InscriptionAnnuellePage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            paymentId: payDoc.id,
             familyId: user.uid,
             familyEmail: family.parentEmail,
             familyName: family.parentName,

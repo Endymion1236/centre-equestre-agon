@@ -75,6 +75,7 @@ export async function GET(req: NextRequest) {
     req.nextUrl.searchParams.get("returnMac") || "";
   const ref = req.nextUrl.searchParams.get("ref") || "";
   const paymentId = req.nextUrl.searchParams.get("paymentId") || "";
+  let sessionPaymentId = "";
   const familyId = req.nextUrl.searchParams.get("familyId") || "";
   const depositStr = req.nextUrl.searchParams.get("deposit") || "0";
   const depositPercent = parseInt(depositStr) || 0;
@@ -104,6 +105,7 @@ export async function GET(req: NextRequest) {
 
     const sessionData = sessionSnap.data() as any;
     const storedReturnMac = sessionData?.returnMac || "";
+    sessionPaymentId = sessionData?.paymentId || "";
 
     // Comparaison en temps constant pour éviter les timing attacks
     // (Node: timingSafeEqual nécessite des Buffers de même longueur)
@@ -159,11 +161,16 @@ export async function GET(req: NextRequest) {
     }
 
     // ── Trouver le payment Firestore ──────────────────────────────────────
+    // paymentId vient de l'URL de retour, mais certains flux (inscription
+    // annuelle groupée) ne l'ont pas toujours passé : fallback sur la session
+    // CAWL (cawl_sessions stocke le paymentId au moment du checkout) puis sur
+    // la référence marchand. Sans ça, le paiement resterait "pending".
     let payRef = null;
     let pData: any = null;
+    const effectivePaymentId = paymentId || sessionPaymentId || "";
 
-    if (paymentId) {
-      const snap = await adminDb.collection("payments").doc(paymentId).get();
+    if (effectivePaymentId) {
+      const snap = await adminDb.collection("payments").doc(effectivePaymentId).get();
       if (snap.exists) { payRef = snap.ref; pData = snap.data(); }
     }
 
