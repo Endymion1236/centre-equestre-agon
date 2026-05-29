@@ -124,6 +124,7 @@ export default function InscriptionAnnuellePage() {
     avecLicence: boolean;
     licenceMoins18: boolean;
     rangEnfant: number;          // rang figé au moment de l'ajout au panier
+    seasonStartYear?: number;    // saison visée (pour détection licence/adhésion cross-panier)
     totalAnnuel: number;
     detailLignes: { label: string; montantTTC: number }[];
     prixAdhesion: number;
@@ -296,6 +297,51 @@ export default function InscriptionAnnuellePage() {
     return enfants.size + 1;
   }, [allForfaits, selectedChild, targetSeason, family?.id, panier]);
 
+  // ── Détection des enfants DÉJÀ inscrits pour la saison d'inscription ──
+  // Empêche une double inscription (re-paiement licence/adhésion, rang faussé).
+  // On regarde la saison MIN_SEASON_INSCRIPTION (seule saison ouverte au
+  // self-service) : forfaits actifs en base + enfants déjà dans le panier.
+  const childIdsDejaInscrits = useMemo(() => {
+    const set = new Set<string>();
+    allForfaits.forEach((f: any) => {
+      if (!f.childId) return;
+      if (f.status && f.status !== "actif") return; // ignore les forfaits annulés
+      const fSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
+      if (fSeason !== MIN_SEASON_INSCRIPTION) return;
+      set.add(f.childId);
+    });
+    panier.forEach(p => set.add(p.childId));
+    return set;
+  }, [allForfaits, panier]);
+  const childDejaInscrit = (id: string) => childIdsDejaInscrits.has(id);
+
+  // ── Licence / adhésion déjà prises pour l'enfant courant cette saison ? ──
+  // Licence FFE et adhésion sont ANNUELLES : payées une seule fois par enfant
+  // et par saison. Si l'enfant a déjà un forfait actif portant la licence
+  // (resp. l'adhésion) sur la saison visée — en base OU dans le panier — on ne
+  // les re-facture pas sur une 2e inscription (2e cours). La saison de
+  // référence est celle réellement visée par le créneau choisi (targetSeason),
+  // pas la constante : robuste quelle que soit la date des créneaux.
+  const prereqDejaPris = useMemo(() => {
+    let licence = false, adhesion = false;
+    if (!selectedChild) return { licence, adhesion };
+    allForfaits.forEach((f: any) => {
+      if (f.childId !== selectedChild) return;
+      if (f.status && f.status !== "actif") return;
+      const fSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
+      if (fSeason !== targetSeason) return;
+      if (f.licenceFFE) licence = true;
+      if (f.adhesion) adhesion = true;
+    });
+    panier.forEach(p => {
+      if (p.childId !== selectedChild) return;
+      if ((p as any).seasonStartYear !== undefined && (p as any).seasonStartYear !== targetSeason) return;
+      if (p.avecLicence) licence = true;
+      if (p.avecAdhesion) adhesion = true;
+    });
+    return { licence, adhesion };
+  }, [allForfaits, panier, selectedChild, targetSeason]);
+
   // ── Séances restantes / total saison pour le prorata ──
   // total saison = sessions du 1er créneau choisi (nb d'occurrences réelles
   // du cours sur la saison). restantes = occurrences à partir d'aujourd'hui.
@@ -308,17 +354,22 @@ export default function InscriptionAnnuellePage() {
     return a < 18;
   })();
 
+  // Facturation effective : si déjà prise cette saison, on ne refacture pas
+  // (le prérequis reste rempli, mais coût 0 sur ce 2e forfait).
+  const avecLicenceFacturee = licenceOK && !prereqDejaPris.licence;
+  const avecAdhesionFacturee = adhesionOK && !prereqDejaPris.adhesion;
+
   const calcul = useMemo(() => calculerForfaitAnnuel({
     frequence,
     sessionsRestantes: sessionsParCreneau,
     sessionsTotalSaison: sessionsParCreneau, // créneaux de septembre = saison pleine → prorata 100%
     rangEnfant,
-    avecAdhesion: adhesionOK,
-    avecLicence: licenceOK,
+    avecAdhesion: avecAdhesionFacturee,
+    avecLicence: avecLicenceFacturee,
     licenceMoins18,
     tarifs,
     familyDiscountRules,
-  }), [frequence, sessionsParCreneau, rangEnfant, adhesionOK, licenceOK, licenceMoins18, tarifs, familyDiscountRules]);
+  }), [frequence, sessionsParCreneau, rangEnfant, avecAdhesionFacturee, avecLicenceFacturee, licenceMoins18, tarifs, familyDiscountRules]);
 
   // Prix par créneau pour la création des items (réparti sur les créneaux)
   const slotsPrices = selectedSlotsData.map(slot => ({
@@ -362,10 +413,11 @@ export default function InscriptionAnnuellePage() {
         startTime: s.startTime, endTime: s.endTime,
         totalSessions: s.totalSessions, creneauIds: s.creneauIds,
       })),
-      avecAdhesion: adhesionOK,
-      avecLicence: licenceOK,
+      avecAdhesion: avecAdhesionFacturee,
+      avecLicence: avecLicenceFacturee,
       licenceMoins18,
       rangEnfant,
+      seasonStartYear: targetSeason,
       totalAnnuel: grandTotal,
       detailLignes: calcul.detailLignes,
       prixAdhesion: calcul.prixAdhesion,
@@ -637,8 +689,9 @@ export default function InscriptionAnnuellePage() {
           startTime: s.startTime, endTime: s.endTime,
           totalSessions: s.totalSessions, creneauIds: s.creneauIds,
         })),
-        avecAdhesion: adhesionOK, avecLicence: licenceOK, licenceMoins18,
+        avecAdhesion: avecAdhesionFacturee, avecLicence: avecLicenceFacturee, licenceMoins18,
         rangEnfant,
+        seasonStartYear: targetSeason,
         totalAnnuel: grandTotal,
         detailLignes: calcul.detailLignes,
         prixAdhesion: calcul.prixAdhesion,
@@ -842,9 +895,11 @@ export default function InscriptionAnnuellePage() {
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {children.map((c: any) => (
+                  {children.map((c: any) => {
+                    const deja = childDejaInscrit(c.id);
+                    return (
                     <button key={c.id} onClick={() => setSelectedChild(c.id)}
-                      className={`flex items-center justify-between px-5 py-4 rounded-xl border text-left cursor-pointer transition-all
+                      className={`flex items-center justify-between px-5 py-4 rounded-xl border text-left transition-all cursor-pointer
                         ${selectedChild === c.id ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white hover:border-gray-300"}`}>
                       <div className="flex items-center gap-3">
                         <span className="text-2xl">🧒</span>
@@ -859,9 +914,12 @@ export default function InscriptionAnnuellePage() {
                           </div>
                         </div>
                       </div>
-                      {selectedChild === c.id && <Check size={20} className="text-blue-500" />}
+                      {deja ? (
+                        <span className="font-body text-[11px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-2 py-1 rounded-full">Déjà inscrit · 2e cours possible</span>
+                      ) : selectedChild === c.id && <Check size={20} className="text-blue-500" />}
                     </button>
-                  ))}
+                    );
+                  })}
                   <button onClick={() => selectedChild && setStep(mode === "annuel" ? 2 : 2)} disabled={!selectedChild}
                     className={`mt-3 w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer
                       ${selectedChild ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-400"}`}>
@@ -878,27 +936,57 @@ export default function InscriptionAnnuellePage() {
               <h2 className="font-body text-base font-semibold text-blue-800 mb-2">Prérequis obligatoires</h2>
               <p className="font-body text-xs text-gray-400 mb-4">Obligatoires pour pratiquer en club.</p>
               <div className="flex flex-col gap-3 mb-6">
-                <label className={`flex items-center justify-between px-5 py-4 rounded-xl border cursor-pointer ${licenceOK ? "border-green-500 bg-green-50" : "border-gray-200"}`}>
-                  <div className="flex items-center gap-3">
-                    <input type="checkbox" checked={licenceOK} onChange={e => setLicenceOK(e.target.checked)} className="accent-green-500 w-5 h-5" />
-                    <div><div className="font-body text-sm font-semibold text-blue-800">Licence FFE</div><div className="font-body text-xs text-gray-400">Obligatoire pour pratiquer en club ({licenceMoins18 ? "-18 ans" : "+18 ans"})</div></div>
+                {prereqDejaPris.licence ? (
+                  <div className="flex items-center justify-between px-5 py-4 rounded-xl border border-green-200 bg-green-50">
+                    <div className="flex items-center gap-3">
+                      <Check size={20} className="text-green-600" />
+                      <div><div className="font-body text-sm font-semibold text-blue-800">Licence FFE</div><div className="font-body text-xs text-green-600">Déjà prise cette saison — non refacturée</div></div>
+                    </div>
+                    <span className="font-body text-xs font-semibold text-green-600">Incluse</span>
                   </div>
-                  <span className="font-body text-base font-bold text-blue-500">{licenceMoins18 ? tarifs.licenceMoins18 : tarifs.licencePlus18}€</span>
-                </label>
-                <label className={`flex items-center justify-between px-5 py-4 rounded-xl border cursor-pointer ${adhesionOK ? "border-green-500 bg-green-50" : "border-gray-200"}`}>
-                  <div className="flex items-center gap-3">
-                    <input type="checkbox" checked={adhesionOK} onChange={e => setAdhesionOK(e.target.checked)} className="accent-green-500 w-5 h-5" />
-                    <div><div className="font-body text-sm font-semibold text-blue-800">Adhésion au club</div><div className="font-body text-xs text-gray-400">Cotisation annuelle{rangEnfant > 1 ? ` (${rangEnfant}e enfant — tarif réduit)` : ""}</div></div>
+                ) : (
+                  <label className={`flex items-center justify-between px-5 py-4 rounded-xl border cursor-pointer ${licenceOK ? "border-green-500 bg-green-50" : "border-gray-200"}`}>
+                    <div className="flex items-center gap-3">
+                      <input type="checkbox" checked={licenceOK} onChange={e => setLicenceOK(e.target.checked)} className="accent-green-500 w-5 h-5" />
+                      <div><div className="font-body text-sm font-semibold text-blue-800">Licence FFE</div><div className="font-body text-xs text-gray-400">Obligatoire pour pratiquer en club ({licenceMoins18 ? "-18 ans" : "+18 ans"})</div></div>
+                    </div>
+                    <span className="font-body text-base font-bold text-blue-500">{licenceMoins18 ? tarifs.licenceMoins18 : tarifs.licencePlus18}€</span>
+                  </label>
+                )}
+                {prereqDejaPris.adhesion ? (
+                  <div className="flex items-center justify-between px-5 py-4 rounded-xl border border-green-200 bg-green-50">
+                    <div className="flex items-center gap-3">
+                      <Check size={20} className="text-green-600" />
+                      <div><div className="font-body text-sm font-semibold text-blue-800">Adhésion au club</div><div className="font-body text-xs text-green-600">Déjà prise cette saison — non refacturée</div></div>
+                    </div>
+                    <span className="font-body text-xs font-semibold text-green-600">Incluse</span>
                   </div>
-                  <span className="font-body text-base font-bold text-blue-500">{calcul.prixAdhesion}€</span>
-                </label>
+                ) : (
+                  <label className={`flex items-center justify-between px-5 py-4 rounded-xl border cursor-pointer ${adhesionOK ? "border-green-500 bg-green-50" : "border-gray-200"}`}>
+                    <div className="flex items-center gap-3">
+                      <input type="checkbox" checked={adhesionOK} onChange={e => setAdhesionOK(e.target.checked)} className="accent-green-500 w-5 h-5" />
+                      <div><div className="font-body text-sm font-semibold text-blue-800">Adhésion au club</div><div className="font-body text-xs text-gray-400">Cotisation annuelle{rangEnfant > 1 ? ` (${rangEnfant}e enfant — tarif réduit)` : ""}</div></div>
+                    </div>
+                    <span className="font-body text-base font-bold text-blue-500">{calcul.prixAdhesion}€</span>
+                  </label>
+                )}
+                {(prereqDejaPris.licence || prereqDejaPris.adhesion) && (
+                  <p className="font-body text-xs text-blue-600">ℹ️ Cet enfant est déjà inscrit cette saison : la licence et/ou l&apos;adhésion ne sont pas refacturées sur ce 2e cours.</p>
+                )}
               </div>
               <div className="flex gap-3">
                 <button onClick={() => setStep(1)} className="px-6 py-3 rounded-xl font-body text-sm text-gray-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
-                <button onClick={() => setStep(3)} disabled={!licenceOK || !adhesionOK}
-                  className={`flex-1 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${licenceOK && adhesionOK ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-400"}`}>
-                  Continuer <ChevronRight size={16} className="inline ml-1" />
-                </button>
+                {(() => {
+                  const licencePrereqOK = prereqDejaPris.licence || licenceOK;
+                  const adhesionPrereqOK = prereqDejaPris.adhesion || adhesionOK;
+                  const prereqOK = licencePrereqOK && adhesionPrereqOK;
+                  return (
+                    <button onClick={() => setStep(3)} disabled={!prereqOK}
+                      className={`flex-1 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${prereqOK ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-400"}`}>
+                      Continuer <ChevronRight size={16} className="inline ml-1" />
+                    </button>
+                  );
+                })()}
               </div>
             </Card>
           )}
