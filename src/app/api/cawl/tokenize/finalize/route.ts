@@ -67,32 +67,40 @@ export async function POST(req: NextRequest) {
 
     const payResp = await payApi.createPayment(CAWL_PSPID, createReq);
     const payBody = payResp?.body || payResp;
-    const payment = payBody?.payment || payBody?.creationOutput?.payment || {};
+    const payment = payBody?.payment || payBody?.creationOutput?.payment || payBody?.createdPaymentOutput?.payment || {};
     // L'id peut se trouver à plusieurs endroits selon la forme de réponse.
     const cawlPaymentId =
       payment?.id ||
       payBody?.payment?.id ||
       payBody?.creationOutput?.payment?.id ||
+      payBody?.createdPaymentOutput?.payment?.id ||
       payBody?.id ||
       "";
+    // Statut : CAWL renvoie un libellé texte (status) ET un code numérique
+    // (statusOutput.statusCode : 5/9 = réussi, 2 = refusé). On gère les deux.
     const status = payment?.status || payBody?.payment?.status || "";
+    const statusCode =
+      payment?.statusOutput?.statusCode ??
+      payBody?.payment?.statusOutput?.statusCode ??
+      payBody?.creationOutput?.payment?.statusOutput?.statusCode ??
+      null;
     const merchantAction = payBody?.merchantAction || payment?.merchantAction;
     const redirectUrl = merchantAction?.redirectData?.redirectURL || "";
 
     // Diagnostic : tracer la réponse si l'id manque (cas observé en test).
     if (!cawlPaymentId) {
-      console.error("[cawl/tokenize/finalize] payment.id absent — réponse brute:", JSON.stringify(payBody)?.slice(0, 800));
+      console.error("[cawl/tokenize/finalize] payment.id absent — réponse brute:", JSON.stringify(payBody)?.slice(0, 1000));
     }
 
     // 3. Stocker token + id paiement initial + statut de l'acompte
     const statusUpper = String(status).toUpperCase();
-    const acomptePaid = ["CAPTURED", "PENDING_CAPTURE", "PAID", "CAPTURE_REQUESTED", "AUTHORIZED"].includes(statusUpper);
+    const acomptePaid =
+      [5, 9].includes(Number(statusCode)) ||
+      ["CAPTURED", "PENDING_CAPTURE", "PAID", "CAPTURE_REQUESTED", "AUTHORIZED"].includes(statusUpper);
     await adminDb.collection("payments").doc(paymentId).update({
       cofToken: tokenId,
       ...(cawlPaymentId ? { cofInitialPaymentId: cawlPaymentId } : {}),
       cawlTokenizedAt: FieldValue.serverTimestamp(),
-      // Si l'acompte est encaissé sans redirection 3DS, on reflète le paiement
-      // partiel tout de suite (sinon ce sera fait au retour 3DS via /status).
       ...(acomptePaid ? {
         paidAmount: Math.round(Number(amount) * 100) / 100,
         status: "partial",
@@ -104,7 +112,7 @@ export async function POST(req: NextRequest) {
     if (merchantAction?.actionType === "REDIRECT" && redirectUrl) {
       return NextResponse.json({ requiresRedirect: true, redirectUrl, cawlPaymentId });
     }
-    return NextResponse.json({ requiresRedirect: false, status, cawlPaymentId });
+    return NextResponse.json({ requiresRedirect: false, status, statusCode, cawlPaymentId });
   } catch (e: any) {
     console.error("[cawl/tokenize/finalize]", e);
     return NextResponse.json({ error: e?.message || "Erreur finalisation tokenisation" }, { status: 500 });
