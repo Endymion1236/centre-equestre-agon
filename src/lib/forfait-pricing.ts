@@ -53,6 +53,12 @@ export interface CalculForfaitInput {
   licenceMoins18: boolean;      // true = tarif -18 ans
   tarifs: ForfaitTarifs;
   familyDiscountRules: FamilyDiscountRule[];
+  // Fréquence (cours/semaine) DÉJÀ inscrite pour cet enfant cette saison.
+  // 0 = première inscription (tarif plein selon `frequence`).
+  // > 0 = l'enfant ajoute une/des heure(s) à un forfait existant : on facture
+  // le DIFFÉRENTIEL vers la fréquence cumulée — tarif(freqDeja+frequence) −
+  // tarif(freqDeja) — au lieu d'un nouveau forfait plein (dégressivité horaire).
+  frequenceDejaInscrite?: number;
 }
 
 export interface CalculForfaitResult {
@@ -78,13 +84,27 @@ export function calculerForfaitAnnuel(input: CalculForfaitInput): CalculForfaitR
   const {
     frequence, sessionsRestantes, sessionsTotalSaison, rangEnfant,
     avecAdhesion, avecLicence, licenceMoins18, tarifs, familyDiscountRules,
+    frequenceDejaInscrite = 0,
   } = input;
 
-  // 1. Prix plein selon fréquence (dégressivité heures)
-  const prixForfaitAnnuelPlein =
-    frequence === 3 ? tarifs.forfait3x :
-    frequence === 2 ? tarifs.forfait2x :
-    tarifs.forfait1x;
+  // Tarif plein pour une fréquence donnée (dégressivité horaire 1x/2x/3x).
+  // Plafonné à 3×/semaine (au-delà, tarif 3x).
+  const tarifPourFreq = (f: number): number => {
+    if (f <= 0) return 0;
+    if (f === 1) return tarifs.forfait1x;
+    if (f === 2) return tarifs.forfait2x;
+    return tarifs.forfait3x;
+  };
+
+  // 1. Prix plein.
+  //    - Première inscription (frequenceDejaInscrite = 0) → tarif plein de `frequence`.
+  //    - Ajout d'heure(s) → DIFFÉRENTIEL : tarif(freqCumulée) − tarif(freqDéjà),
+  //      la fréquence cumulée étant plafonnée à 3×/semaine.
+  const freqCumulee = Math.min(3, frequenceDejaInscrite + frequence);
+  const ajoutHeure = frequenceDejaInscrite > 0;
+  const prixForfaitAnnuelPlein = ajoutHeure
+    ? Math.max(0, tarifPourFreq(freqCumulee) - tarifPourFreq(frequenceDejaInscrite))
+    : tarifPourFreq(frequence);
 
   // 2. Prorata (plafonné à 1 si inscription en début de saison)
   const prorata = sessionsTotalSaison > 0
@@ -120,7 +140,9 @@ export function calculerForfaitAnnuel(input: CalculForfaitInput): CalculForfaitR
   if (avecAdhesion) detailLignes.push({ label: `Adhésion annuelle (enfant ${rangEnfant})`, montantTTC: prixAdhesion });
   if (avecLicence) detailLignes.push({ label: `Licence FFE ${licenceMoins18 ? "-18 ans" : "+18 ans"}`, montantTTC: prixLicence });
   detailLignes.push({
-    label: `Forfait ${frequence}×/semaine${prorata < 1 ? ` (prorata ${Math.round(prorata * 100)}%)` : ""}`,
+    label: ajoutHeure
+      ? `Forfait — heure suppl. (passage ${frequenceDejaInscrite}×→${freqCumulee}×/sem)${prorata < 1 ? ` (prorata ${Math.round(prorata * 100)}%)` : ""}`
+      : `Forfait ${frequence}×/semaine${prorata < 1 ? ` (prorata ${Math.round(prorata * 100)}%)` : ""}`,
     montantTTC: prixForfaitBrut,
   });
   if (familyDiscountAmount > 0) {

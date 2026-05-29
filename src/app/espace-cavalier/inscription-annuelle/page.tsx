@@ -125,6 +125,7 @@ export default function InscriptionAnnuellePage() {
     licenceMoins18: boolean;
     rangEnfant: number;          // rang figé au moment de l'ajout au panier
     seasonStartYear?: number;    // saison visée (pour détection licence/adhésion cross-panier)
+    frequenceDejaInscrite?: number; // heures/sem déjà inscrites (>0 = forfait complément)
     totalAnnuel: number;
     detailLignes: { label: string; montantTTC: number }[];
     prixAdhesion: number;
@@ -342,6 +343,31 @@ export default function InscriptionAnnuellePage() {
     return { licence, adhesion };
   }, [allForfaits, panier, selectedChild, targetSeason]);
 
+  // ── Fréquence (cours/semaine) déjà inscrite pour l'enfant cette saison ──
+  // Somme des fréquences des forfaits actifs (base + panier) sur la saison
+  // visée. Sert à facturer une heure supplémentaire au DIFFÉRENTIEL (passage
+  // 1×→2× etc.) plutôt qu'à plein tarif, et à plafonner le choix à 3×/sem.
+  const frequenceDejaInscrite = useMemo(() => {
+    if (!selectedChild) return 0;
+    let total = 0;
+    allForfaits.forEach((f: any) => {
+      if (f.childId !== selectedChild) return;
+      if (f.status && f.status !== "actif") return;
+      const fSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
+      if (fSeason !== targetSeason) return;
+      total += Number(f.frequence) || 0;
+    });
+    panier.forEach(p => {
+      if (p.childId !== selectedChild) return;
+      if ((p as any).seasonStartYear !== undefined && (p as any).seasonStartYear !== targetSeason) return;
+      total += Number(p.frequence) || 0;
+    });
+    return total;
+  }, [allForfaits, panier, selectedChild, targetSeason]);
+
+  // Nombre d'heures/semaine encore disponibles (plafond 3×/sem cumulé).
+  const freqMaxAjoutable = Math.max(0, 3 - frequenceDejaInscrite);
+
   // ── Séances restantes / total saison pour le prorata ──
   // total saison = sessions du 1er créneau choisi (nb d'occurrences réelles
   // du cours sur la saison). restantes = occurrences à partir d'aujourd'hui.
@@ -369,7 +395,8 @@ export default function InscriptionAnnuellePage() {
     licenceMoins18,
     tarifs,
     familyDiscountRules,
-  }), [frequence, sessionsParCreneau, rangEnfant, avecAdhesionFacturee, avecLicenceFacturee, licenceMoins18, tarifs, familyDiscountRules]);
+    frequenceDejaInscrite,
+  }), [frequence, sessionsParCreneau, rangEnfant, avecAdhesionFacturee, avecLicenceFacturee, licenceMoins18, tarifs, familyDiscountRules, frequenceDejaInscrite]);
 
   // Prix par créneau pour la création des items (réparti sur les créneaux)
   const slotsPrices = selectedSlotsData.map(slot => ({
@@ -418,6 +445,7 @@ export default function InscriptionAnnuellePage() {
       licenceMoins18,
       rangEnfant,
       seasonStartYear: targetSeason,
+      frequenceDejaInscrite,
       totalAnnuel: grandTotal,
       detailLignes: calcul.detailLignes,
       prixAdhesion: calcul.prixAdhesion,
@@ -660,6 +688,14 @@ export default function InscriptionAnnuellePage() {
       paymentPlan,
       status: "actif",
       frequence: item.frequence,
+      // Forfait "complément" : heures ajoutées à un forfait existant la même
+      // saison (facturé au différentiel). frequenceDejaInscrite = heures déjà
+      // prises avant celui-ci ; la fréquence cumulée réelle de l'enfant est
+      // frequenceDejaInscrite + frequence.
+      ...((item.frequenceDejaInscrite || 0) > 0 ? {
+        complement: true,
+        frequenceDejaInscrite: item.frequenceDejaInscrite,
+      } : {}),
       seasonStartYear: seasonOf(creneaux.find(c => c.id === principal.creneauIds[0])?.date || todayLocalString()),
       source: "client",
     } : null;
@@ -692,6 +728,7 @@ export default function InscriptionAnnuellePage() {
         avecAdhesion: avecAdhesionFacturee, avecLicence: avecLicenceFacturee, licenceMoins18,
         rangEnfant,
         seasonStartYear: targetSeason,
+        frequenceDejaInscrite,
         totalAnnuel: grandTotal,
         detailLignes: calcul.detailLignes,
         prixAdhesion: calcul.prixAdhesion,
@@ -992,42 +1029,60 @@ export default function InscriptionAnnuellePage() {
           )}
 
           {/* ─── Step 3 (annuel): Choose forfait type ─── */}
-          {step === 3 && mode === "annuel" && (
+          {step === 3 && mode === "annuel" && (() => {
+            const ajout = frequenceDejaInscrite > 0;
+            // Tarif différentiel affiché pour un ajout de n heure(s).
+            const tarifFreq = (f: number) => f >= 3 ? tarifs.forfait3x : f === 2 ? tarifs.forfait2x : tarifs.forfait1x;
+            const prixAffiche = (nNouveau: number) => {
+              if (!ajout) return tarifFreq(nNouveau);
+              const cumul = Math.min(3, frequenceDejaInscrite + nNouveau);
+              return Math.max(0, tarifFreq(cumul) - tarifFreq(frequenceDejaInscrite));
+            };
+            const options = ([
+              { type: "1x", freq: 1, emoji: "🐴", label: ajout ? "+1 cours" : "1 cours" },
+              { type: "2x", freq: 2, emoji: "🏇", label: ajout ? "+2 cours" : "2 cours" },
+              { type: "3x", freq: 3, emoji: "🏆", label: ajout ? "+3 cours" : "3 cours" },
+            ] as const).filter(o => o.freq <= freqMaxAjoutable);
+            return (
             <Card padding="md">
               <h2 className="font-body text-base font-semibold text-blue-800 mb-2">Type de forfait</h2>
-              <p className="font-body text-xs text-gray-400 mb-4">Combien de cours par semaine ?</p>
-              <div className="grid grid-cols-3 gap-3 mb-6">
-                <button onClick={() => { setForfaitType("1x"); setSelectedSlots([]); }}
-                  className={`py-5 rounded-xl border font-body text-sm font-semibold cursor-pointer transition-all text-center
-                    ${forfaitType === "1x" ? "border-blue-500 bg-blue-50 text-blue-500" : "border-gray-200 bg-white text-gray-500"}`}>
-                  <span className="text-2xl block mb-1">🐴</span>
-                  1 cours
-                  <div className="font-body text-xs font-normal text-gray-400 mt-1">{tarifs.forfait1x}€/an</div>
-                </button>
-                <button onClick={() => { setForfaitType("2x"); setSelectedSlots([]); }}
-                  className={`py-5 rounded-xl border font-body text-sm font-semibold cursor-pointer transition-all text-center
-                    ${forfaitType === "2x" ? "border-blue-500 bg-blue-50 text-blue-500" : "border-gray-200 bg-white text-gray-500"}`}>
-                  <span className="text-2xl block mb-1">🏇</span>
-                  2 cours
-                  <div className="font-body text-xs font-normal text-gray-400 mt-1">{tarifs.forfait2x}€/an</div>
-                </button>
-                <button onClick={() => { setForfaitType("3x"); setSelectedSlots([]); }}
-                  className={`py-5 rounded-xl border font-body text-sm font-semibold cursor-pointer transition-all text-center
-                    ${forfaitType === "3x" ? "border-blue-500 bg-blue-50 text-blue-500" : "border-gray-200 bg-white text-gray-500"}`}>
-                  <span className="text-2xl block mb-1">🏆</span>
-                  3 cours
-                  <div className="font-body text-xs font-normal text-gray-400 mt-1">{tarifs.forfait3x}€/an</div>
-                </button>
-              </div>
+              <p className="font-body text-xs text-gray-400 mb-4">
+                {ajout ? "Combien d'heures ajouter par semaine ?" : "Combien de cours par semaine ?"}
+              </p>
+              {ajout && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                  <p className="font-body text-xs text-blue-800">
+                    🏇 Cet enfant a déjà <strong>{frequenceDejaInscrite}×/semaine</strong> cette saison. Les heures ajoutées sont facturées au <strong>tarif dégressif</strong> (différence vers le forfait {Math.min(3, frequenceDejaInscrite + 1)}×), pas à plein tarif.
+                  </p>
+                </div>
+              )}
+              {freqMaxAjoutable === 0 ? (
+                <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                  <p className="font-body text-sm text-amber-800">Cet enfant est déjà inscrit au maximum (3×/semaine) cette saison.</p>
+                </div>
+              ) : (
+                <div className={`grid gap-3 mb-6 ${options.length === 3 ? "grid-cols-3" : options.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}>
+                  {options.map(o => (
+                    <button key={o.type} onClick={() => { setForfaitType(o.type); setSelectedSlots([]); }}
+                      className={`py-5 rounded-xl border font-body text-sm font-semibold cursor-pointer transition-all text-center
+                        ${forfaitType === o.type ? "border-blue-500 bg-blue-50 text-blue-500" : "border-gray-200 bg-white text-gray-500"}`}>
+                      <span className="text-2xl block mb-1">{o.emoji}</span>
+                      {o.label}
+                      <div className="font-body text-xs font-normal text-gray-400 mt-1">{prixAffiche(o.freq)}€/an</div>
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex gap-3">
                 <button onClick={() => setStep(2)} className="px-6 py-3 rounded-xl font-body text-sm text-gray-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
-                <button onClick={() => setStep(4)}
-                  className="flex-1 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer bg-blue-500 text-white">
+                <button onClick={() => setStep(4)} disabled={freqMaxAjoutable === 0}
+                  className={`flex-1 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${freqMaxAjoutable === 0 ? "bg-gray-200 text-gray-400" : "bg-blue-500 text-white"}`}>
                   Continuer <ChevronRight size={16} className="inline ml-1" />
                 </button>
               </div>
             </Card>
-          )}
+            );
+          })()}
 
           {/* ─── Step 4 (annuel): Choose slot(s) ─── */}
           {step === 4 && mode === "annuel" && (
@@ -1055,9 +1110,11 @@ export default function InscriptionAnnuellePage() {
               {/* Rappel du tarif forfait (prix global, pas par créneau) */}
               <div className="mb-4 p-3 bg-amber-50 rounded-xl border border-amber-200">
                 <span className="font-body text-sm text-amber-800">
-                  💡 Forfait {frequence}×/semaine : <strong>{calcul.prixForfaitAnnuelPlein}€/an</strong>
-                  {calcul.familyDiscountAmount > 0 && ` (− ${calcul.familyDiscountAmount.toFixed(0)}€ réduction famille)`}
-                  . Le prix ne dépend pas du créneau choisi mais du nombre de cours par semaine.
+                  {frequenceDejaInscrite > 0 ? (
+                    <>💡 Heure(s) supplémentaire(s) (passage {frequenceDejaInscrite}×→{Math.min(3, frequenceDejaInscrite + frequence)}×/sem) : <strong>{calcul.prixForfaitAnnuelPlein}€/an</strong>{calcul.familyDiscountAmount > 0 && ` (− ${calcul.familyDiscountAmount.toFixed(0)}€ réduction famille)`}. Tarif dégressif : seule la différence vers le forfait supérieur est facturée.</>
+                  ) : (
+                    <>💡 Forfait {frequence}×/semaine : <strong>{calcul.prixForfaitAnnuelPlein}€/an</strong>{calcul.familyDiscountAmount > 0 && ` (− ${calcul.familyDiscountAmount.toFixed(0)}€ réduction famille)`}. Le prix ne dépend pas du créneau choisi mais du nombre de cours par semaine.</>
+                  )}
                 </span>
               </div>
 
