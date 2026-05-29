@@ -67,17 +67,38 @@ export async function POST(req: NextRequest) {
 
     const payResp = await payApi.createPayment(CAWL_PSPID, createReq);
     const payBody = payResp?.body || payResp;
-    const payment = payBody?.payment || payBody?.creationOutput?.payment || payBody;
-    const cawlPaymentId = payment?.id || "";
-    const status = payment?.status || "";
+    const payment = payBody?.payment || payBody?.creationOutput?.payment || {};
+    // L'id peut se trouver à plusieurs endroits selon la forme de réponse.
+    const cawlPaymentId =
+      payment?.id ||
+      payBody?.payment?.id ||
+      payBody?.creationOutput?.payment?.id ||
+      payBody?.id ||
+      "";
+    const status = payment?.status || payBody?.payment?.status || "";
     const merchantAction = payBody?.merchantAction || payment?.merchantAction;
     const redirectUrl = merchantAction?.redirectData?.redirectURL || "";
 
-    // 3. Stocker token + id paiement initial sur le doc Firestore
+    // Diagnostic : tracer la réponse si l'id manque (cas observé en test).
+    if (!cawlPaymentId) {
+      console.error("[cawl/tokenize/finalize] payment.id absent — réponse brute:", JSON.stringify(payBody)?.slice(0, 800));
+    }
+
+    // 3. Stocker token + id paiement initial + statut de l'acompte
+    const statusUpper = String(status).toUpperCase();
+    const acomptePaid = ["CAPTURED", "PENDING_CAPTURE", "PAID", "CAPTURE_REQUESTED", "AUTHORIZED"].includes(statusUpper);
     await adminDb.collection("payments").doc(paymentId).update({
       cofToken: tokenId,
-      cofInitialPaymentId: cawlPaymentId,
+      ...(cawlPaymentId ? { cofInitialPaymentId: cawlPaymentId } : {}),
       cawlTokenizedAt: FieldValue.serverTimestamp(),
+      // Si l'acompte est encaissé sans redirection 3DS, on reflète le paiement
+      // partiel tout de suite (sinon ce sera fait au retour 3DS via /status).
+      ...(acomptePaid ? {
+        paidAmount: Math.round(Number(amount) * 100) / 100,
+        status: "partial",
+        paymentMode: "cb_online",
+        paymentRef: cawlPaymentId ? `CAWL-${cawlPaymentId}` : "",
+      } : {}),
     });
 
     if (merchantAction?.actionType === "REDIRECT" && redirectUrl) {
