@@ -38,18 +38,38 @@ export async function POST(req: NextRequest) {
     const htApi: any = (cawlSdk as any)?.hostedTokenization;
     const payApi: any = (cawlSdk as any)?.payments;
 
+    // DIAG : tracer la présence des clients SDK dans le doc paiement.
+    await adminDb.collection("payments").doc(paymentId).update({
+      _diag: {
+        step: "start",
+        hasHtApi: !!htApi,
+        hasPayApi: !!payApi,
+        payApiType: typeof payApi?.createPayment,
+        at: new Date().toISOString(),
+      },
+    });
+
     // 1. Récupérer le token créé dans l'iframe
     const htResp = await htApi.getHostedTokenization(CAWL_PSPID, hostedTokenizationId);
     const tokenId = htResp?.body?.token?.id || htResp?.token?.id || "";
+    // paymentProductId du token (ex. 1 = Visa) — REQUIS par createPayment,
+    // sinon CAWL renvoie UNKNOWN_PRODUCT_ID (1007).
+    const paymentProductId =
+      htResp?.body?.token?.paymentProductId ??
+      htResp?.token?.paymentProductId ??
+      null;
     if (!tokenId) {
+      await adminDb.collection("payments").doc(paymentId).update({ "_diag.step": "no_token" });
       return NextResponse.json({ error: "Token introuvable pour cette session" }, { status: 502 });
     }
+    await adminDb.collection("payments").doc(paymentId).update({ "_diag.step": "token_ok", "_diag.tokenId": tokenId, "_diag.productId": paymentProductId });
 
     // 2. Créer le paiement de l'acompte avec le token, en le rendant permanent
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
     const createReq: any = {
       cardPaymentMethodSpecificInput: {
         token: tokenId,
+        ...(paymentProductId ? { paymentProductId } : {}),
         tokenize: true, // rend le token permanent (Card On File)
         unscheduledCardOnFileRequestor: "cardholderInitiated",
         unscheduledCardOnFileSequenceIndicator: "first",
@@ -65,10 +85,25 @@ export async function POST(req: NextRequest) {
       },
     };
 
-    const payResp = await payApi.createPayment(CAWL_PSPID, createReq);
+    let payResp: any;
+    try {
+      payResp = await payApi.createPayment(CAWL_PSPID, createReq);
+    } catch (createErr: any) {
+      await adminDb.collection("payments").doc(paymentId).update({
+        cofToken: tokenId,
+        cawlTokenizedAt: FieldValue.serverTimestamp(),
+        "_diag.step": "createPayment_threw",
+        "_diag.createError": (createErr?.message || String(createErr)).slice(0, 500),
+        "_diag.createErrorBody": JSON.stringify(createErr?.body || createErr?.response || {}).slice(0, 800),
+      });
+      return NextResponse.json({ error: "createPayment a échoué", detail: createErr?.message }, { status: 502 });
+    }
     const payBody = payResp?.body || payResp;
-    // LOG DIAGNOSTIC TEMPORAIRE : structure complète de la réponse CAWL.
-    console.log("[cawl/tokenize/finalize] createPayment resp:", JSON.stringify({ status: payResp?.status, body: payBody })?.slice(0, 1500));
+    await adminDb.collection("payments").doc(paymentId).update({
+      "_diag.step": "createPayment_ok",
+      "_diag.respStatus": payResp?.status ?? null,
+      "_diag.respBody": JSON.stringify(payBody).slice(0, 1500),
+    });
     const payment = payBody?.payment || payBody?.creationOutput?.payment || payBody?.createdPaymentOutput?.payment || {};
     // L'id peut se trouver à plusieurs endroits selon la forme de réponse.
     const cawlPaymentId =
