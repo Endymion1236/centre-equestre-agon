@@ -1,104 +1,133 @@
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { cawlSdk, CAWL_PSPID } from "@/lib/cawl";
 
 /**
- * Prélèvement automatique du solde via un token Card On File (MIT).
+ * Prélèvement automatique du solde via un token Card On File.
  *
- * ⚠️ STUB — NON BRANCHÉ SUR CAWL POUR L'INSTANT.
+ * Scénario "acompte à la réservation + solde prélevé automatiquement une
+ * semaine avant le stage". CAWL distingue deux temps :
  *
- * Ce module isole le SEUL endroit qui dépend de la confirmation du Crédit
- * Agricole / Worldline. Toute la logique métier (cron J-7, détection du token,
- * emails, mise à jour du paiement) est complète et fonctionnelle autour ; il ne
- * reste qu'à remplir l'appel réseau ci-dessous une fois ces points confirmés :
+ *  1) ACOMPTE (client présent) : transaction "cardholderInitiated" /
+ *     sequenceIndicator "first", avec tokenizationMode "createWithConsent"
+ *     pour stocker la carte (token Card On File permanent).
+ *     → géré au checkout/status, qui stocke cofToken + payment.id initial.
  *
- *   1. Card On File / token PERMANENT activé sur le PSPID (contrat CAWL).
- *   2. Accord acquéreur pour CVC optionnel sur les transactions ultérieures.
- *   3. Format exact du JSON CreatePayment côté CAWL avec cardOnFileData
- *      (cf. doc : isInitialTransaction:false + subsequentCardOnFileData
- *       { cardOnFileInitiator:"MERCHANT", transactionType:"...",
- *         initialSchemeTransactionId:"<schemeTransactionId du 1er paiement>" }).
+ *  2) SOLDE (client ABSENT, J-7) : transaction ultérieure de type
+ *     "delayedCharge" — cas documenté : débiter le titulaire après qu'un
+ *     service initial a déjà été traité. Endpoint dédié SubsequentPayment,
+ *     body minimal (doc Card On File, exemples G/H/I/J) :
  *
- * Tant que CAWL_MIT_ENABLED n'est pas mis à "true" dans les variables
- * d'environnement Vercel, cette fonction renvoie { enabled:false } et le cron
- * retombe automatiquement sur l'email de rappel (comportement actuel, sûr).
+ *        {
+ *          "subsequentCardPaymentMethodSpecificInput": { "subsequentType": "delayedCharge" },
+ *          "order": { "amountOfMoney": { "amount": <centimes>, "currencyCode": "EUR" } }
+ *        }
+ *
+ *     Le montant est le solde, le token est lié au paiement initial référencé.
+ *     Hors 3-D Secure (client absent → MIT), CVC inutile.
+ *
+ * ⚠️ L'APPEL HTTP RÉEL est désactivé tant que CAWL_MIT_ENABLED !== "true",
+ *    le temps de : confirmer l'activation Card On File sur le PSPID, vérifier
+ *    le chemin exact de l'endpoint subsequent du SDK, et tester en preprod.
+ *    Flag absent/false → aucun appel réseau, enabled:false, fallback email.
  */
 
 export interface MitChargeParams {
-  paymentId: string;
+  paymentId: string;            // doc payment Firestore (notre référence)
   familyId: string;
-  amount: number;          // montant du solde à prélever (euros)
-  token: string;           // token permanent CAWL (Card On File)
-  schemeTransactionId?: string; // référence du paiement initial (acompte)
-  label: string;           // libellé (ex: "Solde stage Poney — Dupont")
+  amount: number;               // solde à prélever (euros)
+  token: string;                // token permanent Card On File
+  initialPaymentId?: string;    // payment.id CAWL de l'acompte (transaction initiale)
+  label: string;
   familyEmail?: string;
 }
 
 export interface MitChargeResult {
-  enabled: boolean;        // false = stub non branché → fallback email
+  enabled: boolean;             // false = stub non actif → fallback email
   success: boolean;
   paymentReference?: string;
+  statusCode?: number;
   error?: string;
 }
 
-/**
- * Déclenche le prélèvement du solde. Retourne enabled:false tant que le stub
- * n'est pas branché, pour que l'appelant fasse le fallback email.
- */
-export async function chargeWithToken(params: MitChargeParams): Promise<MitChargeResult> {
-  const mitEnabled = process.env.CAWL_MIT_ENABLED === "true";
-
-  // ── STUB : tant que non activé, on ne tente AUCUN appel réseau ─────────────
-  if (!mitEnabled) {
-    console.log(`[cawl-mit] STUB (CAWL_MIT_ENABLED!=true) — pas de prélèvement auto pour ${params.paymentId}, fallback email`);
-    return { enabled: false, success: false };
-  }
-
-  // ── À BRANCHER quand le CA confirme ────────────────────────────────────────
-  // Structure cible (à adapter au format exact renvoyé par le support CAWL) :
-  //
-  //   const merchantId = process.env.CAWL_MERCHANT_ID;
-  //   const endpoint = `${process.env.CAWL_API_BASE}/${merchantId}/payments`;
-  //   const body = {
-  //     cardPaymentMethodSpecificInput: {
-  //       token: params.token,
-  //       paymentProductId: 1, // ou détecté
-  //       unscheduledCardOnFileRequestor: "merchantInitiated",
-  //       unscheduledCardOnFileSequenceIndicator: "subsequent",
-  //       cardOnFileData: {
-  //         isInitialTransaction: false,
-  //         subsequentCardOnFileData: {
-  //           cardOnFileInitiator: "MERCHANT",
-  //           transactionType: "DELAYED_CHARGE",
-  //           initialSchemeTransactionId: params.schemeTransactionId,
-  //         },
-  //       },
-  //     },
-  //     order: {
-  //       amountOfMoney: { amount: Math.round(params.amount * 100), currencyCode: "EUR" },
-  //       customer: { contactDetails: { emailAddress: params.familyEmail } },
-  //       references: { merchantReference: params.paymentId },
-  //     },
-  //   };
-  //   // ... appel signé via le SDK CAWL, lecture du statut, etc.
-  //
-  // Pour l'instant, si quelqu'un active le flag SANS avoir branché l'appel,
-  // on échoue explicitement plutôt que de prétendre un succès.
-  console.error(`[cawl-mit] CAWL_MIT_ENABLED=true mais l'appel réel n'est pas encore implémenté pour ${params.paymentId}`);
+// Corps exact de la requête de prélèvement du solde (delayedCharge).
+// Exporté pour pouvoir être testé/loggé indépendamment de l'appel réseau.
+export function buildDelayedChargeBody(amountEuros: number) {
   return {
-    enabled: true,
-    success: false,
-    error: "Appel CAWL MIT non implémenté (en attente confirmation contrat CA/Worldline)",
+    subsequentCardPaymentMethodSpecificInput: {
+      subsequentType: "delayedCharge" as const,
+    },
+    order: {
+      amountOfMoney: {
+        amount: Math.round(amountEuros * 100), // CAWL attend des centimes
+        currencyCode: "EUR",
+      },
+    },
   };
 }
 
+export async function chargeWithToken(params: MitChargeParams): Promise<MitChargeResult> {
+  const mitEnabled = process.env.CAWL_MIT_ENABLED === "true";
+
+  // Body prêt même en mode stub (utile pour les logs / la mise au point).
+  const body = buildDelayedChargeBody(params.amount);
+
+  // ── STUB : tant que non activé, aucun appel réseau ─────────────────────────
+  if (!mitEnabled) {
+    console.log(`[cawl-mit] STUB (CAWL_MIT_ENABLED!=true) — solde ${params.amount}EUR pour ${params.paymentId} NON prélevé (fallback email). Body prêt:`, JSON.stringify(body));
+    return { enabled: false, success: false };
+  }
+
+  // ── Garde-fous avant tout appel réel ───────────────────────────────────────
+  if (!CAWL_PSPID) {
+    return { enabled: true, success: false, error: "CAWL_PSPID manquant" };
+  }
+  if (!params.initialPaymentId) {
+    // delayedCharge référence la transaction initiale (acompte).
+    return { enabled: true, success: false, error: "initialPaymentId (acompte) manquant pour le delayedCharge" };
+  }
+
+  // ── Appel réel CAWL (SubsequentPayment) ────────────────────────────────────
+  // Le SDK onlinepayments-sdk-nodejs n'expose pas toujours subsequentPayment de
+  // façon stable selon la version ; on tente la méthode SDK si présente. À
+  // VÉRIFIER EN PREPROD avant d'activer le flag en production.
+  try {
+    const paymentsApi: any = (cawlSdk as any)?.payments;
+
+    if (paymentsApi && typeof paymentsApi.subsequentPayment === "function") {
+      const resp = await paymentsApi.subsequentPayment(CAWL_PSPID, params.initialPaymentId, body);
+      const status = resp?.body?.payment?.status || resp?.body?.status || "";
+      const ref = resp?.body?.payment?.id || resp?.body?.id || "";
+      const ok = ["CAPTURED", "PENDING_CAPTURE", "PAID", "CAPTURE_REQUESTED", "AUTHORIZED"].includes(String(status).toUpperCase());
+      if (ok) {
+        return { enabled: true, success: true, paymentReference: ref, statusCode: resp?.status };
+      }
+      return { enabled: true, success: false, paymentReference: ref, statusCode: resp?.status, error: `Statut CAWL: ${status || "inconnu"}` };
+    }
+
+    // Méthode SDK absente : on ne devine pas l'appel REST signé pour ne pas
+    // risquer une transaction mal formée.
+    return {
+      enabled: true,
+      success: false,
+      error: "Méthode SDK subsequentPayment introuvable — endpoint REST à brancher après vérif preprod",
+    };
+  } catch (e: any) {
+    console.error("[cawl-mit] Erreur appel SubsequentPayment:", e);
+    return { enabled: true, success: false, error: (e?.message || String(e)).slice(0, 300) };
+  }
+}
+
 /**
- * Enregistre une tentative de prélèvement auto sur le paiement (audit/anti-doublon).
+ * Enregistre la tentative sur le paiement (audit + anti-doublon).
+ * Incrémente paidAmount uniquement en cas de succès.
  */
 export async function logMitAttempt(paymentId: string, result: MitChargeResult, amount: number) {
   try {
     await adminDb.collection("payments").doc(paymentId).update({
       mitLastAttemptAt: FieldValue.serverTimestamp(),
       mitLastResult: result.success ? "success" : (result.enabled ? "failed" : "skipped_disabled"),
+      ...(result.paymentReference ? { mitPaymentReference: result.paymentReference } : {}),
       ...(result.error ? { mitLastError: result.error.slice(0, 300) } : {}),
       ...(result.success ? {
         paidAmount: FieldValue.increment(amount),

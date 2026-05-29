@@ -101,7 +101,7 @@ export async function GET(req: NextRequest) {
           familyId: p.familyId,
           amount: solde,
           token: cofToken,
-          schemeTransactionId: p.cofSchemeTransactionId || p.schemeTransactionId,
+          initialPaymentId: p.cofInitialPaymentId || p.cawlHostedCheckoutId,
           label: `Solde ${stageTitle} — ${familyName}`,
           familyEmail,
         });

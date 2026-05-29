@@ -227,6 +227,8 @@ export async function GET(req: NextRequest) {
       const cofSchemeTxId = paymentOutput?.paymentOutput?.cardPaymentMethodSpecificOutput?.schemeTransactionId
         || paymentOutput?.cardPaymentMethodSpecificOutput?.schemeTransactionId
         || "";
+      // Id CAWL du paiement initial (acompte) — référence pour le delayedCharge du solde.
+      const cofInitialPaymentId = paymentOutput?.id || paymentOutput?.paymentOutput?.references?.paymentReference || "";
 
       await payRef.update({
         status: isDeposit ? "partial" : "paid",
@@ -236,6 +238,7 @@ export async function GET(req: NextRequest) {
         paymentRef: `CAWL-${hostedCheckoutId}`,
         ...(cofToken ? { cofToken } : {}),
         ...(cofSchemeTxId ? { cofSchemeTransactionId: cofSchemeTxId } : {}),
+        ...(cofInitialPaymentId ? { cofInitialPaymentId } : {}),
         updatedAt: FieldValue.serverTimestamp(),
       });
 
