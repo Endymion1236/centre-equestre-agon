@@ -2198,7 +2198,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             return (
               <div key={e.childId} className="flex items-center justify-between bg-sand rounded-lg px-3 py-2">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColor}`}></span>
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColor}`} title={statusLabel || undefined}></span>
                   <a
                     href={
                       isMoniteur && !isAdmin
@@ -2213,7 +2213,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   </a>
                   {age && <span className="font-body text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full flex-shrink-0">{age}</span>}
                   {galop && galop !== "—" && <span className="font-body text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full flex-shrink-0">{galop}</span>}
-                  {statusLabel && <span className={`font-body text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${isForfaitPaid ? "text-emerald-700 bg-emerald-50" : isForfaitPending ? "text-amber-700 bg-amber-50" : hasPaid ? "text-green-700 bg-green-50" : "text-orange-600 bg-orange-50"}`}>{statusLabel}</span>}
+                  {statusLabel && <span className={`font-body text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 hidden sm:inline ${isForfaitPaid ? "text-emerald-700 bg-emerald-50" : isForfaitPending ? "text-amber-700 bg-amber-50" : hasPaid ? "text-green-700 bg-green-50" : "text-orange-600 bg-orange-50"}`}>{statusLabel}</span>}
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <a
