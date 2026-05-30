@@ -844,14 +844,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     if (cr.price4days) configuredPrices[4] = cr.price4days;
 
     const prixStageComplet = priceTTC;
-    // Prix d'UN jour : on utilise le tarif configuré price1day SEULEMENT s'il
-    // est cohérent (strictement inférieur au prix complet). Un price1day égal
-    // ou supérieur au prix semaine est une mauvaise config → on retombe sur le
-    // prorata prixComplet / nbJours. Évite le bug "1 jour facturé au prix
-    // semaine" (152€ au lieu de 35€).
+    // Prix d'UN jour = prorata prixComplet / nbJours par défaut. Un tarif jour
+    // configuré (price1day) n'est retenu QUE s'il est inférieur ou égal au
+    // prorata (vrai tarif réduit à la journée). Un price1day proche du prix
+    // semaine (ex. 152) est une mauvaise config et serait absurde pour 1 jour
+    // → on garde le prorata. Corrige le bug "1 jour facturé 152€".
     const prixJourProrata = Math.round((prixStageComplet / nbJoursStage) * 100) / 100;
     const price1dayConfig = configuredPrices[1];
-    const prixUnJour = (price1dayConfig && price1dayConfig < prixStageComplet)
+    const prixUnJour = (price1dayConfig && price1dayConfig <= prixJourProrata)
       ? price1dayConfig
       : prixJourProrata;
     const prixEffectif = stageMode === "jour"
@@ -2542,7 +2542,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       {(() => {
                         const cr = creneau as any;
                         const p1 = cr.price1day;
-                        const prixJourAff = (p1 && p1 < priceTTC) ? p1 : Math.round((priceTTC / nbJours) * 100) / 100;
+                        const prixJourAff = (p1 && p1 <= Math.round((priceTTC / nbJours) * 100) / 100) ? p1 : Math.round((priceTTC / nbJours) * 100) / 100;
                         return stageMode === "semaine"
                           ? `${nbJours} jour${nbJours > 1 ? "s" : ""} — ${priceTTC.toFixed(2)}€`
                           : `1 jour sur ${nbJours} — ${prixJourAff.toFixed(2)}€/jour (prorata)`;
