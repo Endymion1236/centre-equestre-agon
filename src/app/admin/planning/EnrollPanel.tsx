@@ -3180,28 +3180,43 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                           const pData = stagePayment.data();
                           const oldItems = pData.items || [];
                           const totalDaysNow = showAddDays.joursInscrits + 1;
+                          const totalJoursStage = showAddDays.totalJoursStage || 1;
                           const cr = showAddDays.creneauRef as any;
+                          const prixComplet = (cr.priceTTC || (cr.priceHT || 0) * (1 + (cr.tvaTaux || 5.5) / 100)) || 0;
+                          // Tarifs multi-jours configurés, retenus seulement s'ils
+                          // sont cohérents (<= prix complet du stage). Sinon prorata
+                          // prixComplet × joursInscrits / totalJours. Évite les prix
+                          // absurdes issus d'une mauvaise config (ex. price1day=152).
                           const prices: Record<number, number> = {};
-                          if (cr.price1day) prices[1] = cr.price1day;
-                          if (cr.price2days) prices[2] = cr.price2days;
-                          if (cr.price3days) prices[3] = cr.price3days;
-                          if (cr.price4days) prices[4] = cr.price4days;
-                          const priceKeys = Object.keys(prices).map(Number).sort((a,b) => a-b);
-                          const maxKey = priceKeys.at(-1) || 1;
-                          // Prix de base pour le nouveau nombre de jours
-                          const prixBase = prices[totalDaysNow] || prices[priceKeys.filter(k => k <= totalDaysNow).at(-1) || maxKey] || prices[maxKey] || 0;
+                          if (cr.price1day && cr.price1day <= prixComplet) prices[1] = cr.price1day;
+                          if (cr.price2days && cr.price2days <= prixComplet) prices[2] = cr.price2days;
+                          if (cr.price3days && cr.price3days <= prixComplet) prices[3] = cr.price3days;
+                          if (cr.price4days && cr.price4days <= prixComplet) prices[4] = cr.price4days;
+                          const prorata = Math.round((prixComplet * totalDaysNow / Math.max(1, totalJoursStage)) * 100) / 100;
+                          // Prix de base = tarif configuré pour ce nb de jours si dispo et cohérent, sinon prorata
+                          const prixBase = (totalDaysNow >= totalJoursStage)
+                            ? prixComplet // tous les jours = prix plein du stage
+                            : (prices[totalDaysNow] ?? prorata);
 
                           // Recalcul individuel par enfant — préserve les remises par rang dans la fratrie
                           const stageItems = oldItems.filter((i: any) => i.activityType === "stage" || i.activityType === "stage_journee");
                           const updatedItems = oldItems.map((item: any) => {
                             if (item.activityType !== "stage" && item.activityType !== "stage_journee") return item;
-                            // Trouver le rang de cet enfant parmi les items stage
                             const rang = stageItems.findIndex((si: any) => si.childId === item.childId);
-                            // Remise selon rang : 0% pour le 1er, 10% pour le 2e, 20% pour le 3e, etc.
                             const remisePct = rang <= 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
                             const remiseEuros = Math.round(prixBase * remisePct / 100 * 100) / 100;
                             const newPriceTTC = Math.max(0, Math.round((prixBase - remiseEuros) * 100) / 100);
-                            return { ...item, priceTTC: newPriceTTC, priceHT: Math.round(newPriceTTC / 1.055 * 100) / 100 };
+                            // Mettre à jour le libellé pour refléter le nb de jours réel.
+                            let newTitle = item.activityTitle || "";
+                            if (/\(\d+j\)/.test(newTitle)) {
+                              newTitle = newTitle.replace(/\(\d+j\)/, `(${totalDaysNow}j)`);
+                            }
+                            return {
+                              ...item,
+                              activityTitle: newTitle,
+                              priceTTC: newPriceTTC,
+                              priceHT: Math.round(newPriceTTC / 1.055 * 100) / 100,
+                            };
                           });
                           const newTotal = Math.round(updatedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0) * 100) / 100;
                           await updateDoc(doc(db, "payments", stagePayment.id), {
