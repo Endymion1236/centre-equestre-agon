@@ -36,6 +36,8 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
   const [editingMandat, setEditingMandat] = useState(false);
   const [mandatForm, setMandatForm] = useState({ iban: "", bic: "", titulaire: family.parentName || "", dateSignature: new Date().toISOString().split("T")[0] });
   const [mandatSaving, setMandatSaving] = useState(false);
+  // Quel enfant a sa liste de séances entièrement dépliée (par childId).
+  const [seancesExpanded, setSeancesExpanded] = useState<string | null>(null);
 
   const handleSaveMandat = async () => {
     if (!mandatForm.iban || !mandatForm.titulaire) return;
@@ -157,7 +159,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
               <div className="font-body text-[10px] text-green-600 font-semibold uppercase tracking-wider mb-2 flex items-center gap-1"><CalendarDays size={12} /> Prochaines séances ({upcoming.length})</div>
               {upcoming.length === 0 ? <p className="font-body text-xs text-slate-400 italic">Aucune séance à venir.</p> : (
                 <div className="flex flex-col gap-1">
-                  {upcoming.slice(0, 8).map((r: any) => (
+                  {(seancesExpanded === child.id ? upcoming : upcoming.slice(0, 8)).map((r: any) => (
                     <div key={r.id} className="flex items-center justify-between font-body text-xs py-1.5 px-3 bg-green-50 rounded-lg">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-green-700 font-semibold min-w-[80px]">{new Date(r.date + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</span>
@@ -172,7 +174,14 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                       }} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-0.5"><Trash2 size={11} /></button>
                     </div>
                   ))}
-                  {upcoming.length > 8 && <p className="font-body text-[10px] text-slate-400 text-center">+{upcoming.length - 8} autres</p>}
+                  {upcoming.length > 8 && (
+                    <button
+                      onClick={() => setSeancesExpanded(seancesExpanded === child.id ? null : child.id)}
+                      className="font-body text-[10px] text-blue-500 hover:text-blue-700 text-center bg-transparent border-none cursor-pointer py-1"
+                    >
+                      {seancesExpanded === child.id ? "▲ Voir moins" : `▼ Voir les ${upcoming.length - 8} autres`}
+                    </button>
+                  )}
                 </div>
               )}
               {past.length > 0 && (
