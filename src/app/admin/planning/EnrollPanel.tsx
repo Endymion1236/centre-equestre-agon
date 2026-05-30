@@ -844,9 +844,19 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     if (cr.price4days) configuredPrices[4] = cr.price4days;
 
     const prixStageComplet = priceTTC;
+    // Prix d'UN jour : on utilise le tarif configuré price1day SEULEMENT s'il
+    // est cohérent (strictement inférieur au prix complet). Un price1day égal
+    // ou supérieur au prix semaine est une mauvaise config → on retombe sur le
+    // prorata prixComplet / nbJours. Évite le bug "1 jour facturé au prix
+    // semaine" (152€ au lieu de 35€).
+    const prixJourProrata = Math.round((prixStageComplet / nbJoursStage) * 100) / 100;
+    const price1dayConfig = configuredPrices[1];
+    const prixUnJour = (price1dayConfig && price1dayConfig < prixStageComplet)
+      ? price1dayConfig
+      : prixJourProrata;
     const prixEffectif = stageMode === "jour"
-      ? (configuredPrices[1] || Math.round((prixStageComplet / nbJoursStage) * 100) / 100)
-      : (configuredPrices[nbJoursStage] || prixStageComplet);
+      ? prixUnJour
+      : (configuredPrices[nbJoursStage] && configuredPrices[nbJoursStage] <= prixStageComplet ? configuredPrices[nbJoursStage] : prixStageComplet);
 
     if (selectedChildren.length === 0 || !fam) { setStageLines([]); return; }
 
@@ -2529,9 +2539,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       </div>
                     )}
                     <div className="font-body text-[10px] text-blue-500 bg-blue-50 rounded px-2 py-1">
-                      {stageMode === "semaine"
-                        ? `${nbJours} jour${nbJours > 1 ? "s" : ""} — ${priceTTC.toFixed(2)}€`
-                        : `1 jour sur ${nbJours} — ${(priceTTC / nbJours).toFixed(2)}€/jour (prorata)`}
+                      {(() => {
+                        const cr = creneau as any;
+                        const p1 = cr.price1day;
+                        const prixJourAff = (p1 && p1 < priceTTC) ? p1 : Math.round((priceTTC / nbJours) * 100) / 100;
+                        return stageMode === "semaine"
+                          ? `${nbJours} jour${nbJours > 1 ? "s" : ""} — ${priceTTC.toFixed(2)}€`
+                          : `1 jour sur ${nbJours} — ${prixJourAff.toFixed(2)}€/jour (prorata)`;
+                      })()}
                     </div>
                     {existingStageCount > 0 && (
                       <div className="font-body text-[10px] text-orange-500 bg-orange-50 rounded px-2 py-1">
