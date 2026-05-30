@@ -343,10 +343,16 @@ export function TabImpayes({
                           const d = isNaN(dt.getTime()) ? item.date : dt.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
                           planning = `${d} · ${item.startTime}${item.endTime ? `–${item.endTime}` : ""}`;
                         }
+                        // Le titre des stages/réservations contient parfois le nom collé
+                        // ("Stage X (3j) — Eliot"). On le retire pour éviter le doublon,
+                        // puis on préfixe childName une seule fois → "Eliot — Stage X (3j)".
+                        const cleanTitle = item.childName
+                          ? String(item.activityTitle || "").replace(` — ${item.childName}`, "")
+                          : (item.activityTitle || "");
                         return (
                           <div key={idx} className="py-1.5 font-body text-xs border-b border-gray-50 last:border-0">
                             <div className="flex items-center justify-between">
-                              <span className="text-slate-600 flex-1 min-w-0 truncate">{item.childName ? `${item.childName} — ` : ""}{item.activityTitle}{item.startTime && !planning ? ` ${item.startTime}` : ""}</span>
+                              <span className="text-slate-600 flex-1 min-w-0 truncate">{item.childName ? `${item.childName} — ` : ""}{cleanTitle}{item.startTime && !planning ? ` ${item.startTime}` : ""}</span>
                               <div className="flex items-center gap-2 flex-shrink-0">
                                 <span className="text-blue-500 font-semibold">{(item.priceTTC || 0) === 0 ? <span className="text-slate-400 text-[10px]">Inclus</span> : `${(item.priceTTC || 0).toFixed(2)}€`}</span>
                                 <button onClick={() => { if (!confirm(`Retirer "${item.activityTitle}" ?\n\nL'enfant sera désinscrit.`)) return; removePaymentItem(p, idx); }} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-0.5"><X size={12}/></button>
