@@ -38,6 +38,21 @@ import TimelineView from "./TimelineView";
 import WeekView from "./WeekView";
 import { authFetch } from "@/lib/auth-fetch";
 
+// Calcule l'âge "X ans" à partir d'une date de naissance (string, Date ou Timestamp Firestore).
+// Identique au helper de EnrollPanel pour un affichage cohérent.
+const calcAge = (birthDate: any): string => {
+  if (!birthDate) return "";
+  const bd = new Date(
+    typeof birthDate === "string" ? birthDate :
+    birthDate?.seconds ? birthDate.seconds * 1000 : birthDate
+  );
+  if (isNaN(bd.getTime())) return "";
+  const now = new Date();
+  let age = now.getFullYear() - bd.getFullYear();
+  if (now.getMonth() < bd.getMonth() || (now.getMonth() === bd.getMonth() && now.getDate() < bd.getDate())) age--;
+  return `${age} ans`;
+};
+
 export default function PlanningPage() {
   const { toast } = useToast();
   const { setAgentContext } = useAgentContext("planning");
@@ -1644,10 +1659,14 @@ export default function PlanningPage() {
                 const statusBg   = isCard ? "#EDF2FA"  : isForfaitPaid ? "#ecfdf5" : isForfaitPending ? "#fffbeb" : hasPaid ? "#f0fdf4"  : hasPending ? "#fffbeb"  : "#f3f4f6";
                 const statusIcon = isCard ? "🎟️" : isForfaitPaid ? "📅" : isForfaitPending ? "⏳" : hasPaid ? "✓" : hasPending ? "…" : "—";
                 const statusLabel = isCard ? "carte" : isForfaitPaid ? "forfait" : isForfaitPending ? "forfait à régler" : hasPaid ? "réglé" : hasPending ? "en attente" : "non réglé";
+                const famForChild = families.find((f:any) => f.firestoreId === e.familyId);
+                const childRec = (famForChild?.children || []).find((c:any) => c.id === e.childId);
+                const age = calcAge(childRec?.birthDate);
                 return <span key={e.childId} className="font-body text-xs px-2.5 py-1.5 rounded-full flex items-center gap-1.5 border"
                   style={{ background: statusBg, borderColor: statusColor+"33", color: "#0C1A2E" }}>
                   <span className="text-[11px]">{statusIcon}</span>
                   <span className="font-semibold">{e.childName}</span>
+                  {age && <span style={{ color: "#64748b", fontSize: 10 }}>{age}</span>}
                   <span style={{ color: statusColor, fontSize: 10 }}>{statusLabel}</span>
                 </span>;
               })}</div>}
