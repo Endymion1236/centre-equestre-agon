@@ -38,17 +38,6 @@ export async function POST(req: NextRequest) {
     const htApi: any = (cawlSdk as any)?.hostedTokenization;
     const payApi: any = (cawlSdk as any)?.payments;
 
-    // DIAG : tracer la présence des clients SDK dans le doc paiement.
-    await adminDb.collection("payments").doc(paymentId).update({
-      _diag: {
-        step: "start",
-        hasHtApi: !!htApi,
-        hasPayApi: !!payApi,
-        payApiType: typeof payApi?.createPayment,
-        at: new Date().toISOString(),
-      },
-    });
-
     // 1. Récupérer le token créé dans l'iframe
     const htResp = await htApi.getHostedTokenization(CAWL_PSPID, hostedTokenizationId);
     const tokenId = htResp?.body?.token?.id || htResp?.token?.id || "";
@@ -59,10 +48,8 @@ export async function POST(req: NextRequest) {
       htResp?.token?.paymentProductId ??
       null;
     if (!tokenId) {
-      await adminDb.collection("payments").doc(paymentId).update({ "_diag.step": "no_token" });
       return NextResponse.json({ error: "Token introuvable pour cette session" }, { status: 502 });
     }
-    await adminDb.collection("payments").doc(paymentId).update({ "_diag.step": "token_ok", "_diag.tokenId": tokenId, "_diag.productId": paymentProductId });
 
     // 2. Créer le paiement de l'acompte avec le token, en le rendant permanent
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
@@ -71,12 +58,16 @@ export async function POST(req: NextRequest) {
         token: tokenId,
         ...(paymentProductId ? { paymentProductId } : {}),
         tokenize: true, // rend le token permanent (Card On File)
-        // SALE = autorisation + capture immédiate (l'acompte est encaissé tout
-        // de suite). Sans ça, le paiement reste en statut CREATED/0.
+        // SALE = autorisation + capture immédiate (l'acompte est encaissé).
         authorizationMode: "SALE",
         unscheduledCardOnFileRequestor: "cardholderInitiated",
         unscheduledCardOnFileSequenceIndicator: "first",
         threeDSecure: {
+          // Paiement avec carte enregistrée : on saute l'authentification forte
+          // (sinon le paiement reste bloqué en attente d'un 3DS qui n'arrive
+          // jamais → statut CREATED). Le challenge reste géré si CAWL le force
+          // (merchantAction REDIRECT).
+          skipAuthentication: true,
           redirectionData: {
             returnUrl: returnUrl || `${appUrl}/espace-cavalier/factures?cawlReturn=${paymentId}`,
           },
@@ -92,23 +83,11 @@ export async function POST(req: NextRequest) {
     try {
       payResp = await payApi.createPayment(CAWL_PSPID, createReq);
     } catch (createErr: any) {
-      await adminDb.collection("payments").doc(paymentId).update({
-        cofToken: tokenId,
-        cawlTokenizedAt: FieldValue.serverTimestamp(),
-        "_diag.step": "createPayment_threw",
-        "_diag.createError": (createErr?.message || String(createErr)).slice(0, 500),
-        "_diag.createErrorBody": JSON.stringify(createErr?.body || createErr?.response || {}).slice(0, 800),
-      });
+      console.error("[cawl/tokenize/finalize] createPayment:", createErr?.message, JSON.stringify(createErr?.body || {}));
       return NextResponse.json({ error: "createPayment a échoué", detail: createErr?.message }, { status: 502 });
     }
     const payBody = payResp?.body || payResp;
-    await adminDb.collection("payments").doc(paymentId).update({
-      "_diag.step": "createPayment_ok",
-      "_diag.respStatus": payResp?.status ?? null,
-      "_diag.respBody": JSON.stringify(payBody).slice(0, 1500),
-    });
     const payment = payBody?.payment || payBody?.creationOutput?.payment || payBody?.createdPaymentOutput?.payment || {};
-    // L'id peut se trouver à plusieurs endroits selon la forme de réponse.
     const cawlPaymentId =
       payment?.id ||
       payBody?.payment?.id ||
@@ -116,8 +95,7 @@ export async function POST(req: NextRequest) {
       payBody?.createdPaymentOutput?.payment?.id ||
       payBody?.id ||
       "";
-    // Statut : CAWL renvoie un libellé texte (status) ET un code numérique
-    // (statusOutput.statusCode : 5/9 = réussi, 2 = refusé, 0 = transitoire).
+    // Statut texte + code numérique (5/9 = réussi, 2 = refusé, 0 = transitoire).
     let status = payment?.status || payBody?.payment?.status || "";
     let statusCode =
       payment?.statusOutput?.statusCode ??
@@ -127,8 +105,7 @@ export async function POST(req: NextRequest) {
     const merchantAction = payBody?.merchantAction || payment?.merchantAction;
     const redirectUrl = merchantAction?.redirectData?.redirectURL || "";
 
-    // Statut transitoire (0) sans redirection → relire le statut définitif via
-    // GetPaymentDetails (le résultat acquéreur arrive juste après la création).
+    // Statut transitoire (0) sans redirection → relire le statut définitif.
     if (cawlPaymentId && (Number(statusCode) === 0 || statusCode == null) && merchantAction?.actionType !== "REDIRECT") {
       try {
         const det = await payApi.getPaymentDetails(CAWL_PSPID, cawlPaymentId);
@@ -137,18 +114,7 @@ export async function POST(req: NextRequest) {
         const detCode = detBody?.statusOutput?.statusCode ?? detBody?.payment?.statusOutput?.statusCode;
         if (detStatus) status = detStatus;
         if (detCode != null) statusCode = detCode;
-        await adminDb.collection("payments").doc(paymentId).update({
-          "_diag.detailsStatus": status,
-          "_diag.detailsStatusCode": statusCode ?? null,
-        });
-      } catch (detErr: any) {
-        await adminDb.collection("payments").doc(paymentId).update({ "_diag.detailsError": (detErr?.message || String(detErr)).slice(0, 300) });
-      }
-    }
-
-    // Diagnostic : tracer la réponse si l'id manque (cas observé en test).
-    if (!cawlPaymentId) {
-      console.error("[cawl/tokenize/finalize] payment.id absent — réponse brute:", JSON.stringify(payBody)?.slice(0, 1000));
+      } catch { /* non bloquant */ }
     }
 
     // 3. Stocker token + id paiement initial + statut de l'acompte
@@ -156,11 +122,6 @@ export async function POST(req: NextRequest) {
     const acomptePaid =
       [5, 9].includes(Number(statusCode)) ||
       ["CAPTURED", "PENDING_CAPTURE", "PAID", "CAPTURE_REQUESTED", "AUTHORIZED", "PENDING_APPROVAL"].includes(statusUpper);
-    await adminDb.collection("payments").doc(paymentId).update({
-      "_diag.finalStatus": status,
-      "_diag.finalStatusCode": statusCode ?? null,
-      "_diag.acomptePaid": acomptePaid,
-    });
     await adminDb.collection("payments").doc(paymentId).update({
       cofToken: tokenId,
       ...(cawlPaymentId ? { cofInitialPaymentId: cawlPaymentId } : {}),
