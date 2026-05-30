@@ -71,6 +71,9 @@ export async function POST(req: NextRequest) {
         token: tokenId,
         ...(paymentProductId ? { paymentProductId } : {}),
         tokenize: true, // rend le token permanent (Card On File)
+        // SALE = autorisation + capture immédiate (l'acompte est encaissé tout
+        // de suite). Sans ça, le paiement reste en statut CREATED/0.
+        authorizationMode: "SALE",
         unscheduledCardOnFileRequestor: "cardholderInitiated",
         unscheduledCardOnFileSequenceIndicator: "first",
         threeDSecure: {
@@ -133,7 +136,12 @@ export async function POST(req: NextRequest) {
     const statusUpper = String(status).toUpperCase();
     const acomptePaid =
       [5, 9].includes(Number(statusCode)) ||
-      ["CAPTURED", "PENDING_CAPTURE", "PAID", "CAPTURE_REQUESTED", "AUTHORIZED"].includes(statusUpper);
+      ["CAPTURED", "PENDING_CAPTURE", "PAID", "CAPTURE_REQUESTED", "AUTHORIZED", "PENDING_APPROVAL"].includes(statusUpper);
+    await adminDb.collection("payments").doc(paymentId).update({
+      "_diag.finalStatus": status,
+      "_diag.finalStatusCode": statusCode ?? null,
+      "_diag.acomptePaid": acomptePaid,
+    });
     await adminDb.collection("payments").doc(paymentId).update({
       cofToken: tokenId,
       ...(cawlPaymentId ? { cofInitialPaymentId: cawlPaymentId } : {}),
