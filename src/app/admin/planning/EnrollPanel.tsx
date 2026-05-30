@@ -2577,7 +2577,24 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       <div key={l.childId} className="flex items-center justify-between font-body text-sm">
                         <div className="flex items-center gap-2">
                           <span className="text-blue-800 font-semibold">{l.childName}</span>
-                          <Badge color="green">-{l.remiseEuros}€ ({l.rang}{l.rang === 1 ? "ère" : "ème"} inscr.)</Badge>
+                          {l.remiseEuros > 0 && (() => {
+                            // Construire un libellé fidèle à la VRAIE cause de la remise.
+                            // discountReasons (rempli par computeStageReductionsAsync) contient
+                            // p.ex. "(plafond au prix plancher 152€)" ou "2ème enfant famille (-X%)".
+                            const reasons: string[] = (l as any).discountReasons || [];
+                            const isPlancher = reasons.some(r => r.includes("plancher"));
+                            const hasFratrieOrMulti = reasons.some(r => r.includes("enfant famille") || r.includes("stage"));
+                            let label: string;
+                            if (isPlancher && !hasFratrieOrMulti) {
+                              label = "tarif plancher";
+                            } else if (hasFratrieOrMulti) {
+                              // Reprend les raisons (sans le suffixe plancher éventuel)
+                              label = reasons.filter(r => !r.includes("plancher")).join(" + ") || "remise";
+                            } else {
+                              label = "remise";
+                            }
+                            return <Badge color="green">-{l.remiseEuros}€ ({label})</Badge>;
+                          })()}
                         </div>
                         <div className="text-right">
                           <span className="text-slate-500 line-through text-xs mr-1">{l.prixBase.toFixed(2)}€</span>
