@@ -874,6 +874,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           creneauId: creneau.id!,
           settings: discountSettings,
           periods: vacationPeriods,
+          jourRatio: stageMode === "jour" ? 1 / Math.max(1, nbJoursStage) : 1,
         });
         if (!cancelled) {
           // Adapter childName avec le nom complet si disponible (compat avec l'UI)
@@ -3200,6 +3201,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
                           // Recalcul individuel par enfant — préserve les remises par rang dans la fratrie
                           const stageItems = oldItems.filter((i: any) => i.activityType === "stage" || i.activityType === "stage_journee");
+                          const crRef = showAddDays.creneauRef as any;
                           const updatedItems = oldItems.map((item: any) => {
                             if (item.activityType !== "stage" && item.activityType !== "stage_journee") return item;
                             const rang = stageItems.findIndex((si: any) => si.childId === item.childId);
@@ -3211,11 +3213,29 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                             if (/\(\d+j\)/.test(newTitle)) {
                               newTitle = newTitle.replace(/\(\d+j\)/, `(${totalDaysNow}j)`);
                             }
+                            // Ajouter la date du jour ajouté au détail (stageDates),
+                            // en évitant les doublons, et trier par date.
+                            const existingDates = Array.isArray(item.stageDates) ? [...item.stageDates] : [];
+                            if (!existingDates.some((d: any) => d.date === j.date)) {
+                              existingDates.push({ date: j.date, startTime: crRef?.startTime || "", endTime: crRef?.endTime || "" });
+                            }
+                            existingDates.sort((a: any, b: any) => (a.date || "").localeCompare(b.date || ""));
+                            // Recomposer un libellé de planning lisible (du X au Y).
+                            let newSchedule = item.stageSchedule || "";
+                            if (existingDates.length > 1) {
+                              const fmt = (d: string) => new Date(d).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+                              newSchedule = `du ${fmt(existingDates[0].date)} au ${fmt(existingDates[existingDates.length - 1].date)} · ${crRef?.startTime || ""}–${crRef?.endTime || ""}`;
+                            }
+                            const existingCreneauIds = Array.isArray(item.creneauIds) ? [...item.creneauIds] : (item.creneauId ? [item.creneauId] : []);
+                            if (!existingCreneauIds.includes(j.id)) existingCreneauIds.push(j.id);
                             return {
                               ...item,
                               activityTitle: newTitle,
                               priceTTC: newPriceTTC,
                               priceHT: Math.round(newPriceTTC / 1.055 * 100) / 100,
+                              stageDates: existingDates,
+                              stageSchedule: newSchedule,
+                              creneauIds: existingCreneauIds,
                             };
                           });
                           const newTotal = Math.round(updatedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0) * 100) / 100;
