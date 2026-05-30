@@ -256,7 +256,10 @@ export default function ReserverPage() {
   const isStage = (c: Creneau) => c.activityType === "stage" || c.activityType === "stage_journee";
 
   // Ajouter au panier (stage = multi-enfants, cours = 1 enfant)
-  const addStageToCart = (stageCreneaux: Creneau[]) => {
+  // En mode jour, stageCreneaux ne contient QUE les jours sélectionnés ; il faut
+  // donc passer prixJourParam (prix d'UN jour) et totalJoursStageParam (nombre
+  // total de jours du stage) calculés par l'appelant, sinon le prorata est faux.
+  const addStageToCart = (stageCreneaux: Creneau[], prixJourParam?: number, totalJoursStageParam?: number) => {
     if (selectedChildren.length === 0) return;
     const first = stageCreneaux[0];
     const prixSemaine = (first as any).priceTTC || first.priceHT * (1 + (first.tvaTaux || 5.5) / 100);
@@ -266,8 +269,13 @@ export default function ReserverPage() {
     // Calculer le prix effectif
     let prixBase: number;
     if (isJourMode) {
-      const prixJour = (first as any).priceTTCDay || Math.round(prixSemaine / stageCreneaux.length * 100) / 100;
-      prixBase = Math.round(prixJour * stageCreneaux.length * 100) / 100;
+      const totalJours = totalJoursStageParam || stageCreneaux.length;
+      const prixJour = prixJourParam ?? (first as any).priceTTCDay ?? Math.round(prixSemaine / Math.max(1, totalJours) * 100) / 100;
+      // Prix jour × nb de jours sélectionnés. Si tous les jours sont pris,
+      // on retombe sur le prix semaine complet. Pas de remise (gérée plus bas).
+      prixBase = (stageCreneaux.length >= totalJours)
+        ? prixSemaine
+        : Math.round(prixJour * stageCreneaux.length * 100) / 100;
     } else {
       prixBase = prixSemaine;
     }
@@ -347,25 +355,31 @@ export default function ReserverPage() {
       return;
     }
 
-    // Nombre total de jours du stage pour calculer la remise au prorata
-    const totalJoursStage = isJourMode ? stageCreneaux.length : 1; // pour le calcul de remise
-    const nbJoursSemaine = Math.max(1, stageCreneaux.length); // fallback
+    // Nombre total de jours du stage pour calculer la remise au prorata.
+    // En mode jour, stageCreneaux = jours sélectionnés ; le total vient du param.
+    const nbJoursSelectionnes = Math.max(1, stageCreneaux.length);
+    const totalJoursStage = isJourMode ? Math.max(nbJoursSelectionnes, totalJoursStageParam || nbJoursSelectionnes) : 1;
+    const nbJoursSemaine = totalJoursStage; // dénominateur du prorata
 
     const newItems: CartItem[] = childrenToAdd.map((childId, idx) => {
       const child = children.find((c: any) => c.id === childId);
       const rang = existingStageCount + idx;
-      const remiseSemaine = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
-      // Prorata de la remise si mode jour
-      const remise = isJourMode ? Math.round(remiseSemaine * stageCreneaux.length / nbJoursSemaine * 100) / 100 : remiseSemaine;
-      let prixFinal = Math.max(0, Math.round((prixBase - remise) * 100) / 100);
-      let remiseEffective = remise;
-      // Plancher : si le tarif degressif tombe en dessous du seuil configure,
-      // on plafonne au plancher. On recalcule alors la remise effective pour
-      // l'affichage et la facturation.
-      if (prixPlancherStage > 0 && prixFinal < prixPlancherStage) {
-        prixFinal = prixPlancherStage;
-        remiseEffective = Math.round((prixBase - prixPlancherStage) * 100) / 100;
-        remiseEffective = Math.max(0, remiseEffective);
+      // En mode JOUR : prix jour brut (prixBase = prixJour × nb jours), AUCUNE
+      // remise, AUCUN plancher. En mode semaine : remise dégressive + plancher.
+      let remiseEffective: number;
+      let prixFinal: number;
+      if (isJourMode) {
+        remiseEffective = 0;
+        prixFinal = Math.max(0, Math.round(prixBase * 100) / 100);
+      } else {
+        const remiseSemaine = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
+        prixFinal = Math.max(0, Math.round((prixBase - remiseSemaine) * 100) / 100);
+        remiseEffective = remiseSemaine;
+        // Plancher uniquement en mode semaine.
+        if (prixPlancherStage > 0 && prixFinal < prixPlancherStage) {
+          prixFinal = prixPlancherStage;
+          remiseEffective = Math.max(0, Math.round((prixBase - prixPlancherStage) * 100) / 100);
+        }
       }
       return {
         creneauIds: stageCreneaux.map(c => c.id),
@@ -893,8 +907,22 @@ export default function ReserverPage() {
                   const first = stageCreneaux[0];
                   const prix = (first as any).priceTTC || first.priceHT * (1 + (first.tvaTaux || 5.5) / 100);
                   const spots = Math.min(...stageCreneaux.map(spotsLeft));
-                  const joursUniques = [...new Map(stageCreneaux.map(c => [c.date, c])).values()];
-                  const jours = joursUniques.map(c => new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })).join(", ");
+                  const joursUniques = [...new Map(stageCreneaux.map(c => [c.date, c])).values()]
+                    .sort((a, b) => a.date.localeCompare(b.date));
+                  // Affichage clair AVEC le mois. Si le stage couvre plusieurs
+                  // jours, on montre la plage "du lun. 6 au ven. 10 juillet" ;
+                  // sinon le jour seul avec son mois.
+                  const jours = (() => {
+                    if (joursUniques.length === 0) return "";
+                    const fmt = (d: string, withMonth = true) =>
+                      new Date(d).toLocaleDateString("fr-FR", withMonth
+                        ? { weekday: "short", day: "numeric", month: "short" }
+                        : { weekday: "short", day: "numeric" });
+                    if (joursUniques.length === 1) return fmt(joursUniques[0].date);
+                    const premier = joursUniques[0].date;
+                    const dernier = joursUniques[joursUniques.length - 1].date;
+                    return `du ${fmt(premier, false)} au ${fmt(dernier)}`;
+                  })();
                   const isSelected = selectedCreneau?.id === first.id;
 
                   return (
@@ -927,11 +955,11 @@ export default function ReserverPage() {
                             return (
                               <div className="mt-1.5 flex flex-col gap-0.5">
                                 {Object.entries(parDate).sort(([a],[b])=>a.localeCompare(b)).map(([date, cs]) => {
-                                  const jourLabel = new Date(date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" });
+                                  const jourLabel = new Date(date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
                                   const horaires = cs.map(c => `${c.startTime}–${c.endTime}`).join(" + ");
                                   return (
                                     <div key={date} className="font-body text-xs text-gray-600 flex items-center gap-1.5">
-                                      <span className="font-semibold text-slate-600 w-16 flex-shrink-0">{jourLabel}</span>
+                                      <span className="font-semibold text-slate-600 w-24 flex-shrink-0">{jourLabel}</span>
                                       <Clock size={10} className="text-gray-600 flex-shrink-0"/>
                                       <span>{horaires}</span>
                                     </div>
@@ -982,8 +1010,6 @@ export default function ReserverPage() {
                       {isSelected && spots > 0 && (() => {
                         const allowDay = stageCreneaux.some((c: any) => c.allowDayBooking);
                         const prixJour = (first as any).priceTTCDay || (stageCreneaux.find((c: any) => (c as any).priceTTCDay) as any)?.priceTTCDay || Math.round(prix / joursUniques.length * 100) / 100;
-                        // State local pour le mode et les jours sélectionnés
-                        // On utilise un key basé sur le stage pour réinitialiser
                         return (
                         <div className="mt-4 pt-4 border-t border-green-200">
                           {/* Choix mode si autorisé */}
@@ -1076,8 +1102,10 @@ export default function ReserverPage() {
                               <button onClick={(e) => {
                                 e.stopPropagation();
                                 if (isJourMode) {
-                                  // Mode jour : inscrire uniquement les jours sélectionnés
-                                  addStageToCart(creneauxToBook);
+                                  // Mode jour : inscrire uniquement les jours sélectionnés.
+                                  // On passe le prix d'un jour et le nombre TOTAL de
+                                  // jours du stage pour un prorata correct.
+                                  addStageToCart(creneauxToBook, prixJour, joursUniques.length);
                                 } else {
                                   addStageToCart(stageCreneaux);
                                 }

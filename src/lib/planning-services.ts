@@ -171,12 +171,17 @@ export async function computeStageReductionsAsync(params: {
   creneauId: string; // à exclure (déjà inscrit en amont)
   settings: import("./discounts").DiscountSettings;
   periods: import("./discounts").VacationPeriod[];
+  jourRatio?: number; // jours facturés / total jours du stage (1 = stage complet)
 }): Promise<StageLine[]> {
   const { applyDiscounts, fetchFamilyStagesInPeriod, getPeriodForDate } = await import("./discounts");
   const {
     selectedChildren, children, prixBase, familyId,
     stageDate, stageType, creneauId, settings, periods,
   } = params;
+  // Ratio de jours (mode "ce jour" = fraction du stage). Le prix plancher est
+  // pensé pour un stage COMPLET → on le proratise au prorata des jours pour ne
+  // pas facturer 1 jour au plancher d'un stage entier (bug 1 jour = 155€).
+  const jourRatio = params.jourRatio != null && params.jourRatio > 0 ? params.jourRatio : 1;
 
   // 1. Identifier la période — si hors vacances, pas de réduction (prix plein)
   const periodId = getPeriodForDate(stageDate, periods);
@@ -252,7 +257,7 @@ export async function computeStageReductionsAsync(params: {
     // Appliquer le prix plancher (config admin) — meme logique que dans
     // lib/discounts.ts > applyDiscounts. Si le prix calcule est sous le
     // plancher, on remonte au plancher.
-    const plancher = (settings as any).prixPlancherStage || 0;
+    const plancher = Math.round(((settings as any).prixPlancherStage || 0) * jourRatio * 100) / 100;
     let plancherApplied = false;
     if (plancher > 0 && prixReduit < plancher) {
       prixReduit = Math.round(plancher * 100) / 100;

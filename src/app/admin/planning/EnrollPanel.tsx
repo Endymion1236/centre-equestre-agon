@@ -844,11 +844,41 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     if (cr.price4days) configuredPrices[4] = cr.price4days;
 
     const prixStageComplet = priceTTC;
+    // Prix d'UN jour = prorata prixComplet / nbJours par défaut. Un tarif jour
+    // Mode jour : on facture le PRIX JOUR DÉFINI dans le stage (price1day),
+    // brut, sans prorata ni réduction ni plancher. Fallback prorata seulement
+    // si price1day n'est pas configuré du tout.
+    const prixJourDefini = (configuredPrices[1] && configuredPrices[1] > 0)
+      ? configuredPrices[1]
+      : Math.round((prixStageComplet / nbJoursStage) * 100) / 100;
     const prixEffectif = stageMode === "jour"
-      ? (configuredPrices[1] || Math.round((prixStageComplet / nbJoursStage) * 100) / 100)
-      : (configuredPrices[nbJoursStage] || prixStageComplet);
+      ? prixJourDefini
+      : (configuredPrices[nbJoursStage] && configuredPrices[nbJoursStage] <= prixStageComplet ? configuredPrices[nbJoursStage] : prixStageComplet);
 
     if (selectedChildren.length === 0 || !fam) { setStageLines([]); return; }
+
+    // En mode JOUR : aucune réduction, aucun plancher. Prix jour brut par enfant.
+    if (stageMode === "jour") {
+      const lines: any[] = selectedChildren.map((childId) => {
+        const child = children.find((c: any) => c.id === childId);
+        const fullName = (child as any)?.lastName
+          ? `${(child as any).firstName} ${(child as any).lastName}`
+          : ((child as any)?.firstName || (child as any)?.name || "");
+        return {
+          childId,
+          childName: fullName,
+          prixBase: prixEffectif,
+          prixReduit: prixEffectif,
+          remiseEuros: 0,
+          rang: 0,
+          discountPercent: 0,
+          discountReasons: [],
+          originalPriceTTC: prixEffectif,
+        };
+      });
+      setStageLines(lines);
+      return;
+    }
 
     // Calcul async via applyDiscounts
     let cancelled = false;
@@ -2198,7 +2228,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             return (
               <div key={e.childId} className="flex items-center justify-between bg-sand rounded-lg px-3 py-2">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColor}`}></span>
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColor}`} title={statusLabel || undefined}></span>
                   <a
                     href={
                       isMoniteur && !isAdmin
@@ -2213,7 +2243,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   </a>
                   {age && <span className="font-body text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full flex-shrink-0">{age}</span>}
                   {galop && galop !== "—" && <span className="font-body text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full flex-shrink-0">{galop}</span>}
-                  {statusLabel && <span className={`font-body text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${isForfaitPaid ? "text-emerald-700 bg-emerald-50" : isForfaitPending ? "text-amber-700 bg-amber-50" : hasPaid ? "text-green-700 bg-green-50" : "text-orange-600 bg-orange-50"}`}>{statusLabel}</span>}
+                  {statusLabel && <span className={`font-body text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 hidden sm:inline ${isForfaitPaid ? "text-emerald-700 bg-emerald-50" : isForfaitPending ? "text-amber-700 bg-amber-50" : hasPaid ? "text-green-700 bg-green-50" : "text-orange-600 bg-orange-50"}`}>{statusLabel}</span>}
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <a
@@ -2529,9 +2559,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       </div>
                     )}
                     <div className="font-body text-[10px] text-blue-500 bg-blue-50 rounded px-2 py-1">
-                      {stageMode === "semaine"
-                        ? `${nbJours} jour${nbJours > 1 ? "s" : ""} — ${priceTTC.toFixed(2)}€`
-                        : `1 jour sur ${nbJours} — ${(priceTTC / nbJours).toFixed(2)}€/jour (prorata)`}
+                      {(() => {
+                        const cr = creneau as any;
+                        const p1 = cr.price1day;
+                        const prixJourAff = (p1 && p1 <= Math.round((priceTTC / nbJours) * 100) / 100) ? p1 : Math.round((priceTTC / nbJours) * 100) / 100;
+                        return stageMode === "semaine"
+                          ? `${nbJours} jour${nbJours > 1 ? "s" : ""} — ${priceTTC.toFixed(2)}€`
+                          : `1 jour sur ${nbJours} — ${prixJourAff.toFixed(2)}€/jour (prorata)`;
+                      })()}
                     </div>
                     {existingStageCount > 0 && (
                       <div className="font-body text-[10px] text-orange-500 bg-orange-50 rounded px-2 py-1">
@@ -3165,28 +3200,54 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                           const pData = stagePayment.data();
                           const oldItems = pData.items || [];
                           const totalDaysNow = showAddDays.joursInscrits + 1;
+                          const totalJoursStage = showAddDays.totalJoursStage || 1;
                           const cr = showAddDays.creneauRef as any;
-                          const prices: Record<number, number> = {};
-                          if (cr.price1day) prices[1] = cr.price1day;
-                          if (cr.price2days) prices[2] = cr.price2days;
-                          if (cr.price3days) prices[3] = cr.price3days;
-                          if (cr.price4days) prices[4] = cr.price4days;
-                          const priceKeys = Object.keys(prices).map(Number).sort((a,b) => a-b);
-                          const maxKey = priceKeys.at(-1) || 1;
-                          // Prix de base pour le nouveau nombre de jours
-                          const prixBase = prices[totalDaysNow] || prices[priceKeys.filter(k => k <= totalDaysNow).at(-1) || maxKey] || prices[maxKey] || 0;
+                          const prixComplet = (cr.priceTTC || (cr.priceHT || 0) * (1 + (cr.tvaTaux || 5.5) / 100)) || 0;
+                          // Prix jour défini dans le stage (price1day), brut.
+                          // Fallback prorata seulement si non configuré.
+                          const prixJour = (cr.price1day && cr.price1day > 0)
+                            ? cr.price1day
+                            : Math.round((prixComplet / Math.max(1, totalJoursStage)) * 100) / 100;
+                          // Prix = prix jour × nb de jours ; si tous les jours pris,
+                          // on retombe sur le prix semaine complet. AUCUNE remise.
+                          const prixBase = (totalDaysNow >= totalJoursStage)
+                            ? prixComplet
+                            : Math.round(prixJour * totalDaysNow * 100) / 100;
 
-                          // Recalcul individuel par enfant — préserve les remises par rang dans la fratrie
-                          const stageItems = oldItems.filter((i: any) => i.activityType === "stage" || i.activityType === "stage_journee");
+                          const crRef = showAddDays.creneauRef as any;
                           const updatedItems = oldItems.map((item: any) => {
                             if (item.activityType !== "stage" && item.activityType !== "stage_journee") return item;
-                            // Trouver le rang de cet enfant parmi les items stage
-                            const rang = stageItems.findIndex((si: any) => si.childId === item.childId);
-                            // Remise selon rang : 0% pour le 1er, 10% pour le 2e, 20% pour le 3e, etc.
-                            const remisePct = rang <= 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
-                            const remiseEuros = Math.round(prixBase * remisePct / 100 * 100) / 100;
-                            const newPriceTTC = Math.max(0, Math.round((prixBase - remiseEuros) * 100) / 100);
-                            return { ...item, priceTTC: newPriceTTC, priceHT: Math.round(newPriceTTC / 1.055 * 100) / 100 };
+                            // Prix jour brut, sans réduction ni plancher.
+                            const newPriceTTC = Math.max(0, Math.round(prixBase * 100) / 100);
+                            // Mettre à jour le libellé pour refléter le nb de jours réel.
+                            let newTitle = item.activityTitle || "";
+                            if (/\(\d+j\)/.test(newTitle)) {
+                              newTitle = newTitle.replace(/\(\d+j\)/, `(${totalDaysNow}j)`);
+                            }
+                            // Ajouter la date du jour ajouté au détail (stageDates),
+                            // en évitant les doublons, et trier par date.
+                            const existingDates = Array.isArray(item.stageDates) ? [...item.stageDates] : [];
+                            if (!existingDates.some((d: any) => d.date === j.date)) {
+                              existingDates.push({ date: j.date, startTime: crRef?.startTime || "", endTime: crRef?.endTime || "" });
+                            }
+                            existingDates.sort((a: any, b: any) => (a.date || "").localeCompare(b.date || ""));
+                            // Recomposer un libellé de planning lisible (du X au Y).
+                            let newSchedule = item.stageSchedule || "";
+                            if (existingDates.length > 1) {
+                              const fmt = (d: string) => new Date(d).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+                              newSchedule = `du ${fmt(existingDates[0].date)} au ${fmt(existingDates[existingDates.length - 1].date)} · ${crRef?.startTime || ""}–${crRef?.endTime || ""}`;
+                            }
+                            const existingCreneauIds = Array.isArray(item.creneauIds) ? [...item.creneauIds] : (item.creneauId ? [item.creneauId] : []);
+                            if (!existingCreneauIds.includes(j.id)) existingCreneauIds.push(j.id);
+                            return {
+                              ...item,
+                              activityTitle: newTitle,
+                              priceTTC: newPriceTTC,
+                              priceHT: Math.round(newPriceTTC / 1.055 * 100) / 100,
+                              stageDates: existingDates,
+                              stageSchedule: newSchedule,
+                              creneauIds: existingCreneauIds,
+                            };
                           });
                           const newTotal = Math.round(updatedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0) * 100) / 100;
                           await updateDoc(doc(db, "payments", stagePayment.id), {
