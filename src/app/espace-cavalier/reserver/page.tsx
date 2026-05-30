@@ -643,21 +643,6 @@ export default function ReserverPage() {
         });
       }
 
-      // ── Flux acompte tokenisé (Card On File) ──────────────────────────────
-      // Si activé (NEXT_PUBLIC_CAWL_TOKENIZATION=true) et qu'on est sur un
-      // acompte stage, on dirige vers la page d'enregistrement de carte
-      // (Hosted Tokenization) qui permettra le prélèvement auto du solde à J-7.
-      // Désactivé par défaut → comportement historique (checkout CAWL classique)
-      // tant que Card On File n'est pas confirmé activé sur le PSPID.
-      if (isDeposit && process.env.NEXT_PUBLIC_CAWL_TOKENIZATION === "true") {
-        const stageLabel = cart.find(i => i.isStage)?.activityTitle || "Acompte stage";
-        window.location.href =
-          `/espace-cavalier/paiement-acompte?paymentId=${newPaymentId}` +
-          `&amount=${acompteFixe}` +
-          `&label=${encodeURIComponent(stageLabel)}`;
-        return;
-      }
-
       try {
         const res = await authFetch("/api/cawl/checkout", {
           method: "POST",
