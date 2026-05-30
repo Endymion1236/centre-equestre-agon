@@ -256,7 +256,10 @@ export default function ReserverPage() {
   const isStage = (c: Creneau) => c.activityType === "stage" || c.activityType === "stage_journee";
 
   // Ajouter au panier (stage = multi-enfants, cours = 1 enfant)
-  const addStageToCart = (stageCreneaux: Creneau[]) => {
+  // En mode jour, stageCreneaux ne contient QUE les jours sélectionnés ; il faut
+  // donc passer prixJourParam (prix d'UN jour) et totalJoursStageParam (nombre
+  // total de jours du stage) calculés par l'appelant, sinon le prorata est faux.
+  const addStageToCart = (stageCreneaux: Creneau[], prixJourParam?: number, totalJoursStageParam?: number) => {
     if (selectedChildren.length === 0) return;
     const first = stageCreneaux[0];
     const prixSemaine = (first as any).priceTTC || first.priceHT * (1 + (first.tvaTaux || 5.5) / 100);
@@ -266,7 +269,8 @@ export default function ReserverPage() {
     // Calculer le prix effectif
     let prixBase: number;
     if (isJourMode) {
-      const prixJour = (first as any).priceTTCDay || Math.round(prixSemaine / stageCreneaux.length * 100) / 100;
+      // prix d'un jour × nombre de jours SÉLECTIONNÉS (= stageCreneaux.length ici)
+      const prixJour = prixJourParam ?? (first as any).priceTTCDay ?? Math.round(prixSemaine / Math.max(1, totalJoursStageParam || stageCreneaux.length) * 100) / 100;
       prixBase = Math.round(prixJour * stageCreneaux.length * 100) / 100;
     } else {
       prixBase = prixSemaine;
@@ -347,9 +351,11 @@ export default function ReserverPage() {
       return;
     }
 
-    // Nombre total de jours du stage pour calculer la remise au prorata
-    const totalJoursStage = isJourMode ? stageCreneaux.length : 1; // pour le calcul de remise
-    const nbJoursSemaine = Math.max(1, stageCreneaux.length); // fallback
+    // Nombre total de jours du stage pour calculer la remise au prorata.
+    // En mode jour, stageCreneaux = jours sélectionnés ; le total vient du param.
+    const nbJoursSelectionnes = Math.max(1, stageCreneaux.length);
+    const totalJoursStage = isJourMode ? Math.max(nbJoursSelectionnes, totalJoursStageParam || nbJoursSelectionnes) : 1;
+    const nbJoursSemaine = totalJoursStage; // dénominateur du prorata
 
     const newItems: CartItem[] = childrenToAdd.map((childId, idx) => {
       const child = children.find((c: any) => c.id === childId);
@@ -1105,8 +1111,10 @@ export default function ReserverPage() {
                               <button onClick={(e) => {
                                 e.stopPropagation();
                                 if (isJourMode) {
-                                  // Mode jour : inscrire uniquement les jours sélectionnés
-                                  addStageToCart(creneauxToBook);
+                                  // Mode jour : inscrire uniquement les jours sélectionnés.
+                                  // On passe le prix d'un jour et le nombre TOTAL de
+                                  // jours du stage pour un prorata correct.
+                                  addStageToCart(creneauxToBook, prixJour, joursUniques.length);
                                 } else {
                                   addStageToCart(stageCreneaux);
                                 }
