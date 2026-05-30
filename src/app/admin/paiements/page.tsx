@@ -380,7 +380,7 @@ export default function PaiementsPage() {
         setQuickEncaisser(null);
         setQuickMontant(""); setQuickRef("");
         setQuickDate(new Date().toISOString().split("T")[0]);
-        await refreshAll([p.id]);
+        await refreshAll();
         setQuickSaving(false);
         return;
       }
@@ -450,7 +450,7 @@ export default function PaiementsPage() {
         setQuickEncaisser(null);
         setQuickMontant(""); setQuickRef("");
         setQuickDate(new Date().toISOString().split("T")[0]);
-        await refreshAll([p.id]);
+        await refreshAll();
         setQuickSaving(false);
         return;
       }
@@ -469,7 +469,7 @@ export default function PaiementsPage() {
       setQuickEncaisser(null);
       setQuickMontant(""); setQuickRef("");
       setQuickDate(new Date().toISOString().split("T")[0]);
-      await refreshAll([p.id]);
+      await refreshAll();
     } catch (e) { console.error(e); toast("Erreur encaissement", "error"); }
     setQuickSaving(false);
   };
@@ -604,66 +604,7 @@ export default function PaiementsPage() {
   };
 
   // Rafraîchir les données
-  // Rafraîchir les données.
-  // changedPaymentIds fourni  → rafraîchissement CIBLÉ (relit seulement ces
-  //   paiements + leurs encaissements + les avoirs de leurs familles).
-  //   Évite de relire TOUTE la collection payments à chaque action
-  //   (~2500 lectures Firestore -> ~6). Utilisé par les actions sur 1 paiement.
-  // Aucun argument → rafraîchissement COMPLET (broadcast, duplication, fallback).
-  const refreshAll = async (changedPaymentIds?: string[]) => {
-    if (changedPaymentIds && changedPaymentIds.length > 0 && changedPaymentIds.length <= 10) {
-      try {
-        // 1. Relire uniquement les paiements modifiés
-        const paySnaps = await Promise.all(
-          changedPaymentIds.map((id) => getDoc(doc(db, "payments", id)))
-        );
-        const updated = paySnaps
-          .filter((s) => s.exists())
-          .map((s) => normalizePayment({ id: s.id, ...s.data() })) as any[];
-        const updatedIds = new Set(updated.map((p) => p.id));
-
-        // 2. Relire les encaissements de ces paiements
-        const encSnap = await getDocs(
-          query(collection(db, "encaissements"), where("paymentId", "in", changedPaymentIds))
-        );
-        const encForChanged = encSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[];
-
-        // 3. Relire les avoirs des familles concernées (création/consommation)
-        const famIds = Array.from(new Set(updated.map((p) => p.familyId).filter(Boolean)));
-        let avoirsForFam: any[] | null = null;
-        if (famIds.length > 0 && famIds.length <= 10) {
-          const avSnap = await getDocs(
-            query(collection(db, "avoirs"), where("familyId", "in", famIds))
-          );
-          avoirsForFam = avSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[];
-        }
-
-        // 4. Mise à jour locale du state (sans tout relire)
-        setPayments((prev: any[]) => {
-          const next = prev.map((p) => (updatedIds.has(p.id) ? updated.find((u) => u.id === p.id) : p));
-          for (const u of updated) if (!prev.some((p) => p.id === u.id)) next.unshift(u);
-          next.sort((a: any, b: any) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
-          return next as any;
-        });
-        setEncaissements((prev: any[]) => {
-          const kept = prev.filter((e) => !changedPaymentIds.includes(e.paymentId));
-          return [...encForChanged, ...kept] as any;
-        });
-        if (avoirsForFam !== null) {
-          const fam = famIds;
-          setAvoirs((prev: any[]) => {
-            const kept = prev.filter((a) => !fam.includes(a.familyId));
-            return [...(avoirsForFam as any[]), ...kept] as any;
-          });
-        }
-        return;
-      } catch (e) {
-        console.error("refreshAll ciblé échoué, fallback complet:", e);
-        // on retombe sur le rafraîchissement complet ci-dessous
-      }
-    }
-
-    // ── Rafraîchissement COMPLET ──
+  const refreshAll = async () => {
     const [paySnap, encSnap, avoirsSnap, chqSnap] = await Promise.all([
       getDocs(collection(db, "payments")),
       getDocs(query(collection(db, "encaissements"), orderBy("date", "desc"), limit(500))),
@@ -782,7 +723,7 @@ export default function PaiementsPage() {
           updatedAt: serverTimestamp(),
         });
         toast(`Facture ${(payment as any).invoiceNumber} annulée`, "success");
-        await refreshAll([payment.id]);
+        await refreshAll();
         return;
       }
 
@@ -905,7 +846,7 @@ export default function PaiementsPage() {
       const warnMsg = unenrollErrors > 0 ? `\n⚠️ ${unenrollErrors} désinscription(s) à vérifier manuellement.` : "";
       toast(`Commande annulée. Avoir créé : ${totalEnc.toFixed(2)}€ (réf. ${ref})${warnMsg}`);
     }
-    await refreshAll([payment.id]);
+    await refreshAll();
   };
 
   const removePaymentItem = async (payment: any, itemIndex: number) => {
@@ -1004,7 +945,7 @@ export default function PaiementsPage() {
         });
       }
     }
-    await refreshAll([payment.id]);
+    await refreshAll();
   };
 
   const [duplicateTarget, setDuplicateTarget] = useState<{ payment: any; targetFamilyId: string; targetSearch: string; mode: "choose" | "other_family" } | null>(null);
