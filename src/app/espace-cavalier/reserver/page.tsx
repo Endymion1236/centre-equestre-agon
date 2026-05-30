@@ -908,8 +908,22 @@ export default function ReserverPage() {
                   const first = stageCreneaux[0];
                   const prix = (first as any).priceTTC || first.priceHT * (1 + (first.tvaTaux || 5.5) / 100);
                   const spots = Math.min(...stageCreneaux.map(spotsLeft));
-                  const joursUniques = [...new Map(stageCreneaux.map(c => [c.date, c])).values()];
-                  const jours = joursUniques.map(c => new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })).join(", ");
+                  const joursUniques = [...new Map(stageCreneaux.map(c => [c.date, c])).values()]
+                    .sort((a, b) => a.date.localeCompare(b.date));
+                  // Affichage clair AVEC le mois. Si le stage couvre plusieurs
+                  // jours, on montre la plage "du lun. 6 au ven. 10 juillet" ;
+                  // sinon le jour seul avec son mois.
+                  const jours = (() => {
+                    if (joursUniques.length === 0) return "";
+                    const fmt = (d: string, withMonth = true) =>
+                      new Date(d).toLocaleDateString("fr-FR", withMonth
+                        ? { weekday: "short", day: "numeric", month: "short" }
+                        : { weekday: "short", day: "numeric" });
+                    if (joursUniques.length === 1) return fmt(joursUniques[0].date);
+                    const premier = joursUniques[0].date;
+                    const dernier = joursUniques[joursUniques.length - 1].date;
+                    return `du ${fmt(premier, false)} au ${fmt(dernier)}`;
+                  })();
                   const isSelected = selectedCreneau?.id === first.id;
 
                   return (
@@ -942,11 +956,11 @@ export default function ReserverPage() {
                             return (
                               <div className="mt-1.5 flex flex-col gap-0.5">
                                 {Object.entries(parDate).sort(([a],[b])=>a.localeCompare(b)).map(([date, cs]) => {
-                                  const jourLabel = new Date(date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" });
+                                  const jourLabel = new Date(date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
                                   const horaires = cs.map(c => `${c.startTime}–${c.endTime}`).join(" + ");
                                   return (
                                     <div key={date} className="font-body text-xs text-gray-600 flex items-center gap-1.5">
-                                      <span className="font-semibold text-slate-600 w-16 flex-shrink-0">{jourLabel}</span>
+                                      <span className="font-semibold text-slate-600 w-24 flex-shrink-0">{jourLabel}</span>
                                       <Clock size={10} className="text-gray-600 flex-shrink-0"/>
                                       <span>{horaires}</span>
                                     </div>
