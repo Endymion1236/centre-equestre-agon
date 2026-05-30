@@ -117,15 +117,34 @@ export async function POST(req: NextRequest) {
       payBody?.id ||
       "";
     // Statut : CAWL renvoie un libellé texte (status) ET un code numérique
-    // (statusOutput.statusCode : 5/9 = réussi, 2 = refusé). On gère les deux.
-    const status = payment?.status || payBody?.payment?.status || "";
-    const statusCode =
+    // (statusOutput.statusCode : 5/9 = réussi, 2 = refusé, 0 = transitoire).
+    let status = payment?.status || payBody?.payment?.status || "";
+    let statusCode =
       payment?.statusOutput?.statusCode ??
       payBody?.payment?.statusOutput?.statusCode ??
       payBody?.creationOutput?.payment?.statusOutput?.statusCode ??
       null;
     const merchantAction = payBody?.merchantAction || payment?.merchantAction;
     const redirectUrl = merchantAction?.redirectData?.redirectURL || "";
+
+    // Statut transitoire (0) sans redirection → relire le statut définitif via
+    // GetPaymentDetails (le résultat acquéreur arrive juste après la création).
+    if (cawlPaymentId && (Number(statusCode) === 0 || statusCode == null) && merchantAction?.actionType !== "REDIRECT") {
+      try {
+        const det = await payApi.getPaymentDetails(CAWL_PSPID, cawlPaymentId);
+        const detBody = det?.body || det;
+        const detStatus = detBody?.status || detBody?.payment?.status;
+        const detCode = detBody?.statusOutput?.statusCode ?? detBody?.payment?.statusOutput?.statusCode;
+        if (detStatus) status = detStatus;
+        if (detCode != null) statusCode = detCode;
+        await adminDb.collection("payments").doc(paymentId).update({
+          "_diag.detailsStatus": status,
+          "_diag.detailsStatusCode": statusCode ?? null,
+        });
+      } catch (detErr: any) {
+        await adminDb.collection("payments").doc(paymentId).update({ "_diag.detailsError": (detErr?.message || String(detErr)).slice(0, 300) });
+      }
+    }
 
     // Diagnostic : tracer la réponse si l'id manque (cas observé en test).
     if (!cawlPaymentId) {
