@@ -845,20 +845,40 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
     const prixStageComplet = priceTTC;
     // Prix d'UN jour = prorata prixComplet / nbJours par défaut. Un tarif jour
-    // configuré (price1day) n'est retenu QUE s'il est inférieur ou égal au
-    // prorata (vrai tarif réduit à la journée). Un price1day proche du prix
-    // semaine (ex. 152) est une mauvaise config et serait absurde pour 1 jour
-    // → on garde le prorata. Corrige le bug "1 jour facturé 152€".
-    const prixJourProrata = Math.round((prixStageComplet / nbJoursStage) * 100) / 100;
-    const price1dayConfig = configuredPrices[1];
-    const prixUnJour = (price1dayConfig && price1dayConfig <= prixJourProrata)
-      ? price1dayConfig
-      : prixJourProrata;
+    // Mode jour : on facture le PRIX JOUR DÉFINI dans le stage (price1day),
+    // brut, sans prorata ni réduction ni plancher. Fallback prorata seulement
+    // si price1day n'est pas configuré du tout.
+    const prixJourDefini = (configuredPrices[1] && configuredPrices[1] > 0)
+      ? configuredPrices[1]
+      : Math.round((prixStageComplet / nbJoursStage) * 100) / 100;
     const prixEffectif = stageMode === "jour"
-      ? prixUnJour
+      ? prixJourDefini
       : (configuredPrices[nbJoursStage] && configuredPrices[nbJoursStage] <= prixStageComplet ? configuredPrices[nbJoursStage] : prixStageComplet);
 
     if (selectedChildren.length === 0 || !fam) { setStageLines([]); return; }
+
+    // En mode JOUR : aucune réduction, aucun plancher. Prix jour brut par enfant.
+    if (stageMode === "jour") {
+      const lines: any[] = selectedChildren.map((childId) => {
+        const child = children.find((c: any) => c.id === childId);
+        const fullName = (child as any)?.lastName
+          ? `${(child as any).firstName} ${(child as any).lastName}`
+          : ((child as any)?.firstName || (child as any)?.name || "");
+        return {
+          childId,
+          childName: fullName,
+          prixBase: prixEffectif,
+          prixReduit: prixEffectif,
+          remiseEuros: 0,
+          rang: 0,
+          discountPercent: 0,
+          discountReasons: [],
+          originalPriceTTC: prixEffectif,
+        };
+      });
+      setStageLines(lines);
+      return;
+    }
 
     // Calcul async via applyDiscounts
     let cancelled = false;
@@ -874,7 +894,6 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           creneauId: creneau.id!,
           settings: discountSettings,
           periods: vacationPeriods,
-          jourRatio: stageMode === "jour" ? 1 / Math.max(1, nbJoursStage) : 1,
         });
         if (!cancelled) {
           // Adapter childName avec le nom complet si disponible (compat avec l'UI)
@@ -3184,30 +3203,22 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                           const totalJoursStage = showAddDays.totalJoursStage || 1;
                           const cr = showAddDays.creneauRef as any;
                           const prixComplet = (cr.priceTTC || (cr.priceHT || 0) * (1 + (cr.tvaTaux || 5.5) / 100)) || 0;
-                          // Tarifs multi-jours configurés, retenus seulement s'ils
-                          // sont cohérents (<= prix complet du stage). Sinon prorata
-                          // prixComplet × joursInscrits / totalJours. Évite les prix
-                          // absurdes issus d'une mauvaise config (ex. price1day=152).
-                          const prices: Record<number, number> = {};
-                          if (cr.price1day && cr.price1day <= prixComplet) prices[1] = cr.price1day;
-                          if (cr.price2days && cr.price2days <= prixComplet) prices[2] = cr.price2days;
-                          if (cr.price3days && cr.price3days <= prixComplet) prices[3] = cr.price3days;
-                          if (cr.price4days && cr.price4days <= prixComplet) prices[4] = cr.price4days;
-                          const prorata = Math.round((prixComplet * totalDaysNow / Math.max(1, totalJoursStage)) * 100) / 100;
-                          // Prix de base = tarif configuré pour ce nb de jours si dispo et cohérent, sinon prorata
+                          // Prix jour défini dans le stage (price1day), brut.
+                          // Fallback prorata seulement si non configuré.
+                          const prixJour = (cr.price1day && cr.price1day > 0)
+                            ? cr.price1day
+                            : Math.round((prixComplet / Math.max(1, totalJoursStage)) * 100) / 100;
+                          // Prix = prix jour × nb de jours ; si tous les jours pris,
+                          // on retombe sur le prix semaine complet. AUCUNE remise.
                           const prixBase = (totalDaysNow >= totalJoursStage)
-                            ? prixComplet // tous les jours = prix plein du stage
-                            : (prices[totalDaysNow] ?? prorata);
+                            ? prixComplet
+                            : Math.round(prixJour * totalDaysNow * 100) / 100;
 
-                          // Recalcul individuel par enfant — préserve les remises par rang dans la fratrie
-                          const stageItems = oldItems.filter((i: any) => i.activityType === "stage" || i.activityType === "stage_journee");
                           const crRef = showAddDays.creneauRef as any;
                           const updatedItems = oldItems.map((item: any) => {
                             if (item.activityType !== "stage" && item.activityType !== "stage_journee") return item;
-                            const rang = stageItems.findIndex((si: any) => si.childId === item.childId);
-                            const remisePct = rang <= 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
-                            const remiseEuros = Math.round(prixBase * remisePct / 100 * 100) / 100;
-                            const newPriceTTC = Math.max(0, Math.round((prixBase - remiseEuros) * 100) / 100);
+                            // Prix jour brut, sans réduction ni plancher.
+                            const newPriceTTC = Math.max(0, Math.round(prixBase * 100) / 100);
                             // Mettre à jour le libellé pour refléter le nb de jours réel.
                             let newTitle = item.activityTitle || "";
                             if (/\(\d+j\)/.test(newTitle)) {

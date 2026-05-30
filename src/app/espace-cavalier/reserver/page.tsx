@@ -269,9 +269,13 @@ export default function ReserverPage() {
     // Calculer le prix effectif
     let prixBase: number;
     if (isJourMode) {
-      // prix d'un jour × nombre de jours SÉLECTIONNÉS (= stageCreneaux.length ici)
-      const prixJour = prixJourParam ?? (first as any).priceTTCDay ?? Math.round(prixSemaine / Math.max(1, totalJoursStageParam || stageCreneaux.length) * 100) / 100;
-      prixBase = Math.round(prixJour * stageCreneaux.length * 100) / 100;
+      const totalJours = totalJoursStageParam || stageCreneaux.length;
+      const prixJour = prixJourParam ?? (first as any).priceTTCDay ?? Math.round(prixSemaine / Math.max(1, totalJours) * 100) / 100;
+      // Prix jour × nb de jours sélectionnés. Si tous les jours sont pris,
+      // on retombe sur le prix semaine complet. Pas de remise (gérée plus bas).
+      prixBase = (stageCreneaux.length >= totalJours)
+        ? prixSemaine
+        : Math.round(prixJour * stageCreneaux.length * 100) / 100;
     } else {
       prixBase = prixSemaine;
     }
@@ -360,18 +364,22 @@ export default function ReserverPage() {
     const newItems: CartItem[] = childrenToAdd.map((childId, idx) => {
       const child = children.find((c: any) => c.id === childId);
       const rang = existingStageCount + idx;
-      const remiseSemaine = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
-      // Prorata de la remise si mode jour
-      const remise = isJourMode ? Math.round(remiseSemaine * stageCreneaux.length / nbJoursSemaine * 100) / 100 : remiseSemaine;
-      let prixFinal = Math.max(0, Math.round((prixBase - remise) * 100) / 100);
-      let remiseEffective = remise;
-      // Plancher : si le tarif degressif tombe en dessous du seuil configure,
-      // on plafonne au plancher. On recalcule alors la remise effective pour
-      // l'affichage et la facturation.
-      if (prixPlancherStage > 0 && prixFinal < prixPlancherStage) {
-        prixFinal = prixPlancherStage;
-        remiseEffective = Math.round((prixBase - prixPlancherStage) * 100) / 100;
-        remiseEffective = Math.max(0, remiseEffective);
+      // En mode JOUR : prix jour brut (prixBase = prixJour × nb jours), AUCUNE
+      // remise, AUCUN plancher. En mode semaine : remise dégressive + plancher.
+      let remiseEffective: number;
+      let prixFinal: number;
+      if (isJourMode) {
+        remiseEffective = 0;
+        prixFinal = Math.max(0, Math.round(prixBase * 100) / 100);
+      } else {
+        const remiseSemaine = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
+        prixFinal = Math.max(0, Math.round((prixBase - remiseSemaine) * 100) / 100);
+        remiseEffective = remiseSemaine;
+        // Plancher uniquement en mode semaine.
+        if (prixPlancherStage > 0 && prixFinal < prixPlancherStage) {
+          prixFinal = prixPlancherStage;
+          remiseEffective = Math.max(0, Math.round((prixBase - prixPlancherStage) * 100) / 100);
+        }
       }
       return {
         creneauIds: stageCreneaux.map(c => c.id),
@@ -1017,8 +1025,6 @@ export default function ReserverPage() {
                       {isSelected && spots > 0 && (() => {
                         const allowDay = stageCreneaux.some((c: any) => c.allowDayBooking);
                         const prixJour = (first as any).priceTTCDay || (stageCreneaux.find((c: any) => (c as any).priceTTCDay) as any)?.priceTTCDay || Math.round(prix / joursUniques.length * 100) / 100;
-                        // State local pour le mode et les jours sélectionnés
-                        // On utilise un key basé sur le stage pour réinitialiser
                         return (
                         <div className="mt-4 pt-4 border-t border-green-200">
                           {/* Choix mode si autorisé */}
