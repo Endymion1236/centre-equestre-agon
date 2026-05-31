@@ -1,0 +1,121 @@
+name: Audit Sécurité
+
+# Audit de sécurité du projet. Complète le workflow CI (ci.yml) qui, lui,
+# vérifie la validation fonctionnelle et le build.
+#
+# Ce workflow vérifie 4 choses :
+#   1. Vulnérabilités des dépendances npm (npm audit)
+#   2. Secrets/tokens accidentellement commités dans le code (Gitleaks)
+#   3. Règles de sécurité Firestore (script validate:rules du projet)
+#   4. Analyse statique de sécurité du code (CodeQL)
+#
+# Déclenché : sur chaque PR vers main, sur push vers main et test, et tous les
+# lundis à 6h (audit hebdomadaire, pour détecter les nouvelles CVE publiées
+# sur des dépendances déjà installées).
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, test]
+  schedule:
+    - cron: '0 6 * * 1' # tous les lundis à 06:00 UTC
+  workflow_dispatch: {} # permet de lancer l'audit manuellement depuis l'onglet Actions
+
+# Permissions minimales nécessaires (principe du moindre privilège).
+permissions:
+  contents: read
+  security-events: write # requis pour publier les alertes CodeQL
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────
+  # 1. Dépendances vulnérables
+  # ──────────────────────────────────────────────────────────────────────
+  dependances:
+    name: Vulnérabilités des dépendances
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Installer les dépendances
+        run: npm install --legacy-peer-deps
+
+      # Bloque uniquement sur les vulnérabilités CRITIQUES (high/critical font
+      # échouer la CI seraient trop bruyants au quotidien ; on les voit dans le
+      # rapport mais sans bloquer). Ajuster --audit-level si besoin.
+      - name: npm audit (échoue si vulnérabilité critique)
+        run: npm audit --audit-level=critical
+
+      # Rapport complet (toujours affiché, n'échoue jamais) pour visibilité.
+      - name: Rapport complet des vulnérabilités (informatif)
+        if: always()
+        run: npm audit || true
+
+  # ──────────────────────────────────────────────────────────────────────
+  # 2. Détection de secrets commités (LE point sensible de ce projet)
+  # ──────────────────────────────────────────────────────────────────────
+  secrets:
+    name: Détection de secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # historique complet : Gitleaks scanne aussi les commits passés
+
+      # Gitleaks détecte clés API, tokens GitHub, clés privées, etc. commités
+      # par erreur. Scanne le code ET l'historique git.
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ──────────────────────────────────────────────────────────────────────
+  # 3. Règles de sécurité Firestore
+  # ──────────────────────────────────────────────────────────────────────
+  firestore-rules:
+    name: Règles Firestore
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Installer les dépendances
+        run: npm install --legacy-peer-deps
+
+      # Le projet a déjà un script qui teste les règles Firestore.
+      - name: Valider les règles Firestore
+        run: npm run validate:rules
+
+  # ──────────────────────────────────────────────────────────────────────
+  # 4. Analyse statique de sécurité du code (CodeQL)
+  # ──────────────────────────────────────────────────────────────────────
+  codeql:
+    name: Analyse statique (CodeQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialiser CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+
+      - name: Analyse CodeQL
+        uses: github/codeql-action/analyze@v3
