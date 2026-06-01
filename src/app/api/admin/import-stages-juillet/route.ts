@@ -49,12 +49,32 @@ export async function POST(req: NextRequest) {
     enfants: Array<{ firstName: string; lastName: string; birthDate: string }>;
   }>;
 
-  // 3. Récupérer les emails déjà présents (pour skip des doublons)
+  // 3. Indexer les ENFANTS déjà présents en base, pour détecter les doublons
+  //    sans dépendre de l'email (les familles existantes ont été créées sans
+  //    email pendant les tests). Clé = prénom+nom normalisés + date de naissance.
+  const norm = (s: string) =>
+    (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/\s+/g, " ");
+  // Extrait AAAA-MM-JJ quel que soit le format stocké (Date, Timestamp Firestore, string).
+  const birthKey = (v: any): string => {
+    if (!v) return "";
+    try {
+      if (typeof v === "string") return v.slice(0, 10);
+      if (typeof v.toDate === "function") return v.toDate().toISOString().slice(0, 10); // Timestamp Firestore
+      if (v._seconds != null) return new Date(v._seconds * 1000).toISOString().slice(0, 10);
+      if (v instanceof Date) return v.toISOString().slice(0, 10);
+    } catch { /* ignore */ }
+    return "";
+  };
+  const childKey = (first: string, last: string, birth: string) =>
+    `${norm(first)}|${norm(last)}|${birth}`;
+
   const existingSnap = await adminDb.collection("families").get();
-  const existingEmails = new Set<string>();
+  const existingChildren = new Set<string>();
   existingSnap.forEach(d => {
-    const e = (d.data().parentEmail || "").trim().toLowerCase();
-    if (e) existingEmails.add(e);
+    const children = d.data().children || [];
+    for (const c of children) {
+      existingChildren.add(childKey(c.firstName || "", c.lastName || "", birthKey(c.birthDate)));
+    }
   });
 
   const rapport = {
@@ -62,7 +82,7 @@ export async function POST(req: NextRequest) {
     mode: apply ? "APPLY (écriture réelle)" : "DRY-RUN (aucune écriture)",
     total_familles_fichier: familles.length,
     a_creer: 0,
-    skip_email_existant: 0,
+    skip_enfant_existant: 0,
     sans_email_crees: 0,
     enfants_crees: 0,
     details_crees: [] as string[],
@@ -77,11 +97,15 @@ export async function POST(req: NextRequest) {
   };
 
   for (const fam of familles) {
-    const email = (fam.email || "").trim().toLowerCase();
-    // Skip si email déjà présent en base
-    if (email && existingEmails.has(email)) {
-      rapport.skip_email_existant++;
-      rapport.details_skip.push(`${fam.parentName} (${email}) — déjà en base`);
+    // Calculer les clés enfant de cette famille (fichier).
+    const famChildKeys = fam.enfants.map(e =>
+      childKey(e.firstName, e.lastName, (e.birthDate || "").slice(0, 10))
+    );
+    // Skip TOUTE la famille si AU MOINS UN de ses enfants existe déjà en base.
+    const dejaPresent = famChildKeys.find(k => existingChildren.has(k));
+    if (dejaPresent) {
+      rapport.skip_enfant_existant++;
+      rapport.details_skip.push(`${fam.parentName} — ${fam.enfants.map(e => e.firstName).join(", ")} (enfant déjà en base)`);
       continue;
     }
 
@@ -122,8 +146,8 @@ export async function POST(req: NextRequest) {
 
     if (apply) {
       await adminDb.collection("families").add(familyDoc);
-      // On ajoute l'email à l'index pour éviter un doublon dans le même run.
-      if (email) existingEmails.add(email);
+      // Ajouter les enfants créés à l'index pour éviter un doublon dans le même run.
+      for (const k of famChildKeys) existingChildren.add(k);
     }
   }
 

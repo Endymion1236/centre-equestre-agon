@@ -55,7 +55,7 @@ export default function ImportCelerisPage() {
             <li>Familles dans le fichier : <strong>{rapport.total_familles_fichier}</strong></li>
             <li className="text-green-700">À créer : <strong>{rapport.a_creer}</strong> (dont {rapport.sans_email_crees} sans email)</li>
             <li>Enfants : <strong>{rapport.enfants_crees}</strong></li>
-            <li className="text-amber-700">Ignorées (email déjà en base) : <strong>{rapport.skip_email_existant}</strong></li>
+            <li className="text-amber-700">Ignorées (enfant déjà en base) : <strong>{rapport.skip_enfant_existant}</strong></li>
           </ul>
           {rapport.details_crees?.length > 0 && (
             <details className="mb-2">
