@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { doc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs, query, where } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import {
@@ -179,6 +179,21 @@ export default function FamilyCard({
   const [sanitaryForm, setSanitaryForm] = useState({ allergies: "", medicalNotes: "", emergencyContactName: "", emergencyContactPhone: "", authorization: true });
   const [editingGalop, setEditingGalop] = useState<string | null>(null); // childId
   const [addingChild, setAddingChild] = useState(false);
+  // Ref vers le formulaire d'ajout : permet de scroller dessus et de donner le
+  // focus au champ Prénom à l'ouverture, pour éviter d'avoir à descendre
+  // manuellement jusqu'en bas de la carte famille.
+  const addChildRef = useRef<HTMLDivElement | null>(null);
+  const addChildFirstInputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (addingChild) {
+      // Laisse le temps au formulaire de se monter avant de scroller/focus.
+      const t = setTimeout(() => {
+        addChildRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        addChildFirstInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(t);
+    }
+  }, [addingChild]);
   const [newChildForm, setNewChildForm] = useState({ firstName: "", lastName: "", birthDate: "", galopLevel: "—" });
 
   const startEditChild = (child: any) => {
@@ -615,10 +630,10 @@ export default function FamilyCard({
 
             {/* ── Formulaire d'ajout cavalier (déclenché par le bouton du haut) ── */}
             {addingChild && (
-              <div className="bg-blue-50 rounded-lg p-4 flex flex-col gap-3">
+              <div ref={addChildRef} className="bg-blue-50 rounded-lg p-4 flex flex-col gap-3 ring-2 ring-blue-200">
                 <div className="font-body text-xs font-semibold text-blue-800">Ajouter un cavalier</div>
                 <div className="flex gap-2">
-                  <input placeholder="Prénom *" value={newChildForm.firstName} onChange={e => setNewChildForm(f => ({ ...f, firstName: e.target.value }))} className={`${inputStyle} flex-1`}/>
+                  <input ref={addChildFirstInputRef} placeholder="Prénom *" value={newChildForm.firstName} onChange={e => setNewChildForm(f => ({ ...f, firstName: e.target.value }))} className={`${inputStyle} flex-1`}/>
                   <input placeholder="Nom" value={newChildForm.lastName} onChange={e => setNewChildForm(f => ({ ...f, lastName: e.target.value }))} className={`${inputStyle} flex-1`}/>
                 </div>
                 <div className="flex gap-2">

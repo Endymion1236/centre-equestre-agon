@@ -22,9 +22,10 @@ interface Props {
   childName: string;
   galopLevel?: string; // niveau actuel du cavalier
   onSaved?: () => void; // callback appelé après une sauvegarde réussie (pour fermer/rediriger)
+  onStats?: (stats: { pctFFE: number; pctProgression: number; totalAcquis: number; total: number }) => void; // remonte les % calculés (pour affichage compact externe)
 }
 
-export default function ProgressionEditor({ childId, familyId, childName, galopLevel, onSaved }: Props) {
+export default function ProgressionEditor({ childId, familyId, childName, galopLevel, onSaved, onStats }: Props) {
   // Acquis : structure rétro-compatible, peut contenir boolean (legacy + binaire)
   // ou { level: 1-5 } (nouveau format pour pratique_*). Cf. progression-helpers.ts.
   const [acquis, setAcquis] = useState<Acquis>({});
@@ -159,6 +160,14 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
   const pctFFE = Math.round((totalAcquis / niveau.competences.length) * 100);
   // Progression globale : sur l'échelle 1-5 chaque compétence apporte un score continu.
   const pctProgression = computeProgressionPercent(niveau.competences, acquis);
+
+  // Remonter les stats au parent (affichage compact dans un en-tête externe).
+  useEffect(() => {
+    if (!loading) {
+      onStats?.({ pctFFE, pctProgression, totalAcquis, total: niveau.competences.length });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pctFFE, pctProgression, totalAcquis, loading]);
 
   if (loading) return <div className="text-center py-4 text-sm text-slate-400">Chargement...</div>;
 

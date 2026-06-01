@@ -5,7 +5,7 @@ import PedaSuiviCard from "@/components/PedaSuiviCard";
 import { doc, updateDoc, addDoc, collection, getDoc, getDocs, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Badge } from "@/components/ui";
-import { Wallet, UserPlus, X, Trash2, CalendarDays, Plus, Save, Loader2 } from "lucide-react";
+import { Wallet, UserPlus, X, Trash2, CalendarDays, Plus, Save, Loader2, ChevronDown } from "lucide-react";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
 
 const modeLabels: Record<string, string> = {
@@ -38,6 +38,12 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
   const [mandatSaving, setMandatSaving] = useState(false);
   // Quel enfant a sa liste de séances entièrement dépliée (par childId).
   const [seancesExpanded, setSeancesExpanded] = useState<string | null>(null);
+  // Progression FFE repliée par défaut (bloc volumineux) : on stocke l'id de
+  // l'enfant dont la progression est dépliée.
+  const [progressionExpanded, setProgressionExpanded] = useState<string | null>(null);
+  // Stats de progression par enfant (remontées par ProgressionEditor quand il
+  // est monté), pour afficher le % FFE dans l'en-tête de l'accordéon.
+  const [progressionStats, setProgressionStats] = useState<Record<string, { pctFFE: number }>>({});
 
   const handleSaveMandat = async () => {
     if (!mandatForm.iban || !mandatForm.titulaire) return;
@@ -210,10 +216,27 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
               )}
             </div>
 
-            {/* Progression FFE */}
+            {/* Progression FFE — accordéon replié par défaut (bloc volumineux) */}
             <div>
-              <div className="font-body text-[10px] text-purple-600 font-semibold uppercase tracking-wider mb-2">📈 Progression FFE</div>
-              <ProgressionEditor childId={child.id} familyId={fid} childName={child.firstName} galopLevel={child.galopLevel} />
+              <button
+                onClick={() => setProgressionExpanded(progressionExpanded === child.id ? null : child.id)}
+                className="w-full flex items-center justify-between gap-2 bg-purple-50 hover:bg-purple-100 rounded-lg px-3 py-2 border-none cursor-pointer transition-colors"
+              >
+                <span className="font-body text-[10px] text-purple-600 font-semibold uppercase tracking-wider flex items-center gap-1">
+                  📈 Progression FFE
+                  <span className="text-purple-400 normal-case font-normal tracking-normal">· {child.galopLevel && child.galopLevel !== "—" ? child.galopLevel : "Débutant"}</span>
+                  {progressionStats[child.id] && (
+                    <span className="text-blue-500 normal-case font-bold tracking-normal">· {progressionStats[child.id].pctFFE}% validé FFE</span>
+                  )}
+                </span>
+                <ChevronDown size={14} className={`text-purple-500 transition-transform ${progressionExpanded === child.id ? "rotate-180" : ""}`} />
+              </button>
+              {progressionExpanded === child.id && (
+                <div className="mt-2">
+                  <ProgressionEditor childId={child.id} familyId={fid} childName={child.firstName} galopLevel={child.galopLevel}
+                    onStats={(s) => setProgressionStats(prev => prev[child.id]?.pctFFE === s.pctFFE ? prev : { ...prev, [child.id]: { pctFFE: s.pctFFE } })} />
+                </div>
+              )}
             </div>
 
             {/* Suivi pédagogique */}
