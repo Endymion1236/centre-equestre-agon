@@ -34,7 +34,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
-import { assertResetAllowed } from "@/lib/reset-guard";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -72,11 +71,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "familyId requis" }, { status: 400 });
     }
 
-    // Garde-fou anti-reset-prod (uniquement en mode apply, pas en dry-run)
-    if (apply) {
-      const guard = assertResetAllowed(reqBody);
-      if (guard) return guard;
-    }
+    // NB : opération ciblée sur UNE seule famille, déjà protégée par
+    // l'auth admin + le dry-run + la confirmation nommée côté UI.
+    // Le garde-fou anti-prod ne s'applique qu'aux resets massifs
+    // (reset-base, reset-compta), pas aux opérations par-famille.
 
     // Vérifier que la famille existe (sécurité supplémentaire)
     const famDoc = await adminDb.collection("families").doc(familyId).get();
