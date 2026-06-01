@@ -41,6 +41,9 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
   // Progression FFE repliée par défaut (bloc volumineux) : on stocke l'id de
   // l'enfant dont la progression est dépliée.
   const [progressionExpanded, setProgressionExpanded] = useState<string | null>(null);
+  // Stats de progression par enfant (remontées par ProgressionEditor quand il
+  // est monté), pour afficher le % FFE dans l'en-tête de l'accordéon.
+  const [progressionStats, setProgressionStats] = useState<Record<string, { pctFFE: number }>>({});
 
   const handleSaveMandat = async () => {
     if (!mandatForm.iban || !mandatForm.titulaire) return;
@@ -222,12 +225,16 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                 <span className="font-body text-[10px] text-purple-600 font-semibold uppercase tracking-wider flex items-center gap-1">
                   📈 Progression FFE
                   <span className="text-purple-400 normal-case font-normal tracking-normal">· {child.galopLevel && child.galopLevel !== "—" ? child.galopLevel : "Débutant"}</span>
+                  {progressionStats[child.id] && (
+                    <span className="text-blue-500 normal-case font-bold tracking-normal">· {progressionStats[child.id].pctFFE}% validé FFE</span>
+                  )}
                 </span>
                 <ChevronDown size={14} className={`text-purple-500 transition-transform ${progressionExpanded === child.id ? "rotate-180" : ""}`} />
               </button>
               {progressionExpanded === child.id && (
                 <div className="mt-2">
-                  <ProgressionEditor childId={child.id} familyId={fid} childName={child.firstName} galopLevel={child.galopLevel} />
+                  <ProgressionEditor childId={child.id} familyId={fid} childName={child.firstName} galopLevel={child.galopLevel}
+                    onStats={(s) => setProgressionStats(prev => prev[child.id]?.pctFFE === s.pctFFE ? prev : { ...prev, [child.id]: { pctFFE: s.pctFFE } })} />
                 </div>
               )}
             </div>
