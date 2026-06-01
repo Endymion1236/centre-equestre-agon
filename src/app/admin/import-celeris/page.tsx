@@ -23,16 +23,36 @@ export default function ImportCelerisPage() {
     setLoading(false);
   };
 
+  const exporter = async () => {
+    setLoading(true); setErreur(""); setRapport(null);
+    try {
+      const res = await authFetch(`/api/admin/export-families`, { method: "GET" });
+      const data = await res.json();
+      if (!res.ok) { setErreur(data.error || "Erreur"); setLoading(false); return; }
+      // Télécharge le JSON exporté.
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `familles-export-${data.projectId}-${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setRapport({ mode: `Export — ${data.count} familles téléchargées`, projectId: data.projectId, total_familles_fichier: data.count, a_creer: 0, skip_enfant_existant: 0, sans_email_crees: 0, enfants_crees: 0, details_crees: [], details_skip: [] });
+    } catch (e: any) {
+      setErreur(e?.message || "Erreur réseau");
+    }
+    setLoading(false);
+  };
+
   return (
     <div className="max-w-2xl mx-auto p-6">
       <h1 className="font-display text-2xl font-bold text-blue-800 mb-2">Import Celeris — Stages juillet 2026</h1>
       <p className="font-body text-sm text-gray-500 mb-4">
         Crée les familles + enfants des inscrits aux stages de juillet (sans inscription aux stages
-        ni paiement). Fonctionne uniquement sur la base <strong>test</strong>. Les familles dont
-        l&apos;email existe déjà sont ignorées.
+        ni paiement). La détection des doublons se fait par enfant (prénom + nom + date de naissance).
       </p>
 
-      <div className="flex gap-3 mb-6">
+      <div className="flex gap-3 mb-6 flex-wrap">
         <button onClick={() => lancer(false)} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 cursor-pointer disabled:opacity-50">
           {loading ? "…" : "1. Aperçu (sans rien écrire)"}
@@ -40,6 +60,10 @@ export default function ImportCelerisPage() {
         <button onClick={() => { if (confirm("Créer réellement les familles sur la base TEST ?")) lancer(true); }} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 border-none cursor-pointer disabled:opacity-50">
           {loading ? "…" : "2. Importer pour de vrai"}
+        </button>
+        <button onClick={exporter} disabled={loading}
+          className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-gray-700 bg-gray-100 border border-gray-200 cursor-pointer disabled:opacity-50">
+          {loading ? "…" : "Exporter les familles (JSON)"}
         </button>
       </div>
 
