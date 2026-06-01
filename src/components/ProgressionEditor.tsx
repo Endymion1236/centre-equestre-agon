@@ -145,6 +145,20 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
   };
 
   const niveau = getNiveauById(selectedNiveau);
+
+  // Remonter les stats au parent (affichage compact dans un en-tête externe).
+  // Placé AVANT tout return conditionnel (règles des Hooks). Recalcule en interne
+  // avec gardes pour ne pas dépendre de variables calculées plus bas.
+  useEffect(() => {
+    if (loading || !niveau) return;
+    const nbValid = niveau.competences.filter(c => isCompetenceValidated(acquis[c.id], seuilFFE)).length;
+    const total = niveau.competences.length || 1;
+    const pFFE = Math.round((nbValid / total) * 100);
+    const pProg = computeProgressionPercent(niveau.competences, acquis);
+    onStats?.({ pctFFE: pFFE, pctProgression: pProg, totalAcquis: nbValid, total });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNiveau, acquis, seuilFFE, loading]);
+
   if (!niveau) return null;
 
   // Grouper les compétences par domaine
@@ -160,14 +174,6 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
   const pctFFE = Math.round((totalAcquis / niveau.competences.length) * 100);
   // Progression globale : sur l'échelle 1-5 chaque compétence apporte un score continu.
   const pctProgression = computeProgressionPercent(niveau.competences, acquis);
-
-  // Remonter les stats au parent (affichage compact dans un en-tête externe).
-  useEffect(() => {
-    if (!loading) {
-      onStats?.({ pctFFE, pctProgression, totalAcquis, total: niveau.competences.length });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pctFFE, pctProgression, totalAcquis, loading]);
 
   if (loading) return <div className="text-center py-4 text-sm text-slate-400">Chargement...</div>;
 
