@@ -71,14 +71,19 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || "";
-  if (!projectId.includes("test")) {
+
+  // Protection : pour effacer réellement (apply=true), il faut fournir le
+  // mot-clé exact de confirmation. Empêche tout déclenchement accidentel,
+  // y compris en prod. Le dry-run (comptage) reste libre.
+  const apply = req.nextUrl.searchParams.get("apply") === "true";
+  const confirm = req.nextUrl.searchParams.get("confirm") || "";
+  const MOT_CLE = "EFFACER-PROD";
+  if (apply && confirm !== MOT_CLE) {
     return NextResponse.json({
-      error: "Refusé : remise à zéro autorisée uniquement sur la base TEST (gestion-2026-test).",
+      error: `Confirmation requise : pour effacer réellement, fournir le mot-clé exact (?confirm=${MOT_CLE}).`,
       projectId,
     }, { status: 403 });
   }
-
-  const apply = req.nextUrl.searchParams.get("apply") === "true";
 
   const rapport: any = {
     projectId,

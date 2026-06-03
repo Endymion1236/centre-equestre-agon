@@ -26,11 +26,18 @@ export default function ImportCelerisPage() {
   const resetDonnees = async (apply: boolean) => {
     setLoading(true); setErreur(""); setRapport(null);
     try {
-      const res = await authFetch(`/api/admin/reset-donnees${apply ? "?apply=true" : ""}`, { method: "POST" });
+      let url = `/api/admin/reset-donnees`;
+      if (apply) {
+        // Mot-clé de confirmation saisi par l'utilisateur (anti-accident).
+        const mot = window.prompt("Pour effacer le financier, tapez exactement : EFFACER-PROD");
+        if (mot !== "EFFACER-PROD") { setErreur("Mot-clé incorrect — opération annulée."); setLoading(false); return; }
+        url += `?apply=true&confirm=${encodeURIComponent(mot)}`;
+      }
+      const res = await authFetch(url, { method: "POST" });
       const data = await res.json();
       if (!res.ok) { setErreur(data.error || "Erreur"); setLoading(false); return; }
       const details = Object.entries(data.par_collection || {}).map(([k, v]) => `${k} : ${v}`);
-      setRapport({ mode: data.mode + " — REMISE À ZÉRO", projectId: data.projectId, total_familles_fichier: data.total_documents, a_creer: 0, skip_enfant_existant: 0, sans_email_crees: 0, enfants_crees: data.total_documents, details_crees: details, details_skip: [] });
+      setRapport({ mode: data.mode + " — REMISE À ZÉRO FINANCIER", projectId: data.projectId, total_familles_fichier: data.total_documents, a_creer: 0, skip_enfant_existant: 0, sans_email_crees: 0, enfants_crees: data.total_documents, details_crees: details, details_skip: [] });
     } catch (e: any) {
       setErreur(e?.message || "Erreur réseau");
     }
@@ -107,7 +114,7 @@ export default function ImportCelerisPage() {
       </div>
 
       <div className="flex gap-3 mb-6 flex-wrap border-t border-red-100 pt-4">
-        <span className="font-body text-xs text-red-400 w-full">⚠️ Efface uniquement le FINANCIER (paiements, SEPA, encaissements, compta, cartes, fidélité, avoirs, forfaits, remises, CAWL). Conserve : familles, progression, péda, présences, réservations, planning, structure. Base TEST uniquement.</span>
+        <span className="font-body text-xs text-red-400 w-full">⚠️ Efface uniquement le FINANCIER (paiements, SEPA, encaissements, compta, cartes, fidélité, avoirs, forfaits, remises, CAWL). Conserve : familles, progression, péda, présences, réservations, planning, structure. Effacement réel protégé par mot-clé.</span>
         <button onClick={() => resetDonnees(false)} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-red-700 bg-red-50 border border-red-200 cursor-pointer disabled:opacity-50">
           {loading ? "…" : "Aperçu remise à zéro (comptage)"}
