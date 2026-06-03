@@ -23,6 +23,27 @@ export default function ImportCelerisPage() {
     setLoading(false);
   };
 
+  const sauvegarder = async () => {
+    setLoading(true); setErreur(""); setRapport(null);
+    try {
+      const res = await authFetch(`/api/admin/backup-all`, { method: "GET" });
+      const data = await res.json();
+      if (!res.ok) { setErreur(data.error || "Erreur"); setLoading(false); return; }
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `backup-complet-${data.projectId}-${new Date().toISOString().slice(0,19).replace(/[:T]/g,"-")}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      const details = Object.entries(data.compteur || {}).filter(([,v]) => (v as number) > 0).map(([k, v]) => `${k} : ${v}`);
+      setRapport({ mode: `Sauvegarde — ${data.total_documents} documents telecharges`, projectId: data.projectId, total_familles_fichier: data.total_documents, a_creer: 0, skip_enfant_existant: 0, sans_email_crees: 0, enfants_crees: data.total_documents, details_crees: details, details_skip: [] });
+    } catch (e: any) {
+      setErreur(e?.message || "Erreur réseau");
+    }
+    setLoading(false);
+  };
+
   const resetDonnees = async (apply: boolean) => {
     setLoading(true); setErreur(""); setRapport(null);
     try {
@@ -110,6 +131,14 @@ export default function ImportCelerisPage() {
         <button onClick={() => { if (confirm("Copier les familles PROD dans la base TEST ?")) copierProd(true); }} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-purple-500 border-none cursor-pointer disabled:opacity-50">
           {loading ? "…" : "Copier prod→test pour de vrai"}
+        </button>
+      </div>
+
+      <div className="flex gap-3 mb-6 flex-wrap border-t border-green-100 pt-4">
+        <span className="font-body text-xs text-green-600 w-full">💾 Sauvegarde complète de toutes les collections (à faire AVANT toute remise à zéro). Télécharge un fichier JSON à conserver.</span>
+        <button onClick={sauvegarder} disabled={loading}
+          className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-green-700 bg-green-50 border border-green-200 cursor-pointer disabled:opacity-50">
+          {loading ? "…" : "💾 Sauvegarde complète (JSON)"}
         </button>
       </div>
 
