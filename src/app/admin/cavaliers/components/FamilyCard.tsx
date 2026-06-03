@@ -174,7 +174,7 @@ export default function FamilyCard({
 
   // ── Édition enfant ─────────────────────────────────────────────────────────
   const [editingChild, setEditingChild] = useState<string | null>(null); // childId
-  const [editChildForm, setEditChildForm] = useState({ firstName: "", lastName: "", birthDate: "", galopLevel: "—" });
+  const [editChildForm, setEditChildForm] = useState({ firstName: "", lastName: "", birthDate: "", galopLevel: "—", licenceNumber: "", licencePayee: false });
   const [editingSanitary, setEditingSanitary] = useState<string | null>(null); // childId
   const [sanitaryForm, setSanitaryForm] = useState({ allergies: "", medicalNotes: "", emergencyContactName: "", emergencyContactPhone: "", authorization: true });
   const [editingGalop, setEditingGalop] = useState<string | null>(null); // childId
@@ -200,7 +200,7 @@ export default function FamilyCard({
     setEditingChild(child.id);
     const bd = child.birthDate;
     const dateStr = bd ? (typeof bd === "string" ? bd.split("T")[0] : bd?.seconds ? new Date(bd.seconds * 1000).toISOString().split("T")[0] : bd instanceof Date ? bd.toISOString().split("T")[0] : "") : "";
-    setEditChildForm({ firstName: child.firstName || "", lastName: child.lastName || "", birthDate: dateStr, galopLevel: child.galopLevel || "—" });
+    setEditChildForm({ firstName: child.firstName || "", lastName: child.lastName || "", birthDate: dateStr, galopLevel: child.galopLevel || "—", licenceNumber: child.licenceNumber || "", licencePayee: !!child.licencePayee });
   };
 
   const handleSaveChild = async (childId: string) => {
@@ -211,6 +211,8 @@ export default function FamilyCard({
         lastName: editChildForm.lastName?.trim() || c.lastName || "",
         birthDate: editChildForm.birthDate ? new Date(editChildForm.birthDate) : c.birthDate,
         galopLevel: editChildForm.galopLevel,
+        licenceNumber: editChildForm.licenceNumber?.trim() || "",
+        licencePayee: !!editChildForm.licencePayee,
       } : c
     );
     try {
@@ -616,6 +618,13 @@ export default function FamilyCard({
                     <select value={editChildForm.galopLevel} onChange={e => setEditChildForm(f => ({ ...f, galopLevel: e.target.value }))} className={inputStyle}>
                       {galopLevels.map(g => <option key={g} value={g}>{g === "\u2014" ? "Débutant" : g}</option>)}
                     </select>
+                  </div>
+                  <div className="flex gap-2 items-center mt-2">
+                    <input value={editChildForm.licenceNumber} onChange={e => setEditChildForm(f => ({ ...f, licenceNumber: e.target.value }))} className={inputStyle} placeholder="N° de licence FFE"/>
+                    <label className="flex items-center gap-1.5 font-body text-xs text-slate-600 whitespace-nowrap">
+                      <input type="checkbox" checked={editChildForm.licencePayee} onChange={e => setEditChildForm(f => ({ ...f, licencePayee: e.target.checked }))} className="accent-green-500 w-4 h-4"/>
+                      Licence payée
+                    </label>
                   </div>
                   <div className="flex gap-2 mt-2">
                     <button onClick={() => handleSaveChild(editingChild)} disabled={saving}

@@ -508,6 +508,9 @@ export default function ProfilPage() {
                       {child.firstName} {(child as any).lastName || ""}
                     </div>
                     <div className="font-body text-xs text-gray-600">Niveau : {child.galopLevel || "—"}</div>
+                    {(child as any).licencePayee && (child as any).licenceNumber && (
+                      <div className="font-body text-xs text-green-700 mt-0.5">Licence FFE : {(child as any).licenceNumber}</div>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
