@@ -8,6 +8,7 @@ import { authFetch } from "@/lib/auth-fetch";
 export default function ImportCelerisPage() {
   const [loading, setLoading] = useState(false);
   const [rapport, setRapport] = useState<any>(null);
+  const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [erreur, setErreur] = useState("");
 
   const lancer = async (apply: boolean) => {
@@ -19,6 +20,27 @@ export default function ImportCelerisPage() {
       else setRapport(data);
     } catch (e: any) {
       setErreur(e?.message || "Erreur réseau");
+    }
+    setLoading(false);
+  };
+
+  const restaurer = async (file: File, apply: boolean) => {
+    setLoading(true); setErreur(""); setRapport(null);
+    try {
+      const texte = await file.text();
+      const backup = JSON.parse(texte);
+      let url = `/api/admin/restore-backup`;
+      if (apply) {
+        const mot = window.prompt("Pour restaurer réellement, tapez exactement : RESTAURER");
+        if (mot !== "RESTAURER") { setErreur("Mot-clé incorrect — restauration annulée."); setLoading(false); return; }
+        url += `?apply=true&confirm=${encodeURIComponent(mot)}`;
+      }
+      const res = await authFetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(backup) });
+      const data = await res.json();
+      if (!res.ok) { setErreur(data.error || "Erreur"); setLoading(false); return; }
+      setRapport({ kind: "reset", mode: data.mode + " — RESTAURATION", projectId: data.projectId, total_documents: data.total_restaure, par_collection: data.par_collection || {} });
+    } catch (e: any) {
+      setErreur(e?.message || "Fichier invalide");
     }
     setLoading(false);
   };
@@ -149,6 +171,20 @@ export default function ImportCelerisPage() {
         <button onClick={() => { if (confirm("EFFACER toutes les données (familles, paiements, etc.) sur TEST ?\n\nLa structure est conservée. Action irréversible.") && confirm("DERNIÈRE CONFIRMATION — effacer les données de la base test ?")) resetDonnees(true); }} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-red-500 border-none cursor-pointer disabled:opacity-50">
           {loading ? "…" : "Remettre à zéro (2 confirmations)"}
+        </button>
+      </div>
+
+      <div className="flex gap-3 mb-6 flex-wrap border-t border-blue-100 pt-4">
+        <span className="font-body text-xs text-blue-500 w-full">♻️ Restauration depuis un fichier de sauvegarde (en cas de pépin). Sélectionne le fichier JSON téléchargé, puis aperçu avant restauration réelle.</span>
+        <input type="file" accept="application/json,.json" onChange={e => setRestoreFile(e.target.files?.[0] || null)}
+          className="font-body text-xs text-gray-600 w-full" />
+        <button onClick={() => restoreFile && restaurer(restoreFile, false)} disabled={loading || !restoreFile}
+          className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 cursor-pointer disabled:opacity-50">
+          {loading ? "…" : "Aperçu restauration"}
+        </button>
+        <button onClick={() => restoreFile && restaurer(restoreFile, true)} disabled={loading || !restoreFile}
+          className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-blue-600 border-none cursor-pointer disabled:opacity-50">
+          {loading ? "…" : "Restaurer (mot-clé)"}
         </button>
       </div>
 
