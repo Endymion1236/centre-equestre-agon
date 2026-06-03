@@ -36,8 +36,7 @@ export default function ImportCelerisPage() {
       a.download = `backup-complet-${data.projectId}-${new Date().toISOString().slice(0,19).replace(/[:T]/g,"-")}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      const details = Object.entries(data.compteur || {}).filter(([,v]) => (v as number) > 0).map(([k, v]) => `${k} : ${v}`);
-      setRapport({ mode: `Sauvegarde — ${data.total_documents} documents telecharges`, projectId: data.projectId, total_familles_fichier: data.total_documents, a_creer: 0, skip_enfant_existant: 0, sans_email_crees: 0, enfants_crees: data.total_documents, details_crees: details, details_skip: [] });
+      setRapport({ kind: "backup", mode: `Sauvegarde — ${data.total_documents} documents téléchargés`, projectId: data.projectId, total_documents: data.total_documents, par_collection: data.compteur || {} });
     } catch (e: any) {
       setErreur(e?.message || "Erreur réseau");
     }
@@ -57,8 +56,7 @@ export default function ImportCelerisPage() {
       const res = await authFetch(url, { method: "POST" });
       const data = await res.json();
       if (!res.ok) { setErreur(data.error || "Erreur"); setLoading(false); return; }
-      const details = Object.entries(data.par_collection || {}).map(([k, v]) => `${k} : ${v}`);
-      setRapport({ mode: data.mode + " — REMISE À ZÉRO FINANCIER", projectId: data.projectId, total_familles_fichier: data.total_documents, a_creer: 0, skip_enfant_existant: 0, sans_email_crees: 0, enfants_crees: data.total_documents, details_crees: details, details_skip: [] });
+      setRapport({ kind: "reset", mode: data.mode + " — REMISE À ZÉRO FINANCIER", projectId: data.projectId, total_documents: data.total_documents, par_collection: data.par_collection || {} });
     } catch (e: any) {
       setErreur(e?.message || "Erreur réseau");
     }
@@ -162,27 +160,50 @@ export default function ImportCelerisPage() {
         <div className="bg-white border border-gray-200 rounded-xl p-4 font-body text-sm">
           <div className="font-semibold text-blue-800 mb-2">Rapport — {rapport.mode}</div>
           <div className="text-xs text-gray-500 mb-3">Base : {rapport.projectId}</div>
-          <ul className="space-y-1 mb-3">
-            <li>Familles dans le fichier : <strong>{rapport.total_familles_fichier}</strong></li>
-            <li className="text-green-700">À créer : <strong>{rapport.a_creer}</strong> (dont {rapport.sans_email_crees} sans email)</li>
-            <li>Enfants : <strong>{rapport.enfants_crees}</strong></li>
-            <li className="text-amber-700">Ignorées (enfant déjà en base) : <strong>{rapport.skip_enfant_existant}</strong></li>
-          </ul>
-          {rapport.details_crees?.length > 0 && (
-            <details className="mb-2">
-              <summary className="cursor-pointer text-blue-600">Détail des {rapport.details_crees.length} familles à créer</summary>
-              <ul className="mt-2 text-xs text-gray-600 space-y-0.5 max-h-64 overflow-y-auto">
-                {rapport.details_crees.map((d: string, i: number) => <li key={i}>• {d}</li>)}
+
+          {(rapport.kind === "reset" || rapport.kind === "backup") ? (
+            <>
+              <ul className="space-y-1 mb-3">
+                <li className={rapport.kind === "reset" ? "text-red-700" : "text-green-700"}>
+                  {rapport.kind === "reset" ? "Documents financiers concernés" : "Documents sauvegardés"} : <strong>{rapport.total_documents}</strong>
+                </li>
               </ul>
-            </details>
-          )}
-          {rapport.details_skip?.length > 0 && (
-            <details>
-              <summary className="cursor-pointer text-amber-600">Détail des {rapport.details_skip.length} ignorées</summary>
-              <ul className="mt-2 text-xs text-gray-500 space-y-0.5 max-h-48 overflow-y-auto">
-                {rapport.details_skip.map((d: string, i: number) => <li key={i}>• {d}</li>)}
+              <details className="mb-2" open>
+                <summary className="cursor-pointer text-blue-600">Détail par collection</summary>
+                <ul className="mt-2 text-xs text-gray-600 space-y-0.5 max-h-72 overflow-y-auto">
+                  {Object.entries(rapport.par_collection || {}).map(([k, v]) => (
+                    <li key={k} className={typeof v === "string" ? "text-red-500" : ((v as number) > 0 ? "" : "text-gray-300")}>
+                      • {k} : <strong>{String(v)}</strong>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </>
+          ) : (
+            <>
+              <ul className="space-y-1 mb-3">
+                <li>Familles dans le fichier : <strong>{rapport.total_familles_fichier}</strong></li>
+                <li className="text-green-700">À créer : <strong>{rapport.a_creer}</strong> (dont {rapport.sans_email_crees} sans email)</li>
+                <li>Enfants : <strong>{rapport.enfants_crees}</strong></li>
+                <li className="text-amber-700">Ignorées (enfant déjà en base) : <strong>{rapport.skip_enfant_existant}</strong></li>
               </ul>
-            </details>
+              {rapport.details_crees?.length > 0 && (
+                <details className="mb-2">
+                  <summary className="cursor-pointer text-blue-600">Détail des {rapport.details_crees.length} familles à créer</summary>
+                  <ul className="mt-2 text-xs text-gray-600 space-y-0.5 max-h-64 overflow-y-auto">
+                    {rapport.details_crees.map((d: string, i: number) => <li key={i}>• {d}</li>)}
+                  </ul>
+                </details>
+              )}
+              {rapport.details_skip?.length > 0 && (
+                <details>
+                  <summary className="cursor-pointer text-amber-600">Détail des {rapport.details_skip.length} ignorées</summary>
+                  <ul className="mt-2 text-xs text-gray-500 space-y-0.5 max-h-48 overflow-y-auto">
+                    {rapport.details_skip.map((d: string, i: number) => <li key={i}>• {d}</li>)}
+                  </ul>
+                </details>
+              )}
+            </>
           )}
         </div>
       )}
