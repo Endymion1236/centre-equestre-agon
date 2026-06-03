@@ -54,26 +54,17 @@ export async function POST(req: NextRequest) {
   //    email pendant les tests). Clé = prénom+nom normalisés + date de naissance.
   const norm = (s: string) =>
     (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/\s+/g, " ");
-  // Extrait AAAA-MM-JJ quel que soit le format stocké (Date, Timestamp Firestore, string).
-  const birthKey = (v: any): string => {
-    if (!v) return "";
-    try {
-      if (typeof v === "string") return v.slice(0, 10);
-      if (typeof v.toDate === "function") return v.toDate().toISOString().slice(0, 10); // Timestamp Firestore
-      if (v._seconds != null) return new Date(v._seconds * 1000).toISOString().slice(0, 10);
-      if (v instanceof Date) return v.toISOString().slice(0, 10);
-    } catch { /* ignore */ }
-    return "";
-  };
-  const childKey = (first: string, last: string, birth: string) =>
-    `${norm(first)}|${norm(last)}|${birth}`;
+  const childKey = (first: string, last: string) =>
+    `${norm(first)}|${norm(last)}`;
 
   const existingSnap = await adminDb.collection("families").get();
   const existingChildren = new Set<string>();
   existingSnap.forEach(d => {
     const children = d.data().children || [];
     for (const c of children) {
-      existingChildren.add(childKey(c.firstName || "", c.lastName || "", birthKey(c.birthDate)));
+      // Détection par prénom+nom (la date de naissance manque souvent sur les
+      // fiches existantes, donc on ne s'y fie pas pour le doublon).
+      existingChildren.add(childKey(c.firstName || "", c.lastName || ""));
     }
   });
 
@@ -99,7 +90,7 @@ export async function POST(req: NextRequest) {
   for (const fam of familles) {
     // Calculer les clés enfant de cette famille (fichier).
     const famChildKeys = fam.enfants.map(e =>
-      childKey(e.firstName, e.lastName, (e.birthDate || "").slice(0, 10))
+      childKey(e.firstName, e.lastName)
     );
     // Skip TOUTE la famille si AU MOINS UN de ses enfants existe déjà en base.
     const dejaPresent = famChildKeys.find(k => existingChildren.has(k));
