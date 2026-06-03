@@ -137,6 +137,9 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                   <Badge color="red">Profil incomplet</Badge>
                 )}
                 {child.sanitaryForm ? <Badge color="green">Attestation OK</Badge> : <Badge color="red">Attestation médicale manquante</Badge>}
+                {child.licenceNumber && (
+                  <Badge color={child.licencePayee ? "green" : "gray"}>Licence {child.licenceNumber}{child.licencePayee ? "" : " (non payée)"}</Badge>
+                )}
               </div>
             </div>
             {/* Actions */}
