@@ -2186,6 +2186,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           {enrolled.length === 0 ? <p className="font-body text-sm text-slate-500 italic mb-4">Aucun</p> :
           <div className="flex flex-col gap-2 mb-4">{enrolled.map((e: any) => {
             const isCard = e.paymentSource === "card";
+            const isCeleris = e.paymentSource === "celeris";
             // ── Cas forfait annuel ─────────────────────────────────────
             // Quand l'enfant est inscrit via un forfait annuel, on
             // distingue 2 sous-cas selon que le forfait est encaisse ou pas :
@@ -2198,12 +2199,12 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             const isForfaitPaid = isForfait && isForfaitChildPaye(payments, e.familyId, e.childId);
             const isForfaitPending = isForfait && !isForfaitPaid;
             const matchesThisEnrollment = (item: any) => itemMatchesCreneau(item, e, creneau);
-            const hasPaid = isCard || isForfaitPaid || payments.some((p: any) =>
+            const hasPaid = isCard || isCeleris || isForfaitPaid || payments.some((p: any) =>
               p.familyId === e.familyId &&
               p.status === "paid" &&
               (p.items || []).some(matchesThisEnrollment)
             );
-            const hasPending = !hasPaid && (isForfaitPending || payments.some((p: any) =>
+            const hasPending = !hasPaid && !isCeleris && (isForfaitPending || payments.some((p: any) =>
               p.familyId === e.familyId &&
               (p.status === "pending" || p.status === "partial") &&
               (p.items || []).some(matchesThisEnrollment)
@@ -2212,14 +2213,16 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             const enrolledChild = (enrolledFam?.children || []).find((c: any) => c.id === e.childId);
             const age = calcAge(enrolledChild?.birthDate);
             const galop = (enrolledChild as any)?.galopLevel || "—";
-            // Label : carte > forfait payé > forfait en attente > réglé > en attente > rien
+            // Label : carte > celeris > forfait payé > forfait en attente > réglé > en attente > rien
             const statusLabel = isCard ? "carte"
+              : isCeleris ? "réglé (Celeris)"
               : isForfaitPaid ? "forfait"
               : isForfaitPending ? "forfait à régler"
               : hasPaid ? "réglé"
               : hasPending ? "en attente"
               : "";
             const statusColor = isCard ? "bg-blue-500"
+              : isCeleris ? "bg-teal-500"
               : isForfaitPaid ? "bg-emerald-500"
               : isForfaitPending ? "bg-amber-500"
               : hasPaid ? "bg-green-500"
