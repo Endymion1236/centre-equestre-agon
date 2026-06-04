@@ -42,18 +42,21 @@ export async function POST(req: NextRequest) {
 
   const projectId =
     process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || "";
-  if (!projectId.includes("test")) {
-    return NextResponse.json({
-      error: "Inscription refusée : route réservée à la base TEST (gestion-2026-test).",
-      projectId,
-    }, { status: 403 });
-  }
+  const isProd = !projectId.includes("test");
 
   const semaine = req.nextUrl.searchParams.get("semaine") || "";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(semaine)) {
     return NextResponse.json({ error: "Paramètre 'semaine' requis (YYYY-MM-DD), ex. 2026-07-06." }, { status: 400 });
   }
   const apply = req.nextUrl.searchParams.get("apply") === "true";
+  const confirmProd = req.nextUrl.searchParams.get("confirmProd") || "";
+  // Aperçu libre partout ; écriture réelle en PROD = mot-clé explicite.
+  if (apply && isProd && confirmProd !== "INSCRIRE-PROD") {
+    return NextResponse.json({
+      error: "Inscription réelle en PRODUCTION refusée : ajoutez confirmProd=INSCRIRE-PROD pour confirmer.",
+      projectId,
+    }, { status: 403 });
+  }
 
   // ── 1. Inscriptions attendues (depuis le JSON tagué) ──────────────────────
   type Fam = {
