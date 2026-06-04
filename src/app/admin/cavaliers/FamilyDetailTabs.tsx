@@ -3,9 +3,10 @@ import { useState } from "react";
 import ProgressionEditor from "@/components/ProgressionEditor";
 import PedaSuiviCard from "@/components/PedaSuiviCard";
 import { doc, updateDoc, addDoc, collection, getDoc, getDocs, query, where, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { db, storage } from "@/lib/firebase";
 import { Badge } from "@/components/ui";
-import { Wallet, UserPlus, X, Trash2, CalendarDays, Plus, Save, Loader2, ChevronDown } from "lucide-react";
+import { Wallet, UserPlus, X, Trash2, CalendarDays, Plus, Save, Loader2, ChevronDown, Camera, Eye } from "lucide-react";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
 
 const modeLabels: Record<string, string> = {
@@ -36,6 +37,12 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
   const [editingMandat, setEditingMandat] = useState(false);
   const [mandatForm, setMandatForm] = useState({ iban: "", bic: "", titulaire: family.parentName || "", dateSignature: new Date().toISOString().split("T")[0] });
   const [mandatSaving, setMandatSaving] = useState(false);
+  // Photo de l'autorisation de prélèvement signée. scanOverride :
+  //   undefined = pas de changement (on affiche mandat.scanUrl)
+  //   string    = URL fraîchement uploadée
+  //   null      = retirée
+  const [scanUploading, setScanUploading] = useState(false);
+  const [scanOverride, setScanOverride] = useState<string | null | undefined>(undefined);
   // Quel enfant a sa liste de séances entièrement dépliée (par childId).
   const [seancesExpanded, setSeancesExpanded] = useState<string | null>(null);
   // Progression FFE repliée par défaut (bloc volumineux) : on stocke l'id de
@@ -372,8 +379,58 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                 <div className="flex items-center gap-2 mb-1"><Badge color="green">Actif</Badge><span className="text-blue-800 font-semibold">{mandat.mandatId}</span></div>
                 <div className="text-slate-500">IBAN : {mandat.iban?.slice(0,4)}...{mandat.iban?.slice(-4)}</div>
                 <div className="text-slate-500">Titulaire : {mandat.titulaire}</div>
+                {/* Photo de l'autorisation de prélèvement signée */}
+                {(() => {
+                  const scanUrl = scanOverride !== undefined ? scanOverride : (mandat.scanUrl || null);
+                  const uploadInput = (
+                    <input type="file" accept="image/*,application/pdf" capture="environment" className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0]; if (!file) return;
+                        setScanUploading(true);
+                        try {
+                          const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+                          const storageRef = ref(storage, `mandats-sepa/${fid}/${Date.now()}_${safe}`);
+                          const task = uploadBytesResumable(storageRef, file);
+                          await new Promise((res, rej) => task.on("state_changed", null, rej, () => res(null)));
+                          const url = await getDownloadURL(task.snapshot.ref);
+                          await updateDoc(doc(db, "mandats-sepa", mandat.id), { scanUrl: url, scanUploadedAt: serverTimestamp() });
+                          setScanOverride(url);
+                          fetchFamilies();
+                        } catch (err) { console.error(err); alert("Échec de l'envoi de la photo."); }
+                        finally { setScanUploading(false); e.target.value = ""; }
+                      }} />
+                  );
+                  return (
+                    <div className="mt-2 pt-2 border-t border-blue-100 flex items-center gap-2 flex-wrap">
+                      {scanUrl ? (
+                        <>
+                          <a href={scanUrl} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1 font-body text-[11px] font-semibold text-blue-600 hover:text-blue-800 no-underline">
+                            <Eye size={12} /> Voir l'autorisation signée
+                          </a>
+                          <label className="flex items-center gap-1 font-body text-[11px] text-slate-400 hover:text-blue-500 cursor-pointer">
+                            {scanUploading ? <Loader2 size={11} className="animate-spin" /> : <Camera size={11} />} Remplacer
+                            {uploadInput}
+                          </label>
+                          <button onClick={async () => {
+                            if (!confirm("Retirer la photo de l'autorisation ?")) return;
+                            await updateDoc(doc(db, "mandats-sepa", mandat.id), { scanUrl: "", updatedAt: serverTimestamp() });
+                            setScanOverride(null); fetchFamilies();
+                          }} className="flex items-center gap-1 font-body text-[11px] text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-0">
+                            <Trash2 size={11} /> Retirer
+                          </button>
+                        </>
+                      ) : (
+                        <label className="flex items-center gap-1.5 font-body text-[11px] font-semibold text-blue-600 bg-white border border-blue-200 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-blue-50">
+                          {scanUploading ? <Loader2 size={12} className="animate-spin" /> : <Camera size={12} />} Prendre en photo / joindre l'autorisation
+                          {uploadInput}
+                        </label>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
-            ) : <p className="font-body text-xs text-slate-400 italic">Aucun mandat SEPA.</p>}
+            ) : <p className="font-body text-xs text-slate-400 italic">Aucun mandat SEPA. Ajoutez le mandat (IBAN) pour pouvoir y joindre la photo de l'autorisation signée.</p>}
           </div>
           {fidData && (fidData.points || 0) > 0 && (
             <div>
