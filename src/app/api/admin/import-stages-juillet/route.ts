@@ -33,16 +33,22 @@ export async function POST(req: NextRequest) {
   const auth = await verifyAuth(req, { adminOnly: true });
   if (auth instanceof NextResponse) return auth;
 
-  // 2. GARDE-FOU : base test uniquement
+  // 2. GARDE-FOU PROD : l'aperçu (dry-run) est libre partout. L'ÉCRITURE
+  //    RÉELLE (apply=true) sur la base de PRODUCTION exige un mot-clé explicite
+  //    (?confirmProd=IMPORT-PROD), pour qu'on ne puisse jamais importer en prod
+  //    par accident. Sur la base test, aucun mot-clé requis.
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || "";
-  if (!projectId.includes("test")) {
+  const isProd = !projectId.includes("test");
+
+  const apply = req.nextUrl.searchParams.get("apply") === "true";
+  const confirmProd = req.nextUrl.searchParams.get("confirmProd") || "";
+  if (apply && isProd && confirmProd !== "IMPORT-PROD") {
     return NextResponse.json({
-      error: "Import refusé : cette route ne s'exécute que sur la base TEST (gestion-2026-test).",
+      error: "Écriture en PRODUCTION refusée : ajoutez confirmProd=IMPORT-PROD pour confirmer l'import réel en prod.",
       projectId,
     }, { status: 403 });
   }
 
-  const apply = req.nextUrl.searchParams.get("apply") === "true";
   const semaine = req.nextUrl.searchParams.get("semaine") || "";
 
   const toutesFamilles = famillesData as Array<{

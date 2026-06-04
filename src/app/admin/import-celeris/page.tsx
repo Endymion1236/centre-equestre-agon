@@ -15,10 +15,19 @@ export default function ImportCelerisPage() {
   const [rapportInsc, setRapportInsc] = useState<any>(null);
 
   const inscrireStages = async (apply: boolean) => {
+    // Écriture réelle en PROD : exiger le mot-clé (basé sur l'aperçu en cours).
+    const isProd = !!rapportInsc?.projectId && !rapportInsc.projectId.includes("test");
+    if (apply && isProd) {
+      const mot = window.prompt("⚠️ Inscription en PRODUCTION. Pour inscrire réellement en prod, tapez : INSCRIRE-PROD");
+      if (mot !== "INSCRIRE-PROD") { setErreur("Mot-clé incorrect — inscription en prod annulée."); return; }
+    }
     setLoading(true); setErreur(""); setRapportInsc(null);
     try {
       const params = new URLSearchParams({ semaine });
-      if (apply) params.set("apply", "true");
+      if (apply) {
+        params.set("apply", "true");
+        if (isProd) params.set("confirmProd", "INSCRIRE-PROD");
+      }
       const res = await authFetch(`/api/admin/inscrire-stages-semaine?${params.toString()}`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) { setErreur(data.error || "Erreur"); }
@@ -56,10 +65,19 @@ export default function ImportCelerisPage() {
   ];
 
   const lancer = async (apply: boolean) => {
+    // Si l'aperçu en cours indique la PROD, exiger le mot-clé avant écriture réelle.
+    const isProd = !!rapport?.projectId && !rapport.projectId.includes("test");
+    if (apply && isProd) {
+      const mot = window.prompt("⚠️ Écriture en PRODUCTION. Pour importer réellement en prod, tapez : IMPORT-PROD");
+      if (mot !== "IMPORT-PROD") { setErreur("Mot-clé incorrect — import en prod annulé."); return; }
+    }
     setLoading(true); setErreur(""); setRapport(null);
     try {
       const params = new URLSearchParams({ semaine });
-      if (apply) params.set("apply", "true");
+      if (apply) {
+        params.set("apply", "true");
+        if (isProd) params.set("confirmProd", "IMPORT-PROD");
+      }
       const res = await authFetch(`/api/admin/import-stages-juillet?${params.toString()}`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) { setErreur(data.error || "Erreur"); }
