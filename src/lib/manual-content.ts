@@ -509,4 +509,96 @@ export const MANUAL: ManualChapter[] = [
       },
     ],
   },
+
+  {
+    id: "import-celeris",
+    title: "Import Celeris & mise en service",
+    icon: "ClipboardList",
+    summary: "Reprendre les familles et stages depuis Celeris, semaine par semaine, et lever les garde-fous le jour J.",
+    sections: [
+      {
+        id: "import-familles",
+        title: "Importer les familles, semaine par semaine",
+        text: `
+          <p>La reprise des données Celeris se fait <strong>une semaine de stage à la fois</strong>, depuis la page
+          <strong>Import Celeris</strong>. Chaque famille est rattachée à la (aux) semaine(s) où ses enfants sont inscrits.</p>
+          <ol>
+            <li>Choisis la <strong>semaine</strong> dans le menu déroulant (6 juillet, 13 juillet, …).</li>
+            <li>Clique <strong>« Aperçu de la semaine »</strong> — aucune écriture, ça liste juste les familles à créer.</li>
+            <li>Si l'aperçu est correct, clique <strong>« Importer cette semaine pour de vrai »</strong>.</li>
+          </ol>
+          <p>L'import crée les <strong>fiches familles + enfants</strong> uniquement (pas d'inscription, pas de paiement).
+          Les familles dont un enfant existe <strong>déjà en base</strong> sont automatiquement <strong>ignorées</strong> : pas de doublon,
+          même si tu réimportes une semaine.</p>
+        `,
+        href: "/admin/import-celeris",
+        tips: [
+          "L'import refuse de s'exécuter sans semaine choisie — impossible d'importer tout le fichier d'un coup.",
+          "On importe d'abord les fiches (étape 1), PUIS on inscrit aux stages (étape 2). Jamais l'inverse.",
+        ],
+      },
+      {
+        id: "inscrire-stages",
+        title: "Inscrire aux stages (sans paiement)",
+        text: `
+          <p>Une fois les fiches importées, l'<strong>étape 2</strong> (section teal de la page) inscrit chaque enfant dans
+          <strong>tous les jours</strong> de son stage, <strong>sans créer de paiement</strong> — l'argent reste encaissé dans Celeris,
+          le journal comptable n'est pas touché.</p>
+          <ol>
+            <li><strong>« Aperçu inscription aux stages »</strong> — vérifie qui sera inscrit, qui l'est déjà, et les éventuels problèmes.</li>
+            <li><strong>« Inscrire aux stages pour de vrai »</strong> — réalise l'inscription.</li>
+          </ol>
+          <p>Ces inscriptions apparaissent au planning avec un <strong>point teal « réglé (Celeris) »</strong> et sont
+          <strong>exclues des impayés</strong> (puisqu'elles ont été payées dans Celeris).</p>
+          <p>Le bouton <strong>« Lister les créneaux-stages de la semaine »</strong> sert au diagnostic : il affiche les stages réels
+          en base avec leurs identifiants, utile si un libellé ne correspond pas.</p>
+        `,
+        href: "/admin/import-celeris",
+        tips: [
+          "Si un enfant apparaît en « problème » (introuvable), le rapport explique pourquoi : fiche non importée, ou enfant absent de sa fiche.",
+          "L'inscription en masse ne déclenche PAS l'alerte toast « stage complet » (qui ne sort qu'à l'inscription manuelle au planning). Le badge X/Y du planning passe quand même au rouge quand c'est plein.",
+        ],
+      },
+      {
+        id: "passer-en-prod",
+        title: "Passer un import en production",
+        text: `
+          <p>La page d'import fonctionne sur la base affichée dans l'aperçu (<code>gestion-2026-test</code> en test,
+          <code>gestion-2026</code> en prod). Par sécurité, <strong>l'aperçu est libre partout</strong>, mais
+          <strong>toute écriture réelle en production demande un mot-clé de confirmation</strong> :</p>
+          <ul>
+            <li>Import des fiches en prod → tape <code>IMPORT-PROD</code> dans la fenêtre de confirmation.</li>
+            <li>Inscription aux stages en prod → tape <code>INSCRIRE-PROD</code>.</li>
+          </ul>
+          <p>En base test, aucun mot-clé n'est demandé. Ce garde-fou empêche d'écrire en prod par accident.</p>
+        `,
+        tips: [
+          "Toujours faire l'aperçu d'abord : il affiche la base concernée (test ou prod) avant toute écriture.",
+        ],
+      },
+      {
+        id: "mode-restreint-emails",
+        title: "Mode restreint des emails (et comment le lever)",
+        text: `
+          <p>Pendant la phase de préparation, les familles ont été importées avec leurs vrais emails, mais on ne veut
+          <strong>surtout pas leur envoyer d'emails</strong>. Un <strong>mode restreint</strong> est donc <strong>actif par défaut</strong> :
+          seuls reçoivent des emails…</p>
+          <ul>
+            <li>les <strong>emails admin</strong> ;</li>
+            <li>le compte de test <code>laserbayagon@gmail.com</code> ;</li>
+            <li>tout email ajouté dans la variable <code>EMAIL_ALLOWLIST</code> (séparés par des virgules — <strong>y mettre les emails des moniteurs</strong>).</li>
+          </ul>
+          <p>Tous les autres destinataires (les familles) sont <strong>bloqués et tracés</strong> dans le Journal emails, sans aucun envoi.
+          Cela couvre tous les canaux : emails manuels, liens de paiement, confirmations CAWL, rappels J-1, prélèvements de solde, activations.</p>
+          <p><strong>Le jour de la mise en service</strong>, pour rouvrir l'envoi à tout le monde : sur Vercel, ajoute la variable
+          <code>EMAIL_RESTRICTED_MODE = off</code> (sur la prod), puis redéploie. Sans cette variable, le mode restreint reste actif.</p>
+        `,
+        tips: [
+          "Les variables EMAIL_ALLOWLIST et EMAIL_RESTRICTED_MODE se règlent dans Vercel → Settings → Environment Variables (par base : prod et/ou test).",
+          "Les notifications push (mobiles) ne sont pas concernées par ce mode restreint — uniquement les emails.",
+          "Après modification d'une variable Vercel, il faut redéployer pour qu'elle soit prise en compte.",
+        ],
+      },
+    ],
+  },
 ];
