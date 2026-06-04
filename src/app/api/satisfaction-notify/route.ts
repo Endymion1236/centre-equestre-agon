@@ -23,6 +23,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { verifyAuth } from "@/lib/api-auth";
 import { logEmail } from "@/lib/email-log";
+import { isRecipientAllowed, blockedLog } from "@/lib/email-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -85,9 +86,16 @@ export async function POST(req: NextRequest) {
       ? [process.env.RESEND_OWNER_EMAIL]
       : [OWNER_EMAIL];
 
+    // 🔒 Garde-fou phase de préparation.
+    const finalAllowed = finalTo.filter((e: string) => isRecipientAllowed(e));
+    if (finalAllowed.length === 0) {
+      console.warn(blockedLog(finalTo.join(", "), "espace_cavalier_satisfaction"));
+      return NextResponse.json({ skipped: true, reason: "mode_restreint" }, { status: 200 });
+    }
+
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
-      to: finalTo,
+      to: finalAllowed,
       subject: TEST_MODE ? `[TEST] ${subject}` : subject,
       html,
     });

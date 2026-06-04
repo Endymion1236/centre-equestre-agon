@@ -3,6 +3,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { verifyAuth } from "@/lib/api-auth";
 import { logEmail } from "@/lib/email-log";
+import { isRecipientAllowed, blockedLog } from "@/lib/email-guard";
 import { generateCAWLQR, generateSEPAQR } from "@/lib/payment-qr";
 
 export const dynamic = "force-dynamic";
@@ -148,7 +149,11 @@ export async function POST(req: NextRequest) {
     const resendKey = process.env.RESEND_API_KEY;
     const subject = `Lien de paiement — ${amount.toFixed(2)}€ — Centre Équestre`;
     const sentByUid = (auth as any)?.uid || "admin";
-    if (resendKey) {
+    if (resendKey && !isRecipientAllowed(recipientEmail)) {
+      // 🔒 Garde-fou phase de préparation : on ne pousse pas le lien à la famille.
+      console.warn(blockedLog(recipientEmail, "payment_link"));
+      await logEmail({ to: recipientEmail, subject, context: "payment_link", template: "paymentLink", status: "failed", error: "Bloqué par le mode restreint (email-guard)", sentBy: sentByUid, paymentId, familyId: payData.familyId });
+    } else if (resendKey) {
       try {
         // Construire la liste d'attachments avec les QR codes en CID.
         // IMPORTANT : l'API REST Resend attend content_id (snake_case), pas

@@ -16,6 +16,7 @@
 import { Resend } from "resend";
 import { adminAuth, adminDb } from "./firebase-admin";
 import { logEmail } from "./email-log";
+import { isRecipientAllowed, blockedLog } from "./email-guard";
 import { createActivationToken } from "./activation-token";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
@@ -106,6 +107,17 @@ export async function sendMagicLink(opts: SendMagicLinkOptions): Promise<SendMag
   });
 
   // ── 4. Envoyer ──
+  // 🔒 Garde-fou phase de préparation : ne pas écrire aux familles non autorisées.
+  if (!isRecipientAllowed(emailNormalized)) {
+    console.warn(blockedLog(emailNormalized, opts.context || "magic-link"));
+    await logEmail({
+      to: emailNormalized, subject, context: opts.context,
+      template: "magic-link",
+      status: "failed", error: "Bloqué par le mode restreint (email-guard)",
+      sentBy: opts.sentBy || "system", familyId: opts.familyId,
+    });
+    return { status: "failed", error: "Bloqué par le mode restreint (email-guard)", emailUsed: emailNormalized };
+  }
   try {
     const send = await resend.emails.send({
       from: FROM,

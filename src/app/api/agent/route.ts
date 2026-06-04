@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
+import { isRecipientAllowed, blockedLog } from "@/lib/email-guard";
 import { FieldValue } from "firebase-admin/firestore";
 
 export const dynamic = "force-dynamic";
@@ -303,6 +304,10 @@ async function executeTool(name: string, input: any): Promise<string> {
       case "envoyer_email": {
         const resendKey = process.env.RESEND_API_KEY;
         if (!resendKey) return "❌ Resend non configuré";
+        if (!isRecipientAllowed(input.to)) {
+          console.warn(blockedLog(input.to, "agent_envoyer_email"));
+          return `🔒 Mode restreint : email NON envoyé à ${input.to} (autorisé seulement pour admins/moniteurs/compte test).`;
+        }
         const res = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
