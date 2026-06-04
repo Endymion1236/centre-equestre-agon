@@ -11,6 +11,20 @@ export default function ImportCelerisPage() {
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [erreur, setErreur] = useState("");
   const [semaine, setSemaine] = useState("2026-07-06");
+  const [stages, setStages] = useState<any>(null);
+
+  const listerStages = async () => {
+    setLoading(true); setErreur(""); setStages(null);
+    try {
+      const res = await authFetch(`/api/admin/diag-stages-semaine?semaine=${encodeURIComponent(semaine)}`, { method: "GET" });
+      const data = await res.json();
+      if (!res.ok) { setErreur(data.error || "Erreur"); }
+      else setStages(data);
+    } catch (e: any) {
+      setErreur(e?.message || "Erreur réseau");
+    }
+    setLoading(false);
+  };
 
   // Semaines de stages été 2026 (lundis). On importe une semaine à la fois.
   const SEMAINES: { value: string; label: string }[] = [
@@ -145,14 +159,44 @@ export default function ImportCelerisPage() {
 
       <div className="mb-4">
         <label className="font-body text-sm font-semibold text-blue-800 block mb-1">Semaine à importer</label>
-        <select value={semaine} onChange={e => { setSemaine(e.target.value); setRapport(null); setErreur(""); }}
+        <select value={semaine} onChange={e => { setSemaine(e.target.value); setRapport(null); setErreur(""); setStages(null); }}
           className="px-3 py-2.5 rounded-xl font-body text-sm text-gray-700 bg-white border border-blue-200 cursor-pointer w-full max-w-xs">
           {SEMAINES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
         <p className="font-body text-xs text-gray-400 mt-1">
           Seules les familles taguées pour cette semaine seront importées. Les familles déjà en base sont ignorées.
         </p>
+        <button onClick={listerStages} disabled={loading}
+          className="mt-2 px-3 py-2 rounded-xl font-body text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 cursor-pointer disabled:opacity-50">
+          {loading ? "…" : "🔎 Lister les créneaux-stages de cette semaine (diagnostic)"}
+        </button>
       </div>
+
+      {stages && (
+        <div className="bg-indigo-50/50 border border-indigo-200 rounded-xl p-4 font-body text-sm mb-6">
+          <div className="font-semibold text-indigo-800 mb-1">
+            Stages du {stages.lundi} au {stages.dimanche} — {stages.nb_stages} stage(s)
+          </div>
+          <div className="text-xs text-gray-500 mb-3">Base : {stages.projectId}</div>
+          {stages.stages.length === 0 ? (
+            <div className="text-amber-700 text-xs">Aucun créneau-stage trouvé sur cette semaine.</div>
+          ) : (
+            <ul className="space-y-2">
+              {stages.stages.map((s: any, i: number) => (
+                <li key={i} className="border-b border-indigo-100 pb-2 last:border-0">
+                  <div className="font-semibold text-gray-800">
+                    {s.startTime}–{s.endTime} · {s.activityTitle}
+                    <span className="text-gray-400 font-normal"> · {s.monitor} · {s.priceTTC ?? "—"}€ · {s.jours.length} jour(s) · {s.nbInscritsMax} inscrit(s)</span>
+                  </div>
+                  <div className="text-[11px] text-gray-500 mt-0.5">stageKey : <code>{s.stageKey}</code></div>
+                  <div className="text-[11px] text-gray-400 mt-0.5">dates : {s.dates.join(", ")}</div>
+                  <div className="text-[11px] text-gray-400 break-all">creneauIds : {s.creneauIds.join(", ")}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-3 mb-6 flex-wrap">
         <button onClick={() => lancer(false)} disabled={loading}
