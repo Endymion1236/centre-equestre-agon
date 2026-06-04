@@ -1166,6 +1166,52 @@ export default function ParametresPage() {
             )}
           </Card>
 
+          {/* Comptes de connexion existants SANS fiche moniteur (réconciliation) */}
+          {(() => {
+            const orphans = authMoniteurs.filter(a =>
+              !moniteurs.some(m => (m.email || "").toLowerCase() === (a.email || "").toLowerCase())
+            );
+            if (orphans.length === 0) return null;
+            return (
+              <Card padding="md" className="border-amber-200">
+                <div className="flex items-center gap-2 mb-1">
+                  <AlertTriangle size={15} className="text-amber-500" />
+                  <h3 className="font-body text-base font-semibold text-amber-700">Comptes de connexion sans fiche</h3>
+                </div>
+                <p className="font-body text-[11px] text-slate-400 mb-3">
+                  Ces personnes ont un <strong>accès</strong> (compte de connexion) mais pas de fiche moniteur ici. Crée-leur une fiche pour les retrouver dans le planning et le management.
+                </p>
+                <div className="flex flex-col gap-2">
+                  {orphans.map((a: any) => {
+                    const busy = !!accountBusy && accountBusy === a.email;
+                    return (
+                      <div key={a.uid} className="flex items-center justify-between flex-wrap gap-2 bg-amber-50/60 rounded-lg px-4 py-3">
+                        <div>
+                          <div className="font-body text-sm font-semibold text-blue-800">{a.displayName || a.email}</div>
+                          <div className="font-body text-xs text-slate-400">{a.email}{a.disabled ? " · compte désactivé" : ""}</div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button onClick={async () => {
+                            const ref = await addDoc(collection(db, "moniteurs"), {
+                              name: a.displayName || a.email, role: "", email: a.email, phone: "", status: "active", createdAt: serverTimestamp(),
+                            });
+                            setMoniteurs(prev => [...prev, { id: ref.id, name: a.displayName || a.email, role: "", email: a.email, phone: "", status: "active" }]);
+                          }} className="flex items-center gap-1.5 font-body text-[11px] font-semibold text-white bg-blue-500 hover:bg-blue-400 px-2.5 py-1.5 rounded-lg border-none cursor-pointer" title="Créer une fiche moniteur à partir de ce compte">
+                            <Plus size={12} /> Créer la fiche
+                          </button>
+                          <button onClick={() => deleteAccess({ name: a.displayName || a.email, email: a.email }, a)} disabled={busy}
+                            className="flex items-center gap-1 font-body text-[10px] font-semibold text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-1.5 py-1 disabled:opacity-50" title="Supprimer ce compte de connexion">
+                            {busy ? <Loader2 size={12} className="animate-spin" /> : <ShieldOff size={12} />} Supprimer l'accès
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            );
+          })()}
+
           {/* Formulaire ajout */}
           {showAddMoniteur && (
             <Card padding="md" className="border-blue-200">
