@@ -5,6 +5,7 @@ import PedaSuiviCard from "@/components/PedaSuiviCard";
 import { doc, updateDoc, addDoc, collection, getDoc, getDocs, query, where, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
+import { authFetch } from "@/lib/auth-fetch";
 import { Badge } from "@/components/ui";
 import { Wallet, UserPlus, X, Trash2, CalendarDays, Plus, Save, Loader2, ChevronDown, Camera, Eye } from "lucide-react";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
@@ -43,6 +44,29 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
   //   null      = retirée
   const [scanUploading, setScanUploading] = useState(false);
   const [scanOverride, setScanOverride] = useState<string | null | undefined>(undefined);
+  const [mandatPdfLoading, setMandatPdfLoading] = useState(false);
+
+  // Télécharger l'autorisation de prélèvement pré-remplie (PDF), même sans email ni mandat existant.
+  const downloadMandatePdf = async () => {
+    setMandatPdfLoading(true);
+    try {
+      const res = await authFetch("/api/admin/sepa-mandate-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ familyId: family.firestoreId }),
+      });
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const safe = (family.parentName || "famille").replace(/[^a-zA-Z0-9._-]/g, "_");
+      a.download = `autorisation-prelevement-${safe}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch { alert("Échec de la génération de l'autorisation."); }
+    finally { setMandatPdfLoading(false); }
+  };
   // Quel enfant a sa liste de séances entièrement dépliée (par childId).
   const [seancesExpanded, setSeancesExpanded] = useState<string | null>(null);
   // Progression FFE repliée par défaut (bloc volumineux) : on stocke l'id de
@@ -359,7 +383,12 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
           <div>
             <div className="font-body text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 flex items-center justify-between">
               <span>🏦 Mandat SEPA</span>
-              {!editingMandat && <button onClick={() => { setMandatForm({ iban: mandat?.iban || "", bic: mandat?.bic || "", titulaire: mandat?.titulaire || family.parentName || "", dateSignature: mandat?.dateSignature || new Date().toISOString().split("T")[0] }); setEditingMandat(true); }} className="font-body text-[10px] text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1"><Plus size={10} /> {mandat ? "Modifier" : "Ajouter"}</button>}
+              <div className="flex items-center gap-3">
+                <button onClick={downloadMandatePdf} disabled={mandatPdfLoading} className="font-body text-[10px] text-slate-500 hover:text-blue-600 bg-transparent border-none cursor-pointer flex items-center gap-1 disabled:opacity-50" title="Télécharger l'autorisation de prélèvement pré-remplie (à imprimer / faire signer)">
+                  {mandatPdfLoading ? <Loader2 size={10} className="animate-spin" /> : <span>📄</span>} Autorisation pré-remplie
+                </button>
+                {!editingMandat && <button onClick={() => { setMandatForm({ iban: mandat?.iban || "", bic: mandat?.bic || "", titulaire: mandat?.titulaire || family.parentName || "", dateSignature: mandat?.dateSignature || new Date().toISOString().split("T")[0] }); setEditingMandat(true); }} className="font-body text-[10px] text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1"><Plus size={10} /> {mandat ? "Modifier" : "Ajouter"}</button>}
+              </div>
             </div>
             {editingMandat ? (
               <div className="bg-blue-50 rounded-lg p-3 flex flex-col gap-2">
