@@ -138,18 +138,26 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const resoudreEnfant = (familyEmail: string, enfant: string) => {
+  type ResolvedChild = { familyId: string; familyName: string; childId: string; childName: string };
+  const resoudreEnfant = (familyEmail: string, enfant: string): ResolvedChild | { error: string } => {
     const k = norm(enfant);
+    const emailKey = norm(familyEmail);
     // 1) via l'email parent puis le nom de l'enfant dans cette famille
-    const fam = byEmail.get(norm(familyEmail));
+    const fam = emailKey ? byEmail.get(emailKey) : undefined;
     if (fam) {
       const c = fam.children.find((ch: any) => norm(`${ch.firstName || ""} ${ch.lastName || ""}`) === k);
       if (c) return { familyId: fam.familyId, familyName: fam.familyName, childId: c.id, childName: `${c.firstName || ""} ${c.lastName || ""}`.trim() };
+      // Famille trouvée par email, mais cet enfant n'est PAS dans sa fiche.
+      const g1 = childByName.get(k) || [];
+      if (g1.length === 1) return g1[0];
+      const enfantsFiche = fam.children.map((ch: any) => `${ch.firstName || ""} ${ch.lastName || ""}`.trim()).join(", ") || "aucun";
+      return { error: `famille trouvée (email ${familyEmail}) mais enfant absent de sa fiche [enfants en base : ${enfantsFiche}]${g1.length > 1 ? ` ; ${g1.length} homonymes ailleurs` : ""}` };
     }
     // 2) fallback : recherche globale par nom d'enfant
     const g = childByName.get(k) || [];
     if (g.length === 1) return g[0];
-    return g.length > 1 ? "ambigu" : null;
+    if (g.length > 1) return { error: `${g.length} enfants homonymes "${enfant}" en base — ambigu` };
+    return { error: `ni la famille (email "${familyEmail || "vide"}") ni l'enfant "${enfant}" trouvés en base — fiche non importée ?` };
   };
 
   // ── 4. Construire le plan ─────────────────────────────────────────────────
@@ -175,8 +183,7 @@ export async function POST(req: NextRequest) {
     if (Array.isArray(stage)) { rapport.problemes.push(`Stage ambigu pour "${a.stageLabel}" (${a.moniteur}) — ${a.enfant} : ${stage.length} candidats`); continue; }
 
     const enf = resoudreEnfant(a.familyEmail, a.enfant);
-    if (!enf) { rapport.problemes.push(`Enfant introuvable en base : ${a.enfant} (${a.familyEmail || "sans email"})`); continue; }
-    if (enf === "ambigu") { rapport.problemes.push(`Enfant ambigu (plusieurs familles) : ${a.enfant}`); continue; }
+    if ("error" in enf) { rapport.problemes.push(`${a.enfant} (${a.familyEmail || "sans email"}) : ${enf.error}`); continue; }
 
     // Inscrire dans tous les jours du stage (idempotent).
     let joursAjoutes = 0, joursDeja = 0;
