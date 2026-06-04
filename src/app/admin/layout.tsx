@@ -83,7 +83,7 @@ const navItems = [
   { href: "/admin/modeles", icon: LayoutTemplate, label: "Modèles" },
   { href: "/admin/contenu", icon: Globe, label: "Contenu site" },
   { href: "/admin/galerie", icon: Image, label: "Galerie photos" },
-  { href: "/admin/equipe", icon: Users, label: "Accès moniteurs" },
+  { href: "/admin/parametres?section=moniteurs", icon: Users, label: "Moniteurs & accès" },
   { href: "/admin/parametres", icon: Settings, label: "Paramètres" },
   { href: "/admin/manuel", icon: BookMarked, label: "Manuel" },
   { href: "/admin/tests", icon: CheckCircle2, label: "Plan de tests" },

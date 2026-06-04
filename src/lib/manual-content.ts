@@ -63,9 +63,9 @@ export const MANUAL: ManualChapter[] = [
             <li><strong>Admin</strong> — accès complet à toutes les sections</li>
             <li><strong>Moniteur</strong> — accès limité aux pages Terrain (Planning consultation, Montoir, Suivi pédagogique)</li>
           </ul>
-          <p>Tu peux gérer qui est admin/moniteur dans <strong>Configuration → Accès moniteurs</strong>.</p>
+          <p>Tu gères les moniteurs (leur fiche <em>et</em> leur compte de connexion) dans <strong>Paramètres → Moniteurs</strong> : chaque moniteur a une fiche, et juste en dessous le bouton <strong>« Créer l'accès »</strong> pour lui ouvrir un compte. Le compte et la fiche sont reliés par l'email.</p>
         `,
-        href: "/admin/equipe",
+        href: "/admin/parametres?section=moniteurs",
       },
     ],
   },

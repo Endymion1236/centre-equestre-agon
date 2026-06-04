@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc, collection, getDocs, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { Save, Plus, Trash2, Loader2, AlertTriangle, Users, Pencil, Calendar } from "lucide-react";
+import { Save, Plus, Trash2, Loader2, AlertTriangle, Users, Pencil, Calendar, KeyRound, RefreshCw, Search, ShieldCheck, ShieldOff } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import MareesSection from "./MareesSection";
 import { DEFAULT_ECHELLE_LABELS, DEFAULT_VALIDATED_FFE_LEVEL, type ProgressionLabelsSettings } from "@/lib/progression-helpers";
@@ -38,6 +38,13 @@ export default function ParametresPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [section, setSection] = useState<"centre" | "reductions" | "degressivite" | "vacances" | "annulation" | "comptable" | "horaires" | "moniteurs" | "fidelite" | "inscription" | "epreuves" | "progression" | "maintenance" | "notifications" | "marees">("centre");
+
+  // Ouvrir directement une section via l'URL (ex. /admin/parametres?section=moniteurs)
+  useEffect(() => {
+    const allowed = ["centre","reductions","degressivite","vacances","annulation","comptable","horaires","moniteurs","fidelite","inscription","epreuves","progression","maintenance","notifications","marees"];
+    const s = new URLSearchParams(window.location.search).get("section");
+    if (s && allowed.includes(s)) setSection(s as any);
+  }, []);
   const [notifSettings, setNotifSettings] = useState({
     nouvelle_inscription: true,
     nouveau_paiement: true,
@@ -176,12 +183,106 @@ export default function ParametresPage() {
   const [editMoniteurId, setEditMoniteurId] = useState<string | null>(null);
   const [moniteurForm, setMoniteurForm] = useState({ name: "", role: "", email: "", phone: "", status: "active" });
   const [moniteurSaving, setMoniteurSaving] = useState(false);
+  // Comptes de connexion (Firebase Auth) — pour afficher/gérer l'accès depuis ici.
+  // On relie un compte à une fiche moniteur par l'EMAIL.
+  const [authMoniteurs, setAuthMoniteurs] = useState<any[]>([]);
+  const [accountBusy, setAccountBusy] = useState<string>(""); // email en cours de traitement
+
+  const reloadAuthMoniteurs = async () => {
+    try {
+      const res = await authFetch("/api/admin/list-moniteurs");
+      const data = await res.json();
+      if (data.moniteurs) setAuthMoniteurs(data.moniteurs);
+    } catch (e) { console.error("Chargement comptes moniteurs:", e); }
+  };
+
+  // Compte Auth correspondant à une fiche moniteur (rapprochement par email)
+  const accountFor = (m: any) =>
+    authMoniteurs.find(a => (a.email || "").toLowerCase() === (m.email || "").toLowerCase());
+
+  // Créer l'accès (compte Firebase Auth + rôle moniteur) pour une fiche existante
+  const createAccess = async (m: any) => {
+    if (!m.email) { alert("Ajoutez d'abord un email à ce moniteur (bouton Modifier)."); return; }
+    const password = window.prompt(
+      `Mot de passe initial pour le compte de ${m.name} (${m.email}) ?\n\nMinimum 6 caractères. Vous le communiquerez au moniteur, qui pourra le changer ensuite.`
+    );
+    if (password === null) return; // annulé
+    if (password.length < 6) { alert("Le mot de passe doit faire au moins 6 caractères."); return; }
+    setAccountBusy(m.email);
+    try {
+      const res = await authFetch("/api/admin/create-moniteur", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: m.name, email: m.email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || "Erreur lors de la création du compte."); return; }
+      alert(`✅ Accès créé pour ${m.email}.\nLe moniteur peut se connecter via « Connexion par email ».`);
+      await reloadAuthMoniteurs();
+    } catch (e) { alert("Erreur réseau."); }
+    finally { setAccountBusy(""); }
+  };
+
+  const deleteAccess = async (m: any, acct: any) => {
+    if (!confirm(`Supprimer l'ACCÈS (compte de connexion) de ${m.name} (${m.email}) ?\n\nLa fiche moniteur est conservée — seul le compte de connexion est supprimé.`)) return;
+    setAccountBusy(m.email);
+    try {
+      const res = await authFetch("/api/admin/create-moniteur", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid: acct.uid }),
+      });
+      if (res.ok) { await reloadAuthMoniteurs(); }
+      else { const d = await res.json(); alert(d.error || "Erreur lors de la suppression du compte."); }
+    } catch (e) { alert("Erreur réseau."); }
+    finally { setAccountBusy(""); }
+  };
+
+  const refreshAccessClaim = async (m: any, acct: any) => {
+    if (!confirm(
+      `Rafraîchir le rôle moniteur de ${m.name} ?\n\n` +
+      `Cela réapplique le droit d'accès et déconnecte la personne de ses sessions. ` +
+      `Elle devra se reconnecter (utile en cas d'erreur de permission).`
+    )) return;
+    setAccountBusy(m.email);
+    try {
+      const res = await authFetch("/api/admin/refresh-moniteur-claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid: acct.uid }),
+      });
+      if (res.ok) alert(`Rôle moniteur réappliqué pour ${m.name}. Demandez-lui de se reconnecter.`);
+      else { const d = await res.json(); alert(d.error || "Erreur lors du rafraîchissement."); }
+    } catch (e) { alert("Erreur réseau."); }
+    finally { setAccountBusy(""); }
+  };
+
+  const diagAccess = async (m: any) => {
+    try {
+      const res = await authFetch(`/api/admin/diag-claims?email=${encodeURIComponent(m.email)}`);
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || "Erreur lors du diagnostic."); return; }
+      const claims = data.customClaims || {};
+      const claimsStr = Object.keys(claims).length === 0 ? "AUCUN CLAIM" : JSON.stringify(claims, null, 2);
+      alert(
+        `🔍 Diagnostic accès — ${m.name}\n\n` +
+        `Email : ${data.email}\nUID : ${data.uid}\n` +
+        `Compte désactivé : ${data.disabled ? "OUI" : "non"}\n` +
+        `Email vérifié : ${data.emailVerified ? "oui" : "NON"}\n\n` +
+        `Custom claims : ${claimsStr}\n\n` +
+        `✅ Claim moniteur : ${data.hasMoniteurClaim ? "OUI" : "❌ NON"}\n` +
+        `✅ Claim admin : ${data.hasAdminClaim ? "OUI" : "non"}\n\n` +
+        `Dernière connexion : ${data.lastSignIn || "jamais"}`
+      );
+    } catch (e) { alert("Erreur réseau."); }
+  };
 
   useEffect(() => {
     if (section !== "moniteurs") return;
     getDocs(collection(db, "moniteurs")).then(snap => {
       setMoniteurs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
+    reloadAuthMoniteurs();
   }, [section]);
 
   // ─── Fidélité ───
@@ -957,7 +1058,12 @@ export default function ParametresPage() {
         <div className="flex flex-col gap-4">
           <Card padding="md">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-body text-base font-semibold text-blue-800">Moniteurs & instructeurs</h3>
+              <div>
+                <h3 className="font-body text-base font-semibold text-blue-800">Moniteurs & instructeurs</h3>
+                <p className="font-body text-[11px] text-slate-400 mt-0.5">
+                  Chaque moniteur a une fiche (nom, rôle, email…) et, en dessous, son <strong>accès</strong> (compte de connexion). L'accès se gère ici, relié par l'email.
+                </p>
+              </div>
               <button onClick={() => { setShowAddMoniteur(true); setEditMoniteurId(null); setMoniteurForm({ name: "", role: "", email: "", phone: "", status: "active" }); }}
                 className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-400">
                 <Plus size={14} /> Ajouter
@@ -969,7 +1075,8 @@ export default function ParametresPage() {
             ) : (
               <div className="flex flex-col gap-2">
                 {moniteurs.map((m: any) => (
-                  <div key={m.id} className="flex items-center justify-between bg-sand rounded-lg px-4 py-3">
+                  <div key={m.id} className="bg-sand rounded-lg px-4 py-3 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center font-body text-sm font-bold text-blue-500">
                         {(m.name || "?")[0].toUpperCase()}
@@ -992,16 +1099,66 @@ export default function ParametresPage() {
                         setEditMoniteurId(m.id);
                         setMoniteurForm({ name: m.name || "", role: m.role || "", email: m.email || "", phone: m.phone || "", status: m.status || "active" });
                         setShowAddMoniteur(true);
-                      }} className="text-blue-400 hover:text-blue-600 bg-transparent border-none cursor-pointer p-1" title="Modifier">
+                      }} className="text-blue-400 hover:text-blue-600 bg-transparent border-none cursor-pointer p-1" title="Modifier la fiche">
                         <Pencil size={14}/>
                       </button>
                       <button onClick={async () => {
-                        if (!confirm(`Supprimer ${m.name} ?`)) return;
+                        if (!confirm(`Supprimer la fiche de ${m.name} ?`)) return;
                         await deleteDoc(doc(db, "moniteurs", m.id));
                         setMoniteurs(prev => prev.filter(x => x.id !== m.id));
-                      }} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1">
+                      }} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1" title="Supprimer la fiche">
                         <Trash2 size={14}/>
                       </button>
+                    </div>
+                    </div>
+
+                    {/* Ligne « accès » : compte de connexion (Firebase Auth), relié par email */}
+                    <div className="flex items-center justify-between flex-wrap gap-2 border-t border-blue-100/70 pt-2">
+                      {(() => {
+                        const acct = accountFor(m);
+                        const busy = !!accountBusy && accountBusy === m.email;
+                        if (acct) {
+                          return (
+                            <>
+                              <span className="flex items-center gap-1.5 font-body text-[11px] font-semibold text-green-600">
+                                <ShieldCheck size={13} /> Accès actif{acct.disabled ? " (désactivé)" : ""}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <button onClick={() => diagAccess(m)} title="Diagnostic des droits"
+                                  className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-purple-500 hover:bg-purple-50 bg-transparent border-none cursor-pointer">
+                                  <Search size={13} />
+                                </button>
+                                <button onClick={() => refreshAccessClaim(m, acct)} disabled={busy} title="Rafraîchir le rôle (erreurs de permission)"
+                                  className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-blue-500 hover:bg-blue-50 bg-transparent border-none cursor-pointer disabled:opacity-50">
+                                  {busy ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                                </button>
+                                <button onClick={() => deleteAccess(m, acct)} disabled={busy} title="Supprimer le compte de connexion (la fiche est conservée)"
+                                  className="flex items-center gap-1 font-body text-[10px] font-semibold text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-1.5 py-1 disabled:opacity-50">
+                                  <ShieldOff size={12} /> Supprimer l'accès
+                                </button>
+                              </div>
+                            </>
+                          );
+                        }
+                        if (!m.email) {
+                          return (
+                            <span className="flex items-center gap-1.5 font-body text-[11px] text-slate-400">
+                              <ShieldOff size={13} /> Pas d'email — ajoutez-en un (Modifier) pour pouvoir créer l'accès
+                            </span>
+                          );
+                        }
+                        return (
+                          <>
+                            <span className="flex items-center gap-1.5 font-body text-[11px] text-slate-400">
+                              <ShieldOff size={13} /> Aucun compte de connexion
+                            </span>
+                            <button onClick={() => createAccess(m)} disabled={busy} title="Créer le compte de connexion moniteur"
+                              className="flex items-center gap-1.5 font-body text-[11px] font-semibold text-white bg-blue-500 hover:bg-blue-400 px-2.5 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                              {busy ? <Loader2 size={12} className="animate-spin" /> : <KeyRound size={12} />} Créer l'accès
+                            </button>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 ))}
