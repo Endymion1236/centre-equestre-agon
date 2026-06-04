@@ -401,6 +401,39 @@ export const MANUAL: ManualChapter[] = [
           <p>Les lignes non matchées restent à pointer manuellement.</p>
         `,
       },
+      {
+        id: "cloture-journaliere",
+        title: "Clôture journalière (NF525)",
+        text: `
+          <p>La <strong>clôture journalière</strong> fige les encaissements de la journée dans le journal certifié
+          <strong>NF525</strong> (chaînage sécurisé, inaltérable). C'est l'équivalent du « Z de caisse » : une fois la journée
+          clôturée, on ne peut plus la modifier.</p>
+          <p>À faire en fin de journée d'encaissement, après avoir saisi tous les paiements du jour.</p>
+        `,
+        href: "/admin/comptabilite/cloture-journaliere",
+        tips: [
+          "Vérifie que tous les encaissements du jour sont saisis AVANT de clôturer — une clôture est définitive.",
+        ],
+      },
+      {
+        id: "livre-caisse",
+        title: "Livre de caisse espèces",
+        text: `
+          <p>Le <strong>livre de caisse espèces</strong> retrace, mois par mois, tous les mouvements en espèces
+          (encaissements, sorties) avec le solde courant. C'est le registre légal des espèces.</p>
+        `,
+        href: "/admin/comptabilite/livre-caisse",
+      },
+      {
+        id: "fond-caisse",
+        title: "Fond de caisse",
+        text: `
+          <p>La page <strong>Fond de caisse</strong> permet de compter le fond physique (billets et pièces) et de le
+          rapprocher du solde théorique attendu. Utile pour vérifier qu'il n'y a pas d'écart de caisse.</p>
+          <p>En cas d'écart, la page <strong>Diagnostic espèces</strong> aide à retrouver d'où vient la différence.</p>
+        `,
+        href: "/admin/comptabilite/fond-caisse",
+      },
     ],
   },
 
@@ -458,6 +491,92 @@ export const MANUAL: ManualChapter[] = [
           </ul>
           <p>Tu peux suivre les envois dans le <strong>Journal emails</strong>.</p>
         `,
+      },
+    ],
+  },
+
+  {
+    id: "management",
+    title: "Management des salariés",
+    icon: "Users",
+    summary: "Planifier les tâches de l'équipe, suivre les heures et gérer les salariés.",
+    sections: [
+      {
+        id: "management-planning",
+        title: "Planning des tâches (semaine)",
+        text: `
+          <p>L'onglet <strong>Planning</strong> organise les tâches de l'équipe semaine par semaine : chaque salarié reçoit
+          ses tâches (écuries du matin, check-list poney, cours, entretien…) avec un horaire. Les salariés sont repérés par
+          une couleur.</p>
+          <p>Tu navigues de semaine en semaine et tu ajoutes/déplaces les tâches depuis la <strong>bibliothèque de tâches</strong>.</p>
+        `,
+        href: "/admin/management",
+        tips: [
+          "Les moniteurs présents dans le planning des cours sont repris automatiquement comme salariés.",
+        ],
+      },
+      {
+        id: "management-resume",
+        title: "Résumé : charge hebdomadaire",
+        text: `
+          <p>L'onglet <strong>Résumé</strong> affiche la <strong>charge de travail</strong> de chaque salarié sur la semaine
+          (total d'heures / de tâches). Utile pour équilibrer la répartition et repérer les surcharges.</p>
+        `,
+        href: "/admin/management",
+      },
+      {
+        id: "management-horaires",
+        title: "Horaires & feuilles de temps",
+        text: `
+          <p>L'onglet <strong>Horaires</strong> récapitule, mois par mois, les heures de chaque salarié sous forme de
+          <strong>feuille de temps</strong>. Chaque salarié peut <strong>signer</strong> sa feuille (signature électronique) pour
+          valider ses heures.</p>
+        `,
+        href: "/admin/management",
+        tips: [
+          "La feuille de temps mensuelle sert de base pour la paie / le suivi des heures.",
+        ],
+      },
+      {
+        id: "management-bibliotheque",
+        title: "Bibliothèque de tâches",
+        text: `
+          <p>L'onglet <strong>Bibliothèque</strong> regroupe les <strong>types de tâches réutilisables</strong> (ex : « Écuries matin »,
+          « Check-list poney »). Pour chaque type, tu définis les jours par défaut et les horaires de début standards, ce qui
+          accélère la création du planning.</p>
+        `,
+        href: "/admin/management",
+      },
+      {
+        id: "management-equipe",
+        title: "Équipe (salariés)",
+        text: `
+          <p>L'onglet <strong>Équipe</strong> liste les salariés, leur couleur et leur statut (actif / inactif). C'est ici que
+          tu gères qui apparaît dans le planning des tâches.</p>
+        `,
+        href: "/admin/management",
+      },
+      {
+        id: "management-modeles",
+        title: "Modèles de planning",
+        text: `
+          <p>L'onglet <strong>Modèles</strong> permet d'enregistrer des plannings types (ex : « Semaine scolaire »,
+          « Planning standard hors vacances ») pour les réappliquer en un clic plutôt que de tout ressaisir.</p>
+        `,
+        href: "/admin/management",
+      },
+      {
+        id: "management-agent-ia",
+        title: "Agent IA (questions sur le planning)",
+        text: `
+          <p>L'onglet <strong>Agent IA</strong> répond en langage naturel à des questions sur l'organisation de l'équipe,
+          par exemple : « Qui est disponible mercredi après-midi ? » ou « Quelle est la charge d'Emmeline cette semaine ? ».
+          Il peut aussi proposer une répartition des tâches.</p>
+        `,
+        href: "/admin/management",
+        tips: [
+          "L'agent s'appuie sur le planning et les salariés saisis : plus les données sont à jour, plus ses réponses sont justes.",
+        ],
       },
     ],
   },
@@ -597,6 +716,30 @@ export const MANUAL: ManualChapter[] = [
           "Les variables EMAIL_ALLOWLIST et EMAIL_RESTRICTED_MODE se règlent dans Vercel → Settings → Environment Variables (par base : prod et/ou test).",
           "Les notifications push (mobiles) ne sont pas concernées par ce mode restreint — uniquement les emails.",
           "Après modification d'une variable Vercel, il faut redéployer pour qu'elle soit prise en compte.",
+        ],
+      },
+      {
+        id: "envoyer-activation",
+        title: "Envoyer les liens d'activation aux familles",
+        text: `
+          <p>Pour qu'une famille accède à son espace en ligne (réservations, factures, profil), elle doit
+          <strong>activer son compte</strong> via un <strong>lien magique</strong> envoyé par email. Ça se passe sur la page
+          <strong>Bascule prod</strong>.</p>
+          <p><strong>Procédure recommandée (phase pilote) :</strong></p>
+          <ol>
+            <li>Choisis <strong>1 à 3 familles pilotes</strong> de confiance (toi-même, Emmeline, un parent habitué).</li>
+            <li>Coche-les dans la liste (recherche par nom, email ou prénom d'enfant).</li>
+            <li>Clique <strong>« Simuler »</strong> (dry-run) : ça vérifie les emails sans rien envoyer.</li>
+            <li>Si tout est bon, clique <strong>« Envoyer pour de vrai »</strong>. La famille reçoit un email avec un lien
+            pour activer son espace (sans mot de passe à créer).</li>
+            <li>Quand les pilotes ont validé que tout fonctionne, tu pourras envoyer aux ~93 familles en masse.</li>
+          </ol>
+          <p>Maximum <strong>10 familles par envoi</strong> en phase pilote. Chaque envoi est tracé.</p>
+        `,
+        href: "/admin/bascule-prod",
+        tips: [
+          "⚠️ Important : tant que le MODE RESTREINT des emails est actif (voir section précédente), un lien d'activation vers une famille NON autorisée est bloqué. Pour activer une vraie famille, ajoute son email à EMAIL_ALLOWLIST, ou attends la mise en service (EMAIL_RESTRICTED_MODE=off).",
+          "Le lien magique ne demande pas de mot de passe : la famille clique et son espace est activé.",
         ],
       },
     ],
