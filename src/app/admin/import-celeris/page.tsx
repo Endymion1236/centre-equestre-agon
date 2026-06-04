@@ -12,6 +12,22 @@ export default function ImportCelerisPage() {
   const [erreur, setErreur] = useState("");
   const [semaine, setSemaine] = useState("2026-07-06");
   const [stages, setStages] = useState<any>(null);
+  const [rapportInsc, setRapportInsc] = useState<any>(null);
+
+  const inscrireStages = async (apply: boolean) => {
+    setLoading(true); setErreur(""); setRapportInsc(null);
+    try {
+      const params = new URLSearchParams({ semaine });
+      if (apply) params.set("apply", "true");
+      const res = await authFetch(`/api/admin/inscrire-stages-semaine?${params.toString()}`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) { setErreur(data.error || "Erreur"); }
+      else setRapportInsc(data);
+    } catch (e: any) {
+      setErreur(e?.message || "Erreur réseau");
+    }
+    setLoading(false);
+  };
 
   const listerStages = async () => {
     setLoading(true); setErreur(""); setStages(null);
@@ -159,7 +175,7 @@ export default function ImportCelerisPage() {
 
       <div className="mb-4">
         <label className="font-body text-sm font-semibold text-blue-800 block mb-1">Semaine à importer</label>
-        <select value={semaine} onChange={e => { setSemaine(e.target.value); setRapport(null); setErreur(""); setStages(null); }}
+        <select value={semaine} onChange={e => { setSemaine(e.target.value); setRapport(null); setErreur(""); setStages(null); setRapportInsc(null); }}
           className="px-3 py-2.5 rounded-xl font-body text-sm text-gray-700 bg-white border border-blue-200 cursor-pointer w-full max-w-xs">
           {SEMAINES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
@@ -212,6 +228,51 @@ export default function ImportCelerisPage() {
           {loading ? "…" : "Exporter les familles (JSON)"}
         </button>
       </div>
+
+      <div className="flex gap-3 mb-6 flex-wrap border-t border-teal-100 pt-4">
+        <span className="font-body text-xs text-teal-600 w-full">
+          🐴 Étape 2 — Inscrit les enfants de la semaine dans leurs stages, <strong>sans créer de paiement</strong>
+          (marqués « réglé via Celeris », exclus des impayés). À faire APRÈS l'import des fiches ci-dessus.
+        </span>
+        <button onClick={() => inscrireStages(false)} disabled={loading}
+          className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-teal-700 bg-teal-50 border border-teal-200 cursor-pointer disabled:opacity-50">
+          {loading ? "…" : "Aperçu inscription aux stages"}
+        </button>
+        <button onClick={() => { if (confirm(`Inscrire les enfants de la ${SEMAINES.find(s => s.value === semaine)?.label} dans leurs stages (sans paiement) sur la base TEST ?`)) inscrireStages(true); }} disabled={loading}
+          className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-teal-600 border-none cursor-pointer disabled:opacity-50">
+          {loading ? "…" : "Inscrire aux stages pour de vrai"}
+        </button>
+      </div>
+
+      {rapportInsc && (
+        <div className="bg-teal-50/50 border border-teal-200 rounded-xl p-4 font-body text-sm mb-6">
+          <div className="font-semibold text-teal-800 mb-1">Inscription stages — {rapportInsc.mode}</div>
+          <div className="text-xs text-gray-500 mb-2">Base : {rapportInsc.projectId} · Semaine {rapportInsc.semaine} · {rapportInsc.statut}</div>
+          <ul className="space-y-1 mb-2">
+            <li>Inscriptions attendues : <strong>{rapportInsc.total_attendu}</strong></li>
+            <li className="text-teal-700">À inscrire : <strong>{rapportInsc.a_inscrire}</strong></li>
+            <li className="text-gray-500">Déjà inscrites : <strong>{rapportInsc.deja_inscrit}</strong></li>
+            <li>Réservations créées : <strong>{rapportInsc.reservations_creees}</strong></li>
+            {rapportInsc.problemes?.length > 0 && <li className="text-red-600">Problèmes : <strong>{rapportInsc.problemes.length}</strong></li>}
+          </ul>
+          {rapportInsc.problemes?.length > 0 && (
+            <details className="mb-2" open>
+              <summary className="cursor-pointer text-red-600">Détail des {rapportInsc.problemes.length} problème(s)</summary>
+              <ul className="mt-2 text-xs text-red-500 space-y-0.5 max-h-48 overflow-y-auto">
+                {rapportInsc.problemes.map((p: string, i: number) => <li key={i}>• {p}</li>)}
+              </ul>
+            </details>
+          )}
+          {rapportInsc.details?.length > 0 && (
+            <details>
+              <summary className="cursor-pointer text-teal-600">Détail des {rapportInsc.details.length} inscription(s)</summary>
+              <ul className="mt-2 text-xs text-gray-600 space-y-0.5 max-h-64 overflow-y-auto">
+                {rapportInsc.details.map((d: string, i: number) => <li key={i}>• {d}</li>)}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-3 mb-6 flex-wrap border-t border-gray-100 pt-4">
         <span className="font-body text-xs text-gray-400 w-full">Copie du snapshot PROD vers la base TEST (pour tester en conditions réelles) :</span>

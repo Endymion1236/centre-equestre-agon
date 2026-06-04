@@ -234,16 +234,17 @@ export default function TimelineView({
                                   <div style={{ display: "flex", gap: 1 }}>
                                     {en.slice(0, 5).map((e: any) => {
                                       const isCard = e.paymentSource === "card";
+                                      const isCeleris = e.paymentSource === "celeris";
                                       const isForfait = e.paymentSource === "forfait";
                                       const isForfaitPaid = isForfait && isForfaitChildPaye(payments, e.familyId, e.childId);
                                       const isForfaitPending = isForfait && !isForfaitPaid;
                                       const matchesThis = (i: any) => itemMatchesCreneau(i, e, c);
-                                      const hasPaid = isCard || isForfaitPaid || payments.some((p: any) =>
+                                      const hasPaid = isCard || isCeleris || isForfaitPaid || payments.some((p: any) =>
                                         p.familyId === e.familyId &&
                                         p.status === "paid" &&
                                         (p.items || []).some(matchesThis)
                                       );
-                                      const dotColor = isForfaitPaid ? "#10b981" : isForfaitPending ? "#f59e0b" : hasPaid ? "#22c55e" : "#fb923c";
+                                      const dotColor = isCeleris ? "#14b8a6" : isForfaitPaid ? "#10b981" : isForfaitPending ? "#f59e0b" : hasPaid ? "#22c55e" : "#fb923c";
                                       return <span key={e.childId} style={{ width: 6, height: 6, borderRadius: "50%", background: dotColor, display: "inline-block" }} />;
                                     })}
                                   </div>
