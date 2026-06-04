@@ -10,11 +10,27 @@ export default function ImportCelerisPage() {
   const [rapport, setRapport] = useState<any>(null);
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [erreur, setErreur] = useState("");
+  const [semaine, setSemaine] = useState("2026-07-06");
+
+  // Semaines de stages été 2026 (lundis). On importe une semaine à la fois.
+  const SEMAINES: { value: string; label: string }[] = [
+    { value: "2026-07-06", label: "Semaine du 6 juillet" },
+    { value: "2026-07-13", label: "Semaine du 13 juillet" },
+    { value: "2026-07-20", label: "Semaine du 20 juillet" },
+    { value: "2026-07-27", label: "Semaine du 27 juillet" },
+    { value: "2026-08-03", label: "Semaine du 3 août" },
+    { value: "2026-08-10", label: "Semaine du 10 août" },
+    { value: "2026-08-17", label: "Semaine du 17 août" },
+    { value: "2026-08-24", label: "Semaine du 24 août" },
+    { value: "2026-08-31", label: "Semaine du 31 août" },
+  ];
 
   const lancer = async (apply: boolean) => {
     setLoading(true); setErreur(""); setRapport(null);
     try {
-      const res = await authFetch(`/api/admin/import-stages-juillet${apply ? "?apply=true" : ""}`, { method: "POST" });
+      const params = new URLSearchParams({ semaine });
+      if (apply) params.set("apply", "true");
+      const res = await authFetch(`/api/admin/import-stages-juillet?${params.toString()}`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) { setErreur(data.error || "Erreur"); }
       else setRapport(data);
@@ -121,20 +137,31 @@ export default function ImportCelerisPage() {
 
   return (
     <div className="max-w-2xl mx-auto p-6">
-      <h1 className="font-display text-2xl font-bold text-blue-800 mb-2">Import Celeris — Stages juillet 2026</h1>
+      <h1 className="font-display text-2xl font-bold text-blue-800 mb-2">Import Celeris — Stages été 2026</h1>
       <p className="font-body text-sm text-gray-500 mb-4">
-        Crée les familles + enfants des inscrits aux stages de juillet (sans inscription aux stages
-        ni paiement). La détection des doublons se fait par enfant (prénom + nom + date de naissance).
+        Crée les familles + enfants des inscrits aux stages d'été, <strong>une semaine à la fois</strong> (sans
+        inscription aux stages ni paiement). La détection des doublons se fait par enfant (prénom + nom).
       </p>
+
+      <div className="mb-4">
+        <label className="font-body text-sm font-semibold text-blue-800 block mb-1">Semaine à importer</label>
+        <select value={semaine} onChange={e => { setSemaine(e.target.value); setRapport(null); setErreur(""); }}
+          className="px-3 py-2.5 rounded-xl font-body text-sm text-gray-700 bg-white border border-blue-200 cursor-pointer w-full max-w-xs">
+          {SEMAINES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+        </select>
+        <p className="font-body text-xs text-gray-400 mt-1">
+          Seules les familles taguées pour cette semaine seront importées. Les familles déjà en base sont ignorées.
+        </p>
+      </div>
 
       <div className="flex gap-3 mb-6 flex-wrap">
         <button onClick={() => lancer(false)} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 cursor-pointer disabled:opacity-50">
-          {loading ? "…" : "1. Aperçu (sans rien écrire)"}
+          {loading ? "…" : "1. Aperçu de la semaine (sans rien écrire)"}
         </button>
-        <button onClick={() => { if (confirm("Créer réellement les familles sur la base TEST ?")) lancer(true); }} disabled={loading}
+        <button onClick={() => { if (confirm(`Créer réellement les familles de la ${SEMAINES.find(s => s.value === semaine)?.label} sur la base TEST ?`)) lancer(true); }} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 border-none cursor-pointer disabled:opacity-50">
-          {loading ? "…" : "2. Importer pour de vrai"}
+          {loading ? "…" : "2. Importer cette semaine pour de vrai"}
         </button>
         <button onClick={exporter} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-gray-700 bg-gray-100 border border-gray-200 cursor-pointer disabled:opacity-50">
@@ -218,7 +245,8 @@ export default function ImportCelerisPage() {
           ) : (
             <>
               <ul className="space-y-1 mb-3">
-                <li>Familles dans le fichier : <strong>{rapport.total_familles_fichier}</strong></li>
+                {rapport.semaine && <li className="text-blue-700">Semaine importée : <strong>{rapport.semaine}</strong></li>}
+                <li>Familles de cette semaine : <strong>{rapport.total_familles_fichier}</strong></li>
                 <li className="text-green-700">À créer : <strong>{rapport.a_creer}</strong> (dont {rapport.sans_email_crees} sans email)</li>
                 <li>Enfants : <strong>{rapport.enfants_crees}</strong></li>
                 <li className="text-amber-700">Ignorées (enfant déjà en base) : <strong>{rapport.skip_enfant_existant}</strong></li>

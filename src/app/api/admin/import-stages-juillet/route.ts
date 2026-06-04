@@ -43,11 +43,33 @@ export async function POST(req: NextRequest) {
   }
 
   const apply = req.nextUrl.searchParams.get("apply") === "true";
-  const familles = famillesData as Array<{
+  const semaine = req.nextUrl.searchParams.get("semaine") || "";
+
+  const toutesFamilles = famillesData as Array<{
     email: string; parentName: string; responsable: string;
     tel: string; cp: string; ville: string; sans_email: boolean;
+    semaines?: string[];
+    inscriptionsStages?: Array<{ semaine: string; stageLabel: string; horaire: string; moniteur: string; prix: number; places: number; enfant: string }>;
     enfants: Array<{ firstName: string; lastName: string; birthDate: string }>;
   }>;
+
+  // Semaines disponibles (calculées depuis les marqueurs du fichier).
+  const semainesDisponibles = Array.from(
+    new Set(toutesFamilles.flatMap(f => f.semaines || []))
+  ).sort();
+
+  // GARDE-FOU : on importe SEMAINE PAR SEMAINE. Sans ?semaine=..., on refuse
+  // (évite de réimporter toutes les familles du fichier d'un seul coup).
+  if (!semaine) {
+    return NextResponse.json({
+      error: "Paramètre 'semaine' requis : l'import se fait semaine par semaine (ex. ?semaine=2026-07-06).",
+      semaines_disponibles: semainesDisponibles,
+      projectId,
+    }, { status: 400 });
+  }
+
+  // On ne garde que les familles taguées pour la semaine demandée.
+  const familles = toutesFamilles.filter(f => (f.semaines || []).includes(semaine));
 
   // 3. Indexer les ENFANTS déjà présents en base, pour détecter les doublons
   //    sans dépendre de l'email (les familles existantes ont été créées sans
@@ -71,6 +93,8 @@ export async function POST(req: NextRequest) {
   const rapport = {
     projectId,
     mode: apply ? "APPLY (écriture réelle)" : "DRY-RUN (aucune écriture)",
+    semaine,
+    semaines_disponibles: semainesDisponibles,
     total_familles_fichier: familles.length,
     a_creer: 0,
     skip_enfant_existant: 0,
