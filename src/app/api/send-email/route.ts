@@ -37,7 +37,22 @@ export async function POST(request: NextRequest) {
 
     const resend = new Resend(apiKey);
     const body = await request.json();
-    const { to, subject, html, replyTo, bcc, context, template, familyId, paymentId, creneauId } = body;
+    const { to, subject, html, replyTo, bcc, context, template, familyId, paymentId, creneauId, attachments } = body;
+
+    // Pièces jointes : tableau [{ filename, content (base64) }]. Garde-fou de taille (~7 Mo de base64 ≈ 5 Mo de fichiers).
+    let safeAttachments: { filename: string; content: string }[] = [];
+    if (Array.isArray(attachments) && attachments.length > 0) {
+      safeAttachments = attachments
+        .filter((a: any) => a && a.filename && a.content)
+        .map((a: any) => ({ filename: String(a.filename), content: String(a.content) }));
+      const totalLen = safeAttachments.reduce((n, a) => n + a.content.length, 0);
+      if (totalLen > 7_000_000) {
+        return NextResponse.json(
+          { error: "Pièces jointes trop volumineuses (max ~5 Mo au total)." },
+          { status: 400 }
+        );
+      }
+    }
 
     logTo = to;
     logSubject = subject || "";
@@ -126,6 +141,7 @@ export async function POST(request: NextRequest) {
           </div>${html}`
         : html,
       replyTo: replyTo || process.env.RESEND_OWNER_EMAIL || process.env.RESEND_FROM_EMAIL || "",
+      ...(safeAttachments.length > 0 ? { attachments: safeAttachments } : {}),
     });
 
     if (error) {

@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Loader2, Mail, X } from "lucide-react";
+import { Loader2, Mail, X, Paperclip, FileSignature } from "lucide-react";
 import { emailTemplates } from "@/lib/email-templates";
 import { useToast } from "@/components/ui/Toast";
 import { authFetch } from "@/lib/auth-fetch";
@@ -16,7 +16,46 @@ export default function EmailModal({ emailModal, allPayments, onClose }: Props) 
   const [emailSubject, setEmailSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
   const [emailSending, setEmailSending] = useState(false);
+  // Pièces jointes : { filename, content (base64 sans préfixe) }
+  const [attachments, setAttachments] = useState<{ filename: string; content: string }[]>([]);
+  const [attaching, setAttaching] = useState(false);
   const { toast } = useToast();
+
+  // Lit un Blob/File en base64 (sans le préfixe data:...;base64,)
+  const toBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(",")[1] || "");
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+
+  const handleAddFiles = async (files: FileList | null) => {
+    if (!files) return;
+    const added: { filename: string; content: string }[] = [];
+    for (const file of Array.from(files)) {
+      try { added.push({ filename: file.name, content: await toBase64(file) }); }
+      catch { toast(`Impossible de lire ${file.name}`, "error"); }
+    }
+    setAttachments(prev => [...prev, ...added]);
+  };
+
+  const handleAttachMandate = async () => {
+    setAttaching(true);
+    try {
+      const res = await authFetch("/api/admin/sepa-mandate-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ familyId: emailModal.familyId }),
+      });
+      if (!res.ok) { toast("Échec de la génération de l'autorisation", "error"); return; }
+      const blob = await res.blob();
+      const content = await toBase64(blob);
+      const safe = (emailModal.familyName || "famille").replace(/[^a-zA-Z0-9._-]/g, "_");
+      setAttachments(prev => [...prev, { filename: `autorisation-prelevement-${safe}.pdf`, content }]);
+      toast("Autorisation de prélèvement jointe", "success");
+    } catch { toast("Erreur lors de la génération", "error"); }
+    finally { setAttaching(false); }
+  };
 
   const handleTemplateChange = (t: string) => {
     setEmailTemplate(t);
@@ -61,6 +100,7 @@ export default function EmailModal({ emailModal, allPayments, onClose }: Props) 
             ? "bienvenueNouvelleFamille"
             : undefined,
           familyId: emailModal.familyId,
+          ...(attachments.length > 0 ? { attachments } : {}),
         }),
       });
       const data = await res.json();
@@ -111,6 +151,34 @@ export default function EmailModal({ emailModal, allPayments, onClose }: Props) 
               className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-blue-400 resize-none"/>
             {emailTemplate === "libre" && (
               <p className="font-body text-[10px] text-slate-400 mt-1">Le message sera envoyé en texte brut.</p>
+            )}
+          </div>
+
+          {/* Pièces jointes */}
+          <div>
+            <label className="font-body text-xs font-semibold text-slate-600 block mb-1.5">Pièces jointes</label>
+            <div className="flex flex-wrap gap-2 mb-2">
+              <label className="flex items-center gap-1.5 font-body text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg cursor-pointer">
+                <Paperclip size={13} /> Joindre un fichier
+                <input type="file" multiple className="hidden" onChange={e => { handleAddFiles(e.target.files); e.target.value = ""; }} />
+              </label>
+              <button type="button" onClick={handleAttachMandate} disabled={attaching}
+                className="flex items-center gap-1.5 font-body text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                {attaching ? <Loader2 size={13} className="animate-spin" /> : <FileSignature size={13} />} Autorisation de prélèvement (pré-remplie)
+              </button>
+            </div>
+            {attachments.length > 0 && (
+              <div className="flex flex-col gap-1">
+                {attachments.map((a, i) => (
+                  <div key={i} className="flex items-center justify-between bg-sand rounded-lg px-3 py-1.5">
+                    <span className="font-body text-xs text-slate-600 truncate flex items-center gap-1.5"><Paperclip size={11} /> {a.filename}</span>
+                    <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
+                      className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer p-0.5" title="Retirer">
+                      <X size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
