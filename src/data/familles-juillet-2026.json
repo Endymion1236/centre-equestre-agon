@@ -1089,7 +1089,8 @@
       }
     ],
     "semaines": [
-      "2026-07-13"
+      "2026-07-13",
+      "2026-08-03"
     ],
     "inscriptionsStages": [
       {
@@ -1109,6 +1110,15 @@
         "prix": 175,
         "places": 8,
         "enfant": "Clara Bizet"
+      },
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage galop de bronze 6/7 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emmeline",
+        "prix": 175,
+        "places": 8,
+        "enfant": "Nicole Danglejan"
       }
     ]
   },
@@ -1848,11 +1858,21 @@
       }
     ],
     "semaines": [
-      "2026-07-20"
+      "2026-07-20",
+      "2026-08-03"
     ],
     "inscriptionsStages": [
       {
         "semaine": "2026-07-20",
+        "stageLabel": "Stage Galop 3",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
+        "prix": 175,
+        "places": 10,
+        "enfant": "Victor Libouton"
+      },
+      {
+        "semaine": "2026-08-03",
         "stageLabel": "Stage Galop 3",
         "horaire": "10:00-12:00",
         "moniteur": "Emeline",
@@ -2585,7 +2605,8 @@
       }
     ],
     "semaines": [
-      "2026-07-27"
+      "2026-07-27",
+      "2026-08-03"
     ],
     "inscriptionsStages": [
       {
@@ -2608,6 +2629,33 @@
       },
       {
         "semaine": "2026-07-27",
+        "stageLabel": "Stage Galop 3",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
+        "prix": 175,
+        "places": 10,
+        "enfant": "anais gourmelon"
+      },
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage galop d'or",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
+        "prix": 175,
+        "places": 10,
+        "enfant": "nathan gourmelon"
+      },
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage Galop 3",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
+        "prix": 175,
+        "places": 10,
+        "enfant": "romane gourmelon"
+      },
+      {
+        "semaine": "2026-08-03",
         "stageLabel": "Stage Galop 3",
         "horaire": "10:00-12:00",
         "moniteur": "Emeline",
@@ -2698,7 +2746,8 @@
       }
     ],
     "semaines": [
-      "2026-07-27"
+      "2026-07-27",
+      "2026-08-03"
     ],
     "inscriptionsStages": [
       {
@@ -2712,6 +2761,24 @@
       },
       {
         "semaine": "2026-07-27",
+        "stageLabel": "Stage Galop 3",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
+        "prix": 175,
+        "places": 10,
+        "enfant": "Ombeline Lepesqueux"
+      },
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage Galop 3",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
+        "prix": 175,
+        "places": 10,
+        "enfant": "Thimeo Lepesqueux"
+      },
+      {
+        "semaine": "2026-08-03",
         "stageLabel": "Stage Galop 3",
         "horaire": "10:00-12:00",
         "moniteur": "Emeline",
@@ -2772,7 +2839,8 @@
       }
     ],
     "semaines": [
-      "2026-07-27"
+      "2026-07-27",
+      "2026-08-03"
     ],
     "inscriptionsStages": [
       {
@@ -2783,6 +2851,15 @@
         "prix": 175,
         "places": 8,
         "enfant": "Cleliana Lepetit"
+      },
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage galop d'or",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
+        "prix": 175,
+        "places": 10,
+        "enfant": "SATINE LEPETIT"
       }
     ]
   },
@@ -2805,6 +2882,29 @@
         "lastName": "Lejeune",
         "birthDate": "1991-08-18"
       }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage 3/4 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Lilou",
+        "prix": 175,
+        "places": 6,
+        "enfant": "Olivia Lejeune"
+      },
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage 3/4 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Lilou",
+        "prix": 175,
+        "places": 6,
+        "enfant": "Constance Lejeune"
+      }
     ]
   },
   {
@@ -2820,6 +2920,29 @@
         "firstName": "Hugo",
         "lastName": "DRECQ",
         "birthDate": "2021-07-11"
+      }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage 3/4 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Lilou",
+        "prix": 175,
+        "places": 6,
+        "enfant": "Hugo DRECQ"
+      },
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage 4,5 / 5,5 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Lilou",
+        "prix": 175,
+        "places": 6,
+        "enfant": "Hugo DRECQ"
       }
     ]
   },
@@ -2837,6 +2960,20 @@
         "lastName": "Rauline",
         "birthDate": "2022-02-02"
       }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage 4,5 / 5,5 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Lilou",
+        "prix": 175,
+        "places": 6,
+        "enfant": "Thelma Rauline"
+      }
     ]
   },
   {
@@ -2853,6 +2990,20 @@
         "lastName": "Vilquin",
         "birthDate": "2021-09-09"
       }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage 4,5 / 5,5 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Lilou",
+        "prix": 175,
+        "places": 6,
+        "enfant": "Solange Vilquin"
+      }
     ]
   },
   {
@@ -2868,6 +3019,29 @@
         "firstName": "Ninon",
         "lastName": "HUGUET",
         "birthDate": "2016-09-19"
+      }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage 4,5 / 5,5 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Lilou",
+        "prix": 175,
+        "places": 6,
+        "enfant": "Ninon HUGUET"
+      },
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage galop d'or",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
+        "prix": 175,
+        "places": 10,
+        "enfant": "Ninon HUGUET"
       }
     ]
   },
@@ -2890,6 +3064,29 @@
         "lastName": "Marcombe",
         "birthDate": "2021-08-10"
       }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage 4,5 / 5,5 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Lilou",
+        "prix": 175,
+        "places": 6,
+        "enfant": "Madeleine Marcombe"
+      },
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage 4,5 / 5,5 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Lilou",
+        "prix": 175,
+        "places": 6,
+        "enfant": "Aristide 2 Marcombe"
+      }
     ]
   },
   {
@@ -2906,6 +3103,20 @@
         "lastName": "Glinec",
         "birthDate": "2020-12-28"
       }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage galop de bronze 6/7 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emmeline",
+        "prix": 175,
+        "places": 8,
+        "enfant": "Victoire Glinec"
+      }
     ]
   },
   {
@@ -2921,6 +3132,20 @@
         "firstName": "Maëlys",
         "lastName": "Verlet",
         "birthDate": "2019-04-28"
+      }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage galop de bronze 6/7 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emmeline",
+        "prix": 175,
+        "places": 8,
+        "enfant": "Maëlys Verlet"
       }
     ]
   },
@@ -2943,6 +3168,29 @@
         "lastName": "DA COSTA GRECH",
         "birthDate": "2012-12-02"
       }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage galop de bronze 6/7 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emmeline",
+        "prix": 175,
+        "places": 8,
+        "enfant": "Léo TRICOIRE"
+      },
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage Galop 3",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
+        "prix": 175,
+        "places": 10,
+        "enfant": "Lucie DA COSTA GRECH"
+      }
     ]
   },
   {
@@ -2964,6 +3212,29 @@
         "lastName": "Massignon",
         "birthDate": "1986-05-08"
       }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage galop de bronze 6/7 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emmeline",
+        "prix": 175,
+        "places": 8,
+        "enfant": "Gaspard Hüe Massignon"
+      },
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage galop de bronze 6/7 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emmeline",
+        "prix": 175,
+        "places": 8,
+        "enfant": "Bertille Massignon"
+      }
     ]
   },
   {
@@ -2979,6 +3250,20 @@
         "firstName": "Anaé",
         "lastName": "Scolan",
         "birthDate": "2018-05-25"
+      }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage galop de bronze 6/7 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emmeline",
+        "prix": 175,
+        "places": 8,
+        "enfant": "Anaé Scolan"
       }
     ]
   },
@@ -2996,6 +3281,20 @@
         "lastName": "Bodet",
         "birthDate": "2020-08-30"
       }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage galop de bronze 6/7 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emmeline",
+        "prix": 175,
+        "places": 8,
+        "enfant": "Adelaide Bodet"
+      }
     ]
   },
   {
@@ -3011,6 +3310,20 @@
         "firstName": "Siméo",
         "lastName": "Lepetit",
         "birthDate": "2017-03-06"
+      }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage galop d'argent 8/10 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Anne",
+        "prix": 175,
+        "places": 8,
+        "enfant": "Siméo Lepetit"
       }
     ]
   },
@@ -3028,6 +3341,20 @@
         "lastName": "Kourouma",
         "birthDate": "2016-12-17"
       }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage galop d'argent 8/10 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Anne",
+        "prix": 175,
+        "places": 8,
+        "enfant": "Mara Kourouma"
+      }
     ]
   },
   {
@@ -3043,6 +3370,20 @@
         "firstName": "leonie",
         "lastName": "bazonnard",
         "birthDate": "2016-05-31"
+      }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage galop d'argent 8/10 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Anne",
+        "prix": 175,
+        "places": 8,
+        "enfant": "leonie bazonnard"
       }
     ]
   },
@@ -3060,6 +3401,20 @@
         "lastName": "ALLAIN",
         "birthDate": "2016-08-13"
       }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage galop d'argent 8/10 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Anne",
+        "prix": 175,
+        "places": 8,
+        "enfant": "Emma ALLAIN"
+      }
     ]
   },
   {
@@ -3076,6 +3431,20 @@
         "lastName": "quellec",
         "birthDate": "2016-11-05"
       }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage galop d'argent 8/10 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Anne",
+        "prix": 175,
+        "places": 8,
+        "enfant": "eleane quellec"
+      }
     ]
   },
   {
@@ -3091,6 +3460,20 @@
         "firstName": "Louise",
         "lastName": "gilbert",
         "birthDate": "2015-09-29"
+      }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage galop d'or",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
+        "prix": 175,
+        "places": 10,
+        "enfant": "Louise gilbert"
       }
     ]
   },
@@ -3113,6 +3496,29 @@
         "lastName": "QUINTAINE",
         "birthDate": "2014-02-08"
       }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage galop d'or",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
+        "prix": 175,
+        "places": 10,
+        "enfant": "appoline quintaine"
+      },
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage Galop 3",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
+        "prix": 175,
+        "places": 10,
+        "enfant": "MAGGIE QUINTAINE"
+      }
     ]
   },
   {
@@ -3128,6 +3534,20 @@
         "firstName": "MAXIMA",
         "lastName": "GUILLEMET",
         "birthDate": "2013-01-05"
+      }
+    ],
+    "semaines": [
+      "2026-08-03"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-03",
+        "stageLabel": "Stage Galop 3",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
+        "prix": 175,
+        "places": 10,
+        "enfant": "MAXIMA GUILLEMET"
       }
     ]
   },
@@ -4019,7 +4439,8 @@
     ],
     "semaines": [
       "2026-07-20",
-      "2026-07-27"
+      "2026-07-27",
+      "2026-08-03"
     ],
     "inscriptionsStages": [
       {
@@ -4033,6 +4454,15 @@
       },
       {
         "semaine": "2026-07-27",
+        "stageLabel": "Stage galop 4 et +",
+        "horaire": "10:00-12:00",
+        "moniteur": "Nicolas",
+        "prix": 175,
+        "places": 8,
+        "enfant": "Ninon Khayat"
+      },
+      {
+        "semaine": "2026-08-03",
         "stageLabel": "Stage galop 4 et +",
         "horaire": "10:00-12:00",
         "moniteur": "Nicolas",
