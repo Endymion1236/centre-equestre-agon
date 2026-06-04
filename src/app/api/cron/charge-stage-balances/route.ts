@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { logEmail } from "@/lib/email-log";
+import { isRecipientAllowed } from "@/lib/email-guard";
 import { generateCAWLQR, generateSEPAQR } from "@/lib/payment-qr";
 import { addDaysParis } from "@/lib/date-local";
 import { chargeWithToken, logMitAttempt } from "@/lib/cawl-mit";
@@ -120,7 +121,7 @@ export async function GET(req: NextRequest) {
             });
 
             // Email de confirmation "solde prélevé"
-            if (resendKey) {
+            if (resendKey && isRecipientAllowed(familyEmail)) {
               const subject = `✅ Solde stage prélevé — ${solde.toFixed(2)}€`;
               const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
                 <div style="background:#2050A0;color:white;padding:20px;border-radius:12px 12px 0 0;text-align:center;">
@@ -153,7 +154,7 @@ export async function GET(req: NextRequest) {
             continue; // solde traité, pas d'email de rappel
           } else {
             // Le prélèvement a échoué : email d'échec + on laisse le lien manuel ci-dessous.
-            if (resendKey) {
+            if (resendKey && isRecipientAllowed(familyEmail)) {
               const subject = `⚠️ Prélèvement du solde stage impossible — ${solde.toFixed(2)}€`;
               const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
                 <div style="background:#c0392b;color:white;padding:20px;border-radius:12px 12px 0 0;text-align:center;">
@@ -244,7 +245,7 @@ export async function GET(req: NextRequest) {
           </div>
         </div>`;
 
-        if (resendKey) {
+        if (resendKey && isRecipientAllowed(familyEmail)) {
           // Attachments CID pour les QR. IMPORTANT : content_id (snake_case)
           // pour l'API REST, sinon Resend traite l'image comme une simple
           // PJ et le <img src="cid:xxx"> ne se résout pas (cf send-payment-link).

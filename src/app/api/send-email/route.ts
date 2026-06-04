@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { verifyAuth } from "@/lib/api-auth";
 import { logEmail } from "@/lib/email-log";
+import { isRecipientAllowed, isEmailRestricted, blockedLog } from "@/lib/email-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,26 @@ export async function POST(request: NextRequest) {
       (email: string) => email && email.includes("@")
     );
 
+    // 🔒 Garde-fou phase de préparation : en mode restreint, on ne garde que
+    //    les destinataires autorisés (admins / moniteurs / compte test).
+    const allowedRecipients = validRecipients.filter((e: string) => isRecipientAllowed(e));
+    if (isEmailRestricted() && allowedRecipients.length < validRecipients.length) {
+      const bloques = validRecipients.filter((e: string) => !isRecipientAllowed(e));
+      console.warn(blockedLog(bloques.join(", "), logContext));
+    }
+    if (allowedRecipients.length === 0) {
+      await logEmail({
+        to: validRecipients, subject,
+        context: logContext, template: logTemplate,
+        status: "failed", error: "Bloqué par le mode restreint (email-guard)",
+        sentBy, ...logMeta,
+      });
+      return NextResponse.json(
+        { skipped: true, reason: "mode_restreint", blocked: validRecipients },
+        { status: 200 }
+      );
+    }
+
     if (validRecipients.length === 0) {
       await logEmail({
         to, subject,
@@ -89,9 +110,9 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-    const finalTo = TEST_MODE ? [TEST_EMAIL] : validRecipients;
+    const finalTo = TEST_MODE ? [TEST_EMAIL] : allowedRecipients;
     const finalSubject = TEST_MODE
-      ? `[TEST → ${validRecipients.join(", ")}] ${subject}`
+      ? `[TEST → ${allowedRecipients.join(", ")}] ${subject}`
       : subject;
 
     const { data, error } = await resend.emails.send({
@@ -101,7 +122,7 @@ export async function POST(request: NextRequest) {
       subject: finalSubject,
       html: TEST_MODE
         ? `<div style="background:#fff3cd;padding:10px;border:1px solid #ffc107;border-radius:6px;margin-bottom:12px;font-family:sans-serif;font-size:12px;color:#856404;">
-            <strong>⚠️ MODE TEST</strong> — Cet email aurait été envoyé à : <strong>${validRecipients.join(", ")}</strong>
+            <strong>⚠️ MODE TEST</strong> — Cet email aurait été envoyé à : <strong>${allowedRecipients.join(", ")}</strong>
           </div>${html}`
         : html,
       replyTo: replyTo || process.env.RESEND_OWNER_EMAIL || process.env.RESEND_FROM_EMAIL || "",

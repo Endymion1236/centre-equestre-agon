@@ -7,6 +7,7 @@ import { confirmReservationsForPayment } from "@/lib/reservations";
 import { createForfaitsForPayment } from "@/lib/forfaits-server";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import { logEmail } from "@/lib/email-log";
+import { isRecipientAllowed } from "@/lib/email-guard";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 
 export const dynamic = "force-dynamic";
@@ -164,7 +165,7 @@ export async function POST(req: NextRequest) {
           const resendKey = process.env.RESEND_API_KEY;
           const fromEmail = process.env.RESEND_FROM_EMAIL || "Centre Equestre <onboarding@resend.dev>";
 
-          if (parentEmail && resendKey) {
+          if (parentEmail && resendKey && isRecipientAllowed(parentEmail)) {
             try {
               const prestations = (pData.items || []).map((i: any) => i.activityTitle).join(", ") || "Prestation";
               const hasStage = (pData.items || []).some((i: any) => i.activityType === "stage");
