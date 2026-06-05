@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { authFetch } from "@/lib/auth-fetch";
+import { db } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 // Charge dynamiquement le script Tokenizer CAWL puis initialise l'iframe.
 // Domaine preprod/prod selon CAWL_ENV (exposé via NEXT_PUBLIC).
@@ -28,6 +30,33 @@ function TokenizePaiementInner() {
   const [status, setStatus] = useState<"loading" | "ready" | "submitting" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const tokenizerRef = useRef<any>(null);
+
+  // Pour la mention de consentement explicite (montant du solde + date de prélèvement)
+  const [solde, setSolde] = useState<number | null>(null);
+  const [debitDateLabel, setDebitDateLabel] = useState<string | null>(null);
+  const [stageDateLabel, setStageDateLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!paymentId) return;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "payments", paymentId));
+        if (!snap.exists()) return;
+        const p: any = snap.data();
+        const total = Number(p.totalTTC || 0);
+        const acompte = Number(amount || 0);
+        if (total > 0) setSolde(Math.max(0, +(total - acompte).toFixed(2)));
+        if (p.stageDate) {
+          const [y, m, d] = String(p.stageDate).split("-").map(Number);
+          const start = new Date(y, m - 1, d);
+          const debit = new Date(start); debit.setDate(debit.getDate() - 7);
+          const fmt = (dt: Date) => dt.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+          setStageDateLabel(fmt(start));
+          setDebitDateLabel(fmt(debit));
+        }
+      } catch { /* dégrade silencieusement : formulation générique conservée */ }
+    })();
+  }, [paymentId, amount]);
 
   useEffect(() => {
     if (!paymentId || !amount) {
@@ -110,8 +139,16 @@ function TokenizePaiementInner() {
     <div className="max-w-lg mx-auto p-4">
       <h1 className="font-display text-xl font-bold text-blue-800 mb-1">{label}</h1>
       <p className="font-body text-sm text-gray-500 mb-4">
-        Acompte de <strong>{Number(amount).toFixed(2)}€</strong>. Votre carte sera enregistrée
-        pour le prélèvement automatique du solde une semaine avant le stage.
+        En validant, vous réglez un <strong>acompte de {Number(amount).toFixed(2)}€</strong> et vous
+        {" "}<strong>autorisez</strong> le Centre Équestre à enregistrer cette carte et à{" "}
+        <strong>prélever automatiquement {solde !== null ? `le solde de ${solde.toFixed(2)}€` : "le solde restant"}</strong>
+        {debitDateLabel
+          ? <> aux alentours du <strong>{debitDateLabel}</strong> (une semaine avant le stage{stageDateLabel ? ` du ${stageDateLabel}` : ""})</>
+          : " une semaine avant le début du stage"}
+        , sans nouvelle demande de votre part.
+      </p>
+      <p className="font-body text-[11px] text-gray-400 mb-4">
+        Vous pourrez à tout moment contacter le centre pour toute question sur ce prélèvement.
       </p>
 
       {status === "error" ? (
