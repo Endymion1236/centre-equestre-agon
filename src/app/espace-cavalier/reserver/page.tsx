@@ -1374,8 +1374,15 @@ export default function ReserverPage() {
                         </button>
                       </div>
                       {depositMode === "deposit" && (
-                        <div className="font-body text-[10px] text-slate-500 mt-2 text-center">
-                          {nbEnfantsStage} enfant{nbEnfantsStage > 1 ? "s" : ""} × {ACOMPTE_PAR_ENFANT}€ = {acompteFixe}€ maintenant · solde {soldeFixe}€ à régler J-7
+                        <div className="mt-2 space-y-2">
+                          <div className="font-body text-[10px] text-slate-500 text-center">
+                            {nbEnfantsStage} enfant{nbEnfantsStage > 1 ? "s" : ""} × {ACOMPTE_PAR_ENFANT}€ = {acompteFixe}€ maintenant · solde {soldeFixe.toFixed(2)}€ prélevé automatiquement ~1 semaine avant le stage
+                          </div>
+                          <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                            <p className="font-body text-[11px] text-amber-800 leading-snug">
+                              ⚠️ <strong>À faire sur la page de paiement :</strong> cochez la case <strong>« Enregistrer mes données de paiement »</strong>. En la cochant, vous autorisez le prélèvement automatique du solde de <strong>{soldeFixe.toFixed(2)}€</strong> environ une semaine avant le stage. Sans cette case, le solde restera à régler manuellement.
+                            </p>
+                          </div>
                         </div>
                       )}
                     </div>
