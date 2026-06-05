@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, query, where, getDocs, limit } from "firebase/firestore";
+import { collection, query, orderBy, getDocs, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { authFetch } from "@/lib/auth-fetch";
 import { Loader2, FlaskConical, AlertTriangle, Play, Eye } from "lucide-react";
@@ -18,13 +18,10 @@ export default function TestMitPage() {
   useEffect(() => {
     (async () => {
       try {
-        const snap = await getDocs(query(collection(db, "payments"), where("status", "==", "partial"), limit(80)));
+        // Toutes les tentatives d'acompte récentes (le finalize pose cawlTokenizedAt)
+        const snap = await getDocs(query(collection(db, "payments"), orderBy("cawlTokenizedAt", "desc"), limit(30)));
         const rows: Pay[] = [];
-        snap.forEach(d => {
-          const p = d.data() as any;
-          const solde = Number(p.totalTTC || 0) - Number(p.paidAmount || 0);
-          if (p.cofToken && solde > 0.009) rows.push({ id: d.id, ...p });
-        });
+        snap.forEach(d => rows.push({ id: d.id, ...(d.data() as any) }));
         setPayments(rows);
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
@@ -45,7 +42,6 @@ export default function TestMitPage() {
     finally { setBusyId(""); }
   };
 
-  const solde = (p: Pay) => (Number(p.totalTTC || 0) - Number(p.paidAmount || 0)).toFixed(2);
 
   return (
     <div className="max-w-3xl mx-auto p-4">
@@ -68,17 +64,26 @@ export default function TestMitPage() {
         <div className="flex items-center gap-2 text-slate-400 font-body text-sm"><Loader2 className="animate-spin" size={16} /> Chargement des paiements éligibles…</div>
       ) : payments.length === 0 ? (
         <p className="font-body text-sm text-slate-400 italic">
-          Aucun paiement éligible (il faut un stage avec acompte payé + carte tokenisée + solde restant). Fais d'abord un acompte de test sur l'espace cavalier.
+          Aucune tentative d'acompte enregistrée. Si tu viens d'en faire une et que rien n'apparaît, c'est probablement que le paiement n'a pas atteint l'étape de tokenisation — souvent un souci d'identifiants CAWL preprod sur l'environnement test, ou un acompte non finalisé.
         </p>
       ) : (
         <div className="flex flex-col gap-2">
-          {payments.map(p => (
+          {payments.map(p => {
+            const sol = Number(p.totalTTC || 0) - Number(p.paidAmount || 0);
+            const hasToken = !!p.cofToken;
+            const hasInit = !!p.cofInitialPaymentId;
+            return (
             <div key={p.id}>
               <div className="flex items-center justify-between flex-wrap gap-2 bg-sand rounded-lg px-4 py-3">
                 <div>
                   <div className="font-body text-sm font-semibold text-blue-800">{p.familyName || "(sans nom)"}</div>
                   <div className="font-body text-xs text-slate-400">
-                    {p.label || "Stage"}{p.stageDate ? ` · stage le ${p.stageDate}` : ""} · solde <strong>{solde(p)}€</strong>
+                    {p.label || "Stage"}{p.stageDate ? ` · stage le ${p.stageDate}` : ""} · solde <strong>{sol.toFixed(2)}€</strong>
+                  </div>
+                  <div className="font-body text-[11px] mt-1 flex flex-wrap gap-2">
+                    <span className={`px-1.5 py-0.5 rounded ${p.status === "partial" ? "bg-green-100 text-green-700" : "bg-slate-200 text-slate-500"}`}>statut : {p.status || "—"}</span>
+                    <span className={`px-1.5 py-0.5 rounded ${hasToken ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>token : {hasToken ? "oui" : "non"}</span>
+                    <span className={`px-1.5 py-0.5 rounded ${hasInit ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>id acompte : {hasInit ? "oui" : "non"}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -86,8 +91,9 @@ export default function TestMitPage() {
                     className="flex items-center gap-1.5 font-body text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50">
                     {busyId === p.id + "-dry" ? <Loader2 size={13} className="animate-spin" /> : <Eye size={13} />} Simuler
                   </button>
-                  <button onClick={() => run(p, false)} disabled={!!busyId}
-                    className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-400 px-3 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                  <button onClick={() => run(p, false)} disabled={!!busyId || !hasToken || !hasInit}
+                    className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-400 px-3 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50"
+                    title={!hasToken || !hasInit ? "Acompte non tokenisé / non finalisé" : "Lancer le débit réel"}>
                     {busyId === p.id + "-real" ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />} Débiter
                   </button>
                 </div>
@@ -98,7 +104,7 @@ export default function TestMitPage() {
                 </pre>
               )}
             </div>
-          ))}
+          );})}
         </div>
       )}
     </div>
