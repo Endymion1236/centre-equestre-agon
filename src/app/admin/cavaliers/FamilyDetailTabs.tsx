@@ -333,6 +333,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                           paidAmount: p.paidAmount||p.totalTTC||0,
                           paymentMode: modeLabels[p.paymentMode]||p.paymentMode||"",
                           paymentDate: p.status==="paid" ? invDate.toLocaleDateString("fr-FR") : "",
+                          paymentId: p.id,
                           paymentDetails: paymentDetails.length > 0 ? paymentDetails : undefined,
                         });
                       }} className="text-blue-500 bg-blue-50 px-1.5 py-1 rounded cursor-pointer border-none hover:bg-blue-100 text-[10px]">📄</button>

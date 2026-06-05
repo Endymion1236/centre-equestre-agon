@@ -402,6 +402,7 @@ export default function FacturesPage() {
                                     paidAmount: p.paidAmount || 0,
                                     paymentMode: modeLabels[p.paymentMode] || p.paymentMode || "",
                                     paymentDate: p.paidAmount > 0 ? d2.toLocaleDateString("fr-FR") : "",
+                                    paymentId: p.id,
                                   });
                               } catch (e) { console.error(e); }
                             }}

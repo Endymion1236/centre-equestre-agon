@@ -13,6 +13,7 @@ try {
 import React from "react";
 import { verifyAuth } from "@/lib/api-auth";
 import { generateSEPAQR } from "@/lib/payment-qr";
+import { adminDb } from "@/lib/firebase-admin";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -111,7 +112,8 @@ export async function POST(request: NextRequest) {
       familyName, familyEmail, familyAddress,
       items = [], totalHT = 0, totalTVA = 0, totalTTC = 0,
       paidAmount = 0, paymentMode, paymentDate,
-      paymentDetails, // nouveau : [{ mode, modeLabel, montant, date }]
+      paymentDetails, // [{ mode, modeLabel, montant, date }] — sinon reconstruit via paymentId
+      paymentId,
       remise,
     } = body;
 
@@ -132,9 +134,28 @@ export async function POST(request: NextRequest) {
     // Construction du libellé de règlement :
     // - Si paymentDetails fourni (plusieurs encaissements) → lister chaque ligne
     // - Sinon → fallback sur paymentMode simple (compat)
+    // Détail des règlements : si non fourni explicitement, on le reconstruit
+    // depuis les encaissements liés au paiement (ex. acompte CB + solde prélevé).
+    let resolvedDetails: any[] = Array.isArray(paymentDetails) ? paymentDetails : [];
+    if (resolvedDetails.length === 0 && paymentId) {
+      try {
+        const encSnap = await adminDb.collection("encaissements").where("paymentId", "==", String(paymentId)).get();
+        resolvedDetails = encSnap.docs
+          .map((d) => d.data() as any)
+          .filter((e) => Number(e.montant || 0) > 0)
+          .sort((a, b) => String(a.dateIso || "").localeCompare(String(b.dateIso || "")))
+          .map((e) => ({
+            mode: e.mode,
+            modeLabel: e.modeLabel || e.mode,
+            montant: Number(e.montant || 0),
+            date: e.dateIso ? new Date(e.dateIso).toLocaleDateString("fr-FR") : undefined,
+          }));
+      } catch { /* en cas d'échec, on retombe sur le libellé simple */ }
+    }
+
     const renderPaymentDetails = () => {
-      if (!Array.isArray(paymentDetails) || paymentDetails.length === 0) return null;
-      return paymentDetails.map((pd: any, idx: number) =>
+      if (resolvedDetails.length === 0) return null;
+      return resolvedDetails.map((pd: any, idx: number) =>
         React.createElement(Text, { key: idx, style: s.payDetail },
           `• ${pd.modeLabel || pd.mode || "—"} : ${Number(pd.montant || 0).toFixed(2)}€${pd.date ? ` (${pd.date})` : ""}`
         )
@@ -272,8 +293,8 @@ export async function POST(request: NextRequest) {
         React.createElement(View, { style: [s.payBox, isPaid ? s.payPaid : s.payUnpaid] },
           React.createElement(Text, { style: [s.payTitle, { color: isPaid ? GREEN : ORANGE }] },
             isPaid ? "✓ Facture réglée" : "⏳ En attente de règlement"),
-          // Priorité 1 : détail ligne par ligne si fourni
-          isPaid && Array.isArray(paymentDetails) && paymentDetails.length > 0
+          // Priorité 1 : détail ligne par ligne (fourni ou reconstruit)
+          isPaid && resolvedDetails.length > 0
             ? [
                 React.createElement(Text, { key: "title", style: s.payDetail }, "Détail des règlements :"),
                 ...(renderPaymentDetails() || []),

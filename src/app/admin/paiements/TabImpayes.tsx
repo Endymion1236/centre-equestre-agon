@@ -378,7 +378,7 @@ export function TabImpayes({
                             const fam = families.find(f => f.firestoreId === p.familyId);
                             const civilite = fam?.civilite ? `${fam.civilite} ` : "";
                             const adresseLines = [fam?.address, [fam?.zipCode, fam?.city].filter(Boolean).join(" ")].filter(Boolean).join("\n");
-                            await downloadInvoicePdf({ invoiceNumber, date: invDate.toLocaleDateString("fr-FR"), familyName: `${civilite}${p.familyName}`, familyEmail: fam?.parentEmail || "", familyAddress: adresseLines, items, totalHT, totalTVA: totalTTC - totalHT, totalTTC, paidAmount: p.paidAmount || 0, paymentMode: p.paymentMode ? (paymentModes.find(m => m.id === p.paymentMode)?.label || p.paymentMode) : "", paymentDate: p.paidAmount > 0 ? invDate.toLocaleDateString("fr-FR") : "" });
+                            await downloadInvoicePdf({ invoiceNumber, date: invDate.toLocaleDateString("fr-FR"), familyName: `${civilite}${p.familyName}`, familyEmail: fam?.parentEmail || "", familyAddress: adresseLines, items, totalHT, totalTVA: totalTTC - totalHT, totalTTC, paidAmount: p.paidAmount || 0, paymentMode: p.paymentMode ? (paymentModes.find(m => m.id === p.paymentMode)?.label || p.paymentMode) : "", paymentDate: p.paidAmount > 0 ? invDate.toLocaleDateString("fr-FR") : "", paymentId: p.id });
                           }} className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1"><Receipt size={10}/> {(p as any).invoiceNumber ? "Facture" : "Proforma"}</button>
                           {!(p as any).invoiceNumber && (
                             <button onClick={async () => {
