@@ -1,6 +1,7 @@
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { cawlSdk, CAWL_PSPID } from "@/lib/cawl";
+import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 
 /**
  * Prélèvement automatique du solde via un token Card On File.
@@ -120,21 +121,53 @@ export async function chargeWithToken(params: MitChargeParams): Promise<MitCharg
 }
 
 /**
- * Enregistre la tentative sur le paiement (audit + anti-doublon).
- * Incrémente paidAmount uniquement en cas de succès.
+ * Enregistre la tentative sur le paiement (audit + anti-doublon) ET, en cas de
+ * succès, réconcilie le paiement comme un règlement normal :
+ *   - paidAmount += solde
+ *   - statut "paid" si le total est atteint
+ *   - création d'un encaissement NF525 pour le solde prélevé
+ * La réconciliation n'est faite qu'une fois (garde mitChargedAt) pour éviter
+ * tout double comptage si la fonction est rappelée.
  */
 export async function logMitAttempt(paymentId: string, result: MitChargeResult, amount: number) {
   try {
-    await adminDb.collection("payments").doc(paymentId).update({
+    const ref = adminDb.collection("payments").doc(paymentId);
+    const snap = await ref.get();
+    const p: any = snap.exists ? snap.data() : {};
+    const alreadySettled = !!p.mitChargedAt;
+
+    const update: any = {
       mitLastAttemptAt: FieldValue.serverTimestamp(),
       mitLastResult: result.success ? "success" : (result.enabled ? "failed" : "skipped_disabled"),
       ...(result.paymentReference ? { mitPaymentReference: result.paymentReference } : {}),
       ...(result.error ? { mitLastError: result.error.slice(0, 300) } : {}),
-      ...(result.success ? {
-        paidAmount: FieldValue.increment(amount),
-        mitChargedAt: FieldValue.serverTimestamp(),
-      } : {}),
-    });
+    };
+
+    if (result.success && !alreadySettled) {
+      const total = Number(p.totalTTC || 0);
+      const newPaid = +((Number(p.paidAmount || 0)) + amount).toFixed(2);
+      const fullyPaid = total > 0 && newPaid >= total - 0.01;
+      update.paidAmount = newPaid;
+      update.mitChargedAt = FieldValue.serverTimestamp();
+      if (fullyPaid) update.status = "paid";
+      if (result.paymentReference) update.paymentRef = `CAWL-${result.paymentReference}`;
+    }
+
+    await ref.update(update);
+
+    // Encaissement NF525 du solde prélevé (comme un paiement normal), une seule fois.
+    if (result.success && !alreadySettled) {
+      await createEncaissementServer({
+        paymentId,
+        familyId: p.familyId || "",
+        familyName: p.familyName || "",
+        montant: amount,
+        mode: "cb_online",
+        modeLabel: "Prélèvement automatique du solde (CAWL)",
+        ref: result.paymentReference ? `CAWL-${result.paymentReference}` : "",
+        activityTitle: (p.items || []).map((i: any) => i.activityTitle).join(", "),
+      });
+    }
   } catch (e) {
     console.error("[cawl-mit] logMitAttempt:", e);
   }
