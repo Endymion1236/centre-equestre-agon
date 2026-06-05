@@ -249,6 +249,38 @@ export const MANUAL: ManualChapter[] = [
           </ul>
         `,
       },
+      {
+        id: "acompte-solde-stages",
+        title: "Acompte + prélèvement automatique du solde (stages)",
+        text: `
+          <p>Pour les stages, une famille peut régler un <strong>acompte</strong> à la réservation ; le <strong>solde</strong> est ensuite prélevé automatiquement environ une semaine avant le stage, sans qu'elle ait à ressaisir sa carte.</p>
+          <p><strong>Côté famille :</strong></p>
+          <ul>
+            <li>Sur la réservation, elle choisit « Acompte » puis paie l'acompte par carte.</li>
+            <li>Sur la page de paiement, elle doit <strong>cocher « Enregistrer mes données de paiement »</strong> pour autoriser le prélèvement du solde. Un encart le lui rappelle juste avant, avec le montant du solde.</li>
+            <li>Si elle ne coche pas la case, le solde devra être réglé manuellement.</li>
+          </ul>
+          <p><strong>Côté centre :</strong> environ 7 jours avant le stage, le solde est prélevé automatiquement. Le paiement passe en « payé », un encaissement est créé, et la facture détaille l'acompte + le solde avec leurs dates.</p>
+          <p><strong>⚠️ Activation en production</strong> (une seule fois, avec ton chargé de compte CAWL) :</p>
+          <ul>
+            <li>Faire confirmer par CAWL que « Card On File » est activé sur ton PSPID <strong>de production</strong>.</li>
+            <li>Dans Vercel (scope Production) : renseigner les identifiants CAWL <em>de production</em>, mettre <code>CAWL_ENV=production</code>, puis <code>CAWL_MIT_ENABLED=true</code>, et redéployer.</li>
+            <li>Tant que <code>CAWL_MIT_ENABLED</code> n'est pas à <code>true</code>, le solde n'est <strong>pas</strong> prélevé automatiquement : une relance par email est envoyée à la place (comportement de sécurité).</li>
+          </ul>
+          <p>Un outil interne (<code>/admin/test-mit</code>, accès admin uniquement, hors menu) permet de simuler ou de lancer un prélèvement de solde sur un paiement précis.</p>
+        `,
+        href: "/admin/paiements",
+      },
+      {
+        id: "echeances-rappel",
+        title: "Échéances SEPA : rappel mensuel",
+        text: `
+          <p>Quand un forfait est réglé en plusieurs fois (3x / 10x), les échéances apparaissent dans <strong>Paiements → Échéances</strong>.</p>
+          <p>Le <strong>25 de chaque mois</strong>, un rappel automatique (email + notification) liste les échéances à <strong>mettre en prélèvement ce mois-ci</strong>, en signalant celles en retard — pour ne pas oublier de lancer les prélèvements SEPA correspondants.</p>
+          <p>Le rappel arrive ~6 jours avant la fin du mois : largement le temps d'enregistrer les remises SEPA avant la date de prélèvement.</p>
+        `,
+        href: "/admin/paiements",
+      },
     ],
   },
 
