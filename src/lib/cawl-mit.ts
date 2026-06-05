@@ -70,7 +70,7 @@ export function buildDelayedChargeBody(amountEuros: number) {
 }
 
 export async function chargeWithToken(params: MitChargeParams): Promise<MitChargeResult> {
-  const mitEnabled = process.env.CAWL_MIT_ENABLED === "true";
+  const mitEnabled = (process.env.CAWL_MIT_ENABLED || "").trim().toLowerCase() === "true";
 
   // Body prêt même en mode stub (utile pour les logs / la mise au point).
   const body = buildDelayedChargeBody(params.amount);
