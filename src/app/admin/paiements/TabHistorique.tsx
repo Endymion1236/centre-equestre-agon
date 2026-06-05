@@ -272,6 +272,7 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                     totalTVA: (p.totalTTC || 0) - ht, totalTTC: p.totalTTC || 0,
                     paymentMode: mode?.label || p.paymentMode || "",
                     paymentDate: p.paidAmount > 0 ? date.toLocaleDateString("fr-FR") : "",
+                    paymentId: p.id,
                     paidAmount: p.paidAmount || p.totalTTC || 0,
                     paymentDetails: paymentDetails.length > 0 ? paymentDetails : undefined,
                   });

@@ -24,6 +24,8 @@ export async function downloadInvoicePdf(params: {
   paymentDate: string;
   /** Détail ligne-par-ligne des encaissements (optionnel, prioritaire sur paymentMode) */
   paymentDetails?: PaymentDetail[];
+  /** ID du paiement : si fourni, la facture reconstruit le détail depuis les encaissements */
+  paymentId?: string;
 }) {
   const res = await authFetch("/api/invoice-pdf", {
     method: "POST",
