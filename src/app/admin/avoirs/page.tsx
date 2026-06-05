@@ -331,7 +331,7 @@ export default function AvoirsPage() {
           ) : (
             <div className="flex flex-col gap-3">
               {filtered.map(a => {
-                const pctUsed = a.amount > 0 ? Math.round((a.usedAmount / a.amount) * 100) : 0;
+                const pctUsed = (a.amount || 0) > 0 ? Math.round(((a.usedAmount || 0) / a.amount) * 100) : 0;
                 const daysLeft = daysUntilExpiry(a.expiryDate);
                 const expiringSoon = daysLeft > 0 && daysLeft <= 30;
                 return (
@@ -356,12 +356,12 @@ export default function AvoirsPage() {
                           <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
                             <div className={`h-full rounded-full ${pctUsed > 80 ? "bg-gray-300" : "bg-blue-300"}`} style={{ width: `${pctUsed}%` }} />
                           </div>
-                          <span className="font-body text-xs text-gray-400">{a.usedAmount.toFixed(2)}€ / {a.amount.toFixed(2)}€ utilisé</span>
+                          <span className="font-body text-xs text-gray-400">{(a.usedAmount || 0).toFixed(2)}€ / {(a.amount || 0).toFixed(2)}€ utilisé</span>
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <div className={`font-body text-xl font-bold ${a.remainingAmount > 0 ? "text-blue-500" : "text-gray-300"}`}>
-                          {a.remainingAmount.toFixed(2)}€
+                        <div className={`font-body text-xl font-bold ${(a.remainingAmount || 0) > 0 ? "text-blue-500" : "text-gray-300"}`}>
+                          {(a.remainingAmount || 0).toFixed(2)}€
                         </div>
                         <div className="font-body text-[10px] text-gray-400">restant</div>
                         {a.status === "actif" && (
@@ -385,9 +385,9 @@ export default function AvoirsPage() {
                             familyName: a.familyName,
                             reason: a.reason || "",
                             items: [],
-                            totalHT: Math.round(a.amount / 1.055 * 100) / 100,
-                            totalTVA: Math.round((a.amount - a.amount / 1.055) * 100) / 100,
-                            totalTTC: a.amount,
+                            totalHT: Math.round((a.amount || 0) / 1.055 * 100) / 100,
+                            totalTVA: Math.round(((a.amount || 0) - (a.amount || 0) / 1.055) * 100) / 100,
+                            totalTTC: a.amount || 0,
                             type: a.type || "avoir",
                             expiryDate: exp ? exp.toLocaleDateString("fr-FR") : "—",
                           });
@@ -404,7 +404,7 @@ export default function AvoirsPage() {
                         {(a.usageHistory || []).map((u: any, i: number) => (
                           <div key={i} className="flex justify-between font-body text-xs text-gray-500 py-0.5">
                             <span>{new Date(u.date).toLocaleDateString("fr-FR")} · {u.invoiceRef}</span>
-                            <span className="font-semibold">-{u.amount.toFixed(2)}€</span>
+                            <span className="font-semibold">-{(u.amount || 0).toFixed(2)}€</span>
                           </div>
                         ))}
                       </div>

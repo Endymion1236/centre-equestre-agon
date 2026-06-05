@@ -60,6 +60,8 @@ export default function EditCreneauModal({
 
   const currentMoniteurs = (form.monitor || "").split(",").map(s => s.trim()).filter(Boolean);
   const moniteurChanged = JSON.stringify([...currentMoniteurs].sort()) !== JSON.stringify([...initialMoniteurs].sort());
+  const enrolledCount = ((creneau as any).enrolled || []).length;
+  const titleChanged = (form.activityTitle || "").trim() !== (creneau.activityTitle || "").trim();
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
       <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
@@ -78,6 +80,13 @@ export default function EditCreneauModal({
             <input value={form.activityTitle}
               onChange={e => onFormChange({...form, activityTitle: e.target.value})}
               className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
+            {titleChanged && enrolledCount > 0 && (
+              <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                <p className="font-body text-[11px] text-amber-800 leading-snug">
+                  ⚠️ Ce créneau a déjà <strong>{enrolledCount} inscrit{enrolledCount > 1 ? "s" : ""}</strong>. Renommer l'intitulé peut <strong>désynchroniser les paiements</strong> : les factures et le suivi payé/impayé des inscriptions existantes garderont l'ancien nom. Pour un nouveau libellé, préférez créer un nouveau créneau.
+                </p>
+              </div>
+            )}
           </div>
           <div>
             <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Couleur du créneau</label>
