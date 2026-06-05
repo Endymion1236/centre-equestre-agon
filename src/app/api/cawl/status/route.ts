@@ -237,7 +237,7 @@ export async function GET(req: NextRequest) {
         paymentMode: "cb_online",
         cawlHostedCheckoutId: hostedCheckoutId,
         paymentRef: `CAWL-${hostedCheckoutId}`,
-        ...(cofToken ? { cofToken } : {}),
+        ...(cofToken ? { cofToken, cawlTokenizedAt: FieldValue.serverTimestamp() } : {}),
         ...(cofSchemeTxId ? { cofSchemeTransactionId: cofSchemeTxId } : {}),
         ...(cofInitialPaymentId ? { cofInitialPaymentId } : {}),
         updatedAt: FieldValue.serverTimestamp(),

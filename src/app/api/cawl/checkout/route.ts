@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     const returnUrl = `${origin}/api/cawl/status?ref=${merchantRef}&paymentId=${paymentId || ""}&familyId=${familyId}&deposit=${isDeposit ? depositPercent : "0"}`;
 
     // Créer la session Hosted Checkout CAWL
-    const checkoutRequest = {
+    const checkoutRequest: any = {
       order: {
         amountOfMoney: {
           amount: totalCents,
@@ -93,8 +93,18 @@ export async function POST(req: NextRequest) {
         returnUrl,
         locale: "fr_FR",
         showResultPage: false,
-        // Pas de filtre produit en test — laisser CAWL proposer tous les moyens disponibles
+        // Acompte : enregistrer la carte (Card On File) pour pouvoir prélever
+        // le solde automatiquement plus tard (doc CAWL, Exemple B).
+        ...(isDeposit ? { cardPaymentMethodSpecificInput: { tokenizationMode: "createWithConsent" } } : {}),
       },
+      // Acompte : transaction initiale "carte en réserve" initiée par le client
+      // (consentement). Indispensable pour réutiliser le token en MIT (solde).
+      ...(isDeposit ? {
+        cardPaymentMethodSpecificInput: {
+          unscheduledCardOnFileRequestor: "cardholderInitiated",
+          unscheduledCardOnFileSequenceIndicator: "first",
+        },
+      } : {}),
     };
 
     const response = await cawlSdk.hostedCheckout.createHostedCheckout(
