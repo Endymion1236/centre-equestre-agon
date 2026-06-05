@@ -30,8 +30,9 @@ export async function GET(req: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://centre-equestre-agon.vercel.app";
   const today = parisYMD();
   const now = new Date();
-  // Dernier jour du mois prochain (jour 0 du mois +2 = dernier jour du mois +1)
-  const endNextYMD = parisYMD(new Date(now.getFullYear(), now.getMonth() + 2, 0));
+  // Dernier jour du mois EN COURS (jour 0 du mois suivant). Les échéances tombant
+  // en fin de mois (le 31), un rappel le 25 laisse le temps de mettre en prélèvement.
+  const endWindowYMD = parisYMD(new Date(now.getFullYear(), now.getMonth() + 1, 0));
 
   const result = { dueCount: 0, overdueCount: 0, totalAmount: 0, families: 0, pushSent: 0, emailSent: false };
 
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
       const p = d.data() as any;
       if (["paid", "cancelled", "sepa_scheduled"].includes(p.status)) return;
       const date = p.echeanceDate;
-      if (!date || date > endNextYMD) return; // seulement ce qui est dû d'ici fin du mois prochain
+      if (!date || date > endWindowYMD) return; // uniquement ce qui est dû d'ici la fin du mois en cours
       rows.push({
         family: p.familyName || "(sans nom)",
         date,
@@ -82,7 +83,7 @@ export async function GET(req: NextRequest) {
 
     const html = `<div style="font-family:Arial,sans-serif;color:#1f2937;max-width:600px;">
       <h2 style="color:#1e3a5f;margin-bottom:4px;">Échéances SEPA à mettre en prélèvement</h2>
-      <p style="color:#374151;">${result.dueCount} échéance(s) à préparer (ce mois-ci et le mois prochain), pour un total de <strong>${result.totalAmount.toFixed(2)}€</strong>${result.overdueCount ? ` — dont <strong style="color:#dc2626;">${result.overdueCount} en retard</strong>` : ""}.</p>
+      <p style="color:#374151;">${result.dueCount} échéance(s) à prélever ce mois-ci, pour un total de <strong>${result.totalAmount.toFixed(2)}€</strong>${result.overdueCount ? ` — dont <strong style="color:#dc2626;">${result.overdueCount} en retard</strong>` : ""}.</p>
       <table style="border-collapse:collapse;width:100%;font-size:13px;">
         <thead><tr style="background:#f9fafb;text-align:left;"><th style="padding:6px 8px;">Famille</th><th style="padding:6px 8px;">Échéance</th><th style="padding:6px 8px;">Date</th><th style="padding:6px 8px;text-align:right;">Montant</th></tr></thead>
         <tbody>${lignes}</tbody>
