@@ -56,6 +56,7 @@ const navItems = [
   { href: "/admin/cavalerie", icon: Heart, label: "Cavalerie" },
   { href: "/admin/recurrences", icon: RotateCw, label: "Récurrences" },
   { href: "/admin/pedagogie", icon: GraduationCap, label: "Suivi péda." },
+  { href: "/admin/livret-pedagogique", icon: GraduationCap, label: "Livret péda." },
   { href: "/admin/management", icon: ClipboardList, label: "Management" },
   // ─── Commercial ───
   { separator: true, label: "Commercial" },
