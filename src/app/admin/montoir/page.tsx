@@ -39,6 +39,7 @@ export default function MontoirPage() {
   const [loading, setLoading] = useState(true);
   const [cartes, setCartes] = useState<any[]>([]);
   const [families, setFamilies] = useState<any[]>([]);
+  const [notesByCreneau, setNotesByCreneau] = useState<Record<string, string>>({});
   const currentDay = useMemo(() => { const d = new Date(); d.setDate(d.getDate()+dayOffset); return d; }, [dayOffset]);
   const dateStr = currentDay.toISOString().split("T")[0];
 
@@ -62,6 +63,24 @@ export default function MontoirPage() {
       }
       const creneauxData = (cSnap.docs.map(d=>({id:d.id,...d.data()})) as Creneau[]).sort(compareCreneaux);
       setCreneaux(creneauxData);
+
+      // Notes de séance préparées (texte) pour les créneaux du jour → dernière par créneau
+      try {
+        const ids = creneauxData.map((c: any) => c.id).slice(0, 30);
+        if (ids.length > 0) {
+          const nSnap = await getDocs(query(collection(db, "notes-seance"), where("creneauId", "in", ids)));
+          const latest: Record<string, { texte: string; t: number }> = {};
+          nSnap.forEach(d => {
+            const n = d.data() as any;
+            if (!n.creneauId || !n.texte) return;
+            const t = n.createdAt?.toMillis ? n.createdAt.toMillis() : 0;
+            if (!latest[n.creneauId] || t > latest[n.creneauId].t) latest[n.creneauId] = { texte: n.texte, t };
+          });
+          const map: Record<string, string> = {};
+          Object.entries(latest).forEach(([cid, v]) => { map[cid] = v.texte; });
+          setNotesByCreneau(map);
+        } else setNotesByCreneau({});
+      } catch (err) { console.error("notes-seance:", err); }
       setEquides(eSnap.docs.map(d=>({id:d.id,...d.data()})));
       setIndisponibilites(iSnap.docs.map(d=>({id:d.id,...d.data()})));
       setCartes(cartSnap.docs.map(d=>({id:d.id,...d.data()})));
@@ -869,6 +888,12 @@ export default function MontoirPage() {
               </>}
             </div>
           </div>
+          {notesByCreneau[c.id] && (
+            <div className="mb-4 bg-blue-50/60 border-l-4 border-blue-300 rounded-r-lg px-3 py-2 print:bg-transparent">
+              <div className="font-body text-[10px] font-semibold text-blue-600 uppercase tracking-wider mb-0.5">📝 Note de séance</div>
+              <p className="font-body text-sm text-slate-700 whitespace-pre-wrap">{notesByCreneau[c.id]}</p>
+            </div>
+          )}
           {en.length===0 ? <p className="font-body text-sm text-slate-600 italic">Aucun inscrit</p> :
           <div>
             <div className="flex items-center px-3 py-2 font-body text-[11px] font-semibold uppercase tracking-wider" style={{color:"#334155"}}>
