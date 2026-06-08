@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { collection, getDocs, query, where, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { authFetch } from "@/lib/auth-fetch";
-import { Mic, MicOff, Loader2, Trash2, ChevronDown, ChevronUp, Check } from "lucide-react";
+import { Mic, MicOff, Loader2, Trash2, ChevronDown, ChevronUp, Check, FileText, X, Eye } from "lucide-react";
 
 interface Props {
   creneau: any;
@@ -25,6 +25,12 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
+
+  // Plan de séance (fichier joint sur le créneau)
+  const [lightbox, setLightbox] = useState(false);
+  const planUrl: string | null = creneau.planSeanceUrl || null;
+  const planType: string = creneau.planSeanceType || "";
+  const planIsPdf = /pdf/i.test(planType) || /\.pdf($|\?)/i.test(planUrl || "");
 
   useEffect(() => { setPrep(creneau.notePreparation || ""); }, [creneau.id, creneau.notePreparation]);
 
@@ -125,22 +131,54 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
 
   return (
     <div className="mb-4 print:bg-transparent">
-      {/* En-tête repliable */}
-      <button onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between bg-blue-50/60 border-l-4 border-blue-300 rounded-r-lg px-3 py-2 border-none cursor-pointer text-left">
-        <div className="min-w-0">
+      {/* En-tête repliable + accès rapide au plan */}
+      <div className="flex items-center gap-2 bg-blue-50/60 border-l-4 border-blue-300 rounded-r-lg px-3 py-2">
+        <button onClick={() => setOpen(o => !o)}
+          className="flex-1 min-w-0 bg-transparent border-none cursor-pointer text-left p-0">
           <div className="font-body text-[10px] font-semibold text-blue-600 uppercase tracking-wider">📝 Notes de séance</div>
           {!open && prepPreview ? (
             <p className="font-body text-sm text-slate-700 truncate">{prepPreview}</p>
           ) : !open ? (
             <p className="font-body text-xs text-slate-400 italic">Préparation, fin de séance, dictée…</p>
           ) : null}
-        </div>
-        {open ? <ChevronUp size={16} className="text-blue-500 flex-shrink-0" /> : <ChevronDown size={16} className="text-blue-500 flex-shrink-0" />}
-      </button>
+        </button>
+        {planUrl && (
+          planIsPdf
+            ? <a href={planUrl} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1 font-body text-xs font-semibold text-purple-600 bg-purple-50 px-2.5 py-1.5 rounded-lg no-underline hover:bg-purple-100 flex-shrink-0">
+                <FileText size={13} /> Plan (PDF)
+              </a>
+            : <button onClick={() => setLightbox(true)}
+                className="flex items-center gap-1 font-body text-xs font-semibold text-purple-600 bg-purple-50 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-purple-100 flex-shrink-0">
+                <Eye size={13} /> Plan
+              </button>
+        )}
+        <button onClick={() => setOpen(o => !o)} className="bg-transparent border-none cursor-pointer flex-shrink-0 p-0">
+          {open ? <ChevronUp size={16} className="text-blue-500" /> : <ChevronDown size={16} className="text-blue-500" />}
+        </button>
+      </div>
 
       {open && (
         <div className="mt-2 space-y-4 bg-white border border-blue-100 rounded-xl p-3 print:hidden">
+          {/* PLAN DE SÉANCE (aperçu mobile) */}
+          {planUrl && (
+            <div>
+              <div className="font-body text-xs font-semibold text-purple-600 mb-1">📄 Plan de séance</div>
+              {planIsPdf ? (
+                <a href={planUrl} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 font-body text-sm font-semibold text-purple-700 bg-purple-50 px-3 py-2 rounded-lg no-underline hover:bg-purple-100">
+                  <FileText size={15} /> Ouvrir le plan (PDF)
+                </a>
+              ) : (
+                <button onClick={() => setLightbox(true)} className="block w-full bg-transparent border border-purple-100 rounded-lg p-0 cursor-pointer overflow-hidden">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={planUrl} alt="Plan de séance" className="w-full max-h-64 object-contain bg-slate-50" />
+                  <div className="font-body text-[10px] text-purple-500 py-1">Toucher pour agrandir</div>
+                </button>
+              )}
+            </div>
+          )}
+
           {/* PRÉPARATION */}
           <div>
             <div className="font-body text-xs font-semibold text-orange-600 mb-1">📋 Note de préparation</div>
@@ -192,6 +230,14 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
               </div>
             </div>
           )}
+        </div>
+      )}
+      {/* Plein écran du plan de séance (image) */}
+      {lightbox && planUrl && !planIsPdf && (
+        <div className="fixed inset-0 bg-black/90 z-[60] flex items-center justify-center p-2 print:hidden" onClick={() => setLightbox(false)}>
+          <button onClick={() => setLightbox(false)} className="absolute top-3 right-3 text-white bg-white/20 rounded-full p-2 border-none cursor-pointer"><X size={22} /></button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={planUrl} alt="Plan de séance" className="max-w-full max-h-full object-contain" onClick={e => e.stopPropagation()} />
         </div>
       )}
     </div>
