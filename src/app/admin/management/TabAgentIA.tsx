@@ -1,8 +1,8 @@
 "use client";
-import { useState } from "react";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { useState, useRef } from "react";
+import { collection, addDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Sparkles, Loader2, Check, RefreshCw } from "lucide-react";
+import { Sparkles, Loader2, Check, RefreshCw, Mic, MicOff, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import type { TacheType, Salarie, TachePlanifiee, JourSemaine } from "./types";
 import { JOURS, JOURS_LABELS, getLundideSemaine, formatDateCourte, calcTempsTravailJour } from "./types";
@@ -25,6 +25,103 @@ export default function TabAgentIA({ semaine, tachesType, salaries, tachesExista
   const [question, setQuestion] = useState("");
   const [reponse, setReponse] = useState<string|null>(null);
   const [qLoading, setQLoading] = useState(false);
+
+  // ── Agent par commande (voix/texte) → actions ajout/suppression ──────────
+  const [command, setCommand] = useState("");
+  const [cmdLoading, setCmdLoading] = useState(false);
+  const [cmdActions, setCmdActions] = useState<any[] | null>(null);
+  const [cmdMessage, setCmdMessage] = useState("");
+  const [applying, setApplying] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+
+  const startRec = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      const chunks: Blob[] = [];
+      rec.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+      rec.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const file = new File([new Blob(chunks, { type: mime || "audio/webm" })], "cmd.webm", { type: mime || "audio/webm" });
+        setTranscribing(true);
+        try {
+          const fd = new FormData(); fd.append("audio", file);
+          const res = await authFetch("/api/whisper", { method: "POST", body: fd });
+          const data = await res.json();
+          if (data.success) setCommand(prev => (prev ? prev.trim() + " " : "") + data.text);
+          else toast(`Erreur transcription : ${data.error}`, "error");
+        } catch (e: any) { toast(`Erreur transcription : ${e.message}`, "error"); }
+        setTranscribing(false);
+      };
+      recorderRef.current = rec;
+      rec.start();
+      setRecording(true);
+    } catch (e: any) { toast(`Micro indisponible : ${e.message}`, "error"); }
+  };
+  const stopRec = () => {
+    if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop();
+    setRecording(false);
+  };
+
+  const interpreter = async () => {
+    if (!command.trim()) return;
+    setCmdLoading(true); setCmdActions(null); setCmdMessage("");
+    try {
+      const res = await authFetch("/api/ia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "management_command",
+          command,
+          semaineLabel: `${formatDateCourte(lundi)} au ${formatDateCourte(new Date(lundi.getTime() + 4 * 86400000))}`,
+          salaries: salaries.filter(s => s.actif).map(s => ({ id: s.id, nom: s.nom })),
+          tachesType: tachesType.map(t => ({ id: t.id, label: t.label, categorie: t.categorie, dureeMinutes: t.dureeMinutes })),
+          tachesExistantes: tachesExistantes.map(t => ({ id: t.id, tacheLabel: t.tacheLabel, salarieName: (t as any).salarieName || "", salarieId: t.salarieId, jour: t.jour, heureDebut: (t as any).heureDebut || "" })),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) { setCmdActions(data.actions || []); setCmdMessage(data.message || ""); }
+      else toast(`Erreur IA : ${data.error}`, "error");
+    } catch (e: any) { toast(`Erreur : ${e.message}`, "error"); }
+    setCmdLoading(false);
+  };
+
+  const appliquerActions = async () => {
+    if (!cmdActions || cmdActions.length === 0) return;
+    setApplying(true);
+    try {
+      let nbAdd = 0, nbDel = 0;
+      for (const a of cmdActions) {
+        if (a.type === "add") {
+          const sal = salaries.find(s => s.id === a.salarieId || s.nom === a.salarie);
+          const tt = tachesType.find(x => x.id === a.tacheTypeId || x.label === a.tacheLabel);
+          if (!sal || !tt) continue;
+          const exists = tachesExistantes.some(e => e.salarieId === sal.id && e.jour === a.jour && e.tacheTypeId === tt.id);
+          if (exists) continue;
+          await addDoc(collection(db, "taches-planifiees"), {
+            tacheTypeId: tt.id, tacheLabel: tt.label, categorie: tt.categorie,
+            salarieId: sal.id, salarieName: sal.nom, jour: a.jour,
+            heureDebut: a.heureDebut || "08:00", dureeMinutes: tt.dureeMinutes,
+            semaine, done: false, createdAt: serverTimestamp(),
+          });
+          nbAdd++;
+        } else if (a.type === "remove" && a.tacheId) {
+          // sécurité : ne supprimer que si l'id existe bien dans la semaine courante
+          if (!tachesExistantes.some(e => e.id === a.tacheId)) continue;
+          await deleteDoc(doc(db, "taches-planifiees", a.tacheId));
+          nbDel++;
+        }
+      }
+      toast(`✅ ${nbAdd} ajout${nbAdd > 1 ? "s" : ""}, ${nbDel} suppression${nbDel > 1 ? "s" : ""}`, "success");
+      setCmdActions(null); setCommand(""); setCmdMessage("");
+      onRefresh();
+    } catch (e: any) { toast(`Erreur application : ${e.message}`, "error"); }
+    setApplying(false);
+  };
 
   const lundi = getLundideSemaine(semaine);
   const jourDates = JOURS.map((j, i) => {
@@ -232,6 +329,59 @@ export default function TabAgentIA({ semaine, tachesType, salaries, tachesExista
           </div>
         </div>
       )}
+
+      {/* Agent par la voix / commande → actions à valider */}
+      <div className="border-t border-gray-100 pt-4">
+        <div className="font-body text-xs font-semibold text-blue-800 mb-2">🎙️ Piloter par la voix (ajouter / supprimer des tâches)</div>
+        <div className="flex gap-2 items-start">
+          <textarea value={command} onChange={e => setCommand(e.target.value)} rows={2}
+            placeholder='Ex : "Ajoute la check-list du soir à Emmeline mardi et jeudi", "Supprime les écuries du matin de samedi"'
+            className="flex-1 px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-purple-400 resize-y" />
+          <button onClick={() => recording ? stopRec() : startRec()} disabled={transcribing}
+            title="Dicter"
+            className={`px-3 py-2.5 rounded-xl border-none cursor-pointer disabled:opacity-50 flex items-center justify-center ${recording ? "bg-red-500 text-white" : "bg-purple-100 text-purple-700 hover:bg-purple-200"}`}>
+            {transcribing ? <Loader2 size={16} className="animate-spin" /> : recording ? <MicOff size={16} /> : <Mic size={16} />}
+          </button>
+        </div>
+        <button onClick={interpreter} disabled={cmdLoading || !command.trim()}
+          className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-purple-500 hover:bg-purple-600 border-none cursor-pointer disabled:opacity-50">
+          {cmdLoading ? <><Loader2 size={15} className="animate-spin" /> Interprétation…</> : <><Sparkles size={15} /> Interpréter la commande</>}
+        </button>
+
+        {cmdActions && (
+          <div className="mt-3 bg-purple-50 border border-purple-200 rounded-xl p-3">
+            {cmdMessage && <p className="font-body text-xs text-purple-700 mb-2">{cmdMessage}</p>}
+            {cmdActions.length === 0 ? (
+              <p className="font-body text-sm text-slate-500 italic">Aucune action proposée. Reformule ta demande.</p>
+            ) : (
+              <>
+                <div className="font-body text-[10px] font-semibold text-purple-600 uppercase tracking-wider mb-1">Actions proposées — à valider</div>
+                <div className="flex flex-col gap-1.5 mb-3">
+                  {cmdActions.map((a: any, i: number) => (
+                    <div key={i} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 text-xs">
+                      {a.type === "add"
+                        ? <span className="flex items-center gap-1 font-semibold text-green-600"><Plus size={13} /> Ajouter</span>
+                        : <span className="flex items-center gap-1 font-semibold text-red-500"><Trash2 size={13} /> Supprimer</span>}
+                      <span className="font-semibold text-blue-800 flex-1">{a.tacheLabel}</span>
+                      <span className="text-slate-500">{JOURS_LABELS[a.jour as JourSemaine]?.slice(0, 3) || a.jour}</span>
+                      {a.heureDebut && a.type === "add" && <span className="text-slate-400">{a.heureDebut}</span>}
+                      <span className="font-semibold text-purple-600">{a.salarie}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={appliquerActions} disabled={applying}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-green-500 hover:bg-green-600 border-none cursor-pointer disabled:opacity-50">
+                    {applying ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Appliquer
+                  </button>
+                  <button onClick={() => { setCmdActions(null); setCmdMessage(""); }} disabled={applying}
+                    className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-slate-500 bg-white border border-gray-200 cursor-pointer">Annuler</button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Question libre */}
       <div className="border-t border-gray-100 pt-4">
