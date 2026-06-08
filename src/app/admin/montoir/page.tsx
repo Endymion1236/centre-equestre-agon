@@ -363,7 +363,8 @@ export default function MontoirPage() {
       // Cas 1 : paymentSource=card avec cardId explicite
       // Cas 2 : fallback — chercher une carte compatible (individuelle ou familiale)
       let carteId = (child as any).cardId;
-      if (!carteId && (child as any).paymentSource !== "card") {
+      const ps = (child as any).paymentSource;
+      if (!carteId && ps !== "card" && ps !== "forfait" && ps !== "offert" && ps !== "celeris") {
         try {
           const isCours = ["cours","cours_collectif","cours_particulier"].includes(c.activityType);
           const isBalade = ["balade","promenade","ponyride"].includes(c.activityType);
