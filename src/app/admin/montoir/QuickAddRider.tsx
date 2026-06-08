@@ -70,15 +70,20 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
     }) || null;
   }, [sel, cartes, isCours, isBalade]);
 
-  // Détection forfait actif compatible
+  // Détection forfait actif compatible (même logique que le planning, slotKey inclus)
   const forfaitActif = useMemo(() => {
     if (!sel) return null;
+    const currentSlotKey = `${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long" })} ${creneau.startTime}`;
     return forfaits.find((f: any) => {
       if (f.childId !== sel.childId || f.status !== "actif") return false;
       const ft = f.activityType || "cours";
-      return ft === "all" || (ft === "cours" && isCours) || (ft === "balade" && isBalade);
+      const typeMatch = ft === "all" || (ft === "cours" && isCours) || (ft === "balade" && isBalade);
+      if (!typeMatch) return false;
+      // Si le forfait est rattaché à un créneau précis, il doit correspondre exactement
+      if (f.slotKey && f.slotKey !== currentSlotKey) return false;
+      return true;
     }) || null;
-  }, [sel, forfaits, isCours, isBalade]);
+  }, [sel, forfaits, isCours, isBalade, creneau]);
 
   const rattrapage = rattrapages[0] || null;
 
