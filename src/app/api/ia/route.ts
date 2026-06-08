@@ -122,7 +122,16 @@ interface PlanningManagementRequest {
   tachesDejaAssignees: number;
 }
 
-type IARequest = RapprochementRequest | AssistantRequest | SuggestionsRequest | EmailRepriseRequest | BilanPedaRequest | GenerateEmailTemplateRequest | ThemeStageRequest | PlanningManagementRequest;
+interface ManagementCommandRequest {
+  type: "management_command";
+  command: string;
+  semaineLabel: string;
+  salaries: { id: string; nom: string }[];
+  tachesType: { id: string; label: string; categorie: string; dureeMinutes: number }[];
+  tachesExistantes: { id: string; tacheLabel: string; salarieName: string; salarieId: string; jour: string; heureDebut: string }[];
+}
+
+type IARequest = RapprochementRequest | AssistantRequest | SuggestionsRequest | EmailRepriseRequest | BilanPedaRequest | GenerateEmailTemplateRequest | ThemeStageRequest | PlanningManagementRequest | ManagementCommandRequest;
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
@@ -595,6 +604,57 @@ Génère une réponse JSON structurée (et UNIQUEMENT du JSON, sans markdown ni 
       }
 
       return NextResponse.json({ success: true, planning: parsed });
+    }
+
+    // ── Commande management (voix/texte → actions ajout/suppression) ──────────
+    if (body.type === "management_command") {
+      const { command, semaineLabel, salaries, tachesType, tachesExistantes } = body;
+      const salStr = salaries.map(s => `- ${s.nom} (id: ${s.id})`).join("\n") || "(aucun)";
+      const ttStr = tachesType.map(t => `- "${t.label}" (id: ${t.id}, ${t.categorie}, ${t.dureeMinutes}min)`).join("\n") || "(aucune)";
+      const exStr = tachesExistantes.map(t => `- id:${t.id} | ${t.tacheLabel} | ${t.salarieName} | ${t.jour} | ${t.heureDebut}`).join("\n") || "(aucune)";
+
+      const prompt = [
+        "Tu es l'assistant de management d'un centre équestre.",
+        `Semaine concernée : ${semaineLabel}.`,
+        "L'utilisateur te donne une instruction en langage naturel (souvent dictée à la voix) pour MODIFIER le planning des tâches de l'équipe.",
+        "Traduis-la en une liste d'ACTIONS précises : ajout (add) ou suppression (remove) de tâches planifiées.",
+        "",
+        "SALARIÉS :", salStr,
+        "",
+        "TÂCHES DISPONIBLES (bibliothèque) :", ttStr,
+        "",
+        "TÂCHES DÉJÀ PLANIFIÉES CETTE SEMAINE :", exStr,
+        "",
+        `INSTRUCTION : "${command}"`,
+        "",
+        "Règles STRICTES :",
+        "- AJOUT : choisis la tâche la plus proche de la bibliothèque (tacheTypeId + tacheLabel EXACTS), le salarié (salarieId + salarie), le jour (lundi/mardi/mercredi/jeudi/vendredi/samedi/dimanche en minuscule), une heure (HH:MM, défaut 08:00).",
+        "- SUPPRESSION : retrouve la/les tâche(s) planifiée(s) correspondante(s) et donne leur tacheId EXACT pris dans la liste ci-dessus.",
+        "- N'invente JAMAIS un salarié, une tâche ou un id absent des listes.",
+        "- Si l'instruction est ambiguë, vide ou ne correspond à rien, renvoie actions: [] et explique pourquoi dans message.",
+        "",
+        "Réponds UNIQUEMENT en JSON (sans markdown ni backticks) :",
+        "{",
+        '  "actions": [',
+        '    { "type": "add", "tacheLabel": "...", "tacheTypeId": "...", "salarie": "...", "salarieId": "...", "jour": "lundi", "heureDebut": "08:00" },',
+        '    { "type": "remove", "tacheId": "...", "tacheLabel": "...", "salarie": "...", "jour": "lundi" }',
+        "  ],",
+        '  "message": "1 phrase résumant ce que tu vas faire (ou pourquoi rien)"',
+        "}",
+      ].join("\n");
+
+      const message = await client.messages.create({
+        model: "claude-sonnet-4-5",
+        max_tokens: 1500,
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      const raw = message.content[0].type === "text" ? message.content[0].text.trim() : "{}";
+      let parsed: any = {};
+      try { parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()); }
+      catch { parsed = { actions: [], message: raw }; }
+      if (!Array.isArray(parsed.actions)) parsed.actions = [];
+      return NextResponse.json({ success: true, actions: parsed.actions, message: parsed.message || "" });
     }
 
   } catch (error: any) {
