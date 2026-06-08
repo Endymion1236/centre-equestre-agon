@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getClubInfo } from "@/lib/club-info";
-import { renderToBuffer, Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { renderToBuffer, Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
 import React from "react";
 import { verifyAuth } from "@/lib/api-auth";
 import { adminDb } from "@/lib/firebase-admin";
@@ -29,6 +29,7 @@ const s = StyleSheet.create({
   bilanMeta: { fontSize: 7, color: "#94a3b8" },
   footer: { position: "absolute", bottom: 20, left: 36, right: 36, fontSize: 7, color: "#94a3b8", textAlign: "center", borderTop: "1pt solid #e2e8f0", paddingTop: 4 },
   empty: { fontSize: 9, color: "#94a3b8", fontStyle: "italic" },
+  planImg: { marginTop: 3, maxHeight: 220, objectFit: "contain", borderRadius: 4, border: "1pt solid #e2e8f0" },
 });
 
 function chunk<T>(arr: T[], n: number): T[][] {
@@ -103,6 +104,25 @@ export async function POST(request: NextRequest) {
 
     const periodeLabel = `${fmtDate(startDate)} → ${fmtDate(endDate)}`;
 
+    // Pré-chargement des plans de séance (images jpeg/png) en base64 pour les embarquer
+    const planImages: Record<string, string> = {};
+    for (const c of creneaux as any[]) {
+      const url = c.planSeanceUrl;
+      const type = c.planSeanceType || "";
+      if (!url) continue;
+      const looksImg = /image\/(jpeg|jpg|png)/i.test(type) || /\.(jpe?g|png)($|\?)/i.test(url);
+      if (!looksImg) continue;
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) continue;
+        const ct = resp.headers.get("content-type") || "";
+        if (!/image\/(jpeg|png)/i.test(ct)) continue;
+        const buf = Buffer.from(await resp.arrayBuffer());
+        if (buf.length > 4_000_000) continue; // évite un PDF démesuré
+        planImages[c.id] = `data:${ct};base64,${buf.toString("base64")}`;
+      } catch { /* plan ignoré si inaccessible */ }
+    }
+
     // ── Construction du PDF ──────────────────────────────────────────────
     const seanceBlocks = creneaux.map((c: any, i: number) => {
       const cavaliers = (c.enrolled || []).map((e: any) => {
@@ -123,6 +143,13 @@ export async function POST(request: NextRequest) {
               el(Text, { style: s.label }, "Préparation de séance"),
               el(Text, { style: s.body }, c.notePreparation))
           : null,
+        planImages[c.id]
+          ? el(View, {},
+              el(Text, { style: s.labelBlue }, "Plan de séance"),
+              el(Image, { src: planImages[c.id], style: s.planImg }))
+          : (c.planSeanceUrl
+              ? el(View, {}, el(Text, { style: s.labelBlue }, "Plan de séance"), el(Text, { style: s.empty }, "Plan joint (PDF) — consultable dans l'application"))
+              : null),
         notes.length
           ? el(View, {},
               el(Text, { style: s.labelBlue }, "Notes de fin de séance"),

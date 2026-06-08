@@ -830,12 +830,6 @@ export default function MontoirPage() {
             </div>
             <div className="flex items-center gap-2 flex-wrap print:hidden">
               <Badge color={closed?"gray":pres===en.length&&en.length>0?"green":"orange"}>{closed?"Clôturée":`${pres}/${en.length} présents`}</Badge>
-              {(c as any).planSeanceUrl && (
-                <a href={(c as any).planSeanceUrl} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 font-body text-xs font-semibold text-purple-600 bg-purple-50 px-2.5 py-1.5 rounded-lg no-underline hover:bg-purple-100">
-                  📄 Plan de séance
-                </a>
-              )}
               {closed && (
                 <button onClick={()=>reopenCreneau(c.id, c.activityTitle)}
                   className="flex items-center gap-1.5 font-body text-xs font-semibold text-slate-700 bg-amber-100 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-amber-200">
