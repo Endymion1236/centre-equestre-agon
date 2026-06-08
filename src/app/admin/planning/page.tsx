@@ -215,6 +215,16 @@ export default function PlanningPage() {
   };
   useEffect(() => { setLoading(true); fetchData(); }, [weekOffset, dayOffset, monthOffset, viewMode]);
 
+  // Arrivée depuis le montoir avec ?date=YYYY-MM-DD → se caler sur ce jour, vue Jour.
+  useEffect(() => {
+    const d = new URLSearchParams(window.location.search).get("date");
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const off = Math.round((new Date(d + "T00:00:00").getTime() - today.getTime()) / 86400000);
+      if (!isNaN(off)) { setDayOffset(off); setViewMode("day"); }
+    }
+  }, []);
+
   // ─── Créer RDV Pro ───
   const handleCreateRdv = async () => {
     if (!rdvForm.title || !rdvForm.date) return;
@@ -1410,6 +1420,10 @@ export default function PlanningPage() {
         <div className="flex items-center gap-3">
           <h1 className="font-display text-2xl font-bold text-blue-800">Planning</h1>
           <HelpButton tourId="planning-enroll" manualLink="/admin/manuel#planning" />
+          <a href={`/admin/montoir?date=${fmtDate(currentDay)}`}
+            className="flex items-center gap-1.5 font-body text-xs font-semibold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg no-underline hover:bg-blue-100">
+            🐴 Montoir
+          </a>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
 
