@@ -129,6 +129,7 @@ interface ManagementCommandRequest {
   salaries: { id: string; nom: string }[];
   tachesType: { id: string; label: string; categorie: string; dureeMinutes: number }[];
   tachesExistantes: { id: string; tacheLabel: string; salarieName: string; salarieId: string; jour: string; heureDebut: string }[];
+  finDeJournee?: Record<string, Record<string, string>>;
 }
 
 type IARequest = RapprochementRequest | AssistantRequest | SuggestionsRequest | EmailRepriseRequest | BilanPedaRequest | GenerateEmailTemplateRequest | ThemeStageRequest | PlanningManagementRequest | ManagementCommandRequest;
@@ -608,10 +609,15 @@ Génère une réponse JSON structurée (et UNIQUEMENT du JSON, sans markdown ni 
 
     // ── Commande management (voix/texte → actions ajout/suppression) ──────────
     if (body.type === "management_command") {
-      const { command, semaineLabel, salaries, tachesType, tachesExistantes } = body;
+      const { command, semaineLabel, salaries, tachesType, tachesExistantes, finDeJournee } = body;
       const salStr = salaries.map(s => `- ${s.nom} (id: ${s.id})`).join("\n") || "(aucun)";
       const ttStr = tachesType.map(t => `- "${t.label}" (id: ${t.id}, ${t.categorie}, ${t.dureeMinutes}min)`).join("\n") || "(aucune)";
       const exStr = tachesExistantes.map(t => `- id:${t.id} | ${t.tacheLabel} | ${t.salarieName} | ${t.jour} | ${t.heureDebut}`).join("\n") || "(aucune)";
+      const finStr = finDeJournee
+        ? Object.entries(finDeJournee)
+            .flatMap(([nom, jours]) => Object.entries(jours).map(([j, h]) => `- ${nom} ${j} : dernière tâche finit à ${h}`))
+            .join("\n") || "(aucune tâche déjà prévue)"
+        : "(non fourni)";
 
       const prompt = [
         "Tu es l'assistant de management d'un centre équestre.",
@@ -625,10 +631,14 @@ Génère une réponse JSON structurée (et UNIQUEMENT du JSON, sans markdown ni 
         "",
         "TÂCHES DÉJÀ PLANIFIÉES CETTE SEMAINE :", exStr,
         "",
+        "FIN DES TÂCHES DÉJÀ PRÉVUES (pour enchaîner juste après) :", finStr,
+        "",
         `INSTRUCTION : "${command}"`,
         "",
         "Règles STRICTES :",
-        "- AJOUT : choisis la tâche la plus proche de la bibliothèque (tacheTypeId + tacheLabel EXACTS), le salarié (salarieId + salarie), le jour (lundi/mardi/mercredi/jeudi/vendredi/samedi/dimanche en minuscule), une heure (HH:MM, défaut 08:00).",
+        "- AJOUT : choisis la tâche la plus proche de la bibliothèque (tacheTypeId + tacheLabel EXACTS), le salarié (salarieId + salarie), le jour (lundi/mardi/mercredi/jeudi/vendredi/samedi/dimanche en minuscule), une heure (HH:MM).",
+        "- HEURE / FIN DE JOURNÉE : si l'utilisateur demande des tâches 'en fin de journée', 'après les cours', 'à la fin' ou sans heure précise, commence à l'heure de fin de la dernière tâche déjà prévue ce jour-là pour ce salarié (voir la liste ci-dessus ; s'il n'y en a pas, propose 17:00) et ENCHAÎNE les tâches bout-à-bout, sans trou (chaque tâche commence quand la précédente finit, selon sa durée).",
+        "- Si l'utilisateur donne une heure précise, respecte-la.",
         "- SUPPRESSION : retrouve la/les tâche(s) planifiée(s) correspondante(s) et donne leur tacheId EXACT pris dans la liste ci-dessus.",
         "- N'invente JAMAIS un salarié, une tâche ou un id absent des listes.",
         "- Si l'instruction est ambiguë, vide ou ne correspond à rien, renvoie actions: [] et explique pourquoi dans message.",
