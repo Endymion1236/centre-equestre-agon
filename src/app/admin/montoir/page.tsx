@@ -21,6 +21,7 @@ import { useAgentContext } from "@/hooks/useAgentContext";
 import { emailTemplates } from "@/lib/email-templates";
 import PoneyChargeView from "./PoneyChargeView";
 import ThemeSuggestion from "./ThemeSuggestion";
+import QuickAddRider from "./QuickAddRider";
 import { Loader2, ChevronLeft, ChevronRight, XCircle, AlertCircle, Printer, ClipboardList, Mic, MicOff, Sparkles,
 } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
@@ -39,19 +40,22 @@ export default function MontoirPage() {
   const [loading, setLoading] = useState(true);
   const [cartes, setCartes] = useState<any[]>([]);
   const [families, setFamilies] = useState<any[]>([]);
+  const [forfaits, setForfaits] = useState<any[]>([]);
+  const [addCreneau, setAddCreneau] = useState<any | null>(null);
   const [notesByCreneau, setNotesByCreneau] = useState<Record<string, string>>({});
   const currentDay = useMemo(() => { const d = new Date(); d.setDate(d.getDate()+dayOffset); return d; }, [dayOffset]);
   const dateStr = currentDay.toISOString().split("T")[0];
 
   const fetchData = async () => {
     try {
-      const [cSnap, eSnap, iSnap, cartSnap, famSnap, centreSnap] = await Promise.all([
+      const [cSnap, eSnap, iSnap, cartSnap, famSnap, centreSnap, forfSnap] = await Promise.all([
         getDocs(query(collection(db,"creneaux"),where("date","==",dateStr))),
         getDocs(collection(db,"equides")),
         getDocs(collection(db,"indisponibilites")),
         getDocs(collection(db,"cartes")),
         getDocs(collection(db,"families")),
         getDoc(doc(db,"settings","centre")),
+        getDocs(query(collection(db,"forfaits"),where("status","==","actif"))),
       ]);
       if (centreSnap.exists()) {
         const d = centreSnap.data() as any;
@@ -85,6 +89,7 @@ export default function MontoirPage() {
       setIndisponibilites(iSnap.docs.map(d=>({id:d.id,...d.data()})));
       setCartes(cartSnap.docs.map(d=>({id:d.id,...d.data()})));
       setFamilies(famSnap.docs.map(d=>({id:d.id,...d.data()})));
+      setForfaits(forfSnap.docs.map(d=>({id:d.id,...d.data()})));
 
       // Contexte agent — données montoir du jour
       // Nouvelle logique "presence par defaut" : un cavalier sans statut
@@ -840,6 +845,12 @@ export default function MontoirPage() {
                 </a>
               )}
               {!closed && (
+                <button onClick={()=>setAddCreneau(c)}
+                  className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-600 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-500">
+                  + Ajouter
+                </button>
+              )}
+              {!closed && (
                 <button onClick={()=>toggleRotationPoneys(c)}
                   title="Rotation poneys : même poney autorisé sur deux stages simultanés (fait 1h dans chacun)"
                   className={`flex items-center gap-1.5 font-body text-xs px-2.5 py-1.5 rounded-lg border-none cursor-pointer transition-all ${c.rotationPoneys ? "bg-green-100 text-green-700 font-semibold" : "bg-gray-100 text-gray-400"}`}>
@@ -1114,6 +1125,16 @@ export default function MontoirPage() {
             </div>
           </div>
         </div>
+      )}
+      {addCreneau && (
+        <QuickAddRider
+          creneau={addCreneau}
+          families={families}
+          cartes={cartes}
+          forfaits={forfaits}
+          onClose={() => setAddCreneau(null)}
+          onDone={(msg) => { setAddCreneau(null); toast(`✅ ${msg}`, "success"); fetchData(); }}
+        />
       )}
     </div>
   );
