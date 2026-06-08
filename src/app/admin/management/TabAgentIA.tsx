@@ -70,6 +70,22 @@ export default function TabAgentIA({ semaine, tachesType, salaries, tachesExista
   const interpreter = async () => {
     if (!command.trim()) return;
     setCmdLoading(true); setCmdActions(null); setCmdMessage("");
+
+    const toMin = (h: string) => { const [a, b] = (h || "08:00").split(":").map(Number); return (a || 0) * 60 + (b || 0); };
+    const toHHMM = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+
+    // Heure de fin de la dernière tâche déjà prévue, par salarié et par jour
+    const finDeJournee: Record<string, Record<string, string>> = {};
+    salaries.filter(s => s.actif).forEach(s => {
+      finDeJournee[s.nom] = {};
+      JOURS.forEach(j => {
+        const dayT = tachesExistantes.filter(t => t.salarieId === s.id && t.jour === j);
+        if (!dayT.length) return;
+        const lastEnd = Math.max(...dayT.map((t: any) => toMin(t.heureDebut || "08:00") + (t.dureeMinutes || 0)));
+        finDeJournee[s.nom][j] = toHHMM(lastEnd);
+      });
+    });
+
     try {
       const res = await authFetch("/api/ia", {
         method: "POST",
@@ -81,11 +97,31 @@ export default function TabAgentIA({ semaine, tachesType, salaries, tachesExista
           salaries: salaries.filter(s => s.actif).map(s => ({ id: s.id, nom: s.nom })),
           tachesType: tachesType.map(t => ({ id: t.id, label: t.label, categorie: t.categorie, dureeMinutes: t.dureeMinutes })),
           tachesExistantes: tachesExistantes.map(t => ({ id: t.id, tacheLabel: t.tacheLabel, salarieName: (t as any).salarieName || "", salarieId: t.salarieId, jour: t.jour, heureDebut: (t as any).heureDebut || "" })),
+          finDeJournee,
         }),
       });
       const data = await res.json();
-      if (data.success) { setCmdActions(data.actions || []); setCmdMessage(data.message || ""); }
-      else toast(`Erreur IA : ${data.error}`, "error");
+      if (data.success) {
+        let actions = (data.actions || []) as any[];
+        // Enchaînement déterministe : les ajouts d'un même salarié/jour sont
+        // placés bout-à-bout (pas de trou), ancrés sur l'heure proposée la plus
+        // tôt du lot (l'IA a reçu l'heure de fin de journée pour bien ancrer).
+        const groups: Record<string, any[]> = {};
+        actions.filter(a => a.type === "add").forEach(a => {
+          const k = `${a.salarieId || a.salarie}|${a.jour}`;
+          (groups[k] = groups[k] || []).push(a);
+        });
+        Object.values(groups).forEach(g => {
+          g.sort((x, y) => toMin(x.heureDebut) - toMin(y.heureDebut));
+          let cursor = toMin(g[0].heureDebut || "08:00");
+          g.forEach(a => {
+            a.heureDebut = toHHMM(cursor);
+            const tt = tachesType.find(x => x.id === a.tacheTypeId || x.label === a.tacheLabel);
+            cursor += (tt?.dureeMinutes || 15);
+          });
+        });
+        setCmdActions(actions); setCmdMessage(data.message || "");
+      } else toast(`Erreur IA : ${data.error}`, "error");
     } catch (e: any) { toast(`Erreur : ${e.message}`, "error"); }
     setCmdLoading(false);
   };
