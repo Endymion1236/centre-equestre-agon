@@ -90,6 +90,16 @@ export default function MontoirPage() {
   };
   useEffect(() => { setLoading(true); fetchData(); }, [dayOffset]);
 
+  // Si on arrive avec ?date=YYYY-MM-DD (depuis le planning), se caler sur ce jour.
+  useEffect(() => {
+    const d = new URLSearchParams(window.location.search).get("date");
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const off = Math.round((new Date(d + "T00:00:00").getTime() - today.getTime()) / 86400000);
+      if (!isNaN(off)) setDayOffset(off);
+    }
+  }, []);
+
   // Liste des équidés disponibles (pas sortis, pas indisponibles)
   // NB : le schéma côté création (cavalerie/TabIndispos) utilise { active, dateDebut, dateFin }
   // On supporte aussi les anciens formats { status, startDate, endDate } par sécurité.
@@ -737,6 +747,10 @@ export default function MontoirPage() {
           <HelpButton tourId="montoir-assign" manualLink="/admin/manuel#montoir" />
         </div>
         <div className="print:hidden flex items-center gap-2">
+          <a href={`/admin/planning?date=${dateStr}`}
+            className="flex items-center gap-2 font-body text-sm font-semibold text-blue-600 bg-blue-50 px-4 py-2 rounded-lg no-underline hover:bg-blue-100">
+            📅 Planning
+          </a>
           <a href={`/montoir/display?date=${dateStr}`} target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-600 px-4 py-2 rounded-lg no-underline hover:bg-blue-500">
             📺 Projeter
@@ -800,6 +814,12 @@ export default function MontoirPage() {
             </div>
             <div className="flex items-center gap-2 flex-wrap print:hidden">
               <Badge color={closed?"gray":pres===en.length&&en.length>0?"green":"orange"}>{closed?"Clôturée":`${pres}/${en.length} présents`}</Badge>
+              {(c as any).planSeanceUrl && (
+                <a href={(c as any).planSeanceUrl} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 font-body text-xs font-semibold text-purple-600 bg-purple-50 px-2.5 py-1.5 rounded-lg no-underline hover:bg-purple-100">
+                  📄 Plan de séance
+                </a>
+              )}
               {!closed && (
                 <button onClick={()=>toggleRotationPoneys(c)}
                   title="Rotation poneys : même poney autorisé sur deux stages simultanés (fait 1h dans chacun)"
