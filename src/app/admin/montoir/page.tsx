@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useRef } from "react";
-import { collection, getDocs, getDoc, updateDoc, addDoc, doc, query, where, serverTimestamp, runTransaction } from "firebase/firestore";
+import { collection, getDocs, getDoc, updateDoc, addDoc, deleteDoc, doc, query, where, serverTimestamp, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { validateChildrenUpdate } from "@/lib/utils";
 import { compareCreneaux } from "@/lib/creneau-sort";
@@ -42,7 +42,7 @@ export default function MontoirPage() {
   const [families, setFamilies] = useState<any[]>([]);
   const [forfaits, setForfaits] = useState<any[]>([]);
   const [addCreneau, setAddCreneau] = useState<any | null>(null);
-  const [notesByCreneau, setNotesByCreneau] = useState<Record<string, string>>({});
+  const [notesByCreneau, setNotesByCreneau] = useState<Record<string, { id: string; texte: string }>>({});
   const currentDay = useMemo(() => { const d = new Date(); d.setDate(d.getDate()+dayOffset); return d; }, [dayOffset]);
   const dateStr = currentDay.toISOString().split("T")[0];
 
@@ -73,15 +73,15 @@ export default function MontoirPage() {
         const ids = creneauxData.map((c: any) => c.id).slice(0, 30);
         if (ids.length > 0) {
           const nSnap = await getDocs(query(collection(db, "notes-seance"), where("creneauId", "in", ids)));
-          const latest: Record<string, { texte: string; t: number }> = {};
+          const latest: Record<string, { id: string; texte: string; t: number }> = {};
           nSnap.forEach(d => {
             const n = d.data() as any;
             if (!n.creneauId || !n.texte) return;
             const t = n.createdAt?.toMillis ? n.createdAt.toMillis() : 0;
-            if (!latest[n.creneauId] || t > latest[n.creneauId].t) latest[n.creneauId] = { texte: n.texte, t };
+            if (!latest[n.creneauId] || t > latest[n.creneauId].t) latest[n.creneauId] = { id: d.id, texte: n.texte, t };
           });
-          const map: Record<string, string> = {};
-          Object.entries(latest).forEach(([cid, v]) => { map[cid] = v.texte; });
+          const map: Record<string, { id: string; texte: string }> = {};
+          Object.entries(latest).forEach(([cid, v]) => { map[cid] = { id: v.id, texte: v.texte }; });
           setNotesByCreneau(map);
         } else setNotesByCreneau({});
       } catch (err) { console.error("notes-seance:", err); }
@@ -295,6 +295,24 @@ export default function MontoirPage() {
   const [iaBilans, setIaBilans] = useState<Record<string, any>>({}); // childId → bilan structuré
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+
+  const reopenCreneau = async (cid: string, title: string) => {
+    if (!confirm(`Rouvrir "${title}" ?\n\nLe créneau repassera en "ouvert" (les débits de cartes et notes déjà faits à la clôture restent inchangés).`)) return;
+    try {
+      await updateDoc(doc(db, "creneaux", cid), { status: "active", closedAt: null, reopenedAt: serverTimestamp() });
+      toast("Créneau rouvert.", "success");
+      fetchData();
+    } catch (e) { console.error("Rouvrir créneau:", e); toast("Erreur lors de la réouverture.", "error"); }
+  };
+
+  const deleteNoteSeance = async (noteId: string) => {
+    if (!confirm("Supprimer la note de préparation de séance ?")) return;
+    try {
+      await deleteDoc(doc(db, "notes-seance", noteId));
+      toast("Note de séance supprimée.", "success");
+      fetchData();
+    } catch (e) { console.error("Suppression note séance:", e); toast("Erreur lors de la suppression.", "error"); }
+  };
 
   const closeCreneau = async (cid: string) => {
     const c = creneaux.find(x => x.id === cid);
@@ -845,6 +863,12 @@ export default function MontoirPage() {
                   📄 Plan de séance
                 </a>
               )}
+              {closed && (
+                <button onClick={()=>reopenCreneau(c.id, c.activityTitle)}
+                  className="flex items-center gap-1.5 font-body text-xs font-semibold text-slate-700 bg-amber-100 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-amber-200">
+                  🔓 Rouvrir
+                </button>
+              )}
               {!closed && (
                 <button onClick={()=>setAddCreneau(c)}
                   className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-600 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-500">
@@ -902,8 +926,14 @@ export default function MontoirPage() {
           </div>
           {notesByCreneau[c.id] && (
             <div className="mb-4 bg-blue-50/60 border-l-4 border-blue-300 rounded-r-lg px-3 py-2 print:bg-transparent">
-              <div className="font-body text-[10px] font-semibold text-blue-600 uppercase tracking-wider mb-0.5">📝 Note de séance</div>
-              <p className="font-body text-sm text-slate-700 whitespace-pre-wrap">{notesByCreneau[c.id]}</p>
+              <div className="flex items-center justify-between mb-0.5">
+                <div className="font-body text-[10px] font-semibold text-blue-600 uppercase tracking-wider">📝 Note de préparation de séance</div>
+                <button onClick={() => deleteNoteSeance(notesByCreneau[c.id].id)}
+                  className="print:hidden font-body text-[10px] font-semibold text-red-500 bg-red-50 px-2 py-0.5 rounded border-none cursor-pointer hover:bg-red-100">
+                  Supprimer
+                </button>
+              </div>
+              <p className="font-body text-sm text-slate-700 whitespace-pre-wrap">{notesByCreneau[c.id].texte}</p>
             </div>
           )}
           {en.length===0 ? <p className="font-body text-sm text-slate-600 italic">Aucun inscrit</p> :
