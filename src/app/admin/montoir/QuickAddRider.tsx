@@ -1,9 +1,19 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, query, where, updateDoc, doc } from "firebase/firestore";
+import { collection, getDocs, query, where, updateDoc, doc, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { enrollChildInCreneau, createReservation } from "@/lib/planning-services";
+import { generateOrderId } from "@/lib/utils";
 import { X, Search, Loader2 } from "lucide-react";
+
+const OFFERT_REASONS = [
+  { value: "Rattrapage", label: "Rattrapage (météo, absence moniteur...)" },
+  { value: "Essai", label: "Séance d'essai" },
+  { value: "Monte poney", label: "Monte d'un jeune poney" },
+  { value: "Geste commercial", label: "Geste commercial" },
+  { value: "Bénévole", label: "Contrepartie bénévolat" },
+  { value: "Autre", label: "Autre" },
+];
 
 type Child = { childId: string; childName: string; familyId: string; familyName: string };
 
@@ -23,6 +33,8 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
   const [loadingR, setLoadingR] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [offertMode, setOffertMode] = useState(false);
+  const [offertReason, setOffertReason] = useState("Rattrapage");
 
   const isCours = ["cours", "cours_collectif", "cours_particulier"].includes(creneau.activityType);
   const isBalade = ["balade", "promenade", "ponyride"].includes(creneau.activityType);
@@ -90,7 +102,7 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
   const dejaInscrit = sel ? enrolled.some((e: any) => e.childId === sel.childId) : false;
 
   // Inscription avec la source choisie
-  const enroll = async (source: "forfait" | "carte" | "rattrapage" | "regler") => {
+  const enroll = async (source: "forfait" | "carte" | "rattrapage" | "regler" | "offert") => {
     if (!sel) return;
     if (dejaInscrit) { setError("Ce cavalier est déjà inscrit sur ce créneau."); return; }
     if (placesLeft <= 0) { setError("Plus de place disponible sur ce créneau."); return; }
@@ -104,6 +116,7 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
       if (source === "forfait") base.paymentSource = "forfait";
       if (source === "carte" && carteActive) { base.paymentSource = "card"; base.cardId = carteActive.id; }
       if (source === "rattrapage") base.paymentSource = "rattrapage";
+      if (source === "offert") base.paymentSource = "offert";
 
       const ok = await enrollChildInCreneau(creneau.id, base);
       if (!ok) { setError("Inscription impossible (déjà inscrit ou créneau introuvable)."); setSaving(false); return; }
@@ -113,9 +126,31 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
           status: "used", usedOnCreneauId: creneau.id, usedOnDate: creneau.date,
         });
       }
+
+      // Inscription offerte → paiement à 0€ avec motif (traçabilité, pas de facturation)
+      if (source === "offert") {
+        const priceTTC = creneau.priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux || 5.5) / 100);
+        await addDoc(collection(db, "payments"), {
+          orderId: generateOrderId(),
+          familyId: sel.familyId, familyName: sel.familyName,
+          items: [{
+            activityTitle: creneau.activityTitle, childId: sel.childId, childName: sel.childName,
+            creneauId: creneau.id, activityType: creneau.activityType, date: creneau.date,
+            startTime: creneau.startTime, endTime: creneau.endTime,
+            priceHT: 0, tva: creneau.tvaTaux || 5.5, priceTTC: 0,
+            originalPriceTTC: Math.round(priceTTC * 100) / 100,
+          }],
+          totalTTC: 0, paidAmount: 0,
+          paymentMode: "offert", paymentRef: "", status: "paid",
+          isFree: true, freeReason: offertReason,
+          note: `🎁 Offert — ${offertReason} (valeur : ${priceTTC.toFixed(2)}€)`,
+          date: serverTimestamp(),
+        });
+      }
+
       try { await createReservation(base, creneau); } catch { /* non bloquant */ }
 
-      const label = source === "forfait" ? "forfait" : source === "carte" ? "carte de séances" : source === "rattrapage" ? "rattrapage" : "à régler";
+      const label = source === "forfait" ? "forfait" : source === "carte" ? "carte de séances" : source === "rattrapage" ? "rattrapage" : source === "offert" ? `offert (${offertReason})` : "à régler";
       onDone(`${sel.childName} ajouté(e) — ${label}`);
     } catch (e) {
       console.error("Ajout cavalier montoir:", e);
@@ -204,6 +239,31 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
                     <span className="text-xl">💶</span>
                     <div><div className="font-body text-sm font-bold text-slate-700">À régler</div><div className="font-body text-xs text-slate-500">À encaisser ensuite dans Paiements</div></div>
                   </button>
+
+                  {!offertMode ? (
+                    <button disabled={saving || dejaInscrit} onClick={() => setOffertMode(true)}
+                      className="flex items-center gap-3 text-left px-3 py-3 rounded-xl border-2 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 cursor-pointer disabled:opacity-50">
+                      <span className="text-xl">🎁</span>
+                      <div><div className="font-body text-sm font-bold text-emerald-700">Offert</div><div className="font-body text-xs text-emerald-600">Gratuit, avec motif (pas de facturation)</div></div>
+                    </button>
+                  ) : (
+                    <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-3">
+                      <div className="font-body text-sm font-bold text-emerald-700 mb-1">🎁 Inscription offerte</div>
+                      <div className="font-body text-[11px] text-emerald-600 mb-2">Un paiement à 0€ sera créé avec le motif (traçabilité).</div>
+                      <select value={offertReason} onChange={e => setOffertReason(e.target.value)}
+                        className="w-full px-2 py-2 rounded-lg border border-emerald-200 font-body text-sm bg-white focus:border-emerald-500 focus:outline-none cursor-pointer mb-2">
+                        {OFFERT_REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                      </select>
+                      <div className="flex gap-2">
+                        <button disabled={saving} onClick={() => enroll("offert")}
+                          className="flex-1 font-body text-sm font-semibold text-white bg-emerald-600 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-emerald-500 disabled:opacity-50">
+                          Confirmer l'inscription offerte
+                        </button>
+                        <button disabled={saving} onClick={() => setOffertMode(false)}
+                          className="font-body text-sm text-slate-500 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer">Annuler</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               {saving && <div className="flex items-center gap-2 text-blue-500 font-body text-sm"><Loader2 size={16} className="animate-spin" /> Inscription…</div>}
