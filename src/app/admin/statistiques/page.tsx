@@ -113,23 +113,26 @@ export default function StatistiquesPage() {
   const [families, setFamilies] = useState<FamilyData[]>([]);
   const [equides, setEquides] = useState<Equide[]>([]);
   const [encaissements, setEncaissements] = useState<any[]>([]);
+  const [echeances, setEcheances] = useState<any[]>([]);
 
   // ─── Fetch ───
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [pSnap, cSnap, fSnap, eSnap, encSnap] = await Promise.all([
+        const [pSnap, cSnap, fSnap, eSnap, encSnap, echSnap] = await Promise.all([
           getDocs(collection(db, "payments")),
           getDocs(collection(db, "creneaux")),
           getDocs(collection(db, "families")),
           getDocs(collection(db, "equides")),
           getDocs(collection(db, "encaissements")),
+          getDocs(collection(db, "echeances-sepa")),
         ]);
         setPayments(pSnap.docs.map(d => ({ id: d.id, ...d.data() } as Payment)));
         setCreneaux(cSnap.docs.map(d => ({ id: d.id, ...d.data() } as Creneau)));
         setFamilies(fSnap.docs.map(d => ({ id: d.id, ...d.data() } as FamilyData)));
         setEquides(eSnap.docs.map(d => ({ id: d.id, ...d.data() } as Equide)));
         setEncaissements(encSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
+        setEcheances(echSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
       } catch (e) {
         console.error("Erreur chargement stats:", e);
       }
@@ -365,6 +368,42 @@ export default function StatistiquesPage() {
     }).reduce((s, p: any) => s + safeNumber(p.totalTTC), 0);
     return { caFacture, resteAEncaisser, ht55, tva55, ht20, tva20, htAutre, tvaAutre, totalEncaisse, parMode, caN1 };
   }, [yearPayments, encaissements, payments, year]);
+
+  // ═══ PRÉVISIONNEL DE TRÉSORERIE (6 prochains mois) ═══
+  const previsionnel = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const months: { ym: string; label: string; sepa: number; stages: number }[] = [];
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+      months.push({ ym: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, label: `${MONTHS_SHORT[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`, sepa: 0, stages: 0 });
+    }
+    const idx: Record<string, number> = {}; months.forEach((m, i) => { idx[m.ym] = i; });
+
+    // Échéances SEPA non encore encaissées
+    echeances.forEach((e: any) => {
+      const st = e.status || "pending";
+      if (["paid", "preleve", "cancelled"].includes(st)) return;
+      const d = e.dateEcheance || "";
+      if (!d || d < todayStr) return;
+      const ym = d.slice(0, 7);
+      if (idx[ym] !== undefined) months[idx[ym]].sepa += safeNumber(e.montant);
+    });
+
+    // Soldes de stage à prélever (J-7 avant le stage)
+    payments.forEach((p: any) => {
+      if (!p.stageDate || p.status === "paid" || p.status === "cancelled") return;
+      const solde = safeNumber(p.totalTTC) - safeNumber(p.paidAmount);
+      if (solde <= 0 || p.stageDate < todayStr) return;
+      const sd = new Date(p.stageDate + "T00:00:00"); sd.setDate(sd.getDate() - 7);
+      const ym = `${sd.getFullYear()}-${String(sd.getMonth() + 1).padStart(2, "0")}`;
+      if (idx[ym] !== undefined) months[idx[ym]].stages += solde;
+    });
+
+    const total = months.reduce((s, m) => s + m.sepa + m.stages, 0);
+    const max = Math.max(1, ...months.map(m => m.sepa + m.stages));
+    return { months, total, max };
+  }, [echeances, payments]);
 
   const modeLabels: Record<string, string> = {
     cb_online: "Carte (en ligne)", cb: "Carte", carte: "Carte", especes: "Espèces", cheque: "Chèque",
@@ -605,6 +644,36 @@ export default function StatistiquesPage() {
                 })}
               </div>
             )}
+          </Card>
+
+          {/* Prévisionnel de trésorerie */}
+          <Card padding="md" className="mb-6">
+            <h3 className="font-body text-sm font-semibold text-blue-800 mb-1">Prévisionnel de trésorerie — 6 prochains mois</h3>
+            <p className="font-body text-xs text-gray-400 mb-4">Rentrées prévues : échéances SEPA non encaissées + soldes de stages (prélevés ~7 jours avant le stage).</p>
+            <div className="flex items-end gap-2 h-40 mb-1">
+              {previsionnel.months.map(m => {
+                const totalM = m.sepa + m.stages;
+                const h = (totalM / previsionnel.max) * 100;
+                const sepaH = totalM > 0 ? (m.sepa / totalM) * 100 : 0;
+                return (
+                  <div key={m.ym} className="flex-1 flex flex-col items-center justify-end h-full">
+                    <div className="font-body text-[9px] text-gray-500 mb-1 h-3">{totalM > 0 ? Math.round(totalM).toLocaleString("fr-FR") : ""}</div>
+                    <div className="w-full flex flex-col justify-end rounded-t overflow-hidden" style={{ height: `${h}%`, minHeight: totalM > 0 ? 4 : 0 }}>
+                      <div style={{ height: `${100 - sepaH}%`, background: "#F0A010" }} title={`Soldes stages : ${Math.round(m.stages)}€`} />
+                      <div style={{ height: `${sepaH}%`, background: "#2563eb" }} title={`Échéances SEPA : ${Math.round(m.sepa)}€`} />
+                    </div>
+                    <div className="font-body text-[10px] text-gray-400 mt-1">{m.label}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-4 justify-center mt-3">
+              <span className="flex items-center gap-1.5 font-body text-xs text-gray-500"><span className="w-3 h-3 rounded-sm" style={{ background: "#2563eb" }} /> Échéances SEPA</span>
+              <span className="flex items-center gap-1.5 font-body text-xs text-gray-500"><span className="w-3 h-3 rounded-sm" style={{ background: "#F0A010" }} /> Soldes stages</span>
+            </div>
+            <div className="text-center mt-3 font-body text-sm text-slate-600">
+              Total prévu sur 6 mois : <span className="font-bold text-blue-700">{Math.round(previsionnel.total).toLocaleString("fr-FR")}€</span>
+            </div>
           </Card>
         </>
       )}
