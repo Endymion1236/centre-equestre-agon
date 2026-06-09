@@ -575,6 +575,45 @@ export default function StatistiquesPage() {
             </Card>
           </div>
 
+          {/* Prévisionnel de trésorerie */}
+          <Card padding="md" className="mb-6">
+            <h3 className="font-body text-sm font-semibold text-blue-800 mb-1">Prévisionnel de trésorerie — encaissements à venir</h3>
+            <p className="font-body text-[11px] text-gray-400 mb-4">Échéances SEPA non réglées + soldes de stage (prélevés ~7 jours avant), sur les 6 prochains mois. Indépendant de l&apos;année sélectionnée.</p>
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="bg-blue-50 rounded-xl p-3">
+                <div className="font-body text-xl font-bold text-blue-600">{Math.round(previsionnel.total).toLocaleString("fr-FR")}€</div>
+                <div className="font-body text-xs text-gray-500">Total à venir (6 mois)</div>
+              </div>
+              <div className="bg-indigo-50 rounded-xl p-3">
+                <div className="font-body text-xl font-bold text-indigo-500">{Math.round(previsionnel.months.reduce((s, m) => s + m.sepa, 0)).toLocaleString("fr-FR")}€</div>
+                <div className="font-body text-xs text-gray-500">dont SEPA</div>
+              </div>
+              <div className="bg-amber-50 rounded-xl p-3">
+                <div className="font-body text-xl font-bold text-amber-500">{Math.round(previsionnel.months.reduce((s, m) => s + m.stages, 0)).toLocaleString("fr-FR")}€</div>
+                <div className="font-body text-xs text-gray-500">dont stages</div>
+              </div>
+            </div>
+            <div className="flex items-end justify-between gap-2 h-44">
+              {previsionnel.months.map(m => {
+                const tot = m.sepa + m.stages;
+                return (
+                  <div key={m.ym} className="flex-1 flex flex-col items-center justify-end h-full">
+                    <div className="font-body text-[10px] text-gray-500 mb-1">{tot > 0 ? `${Math.round(tot).toLocaleString("fr-FR")}€` : ""}</div>
+                    <div className="w-full flex flex-col justify-end" style={{ height: `${(tot / previsionnel.max) * 100}%`, minHeight: tot > 0 ? 4 : 0 }}>
+                      {m.stages > 0 && <div className="w-full bg-amber-400" style={{ height: `${(m.stages / tot) * 100}%` }} title={`Stages : ${Math.round(m.stages).toLocaleString("fr-FR")}€`} />}
+                      {m.sepa > 0 && <div className="w-full bg-indigo-400 rounded-t-md" style={{ height: `${(m.sepa / tot) * 100}%` }} title={`SEPA : ${Math.round(m.sepa).toLocaleString("fr-FR")}€`} />}
+                    </div>
+                    <div className="font-body text-[10px] text-gray-400 mt-1 text-center">{m.label}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-4 mt-3 font-body text-[11px] text-gray-500">
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-indigo-400 inline-block" /> SEPA</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-400 inline-block" /> Soldes de stage</span>
+            </div>
+          </Card>
+
           {/* TVA par taux */}
           <Card padding="md" className="mb-6">
             <h3 className="font-body text-sm font-semibold text-blue-800 mb-3">TVA collectée — {year}</h3>
