@@ -1016,6 +1016,17 @@ export default function PlanningPage() {
         ));
 
         if (existingSnap.empty) {
+          // Limite de 5 rattrapages par saison (hors situation médicale).
+          const seasonStartStr = (() => { const n = new Date(); const y = n.getMonth() >= 8 ? n.getFullYear() : n.getFullYear() - 1; return `${y}-09-01`; })();
+          const allRSnap = await getDocs(query(collection(db, "rattrapages"), where("childId", "==", childId)));
+          const nbNonMedical = allRSnap.docs.filter(d => { const r: any = d.data(); return r.medical !== true && (r.sourceDate || "") >= seasonStartStr; }).length;
+          let medical = false;
+          if (nbNonMedical >= 5) {
+            const ok = window.confirm(`${child.childName} a déjà 5 rattrapages cette saison (hors médical).\n\nS'agit-il d'une situation médicale ?\nOK = accorder un rattrapage médical (exempté de la limite)\nAnnuler = ne pas accorder de rattrapage`);
+            if (!ok) { medical = null as any; }
+            else medical = true;
+          }
+          if (medical !== null) {
           // 3. Calcul de la date d'expiration : date d'absence + 3 mois.
           //    Politique métier : un cavalier qui rate une séance a 3 mois
           //    à partir de la date de cette séance pour utiliser son rattrapage.
@@ -1040,6 +1051,7 @@ export default function PlanningPage() {
             sourceActivity: c.activityTitle,
             sourceTime: `${c.startTime}–${c.endTime}`,
             status: "pending",
+            medical: medical === true,
             usedOnCreneauId: null,
             usedOnDate: null,
             expiryDate: expiryDateStr,
@@ -1047,6 +1059,9 @@ export default function PlanningPage() {
             source: "unenroll_admin", // pour distinguer des rattrapages du montoir
           });
           toast(`${child.childName} désinscrit(e) du ${dateStr} — Rattrapage créé`, "success");
+          } else {
+            toast(`${child.childName} désinscrit(e) du ${dateStr} — limite de rattrapages atteinte, aucun rattrapage accordé`, "info");
+          }
         } else {
           toast(`${child.childName} désinscrit(e) du ${dateStr} — Rattrapage déjà existant`, "info");
         }
