@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { collection, getDocs, query, where, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { authFetch } from "@/lib/auth-fetch";
-import { Mic, MicOff, Loader2, Trash2, ChevronDown, ChevronUp, Check, FileText, X, Eye } from "lucide-react";
+import { Mic, MicOff, Loader2, Trash2, ChevronDown, ChevronUp, Check, FileText, X, Eye, ZoomIn, ZoomOut } from "lucide-react";
 
 interface Props {
   creneau: any;
@@ -28,11 +28,14 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
 
   // Plan de séance (fichier joint sur le créneau)
   const [lightbox, setLightbox] = useState(false);
+  const [zoom, setZoom] = useState(1);
   const planUrl: string | null = creneau.planSeanceUrl || null;
   const planType: string = creneau.planSeanceType || "";
   const planIsPdf = /pdf/i.test(planType) || /\.pdf($|\?)/i.test(planUrl || "");
 
   useEffect(() => { setPrep(creneau.notePreparation || ""); }, [creneau.id, creneau.notePreparation]);
+
+  useEffect(() => { if (lightbox) setZoom(1); }, [lightbox]);
 
   const loadJournal = () => {
     getDocs(query(collection(db, "notes-seance"), where("creneauId", "==", creneau.id)))
@@ -232,12 +235,29 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
           )}
         </div>
       )}
-      {/* Plein écran du plan de séance (image) */}
+      {/* Plein écran du plan de séance (image) avec zoom */}
       {lightbox && planUrl && !planIsPdf && (
-        <div className="fixed inset-0 bg-black/90 z-[60] flex items-center justify-center p-2 print:hidden" onClick={() => setLightbox(false)}>
-          <button onClick={() => setLightbox(false)} className="absolute top-3 right-3 text-white bg-white/20 rounded-full p-2 border-none cursor-pointer"><X size={22} /></button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={planUrl} alt="Plan de séance" className="max-w-full max-h-full object-contain" onClick={e => e.stopPropagation()} />
+        <div className="fixed inset-0 bg-black/90 z-[60] overflow-auto print:hidden" onClick={() => setLightbox(false)}>
+          {/* Barre d'outils */}
+          <div className="fixed top-0 left-0 right-0 z-[61] flex items-center justify-between px-3 py-2 bg-black/40" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setZoom(z => Math.max(1, +(z - 0.5).toFixed(1)))}
+                className="text-white bg-white/15 rounded-lg p-2 border-none cursor-pointer disabled:opacity-40" disabled={zoom <= 1}><ZoomOut size={20} /></button>
+              <span className="font-body text-xs text-white w-10 text-center">{Math.round(zoom * 100)}%</span>
+              <button onClick={() => setZoom(z => Math.min(5, +(z + 0.5).toFixed(1)))}
+                className="text-white bg-white/15 rounded-lg p-2 border-none cursor-pointer disabled:opacity-40" disabled={zoom >= 5}><ZoomIn size={20} /></button>
+            </div>
+            <button onClick={() => setLightbox(false)} className="text-white bg-white/15 rounded-lg p-2 border-none cursor-pointer"><X size={20} /></button>
+          </div>
+          {/* Image (toucher = zoom avant/arrière) */}
+          <div className="min-h-full min-w-full flex items-center justify-center p-2 pt-14">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={planUrl} alt="Plan de séance"
+              onClick={e => { e.stopPropagation(); setZoom(z => (z >= 3 ? 1 : +(z + 1).toFixed(1))); }}
+              style={zoom === 1
+                ? { maxWidth: "100%", maxHeight: "85vh", objectFit: "contain", cursor: "zoom-in" }
+                : { width: `${zoom * 100}%`, height: "auto", maxWidth: "none", cursor: "zoom-out" }} />
+          </div>
         </div>
       )}
     </div>
