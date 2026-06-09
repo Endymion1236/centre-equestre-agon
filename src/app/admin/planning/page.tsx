@@ -1016,6 +1016,10 @@ export default function PlanningPage() {
         ));
 
         if (existingSnap.empty) {
+          const absMonth = (c.date || "").slice(5, 7);
+          if (absMonth === "07" || absMonth === "08") {
+            toast(`${child.childName} désinscrit(e) du ${dateStr} — pas de rattrapage en juillet/août (hors saison)`, "info");
+          } else {
           // Limite de 5 rattrapages par saison (hors situation médicale).
           const seasonStartStr = (() => { const n = new Date(); const y = n.getMonth() >= 8 ? n.getFullYear() : n.getFullYear() - 1; return `${y}-09-01`; })();
           const allRSnap = await getDocs(query(collection(db, "rattrapages"), where("childId", "==", childId)));
@@ -1061,6 +1065,7 @@ export default function PlanningPage() {
           toast(`${child.childName} désinscrit(e) du ${dateStr} — Rattrapage créé`, "success");
           } else {
             toast(`${child.childName} désinscrit(e) du ${dateStr} — limite de rattrapages atteinte, aucun rattrapage accordé`, "info");
+          }
           }
         } else {
           toast(`${child.childName} désinscrit(e) du ${dateStr} — Rattrapage déjà existant`, "info");

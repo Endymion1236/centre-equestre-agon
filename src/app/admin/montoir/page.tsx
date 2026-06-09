@@ -515,6 +515,10 @@ export default function MontoirPage() {
         ));
         if (!existingSnap.empty) continue;
 
+        // Saison sept→juin : aucun rattrapage accordé pour une absence en juillet/août.
+        const absMonthM = (c.date || "").slice(5, 7);
+        if (absMonthM === "07" || absMonthM === "08") continue;
+
         // Limite de 5 rattrapages par saison (hors situation médicale).
         // Au-delà, on demande si c'est médical : si oui on accorde (exempté),
         // sinon on n'accorde pas de rattrapage.
