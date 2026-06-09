@@ -103,7 +103,7 @@ const calcAge = (birthDate: any): number | null => {
 // COMPOSANT PRINCIPAL
 // ═══════════════════════════════════════════
 export default function StatistiquesPage() {
-  const [tab, setTab] = useState<"ca" | "remplissage" | "moniteurs" | "cavaliers">("ca");
+  const [tab, setTab] = useState<"ca" | "finances" | "remplissage" | "moniteurs" | "cavaliers">("ca");
   const [loading, setLoading] = useState(true);
   const [year, setYear] = useState(new Date().getFullYear());
 
@@ -112,21 +112,24 @@ export default function StatistiquesPage() {
   const [creneaux, setCreneaux] = useState<Creneau[]>([]);
   const [families, setFamilies] = useState<FamilyData[]>([]);
   const [equides, setEquides] = useState<Equide[]>([]);
+  const [encaissements, setEncaissements] = useState<any[]>([]);
 
   // ─── Fetch ───
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [pSnap, cSnap, fSnap, eSnap] = await Promise.all([
+        const [pSnap, cSnap, fSnap, eSnap, encSnap] = await Promise.all([
           getDocs(collection(db, "payments")),
           getDocs(collection(db, "creneaux")),
           getDocs(collection(db, "families")),
           getDocs(collection(db, "equides")),
+          getDocs(collection(db, "encaissements")),
         ]);
         setPayments(pSnap.docs.map(d => ({ id: d.id, ...d.data() } as Payment)));
         setCreneaux(cSnap.docs.map(d => ({ id: d.id, ...d.data() } as Creneau)));
         setFamilies(fSnap.docs.map(d => ({ id: d.id, ...d.data() } as FamilyData)));
         setEquides(eSnap.docs.map(d => ({ id: d.id, ...d.data() } as Equide)));
+        setEncaissements(encSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
       } catch (e) {
         console.error("Erreur chargement stats:", e);
       }
@@ -328,8 +331,50 @@ export default function StatistiquesPage() {
   }, [families, year]);
 
   // ─── Styles ───
+  // ═══ CALCULS FINANCES ═══
+  const fin = useMemo(() => {
+    const caFacture = yearPayments.reduce((s, p: any) => s + safeNumber(p.totalTTC), 0);
+    const resteAEncaisser = yearPayments.reduce((s, p: any) => {
+      if (p.isFree) return s;
+      const du = safeNumber(p.totalTTC) - safeNumber(p.paidAmount);
+      return s + (du > 0 ? du : 0);
+    }, 0);
+    // TVA par taux (depuis les items)
+    let ht55 = 0, tva55 = 0, ht20 = 0, tva20 = 0, htAutre = 0, tvaAutre = 0;
+    yearPayments.forEach((p: any) => (p.items || []).forEach((i: any) => {
+      const ht = safeNumber(i.priceHT), ttc = safeNumber(i.priceTTC);
+      const tvaAmt = ttc - ht;
+      const taux = safeNumber(i.tva);
+      if (Math.abs(taux - 5.5) < 0.6) { ht55 += ht; tva55 += tvaAmt; }
+      else if (Math.abs(taux - 20) < 1) { ht20 += ht; tva20 += tvaAmt; }
+      else { htAutre += ht; tvaAutre += tvaAmt; }
+    }));
+    // Encaissé sur l'année (depuis les encaissements) + par mode
+    const yearEnc = encaissements.filter((e: any) => {
+      const d = toDate(e.date) || (e.dateIso ? new Date(e.dateIso) : null);
+      return d && d.getFullYear() === year;
+    });
+    const totalEncaisse = yearEnc.reduce((s, e: any) => s + safeNumber(e.montant), 0);
+    const parMode: Record<string, number> = {};
+    yearEnc.forEach((e: any) => { const k = e.mode || "autre"; parMode[k] = (parMode[k] || 0) + safeNumber(e.montant); });
+    // CA année précédente
+    const caN1 = payments.filter((p: any) => {
+      if (p.status === "cancelled") return false;
+      const d = toDate(p.date);
+      return d && d.getFullYear() === year - 1;
+    }).reduce((s, p: any) => s + safeNumber(p.totalTTC), 0);
+    return { caFacture, resteAEncaisser, ht55, tva55, ht20, tva20, htAutre, tvaAutre, totalEncaisse, parMode, caN1 };
+  }, [yearPayments, encaissements, payments, year]);
+
+  const modeLabels: Record<string, string> = {
+    cb_online: "Carte (en ligne)", cb: "Carte", carte: "Carte", especes: "Espèces", cheque: "Chèque",
+    cheques: "Chèques", sepa: "Prélèvement SEPA", virement: "Virement", avoir: "Avoir", offert: "Offert",
+    passsport: "Pass'Sport", ancv: "Chèques Vacances",
+  };
+
   const tabs = [
     { id: "ca" as const, label: "Chiffre d'affaires", icon: TrendingUp },
+    { id: "finances" as const, label: "Finances", icon: PieChart },
     { id: "remplissage" as const, label: "Remplissage & heures", icon: BarChart3 },
     { id: "moniteurs" as const, label: "Moniteurs", icon: Clock },
     { id: "cavaliers" as const, label: "Cavaliers", icon: Users },
@@ -457,6 +502,104 @@ export default function StatistiquesPage() {
                         {Math.round(amount).toLocaleString("fr-FR")}€
                       </span>
                       <span className="font-body text-xs text-gray-400 min-w-[40px] text-right">{pct}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+        </>
+      )}
+
+      {/* ═══ ONGLET FINANCES ═══ */}
+      {tab === "finances" && (
+        <>
+          {/* KPIs financiers */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            <Card padding="sm">
+              <div className="font-body text-2xl font-bold text-blue-500">{Math.round(fin.caFacture).toLocaleString("fr-FR")}€</div>
+              <div className="font-body text-xs text-gray-400">Facturé {year} (TTC)</div>
+            </Card>
+            <Card padding="sm">
+              <div className="font-body text-2xl font-bold text-green-600">{Math.round(fin.totalEncaisse).toLocaleString("fr-FR")}€</div>
+              <div className="font-body text-xs text-gray-400">Encaissé {year}</div>
+            </Card>
+            <Card padding="sm">
+              <div className={`font-body text-2xl font-bold ${fin.resteAEncaisser > 0 ? "text-orange-500" : "text-green-600"}`}>{Math.round(fin.resteAEncaisser).toLocaleString("fr-FR")}€</div>
+              <div className="font-body text-xs text-gray-400">Reste à encaisser</div>
+            </Card>
+            <Card padding="sm">
+              <div className={`font-body text-2xl font-bold ${fin.caFacture >= fin.caN1 ? "text-green-600" : "text-red-500"}`}>
+                {fin.caN1 > 0 ? `${fin.caFacture >= fin.caN1 ? "+" : ""}${Math.round(((fin.caFacture - fin.caN1) / fin.caN1) * 100)}%` : "—"}
+              </div>
+              <div className="font-body text-xs text-gray-400">vs {year - 1}</div>
+            </Card>
+          </div>
+
+          {/* TVA par taux */}
+          <Card padding="md" className="mb-6">
+            <h3 className="font-body text-sm font-semibold text-blue-800 mb-3">TVA collectée — {year}</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full font-body text-sm">
+                <thead>
+                  <tr className="text-gray-400 text-xs border-b border-gray-100">
+                    <th className="text-left py-2">Taux</th>
+                    <th className="text-right py-2">Base HT</th>
+                    <th className="text-right py-2">TVA</th>
+                    <th className="text-right py-2">TTC</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-gray-50">
+                    <td className="py-2 text-slate-700">5,5 % <span className="text-gray-400 text-xs">(cours, stages)</span></td>
+                    <td className="text-right">{Math.round(fin.ht55).toLocaleString("fr-FR")}€</td>
+                    <td className="text-right text-blue-600">{Math.round(fin.tva55).toLocaleString("fr-FR")}€</td>
+                    <td className="text-right font-semibold">{Math.round(fin.ht55 + fin.tva55).toLocaleString("fr-FR")}€</td>
+                  </tr>
+                  <tr className="border-b border-gray-50">
+                    <td className="py-2 text-slate-700">20 % <span className="text-gray-400 text-xs">(autres prestations)</span></td>
+                    <td className="text-right">{Math.round(fin.ht20).toLocaleString("fr-FR")}€</td>
+                    <td className="text-right text-blue-600">{Math.round(fin.tva20).toLocaleString("fr-FR")}€</td>
+                    <td className="text-right font-semibold">{Math.round(fin.ht20 + fin.tva20).toLocaleString("fr-FR")}€</td>
+                  </tr>
+                  {(fin.htAutre > 0 || fin.tvaAutre > 0) && (
+                    <tr className="border-b border-gray-50">
+                      <td className="py-2 text-slate-700">Autre taux</td>
+                      <td className="text-right">{Math.round(fin.htAutre).toLocaleString("fr-FR")}€</td>
+                      <td className="text-right text-blue-600">{Math.round(fin.tvaAutre).toLocaleString("fr-FR")}€</td>
+                      <td className="text-right font-semibold">{Math.round(fin.htAutre + fin.tvaAutre).toLocaleString("fr-FR")}€</td>
+                    </tr>
+                  )}
+                  <tr className="font-semibold text-blue-800">
+                    <td className="py-2">Total</td>
+                    <td className="text-right">{Math.round(fin.ht55 + fin.ht20 + fin.htAutre).toLocaleString("fr-FR")}€</td>
+                    <td className="text-right">{Math.round(fin.tva55 + fin.tva20 + fin.tvaAutre).toLocaleString("fr-FR")}€</td>
+                    <td className="text-right">{Math.round(fin.caFacture).toLocaleString("fr-FR")}€</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="font-body text-[11px] text-gray-400 mt-2">Indicatif — la déclaration officielle reste sur Celeris jusqu&apos;à la bascule.</p>
+          </Card>
+
+          {/* Encaissements par mode de paiement */}
+          <Card padding="md" className="mb-6">
+            <h3 className="font-body text-sm font-semibold text-blue-800 mb-4">Encaissements par mode de paiement — {year}</h3>
+            {Object.keys(fin.parMode).length === 0 ? (
+              <p className="font-body text-sm text-gray-400 italic">Aucun encaissement sur l&apos;année.</p>
+            ) : (
+              <div className="space-y-2">
+                {Object.entries(fin.parMode).sort((a, b) => b[1] - a[1]).map(([mode, montant]) => {
+                  const pct = fin.totalEncaisse > 0 ? (montant / fin.totalEncaisse) * 100 : 0;
+                  return (
+                    <div key={mode}>
+                      <div className="flex justify-between font-body text-xs mb-1">
+                        <span className="text-slate-700">{modeLabels[mode] || mode}</span>
+                        <span className="text-gray-500">{Math.round(montant).toLocaleString("fr-FR")}€ · {Math.round(pct)}%</span>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-400 rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
                     </div>
                   );
                 })}
