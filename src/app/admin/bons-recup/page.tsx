@@ -19,6 +19,7 @@ interface BonRecup {
   usedActivity?: string;
   expiresAt: string;
   createdAt: any;
+  medical?: boolean;
   // ── Champ technique pour gérer les deux collections en parallèle ─────
   // 'bonsRecup' = collection historique (legacy)
   // 'rattrapages' = collection canonique utilisée par montoir + planning
@@ -84,6 +85,7 @@ export default function BonsRecupPage() {
           usedActivity: undefined,
           expiresAt: data.expiryDate || "",
           createdAt: data.createdAt,
+          medical: data.medical === true,
           _source: "rattrapages" as const,
         };
       });
@@ -248,7 +250,7 @@ export default function BonsRecupPage() {
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-lg">🎫</div>
                       <div>
-                        <div className="font-body text-sm font-semibold text-blue-800">{b.childName} <span className="font-normal text-gray-400">({b.familyName})</span></div>
+                        <div className="font-body text-sm font-semibold text-blue-800">{b.childName} <span className="font-normal text-gray-400">({b.familyName})</span>{b.medical && <span className="ml-2 font-body text-[10px] font-semibold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded">⚕ Médical</span>}</div>
                         <div className="font-body text-xs text-gray-400">
                           Absent le {b.originalDate} — {b.originalActivity}
                           {b.status === "active" && ` · Expire le ${b.expiresAt}`}
