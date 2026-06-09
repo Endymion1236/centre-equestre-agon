@@ -515,6 +515,19 @@ export default function MontoirPage() {
         ));
         if (!existingSnap.empty) continue;
 
+        // Limite de 5 rattrapages par saison (hors situation médicale).
+        // Au-delà, on demande si c'est médical : si oui on accorde (exempté),
+        // sinon on n'accorde pas de rattrapage.
+        const seasonStartStr = (() => { const n = new Date(); const y = n.getMonth() >= 8 ? n.getFullYear() : n.getFullYear() - 1; return `${y}-09-01`; })();
+        const allRSnap = await getDocs(query(collection(db, "rattrapages"), where("childId", "==", child.childId)));
+        const nbNonMedical = allRSnap.docs.filter(d => { const r: any = d.data(); return r.medical !== true && (r.sourceDate || "") >= seasonStartStr; }).length;
+        let medical = false;
+        if (nbNonMedical >= 5) {
+          const ok = window.confirm(`${child.childName} a déjà 5 rattrapages cette saison (hors médical).\n\nS'agit-il d'une situation médicale ?\nOK = accorder un rattrapage médical (exempté de la limite)\nAnnuler = ne pas accorder de rattrapage`);
+          if (!ok) continue;
+          medical = true;
+        }
+
         // Date d'expiration = date d'absence + 3 mois (politique métier)
         // Cohérent avec la désinscription forfait depuis planning admin.
         // Évite l'aberration "fin trimestre civil" qui pouvait être avant
@@ -535,6 +548,7 @@ export default function MontoirPage() {
           sourceActivity: c.activityTitle,
           sourceTime: `${c.startTime}–${c.endTime}`,
           status: "pending", // pending | used | expired
+          medical,
           usedOnCreneauId: null,
           usedOnDate: null,
           expiryDate: expiryDateStr,
