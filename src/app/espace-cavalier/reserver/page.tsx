@@ -221,7 +221,9 @@ export default function ReserverPage() {
     stages.forEach(c => {
       const d = new Date(c.date);
       const mon = new Date(d); mon.setDate(mon.getDate() - ((d.getDay() + 6) % 7));
-      const key = `${c.activityTitle}_${fmtDate(mon)}`;
+      // Clé = activityId (et non le titre) : deux stages différents portant le
+      // même intitulé la même semaine (ex. matin / après-midi) restent distincts.
+      const key = `${c.activityId}_${fmtDate(mon)}`;
       if (!groups[key]) groups[key] = [];
       groups[key].push(c);
     });
@@ -492,6 +494,24 @@ export default function ReserverPage() {
             }],
             enrolledCount: enrolled.length + 1,
           });
+
+          // Si cet enfant était en liste d'attente pour ce créneau, marquer
+          // l'entrée comme acceptée (le hold 24h éventuel devient sans objet
+          // automatiquement dès que l'enfant est inscrit). Non bloquant.
+          try {
+            const wlSnap = await getDocs(query(
+              collection(db, "waitlist"),
+              where("creneauId", "==", cid),
+              where("childId", "==", item.childId),
+              where("familyId", "==", user.uid),
+            ));
+            for (const wd of wlSnap.docs) {
+              const st = (wd.data() as any).status;
+              if (st === "waiting" || st === "notified") {
+                await updateDoc(doc(db, "waitlist", wd.id), { status: "accepted", acceptedAt: new Date().toISOString() });
+              }
+            }
+          } catch (wlErr) { console.warn("[handlePay] maj waitlist:", wlErr); }
         }
 
         // Réservations — une SEULE réservation groupée pour les stages
@@ -684,7 +704,24 @@ export default function ReserverPage() {
     setPaying(false);
   };
 
-  const spotsLeft = (c: Creneau) => c.maxPlaces - (c.enrolled?.length || 0);
+  // ── Hold liste d'attente (place réservée 24h) ──
+  // Un hold est actif s'il n'est pas expiré ET que l'enfant concerné n'est pas
+  // encore inscrit (dès qu'il s'inscrit, le hold devient sans objet).
+  const holdActive = (c: any) => {
+    const h = c?.waitlistHold;
+    if (!h?.until) return false;
+    if (new Date(h.until).getTime() < Date.now()) return false;
+    if ((c.enrolled || []).some((e: any) => e.childId === h.childId)) return false;
+    return true;
+  };
+
+  // Places visibles : la place sous hold est masquée pour les autres familles,
+  // mais reste disponible pour la famille notifiée (elle peut réserver).
+  const spotsLeft = (c: Creneau) => {
+    const base = c.maxPlaces - (c.enrolled?.length || 0);
+    if (holdActive(c) && (c as any).waitlistHold?.familyId !== familyId) return Math.max(0, base - 1);
+    return base;
+  };
 
   const addToWaitlist = async (c: Creneau, childId: string) => {
     if (!user || !family) return;

@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, where, orderBy, updateDoc, doc, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, query, where, orderBy, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
-import { Loader2, Calendar, Check, Clock, XCircle } from "lucide-react";
+import { Loader2, Calendar, Check, Clock, XCircle, Bell, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { todayLocalString } from "@/lib/date-local";
 
@@ -34,6 +34,8 @@ const statusConfig: Record<string, { label: string; color: "green" | "orange" | 
 export default function ReservationsPage() {
   const { user } = useAuth();
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [waitlistEntries, setWaitlistEntries] = useState<any[]>([]);
+  const [cancellingWaitlist, setCancellingWaitlist] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const searchParams = useSearchParams();
   const success = searchParams.get("success");
@@ -59,6 +61,17 @@ export default function ReservationsPage() {
         linked = linkedSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Reservation[];
       } catch (e) { /* pas de réservations liées */ }
 
+      // Inscriptions en liste d'attente (en cours uniquement)
+      try {
+        const wlSnap = await getDocs(query(collection(db, "waitlist"), where("familyId", "==", user.uid)));
+        const today = todayLocalString();
+        const wl = wlSnap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .filter((w: any) => (w.status === "waiting" || w.status === "notified") && (!w.date || w.date >= today))
+          .sort((a: any, b: any) => (a.date || "").localeCompare(b.date || ""));
+        setWaitlistEntries(wl);
+      } catch (e) { console.error("[reservations] waitlist:", e); }
+
       // Dédupliquer par id
       const all = [...own, ...linked.filter(r => !own.some(o => o.id === r.id))];
       setReservations(all);
@@ -66,6 +79,19 @@ export default function ReservationsPage() {
     };
     fetch();
   }, [user]);
+
+  const cancelWaitlist = async (entry: any) => {
+    if (!confirm(`Retirer ${entry.childName} de la liste d'attente pour « ${entry.activityTitle} » ?`)) return;
+    setCancellingWaitlist(entry.id);
+    try {
+      await deleteDoc(doc(db, "waitlist", entry.id));
+      setWaitlistEntries(prev => prev.filter(w => w.id !== entry.id));
+    } catch (e) {
+      console.error("[waitlist] annulation:", e);
+      alert("Impossible d'annuler pour le moment. Réessayez ou contactez le centre.");
+    }
+    setCancellingWaitlist(null);
+  };
 
   // Les inscriptions annuelles sont récurrentes (même jour chaque semaine) et
   // n'ont pas de champ `date` unique : on les sort de l'axe upcoming/past et on
@@ -118,6 +144,60 @@ export default function ReservationsPage() {
             </div>
           </div>
         </Card>
+      )}
+
+      {/* ── Liste d'attente ── */}
+      {waitlistEntries.length > 0 && (
+        <div className="mb-8">
+          <h2 className="font-body text-sm font-bold text-orange-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Bell size={14} /> Liste d&apos;attente ({waitlistEntries.length})
+          </h2>
+          <div className="flex flex-col gap-3">
+            {waitlistEntries.map((w: any) => {
+              const notified = w.status === "notified";
+              const holdStillValid = notified && w.holdUntil && new Date(w.holdUntil).getTime() > Date.now();
+              return (
+                <Card key={w.id} padding="md" className={notified ? "!border-green-300 !bg-green-50/50" : ""}>
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                      <div className="font-body text-sm font-semibold text-blue-800">{w.activityTitle}</div>
+                      <div className="font-body text-xs text-gray-500 mt-0.5">
+                        {w.childName}
+                        {w.date && <> · {new Date(w.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</>}
+                        {w.startTime && <> · {w.startTime}–{w.endTime}</>}
+                      </div>
+                      {holdStillValid ? (
+                        <div className="font-body text-xs text-green-700 font-semibold mt-1">
+                          🎉 Une place s&apos;est libérée ! Elle vous est réservée jusqu&apos;au{" "}
+                          {new Date(w.holdUntil).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} à{" "}
+                          {new Date(w.holdUntil).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })} —{" "}
+                          <a href="/espace-cavalier/reserver" className="text-green-700 underline">réserver maintenant →</a>
+                        </div>
+                      ) : notified ? (
+                        <div className="font-body text-xs text-orange-600 mt-1">
+                          Une place s&apos;était libérée — vérifiez sa disponibilité sur la{" "}
+                          <a href="/espace-cavalier/reserver" className="text-orange-600 underline">page de réservation</a>.
+                        </div>
+                      ) : (
+                        <div className="font-body text-xs text-gray-400 mt-1">
+                          Vous serez notifié par email si une place se libère.
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge color={notified ? "green" : "orange"}>{notified ? "Place disponible" : "En attente"}</Badge>
+                      <button onClick={() => cancelWaitlist(w)} disabled={cancellingWaitlist === w.id}
+                        title="Retirer de la liste d'attente"
+                        className="flex items-center gap-1 font-body text-xs text-gray-500 bg-white border border-gray-200 px-2.5 py-1.5 rounded-lg cursor-pointer hover:border-red-300 hover:text-red-500 disabled:opacity-50">
+                        {cancellingWaitlist === w.id ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />} Annuler
+                      </button>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {loading ? (

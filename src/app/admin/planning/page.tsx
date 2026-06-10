@@ -1397,6 +1397,18 @@ export default function PlanningPage() {
             .sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
           if (waiting.length > 0) {
             const first = waiting[0] as any;
+            // ── Réserver la place 24h pour cette famille (hold) ──
+            // Pendant 24h, cette place n'est plus proposée aux autres familles
+            // côté client. Le hold expire automatiquement (vérifié à la lecture)
+            // ou disparaît dès que l'enfant concerné est inscrit.
+            const holdUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+            await updateDoc(doc(db, "creneaux", cid), {
+              waitlistHold: {
+                familyId: first.familyId, childId: first.childId,
+                childName: first.childName, until: holdUntil,
+                waitlistEntryId: first.id,
+              },
+            });
             authFetch("/api/send-email", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -1414,13 +1426,13 @@ export default function PlanningPage() {
                     <p style="margin:0;color:#166534;font-weight:600;">${c.activityTitle}</p>
                     <p style="margin:8px 0 0;color:#555;font-size:13px;">📅 ${new Date(c.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} — ${c.startTime}–${c.endTime}</p>
                   </div>
-                  <p>Connectez-vous à votre espace famille pour confirmer sous <strong>24h</strong>.</p>
+                  <p><strong>Cette place vous est réservée pendant 24h</strong> (jusqu'au ${new Date(holdUntil).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} à ${new Date(holdUntil).toLocaleTimeString("fr-FR", { hour:"2-digit", minute:"2-digit" })}). Connectez-vous à votre espace famille pour confirmer l'inscription. Passé ce délai, elle sera proposée aux autres familles.</p>
                   <p style="color:#666;font-size:12px;">À bientôt au centre équestre !</p>
                 </div>`,
               }),
             }).catch(() => {});
-            await updateDoc(doc(db, "waitlist", first.id), { status: "notified", notifiedAt: new Date().toISOString() });
-            toast(`🔔 ${first.childName} (liste d'attente) notifié(e) — place libérée`, "success");
+            await updateDoc(doc(db, "waitlist", first.id), { status: "notified", notifiedAt: new Date().toISOString(), holdUntil });
+            toast(`🔔 ${first.childName} (liste d'attente) notifié(e) — place réservée 24h`, "success");
           }
         }
       }

@@ -209,7 +209,21 @@ export default function TimelineReservation({ creneaux, children, familyId, onBo
     return counts;
   }, [creneaux, weekDays, filter, activeChildren]);
 
-  const spotsLeft = (c: Creneau) => c.maxPlaces - (c.enrolled?.length || 0);
+  // Place réservée 24h (hold liste d'attente) : masquée pour les autres
+  // familles, visible pour la famille notifiée. Hold actif = non expiré et
+  // enfant concerné pas encore inscrit.
+  const holdActive = (c: any) => {
+    const h = c?.waitlistHold;
+    if (!h?.until) return false;
+    if (new Date(h.until).getTime() < Date.now()) return false;
+    if ((c.enrolled || []).some((e: any) => e.childId === h.childId)) return false;
+    return true;
+  };
+  const spotsLeft = (c: Creneau) => {
+    const base = c.maxPlaces - (c.enrolled?.length || 0);
+    if (holdActive(c) && (c as any).waitlistHold?.familyId !== familyId) return Math.max(0, base - 1);
+    return base;
+  };
   // Un enfant au moins de la famille est inscrit (pour le badge)
   const hasFamilyEnrolled = (c: Creneau) =>
     (c.enrolled || []).some((e: any) => e.familyId === familyId);
