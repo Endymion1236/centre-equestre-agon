@@ -34,7 +34,10 @@ export async function POST(request: NextRequest) {
     const paid = Number(p.paidAmount || 0);
     const solde = Math.max(0, +(total - paid).toFixed(2));
     const cofToken = p.cofToken || p.cardOnFileToken || "";
-    const initialPaymentId = p.cofInitialPaymentId || p.cawlHostedCheckoutId || "";
+    // Seul cofInitialPaymentId est un paymentId CAWL valide pour l'endpoint
+    // subsequent. Ne PAS retomber sur cawlHostedCheckoutId : le dry-run
+    // afficherait une éligibilité trompeuse et le débit réel échouerait.
+    const initialPaymentId = p.cofInitialPaymentId || "";
 
     const eligibilite = {
       soldeRestant: solde,
