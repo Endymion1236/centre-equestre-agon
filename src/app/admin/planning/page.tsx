@@ -300,7 +300,7 @@ export default function PlanningPage() {
         where("activityTitle", "==", c.activityTitle),
         where("startTime", "==", c.startTime),
       ));
-      setDeleteCount(snap.docs.filter(d => new Date((d.data() as any).date).getDay() === dow).length);
+      setDeleteCount(snap.docs.filter(d => new Date((d.data() as any).date).getDay() === dow && (d.data() as any).activityId === (c as any).activityId).length);
 
       // Pour les stages : compter les créneaux du même stage cette semaine
       if (isStageType(c)) {
@@ -315,7 +315,8 @@ export default function PlanningPage() {
           where("date", ">=", monStr),
           where("date", "<=", sunStr),
         ));
-        setDeleteWeekCount(snapWeek.docs.length);
+        // Filtre activityId : deux stages homonymes la même semaine restent distincts
+        setDeleteWeekCount(snapWeek.docs.filter(d => (d.data() as any).activityId === (c as any).activityId).length);
       }
     } catch { setDeleteCount(1); }
   };
@@ -344,8 +345,10 @@ export default function PlanningPage() {
           where("date", ">=", fmtDate(mon)),
           where("date", "<=", fmtDate(sun)),
         ));
-        for (const t of snap.docs) await deleteDoc(doc(db, "creneaux", t.id));
-        toast(`🗑️ Stage supprimé (${snap.docs.length} créneaux)`, "success");
+        // Filtre activityId : ne supprime QUE ce stage, pas un homonyme la même semaine
+        const weekTargets = snap.docs.filter(d => (d.data() as any).activityId === (deleteCreneau as any).activityId);
+        for (const t of weekTargets) await deleteDoc(doc(db, "creneaux", t.id));
+        toast(`🗑️ Stage supprimé (${weekTargets.length} créneaux)`, "success");
       } else if (mode === "similar") {
         const dow = new Date(deleteCreneau.date).getDay();
         const snap = await getDocs(query(
@@ -353,7 +356,7 @@ export default function PlanningPage() {
           where("activityTitle", "==", deleteCreneau.activityTitle),
           where("startTime", "==", deleteCreneau.startTime),
         ));
-        const targets = snap.docs.filter(d => new Date((d.data() as any).date).getDay() === dow);
+        const targets = snap.docs.filter(d => new Date((d.data() as any).date).getDay() === dow && (d.data() as any).activityId === (deleteCreneau as any).activityId);
         for (const t of targets) await deleteDoc(doc(db, "creneaux", t.id));
         toast(`🗑️ ${targets.length} créneaux supprimés`, "success");
       } else {
