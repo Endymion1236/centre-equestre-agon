@@ -96,13 +96,18 @@ export async function GET(req: NextRequest) {
       // token, on retombe sur l'email de rappel ci-dessous (comportement
       // historique, non destructif).
       const cofToken = p.cofToken || p.cardOnFileToken || "";
-      if (cofToken) {
+      // Le delayedCharge exige le paymentId CAWL de l'acompte (endpoint
+      // /payments/{paymentId}/subsequent). Un hostedCheckoutId n'est PAS un
+      // paymentId : sans cofInitialPaymentId, on ne tente pas le MIT (qui
+      // échouerait et enverrait un email d'échec anxiogène) — on retombe
+      // directement sur l'email de rappel classique.
+      if (cofToken && p.cofInitialPaymentId) {
         const mit = await chargeWithToken({
           paymentId: payDoc.id,
           familyId: p.familyId,
           amount: solde,
           token: cofToken,
-          initialPaymentId: p.cofInitialPaymentId || p.cawlHostedCheckoutId,
+          initialPaymentId: p.cofInitialPaymentId,
           label: `Solde ${stageTitle} — ${familyName}`,
           familyEmail,
         });
