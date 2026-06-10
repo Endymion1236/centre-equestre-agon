@@ -313,7 +313,22 @@ export default function FacturesPage() {
                             </div>
                           </div>
                           <div className="flex items-center gap-3 flex-wrap">
-                            <span className="font-body text-lg font-bold text-blue-500">{(p.totalTTC || 0).toFixed(2)}€</span>
+                            <div className="text-right">
+                              <span className="font-body text-lg font-bold text-blue-500">{(p.totalTTC || 0).toFixed(2)}€</span>
+                              {/* Détail payé / reste dû — uniquement quand ce n'est pas soldé */}
+                              {p.status !== "paid" && (p.paidAmount || 0) > 0 && (p.totalTTC || 0) > (p.paidAmount || 0) && (
+                                <div className="font-body text-[11px] leading-tight">
+                                  <span className="text-green-600">Payé {(p.paidAmount || 0).toFixed(2)}€</span>
+                                  <span className="text-gray-400"> · </span>
+                                  <span className="text-red-500 font-semibold">Reste {((p.totalTTC || 0) - (p.paidAmount || 0)).toFixed(2)}€</span>
+                                </div>
+                              )}
+                              {p.status !== "paid" && (p.paidAmount || 0) === 0 && p.paymentMode !== "prelevement_sepa" && (
+                                <div className="font-body text-[11px] leading-tight text-red-500 font-semibold">
+                                  Reste {(p.totalTTC || 0).toFixed(2)}€
+                                </div>
+                              )}
+                            </div>
                             {p.paymentMode === "prelevement_sepa" && p.status !== "paid" ? (
                               <Badge color="blue">🏦 Prélèvement SEPA programmé</Badge>
                             ) : (

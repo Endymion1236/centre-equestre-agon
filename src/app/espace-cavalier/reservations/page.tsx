@@ -282,7 +282,8 @@ export default function ReservationsPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="font-body text-lg font-bold text-blue-500">{r.priceTTC?.toFixed(2)}€</span>
+                          {/* Tarif volontairement non affiché ici : la logistique est dans
+                              Mes réservations, l'argent (payé / reste dû) dans Mes factures. */}
                           <Badge color={status.color}>{status.label}</Badge>
                         </div>
                       </div>
@@ -310,7 +311,6 @@ export default function ReservationsPage() {
                         <span className="font-body text-sm text-gray-600">{r.activityTitle}</span>
                         <span className="font-body text-xs text-gray-600">🧒 {r.childName}</span>
                       </div>
-                      <span className="font-body text-sm text-gray-600">{r.priceTTC?.toFixed(2)}€</span>
                     </div>
                   </Card>
                 ))}
