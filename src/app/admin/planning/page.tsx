@@ -103,6 +103,7 @@ export default function PlanningPage() {
   const [editForm, setEditForm] = useState<any>({});
   const [editSaving, setEditSaving] = useState(false);
   const [editApplyAll, setEditApplyAll] = useState(false);
+  const [editApplyStage, setEditApplyStage] = useState(false);
   const [showDuplicate, setShowDuplicate] = useState(false); const [dupWeeks, setDupWeeks] = useState(1); const [duplicating, setDuplicating] = useState(false);
   // ─── Menus déroulants barre d'actions (moderne) ───
   const [menuAddOpen, setMenuAddOpen] = useState(false);
@@ -323,6 +324,8 @@ export default function PlanningPage() {
     setEditCreneau(c);
     setEditForm({ activityTitle: c.activityTitle, monitor: c.monitor || "", startTime: c.startTime, endTime: c.endTime, maxPlaces: c.maxPlaces, priceTTC: (c as any).priceTTC || 0, color: (c as any).color || "", allowDayBooking: (c as any).allowDayBooking || false, priceTTCDay: (c as any).priceTTCDay || "", themeStage: (c as any).themeStage || "" });
     setEditApplyAll(false);
+    // Pour un stage multi-jours : appliquer par défaut à tous les jours du stage
+    setEditApplyStage(c.activityType === "stage" || c.activityType === "stage_journee");
   };
 
   const confirmDelete = async (mode: "single" | "similar" | "week") => {
@@ -383,7 +386,30 @@ export default function PlanningPage() {
       };
       if (editForm.color) update.color = editForm.color;
 
-      if (editApplyAll) {
+      const isStageType = editCreneau.activityType === "stage" || editCreneau.activityType === "stage_journee";
+      if (isStageType && editApplyStage) {
+        // ── Appliquer à TOUS les jours de ce stage (même semaine) ──
+        // Filtre par activityId + titre d'origine : deux stages homonymes
+        // la même semaine restent indépendants.
+        const d = new Date(editCreneau.date + "T12:00:00");
+        const mon = new Date(d); mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+        const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+        const weekSnap = await getDocs(query(
+          collection(db, "creneaux"),
+          where("date", ">=", fmtDate(mon)),
+          where("date", "<=", fmtDate(sun)),
+        ));
+        const targets = weekSnap.docs.filter(dd => {
+          const c: any = dd.data();
+          return c.activityId === (editCreneau as any).activityId &&
+            c.activityTitle === editCreneau.activityTitle &&
+            (c.activityType === "stage" || c.activityType === "stage_journee");
+        });
+        for (const t of targets) {
+          await updateDoc(doc(db, "creneaux", t.id), update);
+        }
+        toast(`✅ Stage mis à jour (${targets.length} jour${targets.length > 1 ? "s" : ""})`, "success");
+      } else if (editApplyAll) {
         // Charger TOUS les créneaux futurs depuis Firestore (pas seulement la semaine affichée)
         const today = new Date().toISOString().split("T")[0];
         const allSnap = await getDocs(query(
@@ -1775,6 +1801,8 @@ export default function PlanningPage() {
           form={editForm}
           saving={editSaving}
           applyAll={editApplyAll}
+          applyStage={editApplyStage}
+          onApplyStageChange={setEditApplyStage}
           onFormChange={setEditForm}
           onApplyAllChange={setEditApplyAll}
           onClose={() => setEditCreneau(null)}
