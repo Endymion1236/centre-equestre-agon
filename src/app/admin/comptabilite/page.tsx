@@ -7,6 +7,10 @@ import { collection, getDocs, addDoc, updateDoc, doc, getDoc, setDoc, deleteDoc,
 import { db } from "@/lib/firebase";
 import { safeNumber } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
+import { accounts, modeLabels } from "./shared";
+import TabJournal from "./TabJournal";
+import TabFEC from "./TabFEC";
+import TabTVA from "./TabTVA";
 import { Loader2, Download, Upload, Check, FileText, Building2, Receipt, Calculator, Search, Printer, Plus, Sparkles, Bot, AlertTriangle, EyeOff, RefreshCw } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 
@@ -23,31 +27,9 @@ interface Payment {
   reconciledByBank?: boolean;
 }
 
-const accounts = [
-  { code: "70641000", label: "Animations collectivité", tva: 5.5 },
-  { code: "70611110", label: "Cotisations / Adhésions", tva: 5.5 },
-  { code: "70611600", label: "Découverte / Familiarisation", tva: 5.5 },
-  { code: "70605000", label: "Divers", tva: 20 },
-  { code: "70619900", label: "Droits d'accès installations", tva: 5.5 },
-  { code: "70611300", label: "Enseignement / Cartes", tva: 5.5 },
-  { code: "70611700", label: "Enseignement / Coaching", tva: 5.5 },
-  { code: "70611000", label: "Enseignement / Forfaits", tva: 5.5 },
-  { code: "4386", label: "Formation professionnelle", tva: 0 },
-  { code: "70613110", label: "Location poneys", tva: 20 },
-  { code: "70630110", label: "Pensions équidé", tva: 5.5 },
-  { code: "70611500", label: "Randonnées / Promenades", tva: 5.5 },
-  { code: "70100000", label: "Refacturation FFE", tva: 0 },
-  { code: "70880000", label: "Refacturation soin", tva: 20 },
-  { code: "70611400", label: "Stages équitation", tva: 5.5 },
-  { code: "70622011", label: "Transport", tva: 20 },
-  { code: "70410000", label: "Ventes équidés", tva: 20 },
-];
 
-const modeLabels: Record<string, string> = {
-  cb_terminal: "CB Terminal", cb_online: "CB en ligne", cheque: "Chèque", especes: "Espèces",
-  cheque_vacances: "Chèques Vacances", pass_sport: "Pass'Sport", ancv: "ANCV",
-  virement: "Virement", avoir: "Avoir", prelevement_sepa: "Prélèvement SEPA",
-};
+
+
 
 export default function ComptabilitePage() {
   const searchParams = useSearchParams();
@@ -1935,6 +1917,8 @@ export default function ComptabilitePage() {
     { id: "export" as const,                 label: "Export CSV",         icon: Download,   color: "amber"  },
   ];
 
+  const tabProps = { filteredPayments, totalHT, totalTVA, totalTTC, period, encaissementsCompta, byMode, tvaByRate, generateFEC, payments };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
@@ -2054,133 +2038,9 @@ export default function ComptabilitePage() {
       {loading && <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div>}
 
       {/* ─── Journal des ventes ─── */}
-      {!loading && tab === "journal" && (
-        <Card className="!p-0 overflow-hidden">
-          <div className="overflow-x-auto">
-          <div className="min-w-[700px]">
-          <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-            <span className="w-20">Date</span>
-            <span className="flex-1">Client</span>
-            <span className="w-40">Prestation</span>
-            <span className="w-20 text-center">Mode</span>
-            <span className="w-16 text-right">HT</span>
-            <span className="w-16 text-right">TVA</span>
-            <span className="w-16 text-right">TTC</span>
-          </div>
-          {filteredPayments.length === 0 ? (
-            <div className="p-8 text-center font-body text-sm text-slate-500">Aucun paiement sur cette période.</div>
-          ) : (
-            <>
-              {filteredPayments.map((p) => {
-                const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
-                const ht = (p.items || []).reduce((s, i) => s + (i.priceHT || 0), 0);
-                const tva = (p.totalTTC || 0) - ht;
-                return (
-                  <div key={p.id} className="px-5 py-3 border-b border-blue-500/8 last:border-b-0 flex items-center hover:bg-blue-50/30">
-                    <span className="w-20 font-body text-xs text-slate-500">{d.toLocaleDateString("fr-FR")}</span>
-                    <span className="flex-1 font-body text-sm font-semibold text-blue-800">{p.familyName}</span>
-                    <span className="w-40 font-body text-xs text-slate-600 truncate">{(p.items || []).map((i) => i.activityTitle).join(", ")}</span>
-                    <span className="w-20 text-center"><Badge color="blue">{modeLabels[p.paymentMode] || p.paymentMode}</Badge></span>
-                    <span className="w-16 text-right font-body text-xs text-slate-600">{ht.toFixed(2)}€</span>
-                    <span className="w-16 text-right font-body text-xs text-orange-500">{tva.toFixed(2)}€</span>
-                    <span className="w-16 text-right font-body text-sm font-semibold text-blue-500">{(p.totalTTC || 0).toFixed(2)}€</span>
-                  </div>
-                );
-              })}
-
-              {/* ── Avoirs (encaissements négatifs) ── */}
-              {(() => {
-                const avoirEncaissements = encaissementsCompta.filter(e => {
-                  if (!e.isAvoir) return false;
-                  const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
-                  if (!d) return false;
-                  const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-                  return pm === period;
-                });
-                if (avoirEncaissements.length === 0) return null;
-                const totalAvoirs = avoirEncaissements.reduce((s, e) => s + Math.abs(e.montant || 0), 0);
-                return (
-                  <>
-                    <div className="px-5 py-2 bg-red-50/50 border-b border-red-200/50 flex font-body text-[10px] font-semibold text-red-500 uppercase tracking-wider">
-                      <span>Avoirs émis sur la période</span>
-                    </div>
-                    {avoirEncaissements.map((e: any) => {
-                      const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : new Date();
-                      return (
-                        <div key={e.id} className="px-5 py-3 border-b border-red-100/50 last:border-b-0 flex items-center hover:bg-red-50/20 bg-red-50/10">
-                          <span className="w-20 font-body text-xs text-slate-500">{d.toLocaleDateString("fr-FR")}</span>
-                          <span className="flex-1 font-body text-sm font-semibold text-red-700">{e.familyName}</span>
-                          <span className="w-40 font-body text-xs text-red-500 truncate">{e.activityTitle || e.modeLabel || "Avoir"}</span>
-                          <span className="w-20 text-center"><Badge color="red">{e.avoirRef || "Avoir"}</Badge></span>
-                          <span className="w-16 text-right font-body text-xs text-red-400">—</span>
-                          <span className="w-16 text-right font-body text-xs text-red-400">—</span>
-                          <span className="w-16 text-right font-body text-sm font-semibold text-red-600">-{Math.abs(e.montant || 0).toFixed(2)}€</span>
-                        </div>
-                      );
-                    })}
-                    <div className="px-5 py-2 bg-red-50/30 flex font-body text-xs font-semibold text-red-600">
-                      <span className="flex-1">Total avoirs</span>
-                      <span className="w-40"></span><span className="w-20"></span>
-                      <span className="w-16"></span><span className="w-16"></span>
-                      <span className="w-16 text-right">-{totalAvoirs.toFixed(2)}€</span>
-                    </div>
-                  </>
-                );
-              })()}
-
-              <div className="px-5 py-3 bg-sand flex font-body text-sm font-bold">
-                <span className="flex-1">TOTAL</span>
-                <span className="w-40"></span><span className="w-20"></span>
-                <span className="w-16 text-right text-blue-800">{totalHT.toFixed(2)}€</span>
-                <span className="w-16 text-right text-orange-500">{totalTVA.toFixed(2)}€</span>
-                <span className="w-16 text-right text-blue-500">{totalTTC.toFixed(2)}€</span>
-              </div>
-            </>
-          )}
-          </div>
-          </div>
-        </Card>
-      )}
-
+      {!loading && tab === "journal" && <TabJournal {...tabProps} />}
       {/* ─── TVA ─── */}
-      {!loading && tab === "tva" && (
-        <div className="flex flex-col gap-5">
-          <Card className="!p-0 overflow-hidden">
-            <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              <span className="flex-1">Taux TVA</span>
-              <span className="w-24 text-right">Base HT</span>
-              <span className="w-24 text-right">TVA</span>
-              <span className="w-24 text-right">TTC</span>
-            </div>
-            {tvaByRate.map(([rate, data]) => (
-              <div key={rate} className="px-5 py-3 border-b border-blue-500/8 flex items-center">
-                <span className="flex-1 font-body text-sm font-semibold text-blue-800">{rate}%</span>
-                <span className="w-24 text-right font-body text-sm text-slate-600">{data.ht.toFixed(2)}€</span>
-                <span className="w-24 text-right font-body text-sm font-semibold text-orange-500">{data.tva.toFixed(2)}€</span>
-                <span className="w-24 text-right font-body text-sm font-semibold text-blue-500">{data.ttc.toFixed(2)}€</span>
-              </div>
-            ))}
-            <div className="px-5 py-3 bg-sand flex font-body text-sm font-bold">
-              <span className="flex-1">TOTAL</span>
-              <span className="w-24 text-right">{totalHT.toFixed(2)}€</span>
-              <span className="w-24 text-right text-orange-500">{totalTVA.toFixed(2)}€</span>
-              <span className="w-24 text-right text-blue-500">{totalTTC.toFixed(2)}€</span>
-            </div>
-          </Card>
-
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-4">Répartition par mode de paiement</h3>
-            <div className="flex flex-col gap-2">
-              {byMode.map(([mode, amount]) => (
-                <div key={mode} className="flex items-center justify-between py-2 border-b border-blue-500/8 last:border-b-0">
-                  <span className="font-body text-sm text-slate-600">{modeLabels[mode] || mode}</span>
-                  <span className="font-body text-sm font-semibold text-blue-500">{amount.toFixed(2)}€</span>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-      )}
+      {!loading && tab === "tva" && <TabTVA {...tabProps} />}
 
       {/* ─── Bordereaux de remise ─── */}
       {!loading && tab === "remise" && (() => {
@@ -3964,47 +3824,7 @@ export default function ComptabilitePage() {
       )}
 
       {/* ─── Export FEC ─── */}
-      {!loading && tab === "fec" && (
-        <div className="flex flex-col gap-5">
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-3">Exporter le FEC</h3>
-            <p className="font-body text-sm text-slate-600 mb-4">
-              Génère le Fichier des Écritures Comptables au format réglementaire (Art. L47 A-I du LPF).
-              Ce fichier contient toutes les écritures de la période sélectionnée, prêt à envoyer à votre comptable.
-            </p>
-            <div className="flex gap-4 mb-4">
-              <div>
-                <div className="font-body text-xs font-semibold text-slate-500">Période</div>
-                <div className="font-body text-sm font-semibold text-blue-800">{new Date(period + "-01").toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</div>
-              </div>
-              <div>
-                <div className="font-body text-xs font-semibold text-slate-500">Écritures</div>
-                <div className="font-body text-sm font-semibold text-blue-800">{filteredPayments.length} paiements → ~{filteredPayments.length * 3} lignes</div>
-              </div>
-              <div>
-                <div className="font-body text-xs font-semibold text-slate-500">Format</div>
-                <div className="font-body text-sm font-semibold text-blue-800">TXT (TAB)</div>
-              </div>
-            </div>
-            <button onClick={generateFEC} disabled={filteredPayments.length === 0}
-              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer transition-all
-                ${filteredPayments.length === 0 ? "bg-gray-200 text-slate-500" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
-              <Download size={16} /> Télécharger le FEC — {period}
-            </button>
-          </Card>
-
-          <Card padding="md" className="bg-blue-50 border-blue-500/8">
-            <div className="font-body text-xs text-blue-800 leading-relaxed">
-              <strong>Colonnes du FEC :</strong> JournalCode, JournalLib, EcritureNum, EcritureDate, CompteNum,
-              CompteLib, CompAuxNum, CompAuxLib, PieceRef, PieceDate, EcritureLib, Debit, Credit,
-              EcritureLet, DateLet, ValidDate, Montantdevise, Idevise.
-              <br /><br />
-              <strong>Plan comptable utilisé :</strong> {accounts.length} comptes importés de Celeris.
-              TVA principale à 5.50% pour l&apos;enseignement équestre.
-            </div>
-          </Card>
-        </div>
-      )}
+      {!loading && tab === "fec" && <TabFEC {...tabProps} />}
 
       {/* ─── Export CSV paramétrable ─── */}
       {!loading && tab === "export" && (
