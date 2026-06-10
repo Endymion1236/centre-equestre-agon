@@ -204,25 +204,33 @@ export async function POST(req: NextRequest) {
               let templateKey = "confirmationPaiement";
               let vars: Record<string, string | number> = {
                 parentName,
-                montant: totalTTC.toFixed(2),
+                montant: paidAmount.toFixed(2),
                 prestations,
                 mode: "Carte bancaire en ligne (CAWL)",
               };
 
               if (hasStage) {
-                templateKey = "confirmationStage";
-                // Variables au format attendu par loadTemplate (remplacement {key}
-                // texte simple). Le template par defaut affiche un gros bandeau
-                // 'PAIEMENT CONFIRME - {montant}€ réglé' en haut + détails plus bas.
+                // Acompte → template dédié avec récap total/acompte/solde ;
+                // paiement total → template classique. Toujours le montant
+                // réellement encaissé (paidAmount), jamais le total pour un acompte.
+                templateKey = isDeposit ? "confirmationStageAcompte" : "confirmationStage";
                 const enfantsList = (pData.items || [])
                   .map((i: any) => i.childName).filter(Boolean).join(", ") || "Cavalier(s)";
+                const soldeRestant = Math.max(0, +(((pData.totalTTC || 0)) - paidAmount).toFixed(2));
+                const soldePhrase = cofToken
+                  ? `Le solde de ${soldeRestant.toFixed(2)}€ sera prélevé automatiquement sur votre carte enregistrée environ une semaine avant le début du stage. Aucune action n'est requise.`
+                  : `Un email avec le lien de paiement du solde (${soldeRestant.toFixed(2)}€) vous sera envoyé environ une semaine avant le début du stage.`;
                 vars = {
                   parentName,
                   stageTitle: pData.items?.[0]?.activityTitle || "Stage",
                   dates: pData.stageDate || prestations,
                   horaires: pData.items?.[0]?.stageSchedule || "",
                   enfants: enfantsList,
-                  montant: totalTTC.toFixed(2),
+                  montant: paidAmount.toFixed(2),
+                  acompte: paidAmount.toFixed(2),
+                  solde: soldeRestant.toFixed(2),
+                  total: (pData.totalTTC || 0).toFixed(2),
+                  soldePhrase,
                 };
               }
 
