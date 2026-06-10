@@ -151,6 +151,10 @@ export async function POST(req: NextRequest) {
           familyId: familyId || null,
           paymentId: paymentId || null,
           totalCents,
+          // Marqueur acompte : permet au webhook (qui n'a pas accès aux query
+          // params de l'URL de retour) de distinguer acompte / paiement total.
+          isDeposit: !!isDeposit,
+          depositPercent: isDeposit ? depositPercent : 0,
           createdAt: FieldValue.serverTimestamp(),
           // TTL : RETURNMAC a une durée de vie raisonnablement courte
           // (session CAWL = 2h, redirectUrl = 3h)

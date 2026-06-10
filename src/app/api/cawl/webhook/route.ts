@@ -92,12 +92,29 @@ export async function POST(req: NextRequest) {
       }
 
       if (payRef && pData) {
+        // ── Acompte ou paiement total ? ──────────────────────────────────
+        // Le webhook n'a pas accès aux query params de l'URL de retour : on lit
+        // le marqueur stocké dans cawl_sessions au checkout. Fallback heuristique
+        // pour les sessions antérieures : montant CAWL < totalTTC ⇒ acompte.
+        let isDeposit = false;
+        try {
+          if (hostedCheckoutId) {
+            const sessSnap = await adminDb.collection("cawl_sessions").doc(hostedCheckoutId).get();
+            if (sessSnap.exists) isDeposit = !!(sessSnap.data() as any)?.isDeposit;
+          }
+        } catch (e) { console.warn("CAWL webhook: lecture cawl_sessions impossible:", e); }
+        if (!isDeposit && totalEuros > 0 && (pData.totalTTC || 0) > 0 && totalEuros < pData.totalTTC - 0.01) {
+          isDeposit = true; // heuristique : montant encaissé < total dû
+        }
+
         // ── Verrou anti-doublon ──────────────────────────────────────────
         // Empêche webhook + status d'écrire tous les deux si appelés en
-        // parallèle. Le premier qui acquiert le lock procède, l'autre s'abstient.
+        // parallèle. IMPORTANT : le stage doit être le même que celui utilisé
+        // par la route status (deposit/full), sinon les deux verrous sont
+        // distincts et le paiement serait traité deux fois (double encaissement).
         const lockAcquired = await acquireCawlConfirmationLock({
           hostedCheckoutId,
-          stage: "full",
+          stage: isDeposit ? "deposit" : "full",
           source: "webhook",
           paymentId: payRef.id,
           amountCents: totalCents,
@@ -112,12 +129,26 @@ export async function POST(req: NextRequest) {
 
         if (pData.status !== "paid") {
           const totalTTC = pData.totalTTC || totalEuros;
+          // Montant réellement encaissé : pour un acompte, c'est le montant CAWL
+          // (jamais le total dû). Pour un paiement total, totalTTC comme avant.
+          const paidAmount = isDeposit ? (totalEuros || pData.acompteAmount || 0) : totalTTC;
+
+          // Token Card On File + référence du paiement initial : indispensables
+          // pour le prélèvement automatique du solde (MIT). Le webhook est le
+          // seul point de confirmation si la famille ferme son navigateur avant
+          // la redirection — sans cette capture, le solde ne serait jamais
+          // prélevable automatiquement.
+          const cofToken = payment.paymentOutput?.cardPaymentMethodSpecificOutput?.token || "";
+          const cofSchemeTxId = payment.paymentOutput?.cardPaymentMethodSpecificOutput?.schemeTransactionId || "";
 
           await payRef.update({
-            status: "paid",
-            paidAmount: totalTTC,
+            status: isDeposit ? "partial" : "paid",
+            paidAmount,
             paymentMode: "cb_online",
             paymentRef: `CAWL-${payment.id}`,
+            ...(cofToken ? { cofToken, cawlTokenizedAt: FieldValue.serverTimestamp() } : {}),
+            ...(cofSchemeTxId ? { cofSchemeTransactionId: cofSchemeTxId } : {}),
+            ...(payment.id ? { cofInitialPaymentId: payment.id } : {}),
             updatedAt: FieldValue.serverTimestamp(),
           });
 
@@ -125,14 +156,14 @@ export async function POST(req: NextRequest) {
             paymentId: payRef.id,
             familyId: pData.familyId,
             familyName: pData.familyName || "",
-            montant: totalTTC,
+            montant: paidAmount,
             mode: "cb_online",
-            modeLabel: "CB en ligne (CAWL)",
+            modeLabel: isDeposit ? "CB en ligne CAWL (acompte)" : "CB en ligne (CAWL)",
             ref: `CAWL-${payment.id}`,
             activityTitle: (pData.items || []).map((i: any) => i.activityTitle).join(", "),
           });
 
-          console.log(`✅ CAWL webhook payment confirmé: ${merchantRef} — ${totalTTC}€`);
+          console.log(`✅ CAWL webhook payment confirmé: ${merchantRef} — ${paidAmount}€${isDeposit ? " (acompte)" : ""}`);
 
           // ── Attribution des points de fidélité ────────────────────────
           // Non-bloquant : erreurs loggées mais n'interrompent pas le flow
