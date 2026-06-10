@@ -34,6 +34,33 @@ function wrapHtml(content: string): string {
 
 // ── Templates par défaut (fallback si rien dans Firestore) ──
 const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }> = {
+  confirmationStageAcompte: {
+    subject: "✅ Acompte confirmé — {stageTitle}",
+    body: `<!-- Bandeau ACOMPTE CONFIRMÉ -->
+<div style="background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);color:white;padding:20px 24px;border-radius:12px;margin:0 0 20px 0;text-align:center;box-shadow:0 4px 12px rgba(22,163,74,0.25);">
+  <div style="font-size:32px;line-height:1;margin-bottom:6px;">✅</div>
+  <div style="font-size:18px;font-weight:bold;letter-spacing:0.5px;margin-bottom:4px;">ACOMPTE CONFIRMÉ</div>
+  <div style="font-size:22px;font-weight:bold;margin-top:8px;">{acompte}€ réglé</div>
+</div>
+<p>Bonjour <strong>{parentName}</strong>,</p>
+<p>Votre acompte a bien été reçu : la place au stage <strong style="color:#1e3a5f;">{stageTitle}</strong> est réservée. 🐴</p>
+<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
+  <p style="margin:0 0 8px;color:#166534;font-weight:600;">📅 {dates}</p>
+  <p style="margin:0;color:#166534;font-weight:600;">🕐 {horaires}</p>
+  <p style="margin:8px 0 0;color:#555;font-size:13px;">👧 {enfants}</p>
+</div>
+<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:16px 0;">
+  <p style="margin:0 0 6px;color:#1e40af;font-weight:600;font-size:13px;">💳 Récapitulatif du paiement</p>
+  <table style="width:100%;border-collapse:collapse;font-size:14px;">
+    <tr><td style="padding:3px 0;color:#555;">Total du stage</td><td style="padding:3px 0;text-align:right;color:#1e3a5f;font-weight:600;">{total}€</td></tr>
+    <tr><td style="padding:3px 0;color:#16a34a;">Acompte réglé ce jour</td><td style="padding:3px 0;text-align:right;color:#16a34a;font-weight:600;">−{acompte}€</td></tr>
+    <tr style="border-top:1px solid #bfdbfe;"><td style="padding:6px 0 0;color:#1e3a5f;font-weight:bold;">Solde restant</td><td style="padding:6px 0 0;text-align:right;color:#dc2626;font-weight:bold;font-size:16px;">{solde}€</td></tr>
+  </table>
+  <p style="margin:10px 0 0;color:#555;font-size:13px;">{soldePhrase}</p>
+</div>
+<p style="color:#555;font-size:13px;"><strong>À prévoir :</strong> bottes, bombe, pantalon long. Prévoir un goûter et de l'eau.</p>
+<p style="color:#555;">À bientôt au centre équestre !</p>`,
+  },
   confirmationStage: {
     subject: "✅ Paiement confirmé — {stageTitle}",
     body: `<!-- Bandeau PAIEMENT CONFIRMÉ très visible en haut -->

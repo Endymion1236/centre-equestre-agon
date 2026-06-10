@@ -306,7 +306,15 @@ export async function GET(req: NextRequest) {
           }).join("<br/><br/>");
 
           const prestations = items.map((i: any) => i.activityTitle).join(", ") || "Prestation";
-          const templateKey = hasStage ? "confirmationStage" : "confirmationPaiement";
+          // Acompte de stage → template dédié (récap total / acompte / solde).
+          // Paiement total → template classique "PAIEMENT CONFIRMÉ".
+          const templateKey = hasStage
+            ? (isDeposit ? "confirmationStageAcompte" : "confirmationStage")
+            : "confirmationPaiement";
+          const soldeRestant = Math.max(0, +(((pData.totalTTC || 0)) - paidAmount).toFixed(2));
+          const soldePhrase = cofToken
+            ? `Le solde de ${soldeRestant.toFixed(2)}€ sera prélevé automatiquement sur votre carte enregistrée environ une semaine avant le début du stage. Aucune action n'est requise.`
+            : `Un email avec le lien de paiement du solde (${soldeRestant.toFixed(2)}€) vous sera envoyé environ une semaine avant le début du stage.`;
           const vars: Record<string, string | number> = hasStage ? {
             parentName: pData.familyName || "Client",
             stageTitle: items[0]?.activityTitle || "Stage",
@@ -317,6 +325,11 @@ export async function GET(req: NextRequest) {
             horaires: items.map((i: any) => i.startTime && i.endTime ? `${i.startTime}–${i.endTime}` : "").filter(Boolean)[0] || "",
             enfants: items.map((i: any) => i.childName).filter(Boolean).join(", "),
             montant: paidAmount.toFixed(2),
+            // Variables spécifiques au template acompte
+            acompte: paidAmount.toFixed(2),
+            solde: soldeRestant.toFixed(2),
+            total: (pData.totalTTC || 0).toFixed(2),
+            soldePhrase,
           } : {
             parentName: pData.familyName || "Client",
             montant: paidAmount.toFixed(2),
