@@ -1251,6 +1251,55 @@ export default function ReserverPage() {
               <div className="font-body text-xs text-slate-500 mt-0.5">{bookingCreneau.startTime}–{bookingCreneau.endTime} · {bookingCreneau.monitor}</div>
             </div>
             <div className="p-5">
+              {spotsLeft(bookingCreneau) === 0 ? (
+                /* ── Créneau complet : inscription en liste d'attente ── */
+                waitlistSuccess === bookingCreneau.id ? (
+                  <div className="text-center py-2">
+                    <div className="flex items-center justify-center gap-2 text-green-600 font-body text-sm font-semibold mb-2">
+                      <Check size={18} /> Inscrit en liste d&apos;attente !
+                    </div>
+                    <p className="font-body text-xs text-slate-500 mb-4">
+                      Vous serez notifié par email si une place se libère.
+                    </p>
+                    <button onClick={() => setBookingCreneau(null)}
+                      className="w-full py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 border-none cursor-pointer hover:bg-blue-400">
+                      Fermer
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="font-body text-sm text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 mb-3">
+                      🔔 Ce créneau est complet. Inscrivez-vous en liste d&apos;attente :
+                    </div>
+                    <div className="font-body text-sm font-semibold text-slate-700 mb-3">Pour quel cavalier ?</div>
+                    <div className="flex flex-col gap-2">
+                      {(family?.children || [])
+                        .filter((ch: any) => !(bookingCreneau.enrolled || []).some((e: any) => e.childId === ch.id))
+                        .map((ch: any) => (
+                          <button key={ch.id}
+                            onClick={() => addToWaitlist(bookingCreneau, ch.id)}
+                            disabled={waitlistLoading === bookingCreneau.id}
+                            className="flex items-center justify-between px-4 py-3 rounded-xl border border-orange-200 bg-orange-50 font-body text-sm text-orange-700 cursor-pointer hover:bg-orange-100 disabled:opacity-50">
+                            <span className="font-semibold flex items-center gap-2">
+                              {waitlistLoading === bookingCreneau.id ? <Loader2 size={14} className="animate-spin" /> : "🔔"} {ch.firstName}
+                            </span>
+                            {ch.galopLevel && ch.galopLevel !== "—" && (
+                              <span className="font-body text-xs text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">G{ch.galopLevel}</span>
+                            )}
+                          </button>
+                        ))}
+                      {(family?.children || []).filter((ch: any) => !(bookingCreneau.enrolled || []).some((e: any) => e.childId === ch.id)).length === 0 && (
+                        <p className="font-body text-sm text-slate-500 text-center py-2">Tous vos cavaliers sont déjà inscrits à ce créneau.</p>
+                      )}
+                    </div>
+                    <button onClick={() => setBookingCreneau(null)}
+                      className="w-full mt-3 py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
+                      Annuler
+                    </button>
+                  </>
+                )
+              ) : (
+              <>
               <div className="font-body text-sm font-semibold text-slate-700 mb-3">Pour quel cavalier ?</div>
               <div className="flex flex-col gap-2">
                 {(family?.children || [])
@@ -1301,6 +1350,8 @@ export default function ReserverPage() {
                 className="w-full mt-3 py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
                 Annuler
               </button>
+              </>
+              )}
             </div>
           </div>
         </div>

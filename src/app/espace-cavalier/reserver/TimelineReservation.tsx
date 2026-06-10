@@ -396,10 +396,9 @@ export default function TimelineReservation({ creneaux, children, familyId, onBo
                   {!enrolled && (
                     <button
                       onClick={() => onBook(c)}
-                      disabled={full}
-                      className={`w-full py-2.5 rounded-xl font-body text-sm font-semibold border-none cursor-pointer transition-all ${
-                        full ? "bg-gray-100 text-gray-400 cursor-not-allowed" :
-                        relevance === "perfect" ? "text-white" : "bg-blue-500 text-white hover:bg-blue-600"
+                      className={`w-full py-2.5 rounded-xl font-body text-sm font-semibold cursor-pointer transition-all ${
+                        full ? "bg-orange-50 text-orange-600 border border-orange-200 hover:bg-orange-100" :
+                        relevance === "perfect" ? "text-white border-none" : "bg-blue-500 text-white border-none hover:bg-blue-600"
                       }`}
                       style={relevance === "perfect" && !full ? { background: `linear-gradient(135deg, ${col}, #2050A0)` } : {}}>
                       {full ? "Complet — liste d'attente →" : "Réserver →"}
