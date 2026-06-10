@@ -63,7 +63,7 @@ import {
 } from "@/lib/discounts";
 import { X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera, FileImage, Mail, Sparkles, Send, FileText, Printer, StickyNote, ChevronDown, ChevronUp, Clock } from "lucide-react";
 import type { Activity, Family } from "@/types";
-import { Creneau, EnrolledChild, payModes, typeColors, fmtDate, itemMatchesCreneau, isForfaitChildPaye } from "./types";
+import { Creneau, EnrolledChild, payModes, typeColors, fmtDate, itemMatchesCreneau, isForfaitChildPaye, sameStage } from "./types";
 import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/lib/auth-context";
 
@@ -1055,8 +1055,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           // IMPORTANT: allCreneaux ne contient que la vue courante du planning.
           // Pour les stages en mode semaine, charger TOUS les créneaux de la semaine.
           let stageCreneaux = allCreneaux.filter(c =>
-            c.activityId === creneau.activityId &&
-            c.activityTitle === creneau.activityTitle &&
+            sameStage(c, creneau) &&
             (c.activityType === "stage" || c.activityType === "stage_journee") &&
             c.date >= monStr && c.date <= sunStr
           ).sort((a, b) => a.date.localeCompare(b.date));
@@ -1071,8 +1070,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               ));
               const weekCreneaux = weekSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
               stageCreneaux = weekCreneaux.filter(c =>
-                c.activityId === creneau.activityId &&
-                c.activityTitle === creneau.activityTitle &&
+                sameStage(c, creneau) &&
                 (c.activityType === "stage" || c.activityType === "stage_journee")
               ).sort((a, b) => a.date.localeCompare(b.date));
               console.log(`📋 Stage semaine : ${stageCreneaux.length} jours trouvés pour "${creneau.activityTitle}" (${monStr} → ${sunStr})`);

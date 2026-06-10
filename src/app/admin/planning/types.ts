@@ -16,6 +16,21 @@ export interface Creneau {
   priceHT?: number;
   priceTTC?: number;
   tvaTaux?: number;
+  // Identifiant unique du lot de créneaux d'un stage multi-jours. Deux stages
+  // créés séparément ont toujours des stageGroupId différents, même s'ils
+  // partagent la même activité ET le même titre. Absent sur les créneaux
+  // antérieurs à ce champ (fallback : activityId + titre).
+  stageGroupId?: string;
+}
+
+// ── Deux créneaux appartiennent-ils au même stage ? ──
+// Priorité au stageGroupId (fiable à 100%). Fallback legacy : même activityId
+// + même titre — limite connue : deux stages homonymes créés depuis la même
+// activité AVANT l'introduction du stageGroupId restent indissociables.
+export function sameStage(a: any, b: any): boolean {
+  if (!a || !b) return false;
+  if (a.stageGroupId && b.stageGroupId) return a.stageGroupId === b.stageGroupId;
+  return a.activityId === b.activityId && a.activityTitle === b.activityTitle;
 }
 
 export interface EnrolledChild {

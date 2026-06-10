@@ -24,7 +24,7 @@ import {
 } from "@/lib/discounts";
 import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Loader2, Trash2, Users, CalendarDays, Briefcase, Bell, Mail, Sparkles, Printer, Settings, MoreHorizontal, Copy } from "lucide-react";
 import type { Activity, Family } from "@/types";
-import { Creneau, EnrolledChild, typeColors, dayNames, dayNamesFull, payModes, getWeekDates, fmtDate, fmtDateFR, fmtMonthFR, compareCreneaux, itemMatchesCreneau, isForfaitChildPaye } from "./types";
+import { Creneau, EnrolledChild, typeColors, dayNames, dayNamesFull, payModes, getWeekDates, fmtDate, fmtDateFR, fmtMonthFR, compareCreneaux, itemMatchesCreneau, isForfaitChildPaye, sameStage } from "./types";
 import EnrollPanel from "./EnrollPanel";
 import PeriodGenerator from "./PeriodGenerator";
 import SimpleCreneauForm from "./SimpleCreneauForm";
@@ -315,8 +315,8 @@ export default function PlanningPage() {
           where("date", ">=", monStr),
           where("date", "<=", sunStr),
         ));
-        // Filtre activityId : deux stages homonymes la même semaine restent distincts
-        setDeleteWeekCount(snapWeek.docs.filter(d => (d.data() as any).activityId === (c as any).activityId).length);
+        // Filtre sameStage (stageGroupId prioritaire) : deux stages homonymes restent distincts
+        setDeleteWeekCount(snapWeek.docs.filter(d => sameStage(d.data(), c)).length);
       }
     } catch { setDeleteCount(1); }
   };
@@ -345,8 +345,8 @@ export default function PlanningPage() {
           where("date", ">=", fmtDate(mon)),
           where("date", "<=", fmtDate(sun)),
         ));
-        // Filtre activityId : ne supprime QUE ce stage, pas un homonyme la même semaine
-        const weekTargets = snap.docs.filter(d => (d.data() as any).activityId === (deleteCreneau as any).activityId);
+        // Filtre sameStage (stageGroupId prioritaire) : ne supprime QUE ce stage
+        const weekTargets = snap.docs.filter(d => sameStage(d.data(), deleteCreneau));
         for (const t of weekTargets) await deleteDoc(doc(db, "creneaux", t.id));
         toast(`🗑️ Stage supprimé (${weekTargets.length} créneaux)`, "success");
       } else if (mode === "similar") {
@@ -404,8 +404,7 @@ export default function PlanningPage() {
         ));
         const targets = weekSnap.docs.filter(dd => {
           const c: any = dd.data();
-          return c.activityId === (editCreneau as any).activityId &&
-            c.activityTitle === editCreneau.activityTitle &&
+          return sameStage(c, editCreneau) &&
             (c.activityType === "stage" || c.activityType === "stage_journee");
         });
         for (const t of targets) {

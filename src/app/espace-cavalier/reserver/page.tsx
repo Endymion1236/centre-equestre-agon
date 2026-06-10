@@ -221,9 +221,10 @@ export default function ReserverPage() {
     stages.forEach(c => {
       const d = new Date(c.date);
       const mon = new Date(d); mon.setDate(mon.getDate() - ((d.getDay() + 6) % 7));
-      // Clé = activityId (et non le titre) : deux stages différents portant le
-      // même intitulé la même semaine (ex. matin / après-midi) restent distincts.
-      const key = `${c.activityId}_${fmtDate(mon)}`;
+      // Clé = stageGroupId (lot de création, fiable à 100%) avec fallback
+      // activityId pour les stages antérieurs à ce champ. Deux stages
+      // homonymes — même créés depuis la même activité — restent distincts.
+      const key = `${(c as any).stageGroupId || c.activityId}_${fmtDate(mon)}`;
       if (!groups[key]) groups[key] = [];
       groups[key].push(c);
     });

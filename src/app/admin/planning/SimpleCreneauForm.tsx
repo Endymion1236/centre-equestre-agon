@@ -92,11 +92,21 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
     setSaving(true);
     const ttc = (act as any).priceTTC || (act.priceHT || 0) * (1 + (act.tvaTaux || 5.5) / 100);
     const dates = multiDay ? getEffectiveDates() : [date];
+    // Identifiant unique du lot : tous les créneaux créés ensemble (stage
+    // multi-jours ou stage journée) partagent le même stageGroupId. C'est ce
+    // qui permet de distinguer deux stages homonymes créés depuis la même
+    // activité (édition, suppression, inscription, affichage client).
+    const isStageBatch = multiDay || act.type === "stage" || act.type === "stage_journee";
+    const stageGroupId = isStageBatch
+      ? (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `sg_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`)
+      : null;
+
     const creneaux = dates.map((d, idx) => {
       const hours = (multiDay && customHours[idx]) ? customHours[idx] : { st, et };
       return {
         activityId: actId, activityTitle: act.title, activityType: act.type, date: d,
         startTime: hours.st, endTime: hours.et,
+        ...(stageGroupId ? { stageGroupId } : {}),
         monitor: (multiDay && customMonitors[idx] !== undefined) ? customMonitors[idx] : mon, maxPlaces: mp, enrolledCount: 0, enrolled: [],
         status: "planned",
         ...(color ? { color } : {}),
