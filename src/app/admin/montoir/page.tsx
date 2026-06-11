@@ -15,7 +15,6 @@ const calcAge = (birthDate: any): string => {
   return `${age} ans`;
 };
 import { Card, Badge } from "@/components/ui";
-import { HelpButton } from "@/components/HelpButton";
 import { useToast } from "@/components/ui/Toast";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { emailTemplates } from "@/lib/email-templates";
@@ -778,7 +777,6 @@ export default function MontoirPage() {
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-3">
           <div><h1 className="font-display text-2xl font-bold text-blue-800">Montoir</h1><p className="font-body text-xs text-slate-600">Présences · Affectation poneys · Clôture reprises</p></div>
-          <HelpButton tourId="montoir-assign" manualLink="/admin/manuel#montoir" />
         </div>
         <div className="print:hidden flex items-center gap-2">
           <a href={`/admin/planning?date=${dateStr}`}

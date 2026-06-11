@@ -7,7 +7,6 @@ import { db } from "@/lib/firebase";
 import { emailTemplates } from "@/lib/email-templates";
 import { safeNumber, round2, generateOrderId } from "@/lib/utils";
 import { Card, Badge, Button } from "@/components/ui";
-import { HelpButton } from "@/components/HelpButton";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { useToast } from "@/components/ui/Toast";
 import { useAgentContext } from "@/hooks/useAgentContext";
@@ -1380,7 +1379,6 @@ export default function PaiementsPage() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <h1 className="font-display text-2xl font-bold text-blue-800">Paiements & facturation</h1>
-          <HelpButton tourId="paiements-encaisser" manualLink="/admin/manuel#paiements" />
         </div>
         <button onClick={() => fetchData(true)} disabled={refreshing}
           className="flex items-center gap-1.5 font-body text-xs text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50 disabled:opacity-50 transition-colors">
