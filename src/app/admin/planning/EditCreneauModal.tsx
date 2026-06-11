@@ -31,6 +31,8 @@ interface Props {
   form: EditForm;
   saving: boolean;
   applyAll: boolean;
+  applyStage?: boolean;
+  onApplyStageChange?: (v: boolean) => void;
   onFormChange: (form: EditForm) => void;
   onApplyAllChange: (v: boolean) => void;
   onClose: () => void;
@@ -41,7 +43,7 @@ interface Props {
 const PRESET_COLORS = ["#2050A0","#27ae60","#e67e22","#7c3aed","#D63031","#16a085","#F0A010","#0ea5e9","#db2777","#64748b"];
 
 export default function EditCreneauModal({
-  creneau, form, saving, applyAll, onFormChange, onApplyAllChange, onClose, onSave, onDuplicate
+  creneau, form, saving, applyAll, applyStage, onFormChange, onApplyAllChange, onApplyStageChange, onClose, onSave, onDuplicate
 }: Props) {
   const [moniteurs, setMoniteurs] = useState<string[]>([]);
   const [themes, setThemes] = useState<{ id: string; label: string }[]>([]);
@@ -243,7 +245,19 @@ export default function EditCreneauModal({
           )}
 
           {/* Case "appliquer à tous" — masquée si le changement moniteur gère déjà la portée */}
-          {!moniteurChanged && (
+          {(creneau.activityType === "stage" || creneau.activityType === "stage_journee") ? (
+            <label className="flex items-start gap-3 bg-green-50 rounded-xl p-3 cursor-pointer">
+              <input type="checkbox" checked={!!applyStage} onChange={e => onApplyStageChange?.(e.target.checked)}
+                className="accent-green-600 w-4 h-4 mt-0.5"/>
+              <div>
+                <div className="font-body text-sm font-semibold text-green-800">Appliquer à tous les jours de ce stage</div>
+                <div className="font-body text-xs text-slate-500 mt-0.5">
+                  Horaires, moniteur, places et prix appliqués à tous les jours du stage cette semaine.
+                  Décochez pour ne modifier que le {new Date(creneau.date + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}.
+                </div>
+              </div>
+            </label>
+          ) : !moniteurChanged && (
             <label className="flex items-start gap-3 bg-blue-50 rounded-xl p-3 cursor-pointer">
               <input type="checkbox" checked={applyAll} onChange={e => onApplyAllChange(e.target.checked)}
                 className="accent-blue-500 w-4 h-4 mt-0.5"/>

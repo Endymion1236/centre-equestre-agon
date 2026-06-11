@@ -475,7 +475,9 @@ service cloud.firestore {
     match /waitlist/{docId} {
       allow read: if isStaff() || (isAuth() && resource.data.familyId == request.auth.uid);
       allow create: if isAuth();
-      allow update, delete: if isAdmin();
+      // La famille peut modifier (confirmer) ou supprimer (annuler) SES propres
+      // entrées de liste d'attente ; l'admin garde la main sur tout.
+      allow update, delete: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
     }
 
     // ── Sessions CAWL (RETURNMAC + metadata checkout) ─────────────────────

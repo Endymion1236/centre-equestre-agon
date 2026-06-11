@@ -10,7 +10,6 @@ import {
 } from "@/lib/planning-services";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
-import { HelpButton } from "@/components/HelpButton";
 import { emailTemplates } from "@/lib/email-templates";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { generateOrderId } from "@/lib/utils";
@@ -24,7 +23,7 @@ import {
 } from "@/lib/discounts";
 import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Loader2, Trash2, Users, CalendarDays, Briefcase, Bell, Mail, Sparkles, Printer, Settings, MoreHorizontal, Copy } from "lucide-react";
 import type { Activity, Family } from "@/types";
-import { Creneau, EnrolledChild, typeColors, dayNames, dayNamesFull, payModes, getWeekDates, fmtDate, fmtDateFR, fmtMonthFR, compareCreneaux, itemMatchesCreneau, isForfaitChildPaye } from "./types";
+import { Creneau, EnrolledChild, typeColors, dayNames, dayNamesFull, payModes, getWeekDates, fmtDate, fmtDateFR, fmtMonthFR, compareCreneaux, itemMatchesCreneau, isForfaitChildPaye, sameStage } from "./types";
 import EnrollPanel from "./EnrollPanel";
 import PeriodGenerator from "./PeriodGenerator";
 import SimpleCreneauForm from "./SimpleCreneauForm";
@@ -103,6 +102,7 @@ export default function PlanningPage() {
   const [editForm, setEditForm] = useState<any>({});
   const [editSaving, setEditSaving] = useState(false);
   const [editApplyAll, setEditApplyAll] = useState(false);
+  const [editApplyStage, setEditApplyStage] = useState(false);
   const [showDuplicate, setShowDuplicate] = useState(false); const [dupWeeks, setDupWeeks] = useState(1); const [duplicating, setDuplicating] = useState(false);
   // ─── Menus déroulants barre d'actions (moderne) ───
   const [menuAddOpen, setMenuAddOpen] = useState(false);
@@ -299,7 +299,7 @@ export default function PlanningPage() {
         where("activityTitle", "==", c.activityTitle),
         where("startTime", "==", c.startTime),
       ));
-      setDeleteCount(snap.docs.filter(d => new Date((d.data() as any).date).getDay() === dow).length);
+      setDeleteCount(snap.docs.filter(d => new Date((d.data() as any).date).getDay() === dow && (d.data() as any).activityId === (c as any).activityId).length);
 
       // Pour les stages : compter les créneaux du même stage cette semaine
       if (isStageType(c)) {
@@ -314,7 +314,8 @@ export default function PlanningPage() {
           where("date", ">=", monStr),
           where("date", "<=", sunStr),
         ));
-        setDeleteWeekCount(snapWeek.docs.length);
+        // Filtre sameStage (stageGroupId prioritaire) : deux stages homonymes restent distincts
+        setDeleteWeekCount(snapWeek.docs.filter(d => sameStage(d.data(), c)).length);
       }
     } catch { setDeleteCount(1); }
   };
@@ -323,6 +324,8 @@ export default function PlanningPage() {
     setEditCreneau(c);
     setEditForm({ activityTitle: c.activityTitle, monitor: c.monitor || "", startTime: c.startTime, endTime: c.endTime, maxPlaces: c.maxPlaces, priceTTC: (c as any).priceTTC || 0, color: (c as any).color || "", allowDayBooking: (c as any).allowDayBooking || false, priceTTCDay: (c as any).priceTTCDay || "", themeStage: (c as any).themeStage || "" });
     setEditApplyAll(false);
+    // Pour un stage multi-jours : appliquer par défaut à tous les jours du stage
+    setEditApplyStage(c.activityType === "stage" || c.activityType === "stage_journee");
   };
 
   const confirmDelete = async (mode: "single" | "similar" | "week") => {
@@ -341,8 +344,10 @@ export default function PlanningPage() {
           where("date", ">=", fmtDate(mon)),
           where("date", "<=", fmtDate(sun)),
         ));
-        for (const t of snap.docs) await deleteDoc(doc(db, "creneaux", t.id));
-        toast(`🗑️ Stage supprimé (${snap.docs.length} créneaux)`, "success");
+        // Filtre sameStage (stageGroupId prioritaire) : ne supprime QUE ce stage
+        const weekTargets = snap.docs.filter(d => sameStage(d.data(), deleteCreneau));
+        for (const t of weekTargets) await deleteDoc(doc(db, "creneaux", t.id));
+        toast(`🗑️ Stage supprimé (${weekTargets.length} créneaux)`, "success");
       } else if (mode === "similar") {
         const dow = new Date(deleteCreneau.date).getDay();
         const snap = await getDocs(query(
@@ -350,7 +355,7 @@ export default function PlanningPage() {
           where("activityTitle", "==", deleteCreneau.activityTitle),
           where("startTime", "==", deleteCreneau.startTime),
         ));
-        const targets = snap.docs.filter(d => new Date((d.data() as any).date).getDay() === dow);
+        const targets = snap.docs.filter(d => new Date((d.data() as any).date).getDay() === dow && (d.data() as any).activityId === (deleteCreneau as any).activityId);
         for (const t of targets) await deleteDoc(doc(db, "creneaux", t.id));
         toast(`🗑️ ${targets.length} créneaux supprimés`, "success");
       } else {
@@ -383,7 +388,29 @@ export default function PlanningPage() {
       };
       if (editForm.color) update.color = editForm.color;
 
-      if (editApplyAll) {
+      const isStageType = editCreneau.activityType === "stage" || editCreneau.activityType === "stage_journee";
+      if (isStageType && editApplyStage) {
+        // ── Appliquer à TOUS les jours de ce stage (même semaine) ──
+        // Filtre par activityId + titre d'origine : deux stages homonymes
+        // la même semaine restent indépendants.
+        const d = new Date(editCreneau.date + "T12:00:00");
+        const mon = new Date(d); mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+        const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+        const weekSnap = await getDocs(query(
+          collection(db, "creneaux"),
+          where("date", ">=", fmtDate(mon)),
+          where("date", "<=", fmtDate(sun)),
+        ));
+        const targets = weekSnap.docs.filter(dd => {
+          const c: any = dd.data();
+          return sameStage(c, editCreneau) &&
+            (c.activityType === "stage" || c.activityType === "stage_journee");
+        });
+        for (const t of targets) {
+          await updateDoc(doc(db, "creneaux", t.id), update);
+        }
+        toast(`✅ Stage mis à jour (${targets.length} jour${targets.length > 1 ? "s" : ""})`, "success");
+      } else if (editApplyAll) {
         // Charger TOUS les créneaux futurs depuis Firestore (pas seulement la semaine affichée)
         const today = new Date().toISOString().split("T")[0];
         const allSnap = await getDocs(query(
@@ -1397,6 +1424,18 @@ export default function PlanningPage() {
             .sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
           if (waiting.length > 0) {
             const first = waiting[0] as any;
+            // ── Réserver la place 24h pour cette famille (hold) ──
+            // Pendant 24h, cette place n'est plus proposée aux autres familles
+            // côté client. Le hold expire automatiquement (vérifié à la lecture)
+            // ou disparaît dès que l'enfant concerné est inscrit.
+            const holdUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+            await updateDoc(doc(db, "creneaux", cid), {
+              waitlistHold: {
+                familyId: first.familyId, childId: first.childId,
+                childName: first.childName, until: holdUntil,
+                waitlistEntryId: first.id,
+              },
+            });
             authFetch("/api/send-email", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -1414,13 +1453,13 @@ export default function PlanningPage() {
                     <p style="margin:0;color:#166534;font-weight:600;">${c.activityTitle}</p>
                     <p style="margin:8px 0 0;color:#555;font-size:13px;">📅 ${new Date(c.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} — ${c.startTime}–${c.endTime}</p>
                   </div>
-                  <p>Connectez-vous à votre espace famille pour confirmer sous <strong>24h</strong>.</p>
+                  <p><strong>Cette place vous est réservée pendant 24h</strong> (jusqu'au ${new Date(holdUntil).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} à ${new Date(holdUntil).toLocaleTimeString("fr-FR", { hour:"2-digit", minute:"2-digit" })}). Connectez-vous à votre espace famille pour confirmer l'inscription. Passé ce délai, elle sera proposée aux autres familles.</p>
                   <p style="color:#666;font-size:12px;">À bientôt au centre équestre !</p>
                 </div>`,
               }),
             }).catch(() => {});
-            await updateDoc(doc(db, "waitlist", first.id), { status: "notified", notifiedAt: new Date().toISOString() });
-            toast(`🔔 ${first.childName} (liste d'attente) notifié(e) — place libérée`, "success");
+            await updateDoc(doc(db, "waitlist", first.id), { status: "notified", notifiedAt: new Date().toISOString(), holdUntil });
+            toast(`🔔 ${first.childName} (liste d'attente) notifié(e) — place réservée 24h`, "success");
           }
         }
       }
@@ -1439,7 +1478,6 @@ export default function PlanningPage() {
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <div className="flex items-center gap-3">
           <h1 className="font-display text-2xl font-bold text-blue-800">Planning</h1>
-          <HelpButton tourId="planning-enroll" manualLink="/admin/manuel#planning" />
           <a href={`/admin/montoir?date=${fmtDate(currentDay)}`}
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg no-underline hover:bg-blue-100">
             🐴 Montoir
@@ -1763,6 +1801,8 @@ export default function PlanningPage() {
           form={editForm}
           saving={editSaving}
           applyAll={editApplyAll}
+          applyStage={editApplyStage}
+          onApplyStageChange={setEditApplyStage}
           onFormChange={setEditForm}
           onApplyAllChange={setEditApplyAll}
           onClose={() => setEditCreneau(null)}

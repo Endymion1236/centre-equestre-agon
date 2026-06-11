@@ -15,7 +15,6 @@ const calcAge = (birthDate: any): string => {
   return `${age} ans`;
 };
 import { Card, Badge } from "@/components/ui";
-import { HelpButton } from "@/components/HelpButton";
 import { useToast } from "@/components/ui/Toast";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { emailTemplates } from "@/lib/email-templates";
@@ -775,27 +774,31 @@ export default function MontoirPage() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      {/* En-tête : flex-wrap pour que les boutons passent sous le titre sur
+          mobile au lieu de provoquer un défilement horizontal de la page. */}
+      <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
         <div className="flex items-center gap-3">
           <div><h1 className="font-display text-2xl font-bold text-blue-800">Montoir</h1><p className="font-body text-xs text-slate-600">Présences · Affectation poneys · Clôture reprises</p></div>
-          <HelpButton tourId="montoir-assign" manualLink="/admin/manuel#montoir" />
         </div>
-        <div className="print:hidden flex items-center gap-2">
+        <div className="print:hidden flex flex-wrap items-center gap-2">
           <a href={`/admin/planning?date=${dateStr}`}
-            className="flex items-center gap-2 font-body text-sm font-semibold text-blue-600 bg-blue-50 px-4 py-2 rounded-lg no-underline hover:bg-blue-100">
+            className="flex items-center gap-2 font-body text-sm font-semibold text-blue-600 bg-blue-50 px-3 sm:px-4 py-2 rounded-lg no-underline hover:bg-blue-100">
             📅 Planning
           </a>
           <a href={`/montoir/display?date=${dateStr}`} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-600 px-4 py-2 rounded-lg no-underline hover:bg-blue-500">
+            className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-600 px-3 sm:px-4 py-2 rounded-lg no-underline hover:bg-blue-500">
             📺 Projeter
           </a>
-          <button onClick={()=>window.print()} className="flex items-center gap-2 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><Printer size={16} /> Imprimer</button>
+          <button onClick={()=>window.print()} className="flex items-center gap-2 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><Printer size={16} /> Imprimer</button>
         </div>
       </div>
-      <div className="flex items-center justify-between mb-6">
-        <button onClick={()=>setDayOffset(d=>d-1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16} /> Veille</button>
-        <div className="text-center"><div className="font-display text-lg font-bold text-blue-800 capitalize">{currentDay.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div><div className="font-body text-xs text-slate-600">{creneaux.length} reprise{creneaux.length>1?"s":""} · {totalE} inscrits · {totalP} présents</div></div>
-        <div className="flex gap-2"><button onClick={()=>setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setDayOffset(d=>d+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain <ChevronRight size={16} /></button></div>
+      {/* Navigation jour : sur mobile la date passe en premier (pleine largeur,
+          centrée) et les boutons Veille / Auj. / Lendemain se partagent la
+          ligne du dessous — plus de débordement horizontal. */}
+      <div className="flex flex-wrap items-center justify-between gap-y-3 mb-6">
+        <div className="w-full sm:w-auto sm:order-2 text-center"><div className="font-display text-lg font-bold text-blue-800 capitalize">{currentDay.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div><div className="font-body text-xs text-slate-600">{creneaux.length} reprise{creneaux.length>1?"s":""} · {totalE} inscrits · {totalP} présents</div></div>
+        <button onClick={()=>setDayOffset(d=>d-1)} className="sm:order-1 flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16} /> Veille</button>
+        <div className="sm:order-3 flex gap-2"><button onClick={()=>setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-3 sm:px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setDayOffset(d=>d+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain <ChevronRight size={16} /></button></div>
       </div>
       {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
       <>
@@ -912,18 +915,22 @@ export default function MontoirPage() {
           <SeanceNotes creneau={c} onChanged={fetchData} />
           {en.length===0 ? <p className="font-body text-sm text-slate-600 italic">Aucun inscrit</p> :
           <div>
-            <div className="flex items-center px-3 py-2 font-body text-[11px] font-semibold uppercase tracking-wider" style={{color:"#334155"}}>
-              <span className="w-8 hidden sm:block">#</span><span className="flex-1">Cavalier</span><span className="w-32 hidden sm:block">Famille</span><span className="w-28 sm:w-36">Poney</span><span className="w-20 sm:w-24 text-center">Présence</span>
+            {/* En-tête masqué sur mobile : les lignes y passent en 2 niveaux
+                (nom+âge / poney+présence), les libellés deviennent inutiles. */}
+            <div className="hidden sm:flex items-center px-3 py-2 font-body text-[11px] font-semibold uppercase tracking-wider" style={{color:"#334155"}}>
+              <span className="w-8">#</span><span className="flex-1">Cavalier</span><span className="w-32">Famille</span><span className="w-36">Poney</span><span className="w-24 text-center">Présence</span>
             </div>
             {en.map((e:any, i:number) => (
-              <div key={e.childId} className={`flex items-center px-3 py-2.5 rounded-lg ${i%2===0?"bg-sand":""} ${(e.presence==="absent"||e.presence==="absent_nonjustified")?"opacity-40":""}`}>
+              <div key={e.childId} className={`flex flex-wrap sm:flex-nowrap items-center gap-y-1.5 px-3 py-2.5 rounded-lg ${i%2===0?"bg-sand":""} ${(e.presence==="absent"||e.presence==="absent_nonjustified")?"opacity-40":""}`}>
                 <span className="w-8 font-body text-xs hidden sm:block" style={{color:"#475569"}}>{i+1}</span>
-                <span className="flex-1 font-body text-sm font-semibold text-blue-800">
-                  {e.childName}
-                  {(() => { const fam = families.find((f:any) => (f.children||[]).some((c:any)=>c.id===e.childId)); const child = (fam?.children||[]).find((c:any)=>c.id===e.childId); const age = calcAge(child?.birthDate); return age ? <span className="ml-1.5 font-body text-[10px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">{age}</span> : null; })()}
+                {/* Mobile : nom + âge sur une ligne pleine largeur (le badge ne
+                    casse plus au milieu) ; desktop : colonne flexible inchangée. */}
+                <span className="w-full sm:w-auto sm:flex-1 font-body text-sm font-semibold text-blue-800 flex items-center gap-1.5 min-w-0">
+                  <span className="truncate">{e.childName}</span>
+                  {(() => { const fam = families.find((f:any) => (f.children||[]).some((c:any)=>c.id===e.childId)); const child = (fam?.children||[]).find((c:any)=>c.id===e.childId); const age = calcAge(child?.birthDate); return age ? <span className="shrink-0 whitespace-nowrap font-body text-[10px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">{age}</span> : null; })()}
                 </span>
                 <span className="w-32 font-body text-xs hidden sm:block" style={{color:"#334155"}}>{e.familyName}</span>
-                <span className="w-28 sm:w-36">{!closed ? (() => {
+                <span className="grow basis-40 sm:grow-0 sm:basis-auto sm:w-36 min-w-0">{!closed ? (() => {
                   // Doublon dans CE créneau → toujours bloqué
                   const usedInThis = new Set<string>();
                   en.forEach((oe: any) => { if (oe.childId !== e.childId && oe.horseName) usedInThis.add(oe.horseName); });
@@ -936,7 +943,7 @@ export default function MontoirPage() {
                   });
 
                   return (
-                    <div className="w-28 sm:w-36 flex flex-col gap-1">
+                    <div className="w-full sm:w-36 flex flex-col gap-1">
                       <select value={e.horseName||""} onChange={ev=>assignHorse(c,e.childId,ev.target.value)} className="px-2 py-1.5 rounded-lg border border-blue-500/8 font-body text-xs bg-white w-full">
                         <option value="">Affecter...</option>
                         {availableHorses.map(h => {
@@ -959,8 +966,8 @@ export default function MontoirPage() {
                       )}
                     </div>
                   );
-                })() : <span className="font-body text-xs font-semibold text-blue-800">{displayFromHorseName(e.horseName) || "—"}</span>}</span>
-                <span className="w-28 sm:w-32 flex justify-center gap-1 sm:gap-2">{!closed ? <>
+                })() : <span className="block truncate font-body text-xs font-semibold text-blue-800">{displayFromHorseName(e.horseName) || "—"}</span>}</span>
+                <span className="shrink-0 ml-auto sm:ml-0 sm:w-32 flex justify-end sm:justify-center gap-1 sm:gap-2">{!closed ? <>
                   {/* Bouton "Present" retire (mai 2026, demande Nicolas) :
                       tout cavalier non explicitement marque absent/non
                       justifie est considere present par defaut. On ne

@@ -209,7 +209,21 @@ export default function TimelineReservation({ creneaux, children, familyId, onBo
     return counts;
   }, [creneaux, weekDays, filter, activeChildren]);
 
-  const spotsLeft = (c: Creneau) => c.maxPlaces - (c.enrolled?.length || 0);
+  // Place réservée 24h (hold liste d'attente) : masquée pour les autres
+  // familles, visible pour la famille notifiée. Hold actif = non expiré et
+  // enfant concerné pas encore inscrit.
+  const holdActive = (c: any) => {
+    const h = c?.waitlistHold;
+    if (!h?.until) return false;
+    if (new Date(h.until).getTime() < Date.now()) return false;
+    if ((c.enrolled || []).some((e: any) => e.childId === h.childId)) return false;
+    return true;
+  };
+  const spotsLeft = (c: Creneau) => {
+    const base = c.maxPlaces - (c.enrolled?.length || 0);
+    if (holdActive(c) && (c as any).waitlistHold?.familyId !== familyId) return Math.max(0, base - 1);
+    return base;
+  };
   // Un enfant au moins de la famille est inscrit (pour le badge)
   const hasFamilyEnrolled = (c: Creneau) =>
     (c.enrolled || []).some((e: any) => e.familyId === familyId);
@@ -396,10 +410,9 @@ export default function TimelineReservation({ creneaux, children, familyId, onBo
                   {!enrolled && (
                     <button
                       onClick={() => onBook(c)}
-                      disabled={full}
-                      className={`w-full py-2.5 rounded-xl font-body text-sm font-semibold border-none cursor-pointer transition-all ${
-                        full ? "bg-gray-100 text-gray-400 cursor-not-allowed" :
-                        relevance === "perfect" ? "text-white" : "bg-blue-500 text-white hover:bg-blue-600"
+                      className={`w-full py-2.5 rounded-xl font-body text-sm font-semibold cursor-pointer transition-all ${
+                        full ? "bg-orange-50 text-orange-600 border border-orange-200 hover:bg-orange-100" :
+                        relevance === "perfect" ? "text-white border-none" : "bg-blue-500 text-white border-none hover:bg-blue-600"
                       }`}
                       style={relevance === "perfect" && !full ? { background: `linear-gradient(135deg, ${col}, #2050A0)` } : {}}>
                       {full ? "Complet — liste d'attente →" : "Réserver →"}

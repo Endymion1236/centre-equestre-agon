@@ -221,7 +221,10 @@ export default function ReserverPage() {
     stages.forEach(c => {
       const d = new Date(c.date);
       const mon = new Date(d); mon.setDate(mon.getDate() - ((d.getDay() + 6) % 7));
-      const key = `${c.activityTitle}_${fmtDate(mon)}`;
+      // Clé = stageGroupId (lot de création, fiable à 100%) avec fallback
+      // activityId pour les stages antérieurs à ce champ. Deux stages
+      // homonymes — même créés depuis la même activité — restent distincts.
+      const key = `${(c as any).stageGroupId || c.activityId}_${fmtDate(mon)}`;
       if (!groups[key]) groups[key] = [];
       groups[key].push(c);
     });
@@ -492,6 +495,24 @@ export default function ReserverPage() {
             }],
             enrolledCount: enrolled.length + 1,
           });
+
+          // Si cet enfant était en liste d'attente pour ce créneau, marquer
+          // l'entrée comme acceptée (le hold 24h éventuel devient sans objet
+          // automatiquement dès que l'enfant est inscrit). Non bloquant.
+          try {
+            const wlSnap = await getDocs(query(
+              collection(db, "waitlist"),
+              where("creneauId", "==", cid),
+              where("childId", "==", item.childId),
+              where("familyId", "==", user.uid),
+            ));
+            for (const wd of wlSnap.docs) {
+              const st = (wd.data() as any).status;
+              if (st === "waiting" || st === "notified") {
+                await updateDoc(doc(db, "waitlist", wd.id), { status: "accepted", acceptedAt: new Date().toISOString() });
+              }
+            }
+          } catch (wlErr) { console.warn("[handlePay] maj waitlist:", wlErr); }
         }
 
         // Réservations — une SEULE réservation groupée pour les stages
@@ -684,7 +705,24 @@ export default function ReserverPage() {
     setPaying(false);
   };
 
-  const spotsLeft = (c: Creneau) => c.maxPlaces - (c.enrolled?.length || 0);
+  // ── Hold liste d'attente (place réservée 24h) ──
+  // Un hold est actif s'il n'est pas expiré ET que l'enfant concerné n'est pas
+  // encore inscrit (dès qu'il s'inscrit, le hold devient sans objet).
+  const holdActive = (c: any) => {
+    const h = c?.waitlistHold;
+    if (!h?.until) return false;
+    if (new Date(h.until).getTime() < Date.now()) return false;
+    if ((c.enrolled || []).some((e: any) => e.childId === h.childId)) return false;
+    return true;
+  };
+
+  // Places visibles : la place sous hold est masquée pour les autres familles,
+  // mais reste disponible pour la famille notifiée (elle peut réserver).
+  const spotsLeft = (c: Creneau) => {
+    const base = c.maxPlaces - (c.enrolled?.length || 0);
+    if (holdActive(c) && (c as any).waitlistHold?.familyId !== familyId) return Math.max(0, base - 1);
+    return base;
+  };
 
   const addToWaitlist = async (c: Creneau, childId: string) => {
     if (!user || !family) return;
@@ -1251,6 +1289,55 @@ export default function ReserverPage() {
               <div className="font-body text-xs text-slate-500 mt-0.5">{bookingCreneau.startTime}–{bookingCreneau.endTime} · {bookingCreneau.monitor}</div>
             </div>
             <div className="p-5">
+              {spotsLeft(bookingCreneau) === 0 ? (
+                /* ── Créneau complet : inscription en liste d'attente ── */
+                waitlistSuccess === bookingCreneau.id ? (
+                  <div className="text-center py-2">
+                    <div className="flex items-center justify-center gap-2 text-green-600 font-body text-sm font-semibold mb-2">
+                      <Check size={18} /> Inscrit en liste d&apos;attente !
+                    </div>
+                    <p className="font-body text-xs text-slate-500 mb-4">
+                      Vous serez notifié par email si une place se libère.
+                    </p>
+                    <button onClick={() => setBookingCreneau(null)}
+                      className="w-full py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 border-none cursor-pointer hover:bg-blue-400">
+                      Fermer
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="font-body text-sm text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 mb-3">
+                      🔔 Ce créneau est complet. Inscrivez-vous en liste d&apos;attente :
+                    </div>
+                    <div className="font-body text-sm font-semibold text-slate-700 mb-3">Pour quel cavalier ?</div>
+                    <div className="flex flex-col gap-2">
+                      {(family?.children || [])
+                        .filter((ch: any) => !(bookingCreneau.enrolled || []).some((e: any) => e.childId === ch.id))
+                        .map((ch: any) => (
+                          <button key={ch.id}
+                            onClick={() => addToWaitlist(bookingCreneau, ch.id)}
+                            disabled={waitlistLoading === bookingCreneau.id}
+                            className="flex items-center justify-between px-4 py-3 rounded-xl border border-orange-200 bg-orange-50 font-body text-sm text-orange-700 cursor-pointer hover:bg-orange-100 disabled:opacity-50">
+                            <span className="font-semibold flex items-center gap-2">
+                              {waitlistLoading === bookingCreneau.id ? <Loader2 size={14} className="animate-spin" /> : "🔔"} {ch.firstName}
+                            </span>
+                            {ch.galopLevel && ch.galopLevel !== "—" && (
+                              <span className="font-body text-xs text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">G{ch.galopLevel}</span>
+                            )}
+                          </button>
+                        ))}
+                      {(family?.children || []).filter((ch: any) => !(bookingCreneau.enrolled || []).some((e: any) => e.childId === ch.id)).length === 0 && (
+                        <p className="font-body text-sm text-slate-500 text-center py-2">Tous vos cavaliers sont déjà inscrits à ce créneau.</p>
+                      )}
+                    </div>
+                    <button onClick={() => setBookingCreneau(null)}
+                      className="w-full mt-3 py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
+                      Annuler
+                    </button>
+                  </>
+                )
+              ) : (
+              <>
               <div className="font-body text-sm font-semibold text-slate-700 mb-3">Pour quel cavalier ?</div>
               <div className="flex flex-col gap-2">
                 {(family?.children || [])
@@ -1301,6 +1388,8 @@ export default function ReserverPage() {
                 className="w-full mt-3 py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
                 Annuler
               </button>
+              </>
+              )}
             </div>
           </div>
         </div>

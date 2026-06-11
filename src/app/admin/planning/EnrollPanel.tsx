@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useRef } from "react";
-import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, query, where, orderBy, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, deleteField, doc, query, where, orderBy, serverTimestamp } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { Card, Badge } from "@/components/ui";
@@ -63,7 +63,7 @@ import {
 } from "@/lib/discounts";
 import { X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera, FileImage, Mail, Sparkles, Send, FileText, Printer, StickyNote, ChevronDown, ChevronUp, Clock } from "lucide-react";
 import type { Activity, Family } from "@/types";
-import { Creneau, EnrolledChild, payModes, typeColors, fmtDate, itemMatchesCreneau, isForfaitChildPaye } from "./types";
+import { Creneau, EnrolledChild, payModes, typeColors, fmtDate, itemMatchesCreneau, isForfaitChildPaye, sameStage } from "./types";
 import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/lib/auth-context";
 
@@ -390,6 +390,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       }];
       await updateDoc(doc(db, "creneaux", creneau.id!), {
         enrolled: newEnrolled, enrolledCount: newEnrolled.length,
+        // Lever le hold 24h s'il concernait cette entrée (place réservée honorée)
+        ...((creneau as any).waitlistHold?.childId === entry.childId ? { waitlistHold: deleteField() } : {}),
       });
       // Mettre à jour le statut waitlist
       await updateDoc(doc(db, "waitlist", entry.id), { status: "accepted", acceptedAt: new Date().toISOString() });
@@ -1053,7 +1055,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           // IMPORTANT: allCreneaux ne contient que la vue courante du planning.
           // Pour les stages en mode semaine, charger TOUS les créneaux de la semaine.
           let stageCreneaux = allCreneaux.filter(c =>
-            c.activityTitle === creneau.activityTitle &&
+            sameStage(c, creneau) &&
             (c.activityType === "stage" || c.activityType === "stage_journee") &&
             c.date >= monStr && c.date <= sunStr
           ).sort((a, b) => a.date.localeCompare(b.date));
@@ -1068,7 +1070,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               ));
               const weekCreneaux = weekSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
               stageCreneaux = weekCreneaux.filter(c =>
-                c.activityTitle === creneau.activityTitle &&
+                sameStage(c, creneau) &&
                 (c.activityType === "stage" || c.activityType === "stage_journee")
               ).sort((a, b) => a.date.localeCompare(b.date));
               console.log(`📋 Stage semaine : ${stageCreneaux.length} jours trouvés pour "${creneau.activityTitle}" (${monStr} → ${sunStr})`);
@@ -1634,33 +1636,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
   const handleUnenroll = async (childId: string) => {
     setUnenrolling(childId);
+    // La notification du premier en liste d'attente (email + hold 24h sur la
+    // place) est gérée de manière centralisée dans onUnenroll (planning/page.tsx).
+    // Ne PAS renvoyer d'email ici : cela créait un doublon de notification.
     await onUnenroll(creneau.id!, childId);
-    // Notifier le premier en liste d'attente s'il y en a
-    if (waitlist.length > 0) {
-      const first = waitlist[0];
-      authFetch("/api/send-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to: first.familyEmail,
-          subject: `🎉 Une place s'est libérée — ${creneau.activityTitle}`,
-          context: "admin_place_liberee",
-          template: "placeLibereeNotif",
-          familyId: first.familyId,
-          creneauId: creneau.id,
-          html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-            <p>Bonjour <strong>${first.familyName}</strong>,</p>
-            <p>Une place vient de se libérer pour <strong>${first.childName}</strong> !</p>
-            <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:16px;margin:16px 0;">
-              <p style="margin:0;color:#c2410c;font-weight:600;">🔔 ${creneau.activityTitle}</p>
-              <p style="margin:8px 0 0;color:#555;font-size:13px;">📅 ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })}</p>
-              <p style="margin:4px 0 0;color:#555;font-size:13px;">🕐 ${creneau.startTime}–${creneau.endTime}</p>
-            </div>
-            <p>Connectez-vous à votre espace cavalier pour confirmer l'inscription avant qu'une autre famille ne la prenne.</p>
-          </div>`,
-        }),
-      }).catch(e => console.warn("Email waitlist notif:", e));
-    }
     setUnenrolling("");
   };
 
