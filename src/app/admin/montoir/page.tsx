@@ -927,7 +927,7 @@ export default function MontoirPage() {
                   {(() => { const fam = families.find((f:any) => (f.children||[]).some((c:any)=>c.id===e.childId)); const child = (fam?.children||[]).find((c:any)=>c.id===e.childId); const age = calcAge(child?.birthDate); return age ? <span className="shrink-0 whitespace-nowrap font-body text-[10px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">{age}</span> : null; })()}
                 </span>
                 <span className="w-32 font-body text-xs hidden sm:block" style={{color:"#334155"}}>{e.familyName}</span>
-                <span className="flex-1 sm:flex-none sm:w-36 min-w-0">{!closed ? (() => {
+                <span className="grow basis-40 sm:grow-0 sm:basis-auto sm:w-36 min-w-0">{!closed ? (() => {
                   // Doublon dans CE créneau → toujours bloqué
                   const usedInThis = new Set<string>();
                   en.forEach((oe: any) => { if (oe.childId !== e.childId && oe.horseName) usedInThis.add(oe.horseName); });
