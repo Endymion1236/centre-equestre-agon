@@ -870,8 +870,11 @@ export default function ReserverPage() {
       {/* ── VUE LISTE ── */}
       {(viewMode === "liste" || filter !== "all") && (<>
 
-      {/* Filtres catégorie — masqués si filtre imposé par l'URL */}
-      {filter === "all" && (
+      {/* Filtres catégorie — masqués uniquement si le filtre est imposé par
+          l'URL (?filter=stage). Tester l'état courant (filter) au lieu du
+          filtre initial faisait disparaître la rangée dès le premier clic :
+          impossible de revenir à "Tout". */}
+      {initialFilter === "all" && (
         <div className="flex flex-wrap gap-2 mb-2">
           {[
             ["all", "Tout"],
