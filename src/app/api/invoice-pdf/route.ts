@@ -70,6 +70,10 @@ const s = StyleSheet.create({
   payBox:     { padding: "10 12", borderRadius: 5, borderWidth: 1, marginBottom: 14 },
   payPaid:    { backgroundColor: "#f0fdf4", borderColor: "#86efac" },
   payUnpaid:  { backgroundColor: "#fff7ed", borderColor: "#fdba74" },
+  // Tampon "PAYÉ" : encadré rouge incliné en bas à droite, façon tampon encreur.
+  // Position absolue par rapport à la page, au-dessus du pied de page.
+  stampBox:   { position: "absolute", bottom: 80, right: 50, transform: "rotate(-12deg)", borderWidth: 3, borderColor: "#dc2626", borderRadius: 6, padding: "5 16", opacity: 0.8 },
+  stampTxt:   { color: "#dc2626", fontSize: 26, fontFamily: "Helvetica-Bold", letterSpacing: 3 },
   payTitle:   { fontSize: 10, fontFamily: "Helvetica-Bold", marginBottom: 3 },
   payDetail:  { fontSize: 8, color: GRAY, lineHeight: 1.6 },
   // QR Code SEPA pour faciliter le paiement par virement (norme EPC069-12)
@@ -323,6 +327,12 @@ export async function POST(request: NextRequest) {
               )
             : null,
         ),
+
+        // ── Tampon PAYÉ (uniquement si la facture est réglée) ────────────
+        isPaid
+          ? React.createElement(View, { style: s.stampBox, fixed: true },
+              React.createElement(Text, { style: s.stampTxt }, "PAYÉ"))
+          : null,
 
         // ── Pied de page ─────────────────────────────────────────────────
         React.createElement(Text, { style: s.footer },
