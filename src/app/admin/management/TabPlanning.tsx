@@ -8,7 +8,7 @@ import { Plus, Trash2, Check, ChevronLeft, ChevronRight, Printer, Save, LayoutTe
 import { useToast } from "@/components/ui/Toast";
 import { Card } from "@/components/ui";
 import type { TacheType, TachePlanifiee, Salarie, JourSemaine, ModelePlanning, TacheModele } from "./types";
-import { CATEGORIES, JOURS, JOURS_LABELS, getLundideSemaine, getISOWeek, formatDateCourte, fmtDuree, calcTempsTravailJour } from "./types";
+import { CATEGORIES, JOURS, JOURS_LABELS, getLundideSemaine, getISOWeek, formatDateCourte, fmtDuree, calcTempsTravailJour, bornesJournee } from "./types";
 
 interface Props {
   semaine: string;
@@ -945,7 +945,10 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
         const chargeCells = joursLabels.map(({ jour }) => {
           const dayT = salTaches.filter(t => t.jour === jour);
           const charge = calcTempsTravailJour(dayT);
-          return `<td style="padding:4px;text-align:center;font-size:9px;font-weight:700;color:${charge > 0 ? "#1e3a5f" : "#d1d5db"};border-top:1px solid #e2e8f0;">${charge > 0 ? fmtDuree(charge) : "—"}</td>`;
+          // Heure de fin de journée (fin de la dernière tâche) sous la charge
+          const bornes = bornesJournee(dayT);
+          const finStr = bornes ? `<br/><span style="font-weight:400;color:#64748b;">→ ${bornes.fin}</span>` : "";
+          return `<td style="padding:4px;text-align:center;font-size:9px;font-weight:700;color:${charge > 0 ? "#1e3a5f" : "#d1d5db"};border-top:1px solid #e2e8f0;">${charge > 0 ? fmtDuree(charge) + finStr : "—"}</td>`;
         }).join("");
 
         const html = `
@@ -1665,11 +1668,18 @@ Réponds de façon concise et pratique, en français.`,
                     })}
 
                     {/* Total jour */}
-                    {dayCharge > 0 && (
-                      <div style={{marginTop:6, fontSize:12, fontWeight:700, color:"#475569", textAlign:"right"}}>
-                        Total : {fmtDuree(dayCharge)} · {dayTaches.filter(t=>t.done).length}/{dayTaches.length} tâches validées
-                      </div>
-                    )}
+                    {dayCharge > 0 && (() => {
+                      // Heure de fin de journée = fin de la dernière tâche
+                      // (heure de début + durée), calculée par bornesJournee.
+                      const bornes = bornesJournee(dayTaches);
+                      return (
+                        <div style={{marginTop:6, fontSize:12, fontWeight:700, color:"#475569", textAlign:"right"}}>
+                          {bornes && <span style={{color:"#2050A0"}}>Journée {bornes.debut} → {bornes.fin}</span>}
+                          {bornes && " · "}
+                          Total : {fmtDuree(dayCharge)} · {dayTaches.filter(t=>t.done).length}/{dayTaches.length} tâches validées
+                        </div>
+                      );
+                    })()}
                   </>
                 )}
               </div>

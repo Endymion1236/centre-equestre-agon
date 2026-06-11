@@ -176,3 +176,20 @@ export function calcTempsTravailJour(
     .reduce((s, t) => s + t.dureeMinutes, 0);
   return Math.max(0, amplitude - pauseMin);
 }
+
+/**
+ * Bornes horaires de la journée : début de la première tâche non-pause et
+ * fin de la dernière (heure de début + durée). Sert à afficher l'heure de
+ * fin de journée dans le récap du semainier. Retourne null si aucune tâche.
+ */
+export function bornesJournee(
+  tachesDuJour: { heureDebut: string; dureeMinutes: number; categorie: string }[]
+): { debut: string; fin: string } | null {
+  const travail = tachesDuJour.filter(t => t.categorie !== "pause");
+  if (travail.length === 0) return null;
+  const sorted = [...travail].sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
+  const lastT = sorted[sorted.length - 1];
+  const finMin = _heureToMin(lastT.heureDebut) + (lastT.dureeMinutes || 0);
+  const minToH = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  return { debut: sorted[0].heureDebut, fin: minToH(finMin) };
+}
