@@ -774,26 +774,31 @@ export default function MontoirPage() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      {/* En-tête : flex-wrap pour que les boutons passent sous le titre sur
+          mobile au lieu de provoquer un défilement horizontal de la page. */}
+      <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
         <div className="flex items-center gap-3">
           <div><h1 className="font-display text-2xl font-bold text-blue-800">Montoir</h1><p className="font-body text-xs text-slate-600">Présences · Affectation poneys · Clôture reprises</p></div>
         </div>
-        <div className="print:hidden flex items-center gap-2">
+        <div className="print:hidden flex flex-wrap items-center gap-2">
           <a href={`/admin/planning?date=${dateStr}`}
-            className="flex items-center gap-2 font-body text-sm font-semibold text-blue-600 bg-blue-50 px-4 py-2 rounded-lg no-underline hover:bg-blue-100">
+            className="flex items-center gap-2 font-body text-sm font-semibold text-blue-600 bg-blue-50 px-3 sm:px-4 py-2 rounded-lg no-underline hover:bg-blue-100">
             📅 Planning
           </a>
           <a href={`/montoir/display?date=${dateStr}`} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-600 px-4 py-2 rounded-lg no-underline hover:bg-blue-500">
+            className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-600 px-3 sm:px-4 py-2 rounded-lg no-underline hover:bg-blue-500">
             📺 Projeter
           </a>
-          <button onClick={()=>window.print()} className="flex items-center gap-2 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><Printer size={16} /> Imprimer</button>
+          <button onClick={()=>window.print()} className="flex items-center gap-2 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><Printer size={16} /> Imprimer</button>
         </div>
       </div>
-      <div className="flex items-center justify-between mb-6">
-        <button onClick={()=>setDayOffset(d=>d-1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16} /> Veille</button>
-        <div className="text-center"><div className="font-display text-lg font-bold text-blue-800 capitalize">{currentDay.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div><div className="font-body text-xs text-slate-600">{creneaux.length} reprise{creneaux.length>1?"s":""} · {totalE} inscrits · {totalP} présents</div></div>
-        <div className="flex gap-2"><button onClick={()=>setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setDayOffset(d=>d+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain <ChevronRight size={16} /></button></div>
+      {/* Navigation jour : sur mobile la date passe en premier (pleine largeur,
+          centrée) et les boutons Veille / Auj. / Lendemain se partagent la
+          ligne du dessous — plus de débordement horizontal. */}
+      <div className="flex flex-wrap items-center justify-between gap-y-3 mb-6">
+        <div className="w-full sm:w-auto sm:order-2 text-center"><div className="font-display text-lg font-bold text-blue-800 capitalize">{currentDay.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div><div className="font-body text-xs text-slate-600">{creneaux.length} reprise{creneaux.length>1?"s":""} · {totalE} inscrits · {totalP} présents</div></div>
+        <button onClick={()=>setDayOffset(d=>d-1)} className="sm:order-1 flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16} /> Veille</button>
+        <div className="sm:order-3 flex gap-2"><button onClick={()=>setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-3 sm:px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setDayOffset(d=>d+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain <ChevronRight size={16} /></button></div>
       </div>
       {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
       <>
