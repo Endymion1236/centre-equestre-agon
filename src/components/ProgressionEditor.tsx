@@ -339,8 +339,99 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
         {saved ? "✅ Sauvegardé !" : saving ? "Sauvegarde..." : "Enregistrer la progression"}
       </button>
 
+      {/* ── Analyse IA de la progression ── */}
+      <AnalyseIA childName={childName} galopLevel={galopLevel}
+        niveau={niveau} acquis={acquis} echelleLabels={echelleLabels} seuilFFE={seuilFFE} />
+
       {/* ── Note / commentaire du moniteur (en fin de bilan, inclus dans le PDF) ── */}
       <NoteMoniteur childId={childId} familyId={familyId} childName={childName} />
+    </div>
+  );
+}
+
+// ── Analyse IA de la progression ─────────────────────────────────────────────
+// Génération à la demande (jamais automatique : coût + choix explicite du
+// moniteur). Envoie le détail des compétences évaluées à /api/ia qui produit :
+// points forts, axes de travail, idées d'exercices ludiques, suggestion de
+// mot aux parents. L'analyse n'est PAS persistée : c'est un outil de travail.
+function AnalyseIA({ childName, galopLevel, niveau, acquis, echelleLabels, seuilFFE }: {
+  childName: string; galopLevel?: string; niveau: any;
+  acquis: Record<string, any>; echelleLabels: string[]; seuilFFE: number;
+}) {
+  const [working, setWorking] = useState(false);
+  const [analysis, setAnalysis] = useState<string>("");
+  const [error, setError] = useState<string>("");
+  const [copied, setCopied] = useState(false);
+
+  const generer = async () => {
+    if (!niveau) return;
+    setWorking(true); setError(""); setAnalysis("");
+    try {
+      const competences = (niveau.competences || []).map((c: any) => ({
+        label: c.label,
+        domaine: DOMAINE_LABELS[c.domaine as Domaine] || c.domaine,
+        niveau: getCompetenceLevel(acquis[c.id]),
+        validee: isCompetenceValidated(acquis[c.id], seuilFFE),
+      }));
+      const pct = computeProgressionPercent(niveau.competences, acquis);
+      const token = await (await import("firebase/auth")).getAuth().currentUser?.getIdToken();
+      const res = await fetch("/api/ia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          type: "analyse_progression",
+          child: { firstName: childName, galopLevel },
+          niveauLabel: niveau.label,
+          pctProgression: pct,
+          echelleLabels,
+          competences,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.analysis) throw new Error(data.error || "Réponse vide");
+      setAnalysis(data.analysis);
+    } catch (e: any) {
+      setError(e.message || "Erreur lors de la génération");
+    }
+    setWorking(false);
+  };
+
+  const copier = async () => {
+    try { await navigator.clipboard.writeText(analysis); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch {}
+  };
+
+  return (
+    <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-4">
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+        <div className="font-body text-xs font-semibold text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
+          ✨ Analyse IA de la progression
+        </div>
+        <button onClick={generer} disabled={working || !niveau}
+          className="font-body text-xs font-semibold text-white bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 px-3 py-1.5 rounded-lg border-none cursor-pointer">
+          {working ? "Analyse en cours…" : analysis ? "↻ Régénérer" : "Générer l'analyse"}
+        </button>
+      </div>
+      <p className="font-body text-[11px] text-indigo-400 mb-2">
+        Points forts, axes de travail, idées d&apos;exercices et suggestion de mot aux parents — d&apos;après les compétences évaluées ci-dessus.
+      </p>
+
+      {error && <p className="font-body text-xs text-red-500">{error}</p>}
+
+      {analysis && (
+        <div className="bg-white border border-indigo-100 rounded-lg p-3">
+          <div className="font-body text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+            {analysis.split(/\*\*(.*?)\*\*/g).map((part, i) =>
+              i % 2 === 1 ? <strong key={i} className="text-indigo-800">{part}</strong> : part
+            )}
+          </div>
+          <div className="flex justify-end mt-2">
+            <button onClick={copier}
+              className="font-body text-[11px] text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-1.5 cursor-pointer hover:bg-indigo-100">
+              {copied ? "✅ Copié !" : "📋 Copier l'analyse"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

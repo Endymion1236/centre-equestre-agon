@@ -132,7 +132,17 @@ interface ManagementCommandRequest {
   finDeJournee?: Record<string, Record<string, string>>;
 }
 
-type IARequest = RapprochementRequest | AssistantRequest | SuggestionsRequest | EmailRepriseRequest | BilanPedaRequest | GenerateEmailTemplateRequest | ThemeStageRequest | PlanningManagementRequest | ManagementCommandRequest;
+interface AnalyseProgressionRequest {
+  type: "analyse_progression";
+  child: { firstName: string; age?: string; galopLevel?: string };
+  niveauLabel: string;
+  pctProgression: number;
+  echelleLabels: string[];
+  competences: { label: string; domaine: string; niveau: number | null; validee: boolean }[];
+  notesRecentes?: string[];
+}
+
+type IARequest = RapprochementRequest | AssistantRequest | SuggestionsRequest | EmailRepriseRequest | BilanPedaRequest | GenerateEmailTemplateRequest | ThemeStageRequest | PlanningManagementRequest | ManagementCommandRequest | AnalyseProgressionRequest;
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
@@ -219,6 +229,48 @@ Sois concis, pratique, en français. Pas de markdown complexe, juste des titres 
             : 100,
         },
       });
+    }
+
+    // ── Analyse pédagogique de progression ────────────────────────────────────
+    if (body.type === "analyse_progression") {
+      const parDomaine: Record<string, string[]> = {};
+      body.competences.forEach(c => {
+        if (!parDomaine[c.domaine]) parDomaine[c.domaine] = [];
+        const etat = c.validee
+          ? "✅ validée"
+          : c.niveau
+            ? `${c.niveau}/5 (${body.echelleLabels[c.niveau - 1] || ""})`
+            : "non évaluée";
+        parDomaine[c.domaine].push(`- ${c.label} : ${etat}`);
+      });
+
+      const prompt = `Tu es un moniteur d'équitation expérimenté en poney-club, spécialiste de la pédagogie ludique (Pony Games, équifun).
+Analyse la progression de ce cavalier et produis un bilan utile au moniteur.
+
+CAVALIER : ${body.child.firstName}${body.child.age ? `, ${body.child.age}` : ""}
+NIVEAU EN COURS : ${body.niveauLabel} — ${body.pctProgression}% de progression
+ÉCHELLE D'ÉVALUATION : ${body.echelleLabels.map((l, i) => `${i + 1}=${l}`).join(", ")}
+
+COMPÉTENCES PAR DOMAINE :
+${Object.entries(parDomaine).map(([d, lignes]) => `${d.toUpperCase()} :\n${lignes.join("\n")}`).join("\n\n")}
+${body.notesRecentes?.length ? `\nDERNIÈRES NOTES DU MONITEUR :\n${body.notesRecentes.slice(0, 3).map(n => `- ${n}`).join("\n")}` : ""}
+
+Fournis une analyse structurée en 4 parties :
+1. **Points forts** — 2-3 compétences où ${body.child.firstName} excelle ou progresse vite
+2. **Axes de travail prioritaires** — 2-3 compétences à travailler en priorité, avec une phrase expliquant pourquoi (prérequis pour la suite, déséquilibre entre domaines, etc.)
+3. **Idées d'exercices ludiques** — 2-3 jeux ou exercices concrets de poney-club adaptés à ces axes et à l'âge du cavalier
+4. **Suggestion de mot aux parents** — 2-3 phrases chaleureuses et encourageantes, prêtes à envoyer, sans formule de politesse
+
+Sois concis et concret, en français. Titres en gras simple, listes à tirets, pas de markdown complexe.`;
+
+      const message = await client.messages.create({
+        model: "claude-sonnet-4-5",
+        max_tokens: 1024,
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      const text = message.content[0].type === "text" ? message.content[0].text : "";
+      return NextResponse.json({ success: true, analysis: text });
     }
 
     // ── Assistant comptable ───────────────────────────────────────────────────
