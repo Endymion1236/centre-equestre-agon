@@ -354,105 +354,14 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
         {saved ? "✅ Sauvegardé !" : saving ? "Sauvegarde..." : "Enregistrer la progression"}
       </button>
 
-      {/* ── Analyse IA de la progression ── */}
-      <AnalyseIA childName={childName} galopLevel={galopLevel}
-        niveau={niveau} acquis={acquis} echelleLabels={echelleLabels} seuilFFE={seuilFFE} />
-
-      {/* ── Note / commentaire du moniteur (en fin de bilan, inclus dans le PDF) ── */}
-      <NoteMoniteur childId={childId} familyId={familyId} childName={childName} />
+      {/* ── Note / commentaire du moniteur (en fin de bilan, inclus dans le PDF)
+            avec analyse IA de la note dictée ── */}
+      <NoteMoniteur childId={childId} familyId={familyId} childName={childName} galopLevel={galopLevel} />
     </div>
   );
 }
 
-// ── Analyse IA de la progression ─────────────────────────────────────────────
-// Génération à la demande (jamais automatique : coût + choix explicite du
-// moniteur). Envoie le détail des compétences évaluées à /api/ia qui produit :
-// points forts, axes de travail, idées d'exercices ludiques, suggestion de
-// mot aux parents. L'analyse n'est PAS persistée : c'est un outil de travail.
-function AnalyseIA({ childName, galopLevel, niveau, acquis, echelleLabels, seuilFFE }: {
-  childName: string; galopLevel?: string; niveau: any;
-  acquis: Record<string, any>; echelleLabels: string[]; seuilFFE: number;
-}) {
-  const [working, setWorking] = useState(false);
-  const [analysis, setAnalysis] = useState<string>("");
-  const [error, setError] = useState<string>("");
-  const [copied, setCopied] = useState(false);
-
-  const generer = async () => {
-    if (!niveau) return;
-    setWorking(true); setError(""); setAnalysis("");
-    try {
-      const competences = (niveau.competences || []).map((c: any) => ({
-        label: c.label,
-        domaine: DOMAINE_LABELS[c.domaine as Domaine] || c.domaine,
-        niveau: getCompetenceLevel(acquis[c.id]),
-        validee: isCompetenceValidated(acquis[c.id], seuilFFE),
-      }));
-      const pct = computeProgressionPercent(niveau.competences, acquis);
-      const token = await (await import("firebase/auth")).getAuth().currentUser?.getIdToken();
-      const res = await fetch("/api/ia", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          type: "analyse_progression",
-          child: { firstName: childName, galopLevel },
-          niveauLabel: niveau.label,
-          pctProgression: pct,
-          echelleLabels,
-          competences,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.analysis) throw new Error(data.error || "Réponse vide");
-      setAnalysis(data.analysis);
-    } catch (e: any) {
-      setError(e.message || "Erreur lors de la génération");
-    }
-    setWorking(false);
-  };
-
-  const copier = async () => {
-    try { await navigator.clipboard.writeText(analysis); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch {}
-  };
-
-  return (
-    <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-4">
-      <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
-        <div className="font-body text-xs font-semibold text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
-          ✨ Analyse IA de la progression
-        </div>
-        <button onClick={generer} disabled={working || !niveau}
-          className="font-body text-xs font-semibold text-white bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 px-3 py-1.5 rounded-lg border-none cursor-pointer">
-          {working ? "Analyse en cours…" : analysis ? "↻ Régénérer" : "Générer l'analyse"}
-        </button>
-      </div>
-      <p className="font-body text-[11px] text-indigo-400 mb-2">
-        Points forts, axes de travail, idées d&apos;exercices et suggestion de mot aux parents — d&apos;après les compétences évaluées ci-dessus.
-      </p>
-
-      {error && <p className="font-body text-xs text-red-500">{error}</p>}
-
-      {analysis && (
-        <div className="bg-white border border-indigo-100 rounded-lg p-3">
-          <div className="font-body text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-            {analysis.split(/\*\*(.*?)\*\*/g).map((part, i) =>
-              i % 2 === 1 ? <strong key={i} className="text-indigo-800">{part}</strong> : part
-            )}
-          </div>
-          <div className="flex justify-end mt-2">
-            <button onClick={copier}
-              className="font-body text-[11px] text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-1.5 cursor-pointer hover:bg-indigo-100">
-              {copied ? "✅ Copié !" : "📋 Copier l'analyse"}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Composant Note Moniteur (texte + vocal + IA) ────────────────────────────
-function NoteMoniteur({ childId, familyId, childName }: { childId: string; familyId: string; childName: string }) {
+function NoteMoniteur({ childId, familyId, childName, galopLevel }: { childId: string; familyId: string; childName: string; galopLevel?: string }) {
   const [noteText, setNoteText] = useState("");
   const [recording, setRecording] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -550,6 +459,7 @@ function NoteMoniteur({ childId, familyId, childName }: { childId: string; famil
       }
       const transData = await transRes.json();
       const transcript = transData.text;
+      setRawTranscript(transcript); // matière première pour l'analyse IA
 
       // 2. Reformuler avec l'IA pour que ce soit un joli commentaire
       const iaRes = await fetch("/api/ia", {
@@ -661,6 +571,41 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
 
   const [expandedNoteIdx, setExpandedNoteIdx] = useState<number | null>(null);
 
+  // ── Analyse IA de la note dictée ──
+  // rawTranscript = transcription brute de la dernière dictée (plus riche que
+  // le texte reformulé) ; à défaut, on analyse le texte saisi dans la note.
+  const [rawTranscript, setRawTranscript] = useState("");
+  const [analysing, setAnalysing] = useState(false);
+  const [analysis, setAnalysis] = useState("");
+  const [motParents, setMotParents] = useState<string | null>(null);
+  const [analysisError, setAnalysisError] = useState("");
+
+  const analyserNote = async () => {
+    const matiere = (rawTranscript || noteText).trim();
+    if (!matiere) return;
+    setAnalysing(true); setAnalysis(""); setMotParents(null); setAnalysisError("");
+    try {
+      const token = await (await import("firebase/auth")).getAuth().currentUser?.getIdToken();
+      const res = await fetch("/api/ia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          type: "analyse_progression",
+          child: { firstName: childName, galopLevel },
+          noteVocale: matiere,
+          notesRecentes: recentNotes.map(n => n.text).filter(Boolean),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.analysis) throw new Error(data.error || "Réponse vide");
+      setAnalysis(data.analysis);
+      setMotParents(data.motParents || null);
+    } catch (e: any) {
+      setAnalysisError(e.message || "Erreur lors de l'analyse");
+    }
+    setAnalysing(false);
+  };
+
   return (
     <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-4">
       <div className="font-body text-xs font-semibold text-purple-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
@@ -695,12 +640,44 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
             Analyse IA...
           </span>
         )}
+        <button onClick={analyserNote} disabled={analysing || (!rawTranscript && !noteText.trim())}
+          title="Analyse IA de la note : points forts, axes de travail, exercices, mot aux parents"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold text-indigo-700 bg-white border border-indigo-200 cursor-pointer hover:bg-indigo-50 disabled:opacity-40">
+          {analysing ? "✨ Analyse…" : "✨ Analyser"}
+        </button>
         <div className="flex-1" />
         <button onClick={saveNote} disabled={saving || !noteText.trim()}
           className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${saved ? "bg-green-500 text-white" : "bg-purple-500 text-white hover:bg-purple-400"} disabled:opacity-40`}>
           {saved ? "✅ Envoyé !" : saving ? "Envoi..." : "📤 Envoyer la note"}
         </button>
       </div>
+
+      {/* Résultat de l'analyse IA de la note dictée */}
+      {analysisError && <p className="font-body text-xs text-red-500 mb-3">{analysisError}</p>}
+      {analysis && (
+        <div className="bg-white border border-indigo-200 rounded-lg p-3 mb-3">
+          <div className="font-body text-[10px] font-semibold text-indigo-500 uppercase tracking-wider mb-2">
+            ✨ Analyse de la note {rawTranscript ? "dictée" : "saisie"}
+          </div>
+          <div className="font-body text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+            {analysis.split(/\*\*(.*?)\*\*/g).map((part, i) =>
+              i % 2 === 1 ? <strong key={i} className="text-indigo-800">{part}</strong> : part
+            )}
+          </div>
+          <div className="flex gap-2 justify-end mt-2 flex-wrap">
+            {motParents && (
+              <button onClick={() => { setNoteText(motParents); if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                className="font-body text-[11px] font-semibold text-white bg-indigo-500 border-none rounded-lg px-3 py-1.5 cursor-pointer hover:bg-indigo-600">
+                ✏️ Utiliser le mot aux parents dans la note
+              </button>
+            )}
+            <button onClick={async () => { try { await navigator.clipboard.writeText(analysis); } catch {} }}
+              className="font-body text-[11px] text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-1.5 cursor-pointer hover:bg-indigo-100">
+              📋 Copier
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Notes récentes — sélectionner celle qui apparaît dans le bilan */}
       {recentNotes.length > 0 && (
