@@ -546,6 +546,7 @@ export default function FamilyCard({
               allReservations={allReservations} allPayments={allPayments}
               allAvoirs={allAvoirs} allCartes={allCartes}
               allMandats={allMandats} allFidelite={allFidelite}
+              allCreneaux={allCreneaux}
               fetchFamilies={onRefresh}
               onEditChild={(child) => startEditChild(child)}
               onDeleteChild={(childId, childName) => handleDeleteChild(childId, childName)}
