@@ -80,12 +80,36 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
     setRelanceSending(null);
   };
 
+  // Compression côté client : une photo de smartphone fait 3-12 Mo ; on la
+  // ramène à un carré JPEG de 512px (~40 Ko) avant upload — affichage
+  // instantané des avatars et Storage léger.
+  const compressPhoto = (file: File): Promise<Blob> =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const size = 512;
+        const canvas = document.createElement("canvas");
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject(new Error("canvas"));
+        // Recadrage carré centré (cover)
+        const min = Math.min(img.width, img.height);
+        const sx = (img.width - min) / 2, sy = (img.height - min) / 2;
+        ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+        canvas.toBlob(b => b ? resolve(b) : reject(new Error("toBlob")), "image/jpeg", 0.85);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("image")); };
+      img.src = url;
+    });
+
   const uploadPhoto = async (child: any, file: File) => {
     setPhotoUploading(child.id);
     try {
-      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-      const storageRef = ref(storage, `cavaliers/${family.firestoreId || family.id}/${child.id}.${ext}`);
-      const task = uploadBytesResumable(storageRef, file);
+      const blob = await compressPhoto(file).catch(() => file); // fallback : original si compression impossible
+      const storageRef = ref(storage, `cavaliers/${family.firestoreId || family.id}/${child.id}.jpg`);
+      const task = uploadBytesResumable(storageRef, blob, { contentType: "image/jpeg" });
       await new Promise<void>((res, rej) => task.on("state_changed", undefined, rej, () => res()));
       const url = await getDownloadURL(storageRef);
       const famSnap = await getDoc(doc(db, "families", family.firestoreId || family.id));
