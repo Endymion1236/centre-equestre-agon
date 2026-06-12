@@ -927,7 +927,30 @@ export default function MontoirPage() {
                     casse plus au milieu) ; desktop : colonne flexible inchangée. */}
                 <span className="w-full sm:w-auto sm:flex-1 font-body text-sm font-semibold text-blue-800 flex items-center gap-1.5 min-w-0">
                   <span className="truncate">{e.childName}</span>
-                  {(() => { const fam = families.find((f:any) => (f.children||[]).some((c:any)=>c.id===e.childId)); const child = (fam?.children||[]).find((c:any)=>c.id===e.childId); const age = calcAge(child?.birthDate); return age ? <span className="shrink-0 whitespace-nowrap font-body text-[10px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">{age}</span> : null; })()}
+                  {(() => {
+                    const fam = families.find((f:any) => (f.children||[]).some((c:any)=>c.id===e.childId));
+                    const child = (fam?.children||[]).find((c:any)=>c.id===e.childId);
+                    const age = calcAge(child?.birthDate);
+                    // Anniversaire dans les 7 jours → 🎂 pour que la monitrice le souhaite en séance
+                    const dBirth = (() => {
+                      if (!child?.birthDate) return null;
+                      const bd = new Date(typeof child.birthDate === "string" ? child.birthDate : child.birthDate?.seconds ? child.birthDate.seconds * 1000 : child.birthDate);
+                      if (isNaN(bd.getTime())) return null;
+                      const today = new Date(); today.setHours(0,0,0,0);
+                      const next = new Date(today.getFullYear(), bd.getMonth(), bd.getDate());
+                      if (next < today) next.setFullYear(today.getFullYear() + 1);
+                      return Math.round((next.getTime() - today.getTime()) / 86400000);
+                    })();
+                    return <>
+                      {age ? <span className="shrink-0 whitespace-nowrap font-body text-[10px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">{age}</span> : null}
+                      {dBirth !== null && dBirth <= 7 && (
+                        <span className="shrink-0 whitespace-nowrap font-body text-[10px] font-semibold text-pink-600 bg-pink-50 px-1.5 py-0.5 rounded-full"
+                          title={dBirth === 0 ? "C'est son anniversaire aujourd'hui !" : `Anniversaire dans ${dBirth} jour${dBirth > 1 ? "s" : ""}`}>
+                          🎂{dBirth === 0 ? " Aujourd'hui !" : ` J-${dBirth}`}
+                        </span>
+                      )}
+                    </>;
+                  })()}
                 </span>
                 <span className="w-32 font-body text-xs hidden sm:block" style={{color:"#334155"}}>{e.familyName}</span>
                 <span className="grow basis-40 sm:grow-0 sm:basis-auto sm:w-36 min-w-0">{!closed ? (() => {

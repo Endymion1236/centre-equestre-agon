@@ -355,7 +355,8 @@ export default function FamilyCard({
                 {family.parentEmail && (
                   <span className="inline-flex items-center gap-1">
                     <Mail size={10} />
-                    <span>{family.parentEmail}</span>
+                    <a href={`mailto:${family.parentEmail}`} onClick={(e) => e.stopPropagation()}
+                      className="text-slate-600 no-underline hover:text-blue-500 hover:underline">{family.parentEmail}</a>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -371,7 +372,7 @@ export default function FamilyCard({
                     <span className="text-slate-400">·</span>
                   </span>
                 )}
-                {family.parentPhone && <><Phone size={10} className="inline mr-1"/>{family.parentPhone} · </>}
+                {family.parentPhone && <><Phone size={10} className="inline mr-1"/><a href={`tel:${family.parentPhone.replace(/[\s.]/g, "")}`} onClick={(e) => e.stopPropagation()} className="text-slate-600 no-underline hover:text-blue-500 hover:underline">{family.parentPhone}</a> · </>}
                 {children.length} cavalier{children.length > 1 ? "s" : ""}
               </div>
               {(family as any).updatedAt && (
@@ -382,6 +383,15 @@ export default function FamilyCard({
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {/* Mobile : bouton d'appel taille pouce (le lien texte existe mais
+                sa cible de tap est trop petite — c'est LE geste quotidien) */}
+            {family.parentPhone && (
+              <a href={`tel:${family.parentPhone.replace(/[\s.]/g, "")}`} onClick={(e) => e.stopPropagation()}
+                title={`Appeler ${family.parentName || ""}`}
+                className="sm:hidden flex items-center justify-center w-10 h-10 rounded-full bg-green-500 text-white no-underline shadow-sm active:scale-95 transition-transform">
+                <Phone size={17} />
+              </a>
+            )}
             <Badge color={family.authProvider === "admin" ? "gray" : family.authProvider === "google" ? "blue" : "purple"}>
               {family.authProvider === "admin" ? "Créé admin" : family.authProvider === "google" ? "Google" : "Facebook"}
             </Badge>
@@ -491,8 +501,8 @@ export default function FamilyCard({
                 </div>
                 {/* Infos contact */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div><div className={labelStyle}>Email</div><div className="font-body text-sm text-blue-800 break-all">{family.parentEmail || "—"}</div></div>
-                  <div><div className={labelStyle}>Téléphone</div><div className="font-body text-sm text-blue-800">{family.parentPhone || "Non renseigné"}</div></div>
+                  <div><div className={labelStyle}>Email</div><div className="font-body text-sm break-all">{family.parentEmail ? <a href={`mailto:${family.parentEmail}`} className="text-blue-800 no-underline hover:underline">{family.parentEmail}</a> : "—"}</div></div>
+                  <div><div className={labelStyle}>Téléphone</div><div className="font-body text-sm">{family.parentPhone ? <a href={`tel:${family.parentPhone.replace(/[\s.]/g, "")}`} className="text-blue-800 no-underline hover:underline">📞 {family.parentPhone}</a> : "Non renseigné"}</div></div>
                   <div><div className={labelStyle}>Inscription</div><div className="font-body text-sm text-blue-800">{family.authProvider === "admin" ? "Créé par l'admin" : `Via ${family.authProvider}`}</div></div>
                 </div>
                 {(family.address || family.city) && (
