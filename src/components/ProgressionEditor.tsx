@@ -641,7 +641,7 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
           </span>
         )}
         <button onClick={analyserNote} disabled={analysing || (!rawTranscript && !noteText.trim())}
-          title="Analyse IA de la note : points forts, axes de travail, exercices, mot aux parents"
+          title="Analyse IA de la note : points forts, axes de travail, mot aux parents"
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold text-indigo-700 bg-white border border-indigo-200 cursor-pointer hover:bg-indigo-50 disabled:opacity-40">
           {analysing ? "✨ Analyse…" : "✨ Analyser"}
         </button>

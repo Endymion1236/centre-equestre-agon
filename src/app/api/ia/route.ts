@@ -242,11 +242,10 @@ OBSERVATION DICTÉE PAR LE MONITEUR :
 "${body.noteVocale}"
 ${body.notesRecentes?.length ? `\nNOTES PRÉCÉDENTES ENVOYÉES À LA FAMILLE (pour la continuité, repère les progrès ou points récurrents) :\n${body.notesRecentes.slice(0, 3).map(n => `- ${n}`).join("\n")}` : ""}
 
-Fournis une analyse structurée en 4 parties :
+Fournis une analyse structurée en 3 parties :
 1. **Points forts relevés** — ce qui ressort de positif dans l'observation
 2. **Axes de travail** — les difficultés ou points à travailler mentionnés (ou en filigrane), avec une phrase d'explication chacun
-3. **Idées d'exercices ludiques** — 2-3 jeux ou exercices concrets de poney-club ciblant précisément ces axes, adaptés au niveau du cavalier
-4. **Mot aux parents** — 2-3 phrases chaleureuses et encourageantes prêtes à envoyer à la famille, fidèles à l'observation, sans formule de politesse. Place ce mot ENTRE les balises <mot> et </mot>.
+3. **Mot aux parents** — 2-3 phrases chaleureuses et encourageantes prêtes à envoyer à la famille, fidèles à l'observation, sans formule de politesse. Place ce mot ENTRE les balises <mot> et </mot>.
 
 Ne brode pas au-delà de ce que dit l'observation. Sois concis et concret, en français. Titres en gras simple, listes à tirets.`;
 
