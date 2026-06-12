@@ -18,13 +18,15 @@
  *   - echeances-sepa
  *   - mandats-sepa
  *   - reservations
+ *   - waitlist (liste d'attente)
  *   - bonsRecup (collection legacy)
  *   - paiements offerts éventuels
+ *   - les inscriptions sur les créneaux (enrolled[] purgé de la famille,
+ *     places libérées) — phase 3
  *
  * Ce qui est PRÉSERVÉ :
  *   - le doc family (parent, enfants, contact, etc.)
  *   - les enfants (id, prénom, âge, galop, etc.)
- *   - les inscriptions sur les créneaux (enrolled[] reste intact)
  *   - le compte Firebase Auth
  *   - les emails-log (audit)
  *
@@ -48,6 +50,7 @@ const COLLECTIONS_BY_FAMILYID = [
   "echeances-sepa",
   "mandats-sepa",
   "reservations",
+  "waitlist",
   "bonsRecup",
   "fidelite_transactions", // Historique des gains/conso de points
   "recurrences",           // Pensions et autres prestations recurrentes
@@ -112,8 +115,15 @@ export async function POST(req: NextRequest) {
 
     const totalDocs = Object.values(inventory).reduce((s, x) => s + x.count, 0);
 
-    // Mode dry-run : on n'écrit rien, on retourne juste l'inventaire
+    // Mode dry-run : on n'écrit rien, on retourne l'inventaire + le nombre
+    // de créneaux dont la famille serait désinscrite (phase 3).
     if (!apply) {
+      let creneauxConcernes = 0;
+      const allCreneauxSnap = await adminDb.collection("creneaux").get();
+      for (const doc of allCreneauxSnap.docs) {
+        const enrolled = (doc.data().enrolled || []) as any[];
+        if (enrolled.some(e => e.familyId === familyId)) creneauxConcernes++;
+      }
       return NextResponse.json({
         success: true,
         dryRun: true,
@@ -121,7 +131,8 @@ export async function POST(req: NextRequest) {
         familyName,
         totalDocs,
         inventory,
-        message: `DRY-RUN : ${totalDocs} document(s) seraient supprimés pour la famille "${familyName}".`,
+        creneauxConcernes,
+        message: `DRY-RUN : ${totalDocs} document(s) seraient supprimés et la famille désinscrite de ${creneauxConcernes} créneau(x) pour "${familyName}".`,
       });
     }
 

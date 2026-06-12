@@ -154,9 +154,10 @@ export default function ResetBasePage() {
     if (!familyResetDryRun) return;
     const fam = familyList.find(f => f.id === familyResetId);
     if (!confirm(
-      `⚠️ Confirmer la suppression de ${familyResetDryRun.totalDocs} document(s) financiers ` +
-      `pour la famille "${fam?.parentName || familyResetId}" ?\n\n` +
-      `Les inscriptions aux créneaux, les enfants et la fiche famille seront PRÉSERVÉS.\n\n` +
+      `⚠️ Confirmer la remise à zéro de la famille "${fam?.parentName || familyResetId}" ?\n\n` +
+      `Seront supprimés : ${familyResetDryRun.totalDocs} document(s) (financier, réservations, liste d'attente)` +
+      (familyResetDryRun.creneauxConcernes ? ` + désinscription de ${familyResetDryRun.creneauxConcernes} créneau(x)` : "") + `.\n\n` +
+      `Seront préservés : la fiche famille, les enfants et le compte de connexion.\n\n` +
       `Action irréversible.`
     )) return;
     setFamilyResetWorking(true);
@@ -366,22 +367,24 @@ export default function ResetBasePage() {
         )}
       </Card>
 
-      {/* ── Reset financier d'une seule famille (cas tests) ────────────
-          Cas d'usage : nettoyer toutes les donnees financieres d'un
-          compte de test sans devoir supprimer puis recreer la famille.
-          Préserve : enfants, inscriptions aux créneaux, fiche famille.
+      {/* ── Remise à zéro d'une seule famille (cas tests) ──────────────
+          Cas d'usage : nettoyer un compte de test sans devoir supprimer
+          puis recréer la famille.
+          Préserve : enfants, fiche famille, compte de connexion.
           Supprime : payments, avoirs, rattrapages, forfaits, cartes,
-          mandats/échéances SEPA, réservations, bonsRecup. */}
+          mandats/échéances SEPA, réservations, liste d'attente, bonsRecup
+          + désinscription des enfants de tous les créneaux. */}
       <Card padding="md" className="mb-4">
         <div className="flex items-center gap-2 mb-3">
           <span className="w-6 h-6 rounded-full bg-amber-500 text-white font-bold text-xs flex items-center justify-center">↻</span>
           <h2 className="font-display text-base font-bold text-amber-700">Reset financier d'une famille (test)</h2>
         </div>
         <p className="font-body text-xs text-slate-600 mb-3">
-          Supprime <strong>uniquement les données financières</strong> d'une famille (paiements, avoirs,
-          rattrapages, forfaits, cartes, SEPA, réservations). Les enfants, la fiche famille
-          et les inscriptions aux créneaux sont <strong>préservés</strong>.
-          Utile pour repartir d'un état propre avec un compte de test.
+          Remet la famille <strong>à zéro</strong> : financier (paiements, avoirs, rattrapages,
+          forfaits, cartes, SEPA), <strong>réservations</strong>, liste d&apos;attente, et
+          <strong> désinscription des enfants de tous les créneaux</strong> (places libérées).
+          Les enfants, la fiche famille et le compte de connexion sont <strong>préservés</strong>.
+          Utile pour repartir d&apos;un état propre avec un compte de test.
         </p>
 
         <div className="flex flex-wrap items-end gap-3 mb-3">
