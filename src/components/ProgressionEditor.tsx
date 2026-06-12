@@ -109,26 +109,41 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
   };
 
   const save = async () => {
+    // Auto-validation des niveaux précédents : on calcule d'abord ce qui
+    // serait rempli, et on demande une confirmation EXPLICITE au moniteur
+    // si des compétences vont être validées automatiquement.
+    const currentIdx = GALOPS_PROGRAMME.findIndex(n => n.id === selectedNiveau);
+    const aValider: { id: string; domaine: string }[] = [];
+    if (currentIdx > 0) {
+      GALOPS_PROGRAMME.slice(0, currentIdx).forEach(niveau => {
+        niveau.competences.forEach(c => {
+          if (!acquis[c.id]) aValider.push({ id: c.id, domaine: c.domaine });
+        });
+      });
+    }
+    if (aValider.length > 0) {
+      const niveauxLabels = GALOPS_PROGRAMME.slice(0, currentIdx).map(n => n.label).join(", ");
+      const ok = confirm(
+        `Le niveau en cours est "${GALOPS_PROGRAMME[currentIdx]?.label}".\n\n` +
+        `${aValider.length} compétence(s) non évaluée(s) des niveaux précédents (${niveauxLabels}) ` +
+        `seront automatiquement marquées "Acquis".\n` +
+        `Les compétences déjà évaluées finement (ex. 3/5) ne seront PAS modifiées.\n\n` +
+        `OK = enregistrer avec cette validation automatique\n` +
+        `Annuler = ne rien enregistrer`
+      );
+      if (!ok) return;
+    }
+
     setSaving(true);
     try {
       // Auto-valider tous les niveaux précédents à 100%.
       // Pour les compétences pratiques, on stocke level: 5 (= acquis FFE).
       // Pour les binaires, on stocke true. Cela garantit que les niveaux
       // antérieurs comptent bien comme validés dans isCompetenceValidated.
-      const currentIdx = GALOPS_PROGRAMME.findIndex(n => n.id === selectedNiveau);
       const enrichedAcquis: Acquis = { ...acquis };
-      if (currentIdx > 0) {
-        GALOPS_PROGRAMME.slice(0, currentIdx).forEach(niveau => {
-          niveau.competences.forEach(c => {
-            // Ne pas écraser une valeur déjà finement réglée (level: 3 par
-            // exemple) si l'utilisateur l'a configurée volontairement. On
-            // remplit uniquement ce qui est absent.
-            if (!enrichedAcquis[c.id]) {
-              enrichedAcquis[c.id] = isDomaineEchelle(c.domaine) ? { level: 5 } : true;
-            }
-          });
-        });
-      }
+      aValider.forEach(({ id, domaine }) => {
+        enrichedAcquis[id] = isDomaineEchelle(domaine as any) ? { level: 5 } : true;
+      });
 
       await setDoc(doc(db, "progressions", docId), {
         childId, familyId, childName,
