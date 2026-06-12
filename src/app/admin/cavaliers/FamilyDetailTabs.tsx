@@ -50,6 +50,8 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
   const [relanceSent, setRelanceSent] = useState<Record<string, boolean>>({});
   const [relanceSending, setRelanceSending] = useState<string | null>(null);
   const [photoUploading, setPhotoUploading] = useState<string | null>(null);
+  // Lightbox photo : agrandir au clic + choix prendre une photo / fichier
+  const [photoLightbox, setPhotoLightbox] = useState<string | null>(null);
 
   const relancerAttestation = async (child: any) => {
     if (!family.parentEmail) { alert("Pas d'email renseigné pour cette famille."); return; }
@@ -247,16 +249,53 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
           <div className="flex flex-col gap-5">
             {/* En-tête */}
             <div className="flex items-center gap-3 pb-3 border-b border-blue-500/8">
-              <label className="relative w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-xl cursor-pointer group overflow-hidden shrink-0" title="Cliquer pour ajouter/changer la photo">
-                {child.photoUrl
-                  ? <img src={child.photoUrl} alt={child.firstName} className="w-full h-full object-cover" />
-                  : "🧒"}
-                <span className="absolute inset-0 bg-black/40 text-white text-sm hidden group-hover:flex items-center justify-center">
+              <div className="relative shrink-0">
+                {child.photoUrl ? (
+                  /* Photo présente : clic = agrandir (lightbox) */
+                  <button onClick={() => setPhotoLightbox(child.id)} title="Agrandir la photo"
+                    className="w-12 h-12 rounded-xl overflow-hidden border-none p-0 cursor-zoom-in bg-blue-50 block">
+                    <img src={child.photoUrl} alt={child.firstName} className="w-full h-full object-cover" />
+                  </button>
+                ) : (
+                  /* Pas de photo : clic = choisir/prendre */
+                  <label className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-xl cursor-pointer" title="Ajouter une photo">
+                    {photoUploading === child.id ? "⏳" : "🧒"}
+                    <input type="file" accept="image/*" className="hidden" disabled={photoUploading === child.id}
+                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadPhoto(child, f); e.target.value = ""; }} />
+                  </label>
+                )}
+                {/* Badge 📷 toujours présent pour changer la photo sans passer par la lightbox */}
+                <label className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center text-[10px] cursor-pointer hover:bg-gray-50" title="Changer la photo">
                   {photoUploading === child.id ? "⏳" : "📷"}
-                </span>
-                <input type="file" accept="image/*" className="hidden" disabled={photoUploading === child.id}
-                  onChange={e => { const f = e.target.files?.[0]; if (f) uploadPhoto(child, f); e.target.value = ""; }} />
-              </label>
+                  <input type="file" accept="image/*" className="hidden" disabled={photoUploading === child.id}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadPhoto(child, f); e.target.value = ""; }} />
+                </label>
+              </div>
+
+              {/* Lightbox photo cavalier */}
+              {photoLightbox === child.id && child.photoUrl && (
+                <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setPhotoLightbox(null)}>
+                  <div className="bg-white rounded-2xl p-4 max-w-md w-full" onClick={e => e.stopPropagation()}>
+                    <img src={child.photoUrl} alt={child.firstName} className="w-full rounded-xl object-cover aspect-square" />
+                    <div className="font-body text-sm font-semibold text-blue-800 text-center mt-3">{child.firstName}{child.lastName ? ` ${child.lastName}` : ""}</div>
+                    <div className="flex gap-2 mt-3 flex-wrap">
+                      {/* capture → ouvre directement l'appareil photo sur mobile (ignoré sur PC) */}
+                      <label className="flex-1 text-center font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 px-3 py-2 rounded-lg cursor-pointer">
+                        📷 Prendre une photo
+                        <input type="file" accept="image/*" capture="environment" className="hidden" disabled={photoUploading === child.id}
+                          onChange={e => { const f = e.target.files?.[0]; if (f) { uploadPhoto(child, f); setPhotoLightbox(null); } e.target.value = ""; }} />
+                      </label>
+                      <label className="flex-1 text-center font-body text-xs font-semibold text-slate-600 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-lg cursor-pointer">
+                        🖼 Choisir une image
+                        <input type="file" accept="image/*" className="hidden" disabled={photoUploading === child.id}
+                          onChange={e => { const f = e.target.files?.[0]; if (f) { uploadPhoto(child, f); setPhotoLightbox(null); } e.target.value = ""; }} />
+                      </label>
+                      <button onClick={() => setPhotoLightbox(null)}
+                        className="font-body text-xs text-slate-500 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer">Fermer</button>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="flex-1">
                 <div className="font-body text-base font-semibold text-blue-800">{child.firstName}{child.lastName ? ` ${child.lastName}` : ""}</div>
                 <div className="font-body text-xs text-slate-500 flex items-center gap-2 flex-wrap">
