@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { db } from "@/lib/firebase";
+import { authFetch } from "@/lib/auth-fetch";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { GALOPS_PROGRAMME, DOMAINE_LABELS, getNiveauById, type Domaine } from "@/lib/galops-programme";
 import { CheckCircle2, Circle, ChevronDown, ChevronRight, Save } from "lucide-react";
@@ -541,6 +542,10 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
     } catch (e) { console.error(e); }
   };
 
+  // Prévenir la famille par email : la note devient alors la note ⭐ visible
+  // dans l'espace famille (sinon l'email annoncerait un mot... invisible).
+  const [notifyFamily, setNotifyFamily] = useState(false);
+
   const saveNote = async () => {
     if (!noteText.trim()) return;
     setSaving(true);
@@ -548,20 +553,54 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
       const famDoc = await getDoc(doc(db, "families", familyId));
       if (famDoc.exists()) {
         const famData = famDoc.data() as any;
+        const noteDate = new Date().toISOString();
         const updatedChildren = (famData.children || []).map((c: any) => {
           if (c.id !== childId) return c;
           const peda = c.peda || { objectifs: [], notes: [] };
           const newNote = {
-            date: new Date().toISOString(),
+            date: noteDate,
             text: noteText.trim(),
             author: "moniteur",
             activity: "Bilan progression",
+            // Si on prévient la famille, cette note devient LA note visible (⭐)
+            ...(notifyFamily ? { featured: true } : {}),
           };
-          return { ...c, peda: { ...peda, notes: [newNote, ...peda.notes], updatedAt: new Date().toISOString() } };
+          const anciennes = notifyFamily
+            ? (peda.notes || []).map((n: any) => ({ ...n, featured: false }))
+            : (peda.notes || []);
+          return { ...c, peda: { ...peda, notes: [newNote, ...anciennes], updatedAt: new Date().toISOString() } };
         });
         await setDoc(doc(db, "families", familyId), { ...famData, children: updatedChildren, updatedAt: serverTimestamp() }, { merge: true });
-        setRecentNotes(prev => [{ date: new Date().toISOString(), text: noteText.trim(), activity: "Bilan progression" }, ...prev].slice(0, 3));
+
+        // Email optionnel à la famille (non bloquant)
+        if (notifyFamily && famData.parentEmail) {
+          authFetch("/api/send-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              to: famData.parentEmail,
+              subject: `💬 Un mot du moniteur pour ${childName}`,
+              context: "admin_note_moniteur",
+              familyId,
+              html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+                <p>Bonjour <strong>${famData.parentName || ""}</strong>,</p>
+                <p>Le moniteur a laissé un mot à propos de <strong>${childName}</strong> :</p>
+                <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:16px;margin:16px 0;font-style:italic;color:#6b21a8;">
+                  ${noteText.trim().replace(/\n/g, "<br/>")}
+                </div>
+                <p style="color:#555;font-size:13px;">Retrouvez ce mot et la progression complète dans votre espace famille, rubrique Progression.</p>
+                <p style="color:#666;font-size:12px;">À bientôt au centre équestre !</p>
+              </div>`,
+            }),
+          }).catch(e => console.warn("Email note moniteur:", e));
+        }
+
+        setRecentNotes(prev => [
+          { date: noteDate, text: noteText.trim(), activity: "Bilan progression", ...(notifyFamily ? { featured: true } : {}) },
+          ...prev.map(n => notifyFamily ? { ...n, featured: false } : n),
+        ].slice(0, 3));
         setNoteText("");
+        setNotifyFamily(false);
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
       }
@@ -648,9 +687,21 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
         <div className="flex-1" />
         <button onClick={saveNote} disabled={saving || !noteText.trim()}
           className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${saved ? "bg-green-500 text-white" : "bg-purple-500 text-white hover:bg-purple-400"} disabled:opacity-40`}>
-          {saved ? "✅ Envoyé !" : saving ? "Envoi..." : "📤 Envoyer la note"}
+          {saved ? "✅ Enregistrée !" : saving ? "Enregistrement..." : "💾 Enregistrer la note"}
         </button>
       </div>
+
+      {/* Notification famille + rappel visibilité */}
+      <label className="flex items-start gap-2 mb-1 cursor-pointer">
+        <input type="checkbox" checked={notifyFamily} onChange={e => setNotifyFamily(e.target.checked)}
+          className="accent-purple-500 w-3.5 h-3.5 mt-0.5" />
+        <span className="font-body text-[11px] text-purple-700">
+          Prévenir la famille par email — la note devient alors le mot visible (⭐) dans leur espace
+        </span>
+      </label>
+      <p className="font-body text-[10px] text-purple-400 mb-3">
+        Sans cette case, la note est simplement enregistrée au dossier : utilisez ⭐ ci-dessous pour la rendre visible côté famille et dans le bilan PDF.
+      </p>
 
       {/* Résultat de l'analyse IA de la note dictée */}
       {analysisError && <p className="font-body text-xs text-red-500 mb-3">{analysisError}</p>}
