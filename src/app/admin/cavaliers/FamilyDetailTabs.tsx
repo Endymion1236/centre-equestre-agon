@@ -16,6 +16,17 @@ const modeLabels: Record<string, string> = {
   ancv: "ANCV", virement: "Virement", avoir: "Avoir", prelevement_sepa: "SEPA",
 };
 
+// Jours avant le prochain anniversaire (0 = aujourd'hui), null si date invalide
+function daysToNextBirthday(birthDate: any): number | null {
+  if (!birthDate) return null;
+  const bd = new Date(typeof birthDate === "string" ? birthDate : birthDate?.seconds ? birthDate.seconds * 1000 : birthDate);
+  if (isNaN(bd.getTime())) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const next = new Date(today.getFullYear(), bd.getMonth(), bd.getDate());
+  if (next < today) next.setFullYear(today.getFullYear() + 1);
+  return Math.round((next.getTime() - today.getTime()) / 86400000);
+}
+
 export default function FamilyDetailTabs({ family, children, allReservations, allPayments, allAvoirs, allCartes, allMandats, allFidelite, fetchFamilies, onEditChild, onDeleteChild, onEditSanitary, onEditGalop, onInscribe, onBilanPdf }: {
   family: any; children: any[]; allReservations: any[]; allPayments: any[];
   allAvoirs: any[]; allCartes: any[]; allMandats: any[]; allFidelite: any[];
@@ -168,6 +179,16 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                 </div>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
+                {(() => {
+                  const d = daysToNextBirthday(child.birthDate);
+                  if (d === null || d > 7) return null;
+                  return (
+                    <span className="font-body text-[10px] font-semibold text-pink-600 bg-pink-50 border border-pink-200 px-2 py-0.5 rounded-full"
+                      title={d === 0 ? "C'est son anniversaire aujourd'hui !" : `Anniversaire dans ${d} jour${d > 1 ? "s" : ""}`}>
+                      🎂 {d === 0 ? "Aujourd'hui !" : `J-${d}`}
+                    </span>
+                  );
+                })()}
                 <Badge color={child.galopLevel && child.galopLevel !== "—" ? "blue" : "gray"}>{child.galopLevel && child.galopLevel !== "—" ? child.galopLevel : "Débutant"}</Badge>
                 {/* Manquants = orange compact (à compléter, pas une alerte) ;
                     le rouge reste réservé au bloquant (impayés). */}
