@@ -36,6 +36,8 @@ export default function CavaliersPage() {
   const targetFamilyId = searchParams.get("id") || "";
   const targetChildId = searchParams.get("child") || "";
   const [filterTag, setFilterTag] = useState<string>("");
+  // Filtres actionnables : pile de travail (rentrée, relances)
+  const [filterAction, setFilterAction] = useState<"" | "attestation" | "impayes" | "sans_seance">("");
   const [showCreateFamily, setShowCreateFamily] = useState(false);
   const { toast } = useToast();
 
@@ -73,6 +75,20 @@ export default function CavaliersPage() {
 
   useEffect(() => { fetchFamilies(); }, []);
 
+  // ── Prédicats des filtres actionnables ────────────────────────────────────
+  const todayStr = new Date().toISOString().split("T")[0];
+  // Famille avec au moins un cavalier sans attestation médicale
+  const famSansAttestation = (f: any) => (f.children || []).some((c: any) => !c.sanitaryForm);
+  // Reste dû de la famille (même calcul que la fiche : payments non annulés)
+  const famImpayes = (f: any) => {
+    const fp = allPayments.filter((p: any) => p.familyId === f.firestoreId && p.status !== "cancelled");
+    return fp.reduce((s2: number, p: any) => s2 + (p.totalTTC || 0), 0) - fp.reduce((s2: number, p: any) => s2 + (p.paidAmount || 0), 0);
+  };
+  // Famille avec cavaliers mais aucune séance à venir (réservation non annulée)
+  const famSansSeance = (f: any) =>
+    (f.children || []).length > 0 &&
+    !allReservations.some((r: any) => r.familyId === f.firestoreId && r.status !== "cancelled" && r.date >= todayStr);
+
   // ── Filtrage ──────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     // Si une famille est ciblée par l'URL (clic depuis la barre de recherche globale),
@@ -94,6 +110,10 @@ export default function CavaliersPage() {
     if (filterTag) {
       list = list.filter(f => (f as any).tags?.includes(filterTag));
     }
+    // Filtres actionnables (pile de travail)
+    if (filterAction === "attestation") list = list.filter(f => famSansAttestation(f));
+    if (filterAction === "impayes") list = list.filter(f => famImpayes(f) > 0.009);
+    if (filterAction === "sans_seance") list = list.filter(f => famSansSeance(f));
     // Tri alphabétique par nom de famille, puis prénom
     return [...list].sort((a, b) => {
       const lastA = ((a as any).lastName || a.parentName || "").toLowerCase();
@@ -103,7 +123,7 @@ export default function CavaliersPage() {
       const firstB = ((b as any).firstName || "").toLowerCase();
       return firstA.localeCompare(firstB, "fr");
     });
-  }, [families, search, filterTag, targetFamilyId]);
+  }, [families, search, filterTag, filterAction, targetFamilyId, allPayments, allReservations]);
 
   // ── Stats ─────────────────────────────────────────────────────────────────
   const allChildren = families.flatMap(f => f.children || []);
@@ -167,6 +187,38 @@ export default function CavaliersPage() {
           );
         })}
       </div>
+
+      {/* Filtres actionnables — la pile de travail. Un clic = la liste se
+          réduit aux familles à traiter (rentrée : attestations, relances). */}
+      {(() => {
+        const nbAttestation = allChildren.filter((c: any) => !c.sanitaryForm).length;
+        const nbImpayes = families.filter(f => famImpayes(f) > 0.009).length;
+        const nbSansSeance = families.filter(f => famSansSeance(f)).length;
+        const pills: { id: typeof filterAction; label: string; count: number; active: string }[] = [
+          { id: "attestation", label: "⚠ Attestation manquante", count: nbAttestation, active: "text-orange-700 bg-orange-50 border-orange-300" },
+          { id: "impayes", label: "💳 Impayés", count: nbImpayes, active: "text-red-700 bg-red-50 border-red-300" },
+          { id: "sans_seance", label: "📅 Sans séance à venir", count: nbSansSeance, active: "text-blue-700 bg-blue-50 border-blue-300" },
+        ];
+        return (
+          <div className="flex flex-wrap items-center gap-2 mb-5 -mt-2">
+            <span className="font-body text-[10px] text-slate-400 uppercase tracking-wider font-semibold">À traiter :</span>
+            {pills.map(pl => (
+              <button key={pl.id} onClick={() => setFilterAction(filterAction === pl.id ? "" : pl.id)}
+                disabled={pl.count === 0}
+                className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border cursor-pointer transition-all disabled:opacity-40 disabled:cursor-default
+                  ${filterAction === pl.id ? pl.active : "bg-white text-slate-500 border-gray-200 hover:border-gray-300"}`}>
+                {pl.label} ({pl.count})
+              </button>
+            ))}
+            {filterAction && (
+              <button onClick={() => setFilterAction("")}
+                className="px-2 py-1.5 rounded-lg font-body text-xs text-slate-400 bg-transparent border-none cursor-pointer hover:text-slate-600">
+                ✕ Effacer
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Liste */}
       {loading ? (

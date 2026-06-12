@@ -27,9 +27,9 @@ function daysToNextBirthday(birthDate: any): number | null {
   return Math.round((next.getTime() - today.getTime()) / 86400000);
 }
 
-export default function FamilyDetailTabs({ family, children, allReservations, allPayments, allAvoirs, allCartes, allMandats, allFidelite, fetchFamilies, onEditChild, onDeleteChild, onEditSanitary, onEditGalop, onInscribe, onBilanPdf }: {
+export default function FamilyDetailTabs({ family, children, allReservations, allPayments, allAvoirs, allCartes, allMandats, allFidelite, allCreneaux = [], fetchFamilies, onEditChild, onDeleteChild, onEditSanitary, onEditGalop, onInscribe, onBilanPdf }: {
   family: any; children: any[]; allReservations: any[]; allPayments: any[];
-  allAvoirs: any[]; allCartes: any[]; allMandats: any[]; allFidelite: any[];
+  allAvoirs: any[]; allCartes: any[]; allMandats: any[]; allFidelite: any[]; allCreneaux?: any[];
   fetchFamilies: () => void;
   onEditChild?: (child: any) => void;
   onDeleteChild?: (childId: string, childName: string) => void;
@@ -46,6 +46,59 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
   ];
   const allTabs = [...childTabs, ...familyTabs];
   const [tab, setTab] = useState(childTabs[0]?.id || "paiements");
+  // Relance attestation (anti double-envoi) + upload photo cavalier
+  const [relanceSent, setRelanceSent] = useState<Record<string, boolean>>({});
+  const [relanceSending, setRelanceSending] = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState<string | null>(null);
+
+  const relancerAttestation = async (child: any) => {
+    if (!family.parentEmail) { alert("Pas d'email renseigné pour cette famille."); return; }
+    setRelanceSending(child.id);
+    try {
+      const res = await authFetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: family.parentEmail,
+          subject: `📋 Attestation médicale manquante — ${child.firstName}`,
+          context: "admin_relance_attestation",
+          familyId: family.firestoreId || family.id,
+          html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+            <p>Bonjour <strong>${family.parentName || ""}</strong>,</p>
+            <p>Pour que <strong>${child.firstName}</strong> puisse monter en toute sécurité, il nous manque encore sa <strong>fiche sanitaire et attestation médicale</strong>.</p>
+            <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:16px;margin:16px 0;">
+              <p style="margin:0;color:#9a3412;font-size:14px;">📝 Connectez-vous à votre espace famille, rubrique <strong>Profil</strong>, pour compléter la fiche sanitaire de ${child.firstName} (allergies, contact d'urgence, attestation).</p>
+            </div>
+            <p style="color:#555;font-size:13px;">Cela ne prend que 2 minutes. Merci !</p>
+            <p style="color:#666;font-size:12px;">À bientôt au centre équestre !</p>
+          </div>`,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      setRelanceSent(prev => ({ ...prev, [child.id]: true }));
+    } catch { alert("Échec de l'envoi de la relance."); }
+    setRelanceSending(null);
+  };
+
+  const uploadPhoto = async (child: any, file: File) => {
+    setPhotoUploading(child.id);
+    try {
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const storageRef = ref(storage, `cavaliers/${family.firestoreId || family.id}/${child.id}.${ext}`);
+      const task = uploadBytesResumable(storageRef, file);
+      await new Promise<void>((res, rej) => task.on("state_changed", undefined, rej, () => res()));
+      const url = await getDownloadURL(storageRef);
+      const famSnap = await getDoc(doc(db, "families", family.firestoreId || family.id));
+      if (famSnap.exists()) {
+        const data = famSnap.data() as any;
+        const updated = (data.children || []).map((c: any) => c.id === child.id ? { ...c, photoUrl: url } : c);
+        await updateDoc(doc(db, "families", family.firestoreId || family.id), { children: updated });
+        fetchFamilies();
+      }
+    } catch (e) { console.error("Photo cavalier:", e); alert("Échec de l'upload de la photo."); }
+    setPhotoUploading(null);
+  };
+
   // UX fiche cavalier : menu ⋯ (actions rares), sections repliées par défaut
   const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null);
   const [pastExpanded, setPastExpanded] = useState<string | null>(null);
@@ -170,12 +223,48 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
           <div className="flex flex-col gap-5">
             {/* En-tête */}
             <div className="flex items-center gap-3 pb-3 border-b border-blue-500/8">
-              <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-xl">🧒</div>
+              <label className="relative w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-xl cursor-pointer group overflow-hidden shrink-0" title="Cliquer pour ajouter/changer la photo">
+                {child.photoUrl
+                  ? <img src={child.photoUrl} alt={child.firstName} className="w-full h-full object-cover" />
+                  : "🧒"}
+                <span className="absolute inset-0 bg-black/40 text-white text-sm hidden group-hover:flex items-center justify-center">
+                  {photoUploading === child.id ? "⏳" : "📷"}
+                </span>
+                <input type="file" accept="image/*" className="hidden" disabled={photoUploading === child.id}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) uploadPhoto(child, f); e.target.value = ""; }} />
+              </label>
               <div className="flex-1">
                 <div className="font-body text-base font-semibold text-blue-800">{child.firstName}{child.lastName ? ` ${child.lastName}` : ""}</div>
                 <div className="font-body text-xs text-slate-500 flex items-center gap-2 flex-wrap">
                   {bd && !isNaN(bd.getTime()) && <span>Né(e) le {bd.toLocaleDateString("fr-FR")}</span>}
                   {age !== null && age >= 0 && <span className="text-blue-500 font-semibold">{age} ans</span>}
+                  {(() => {
+                    // ── Assiduité saison : présences sur les séances clôturées ──
+                    // allCreneaux est déjà en mémoire (chargé par la page) : zéro
+                    // requête. On ne compte que les séances passées où la présence
+                    // a été pointée (séance clôturée au montoir).
+                    const now = new Date();
+                    const sy = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+                    const seasonStart = `${sy}-09-01`;
+                    const today = now.toISOString().split("T")[0];
+                    const pointees = allCreneaux.filter((c: any) =>
+                      c.date >= seasonStart && c.date <= today &&
+                      (c.enrolled || []).some((e: any) => e.childId === child.id && e.presence)
+                    );
+                    if (pointees.length === 0) return null;
+                    const absences = pointees.filter((c: any) =>
+                      (c.enrolled || []).find((e: any) => e.childId === child.id)?.presence?.startsWith("absent"));
+                    const present = pointees.length - absences.length;
+                    const ratio = present / pointees.length;
+                    const detail = absences.map((c: any) =>
+                      `${new Date(c.date + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} — ${c.activityTitle}`).join("\n");
+                    return (
+                      <span title={absences.length ? `Absences :\n${detail}` : "Aucune absence cette saison"}
+                        className={`font-semibold cursor-help ${ratio < 0.7 ? "text-orange-500" : "text-green-600"}`}>
+                        📊 {present}/{pointees.length} présences
+                      </span>
+                    );
+                  })()}
                 </div>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
@@ -195,7 +284,15 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                 {(!child.firstName?.trim() || !child.lastName?.trim() || !bd || isNaN(bd.getTime())) && (
                   <Badge color="orange">⚠ Profil</Badge>
                 )}
-                {child.sanitaryForm ? <Badge color="green">Attestation ✓</Badge> : <Badge color="orange">⚠ Attestation</Badge>}
+                {child.sanitaryForm ? <Badge color="green">Attestation ✓</Badge> : <>
+                  <Badge color="orange">⚠ Attestation</Badge>
+                  <button onClick={() => relancerAttestation(child)}
+                    disabled={relanceSending === child.id || relanceSent[child.id] || !family.parentEmail}
+                    title={family.parentEmail ? `Envoyer un email de relance à ${family.parentEmail}` : "Pas d'email renseigné"}
+                    className="font-body text-[10px] font-semibold text-orange-700 bg-white border border-orange-300 px-2 py-0.5 rounded-full cursor-pointer hover:bg-orange-50 disabled:opacity-50 disabled:cursor-default">
+                    {relanceSent[child.id] ? "✅ Relancé" : relanceSending === child.id ? "Envoi…" : "✉️ Relancer"}
+                  </button>
+                </>}
                 {child.licenceNumber && (
                   <Badge color={child.licencePayee ? "green" : "gray"}>Licence {child.licenceNumber}{child.licencePayee ? "" : " (non payée)"}</Badge>
                 )}
