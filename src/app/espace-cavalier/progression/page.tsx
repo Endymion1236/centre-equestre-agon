@@ -2,9 +2,9 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore";
 import { Card } from "@/components/ui";
-import { CheckCircle2, Circle, ChevronDown, ChevronRight, Trophy, Lock } from "lucide-react";
+import { CheckCircle2, Circle, ChevronDown, ChevronRight, Trophy, Lock, BookOpen, Loader2 } from "lucide-react";
 import { GALOPS_PROGRAMME, DOMAINE_LABELS, getNiveauById, type Domaine } from "@/lib/galops-programme";
 import {
   isDomaineEchelle,
@@ -34,6 +34,10 @@ export default function ProgressionPage() {
       }
     }).catch(() => {});
   }, []);
+
+  // Journal des séances : créneaux passés de la saison, chargés UNE fois
+  // pour toute la famille au premier dépliage (null = pas encore chargé).
+  const [journalCache, setJournalCache] = useState<any[] | null>(null);
 
   // Accordéon niveaux : childId_niveauId → boolean
   const [openNiveaux, setOpenNiveaux] = useState<Record<string, boolean>>({});
@@ -168,6 +172,10 @@ export default function ProgressionPage() {
                     )}
                   </div>
                 )}
+
+                {/* ── Journal des séances (chargé à la demande) ──────── */}
+                <JournalSeances child={child} familyId={user!.uid}
+                  journalCache={journalCache} setJournalCache={setJournalCache} />
               </div>
             );
           })}
@@ -344,6 +352,164 @@ function NiveauAccordeon({ child, niveau, acquis, isCurrent, openByDefault, open
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Journal des séances d'un cavalier ────────────────────────────────────────
+// Liste antichronologique des séances passées de la saison : date, activité,
+// poney monté, présence, et thème de séance (notePreparation du créneau —
+// champ visible par les familles ; les notes pédagogiques internes du staff
+// vivent dans la collection notes-seance, réservée au staff par les règles).
+// Les créneaux de la saison sont chargés UNE seule fois pour la famille
+// (cache partagé entre enfants), et seulement au premier dépliage.
+function JournalSeances({ child, familyId, journalCache, setJournalCache }: {
+  child: any; familyId: string;
+  journalCache: any[] | null;
+  setJournalCache: (v: any[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [visible, setVisible] = useState(10);
+
+  // Début de saison équestre : 1er septembre (sept–août)
+  const seasonStart = (() => {
+    const now = new Date();
+    const y = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+    return `${y}-09-01`;
+  })();
+  const todayStr = (() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+  })();
+
+  const toggle = async () => {
+    const next = !open;
+    setOpen(next);
+    if (next && journalCache === null && !loading) {
+      setLoading(true);
+      try {
+        const snap = await getDocs(query(
+          collection(db, "creneaux"),
+          where("date", ">=", seasonStart),
+          where("date", "<=", todayStr),
+        ));
+        // On ne garde que les créneaux où la famille est inscrite
+        const fam = snap.docs
+          .map(d => ({ id: d.id, ...d.data() } as any))
+          .filter(c => (c.enrolled || []).some((e: any) => e.familyId === familyId));
+        setJournalCache(fam);
+      } catch (e) {
+        console.error("[journal] chargement:", e);
+        setJournalCache([]);
+      }
+      setLoading(false);
+    }
+  };
+
+  // Séances de CET enfant, antichronologiques
+  const entries = (journalCache || [])
+    .map(c => {
+      const e = (c.enrolled || []).find((x: any) => x.childId === child.id);
+      if (!e) return null;
+      return {
+        id: c.id, date: c.date, title: c.activityTitle,
+        startTime: c.startTime, horse: e.horseName || "",
+        presence: e.presence || "", theme: (c.notePreparation || "").trim(),
+      };
+    })
+    .filter(Boolean)
+    .sort((a: any, b: any) => b.date.localeCompare(a.date) || (b.startTime || "").localeCompare(a.startTime || "")) as any[];
+
+  // Podium des poneys (séances où l'enfant était présent ou non marqué absent)
+  const podium = (() => {
+    const counts: Record<string, number> = {};
+    entries.forEach(e => {
+      if (!e.horse) return;
+      if (e.presence === "absent" || e.presence === "absent_nonjustified") return;
+      counts[e.horse] = (counts[e.horse] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  })();
+
+  const presenceBadge = (p: string) => {
+    if (p === "absent") return <span className="font-body text-[10px] font-semibold text-red-500 bg-red-50 px-2 py-0.5 rounded-full whitespace-nowrap">Absent</span>;
+    if (p === "absent_nonjustified") return <span className="font-body text-[10px] font-semibold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full whitespace-nowrap">Absent</span>;
+    if (p) return <span className="font-body text-[10px] font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full whitespace-nowrap">Présent</span>;
+    return null;
+  };
+
+  return (
+    <div className="mt-4">
+      <button onClick={toggle}
+        className="w-full flex items-center justify-between bg-blue-50 hover:bg-blue-100 rounded-xl px-4 py-3 border-none cursor-pointer transition-colors">
+        <span className="flex items-center gap-2 font-body text-sm font-semibold text-blue-800">
+          <BookOpen size={16} /> Journal des séances de {child.firstName}
+        </span>
+        {open ? <ChevronDown size={16} className="text-blue-500" /> : <ChevronRight size={16} className="text-blue-500" />}
+      </button>
+
+      {open && (
+        <div className="mt-3">
+          {loading ? (
+            <div className="flex items-center justify-center py-6 text-blue-400">
+              <Loader2 size={20} className="animate-spin" />
+            </div>
+          ) : entries.length === 0 ? (
+            <Card padding="md" className="text-center">
+              <p className="font-body text-sm text-slate-400">Aucune séance enregistrée cette saison.</p>
+            </Card>
+          ) : (
+            <>
+              {/* Podium des poneys */}
+              {podium.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {podium.map(([horse, n], i) => (
+                    <div key={horse} className="flex items-center gap-1.5 bg-amber-50 border border-amber-100 rounded-full px-3 py-1.5">
+                      <span className="text-sm">{["🥇", "🥈", "🥉"][i]}</span>
+                      <span className="font-body text-xs font-semibold text-amber-800">{horse}</span>
+                      <span className="font-body text-[10px] text-amber-500">×{n}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Liste des séances */}
+              <div className="flex flex-col gap-2">
+                {entries.slice(0, visible).map((e: any) => (
+                  <Card key={e.id} padding="sm">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="min-w-0">
+                        <div className="font-body text-sm font-semibold text-blue-800">
+                          {e.title}
+                          {e.horse && <span className="ml-2 font-normal text-slate-600">🐴 {e.horse}</span>}
+                        </div>
+                        <div className="font-body text-xs text-slate-500 mt-0.5 capitalize">
+                          {new Date(e.date + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })}
+                          {e.startTime && <span className="lowercase"> · {e.startTime}</span>}
+                        </div>
+                        {e.theme && (
+                          <div className="font-body text-xs text-slate-600 mt-1 italic truncate">
+                            📝 {e.theme.length > 90 ? e.theme.slice(0, 90) + "…" : e.theme}
+                          </div>
+                        )}
+                      </div>
+                      {presenceBadge(e.presence)}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+
+              {entries.length > visible && (
+                <button onClick={() => setVisible(v => v + 15)}
+                  className="w-full mt-2 py-2 font-body text-xs font-semibold text-blue-500 bg-white border border-blue-100 rounded-lg cursor-pointer hover:bg-blue-50">
+                  Afficher plus ({entries.length - visible} séances restantes)
+                </button>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>
