@@ -944,7 +944,27 @@ export default function ReserverPage() {
             <div>
               <h2 className="font-display text-lg font-bold text-green-700 mb-3">Stages</h2>
               <div className="flex flex-col gap-3">
-                {Object.entries(stageGroups).map(([key, stageCreneaux]) => {
+                {(() => {
+                  // Tri chronologique par premier jour du stage, puis intercalage
+                  // d'un en-tête à chaque changement de semaine ("Semaine du ... au ...").
+                  const sorted = Object.entries(stageGroups).sort(([, a], [, b]) => {
+                    const da = [...a].map(c => c.date).sort()[0] || "";
+                    const db2 = [...b].map(c => c.date).sort()[0] || "";
+                    return da.localeCompare(db2);
+                  });
+                  let prevMonday = "";
+                  return sorted.map(([key, stageCreneaux]) => {
+                  // Lundi de la semaine = suffixe de la clé du groupe (YYYY-MM-DD)
+                  const monday = key.slice(-10);
+                  const showWeekHeader = monday !== prevMonday;
+                  prevMonday = monday;
+                  const weekLabel = (() => {
+                    const mon = new Date(monday + "T12:00:00");
+                    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+                    const f = (d: Date, withMonth: boolean) => d.toLocaleDateString("fr-FR", withMonth ? { day: "numeric", month: "long" } : { day: "numeric" });
+                    const sameMonth = mon.getMonth() === sun.getMonth();
+                    return `Semaine du ${f(mon, !sameMonth)} au ${f(sun, true)}`;
+                  })();
                   const first = stageCreneaux[0];
                   const prix = (first as any).priceTTC || first.priceHT * (1 + (first.tvaTaux || 5.5) / 100);
                   const spots = Math.min(...stageCreneaux.map(spotsLeft));
@@ -967,7 +987,13 @@ export default function ReserverPage() {
                   const isSelected = selectedCreneau?.id === first.id;
 
                   return (
-                    <Card key={key} padding="md" className={isSelected ? "ring-2 ring-green-500" : ""}>
+                    <div key={key} className="flex flex-col gap-3">
+                      {showWeekHeader && (
+                        <div className="font-body text-xs font-bold uppercase tracking-wider text-slate-500 mt-2 first:mt-0">
+                          📅 {weekLabel}
+                        </div>
+                      )}
+                    <Card padding="md" className={isSelected ? "ring-2 ring-green-500" : ""}>
                       <div className="flex justify-between items-start cursor-pointer" onClick={() => { setSelectedCreneau(isSelected ? null : first); setSelectedChildren([]); setStageBookingMode("semaine"); setSelectedDays([]); }}>
                         <div>
                           <div className="font-body text-base font-semibold text-blue-800">{first.activityTitle}</div>
@@ -1160,8 +1186,9 @@ export default function ReserverPage() {
                         </div>
                       );})()}
                     </Card>
+                    </div>
                   );
-                })}
+                });})()}
               </div>
             </div>
           )}
