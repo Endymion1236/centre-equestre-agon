@@ -35,6 +35,11 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
   ];
   const allTabs = [...childTabs, ...familyTabs];
   const [tab, setTab] = useState(childTabs[0]?.id || "paiements");
+  // UX fiche cavalier : menu ⋯ (actions rares), sections repliées par défaut
+  const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null);
+  const [pastExpanded, setPastExpanded] = useState<string | null>(null);
+  const [sanitaryExpanded, setSanitaryExpanded] = useState<string | null>(null);
+
   const [editingMandat, setEditingMandat] = useState(false);
   const [mandatForm, setMandatForm] = useState({ iban: "", bic: "", titulaire: family.parentName || "", dateSignature: new Date().toISOString().split("T")[0] });
   const [mandatSaving, setMandatSaving] = useState(false);
@@ -164,35 +169,52 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <Badge color={child.galopLevel && child.galopLevel !== "—" ? "blue" : "gray"}>{child.galopLevel && child.galopLevel !== "—" ? child.galopLevel : "Débutant"}</Badge>
+                {/* Manquants = orange compact (à compléter, pas une alerte) ;
+                    le rouge reste réservé au bloquant (impayés). */}
                 {(!child.firstName?.trim() || !child.lastName?.trim() || !bd || isNaN(bd.getTime())) && (
-                  <Badge color="red">Profil incomplet</Badge>
+                  <Badge color="orange">⚠ Profil</Badge>
                 )}
-                {child.sanitaryForm ? <Badge color="green">Attestation OK</Badge> : <Badge color="red">Attestation médicale manquante</Badge>}
+                {child.sanitaryForm ? <Badge color="green">Attestation ✓</Badge> : <Badge color="orange">⚠ Attestation</Badge>}
                 {child.licenceNumber && (
                   <Badge color={child.licencePayee ? "green" : "gray"}>Licence {child.licenceNumber}{child.licencePayee ? "" : " (non payée)"}</Badge>
                 )}
               </div>
             </div>
             {/* Actions */}
-            <div className="flex items-center gap-1.5 flex-wrap -mt-2 pb-3 border-b border-blue-500/8">
-              {onInscribe && <button onClick={() => onInscribe(child.id, child.firstName)} className="font-body text-[11px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1"><CalendarDays size={11}/> Inscrire</button>}
-              {onEditSanitary && <button onClick={() => onEditSanitary(child)} className="font-body text-[11px] text-green-600 bg-green-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-green-100">Fiche sanitaire</button>}
-              {onEditGalop && <button onClick={() => onEditGalop(child.id)} className="font-body text-[11px] text-purple-600 bg-purple-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-purple-100">Changer niveau</button>}
-              <a href={`/admin/progression/${child.id}?familyId=${family.id}`} className="font-body text-[11px] text-pink-600 bg-pink-50 px-2.5 py-1 rounded-lg no-underline cursor-pointer hover:bg-pink-100 flex items-center gap-1">📈 Progression</a>
-              {onBilanPdf && <button onClick={() => onBilanPdf(child)} className="font-body text-[11px] text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-indigo-100">🖨 Bilan PDF</button>}
-              {onEditChild && <button onClick={() => onEditChild(child)} className="font-body text-[11px] text-slate-600 bg-gray-100 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-gray-200">✏️ Modifier</button>}
-              {onDeleteChild && <button onClick={() => onDeleteChild(child.id, child.firstName)} className="font-body text-[11px] text-red-400 bg-red-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-red-100">🗑 Suppr.</button>}
+            {/* Hiérarchie : Inscrire = primaire plein ; consultation = secondaires
+                neutres ; actions rares ou destructives = menu ⋯ */}
+            <div className="relative flex items-center gap-1.5 flex-wrap -mt-2 pb-3 border-b border-blue-500/8">
+              {onInscribe && <button onClick={() => onInscribe(child.id, child.firstName)} className="font-body text-[11px] font-semibold text-white bg-blue-500 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-600 flex items-center gap-1"><CalendarDays size={11}/> Inscrire</button>}
+              <a href={`/admin/progression/${child.id}?familyId=${family.id}`} className="font-body text-[11px] text-slate-600 bg-gray-100 px-2.5 py-1.5 rounded-lg no-underline cursor-pointer hover:bg-gray-200">📈 Progression</a>
+              {onBilanPdf && <button onClick={() => onBilanPdf(child)} className="font-body text-[11px] text-slate-600 bg-gray-100 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">🖨 Bilan PDF</button>}
+              {onEditSanitary && <button onClick={() => onEditSanitary(child)} className="font-body text-[11px] text-slate-600 bg-gray-100 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">🩺 Fiche sanitaire</button>}
+              <button onClick={() => setActionMenuOpen(actionMenuOpen === child.id ? null : child.id)}
+                title="Plus d'actions"
+                className="font-body text-[13px] font-bold text-slate-500 bg-gray-100 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-gray-200">⋯</button>
+              {actionMenuOpen === child.id && (
+                <div className="absolute right-0 top-9 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[170px]">
+                  {onEditChild && <button onClick={() => { setActionMenuOpen(null); onEditChild(child); }} className="w-full text-left font-body text-xs text-slate-700 px-3 py-2 bg-transparent border-none cursor-pointer hover:bg-gray-50">✏️ Modifier la fiche</button>}
+                  {onEditGalop && <button onClick={() => { setActionMenuOpen(null); onEditGalop(child.id); }} className="w-full text-left font-body text-xs text-slate-700 px-3 py-2 bg-transparent border-none cursor-pointer hover:bg-gray-50">🎖 Changer le niveau</button>}
+                  {onDeleteChild && <button onClick={() => { setActionMenuOpen(null); onDeleteChild(child.id, child.firstName); }} className="w-full text-left font-body text-xs text-red-500 px-3 py-2 bg-transparent border-none cursor-pointer hover:bg-red-50 border-t border-gray-100">🗑 Supprimer le cavalier</button>}
+                </div>
+              )}
             </div>
 
-            {/* Fiche sanitaire */}
+            {/* Fiche sanitaire — repliée en une ligne par défaut */}
             {child.sanitaryForm && (
-              <div className="bg-green-50 rounded-xl px-4 py-3">
-                <div className="font-body text-[10px] text-green-600 uppercase tracking-wider font-semibold mb-1">Fiche sanitaire</div>
-                <div className="font-body text-xs text-slate-600 flex flex-wrap gap-3">
-                  <span>Allergies : {child.sanitaryForm.allergies || "Aucune"}</span>
-                  <span className="text-slate-400">Urgence : {child.sanitaryForm.emergencyContactName} ({child.sanitaryForm.emergencyContactPhone})</span>
+              <button onClick={() => setSanitaryExpanded(sanitaryExpanded === child.id ? null : child.id)}
+                className="w-full text-left bg-green-50 hover:bg-green-100 rounded-xl px-4 py-2.5 border-none cursor-pointer transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-body text-[10px] text-green-600 uppercase tracking-wider font-semibold">🩺 Fiche sanitaire ✓{!sanitaryExpanded && child.sanitaryForm.allergies ? <span className="ml-2 normal-case tracking-normal font-normal text-orange-600">Allergies : {child.sanitaryForm.allergies}</span> : null}</span>
+                  <span className="font-body text-[10px] text-green-500">{sanitaryExpanded === child.id ? "▲" : "▼"}</span>
                 </div>
-              </div>
+                {sanitaryExpanded === child.id && (
+                  <div className="font-body text-xs text-slate-600 flex flex-wrap gap-3 mt-1.5">
+                    <span>Allergies : {child.sanitaryForm.allergies || "Aucune"}</span>
+                    <span className="text-slate-400">Urgence : {child.sanitaryForm.emergencyContactName} ({child.sanitaryForm.emergencyContactPhone})</span>
+                  </div>
+                )}
+              </button>
             )}
 
             {/* Prochaines séances */}
@@ -200,7 +222,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
               <div className="font-body text-[10px] text-green-600 font-semibold uppercase tracking-wider mb-2 flex items-center gap-1"><CalendarDays size={12} /> Prochaines séances ({upcoming.length})</div>
               {upcoming.length === 0 ? <p className="font-body text-xs text-slate-400 italic">Aucune séance à venir.</p> : (
                 <div className="flex flex-col gap-1">
-                  {(seancesExpanded === child.id ? upcoming : upcoming.slice(0, 8)).map((r: any) => (
+                  {(seancesExpanded === child.id ? upcoming : upcoming.slice(0, 3)).map((r: any) => (
                     <div key={r.id} className="flex items-center justify-between font-body text-xs py-1.5 px-3 bg-green-50 rounded-lg">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-green-700 font-semibold min-w-[80px]">{new Date(r.date + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</span>
@@ -215,20 +237,23 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                       }} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-0.5"><Trash2 size={11} /></button>
                     </div>
                   ))}
-                  {upcoming.length > 8 && (
+                  {upcoming.length > 3 && (
                     <button
                       onClick={() => setSeancesExpanded(seancesExpanded === child.id ? null : child.id)}
                       className="font-body text-[10px] text-blue-500 hover:text-blue-700 text-center bg-transparent border-none cursor-pointer py-1"
                     >
-                      {seancesExpanded === child.id ? "▲ Voir moins" : `▼ Voir les ${upcoming.length - 8} autres`}
+                      {seancesExpanded === child.id ? "▲ Voir moins" : `▼ Voir les ${upcoming.length - 3} autres`}
                     </button>
                   )}
                 </div>
               )}
               {past.length > 0 && (
                 <div className="mt-2">
-                  <div className="font-body text-[10px] text-slate-400 font-semibold mb-1">Passées</div>
-                  {past.map((r: any) => {
+                  <button onClick={() => setPastExpanded(pastExpanded === child.id ? null : child.id)}
+                    className="font-body text-[10px] text-slate-400 font-semibold mb-1 bg-transparent border-none cursor-pointer p-0 hover:text-slate-600">
+                    {pastExpanded === child.id ? "▼" : "▶"} Passées ({past.length})
+                  </button>
+                  {pastExpanded === child.id && past.map((r: any) => {
                     // Croiser avec les notes de clôture Montoir pour retrouver le poney
                     // attribué à cette séance (même créneau). Les notes "type: seance"
                     // sont créées à la clôture et contiennent creneauId + horseName.
