@@ -707,8 +707,15 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
       {analysisError && <p className="font-body text-xs text-red-500 mb-3">{analysisError}</p>}
       {analysis && (
         <div className="bg-white border border-indigo-200 rounded-lg p-3 mb-3">
-          <div className="font-body text-[10px] font-semibold text-indigo-500 uppercase tracking-wider mb-2">
-            ✨ Analyse de la note {rawTranscript ? "dictée" : "saisie"}
+          <div className="flex items-center justify-between mb-2">
+            <div className="font-body text-[10px] font-semibold text-indigo-500 uppercase tracking-wider">
+              ✨ Analyse de la note {rawTranscript ? "dictée" : "saisie"}
+            </div>
+            <button onClick={() => { setAnalysis(""); setMotParents(null); }}
+              title="Supprimer l'analyse (elle n'est jamais enregistrée)"
+              className="font-body text-xs text-indigo-400 bg-transparent border-none cursor-pointer hover:text-indigo-600 px-1">
+              ✕
+            </button>
           </div>
           <div className="font-body text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
             {analysis.split(/\*\*(.*?)\*\*/g).map((part, i) =>
@@ -717,7 +724,7 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
           </div>
           <div className="flex gap-2 justify-end mt-2 flex-wrap">
             {motParents && (
-              <button onClick={() => { setNoteText(motParents); if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); }}
+              <button onClick={() => { setNoteText(motParents); setAnalysis(""); setMotParents(null); }}
                 className="font-body text-[11px] font-semibold text-white bg-indigo-500 border-none rounded-lg px-3 py-1.5 cursor-pointer hover:bg-indigo-600">
                 ✏️ Utiliser le mot aux parents dans la note
               </button>
