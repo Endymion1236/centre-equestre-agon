@@ -120,7 +120,16 @@ export default function TestRapprochementPage() {
       `${fmtFR(s.vendredi)};VIR RECU INCONNU REMBOURSEMENT;;${eur(83.50)}`,
       `${fmtFR(s.vendredi)};PRLV ASSURANCE MATERIEL;120,00;`,
     ];
-    const blob = new Blob([lignes.join("\n")], { type: "text/csv;charset=utf-8" });
+    // Le rapprochement lit les fichiers en ISO-8859-1 (encodage Crédit Agricole).
+    // On encode donc le CSV en Latin1, sinon les accents de l'en-tête (« Libellé »)
+    // sont mal relus et le parser ne reconnaît pas les colonnes → 0 ligne importée.
+    const texte = lignes.join("\r\n");
+    const latin1 = new Uint8Array(texte.length);
+    for (let i = 0; i < texte.length; i++) {
+      const code = texte.charCodeAt(i);
+      latin1[i] = code <= 0xff ? code : 0x3f; // caractère hors Latin1 → "?"
+    }
+    const blob = new Blob([latin1], { type: "text/csv;charset=iso-8859-1" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = `releve-test-${fmtFR(s.lundi).replace(/\//g, "-")}.csv`;
