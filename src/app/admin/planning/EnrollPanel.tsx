@@ -79,6 +79,59 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const { isAdmin, isMoniteur, user } = useAuth();
   const [search, setSearch] = useState(""); const [selFam, setSelFam] = useState(""); const [selChild, setSelChild] = useState("");
   const [enrolling, setEnrolling] = useState(false); const [justEnrolled, setJustEnrolled] = useState("");
+
+  // ── Inscription établissement sur TOUTE la saison ──
+  // Inscrit l'enfant dans tous les créneaux récurrents à venir (même titre,
+  // même heure, même jour de semaine) SANS forfait facturé ni paiement parent.
+  // L'établissement est facturé à part (forfait fixe par séance). Le suivi péda
+  // (présences, progression) fonctionne normalement sur chaque créneau.
+  const [enrollingSaison, setEnrollingSaison] = useState(false);
+  const inscrireSaisonEtablissement = async (childId: string, childName: string, familyId: string, familyName: string) => {
+    if (!childId) { panelToast("Sélectionne d'abord un cavalier", "error"); return; }
+    setEnrollingSaison(true);
+    try {
+      const creneauDate = new Date(creneau.date); creneauDate.setHours(0, 0, 0, 0);
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const start = creneauDate > today ? creneauDate : today;
+      const startStr = start.toISOString().split("T")[0];
+      const endStr = dateFinSaisonEffective.toISOString().split("T")[0];
+      const jourRef = new Date(creneau.date + "T12:00:00").getDay();
+
+      const snap = await getDocs(query(
+        collection(db, "creneaux"),
+        where("date", ">=", startStr),
+        where("date", "<=", endStr),
+      ));
+      // Créneaux récurrents : même cours, même heure, même jour de semaine, à venir
+      const cibles = snap.docs.filter(d => {
+        const c = d.data() as any;
+        if (c.activityTitle !== creneau.activityTitle) return false;
+        if (c.startTime !== creneau.startTime) return false;
+        if (new Date(c.date + "T12:00:00").getDay() !== jourRef) return false;
+        // Pas déjà inscrit
+        return !(c.enrolled || []).some((e: any) => e.childId === childId);
+      });
+
+      let count = 0;
+      for (const d of cibles) {
+        const c = d.data() as any;
+        const newEnrolled = [...(c.enrolled || []), {
+          childId, childName, familyId, familyName,
+          enrolledAt: new Date().toISOString(), presence: null,
+          institutional: true, // marqueur : séance facturée à l'établissement
+        }];
+        await updateDoc(doc(db, "creneaux", d.id), { enrolled: newEnrolled, enrolledCount: newEnrolled.length });
+        count++;
+      }
+      panelToast(`🏫 ${childName} inscrit(e) sur ${count} séance(s) de la saison (établissement, sans facturation)`, "success");
+      setJustEnrolled(`🏫 ${childName} — ${count} séances de la saison (établissement)`);
+      await onRefresh?.();
+    } catch (e) {
+      console.error("Inscription saison établissement:", e);
+      panelToast("Erreur lors de l'inscription saison", "error");
+    }
+    setEnrollingSaison(false);
+  };
   const [showPay, setShowPay] = useState(false); const [payMode, setPayMode] = useState("cb_terminal"); const [unenrolling, setUnenrolling] = useState("");
   const [avoirSolde, setAvoirSolde] = useState<Record<string, number>>({});
   const [freeEnroll, setFreeEnroll] = useState(false);
@@ -2770,10 +2823,29 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 {inscriptionMode === "ponctuel" && !showPay && !useRattrapage && (
                   <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-2">
                     {freeEnroll && freeReason === "Établissement" ? (
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-body text-xs font-semibold text-purple-700">🏫 Inscription établissement — aucune facture aux parents</span>
-                        <button onClick={() => { setFreeEnroll(false); setFreeReason("Rattrapage"); }}
-                          className="font-body text-[10px] text-slate-500 bg-transparent border-none cursor-pointer underline">Annuler</button>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-body text-xs font-semibold text-purple-700">🏫 Inscription établissement — aucune facture aux parents</span>
+                          <button onClick={() => { setFreeEnroll(false); setFreeReason("Rattrapage"); }}
+                            className="font-body text-[10px] text-slate-500 bg-transparent border-none cursor-pointer underline">Annuler</button>
+                        </div>
+                        {/* Inscrire sur toute la saison récurrente, sans facturation */}
+                        {selChild && selFam && (() => {
+                          const fam = families.find((f: any) => f.firestoreId === selFam);
+                          if (!fam) return null;
+                          const childObj: any = (fam.children || []).find((c: any) => c.id === selChild);
+                          const childName = childObj ? `${childObj.firstName}${childObj.lastName ? " " + childObj.lastName : ""}` : "";
+                          return (
+                            <button onClick={() => inscrireSaisonEtablissement(selChild, childName, fam.firestoreId, fam.parentName || "—")}
+                              disabled={enrollingSaison}
+                              className="w-full flex items-center justify-center gap-1.5 font-body text-xs font-semibold text-white bg-purple-500 hover:bg-purple-600 rounded-lg px-3 py-2 cursor-pointer border-none disabled:opacity-50">
+                              {enrollingSaison ? "Inscription en cours…" : "📅 Inscrire sur toute la saison (tous les créneaux récurrents)"}
+                            </button>
+                          );
+                        })()}
+                        <p className="font-body text-[10px] text-purple-400">
+                          « Inscrire » ci-dessous = cette séance seulement. Le bouton ci-dessus = toutes les séances récurrentes de la saison.
+                        </p>
                       </div>
                     ) : (
                       <button onClick={() => { setFreeEnroll(true); setFreeReason("Établissement"); setShowPay(false); }}
