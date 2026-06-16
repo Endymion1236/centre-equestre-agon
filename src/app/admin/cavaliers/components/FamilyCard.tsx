@@ -26,6 +26,7 @@ const FAMILY_TAGS = [
   { id: "cavalier_annee", label: "Cavalier année", color: "text-green-700 bg-green-50", emoji: "🏇" },
   { id: "stage", label: "Stage", color: "text-blue-700 bg-blue-50", emoji: "🎯" },
   { id: "passage", label: "Passage", color: "text-orange-700 bg-orange-50", emoji: "👋" },
+  { id: "etablissement", label: "Établissement", color: "text-purple-700 bg-purple-50", emoji: "🏫" },
 ] as const;
 
 const calcAge = (birthDate: any): string => {
