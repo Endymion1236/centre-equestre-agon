@@ -2853,8 +2853,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                             )}
                             {!useRattrapage && (
                               <button onClick={() => { setFreeEnroll(true); setShowPay(false); }}
-                                className="font-body text-[10px] text-green-600 bg-transparent border-none cursor-pointer underline text-left">
-                                🎁 Offert (pas de facturation)
+                                className="flex items-center justify-center gap-1.5 font-body text-xs font-semibold text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 cursor-pointer hover:bg-green-100">
+                                🎁 Inscrire sans facturation (offert / établissement)
                               </button>
                             )}
                           </div>
