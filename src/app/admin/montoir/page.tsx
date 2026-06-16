@@ -22,7 +22,7 @@ import PoneyChargeView from "./PoneyChargeView";
 import ThemeSuggestion from "./ThemeSuggestion";
 import QuickAddRider from "./QuickAddRider";
 import SeanceNotes from "./SeanceNotes";
-import { Loader2, ChevronLeft, ChevronRight, XCircle, AlertCircle, Printer, ClipboardList, Mic, MicOff, Sparkles,
+import { Loader2, ChevronLeft, ChevronRight, XCircle, AlertCircle, Printer, ClipboardList, Mic, MicOff, Sparkles, TrendingUp,
 } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 
@@ -926,7 +926,25 @@ export default function MontoirPage() {
                 {/* Mobile : nom + âge sur une ligne pleine largeur (le badge ne
                     casse plus au milieu) ; desktop : colonne flexible inchangée. */}
                 <span className="w-full sm:w-auto sm:flex-1 font-body text-sm font-semibold text-blue-800 flex items-center gap-1.5 min-w-0">
-                  <span className="truncate">{e.childName}</span>
+                  {(() => {
+                    const famForLink = families.find((f:any) => (f.children||[]).some((cc:any)=>cc.id===e.childId));
+                    const famId = famForLink?.firestoreId || famForLink?.id;
+                    return (<>
+                      {/* Nom cliquable → fiche famille (cavalier ciblé) */}
+                      {famId ? (
+                        <a href={`/admin/cavaliers?id=${famId}&child=${e.childId}`} title="Ouvrir la fiche client"
+                          className="truncate text-blue-800 no-underline hover:underline hover:text-blue-600">{e.childName}</a>
+                      ) : <span className="truncate">{e.childName}</span>}
+                      {/* Desktop : icône progression, sans quitter le montoir */}
+                      {famId && (
+                        <a href={`/admin/progression/${e.childId}?familyId=${famId}`} title="Voir la progression"
+                          target="_blank" rel="noopener noreferrer"
+                          className="hidden sm:inline-flex shrink-0 text-pink-500 no-underline hover:text-pink-600">
+                          <TrendingUp size={13} />
+                        </a>
+                      )}
+                    </>);
+                  })()}
                   {(() => {
                     const fam = families.find((f:any) => (f.children||[]).some((c:any)=>c.id===e.childId));
                     const child = (fam?.children||[]).find((c:any)=>c.id===e.childId);
@@ -952,7 +970,15 @@ export default function MontoirPage() {
                     </>;
                   })()}
                 </span>
-                <span className="w-32 font-body text-xs hidden sm:block" style={{color:"#334155"}}>{e.familyName}</span>
+                <span className="w-32 font-body text-xs hidden sm:block" style={{color:"#334155"}}>
+                  {(() => {
+                    const famForLink = families.find((f:any) => (f.children||[]).some((cc:any)=>cc.id===e.childId));
+                    const famId = famForLink?.firestoreId || famForLink?.id;
+                    return famId
+                      ? <a href={`/admin/cavaliers?id=${famId}&child=${e.childId}`} title="Ouvrir la fiche client" className="no-underline hover:underline" style={{color:"#334155"}}>{e.familyName}</a>
+                      : e.familyName;
+                  })()}
+                </span>
                 <span className="grow basis-40 sm:grow-0 sm:basis-auto sm:w-36 min-w-0">{!closed ? (() => {
                   // Doublon dans CE créneau → toujours bloqué
                   const usedInThis = new Set<string>();
