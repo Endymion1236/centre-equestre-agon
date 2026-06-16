@@ -34,6 +34,7 @@ interface TabImpayesProps {
   setDuplicateTarget: (val: any) => void;
   deletePaymentCommand: (payment: any) => Promise<void>;
   enrollChildInForfait: (payment: any, familyId: string) => Promise<number>;
+  onMultiEncaisser: (familyId: string, familyName: string, payments: any[]) => void;
 }
 
 export function TabImpayes({
@@ -42,6 +43,7 @@ export function TabImpayes({
   setEditPayment, setEditItems, setEditRemisePct, setEditRemiseEuros,
   setPayLinkModal, setPayLinkEmail, setPayLinkAmount, setPayLinkMessage,
   removePaymentItem, setDuplicateTarget, deletePaymentCommand, enrollChildInForfait,
+  onMultiEncaisser,
 }: TabImpayesProps) {
   const [impayesSearch, setImpayesSearch] = useState("");
   const [impayesExpanded, setImpayesExpanded] = useState<Set<string>>(new Set());
@@ -162,6 +164,54 @@ export function TabImpayes({
             <span className="font-body text-2xl font-bold text-red-500">{totalDue.toFixed(2)}€</span>
             <span className="font-body text-xs text-slate-600">total impayé sur {unpaid.length} facture{unpaid.length > 1 ? "s" : ""}</span>
           </Card>
+
+          {/* ── Encaisser ensemble : familles ayant ≥2 factures réglables ──
+              Réglable = sans règlement en cours : pas de chèque différé, pas de
+              SEPA programmé, pas d'échéancier multi-échéances. Un clic propose
+              de tout solder en un seul geste de paiement. */}
+          {(() => {
+            const reglable = (p: any) =>
+              p.paymentMode !== "cheque_differe" &&
+              p.status !== "sepa_scheduled" &&
+              !((p as any).echeancesTotal > 1) &&
+              (p.totalTTC || 0) - (p.paidAmount || 0) > 0.005;
+            const parFamille = new Map<string, { name: string; pays: any[]; total: number }>();
+            for (const p of unpaid) {
+              if (!reglable(p)) continue;
+              const fid = p.familyId || "";
+              if (!parFamille.has(fid)) parFamille.set(fid, { name: p.familyName || "Famille", pays: [], total: 0 });
+              const e = parFamille.get(fid)!;
+              e.pays.push(p);
+              e.total += (p.totalTTC || 0) - (p.paidAmount || 0);
+            }
+            const multi = [...parFamille.entries()].filter(([, e]) => e.pays.length >= 2)
+              .sort((a, b) => b[1].total - a[1].total);
+            if (multi.length === 0) return null;
+            return (
+              <Card padding="sm" className="mb-4 !bg-blue-50/50 !border-blue-200">
+                <div className="font-body text-[11px] font-semibold text-blue-700 uppercase tracking-wider mb-2">
+                  💳 Encaisser ensemble — familles avec plusieurs factures réglables
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {multi.map(([fid, e]) => (
+                    <div key={fid} className="flex items-center justify-between gap-3 bg-white rounded-lg px-3 py-2">
+                      <div className="font-body text-sm text-slate-700 min-w-0">
+                        <span className="font-semibold text-blue-800">{e.name}</span>
+                        <span className="text-slate-500"> · {e.pays.length} factures · {e.total.toFixed(2)}€</span>
+                      </div>
+                      <button onClick={() => onMultiEncaisser(fid, e.name, e.pays)}
+                        className="shrink-0 font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 px-3 py-1.5 rounded-lg border-none cursor-pointer">
+                        💳 Tout encaisser
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p className="font-body text-[10px] text-slate-400 mt-2">
+                  Les chèques différés, prélèvements SEPA programmés et échéanciers en cours sont exclus (ils ont déjà un règlement en cours).
+                </p>
+              </Card>
+            );
+          })()}
 
           {/* Barre de recherche */}
           <div className="relative mb-3">
