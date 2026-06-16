@@ -95,6 +95,7 @@ export default function TestRapprochementPage() {
       const clrData = await clr.json();
       if (!clr.ok) throw new Error(clrData.error || "Nettoyage impossible");
       add(`   ${clrData.deleted} ancien(s) encaissement(s) TEST supprimé(s).`);
+      if (clrData.bankLinesRemoved > 0) add(`   ${clrData.bankLinesRemoved} ancienne(s) ligne(s) de rapprochement de test purgée(s).`);
 
       const encs = mode === "fixe" ? jeuFixe() : jeuAleatoire();
       for (const e of encs) {

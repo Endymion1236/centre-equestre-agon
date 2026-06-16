@@ -40,7 +40,55 @@ export async function POST(req: NextRequest) {
       await batch.commit();
     }
 
-    return NextResponse.json({ success: true, deleted });
+    // ── Purge des lignes de rapprochement de test ──
+    // Les bankLines de test (libellés REMISE / VIR de test / PRLV assurance,
+    // ou rapprochées à des familles "TEST") restent dans rapprochements/{YYYY-MM}
+    // et s'empilent à chaque import. On les retire pour repartir propre.
+    // On ne touche QU'AUX lignes reconnaissables comme du test (mois témoin =
+    // mois courant et mois précédent, qui couvrent la "semaine dernière").
+    let bankLinesRemoved = 0;
+    const now = new Date();
+    const ymOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const monthsToClean = [ymOf(now), ymOf(prevMonth)];
+
+    const isTestLine = (bl: any): boolean => {
+      const label = (bl.label || "").toUpperCase();
+      if (label.includes("ASSURANCE MATERIEL")) return true;       // débit piège
+      if (label.includes("INCONNU REMBOURSEMENT")) return true;    // virement piège
+      if (label.includes("REMISE CARTE BANCAIRE")) return true;    // remises CB de test
+      if (label.includes("REMISE CB TPE")) return true;
+      if (label.includes("REMISE CHEQUES")) return true;
+      if (label.includes("VIR RECU TEST")) return true;            // virements de test
+      // Lignes rapprochées à une famille "TEST ..."
+      if ((bl.matchedEncs || []).some((e: any) => (e.familyName || "").startsWith("TEST "))) return true;
+      return false;
+    };
+
+    for (const ym of monthsToClean) {
+      const ref = adminDb.collection("rapprochements").doc(ym);
+      const docSnap = await ref.get();
+      if (!docSnap.exists) continue;
+      const data = docSnap.data() as any;
+      const before = (data.bankLines || []) as any[];
+      const kept = before.filter(bl => !isTestLine(bl));
+      const removed = before.length - kept.length;
+      if (removed > 0) {
+        bankLinesRemoved += removed;
+        if (kept.length === 0) {
+          await ref.delete();
+        } else {
+          await ref.set({
+            ...data,
+            bankLines: kept,
+            totalLines: kept.length,
+            totalMatched: kept.filter((b: any) => b.matched).length,
+          }, { merge: true });
+        }
+      }
+    }
+
+    return NextResponse.json({ success: true, deleted, bankLinesRemoved });
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e?.message || String(e) }, { status: 500 });
   }
