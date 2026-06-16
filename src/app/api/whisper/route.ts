@@ -46,12 +46,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Audio trop long (max 25 MB)" }, { status: 400 });
     }
 
-    const transcription = await openai.audio.transcriptions.create({
-      file: audioFile,
-      model: "whisper-1",
-      language: "fr",
-      prompt: "Bilan pédagogique équitation, galop, foulées, équilibre, position, cavalier, poney, cheval, moniteur, centre équestre.",
-    });
+    // Modèle de transcription : gpt-4o-transcribe (meilleur taux d'erreur,
+    // plus robuste aux accents et au bruit — utile en écurie). Surchargeable
+    // via la variable d'env WHISPER_MODEL pour revenir à whisper-1 sans
+    // redéploiement. Fallback automatique vers whisper-1 si le modèle récent
+    // échoue (indisponibilité, format non supporté), pour ne jamais bloquer
+    // une dictée.
+    const PROMPT = "Bilan pédagogique équitation, galop, foulées, équilibre, position, cavalier, poney, cheval, moniteur, centre équestre.";
+    const primaryModel = process.env.WHISPER_MODEL || "gpt-4o-transcribe";
+
+    let transcription;
+    try {
+      transcription = await openai.audio.transcriptions.create({
+        file: audioFile,
+        model: primaryModel,
+        language: "fr",
+        prompt: PROMPT,
+      });
+    } catch (primaryErr: any) {
+      if (primaryModel === "whisper-1") throw primaryErr;
+      console.warn(`Whisper: échec ${primaryModel}, fallback whisper-1:`, primaryErr?.message || primaryErr);
+      transcription = await openai.audio.transcriptions.create({
+        file: audioFile,
+        model: "whisper-1",
+        language: "fr",
+        prompt: PROMPT,
+      });
+    }
 
     return NextResponse.json({
       success: true,
