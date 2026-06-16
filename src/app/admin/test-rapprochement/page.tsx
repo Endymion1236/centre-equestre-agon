@@ -3,15 +3,17 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  PAGE DE TEST DU RAPPROCHEMENT BANCAIRE  —  ENVIRONNEMENT TEST UNIQUEMENT
 //
-//  Valide le smart matching du rapprochement CSV sans rejouer une vraie semaine.
-//  Deux modes :
-//    • Jeu FIXE      : scénario reproductible avec cas pièges connus
-//    • Jeu ALÉATOIRE : montants/nombre de transactions/refus variables
+//  Reproduit le VRAI workflow de septembre :
+//    • chèques, espèces et virements → matchés automatiquement à l'import CSV
+//    • remises CB (REMISE CARTE) → arrivent en "À traiter", on colle le DÉTAIL CA
+//      (copié depuis le site Crédit Agricole) via le bouton "Détail CA"
 //
-//  Le bouton "Créer" efface d'abord les anciens encaissements de test (préfixe
-//  "TEST ") via /api/admin/clear-test-encaissements, puis recrée le jeu courant.
+//  Cette page génère donc DEUX choses :
+//    1. le CSV bancaire (Latin1) à importer dans Compta → Rapprochement
+//    2. le TEXTE "Détail CA" de chaque remise CB, à coller dans la modale Détail CA
 //
-//  Usage : 1) Créer  2) Télécharger le CSV  3) Compta → Rapprochement → importer
+//  Le bouton "Créer" efface d'abord les anciens encaissements TEST (préfixe
+//  "TEST ") via /api/admin/clear-test-encaissements, puis recrée le jeu.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState } from "react";
@@ -35,39 +37,36 @@ function pick<T>(arr: T[]): T { return arr[rand(0, arr.length - 1)]; }
 type Jour = "lundi" | "mardi" | "mercredi" | "jeudi" | "vendredi";
 type Enc = { familyName: string; montant: number; activityTitle: string; mode: string; modeLabel: string; jour: Jour };
 
+// Heure aléatoire de transaction CB (format site CA : HH:MM:SS)
+const heureCB = () => `${String(rand(9, 18)).padStart(2, "0")}:${String(rand(0, 59)).padStart(2, "0")}:${String(rand(0, 59)).padStart(2, "0")}`;
+
 function jeuFixe() {
   const cbLundi: [string, number, string][] = [["Dupont", 45, "Cours collectif"], ["Martin", 26, "Galop d'argent"], ["Bernard", 52, "Stage poney"]];
-  const cbMardi: [string, number, string][] = [["Petit", 30, "Baby poney"], ["Refus", 99, "Transaction refusée"]];
-  const cheques: [string, number, string][] = [["Robert", 175, "Forfait trimestre"], ["Richard", 165, "Stage galop d'or"]];
+  const cbMardi: [string, number, string][] = [["Petit", 30, "Baby poney"], ["Robert", 38, "Cours particulier"]];
+  const cheques: [string, number, string][] = [["Richard", 175, "Forfait trimestre"], ["Moreau", 165, "Stage galop d'or"]];
+  const mkCB = (arr: [string, number, string][], jour: Jour): Enc[] =>
+    arr.map(([n, m, a]) => ({ familyName: `TEST ${n}`, montant: m, activityTitle: a, mode: "cb_terminal", modeLabel: "CB (terminal)", jour }));
   const encs: Enc[] = [
-    ...cbLundi.map(([n, m, a]): Enc => ({ familyName: `TEST ${n}`, montant: m, activityTitle: a, mode: "cb_terminal", modeLabel: "CB (terminal)", jour: "lundi" })),
-    ...cbMardi.map(([n, m, a]): Enc => ({ familyName: `TEST ${n}`, montant: m, activityTitle: a, mode: "cb_terminal", modeLabel: "CB (terminal)", jour: "mardi" })),
+    ...mkCB(cbLundi, "lundi"),
+    ...mkCB(cbMardi, "mardi"),
     ...cheques.map(([n, m, a]): Enc => ({ familyName: `TEST ${n}`, montant: m, activityTitle: a, mode: "cheque", modeLabel: "Chèque", jour: "jeudi" })),
-    { familyName: "TEST Moreau", montant: 220, activityTitle: "Forfait annuel", mode: "virement", modeLabel: "Virement", jour: "vendredi" },
-    { familyName: "TEST Simon", montant: 40, activityTitle: "Balade", mode: "especes", modeLabel: "Espèces", jour: "vendredi" },
+    { familyName: "TEST Simon", montant: 220, activityTitle: "Forfait annuel", mode: "virement", modeLabel: "Virement", jour: "vendredi" },
+    { familyName: "TEST Laurent", montant: 40, activityTitle: "Balade", mode: "especes", modeLabel: "Espèces", jour: "vendredi" },
   ];
-  return { encs, cbLundiTotal: 123, cbMardiValide: 30, chequesTotal: 340, virement: 220, virName: "Moreau" };
+  return encs;
 }
 
 function jeuAleatoire() {
   const used = new Set<string>();
   const nom = () => { let n: string; do { n = pick(NOMS); } while (used.has(n) && used.size < NOMS.length); used.add(n); return `TEST ${n}`; };
   const mk = (mode: string, modeLabel: string, jour: Jour): Enc => ({ familyName: nom(), montant: rand(20, 200), activityTitle: pick(ACTS), mode, modeLabel, jour });
-  const cbLundi = Array.from({ length: rand(2, 5) }, () => mk("cb_terminal", "CB (terminal)", "lundi"));
-  const cbMardi = Array.from({ length: rand(2, 4) }, () => mk("cb_terminal", "CB (terminal)", "mardi"));
-  const refusIdx = Math.random() < 0.6 ? rand(0, cbMardi.length - 1) : -1;
-  const cheques = Array.from({ length: rand(1, 3) }, () => mk("cheque", "Chèque", "jeudi"));
-  const vir = mk("virement", "Virement", "vendredi");
-  const esp = mk("especes", "Espèces", "vendredi");
-  const encs = [...cbLundi, ...cbMardi, ...cheques, vir, esp];
-  return {
-    encs,
-    cbLundiTotal: cbLundi.reduce((a, e) => a + e.montant, 0),
-    cbMardiValide: cbMardi.filter((_, i) => i !== refusIdx).reduce((a, e) => a + e.montant, 0),
-    chequesTotal: cheques.reduce((a, e) => a + e.montant, 0),
-    virement: vir.montant,
-    virName: vir.familyName.replace("TEST ", ""),
-  };
+  return [
+    ...Array.from({ length: rand(2, 5) }, () => mk("cb_terminal", "CB (terminal)", "lundi")),
+    ...Array.from({ length: rand(2, 4) }, () => mk("cb_terminal", "CB (terminal)", "mardi")),
+    ...Array.from({ length: rand(1, 3) }, () => mk("cheque", "Chèque", "jeudi")),
+    mk("virement", "Virement", "vendredi"),
+    mk("especes", "Espèces", "vendredi"),
+  ];
 }
 
 export default function TestRapprochementPage() {
@@ -75,12 +74,12 @@ export default function TestRapprochementPage() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [mode, setMode] = useState<"fixe" | "aleatoire">("fixe");
-  const [scenario, setScenario] = useState<any>(null);
+  const [encsCrees, setEncsCrees] = useState<Enc[]>([]);
 
   const add = (m: string) => setLog(prev => [...prev, m]);
 
   const creer = async () => {
-    setBusy(true); setLog([]); setDone(false);
+    setBusy(true); setLog([]); setDone(false); setEncsCrees([]);
     const s = semaineTemoin();
     try {
       add("🧹 Nettoyage des encaissements de test précédents…");
@@ -89,17 +88,21 @@ export default function TestRapprochementPage() {
       if (!clr.ok) throw new Error(clrData.error || "Nettoyage impossible");
       add(`   ${clrData.deleted} ancien(s) encaissement(s) TEST supprimé(s).`);
 
-      const data = mode === "fixe" ? jeuFixe() : jeuAleatoire();
-      for (const e of data.encs) {
+      const encs = mode === "fixe" ? jeuFixe() : jeuAleatoire();
+      for (const e of encs) {
         await createEncaissement({
           familyName: e.familyName, montant: e.montant, mode: e.mode,
           modeLabel: e.modeLabel, activityTitle: e.activityTitle, explicitDate: s[e.jour],
         });
         add(`✓ ${e.modeLabel} ${e.familyName} — ${e.montant}€ (${e.jour})`);
       }
-      setScenario(data);
+      setEncsCrees(encs);
       add("");
-      add("✅ Encaissements créés. Télécharge le CSV puis importe-le dans Compta → Rapprochement.");
+      add("✅ Encaissements créés.");
+      add("→ 1) Télécharge le CSV et importe-le dans Compta → Rapprochement.");
+      add("→ 2) Les chèques/virement se rapprochent seuls.");
+      add("→ 3) Sur chaque ligne REMISE CARTE (« À traiter »), clique « Détail CA »");
+      add("     et colle le texte correspondant (bouton « Copier détail CA » ci-dessous).");
       setDone(true);
     } catch (e: any) {
       add(`❌ Erreur : ${e.message || e}`);
@@ -107,27 +110,45 @@ export default function TestRapprochementPage() {
     setBusy(false);
   };
 
+  // CB groupés par jour → une remise CARTE par jour dans le CSV
+  const cbParJour = () => {
+    const grp: Record<string, Enc[]> = {};
+    for (const e of encsCrees) {
+      if (e.mode !== "cb_terminal") continue;
+      (grp[e.jour] ||= []).push(e);
+    }
+    return grp;
+  };
+
   const telechargerCSV = () => {
-    if (!scenario) return;
+    if (encsCrees.length === 0) return;
     const s = semaineTemoin();
-    const lignes = [
+    const grp = cbParJour();
+    const totalCheques = encsCrees.filter(e => e.mode === "cheque").reduce((a, e) => a + e.montant, 0);
+    const vir = encsCrees.find(e => e.mode === "virement");
+
+    const lignes: string[] = [
       `Compte de test - operations entre le ${fmtFR(s.lundi)} et le ${fmtFR(s.vendredi)}`,
       "Date;Libellé;Débit euros;Crédit euros",
-      `${fmtFR(s.lundi)};REMISE CARTE BANCAIRE TPE;;${eur(scenario.cbLundiTotal)}`,
-      `${fmtFR(s.mardi)};REMISE CB TPE;;${eur(scenario.cbMardiValide)}`,
-      `${fmtFR(s.jeudi)};REMISE CHEQUES;;${eur(scenario.chequesTotal)}`,
-      `${fmtFR(s.vendredi)};VIR RECU TEST ${(scenario.virName || "MOREAU").toUpperCase()};;${eur(scenario.virement)}`,
-      `${fmtFR(s.vendredi)};VIR RECU INCONNU REMBOURSEMENT;;${eur(83.50)}`,
-      `${fmtFR(s.vendredi)};PRLV ASSURANCE MATERIEL;120,00;`,
     ];
-    // Le rapprochement lit les fichiers en ISO-8859-1 (encodage Crédit Agricole).
-    // On encode donc le CSV en Latin1, sinon les accents de l'en-tête (« Libellé »)
-    // sont mal relus et le parser ne reconnaît pas les colonnes → 0 ligne importée.
+    // Une remise CARTE par jour de CB (montant = total du jour)
+    for (const jour of Object.keys(grp)) {
+      const total = grp[jour].reduce((a, e) => a + e.montant, 0);
+      const dt = s[jour as Jour];
+      lignes.push(`${fmtFR(dt)};REMISE CARTE BANCAIRE;;${eur(total)}`);
+    }
+    if (totalCheques > 0) lignes.push(`${fmtFR(s.jeudi)};REMISE CHEQUES;;${eur(totalCheques)}`);
+    if (vir) lignes.push(`${fmtFR(s.vendredi)};VIR RECU ${vir.familyName.toUpperCase()};;${eur(vir.montant)}`);
+    // Pièges : virement inconnu (non rapproché) + débit (ignoré)
+    lignes.push(`${fmtFR(s.vendredi)};VIR RECU INCONNU REMBOURSEMENT;;${eur(83.50)}`);
+    lignes.push(`${fmtFR(s.vendredi)};PRLV ASSURANCE MATERIEL;120,00;`);
+
+    // Encodage Latin1 (comme un vrai relevé CA)
     const texte = lignes.join("\r\n");
     const latin1 = new Uint8Array(texte.length);
     for (let i = 0; i < texte.length; i++) {
       const code = texte.charCodeAt(i);
-      latin1[i] = code <= 0xff ? code : 0x3f; // caractère hors Latin1 → "?"
+      latin1[i] = code <= 0xff ? code : 0x3f;
     }
     const blob = new Blob([latin1], { type: "text/csv;charset=iso-8859-1" });
     const url = URL.createObjectURL(blob);
@@ -137,34 +158,43 @@ export default function TestRapprochementPage() {
     URL.revokeObjectURL(url);
   };
 
+  // Texte "Détail CA" d'une journée de CB (format site Crédit Agricole)
+  const detailCAduJour = (jour: string, encs: Enc[]) => {
+    const lignes = encs.map(e => `${heureCB()} ${eur(e.montant)} EUR`);
+    return lignes.join("\n");
+  };
+
+  const copierDetail = async (txt: string) => {
+    try { await navigator.clipboard.writeText(txt); } catch {}
+  };
+
   const s = semaineTemoin();
+  const grp = cbParJour();
 
   return (
     <div className="max-w-2xl mx-auto p-6">
       <h1 className="font-display text-2xl font-bold text-blue-800 mb-1">Test du rapprochement bancaire</h1>
-      <p className="font-body text-sm text-slate-500 mb-1">Environnement de test uniquement — valide le smart matching CSV.</p>
+      <p className="font-body text-sm text-slate-500 mb-1">Environnement de test — reproduit le workflow réel (CSV + Détail CA).</p>
       <p className="font-body text-xs text-slate-400 mb-5">Semaine témoin : {fmtFR(s.lundi)} → {fmtFR(s.vendredi)}</p>
 
       <div className="flex gap-2 mb-4">
-        <button onClick={() => { setMode("fixe"); setDone(false); setScenario(null); }}
+        <button onClick={() => { setMode("fixe"); setDone(false); setEncsCrees([]); }}
           className={`flex-1 py-2 rounded-lg font-body text-sm font-semibold border cursor-pointer ${mode === "fixe" ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
-          📌 Jeu fixe (reproductible)
+          📌 Jeu fixe
         </button>
-        <button onClick={() => { setMode("aleatoire"); setDone(false); setScenario(null); }}
+        <button onClick={() => { setMode("aleatoire"); setDone(false); setEncsCrees([]); }}
           className={`flex-1 py-2 rounded-lg font-body text-sm font-semibold border cursor-pointer ${mode === "aleatoire" ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
-          🎲 Jeu aléatoire (varie les cas)
+          🎲 Jeu aléatoire
         </button>
       </div>
 
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5">
-        <p className="font-body text-sm text-amber-800 font-semibold mb-2">Résultat attendu après import :</p>
+        <p className="font-body text-sm text-amber-800 font-semibold mb-2">Workflow testé (comme en vrai) :</p>
         <ul className="font-body text-xs text-amber-700 space-y-1 list-disc pl-4">
-          <li><strong>Remise CB groupée</strong> → rapproche tous les CB du lundi d'un coup</li>
-          <li><strong>Remise CB mardi</strong> → {mode === "fixe" ? "sous-ensemble (le 99€ refusé reste seul)" : "combinaison qui colle (refus éventuel exclu)"}</li>
-          <li><strong>Remise chèques en lot</strong> → rapproche les chèques du jeudi</li>
-          <li><strong>Virement nominatif</strong> → rapproché à la bonne famille</li>
-          <li><strong>Virement inconnu (83,50€)</strong> → doit rester <em>non rapproché</em></li>
-          <li><strong>Débit assurance</strong> → doit être <em>ignoré</em></li>
+          <li><strong>Chèques / virement</strong> → rapprochés automatiquement à l'import CSV</li>
+          <li><strong>Remises CARTE</strong> → arrivent en « À traiter » → bouton « Détail CA » + coller le texte</li>
+          <li><strong>Virement inconnu (83,50€)</strong> → doit rester non rapproché</li>
+          <li><strong>Débit assurance</strong> → doit être ignoré</li>
         </ul>
       </div>
 
@@ -178,6 +208,34 @@ export default function TestRapprochementPage() {
           2. Télécharger le CSV
         </button>
       </div>
+
+      {/* Boutons "Copier détail CA" par remise CB */}
+      {done && Object.keys(grp).length > 0 && (
+        <div className="bg-white border border-blue-200 rounded-xl p-4 mb-5">
+          <p className="font-body text-sm font-semibold text-blue-800 mb-3">3. Détail CA à coller sur chaque remise CARTE</p>
+          <div className="flex flex-col gap-3">
+            {Object.entries(grp).map(([jour, encs]) => {
+              const total = encs.reduce((a, e) => a + e.montant, 0);
+              const dt = s[jour as Jour];
+              const detail = detailCAduJour(jour, encs);
+              return (
+                <div key={jour} className="bg-cream rounded-lg p-3">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="font-body text-xs font-semibold text-slate-700">
+                      Remise du {fmtFR(dt)} — {encs.length} CB = {total.toFixed(2)}€
+                    </span>
+                    <button onClick={() => copierDetail(detail)}
+                      className="font-body text-[11px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-blue-100">
+                      📋 Copier détail CA
+                    </button>
+                  </div>
+                  <pre className="font-mono text-[11px] text-slate-500 whitespace-pre-wrap m-0">{detail}</pre>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {log.length > 0 && (
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 font-mono text-xs text-slate-600 whitespace-pre-wrap">
