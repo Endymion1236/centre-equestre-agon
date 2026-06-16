@@ -2830,16 +2830,24 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                             className="font-body text-[10px] text-slate-500 bg-transparent border-none cursor-pointer underline">Annuler</button>
                         </div>
                         {/* Inscrire sur toute la saison récurrente, sans facturation */}
-                        {selChild && selFam && (() => {
+                        {/* Inscrire sur toute la saison récurrente, sans facturation.
+                            Marche pour tous les cavaliers sélectionnés (multi). */}
+                        {selectedChildren.length > 0 && selFam && (() => {
                           const fam = families.find((f: any) => f.firestoreId === selFam);
                           if (!fam) return null;
-                          const childObj: any = (fam.children || []).find((c: any) => c.id === selChild);
-                          const childName = childObj ? `${childObj.firstName}${childObj.lastName ? " " + childObj.lastName : ""}` : "";
+                          const cavaliers = selectedChildren.map((cid: string) => {
+                            const c: any = (fam.children || []).find((x: any) => x.id === cid);
+                            return c ? { id: cid, name: `${c.firstName}${c.lastName ? " " + c.lastName : ""}` } : null;
+                          }).filter(Boolean) as { id: string; name: string }[];
                           return (
-                            <button onClick={() => inscrireSaisonEtablissement(selChild, childName, fam.firestoreId, fam.parentName || "—")}
+                            <button onClick={async () => {
+                              for (const cav of cavaliers) {
+                                await inscrireSaisonEtablissement(cav.id, cav.name, fam.firestoreId, fam.parentName || "—");
+                              }
+                            }}
                               disabled={enrollingSaison}
                               className="w-full flex items-center justify-center gap-1.5 font-body text-xs font-semibold text-white bg-purple-500 hover:bg-purple-600 rounded-lg px-3 py-2 cursor-pointer border-none disabled:opacity-50">
-                              {enrollingSaison ? "Inscription en cours…" : "📅 Inscrire sur toute la saison (tous les créneaux récurrents)"}
+                              {enrollingSaison ? "Inscription en cours…" : `📅 Inscrire ${cavaliers.length > 1 ? `les ${cavaliers.length} cavaliers` : "sur toute la saison"} (créneaux récurrents)`}
                             </button>
                           );
                         })()}
@@ -3237,6 +3245,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               return (
               <button onClick={handleEnroll} disabled={!selChild||enrolling||(inscriptionMode==="annuel"&&frequenceCours>=2&&extraSlots.length<frequenceCours-1)} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${(!selChild||enrolling||(inscriptionMode==="annuel"&&frequenceCours>=2&&extraSlots.length<frequenceCours-1))?"bg-gray-200 text-slate-500":useRattrapage?"bg-purple-600 text-white hover:bg-purple-500":inscriptionMode==="annuel"?"bg-green-600 text-white hover:bg-green-500":"bg-blue-500 text-white hover:bg-blue-400"}`}>
                 {enrolling ? "..."
+                  // ── Priorité 0 : inscription établissement (aucune facture) ───
+                  : freeEnroll && freeReason === "Établissement" ? `🏫 Inscrire (établissement, sans facture)${suffixe}`
                   // ── Priorité 1 : un rattrapage est sélectionné ───
                   // Aucun paiement ne sera créé (handleEnroll côté page
                   // marque juste le rattrapage 'used'), donc le label doit
