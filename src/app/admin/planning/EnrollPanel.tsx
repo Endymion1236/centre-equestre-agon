@@ -2779,6 +2779,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                           <label className="font-body text-[10px] font-semibold text-green-800 block mb-1">Motif</label>
                           <select value={freeReason} onChange={e => setFreeReason(e.target.value)}
                             className="w-full px-2 py-1.5 rounded-lg border border-green-200 font-body text-xs bg-white focus:border-green-500 focus:outline-none cursor-pointer">
+                            <option value="Établissement">🏫 Établissement (facturé séparément)</option>
                             <option value="Rattrapage">Rattrapage (météo, absence moniteur...)</option>
                             <option value="Essai">Séance d'essai</option>
                             <option value="Monte poney">Monte d'un jeune poney</option>

@@ -78,7 +78,10 @@ export default function CavaliersPage() {
   // ── Prédicats des filtres actionnables ────────────────────────────────────
   const todayStr = new Date().toISOString().split("T")[0];
   // Famille avec au moins un cavalier sans attestation médicale
-  const famSansAttestation = (f: any) => (f.children || []).some((c: any) => !c.sanitaryForm);
+  // Une fiche "Établissement" (collège, hôpital) n'a pas d'attestation à
+  // relancer (les enfants ont leur fiche perso) et est facturée à part.
+  const isEtablissement = (f: any) => (f.tags || []).includes("etablissement");
+  const famSansAttestation = (f: any) => !isEtablissement(f) && (f.children || []).some((c: any) => !c.sanitaryForm);
   // Reste dû de la famille (même calcul que la fiche : payments non annulés)
   const famImpayes = (f: any) => {
     const fp = allPayments.filter((p: any) => p.familyId === f.firestoreId && p.status !== "cancelled");
@@ -176,6 +179,7 @@ export default function CavaliersPage() {
           { id: "cavalier_annee", label: "Cavaliers année", emoji: "🏇", color: "text-green-700 bg-green-50 border-green-200" },
           { id: "stage", label: "Stages", emoji: "🎯", color: "text-blue-700 bg-blue-50 border-blue-200" },
           { id: "passage", label: "Passages", emoji: "👋", color: "text-orange-700 bg-orange-50 border-orange-200" },
+          { id: "etablissement", label: "Établissement", emoji: "🏫", color: "text-purple-700 bg-purple-50 border-purple-200" },
         ].map(tag => {
           const count = families.filter(f => (f as any).tags?.includes(tag.id)).length;
           return (
