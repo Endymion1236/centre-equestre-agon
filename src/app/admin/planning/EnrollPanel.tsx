@@ -2764,8 +2764,28 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   </button>
                 </div>
 
+                {/* Inscription Établissement : disponible même sans prix de séance.
+                    L'enfant est inscrit au suivi péda, l'établissement est facturé
+                    à part (forfait). Ne compte PAS comme séance offerte. */}
+                {inscriptionMode === "ponctuel" && !showPay && !useRattrapage && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-2">
+                    {freeEnroll && freeReason === "Établissement" ? (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-body text-xs font-semibold text-purple-700">🏫 Inscription établissement — aucune facture aux parents</span>
+                        <button onClick={() => { setFreeEnroll(false); setFreeReason("Rattrapage"); }}
+                          className="font-body text-[10px] text-slate-500 bg-transparent border-none cursor-pointer underline">Annuler</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => { setFreeEnroll(true); setFreeReason("Établissement"); setShowPay(false); }}
+                        className="w-full flex items-center justify-center gap-1.5 font-body text-xs font-semibold text-purple-700 bg-white border border-purple-200 rounded-lg px-3 py-2 cursor-pointer hover:bg-purple-50">
+                        🏫 Inscrire pour un établissement (collège, hôpital…)
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {/* Mode ponctuel */}
-                {inscriptionMode === "ponctuel" && priceTTC > 0 && (
+                {inscriptionMode === "ponctuel" && priceTTC > 0 && !(freeEnroll && freeReason === "Établissement") && (
                   <div className="bg-white rounded-lg p-3">
                     {carteActive ? (
                       <div className="font-body text-xs text-gold-600 bg-gold-50 rounded-lg px-3 py-2">

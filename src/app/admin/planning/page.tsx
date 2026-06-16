@@ -566,6 +566,10 @@ export default function PlanningPage() {
       if (options?.freeReason) {
         const priceTTC = c.priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
         const priceHT = priceTTC / (1 + (c.tvaTaux || 5.5) / 100);
+        // Cas "Établissement" : ce n'est PAS une séance offerte (elle est payée
+        // par l'établissement, facturé à part). On la marque institutionnelle
+        // pour la sortir des stats de gratuités, tout en gardant la trace.
+        const isEtablissement = options.freeReason === "Établissement";
         await addDoc(collection(db, "payments"), {
           orderId: generateOrderId(),
           familyId: child.familyId, familyName: child.familyName,
@@ -577,12 +581,15 @@ export default function PlanningPage() {
             originalPriceTTC: Math.round(priceTTC * 100) / 100,
           }],
           totalTTC: 0, paidAmount: 0,
-          paymentMode: "offert",
+          paymentMode: isEtablissement ? "institutionnel" : "offert",
           paymentRef: "",
           status: "paid",
-          isFree: true,
+          // isFree uniquement pour les vraies gratuités, pas pour l'établissement
+          ...(isEtablissement ? { isInstitutional: true } : { isFree: true }),
           freeReason: options.freeReason,
-          note: `🎁 Offert — ${options.freeReason} (valeur : ${priceTTC.toFixed(2)}€)`,
+          note: isEtablissement
+            ? `🏫 Établissement — facturé séparément (valeur indicative : ${priceTTC.toFixed(2)}€)`
+            : `🎁 Offert — ${options.freeReason} (valeur : ${priceTTC.toFixed(2)}€)`,
           date: serverTimestamp(),
         });
         // Pas d'encaissement, pas de facture — juste la trace
