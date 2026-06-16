@@ -387,11 +387,23 @@ export function TabEncaisser({
 
       {/* Impayés de cette famille */}
       {selectedFam && (() => {
-        const familyPending = payments.filter(p =>
+        // Toutes les commandes non soldées de la famille
+        const allUnpaid = payments.filter(p =>
           p.familyId === selectedFamily &&
           (p.status === "pending" || (p.status === "partial" && (p.paidAmount || 0) < (p.totalTTC || 0)))
         );
-        if (familyPending.length === 0) return null;
+        // Une commande a un règlement EN COURS si : SEPA programmé, chèque
+        // différé enregistré, ou un encaissement déjà rattaché (acompte). On
+        // ne la regroupe pas dans l'encaissement « tout d'un coup » : son
+        // règlement suit déjà son cours, l'inclure créerait un double paiement.
+        const aReglementEnCours = (p: any) =>
+          p.status === "sepa_scheduled" ||
+          p.paymentMode === "cheque_differe" ||
+          p.paymentMode === "prelevement_sepa" ||
+          encaissements.some((e: any) => e.paymentId === p.id);
+        const familyPending = allUnpaid.filter(p => !aReglementEnCours(p));
+        const enCours = allUnpaid.filter(p => aReglementEnCours(p));
+        if (allUnpaid.length === 0) return null;
         const totalPending = familyPending.reduce((s, p) => s + (p.totalTTC || 0) - (p.paidAmount || 0), 0);
         const pendingDiscount = appliedPromo
           ? (appliedPromo.discountMode === "percent" ? totalPending * appliedPromo.discountValue / 100 : appliedPromo.discountValue)
