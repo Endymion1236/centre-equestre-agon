@@ -35,17 +35,20 @@ const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min
 function pick<T>(arr: T[]): T { return arr[rand(0, arr.length - 1)]; }
 
 type Jour = "lundi" | "mardi" | "mercredi" | "jeudi" | "vendredi";
-type Enc = { familyName: string; montant: number; activityTitle: string; mode: string; modeLabel: string; jour: Jour };
+type Enc = { familyName: string; montant: number; activityTitle: string; mode: string; modeLabel: string; jour: Jour; refuse?: boolean };
 
 // Heure aléatoire de transaction CB (format site CA : HH:MM:SS)
 const heureCB = () => `${String(rand(9, 18)).padStart(2, "0")}:${String(rand(0, 59)).padStart(2, "0")}:${String(rand(0, 59)).padStart(2, "0")}`;
 
 function jeuFixe() {
   const cbLundi: [string, number, string][] = [["Dupont", 45, "Cours collectif"], ["Martin", 26, "Galop d'argent"], ["Bernard", 52, "Stage poney"]];
-  const cbMardi: [string, number, string][] = [["Petit", 30, "Baby poney"], ["Robert", 38, "Cours particulier"]];
+  // Le 3e CB du mardi est REFUSÉ : saisi au TPE mais non remis par la banque.
+  // → le total de la remise du mardi ne tombera pas juste → "À traiter" → on
+  //   doit utiliser Détail CA. C'est LE cas à valider absolument.
+  const cbMardi: [string, number, string, boolean?][] = [["Petit", 30, "Baby poney"], ["Robert", 38, "Cours particulier"], ["Mercier", 55, "Transaction refusée", true]];
   const cheques: [string, number, string][] = [["Richard", 175, "Forfait trimestre"], ["Moreau", 165, "Stage galop d'or"]];
-  const mkCB = (arr: [string, number, string][], jour: Jour): Enc[] =>
-    arr.map(([n, m, a]) => ({ familyName: `TEST ${n}`, montant: m, activityTitle: a, mode: "cb_terminal", modeLabel: "CB (terminal)", jour }));
+  const mkCB = (arr: [string, number, string, boolean?][], jour: Jour): Enc[] =>
+    arr.map(([n, m, a, refuse]) => ({ familyName: `TEST ${n}`, montant: m, activityTitle: a, mode: "cb_terminal", modeLabel: "CB (terminal)", jour, refuse }));
   const encs: Enc[] = [
     ...mkCB(cbLundi, "lundi"),
     ...mkCB(cbMardi, "mardi"),
@@ -62,7 +65,12 @@ function jeuAleatoire() {
   const mk = (mode: string, modeLabel: string, jour: Jour): Enc => ({ familyName: nom(), montant: rand(20, 200), activityTitle: pick(ACTS), mode, modeLabel, jour });
   return [
     ...Array.from({ length: rand(2, 5) }, () => mk("cb_terminal", "CB (terminal)", "lundi")),
-    ...Array.from({ length: rand(2, 4) }, () => mk("cb_terminal", "CB (terminal)", "mardi")),
+    ...(() => {
+      const cbMardi = Array.from({ length: rand(2, 4) }, () => mk("cb_terminal", "CB (terminal)", "mardi"));
+      // 60% du temps, une transaction du mardi est refusée (non remise)
+      if (Math.random() < 0.6 && cbMardi.length > 0) cbMardi[rand(0, cbMardi.length - 1)].refuse = true;
+      return cbMardi;
+    })(),
     ...Array.from({ length: rand(1, 3) }, () => mk("cheque", "Chèque", "jeudi")),
     mk("virement", "Virement", "vendredi"),
     mk("especes", "Espèces", "vendredi"),
@@ -94,7 +102,7 @@ export default function TestRapprochementPage() {
           familyName: e.familyName, montant: e.montant, mode: e.mode,
           modeLabel: e.modeLabel, activityTitle: e.activityTitle, explicitDate: s[e.jour],
         });
-        add(`✓ ${e.modeLabel} ${e.familyName} — ${e.montant}€ (${e.jour})`);
+        add(`✓ ${e.modeLabel} ${e.familyName} — ${e.montant}€ (${e.jour})${e.refuse ? "  ⚠️ REFUSÉ (non remis par la banque)" : ""}`);
       }
       setEncsCrees(encs);
       add("");
@@ -131,9 +139,13 @@ export default function TestRapprochementPage() {
       `Compte de test - operations entre le ${fmtFR(s.lundi)} et le ${fmtFR(s.vendredi)}`,
       "Date;Libellé;Débit euros;Crédit euros",
     ];
-    // Une remise CARTE par jour de CB (montant = total du jour)
+    // Une remise CARTE par jour de CB. La banque ne remet QUE les transactions
+    // acceptées → le total exclut les CB refusés. Si une journée a un refus, le
+    // total ne tombera pas sur la somme de tous les CB du jour → "À traiter".
     for (const jour of Object.keys(grp)) {
-      const total = grp[jour].reduce((a, e) => a + e.montant, 0);
+      const remis = grp[jour].filter(e => !e.refuse);
+      if (remis.length === 0) continue;
+      const total = remis.reduce((a, e) => a + e.montant, 0);
       const dt = s[jour as Jour];
       lignes.push(`${fmtFR(dt)};REMISE CARTE BANCAIRE;;${eur(total)}`);
     }
@@ -160,7 +172,8 @@ export default function TestRapprochementPage() {
 
   // Texte "Détail CA" d'une journée de CB (format site Crédit Agricole)
   const detailCAduJour = (jour: string, encs: Enc[]) => {
-    const lignes = encs.map(e => `${heureCB()} ${eur(e.montant)} EUR`);
+    // Le site CA ne montre que les transactions effectivement remises (acceptées)
+    const lignes = encs.filter(e => !e.refuse).map(e => `${heureCB()} ${eur(e.montant)} EUR`);
     return lignes.join("\n");
   };
 
@@ -215,14 +228,17 @@ export default function TestRapprochementPage() {
           <p className="font-body text-sm font-semibold text-blue-800 mb-3">3. Détail CA à coller sur chaque remise CARTE</p>
           <div className="flex flex-col gap-3">
             {Object.entries(grp).map(([jour, encs]) => {
-              const total = encs.reduce((a, e) => a + e.montant, 0);
+              const remis = encs.filter(e => !e.refuse);
+              const nbRefus = encs.length - remis.length;
+              const total = remis.reduce((a, e) => a + e.montant, 0);
               const dt = s[jour as Jour];
               const detail = detailCAduJour(jour, encs);
               return (
                 <div key={jour} className="bg-cream rounded-lg p-3">
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <span className="font-body text-xs font-semibold text-slate-700">
-                      Remise du {fmtFR(dt)} — {encs.length} CB = {total.toFixed(2)}€
+                      Remise du {fmtFR(dt)} — {remis.length} CB remis = {total.toFixed(2)}€
+                      {nbRefus > 0 && <span className="text-orange-600"> · {nbRefus} refusé(s) → matching auto impossible, Détail CA requis</span>}
                     </span>
                     <button onClick={() => copierDetail(detail)}
                       className="font-body text-[11px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-blue-100">
