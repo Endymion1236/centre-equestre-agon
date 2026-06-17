@@ -102,7 +102,7 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
   const dejaInscrit = sel ? enrolled.some((e: any) => e.childId === sel.childId) : false;
 
   // Inscription avec la source choisie
-  const enroll = async (source: "forfait" | "carte" | "rattrapage" | "regler" | "offert") => {
+  const enroll = async (source: "forfait" | "carte" | "rattrapage" | "regler" | "offert" | "etablissement") => {
     if (!sel) return;
     if (dejaInscrit) { setError("Ce cavalier est déjà inscrit sur ce créneau."); return; }
     if (placesLeft <= 0) { setError("Plus de place disponible sur ce créneau."); return; }
@@ -117,6 +117,7 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
       if (source === "carte" && carteActive) { base.paymentSource = "card"; base.cardId = carteActive.id; }
       if (source === "rattrapage") base.paymentSource = "rattrapage";
       if (source === "offert") base.paymentSource = "offert";
+      if (source === "etablissement") { base.paymentSource = "institutionnel"; base.institutional = true; }
 
       const ok = await enrollChildInCreneau(creneau.id, base);
       if (!ok) { setError("Inscription impossible (déjà inscrit ou créneau introuvable)."); setSaving(false); return; }
@@ -148,9 +149,31 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
         });
       }
 
+      // Inscription établissement → trace institutionnelle (pas isFree, exclue
+      // des séances offertes). L'établissement est facturé à part au forfait.
+      if (source === "etablissement") {
+        const priceTTC = creneau.priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux || 5.5) / 100);
+        await addDoc(collection(db, "payments"), {
+          orderId: generateOrderId(),
+          familyId: sel.familyId, familyName: sel.familyName,
+          items: [{
+            activityTitle: creneau.activityTitle, childId: sel.childId, childName: sel.childName,
+            creneauId: creneau.id, activityType: creneau.activityType, date: creneau.date,
+            startTime: creneau.startTime, endTime: creneau.endTime,
+            priceHT: 0, tva: creneau.tvaTaux || 5.5, priceTTC: 0,
+            originalPriceTTC: Math.round(priceTTC * 100) / 100,
+          }],
+          totalTTC: 0, paidAmount: 0,
+          paymentMode: "institutionnel", paymentRef: "", status: "paid",
+          isInstitutional: true, freeReason: "Établissement",
+          note: `🏫 Établissement — facturé séparément (valeur indicative : ${priceTTC.toFixed(2)}€)`,
+          date: serverTimestamp(),
+        });
+      }
+
       try { await createReservation(base, creneau); } catch { /* non bloquant */ }
 
-      const label = source === "forfait" ? "forfait" : source === "carte" ? "carte de séances" : source === "rattrapage" ? "rattrapage" : source === "offert" ? `offert (${offertReason})` : "à régler";
+      const label = source === "forfait" ? "forfait" : source === "carte" ? "carte de séances" : source === "rattrapage" ? "rattrapage" : source === "offert" ? `offert (${offertReason})` : source === "etablissement" ? "établissement" : "à régler";
       onDone(`${sel.childName} ajouté(e) — ${label}`);
     } catch (e) {
       console.error("Ajout cavalier montoir:", e);
@@ -238,6 +261,14 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
                     className="flex items-center gap-3 text-left px-3 py-3 rounded-xl border-2 border-gray-200 bg-white hover:bg-gray-50 cursor-pointer disabled:opacity-50">
                     <span className="text-xl">💶</span>
                     <div><div className="font-body text-sm font-bold text-slate-700">À régler</div><div className="font-body text-xs text-slate-500">À encaisser ensuite dans Paiements</div></div>
+                  </button>
+
+                  {/* Établissement : facturé à l'établissement, pas aux parents,
+                      et ne compte pas comme séance offerte */}
+                  <button disabled={saving || dejaInscrit} onClick={() => enroll("etablissement")}
+                    className="flex items-center gap-3 text-left px-3 py-3 rounded-xl border-2 border-purple-200 bg-purple-50 hover:bg-purple-100 cursor-pointer disabled:opacity-50">
+                    <span className="text-xl">🏫</span>
+                    <div><div className="font-body text-sm font-bold text-purple-700">Établissement</div><div className="font-body text-xs text-purple-600">Facturé à l'établissement, sans facture aux parents</div></div>
                   </button>
 
                   {!offertMode ? (
