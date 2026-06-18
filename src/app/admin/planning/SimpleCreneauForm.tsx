@@ -34,7 +34,9 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
     getDocs(collection(db, "moniteurs")).then(snap => {
       const noms = snap.docs.map(d => (d.data() as any).name).filter(Boolean).sort();
       setMoniteurs(noms);
-      if (noms.length > 0 && !mon) setMon(noms[0]);
+      // Ne PAS présélectionner le 1er moniteur (triés alphabétiquement = Alice) :
+      // ça collait Alice par défaut sur chaque créneau si on oubliait de changer.
+      // On force un choix explicite via l'option vide du select.
     });
   }, []);
 
@@ -89,6 +91,11 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
 
   const sub = async () => {
     if (!actId || !act) return;
+    // Garde-fou : un moniteur doit être choisi (plus de présélection auto).
+    if (!(mon || "").trim()) {
+      alert("Sélectionne au moins un moniteur pour ce créneau.");
+      return;
+    }
     setSaving(true);
     const ttc = (act as any).priceTTC || (act.priceHT || 0) * (1 + (act.tvaTaux || 5.5) / 100);
     const dates = multiDay ? getEffectiveDates() : [date];
