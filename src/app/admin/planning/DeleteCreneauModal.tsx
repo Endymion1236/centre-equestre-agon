@@ -32,6 +32,11 @@ export default function DeleteCreneauModal({
             {new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} · {creneau.startTime}–{creneau.endTime}
           </p>
 
+          {/* [DIAGNOSTIC TEMPORAIRE] visible à l'écran (contourne le cache console) */}
+          <div className="bg-slate-100 rounded-lg p-2 mb-3 font-mono text-[10px] text-slate-500 break-all">
+            type={String((creneau as any).activityType)} · isStage={String(isStageType(creneau))} · sg={String((creneau as any).stageGroupId || "—")} · série={deleteSerieCount} · stageCount={deleteWeekCount}
+          </div>
+
           {isStageType(creneau) && deleteWeekCount > 1 && (
             <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-3 text-center">
               <p className="font-body text-xs text-green-700">
