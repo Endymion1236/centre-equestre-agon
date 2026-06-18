@@ -29,8 +29,15 @@ export interface Creneau {
 // activité AVANT l'introduction du stageGroupId restent indissociables.
 export function sameStage(a: any, b: any): boolean {
   if (!a || !b) return false;
+  // Priorité 1 : identifiant de lot explicite (stages créés ensemble)
   if (a.stageGroupId && b.stageGroupId) return a.stageGroupId === b.stageGroupId;
-  return a.activityId === b.activityId && a.activityTitle === b.activityTitle;
+  // Priorité 2 : même activité + même titre (stages depuis la même activité)
+  if (a.activityId && b.activityId) return a.activityId === b.activityId && a.activityTitle === b.activityTitle;
+  // Priorité 3 (fallback) : ni l'un ni l'autre n'a d'identifiant fiable
+  // (stages anciens ou créés jour par jour à la main) → on regroupe sur
+  // titre + horaire de début identiques. Suffisant car deux stages distincts
+  // au même titre ET même heure de début la même période sont très rares.
+  return a.activityTitle === b.activityTitle && a.startTime === b.startTime;
 }
 
 export interface EnrolledChild {
