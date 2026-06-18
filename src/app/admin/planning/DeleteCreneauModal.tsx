@@ -34,7 +34,7 @@ export default function DeleteCreneauModal({
           {isStageType(creneau) && deleteWeekCount > 1 && (
             <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-3 text-center">
               <p className="font-body text-xs text-green-700">
-                <strong>{deleteWeekCount} créneaux</strong> pour ce stage cette semaine
+                <strong>{deleteWeekCount} créneaux</strong> pour ce stage
               </p>
             </div>
           )}
@@ -57,7 +57,7 @@ export default function DeleteCreneauModal({
             {isStageType(creneau) && deleteWeekCount > 1 && (
               <button onClick={() => onConfirm("week")} disabled={deleting}
                 className="w-full py-3 rounded-xl font-body text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 border-none cursor-pointer disabled:opacity-50">
-                🗓️ Supprimer toute la semaine de stage ({deleteWeekCount} créneaux)
+                🗓️ Supprimer tout le stage ({deleteWeekCount} créneaux)
               </button>
             )}
             {!isStageType(creneau) && deleteCount > 1 && (
