@@ -96,9 +96,21 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
   const sub = async () => {
     if (!actId || !act) return;
     // Garde-fou : un moniteur doit être choisi (plus de présélection auto).
-    if (!(mon || "").trim()) {
+    if (!(mon || "").trim() && !multiDay) {
       alert("Sélectionne au moins un moniteur pour ce créneau.");
       return;
+    }
+    // Mode stage : vérifier que chaque jour a un moniteur (le sien ou le défaut)
+    if (multiDay) {
+      const jours = getEffectiveDates();
+      const sansMoniteur = jours.findIndex((_, idx) => {
+        const v = (customMonitors[idx] ?? mon ?? "").trim();
+        return !v;
+      });
+      if (sansMoniteur !== -1) {
+        alert(`Le jour J${sansMoniteur + 1} n'a pas de moniteur. Sélectionne un moniteur pour chaque jour du stage.`);
+        return;
+      }
     }
     setSaving(true);
     const ttc = (act as any).priceTTC || (act.priceHT || 0) * (1 + (act.tvaTaux || 5.5) / 100);
@@ -122,7 +134,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
         activityId: actId, activityTitle: act.title, activityType: act.type, date: d,
         startTime: hours.st, endTime: hours.et,
         ...(stageGroupId ? { stageGroupId } : {}),
-        monitor: (multiDay && customMonitors[idx] !== undefined) ? customMonitors[idx] : mon, maxPlaces: mp, enrolledCount: 0, enrolled: [],
+        monitor: [...new Set(((multiDay && customMonitors[idx] !== undefined ? customMonitors[idx] : mon) || "").split(",").map(x => x.trim()).filter(Boolean))].join(", "), maxPlaces: mp, enrolledCount: 0, enrolled: [],
         status: "planned",
         ...(color ? { color } : {}),
         priceHT: ttc / (1 + (act.tvaTaux || 5.5) / 100),
@@ -212,7 +224,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
               return (
                 <button key={m} type="button" onClick={() => {
                   const curr = (mon || "").split(",").map(s => s.trim()).filter(Boolean);
-                  const newList = isSelected ? curr.filter(s => s !== m) : [...curr, m];
+                  const newList = isSelected ? curr.filter(s => s !== m) : [...new Set([...curr, m])];
                   setMon(newList.join(", "));
                 }}
                   className={`px-2.5 py-1 rounded-lg font-body text-[11px] font-semibold border-none cursor-pointer transition-all
@@ -294,13 +306,16 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
                     <div className="flex-1">
                       <div className="flex flex-wrap gap-1">
                         {moniteurs.map(m => {
-                          const currentVal = customMonitors[idx] ?? mon;
-                          const selected = currentVal.split(",").map(s => s.trim()).filter(Boolean);
+                          // La sélection du jour = sa valeur propre si déjà
+                          // touchée, sinon le défaut global. On ne modifie
+                          // QUE customMonitors[idx], jamais les autres jours.
+                          const currentVal = customMonitors[idx] ?? mon ?? "";
+                          const selected = [...new Set(currentVal.split(",").map(s => s.trim()).filter(Boolean))];
                           const isSelected = selected.includes(m);
                           return (
                             <button key={m} type="button" onClick={() => {
-                              const curr = (customMonitors[idx] ?? mon).split(",").map(s => s.trim()).filter(Boolean);
-                              const newList = isSelected ? curr.filter(s => s !== m) : [...curr, m];
+                              const curr = [...new Set((customMonitors[idx] ?? mon ?? "").split(",").map(s => s.trim()).filter(Boolean))];
+                              const newList = isSelected ? curr.filter(s => s !== m) : [...new Set([...curr, m])];
                               setCustomMonitors(prev => ({ ...prev, [idx]: newList.join(", ") }));
                             }}
                               className={`px-2 py-0.5 rounded font-body text-[10px] font-semibold border-none cursor-pointer
