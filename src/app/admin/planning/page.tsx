@@ -304,7 +304,6 @@ export default function PlanningPage() {
       setDeleteCount(snap.docs.filter(d => new Date((d.data() as any).date).getDay() === dow && (d.data() as any).activityId === (c as any).activityId).length);
 
       // [DIAGNOSTIC] type du créneau cliqué (toujours loggé)
-      console.log("[STAGE DELETE] cliqué:", { titre: c.activityTitle, type: (c as any).activityType, isStage: isStageType(c), sg: (c as any).stageGroupId, aid: (c as any).activityId, date: c.date, st: c.startTime });
 
       // Série d'occurrences proches (même titre + même horaire, ±21j, tous
       // jours) — proposé pour TOUT créneau, stage ou non, dès qu'il y a des
@@ -317,32 +316,16 @@ export default function PlanningPage() {
           const data = d.data() as any;
           return data.startTime === c.startTime && data.date >= fmtDate(from2) && data.date <= fmtDate(to2);
         });
-        console.log("[STAGE DELETE] série proche (même titre+heure ±21j):", snapSerie.length, snapSerie.map(d => (d.data() as any).date));
         setDeleteSerieCount(snapSerie.length);
       }
 
-      // Pour les stages : compter les créneaux du même stage cette semaine
+      // Pour les stages : compter les créneaux du même stage. On réutilise le
+      // snap déjà chargé (même titre + même horaire) et on filtre par sameStage,
+      // au lieu d'une requête datée séparée qui ratait les bornes à cause du
+      // fuseau (new Date(c.date) en UTC) → stageCount tombait à 0 alors que les
+      // jours existaient (série les trouvait, pas le bloc stage).
       if (isStageType(c)) {
-        // Un stage peut chevaucher deux semaines (ex. jeu→mer). On cherche
-        // donc par stageGroupId sur une plage large (le mois autour), au lieu
-        // de se limiter à la semaine lundi-dimanche qui ratait les jours de
-        // la semaine suivante → le bouton "supprimer tout le stage"
-        // n'apparaissait pas et on ne pouvait supprimer que jour par jour.
-        const cDate = new Date(c.date);
-        const from = new Date(cDate); from.setDate(cDate.getDate() - 21);
-        const to = new Date(cDate); to.setDate(cDate.getDate() + 21);
-        const snapWeek = await getDocs(query(
-          collection(db, "creneaux"),
-          where("activityTitle", "==", c.activityTitle),
-          where("date", ">=", fmtDate(from)),
-          where("date", "<=", fmtDate(to)),
-        ));
-        // Filtre sameStage (stageGroupId prioritaire) : deux stages homonymes restent distincts
-        const matched = snapWeek.docs.filter(d => sameStage(d.data(), c));
-        // [DIAGNOSTIC TEMPORAIRE] comprendre pourquoi le regroupement échoue
-        console.log("[STAGE DELETE] créneau cliqué:", { titre: c.activityTitle, type: (c as any).activityType, stageGroupId: (c as any).stageGroupId, activityId: (c as any).activityId, startTime: c.startTime, date: c.date });
-        console.log("[STAGE DELETE] candidats dans ±21j:", snapWeek.docs.map(d => { const x = d.data() as any; return { date: x.date, sg: x.stageGroupId, aid: x.activityId, st: x.startTime, type: x.activityType }; }));
-        console.log("[STAGE DELETE] matched (sameStage):", matched.length);
+        const matched = snap.docs.filter(d => sameStage(d.data(), c));
         setDeleteWeekCount(matched.length);
       }
     } catch { setDeleteCount(1); }
