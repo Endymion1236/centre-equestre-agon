@@ -9,11 +9,12 @@ interface Props {
   deleteWeekCount: number;
   isStageType: (c: any) => boolean;
   onClose: () => void;
-  onConfirm: (mode: "single" | "similar" | "week") => void;
+  deleteSerieCount?: number;
+  onConfirm: (mode: "single" | "similar" | "week" | "serie") => void;
 }
 
 export default function DeleteCreneauModal({
-  creneau, deleting, deleteCount, deleteWeekCount, isStageType, onClose, onConfirm
+  creneau, deleting, deleteCount, deleteWeekCount, deleteSerieCount = 0, isStageType, onClose, onConfirm
 }: Props) {
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4"
@@ -63,7 +64,13 @@ export default function DeleteCreneauModal({
             {!isStageType(creneau) && deleteCount > 1 && (
               <button onClick={() => onConfirm("similar")} disabled={deleting}
                 className="w-full py-3 rounded-xl font-body text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 border-none cursor-pointer disabled:opacity-50">
-                Supprimer les {deleteCount} créneaux similaires
+                Supprimer les {deleteCount} créneaux similaires (même jour de semaine, toute l'année)
+              </button>
+            )}
+            {!isStageType(creneau) && deleteSerieCount > 1 && (
+              <button onClick={() => onConfirm("serie")} disabled={deleting}
+                className="w-full py-3 rounded-xl font-body text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 border-none cursor-pointer disabled:opacity-50">
+                🗑️ Supprimer cette série ({deleteSerieCount} créneaux proches)
               </button>
             )}
             <button onClick={onClose} disabled={deleting}

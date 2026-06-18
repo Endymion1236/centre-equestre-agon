@@ -279,6 +279,7 @@ export default function PlanningPage() {
   const [deleteDeleting, setDeleteDeleting] = useState(false);
   const [deleteCount, setDeleteCount] = useState(0);
   const [deleteWeekCount, setDeleteWeekCount] = useState(0); // créneaux du même stage cette semaine
+  const [deleteSerieCount, setDeleteSerieCount] = useState(0); // occurrences proches d'une activité non-stage
 
   const handleDelete = (id: string) => {
     const c = creneaux.find(x => x.id === id);
@@ -291,6 +292,7 @@ export default function PlanningPage() {
     setDeleteCreneau(c);
     setDeleteDeleting(false);
     setDeleteWeekCount(0);
+    setDeleteSerieCount(0);
     try {
       // Similaires sur toute l'année (même titre + même heure + même jour semaine)
       const dow = new Date(c.date).getDay();
@@ -300,6 +302,21 @@ export default function PlanningPage() {
         where("startTime", "==", c.startTime),
       ));
       setDeleteCount(snap.docs.filter(d => new Date((d.data() as any).date).getDay() === dow && (d.data() as any).activityId === (c as any).activityId).length);
+
+      // Pour les activités NON-stage répliquées sur des jours consécutifs
+      // (ex. promenade créée sur lun-mar-mer via le calendrier de dates) :
+      // compter les occurrences proches (même titre + même horaire, ±21 j),
+      // tous jours de semaine confondus, pour proposer une suppression groupée.
+      if (!isStageType(c)) {
+        const cDate2 = new Date(c.date);
+        const from2 = new Date(cDate2); from2.setDate(cDate2.getDate() - 21);
+        const to2 = new Date(cDate2); to2.setDate(cDate2.getDate() + 21);
+        const snapSerie = snap.docs.filter(d => {
+          const data = d.data() as any;
+          return data.startTime === c.startTime && data.date >= fmtDate(from2) && data.date <= fmtDate(to2);
+        });
+        setDeleteSerieCount(snapSerie.length);
+      }
 
       // Pour les stages : compter les créneaux du même stage cette semaine
       if (isStageType(c)) {
@@ -318,7 +335,12 @@ export default function PlanningPage() {
           where("date", "<=", fmtDate(to)),
         ));
         // Filtre sameStage (stageGroupId prioritaire) : deux stages homonymes restent distincts
-        setDeleteWeekCount(snapWeek.docs.filter(d => sameStage(d.data(), c)).length);
+        const matched = snapWeek.docs.filter(d => sameStage(d.data(), c));
+        // [DIAGNOSTIC TEMPORAIRE] comprendre pourquoi le regroupement échoue
+        console.log("[STAGE DELETE] créneau cliqué:", { titre: c.activityTitle, type: (c as any).activityType, stageGroupId: (c as any).stageGroupId, activityId: (c as any).activityId, startTime: c.startTime, date: c.date });
+        console.log("[STAGE DELETE] candidats dans ±21j:", snapWeek.docs.map(d => { const x = d.data() as any; return { date: x.date, sg: x.stageGroupId, aid: x.activityId, st: x.startTime, type: x.activityType }; }));
+        console.log("[STAGE DELETE] matched (sameStage):", matched.length);
+        setDeleteWeekCount(matched.length);
       }
     } catch { setDeleteCount(1); }
   };
@@ -331,7 +353,7 @@ export default function PlanningPage() {
     setEditApplyStage(c.activityType === "stage" || c.activityType === "stage_journee");
   };
 
-  const confirmDelete = async (mode: "single" | "similar" | "week") => {
+  const confirmDelete = async (mode: "single" | "similar" | "week" | "serie") => {
     if (!deleteCreneau) return;
     setDeleteDeleting(true);
     try {
@@ -359,6 +381,22 @@ export default function PlanningPage() {
           where("startTime", "==", deleteCreneau.startTime),
         ));
         const targets = snap.docs.filter(d => new Date((d.data() as any).date).getDay() === dow && (d.data() as any).activityId === (deleteCreneau as any).activityId);
+        for (const t of targets) await deleteDoc(doc(db, "creneaux", t.id));
+        toast(`🗑️ ${targets.length} créneaux supprimés`, "success");
+      } else if (mode === "serie") {
+        // Suppression d'une série d'occurrences proches (non-stage)
+        const cDate3 = new Date(deleteCreneau.date);
+        const from3 = new Date(cDate3); from3.setDate(cDate3.getDate() - 21);
+        const to3 = new Date(cDate3); to3.setDate(cDate3.getDate() + 21);
+        const snap = await getDocs(query(
+          collection(db, "creneaux"),
+          where("activityTitle", "==", deleteCreneau.activityTitle),
+          where("startTime", "==", deleteCreneau.startTime),
+        ));
+        const targets = snap.docs.filter(d => {
+          const data = d.data() as any;
+          return data.date >= fmtDate(from3) && data.date <= fmtDate(to3);
+        });
         for (const t of targets) await deleteDoc(doc(db, "creneaux", t.id));
         toast(`🗑️ ${targets.length} créneaux supprimés`, "success");
       } else {
@@ -1798,6 +1836,7 @@ export default function PlanningPage() {
           deleting={deleteDeleting}
           deleteCount={deleteCount}
           deleteWeekCount={deleteWeekCount}
+          deleteSerieCount={deleteSerieCount}
           isStageType={isStageType}
           onClose={() => setDeleteCreneau(null)}
           onConfirm={confirmDelete}
