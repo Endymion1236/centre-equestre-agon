@@ -303,18 +303,21 @@ export default function PlanningPage() {
       ));
       setDeleteCount(snap.docs.filter(d => new Date((d.data() as any).date).getDay() === dow && (d.data() as any).activityId === (c as any).activityId).length);
 
-      // Pour les activités NON-stage répliquées sur des jours consécutifs
-      // (ex. promenade créée sur lun-mar-mer via le calendrier de dates) :
-      // compter les occurrences proches (même titre + même horaire, ±21 j),
-      // tous jours de semaine confondus, pour proposer une suppression groupée.
-      if (!isStageType(c)) {
-        const cDate2 = new Date(c.date);
+      // [DIAGNOSTIC] type du créneau cliqué (toujours loggé)
+      console.log("[STAGE DELETE] cliqué:", { titre: c.activityTitle, type: (c as any).activityType, isStage: isStageType(c), sg: (c as any).stageGroupId, aid: (c as any).activityId, date: c.date, st: c.startTime });
+
+      // Série d'occurrences proches (même titre + même horaire, ±21j, tous
+      // jours) — proposé pour TOUT créneau, stage ou non, dès qu'il y a des
+      // jours multiples. Couvre les stages mal typés et les réplications.
+      {
+        const cDate2 = new Date(c.date + "T12:00:00");
         const from2 = new Date(cDate2); from2.setDate(cDate2.getDate() - 21);
         const to2 = new Date(cDate2); to2.setDate(cDate2.getDate() + 21);
         const snapSerie = snap.docs.filter(d => {
           const data = d.data() as any;
           return data.startTime === c.startTime && data.date >= fmtDate(from2) && data.date <= fmtDate(to2);
         });
+        console.log("[STAGE DELETE] série proche (même titre+heure ±21j):", snapSerie.length, snapSerie.map(d => (d.data() as any).date));
         setDeleteSerieCount(snapSerie.length);
       }
 
