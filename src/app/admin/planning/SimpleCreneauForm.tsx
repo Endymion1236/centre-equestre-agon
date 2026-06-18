@@ -23,6 +23,10 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
   const [date, setDate] = useState(defaultDate || fmtDate(new Date()));
   const [saving, setSaving] = useState(false);
   const [multiDay, setMultiDay] = useState(false);
+  // Répétition hebdomadaire : créer le même créneau sur N semaines (créneau
+  // récurrent type cours hebdo), distinct du stage multi-jours.
+  const [repeatWeekly, setRepeatWeekly] = useState(false);
+  const [repeatWeeks, setRepeatWeeks] = useState(8);
   const [nbDays, setNbDays] = useState(5);
   const [skipWeekend, setSkipWeekend] = useState(true);
   // Clé = index du jour (pas la date) pour gérer 2 demi-journées le même jour
@@ -98,7 +102,16 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
     }
     setSaving(true);
     const ttc = (act as any).priceTTC || (act.priceHT || 0) * (1 + (act.tvaTaux || 5.5) / 100);
-    const dates = multiDay ? getEffectiveDates() : [date];
+    let dates = multiDay ? getEffectiveDates() : [date];
+    // Répétition hebdomadaire (mode simple) : on duplique la date de base sur
+    // N semaines consécutives (+7 jours à chaque fois).
+    if (!multiDay && repeatWeekly && repeatWeeks > 1) {
+      const base = new Date(date + "T12:00:00");
+      dates = Array.from({ length: repeatWeeks }, (_, i) => {
+        const d = new Date(base); d.setDate(base.getDate() + i * 7);
+        return fmtDate(d);
+      });
+    }
     // Identifiant unique du lot : tous les créneaux créés ensemble (stage
     // multi-jours ou stage journée) partagent le même stageGroupId. C'est ce
     // qui permet de distinguer deux stages homonymes créés depuis la même
@@ -158,6 +171,25 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
                 <input type="checkbox" checked={skipWeekend} onChange={e => setSkipWeekend(e.target.checked)} className="w-4 h-4 accent-blue-500" />
                 <span className="font-body text-xs text-slate-500">Sauter week-end</span>
               </label>
+            </>
+          )}
+          {/* Répétition hebdomadaire — uniquement en mode simple (pas stage).
+              Crée le même créneau sur N semaines (cours hebdo récurrent). */}
+          {!multiDay && (
+            <>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={repeatWeekly} onChange={e => setRepeatWeekly(e.target.checked)} className="w-4 h-4 accent-blue-500" />
+                <span className="font-body text-sm text-slate-600">🔁 Répéter chaque semaine</span>
+              </label>
+              {repeatWeekly && (
+                <div className="flex items-center gap-1.5">
+                  <span className="font-body text-xs text-slate-500">pendant</span>
+                  <input type="number" min={2} max={40} value={repeatWeeks}
+                    onChange={e => setRepeatWeeks(Math.max(2, Math.min(40, parseInt(e.target.value) || 2)))}
+                    className={`${inp} !w-16 text-center`} />
+                  <span className="font-body text-xs text-slate-500">semaines</span>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -309,7 +341,9 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
         <button onClick={sub} disabled={!actId || saving}
           className={`flex items-center justify-center gap-2 py-2.5 rounded-lg font-body text-sm font-semibold border-none cursor-pointer ${!actId || saving ? "bg-gray-200 text-slate-400" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
           {saving ? <Loader2 size={16} className="animate-spin"/> : <Check size={16}/>}
-          {multiDay ? `Créer ${previewDates.length} créneaux` : "Créer"}
+          {multiDay ? `Créer ${previewDates.length} créneaux`
+            : (repeatWeekly && repeatWeeks > 1) ? `Créer ${repeatWeeks} créneaux (1/semaine)`
+            : "Créer"}
         </button>
       </div>
     </Card>
