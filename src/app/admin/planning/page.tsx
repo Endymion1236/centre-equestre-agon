@@ -303,16 +303,19 @@ export default function PlanningPage() {
 
       // Pour les stages : compter les créneaux du même stage cette semaine
       if (isStageType(c)) {
+        // Un stage peut chevaucher deux semaines (ex. jeu→mer). On cherche
+        // donc par stageGroupId sur une plage large (le mois autour), au lieu
+        // de se limiter à la semaine lundi-dimanche qui ratait les jours de
+        // la semaine suivante → le bouton "supprimer tout le stage"
+        // n'apparaissait pas et on ne pouvait supprimer que jour par jour.
         const cDate = new Date(c.date);
-        const dow0 = (cDate.getDay() + 6) % 7; // lundi = 0
-        const mon = new Date(cDate); mon.setDate(cDate.getDate() - dow0);
-        const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-        const monStr = fmtDate(mon); const sunStr = fmtDate(sun);
+        const from = new Date(cDate); from.setDate(cDate.getDate() - 21);
+        const to = new Date(cDate); to.setDate(cDate.getDate() + 21);
         const snapWeek = await getDocs(query(
           collection(db, "creneaux"),
           where("activityTitle", "==", c.activityTitle),
-          where("date", ">=", monStr),
-          where("date", "<=", sunStr),
+          where("date", ">=", fmtDate(from)),
+          where("date", "<=", fmtDate(to)),
         ));
         // Filtre sameStage (stageGroupId prioritaire) : deux stages homonymes restent distincts
         setDeleteWeekCount(snapWeek.docs.filter(d => sameStage(d.data(), c)).length);
@@ -333,16 +336,16 @@ export default function PlanningPage() {
     setDeleteDeleting(true);
     try {
       if (mode === "week") {
-        // Supprimer tous les créneaux du même stage cette semaine
+        // Supprimer tous les créneaux du même stage (plage large pour couvrir
+        // les stages à cheval sur deux semaines — cohérent avec le décompte).
         const cDate = new Date(deleteCreneau.date);
-        const dow0 = (cDate.getDay() + 6) % 7;
-        const mon = new Date(cDate); mon.setDate(cDate.getDate() - dow0);
-        const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+        const from = new Date(cDate); from.setDate(cDate.getDate() - 21);
+        const to = new Date(cDate); to.setDate(cDate.getDate() + 21);
         const snap = await getDocs(query(
           collection(db, "creneaux"),
           where("activityTitle", "==", deleteCreneau.activityTitle),
-          where("date", ">=", fmtDate(mon)),
-          where("date", "<=", fmtDate(sun)),
+          where("date", ">=", fmtDate(from)),
+          where("date", "<=", fmtDate(to)),
         ));
         // Filtre sameStage (stageGroupId prioritaire) : ne supprime QUE ce stage
         const weekTargets = snap.docs.filter(d => sameStage(d.data(), deleteCreneau));

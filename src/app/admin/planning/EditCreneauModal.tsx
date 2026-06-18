@@ -110,16 +110,24 @@ export default function EditCreneauModal({
             {(() => {
               const selected = (form.monitor || "").split(",").map(s => s.trim()).filter(Boolean);
               const toggleMoniteur = (name: string) => {
-                const newList = selected.includes(name)
-                  ? selected.filter(s => s !== name)
-                  : [...selected, name];
+                const norm = (s: string) => s.trim().toLowerCase();
+                // Retire toute occurrence existante (normalisée) puis ajoute/enlève.
+                const sansDoublon = [...new Set(selected.map(s => s.trim()))].filter(s => norm(s) !== norm(name));
+                const newList = selected.some(s => norm(s) === norm(name))
+                  ? sansDoublon
+                  : [...sansDoublon, name];
                 onFormChange({ ...form, monitor: newList.join(", ") });
               };
               return (
                 <div className="flex flex-wrap gap-1.5">
                   {moniteurs.map(m => {
-                    const isSelected = selected.includes(m);
-                    const isNew = isSelected && !initialMoniteurs.includes(m);
+                    // Comparaison insensible à la casse/espaces : un monitor
+                    // stocké "alice" ou " Alice " doit matcher "Alice" de la
+                    // liste, sinon Alice apparaissait en double (liste + orange)
+                    // et devenait non sélectionnable.
+                    const norm = (s: string) => s.trim().toLowerCase();
+                    const isSelected = selected.some(s => norm(s) === norm(m));
+                    const isNew = isSelected && !initialMoniteurs.some(s => norm(s) === norm(m));
                     return (
                       <button key={m} onClick={() => toggleMoniteur(m)}
                         className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer transition-all
@@ -128,7 +136,9 @@ export default function EditCreneauModal({
                       </button>
                     );
                   })}
-                  {selected.filter(s => !moniteurs.includes(s)).map(m => (
+                  {/* Moniteurs stockés mais VRAIMENT absents de la liste
+                      (ex. ancien moniteur supprimé), comparaison normalisée. */}
+                  {selected.filter(s => !moniteurs.some(m => m.trim().toLowerCase() === s.trim().toLowerCase())).map(m => (
                     <button key={m} onClick={() => toggleMoniteur(m)}
                       className="px-3 py-1.5 rounded-lg font-body text-xs font-semibold bg-orange-100 text-orange-600 border-none cursor-pointer">
                       ✓ {m}
