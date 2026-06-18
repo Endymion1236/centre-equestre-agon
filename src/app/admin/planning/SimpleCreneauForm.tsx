@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card } from "@/components/ui";
-import { Check, Loader2, X } from "lucide-react";
+import { Check, Loader2, X, ChevronLeft, ChevronRight } from "lucide-react";
 import type { Activity } from "@/types";
 import { Creneau, fmtDate } from "./types";
 import ActivityPicker from "./ActivityPicker";
@@ -23,10 +23,10 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
   const [date, setDate] = useState(defaultDate || fmtDate(new Date()));
   const [saving, setSaving] = useState(false);
   const [multiDay, setMultiDay] = useState(false);
-  // Répétition hebdomadaire : créer le même créneau sur N semaines (créneau
-  // récurrent type cours hebdo), distinct du stage multi-jours.
-  const [repeatWeekly, setRepeatWeekly] = useState(false);
-  const [repeatWeeks, setRepeatWeeks] = useState(8);
+  // Dates supplémentaires choisies à la main via le mini-calendrier (réplication
+  // du créneau sur des dates exactes, en plus de la date principale).
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [extraDates, setExtraDates] = useState<string[]>([]);
   const [nbDays, setNbDays] = useState(5);
   const [skipWeekend, setSkipWeekend] = useState(true);
   // Clé = index du jour (pas la date) pour gérer 2 demi-journées le même jour
@@ -102,16 +102,11 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
     }
     setSaving(true);
     const ttc = (act as any).priceTTC || (act.priceHT || 0) * (1 + (act.tvaTaux || 5.5) / 100);
-    let dates = multiDay ? getEffectiveDates() : [date];
-    // Répétition hebdomadaire (mode simple) : on duplique la date de base sur
-    // N semaines consécutives (+7 jours à chaque fois).
-    if (!multiDay && repeatWeekly && repeatWeeks > 1) {
-      const base = new Date(date + "T12:00:00");
-      dates = Array.from({ length: repeatWeeks }, (_, i) => {
-        const d = new Date(base); d.setDate(base.getDate() + i * 7);
-        return fmtDate(d);
-      });
-    }
+    // Mode simple : date principale + dates supplémentaires choisies au
+    // calendrier (dédupliquées). Mode stage : suite de jours générée.
+    let dates = multiDay
+      ? getEffectiveDates()
+      : Array.from(new Set([date, ...extraDates])).sort();
     // Identifiant unique du lot : tous les créneaux créés ensemble (stage
     // multi-jours ou stage journée) partagent le même stageGroupId. C'est ce
     // qui permet de distinguer deux stages homonymes créés depuis la même
@@ -173,26 +168,25 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
               </label>
             </>
           )}
-          {/* Répétition hebdomadaire — uniquement en mode simple (pas stage).
-              Crée le même créneau sur N semaines (cours hebdo récurrent). */}
+          {/* Réplication sur des dates exactes (mode simple uniquement) :
+              ouvre un mini-calendrier pour cocher les jours voulus. */}
           {!multiDay && (
-            <>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={repeatWeekly} onChange={e => setRepeatWeekly(e.target.checked)} className="w-4 h-4 accent-blue-500" />
-                <span className="font-body text-sm text-slate-600">🔁 Répéter chaque semaine</span>
-              </label>
-              {repeatWeekly && (
-                <div className="flex items-center gap-1.5">
-                  <span className="font-body text-xs text-slate-500">pendant</span>
-                  <input type="number" min={2} max={40} value={repeatWeeks}
-                    onChange={e => setRepeatWeeks(Math.max(2, Math.min(40, parseInt(e.target.value) || 2)))}
-                    className={`${inp} !w-16 text-center`} />
-                  <span className="font-body text-xs text-slate-500">semaines</span>
-                </div>
-              )}
-            </>
+            <button type="button" onClick={() => setShowDatePicker(v => !v)}
+              className="flex items-center gap-1.5 font-body text-sm font-semibold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
+              📅 {extraDates.length > 0 ? `${extraDates.length} date(s) en plus` : "Répliquer sur d'autres dates"}
+            </button>
           )}
         </div>
+
+        {/* Mini-calendrier de sélection des dates supplémentaires */}
+        {!multiDay && showDatePicker && (
+          <DatePickerInline
+            mainDate={date}
+            selected={extraDates}
+            onToggle={(d) => setExtraDates(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])}
+            onClose={() => setShowDatePicker(false)}
+          />
+        )}
 
         <div className="flex gap-2">
           <div className="flex-1">
@@ -342,11 +336,77 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
           className={`flex items-center justify-center gap-2 py-2.5 rounded-lg font-body text-sm font-semibold border-none cursor-pointer ${!actId || saving ? "bg-gray-200 text-slate-400" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
           {saving ? <Loader2 size={16} className="animate-spin"/> : <Check size={16}/>}
           {multiDay ? `Créer ${previewDates.length} créneaux`
-            : (repeatWeekly && repeatWeeks > 1) ? `Créer ${repeatWeeks} créneaux (1/semaine)`
+            : extraDates.length > 0 ? `Créer ${extraDates.length + 1} créneaux`
             : "Créer"}
         </button>
       </div>
     </Card>
+  );
+}
+
+// ── Mini-calendrier inline pour répliquer un créneau sur des dates exactes ───
+// Même principe que DuplicateCreneauModal, mais intégré au formulaire de
+// création : on coche les jours supplémentaires sur lesquels créer le créneau.
+function DatePickerInline({ mainDate, selected, onToggle, onClose }: {
+  mainDate: string; selected: string[];
+  onToggle: (d: string) => void; onClose: () => void;
+}) {
+  const MONTHS_FR = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+  const DAYS_FR = ["Lu","Ma","Me","Je","Ve","Sa","Di"];
+  const base = new Date(mainDate + "T12:00:00");
+  const [year, setYear] = useState(base.getFullYear());
+  const [month, setMonth] = useState(base.getMonth());
+
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const startOffset = (firstDay.getDay() + 6) % 7;
+  const daysInMonth = lastDay.getDate();
+  const cells: (number | null)[] = [
+    ...Array(startOffset).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+  const fmtCell = (d: number) => `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+  const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y - 1); } else setMonth(m => m - 1); };
+  const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y => y + 1); } else setMonth(m => m + 1); };
+
+  return (
+    <div className="border border-blue-200 rounded-xl p-3 bg-blue-50/40">
+      <div className="flex items-center justify-between mb-2">
+        <span className="font-body text-xs font-semibold text-blue-800">Cliquez les jours où répéter ce créneau</span>
+        <button type="button" onClick={onClose} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={16} /></button>
+      </div>
+      <div className="flex items-center justify-between mb-2">
+        <button type="button" onClick={prevMonth} className="text-blue-500 bg-white rounded-lg border border-blue-100 p-1 cursor-pointer"><ChevronLeft size={16} /></button>
+        <span className="font-body text-sm font-semibold text-blue-800">{MONTHS_FR[month]} {year}</span>
+        <button type="button" onClick={nextMonth} className="text-blue-500 bg-white rounded-lg border border-blue-100 p-1 cursor-pointer"><ChevronRight size={16} /></button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center mb-1">
+        {DAYS_FR.map(d => <span key={d} className="font-body text-[10px] font-semibold text-slate-400">{d}</span>)}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((d, i) => {
+          if (d === null) return <span key={i} />;
+          const ds = fmtCell(d);
+          const isMain = ds === mainDate;
+          const isSel = selected.includes(ds);
+          return (
+            <button key={i} type="button" disabled={isMain}
+              onClick={() => onToggle(ds)}
+              className={`font-body text-xs py-1.5 rounded-lg border cursor-pointer
+                ${isMain ? "bg-blue-500 text-white border-blue-500 cursor-default font-semibold"
+                  : isSel ? "bg-gold-400 text-blue-800 border-gold-400 font-semibold"
+                  : "bg-white text-slate-600 border-gray-200 hover:border-blue-300"}`}>
+              {d}
+            </button>
+          );
+        })}
+      </div>
+      <p className="font-body text-[10px] text-slate-400 mt-2">
+        🔵 Date principale · 🟡 dates ajoutées. {selected.length} date(s) supplémentaire(s) sélectionnée(s).
+      </p>
+    </div>
   );
 }
 
