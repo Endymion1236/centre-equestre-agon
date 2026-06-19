@@ -346,14 +346,13 @@ export default function PlanningPage() {
       if (mode === "week") {
         // Supprimer tous les créneaux du même stage (plage large pour couvrir
         // les stages à cheval sur deux semaines — cohérent avec le décompte).
-        const cDate = new Date(deleteCreneau.date);
-        const from = new Date(cDate); from.setDate(cDate.getDate() - 21);
-        const to = new Date(cDate); to.setDate(cDate.getDate() + 21);
+        // Même requête que la lecture (titre + horaire, index simple, pas de
+        // date range qui exigeait un index composite absent → la requête
+        // plantait et la suppression échouait). Filtre sameStage en mémoire.
         const snap = await getDocs(query(
           collection(db, "creneaux"),
           where("activityTitle", "==", deleteCreneau.activityTitle),
-          where("date", ">=", fmtDate(from)),
-          where("date", "<=", fmtDate(to)),
+          where("startTime", "==", deleteCreneau.startTime),
         ));
         // Filtre sameStage (stageGroupId prioritaire) : ne supprime QUE ce stage
         const weekTargets = snap.docs.filter(d => sameStage(d.data(), deleteCreneau));
