@@ -67,7 +67,7 @@ export default function DeleteCreneauModal({
                 Supprimer les {deleteCount} créneaux similaires (même jour de semaine, toute l'année)
               </button>
             )}
-            {deleteSerieCount > 1 && (
+            {!isStageType(creneau) && deleteSerieCount > 1 && (
               <button onClick={() => onConfirm("serie")} disabled={deleting}
                 className="w-full py-3 rounded-xl font-body text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 border-none cursor-pointer disabled:opacity-50">
                 🗑️ Supprimer cette série ({deleteSerieCount} créneaux : même activité, même horaire, dates proches)
