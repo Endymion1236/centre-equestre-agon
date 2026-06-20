@@ -5,7 +5,7 @@ import { db } from "@/lib/firebase";
 import { Card } from "@/components/ui";
 import { Check, Loader2, X, ChevronLeft, ChevronRight } from "lucide-react";
 import type { Activity } from "@/types";
-import { Creneau, fmtDate } from "./types";
+import { Creneau, fmtDate, moniteursUniques } from "./types";
 import ActivityPicker from "./ActivityPicker";
 
 function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
@@ -36,11 +36,9 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
 
   useEffect(() => {
     getDocs(collection(db, "moniteurs")).then(snap => {
-      const noms = snap.docs.map(d => (d.data() as any).name).filter(Boolean).sort();
-      setMoniteurs(noms);
-      // Ne PAS présélectionner le 1er moniteur (triés alphabétiquement = Alice) :
-      // ça collait Alice par défaut sur chaque créneau si on oubliait de changer.
-      // On force un choix explicite via l'option vide du select.
+      // Liste dédoublonnée (cf. moniteursUniques : évite les doublons "Alice"/"Alice ").
+      setMoniteurs(moniteursUniques(snap.docs));
+      // Ne PAS présélectionner le 1er moniteur (triés alphabétiquement = Alice).
     });
   }, []);
 
@@ -220,11 +218,14 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
           <div className="flex flex-wrap gap-1.5">
             {moniteurs.map(m => {
               const selected = (mon || "").split(",").map(s => s.trim()).filter(Boolean);
-              const isSelected = selected.includes(m);
+              const isSelected = selected.some(s => s.toLowerCase() === m.toLowerCase());
               return (
                 <button key={m} type="button" onClick={() => {
                   const curr = (mon || "").split(",").map(s => s.trim()).filter(Boolean);
-                  const newList = isSelected ? curr.filter(s => s !== m) : [...new Set([...curr, m])];
+                  const dejaLa = curr.some(s => s.toLowerCase() === m.toLowerCase());
+                  const newList = dejaLa
+                    ? curr.filter(s => s.toLowerCase() !== m.toLowerCase())
+                    : [...new Set([...curr, m])];
                   setMon(newList.join(", "));
                 }}
                   className={`px-2.5 py-1 rounded-lg font-body text-[11px] font-semibold border-none cursor-pointer transition-all
@@ -306,16 +307,23 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
                     <div className="flex-1">
                       <div className="flex flex-wrap gap-1">
                         {moniteurs.map(m => {
-                          // La sélection du jour = sa valeur propre si déjà
-                          // touchée, sinon le défaut global. On ne modifie
-                          // QUE customMonitors[idx], jamais les autres jours.
-                          const currentVal = customMonitors[idx] ?? mon ?? "";
-                          const selected = [...new Set(currentVal.split(",").map(s => s.trim()).filter(Boolean))];
-                          const isSelected = selected.includes(m);
+                          // Valeur affichée du jour : sa valeur propre si déjà
+                          // figée, sinon le défaut global (affichage seulement).
+                          const baseVal = customMonitors[idx] ?? mon ?? "";
+                          const selected = [...new Set(baseVal.split(",").map(s => s.trim()).filter(Boolean))];
+                          const isSelected = selected.some(s => s.toLowerCase() === m.toLowerCase());
                           return (
                             <button key={m} type="button" onClick={() => {
-                              const curr = [...new Set((customMonitors[idx] ?? mon ?? "").split(",").map(s => s.trim()).filter(Boolean))];
-                              const newList = isSelected ? curr.filter(s => s !== m) : [...new Set([...curr, m])];
+                              // Au clic, on FIGE la valeur du jour à partir de ce
+                              // qui est affiché (héritage de mon compris), puis on
+                              // ajoute/retire m. Évite le bug où un moniteur déjà
+                              // présent via mon (ex. Alice) se "désélectionnait"
+                              // au lieu de rester, le rendant non sélectionnable.
+                              const curr = [...new Set(baseVal.split(",").map(s => s.trim()).filter(Boolean))];
+                              const dejaLa = curr.some(s => s.toLowerCase() === m.toLowerCase());
+                              const newList = dejaLa
+                                ? curr.filter(s => s.toLowerCase() !== m.toLowerCase())
+                                : [...curr, m];
                               setCustomMonitors(prev => ({ ...prev, [idx]: newList.join(", ") }));
                             }}
                               className={`px-2 py-0.5 rounded font-body text-[10px] font-semibold border-none cursor-pointer

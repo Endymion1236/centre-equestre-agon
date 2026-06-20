@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Creneau } from "./types";
+import { moniteursUniques } from "./types";
 
 // Créneaux horaires disponibles de 7h à 23h par tranches de 15min
 const TIME_OPTIONS = Array.from({ length: (23 - 7) * 4 + 1 }, (_, i) => {
@@ -52,7 +53,7 @@ export default function EditCreneauModal({
 
   useEffect(() => {
     getDocs(collection(db, "moniteurs")).then(snap => {
-      setMoniteurs(snap.docs.map(d => (d.data() as any).name).filter(Boolean).sort());
+      setMoniteurs(moniteursUniques(snap.docs));
     });
     getDocs(collection(db, "themes-stage")).then(snap => {
       setThemes(snap.docs.map(d => ({ id: d.id, label: (d.data() as any).label }))
