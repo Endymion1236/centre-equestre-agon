@@ -7,8 +7,8 @@
 // tard correspondre à un cavalier/une famille déjà en base Firestore.
 // =============================================================================
 
-/** Les terrains qui tournent EN PARALLÈLE le jour du concours. */
-export type TerrainId = "manege" | "carriere";
+/** Identifiant d'un terrain. Libre : "manege", "carriere", ou tout autre. */
+export type TerrainId = string;
 
 export interface Terrain {
   id: TerrainId;

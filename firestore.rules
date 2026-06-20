@@ -539,6 +539,13 @@ service cloud.firestore {
       allow write: if isStaff();
     }
 
+    // ── Organisation de concours (module Terrain) ────────────────────────
+    // Un document = un concours complet (passages, personnes, chevaux...).
+    // Lecture/écriture réservées au staff (page admin "Orga concours").
+    match /concours/{docId} {
+      allow read, write: if isStaff();
+    }
+
     // ── Bloc par défaut — DENY ALL ────────────────────────────────────────
     // Toute collection non listée ci-dessus est bloquée
     match /{document=**} {
