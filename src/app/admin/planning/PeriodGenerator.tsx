@@ -5,7 +5,7 @@ import { db } from "@/lib/firebase";
 import { Card } from "@/components/ui";
 import { Loader2, Plus, X, Trash2, Calendar, Save, FolderOpen } from "lucide-react";
 import type { Activity } from "@/types";
-import { Creneau, Period, SlotDef, dayNames, dayNamesFull, fmtDate } from "./types";
+import { Creneau, Period, SlotDef, dayNames, dayNamesFull, fmtDate, moniteursUniques } from "./types";
 import ActivityPicker from "./ActivityPicker";
 
 /**
@@ -44,7 +44,7 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
 
   useEffect(() => {
     getDocs(collection(db, "moniteurs")).then(snap => {
-      const noms = snap.docs.map(d => (d.data() as any).name).filter(Boolean).sort();
+      const noms = moniteursUniques(snap.docs);
       setMoniteurs(noms);
       // Initialiser le premier slot avec le premier moniteur
       if (noms.length > 0) setSlots(s => s.map(slot => slot.monitor ? slot : { ...slot, monitor: noms[0] }));

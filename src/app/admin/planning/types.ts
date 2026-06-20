@@ -222,3 +222,25 @@ export function isForfaitChildPaye(
     });
   });
 }
+
+/**
+ * Extrait la liste dédoublonnée des noms de moniteurs depuis un snapshot
+ * Firestore. La base peut contenir des doublons (ex. "Alice" et "Alice "
+ * hérités d'un ancien bug) qui créaient deux boutons dont un seul réagissait.
+ * On normalise (trim) et on déduplique sur le nom (insensible à la casse),
+ * en conservant la première graphie rencontrée.
+ */
+export function moniteursUniques(docs: { data: () => any }[]): string[] {
+  const vus = new Set<string>();
+  const noms: string[] = [];
+  for (const d of docs) {
+    const brut = d.data()?.name;
+    if (!brut) continue;
+    const nom = String(brut).trim();
+    const cle = nom.toLowerCase();
+    if (!nom || vus.has(cle)) continue;
+    vus.add(cle);
+    noms.push(nom);
+  }
+  return noms.sort();
+}
