@@ -82,8 +82,12 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
   const toggle = (competenceId: string) => {
     setAcquis(prev => {
       const next = { ...prev };
-      if (next[competenceId]) {
-        delete next[competenceId];
+      const estCoche = isCompetenceValidated(prev[competenceId], seuilFFE) || prev[competenceId] === true;
+      if (estCoche) {
+        // Décoche explicite : on écrit false (≠ suppression). Avec setDoc
+        // merge:true, supprimer la clé ne l'effacerait PAS côté Firestore
+        // (l'ancien true persisterait) → la décoche ne tenait pas au reload.
+        next[competenceId] = false;
       } else {
         next[competenceId] = true;
       }
@@ -99,8 +103,9 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
       const next = { ...prev };
       const currentLevel = getCompetenceLevel(prev[competenceId]);
       if (currentLevel === level) {
-        // Décochage : on retire la compétence du tableau
-        delete next[competenceId];
+        // Décoche explicite : marquée false (≠ absent) pour ne pas être
+        // re-validée automatiquement par les niveaux précédents.
+        next[competenceId] = false;
       } else {
         next[competenceId] = { level };
       }
@@ -118,7 +123,10 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
     if (currentIdx > 0) {
       GALOPS_PROGRAMME.slice(0, currentIdx).forEach(niveau => {
         niveau.competences.forEach(c => {
-          if (!acquis[c.id]) aValider.push({ id: c.id, domaine: c.domaine });
+          // Auto-valider seulement les compétences JAMAIS touchées (absentes).
+          // Une compétence explicitement décochée (false) traduit un choix de
+          // la monitrice → on la respecte et on ne la re-valide pas.
+          if (!(c.id in acquis)) aValider.push({ id: c.id, domaine: c.domaine });
         });
       });
     }
