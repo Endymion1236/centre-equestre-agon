@@ -11,7 +11,7 @@
 import type { Concours, Passage, Personne, RoleType, Conflit } from "./types";
 
 /** Durée pendant laquelle une équipe est "en piste" (fenêtre des rôles support). */
-const DUREE_PASSAGE_MIN = 20;
+const DUREE_PASSAGE_MIN = 15;
 /** Prépa par défaut avant l'heure "à cheval", si heurePrepa n'est pas renseignée. */
 const PREPA_AVANT_MIN = 30;
 
@@ -125,11 +125,14 @@ export function occupationsParPersonne(concours: Concours): Map<string, Occupati
 
     if (fPass) {
       for (const r of p.roles) {
+        // Le camion (prépa) est souple : on le traite comme de la prépa, pas comme
+        // un poste bloquant à la minute exacte du passage.
+        const typeOcc: TypeOccupation = r.type === "camion" ? "prepa" : "role";
         for (const pid of r.personneIds) {
           add(pid, {
             passageId: p.id,
             fenetre: fPass,
-            type: "role",
+            type: typeOcc,
             detail: `${LIBELLE_ROLE[r.type]} (${p.nomEquipe})`,
           });
         }
