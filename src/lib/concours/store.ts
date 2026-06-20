@@ -79,3 +79,49 @@ export function concoursVide(titre: string, sousTitre: string, date: string): Om
     rappels: [],
   };
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// Bases existantes : cavaliers (families/children) et poneys (equides)
+// ───────────────────────────────────────────────────────────────────────────
+
+export interface CavalierBase {
+  childId: string;
+  prenom: string;
+  famille: string;
+  galop?: string;
+  familyId: string;
+}
+
+export interface PoneyBase {
+  equideId: string;
+  nom: string;
+}
+
+/** Aplatit tous les cavaliers (children) de toutes les familles. */
+export async function listerCavaliersBase(): Promise<CavalierBase[]> {
+  const snap = await getDocs(collection(db, "families"));
+  const out: CavalierBase[] = [];
+  snap.docs.forEach((d) => {
+    const f = d.data() as any;
+    const famille = (f.lastName || f.parentName || "").toString();
+    (f.children || []).forEach((c: any) => {
+      if (!c?.id) return;
+      out.push({
+        childId: c.id,
+        prenom: c.firstName || "?",
+        famille,
+        galop: c.galopLevel,
+        familyId: d.id,
+      });
+    });
+  });
+  return out.sort((a, b) => a.prenom.localeCompare(b.prenom, "fr"));
+}
+
+/** Liste les poneys/équidés de la cavalerie. */
+export async function listerPoneysBase(): Promise<PoneyBase[]> {
+  const snap = await getDocs(collection(db, "equides"));
+  return snap.docs
+    .map((d) => ({ equideId: d.id, nom: (d.data() as any).name || "?" }))
+    .sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+}

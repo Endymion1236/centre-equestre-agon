@@ -68,6 +68,10 @@ export interface Personne {
   /** Peut être RESPONSABLE de la préparation au camion (pas les plus jeunes). */
   peutResponsableCamion?: boolean;
   // Tout le monde peut être placeur par défaut, donc pas de flag dédié.
+
+  /** Si la personne vient de la base cavaliers : id du cavalier (families/children) + sa famille. */
+  cavalierId?: string;
+  familyId?: string;
 }
 
 // -----------------------------------------------------------------------------
@@ -80,6 +84,25 @@ export interface Personne {
 export interface Cheval {
   id: string;
   nom: string; // "Milton", "Java", "Galaxy"...
+  /** Si le poney vient de la base : id du document `equides`. */
+  equideId?: string;
+}
+
+// -----------------------------------------------------------------------------
+// UNE ÉQUIPE
+// -----------------------------------------------------------------------------
+// Un groupe nommé de cavaliers (avec leur poney). On crée l'équipe une fois,
+// on la nomme, puis on l'affecte à un passage : le passage récupère le nom et
+// la composition de l'équipe.
+export interface MembreEquipe {
+  personneId: string;
+  chevalId?: string;
+}
+
+export interface Equipe {
+  id: string;
+  nom: string;
+  membres: MembreEquipe[];
 }
 
 // -----------------------------------------------------------------------------
@@ -120,6 +143,8 @@ export interface Passage {
   categorie: string;
   /** Nom de l'équipe : "Les Jamais 2 sans toi". */
   nomEquipe: string;
+  /** Équipe affectée à ce passage (remplit nom + participants). Optionnel. */
+  equipeId?: string;
 
   /** Cavaliers + poneys de l'équipe. */
   participants: ParticipationPassage[];
@@ -145,6 +170,7 @@ export interface Concours {
   terrains: Terrain[];
   personnes: Personne[];
   chevaux: Cheval[];
+  equipes?: Equipe[];
   passages: Passage[];
 
   /** Rappels généraux affichés en bas de l'affiche (texte libre). */

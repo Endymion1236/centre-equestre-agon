@@ -4,11 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   Save, Printer, ArrowLeft, Plus, Trash2, Loader2, X,
-  AlertOctagon, AlertTriangle, CheckCircle2, UserPlus,
+  AlertOctagon, AlertTriangle, CheckCircle2, UserPlus, Users,
 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { analyser } from "@/lib/concours/contraintes";
-import { getConcours, saveConcours } from "@/lib/concours/store";
+import {
+  getConcours, saveConcours,
+  listerCavaliersBase, listerPoneysBase,
+  type CavalierBase, type PoneyBase,
+} from "@/lib/concours/store";
 import Affiche from "../Affiche";
 import type { Concours, Passage, RoleAssignation, RoleType } from "@/lib/concours/types";
 
@@ -49,6 +53,23 @@ export default function EditeurConcours() {
   // saisies "ajouter"
   const [nouvPersonne, setNouvPersonne] = useState("");
   const [nouvCheval, setNouvCheval] = useState("");
+  const [nouvEquipe, setNouvEquipe] = useState("");
+
+  // bases existantes (cavaliers + poneys)
+  const [cavBase, setCavBase] = useState<CavalierBase[]>([]);
+  const [poneyBase, setPoneyBase] = useState<PoneyBase[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [cav, pon] = await Promise.all([listerCavaliersBase(), listerPoneysBase()]);
+        setCavBase(cav);
+        setPoneyBase(pon);
+      } catch (e) {
+        console.error("Bases cavaliers/poneys indisponibles", e);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -114,7 +135,95 @@ export default function EditeurConcours() {
         ...pa,
         participants: pa.participants.map((x) => (x.chevalId === cid ? { ...x, chevalId: undefined } : x)),
       })),
+      equipes: (c.equipes || []).map((e) => ({
+        ...e,
+        membres: e.membres.map((m) => (m.chevalId === cid ? { ...m, chevalId: undefined } : m)),
+      })),
     }));
+
+  // ---- Ajout depuis les bases existantes ----
+  const ajouterCavalierDeBase = (childId: string) => {
+    if (!childId) return;
+    const cav = cavBase.find((x) => x.childId === childId);
+    if (!cav) return;
+    update((c) => {
+      if (c.personnes.some((p) => p.cavalierId === childId)) return c; // déjà ajouté
+      return {
+        ...c,
+        personnes: [
+          ...c.personnes,
+          { id: `cav-${childId}`, prenom: cav.prenom, cavalierId: cav.childId, familyId: cav.familyId },
+        ],
+      };
+    });
+  };
+  const ajouterPoneyDeBase = (equideId: string) => {
+    if (!equideId) return;
+    const po = poneyBase.find((x) => x.equideId === equideId);
+    if (!po) return;
+    update((c) => {
+      if (c.chevaux.some((ch) => ch.equideId === equideId)) return c;
+      return { ...c, chevaux: [...c.chevaux, { id: `eq-${equideId}`, nom: po.nom, equideId: po.equideId }] };
+    });
+  };
+
+  // ---- Équipes ----
+  const ajouterEquipe = () => {
+    const nom = nouvEquipe.trim();
+    if (!nom) return;
+    update((c) => ({ ...c, equipes: [...(c.equipes || []), { id: genId(nom), nom, membres: [] }] }));
+    setNouvEquipe("");
+  };
+  const supprimerEquipe = (eid: string) =>
+    update((c) => ({
+      ...c,
+      equipes: (c.equipes || []).filter((e) => e.id !== eid),
+      passages: c.passages.map((p) => (p.equipeId === eid ? { ...p, equipeId: undefined } : p)),
+    }));
+  const renommerEquipe = (eid: string, nom: string) =>
+    update((c) => ({ ...c, equipes: (c.equipes || []).map((e) => (e.id === eid ? { ...e, nom } : e)) }));
+  const ajouterMembre = (eid: string) =>
+    update((c) => ({
+      ...c,
+      equipes: (c.equipes || []).map((e) =>
+        e.id === eid ? { ...e, membres: [...e.membres, { personneId: "", chevalId: undefined }] } : e,
+      ),
+    }));
+  const setMembre = (eid: string, idx: number, field: "personneId" | "chevalId", value: string) =>
+    update((c) => ({
+      ...c,
+      equipes: (c.equipes || []).map((e) =>
+        e.id === eid
+          ? {
+              ...e,
+              membres: e.membres.map((m, i) =>
+                i === idx ? { ...m, [field]: field === "chevalId" ? value || undefined : value } : m,
+              ),
+            }
+          : e,
+      ),
+    }));
+  const supprimerMembre = (eid: string, idx: number) =>
+    update((c) => ({
+      ...c,
+      equipes: (c.equipes || []).map((e) =>
+        e.id === eid ? { ...e, membres: e.membres.filter((_, i) => i !== idx) } : e,
+      ),
+    }));
+
+  // Affecter une équipe à un passage : remplit le nom + les participants.
+  const appliquerEquipe = (pid: string, equipeId: string) =>
+    patchPassageFn(pid, (p) => {
+      if (!equipeId) return { ...p, equipeId: undefined };
+      const eq = (concours?.equipes || []).find((e) => e.id === equipeId);
+      if (!eq) return { ...p, equipeId };
+      return {
+        ...p,
+        equipeId,
+        nomEquipe: eq.nom,
+        participants: eq.membres.map((m) => ({ personneId: m.personneId, chevalId: m.chevalId })),
+      };
+    });
 
   // ---- Passages ----
   const ajouterPassage = (terrain: string) =>
@@ -272,9 +381,21 @@ export default function EditeurConcours() {
       <div className="mb-5 grid md:grid-cols-2 gap-4 no-print">
         <div className="rounded-xl border border-blue-500/12 bg-white p-4">
           <div className="font-display font-bold text-gray-800 mb-2 text-sm">Personnes ({concours.personnes.length})</div>
-          <div className="flex gap-2 mb-3">
-            <input className={inp} placeholder="Prénom…" value={nouvPersonne} onChange={(e) => setNouvPersonne(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ajouterPersonne()} />
-            <button onClick={ajouterPersonne} className="px-3 rounded-lg bg-blue-600 text-white shrink-0"><UserPlus size={16} /></button>
+          <div className="space-y-2 mb-3">
+            <select className={inp} value="" onChange={(e) => ajouterCavalierDeBase(e.target.value)}>
+              <option value="">+ Ajouter un cavalier (base)…</option>
+              {cavBase
+                .filter((cv) => !concours.personnes.some((p) => p.cavalierId === cv.childId))
+                .map((cv) => (
+                  <option key={cv.childId} value={cv.childId}>
+                    {cv.prenom}{cv.famille ? ` ${cv.famille}` : ""}{cv.galop && cv.galop !== "—" ? ` · ${cv.galop}` : ""}
+                  </option>
+                ))}
+            </select>
+            <div className="flex gap-2">
+              <input className={inp} placeholder="Encadrant / personne libre…" value={nouvPersonne} onChange={(e) => setNouvPersonne(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ajouterPersonne()} />
+              <button onClick={ajouterPersonne} className="px-3 rounded-lg bg-blue-600 text-white shrink-0" title="Ajouter une personne hors base (Nicolas, Emmeline, parent…)"><UserPlus size={16} /></button>
+            </div>
           </div>
           <div className="space-y-1.5 max-h-72 overflow-auto">
             {concours.personnes.map((p) => (
@@ -292,9 +413,17 @@ export default function EditeurConcours() {
 
         <div className="rounded-xl border border-blue-500/12 bg-white p-4">
           <div className="font-display font-bold text-gray-800 mb-2 text-sm">Poneys ({concours.chevaux.length})</div>
-          <div className="flex gap-2 mb-3">
-            <input className={inp} placeholder="Nom du poney…" value={nouvCheval} onChange={(e) => setNouvCheval(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ajouterCheval()} />
-            <button onClick={ajouterCheval} className="px-3 rounded-lg bg-blue-600 text-white shrink-0"><Plus size={16} /></button>
+          <div className="space-y-2 mb-3">
+            <select className={inp} value="" onChange={(e) => ajouterPoneyDeBase(e.target.value)}>
+              <option value="">+ Ajouter un poney (cavalerie)…</option>
+              {poneyBase
+                .filter((po) => !concours.chevaux.some((ch) => ch.equideId === po.equideId))
+                .map((po) => <option key={po.equideId} value={po.equideId}>{po.nom}</option>)}
+            </select>
+            <div className="flex gap-2">
+              <input className={inp} placeholder="Poney hors base…" value={nouvCheval} onChange={(e) => setNouvCheval(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ajouterCheval()} />
+              <button onClick={ajouterCheval} className="px-3 rounded-lg bg-blue-600 text-white shrink-0" title="Ajouter un poney hors base"><Plus size={16} /></button>
+            </div>
           </div>
           <div className="flex flex-wrap gap-1.5 max-h-72 overflow-auto">
             {concours.chevaux.map((ch) => (
@@ -305,6 +434,47 @@ export default function EditeurConcours() {
             ))}
             {concours.chevaux.length === 0 && <p className="text-xs text-gray-400">Optionnel — pour afficher « Cavalier / Poney ».</p>}
           </div>
+        </div>
+      </div>
+
+      {/* Équipes */}
+      <div className="mb-5 rounded-xl border border-blue-500/12 bg-white p-4 no-print">
+        <div className="flex items-center gap-2 mb-3">
+          <Users size={16} className="text-blue-600" />
+          <span className="font-display font-bold text-gray-800 text-sm">Équipes ({(concours.equipes || []).length})</span>
+        </div>
+        <div className="flex gap-2 mb-3 max-w-md">
+          <input className={inp} placeholder="Nom de l'équipe…" value={nouvEquipe} onChange={(e) => setNouvEquipe(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ajouterEquipe()} />
+          <button onClick={ajouterEquipe} className="px-3 rounded-lg bg-blue-600 text-white shrink-0 inline-flex items-center gap-1 text-sm font-semibold"><Plus size={15} /> Équipe</button>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          {(concours.equipes || []).map((eq) => (
+            <div key={eq.id} className="rounded-lg border border-blue-500/10 p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <input className={`${inpSm} flex-1 font-semibold`} value={eq.nom} onChange={(e) => renommerEquipe(eq.id, e.target.value)} />
+                <button onClick={() => supprimerEquipe(eq.id)} className="p-1 text-gray-300 hover:text-red-500"><Trash2 size={15} /></button>
+              </div>
+              <div className="space-y-1.5">
+                {eq.membres.map((m, idx) => (
+                  <div key={idx} className="flex gap-1.5">
+                    <select className={`${inpSm} flex-1`} value={m.personneId} onChange={(e) => setMembre(eq.id, idx, "personneId", e.target.value)}>
+                      <option value="">— cavalier —</option>
+                      {concours.personnes.map((pe) => <option key={pe.id} value={pe.id}>{pe.prenom}</option>)}
+                    </select>
+                    <select className={`${inpSm} flex-1`} value={m.chevalId ?? ""} onChange={(e) => setMembre(eq.id, idx, "chevalId", e.target.value)}>
+                      <option value="">— poney —</option>
+                      {concours.chevaux.map((ch) => <option key={ch.id} value={ch.id}>{ch.nom}</option>)}
+                    </select>
+                    <button onClick={() => supprimerMembre(eq.id, idx)} className="px-1 text-gray-300 hover:text-red-500"><X size={15} /></button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => ajouterMembre(eq.id)} className="mt-1.5 text-xs text-blue-600 font-semibold inline-flex items-center gap-1"><Plus size={13} /> membre</button>
+            </div>
+          ))}
+          {(concours.equipes || []).length === 0 && (
+            <p className="text-xs text-gray-400">Crée une équipe, nomme-la, puis ajoute ses membres (cavalier + poney). Tu pourras ensuite l&apos;affecter à un passage.</p>
+          )}
         </div>
       </div>
 
@@ -336,6 +506,13 @@ export default function EditeurConcours() {
                   <input className={`${inpSm} w-32`} placeholder="Heure" value={p.heureACheval} onChange={(e) => patchPassage(p.id, { heureACheval: e.target.value })} />
                 ) : (
                   <>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-gray-600 shrink-0">Équipe</span>
+                      <select className={`${inpSm} flex-1`} value={p.equipeId ?? ""} onChange={(e) => appliquerEquipe(p.id, e.target.value)}>
+                        <option value="">— choisir une équipe —</option>
+                        {(concours.equipes || []).map((eq) => <option key={eq.id} value={eq.id}>{eq.nom}</option>)}
+                      </select>
+                    </div>
                     <div className="grid grid-cols-2 gap-2">
                       <input className={inpSm} placeholder="Catégorie" value={p.categorie} onChange={(e) => patchPassage(p.id, { categorie: e.target.value })} />
                       <div className="grid grid-cols-3 gap-1">
