@@ -15,6 +15,8 @@ import {
   setDoc,
   deleteDoc,
   doc,
+  query,
+  where,
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -124,4 +126,41 @@ export async function listerPoneysBase(): Promise<PoneyBase[]> {
   return snap.docs
     .map((d) => ({ equideId: d.id, nom: (d.data() as any).name || "?" }))
     .sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Import depuis le planning : séances (creneaux) d'une date + leurs inscrits
+// ───────────────────────────────────────────────────────────────────────────
+
+export interface CreneauImport {
+  id: string;
+  titre: string;
+  heure: string;
+  type: string;
+  inscrits: { childId: string; prenom: string; familyId: string }[];
+}
+
+/** Récupère les séances du planning à une date donnée (ISO "AAAA-MM-JJ"). */
+export async function listerCreneauxDuJour(date: string): Promise<CreneauImport[]> {
+  if (!date) return [];
+  const snap = await getDocs(query(collection(db, "creneaux"), where("date", "==", date)));
+  return snap.docs
+    .map((d) => {
+      const c = d.data() as any;
+      const inscrits = (c.enrolled || [])
+        .map((e: any) => ({
+          childId: e.childId,
+          prenom: e.childName || e.firstName || "?",
+          familyId: e.familyId || "",
+        }))
+        .filter((x: any) => x.childId);
+      return {
+        id: d.id,
+        titre: c.activityTitle || "Séance",
+        heure: c.startTime || "",
+        type: c.activityType || "",
+        inscrits,
+      };
+    })
+    .sort((a, b) => a.heure.localeCompare(b.heure));
 }

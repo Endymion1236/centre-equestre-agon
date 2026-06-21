@@ -10,8 +10,8 @@ import { useToast } from "@/components/ui/Toast";
 import { analyser } from "@/lib/concours/contraintes";
 import {
   getConcours, saveConcours,
-  listerCavaliersBase, listerPoneysBase,
-  type CavalierBase, type PoneyBase,
+  listerCavaliersBase, listerPoneysBase, listerCreneauxDuJour,
+  type CavalierBase, type PoneyBase, type CreneauImport,
 } from "@/lib/concours/store";
 import Affiche from "../Affiche";
 import type { Concours, Passage, RoleAssignation, RoleType } from "@/lib/concours/types";
@@ -58,6 +58,8 @@ export default function EditeurConcours() {
   // bases existantes (cavaliers + poneys)
   const [cavBase, setCavBase] = useState<CavalierBase[]>([]);
   const [poneyBase, setPoneyBase] = useState<PoneyBase[]>([]);
+  // séances du planning à la date du concours (pour importer les inscrits)
+  const [creneauxJour, setCreneauxJour] = useState<CreneauImport[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -70,6 +72,20 @@ export default function EditeurConcours() {
       }
     })();
   }, []);
+
+  // Recharge les séances du planning quand la date du concours change.
+  useEffect(() => {
+    const date = concours?.date;
+    if (!date) { setCreneauxJour([]); return; }
+    (async () => {
+      try {
+        setCreneauxJour(await listerCreneauxDuJour(date));
+      } catch (e) {
+        console.error("Séances du planning indisponibles", e);
+        setCreneauxJour([]);
+      }
+    })();
+  }, [concours?.date]);
 
   useEffect(() => {
     (async () => {
@@ -140,6 +156,20 @@ export default function EditeurConcours() {
         membres: e.membres.map((m) => (m.chevalId === cid ? { ...m, chevalId: undefined } : m)),
       })),
     }));
+
+  // ---- Import des inscrits d'une séance du planning ----
+  const importerSeance = (creneauId: string) => {
+    const cr = creneauxJour.find((x) => x.id === creneauId);
+    if (!cr) return;
+    update((c) => {
+      const dejaLa = new Set(c.personnes.map((p) => p.cavalierId).filter(Boolean));
+      const ajouts = cr.inscrits
+        .filter((i) => !dejaLa.has(i.childId))
+        .map((i) => ({ id: `cav-${i.childId}`, prenom: i.prenom, cavalierId: i.childId, familyId: i.familyId }));
+      if (ajouts.length === 0) return c;
+      return { ...c, personnes: [...c.personnes, ...ajouts] };
+    });
+  };
 
   // ---- Ajout depuis les bases existantes ----
   const ajouterCavalierDeBase = (childId: string) => {
@@ -382,6 +412,14 @@ export default function EditeurConcours() {
         <div className="rounded-xl border border-blue-500/12 bg-white p-4">
           <div className="font-display font-bold text-gray-800 mb-2 text-sm">Personnes ({concours.personnes.length})</div>
           <div className="space-y-2 mb-3">
+            {creneauxJour.length > 0 && (
+              <select className={`${inp} bg-green-50 border-green-300`} value="" onChange={(e) => importerSeance(e.target.value)}>
+                <option value="">⤓ Importer les inscrits d&apos;une séance du planning…</option>
+                {creneauxJour.map((cr) => (
+                  <option key={cr.id} value={cr.id}>{cr.heure} · {cr.titre} ({cr.inscrits.length})</option>
+                ))}
+              </select>
+            )}
             <select className={inp} value="" onChange={(e) => ajouterCavalierDeBase(e.target.value)}>
               <option value="">+ Ajouter un cavalier (base)…</option>
               {cavBase
