@@ -7,7 +7,7 @@ import {
   AlertOctagon, AlertTriangle, CheckCircle2, UserPlus, Users,
 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
-import { analyser, compterPassagesPoneys } from "@/lib/concours/contraintes";
+import { analyser, compterPassagesPoneys, personnesOccupeesAuPassage } from "@/lib/concours/contraintes";
 import {
   getConcours, saveConcours,
   listerCavaliersBase, listerPoneysBase, listerCreneauxDuJour,
@@ -106,6 +106,11 @@ export default function EditeurConcours() {
   const erreurs = conflits.filter((c) => c.gravite === "erreur");
   const alertes = conflits.filter((c) => c.gravite === "alerte");
   const passagesParPoney = useMemo(() => (concours ? compterPassagesPoneys(concours) : {}), [concours]);
+  const occupesParPassage = useMemo(() => {
+    const m: Record<string, Set<string>> = {};
+    if (concours) for (const p of concours.passages) m[p.id] = personnesOccupeesAuPassage(concours, p.id);
+    return m;
+  }, [concours]);
 
   const update = (mut: (c: Concours) => Concours) => {
     setConcours((prev) => (prev ? mut(prev) : prev));
@@ -642,7 +647,14 @@ export default function EditeurConcours() {
                               ))}
                               <select className={`${inpSm} text-xs`} value="" onChange={(e) => assignerRole(p.id, type, e.target.value)}>
                                 <option value="">+ ajouter</option>
-                                {dispos.map((pe) => <option key={pe.id} value={pe.id}>{pe.prenom}</option>)}
+                                {dispos.map((pe) => {
+                                  const occupe = occupesParPassage[p.id]?.has(pe.id);
+                                  return (
+                                    <option key={pe.id} value={pe.id} disabled={occupe}>
+                                      {pe.prenom}{occupe ? " — occupé" : ""}
+                                    </option>
+                                  );
+                                })}
                               </select>
                             </div>
                           </div>

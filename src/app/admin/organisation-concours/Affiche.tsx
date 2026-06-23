@@ -1,16 +1,22 @@
 "use client";
 
-import { Clock, Trophy } from "lucide-react";
+import { Trophy } from "lucide-react";
 import type { Concours, Passage, RoleType } from "@/lib/concours/types";
 
 const LIBELLE_ROLE: Record<RoleType, string> = {
   coach: "Coach",
   placeur: "Placeurs",
   juge: "Juge",
-  camion: "Camion",
+  camion: "Aide camion",
   detente: "Détente",
 };
 const ORDRE_ROLE: RoleType[] = ["coach", "placeur", "juge", "camion", "detente"];
+
+/** Heure à laquelle un poste s'exerce : aide camion = prépa, le reste = passage. */
+function heureRole(p: Passage, type: RoleType): string {
+  if (type === "camion") return p.heurePrepa || p.heureACheval || p.heurePassage || "";
+  return p.heurePassage || p.heureACheval || "";
+}
 
 /** Rendu "affiche" d'un concours : utilisé pour l'aperçu et l'impression. */
 export default function Affiche({ concours }: { concours: Concours }) {
@@ -68,41 +74,50 @@ export default function Affiche({ concours }: { concours: Concours }) {
                   </div>
                 ) : (
                   <div key={p.id} className="rounded-xl border border-blue-500/10 bg-white p-4">
-                    <div className="flex items-center gap-3 mb-1">
-                      <span className={`${numBg} text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shrink-0`}>
+                    {/* En-tête : n° + équipe + heure de passage */}
+                    <div className="flex items-start gap-3 mb-2">
+                      <span className={`${numBg} text-white text-sm font-bold w-7 h-7 rounded-full flex items-center justify-center shrink-0`}>
                         {p.ordre}
                       </span>
-                      <span className="inline-flex items-center gap-1 font-display text-lg font-bold text-blue-900">
-                        <Clock size={15} className="text-gray-400" /> {p.heurePassage || p.heureACheval}
-                      </span>
-                      {p.categorie && (
-                        <span className="ml-auto text-xs font-body font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full">
-                          {p.categorie}
-                        </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-display text-lg font-bold text-gray-900 leading-tight">{p.nomEquipe}</div>
+                        {p.categorie && <div className="text-xs font-semibold text-blue-700">{p.categorie}</div>}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="font-display text-xl font-bold text-blue-900 leading-none">{p.heurePassage || p.heureACheval}</div>
+                        <div className="text-[10px] uppercase tracking-wide text-gray-400">passage</div>
+                      </div>
+                    </div>
+
+                    {/* Horaires clés */}
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {p.heurePrepa && <span className="text-[11px] bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">Prépa {p.heurePrepa}</span>}
+                      {p.heureACheval && <span className="text-[11px] bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">À cheval {p.heureACheval}</span>}
+                      {(p.heurePassage || p.heureACheval) && (
+                        <span className="text-[11px] bg-blue-100 text-blue-700 font-semibold rounded px-1.5 py-0.5">Passage {p.heurePassage || p.heureACheval}</span>
                       )}
                     </div>
 
-                    <div className="font-display text-base font-bold text-gray-800 mb-1">{p.nomEquipe}</div>
-                    {riders(p) && <div className="font-body text-xs text-gray-500 mb-3">{riders(p)}</div>}
+                    {/* Cavaliers */}
+                    {riders(p) && (
+                      <div className="font-body text-xs text-gray-600 mb-2">
+                        <span className="font-semibold text-gray-700">Cavaliers : </span>{riders(p)}
+                      </div>
+                    )}
 
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 font-body text-xs">
-                      {rolesPresents(p).map((t) => (
-                        <div key={t} className="flex gap-1.5">
-                          <span className="font-semibold text-gray-700 shrink-0">{LIBELLE_ROLE[t]} :</span>
-                          <span className={roleNoms(p, t) === "—" ? "text-red-500 font-semibold" : "text-gray-600"}>
-                            {roleNoms(p, t)}
-                          </span>
-                        </div>
-                      ))}
-                      {(() => {
-                        const prepa = [
-                          p.heurePrepa && `Prépa ${p.heurePrepa}`,
-                          p.heureACheval && `À cheval ${p.heureACheval}`,
-                        ]
-                          .filter(Boolean)
-                          .join("  •  ");
-                        return prepa ? <div className="col-span-2 text-gray-400 mt-0.5">{prepa}</div> : null;
-                      })()}
+                    {/* Qui fait quoi et à quelle heure */}
+                    <div className="space-y-1 font-body text-xs border-t border-gray-100 pt-2">
+                      {rolesPresents(p).map((t) => {
+                        const noms = roleNoms(p, t);
+                        const h = heureRole(p, t);
+                        return (
+                          <div key={t} className="flex items-baseline gap-2">
+                            <span className="font-semibold text-gray-700 shrink-0 w-[72px]">{LIBELLE_ROLE[t]}</span>
+                            <span className="text-gray-400 shrink-0 w-10 tabular-nums">{h}</span>
+                            <span className={noms === "—" ? "text-red-500 font-semibold" : "text-gray-700"}>{noms}</span>
+                          </div>
+                        );
+                      })}
                     </div>
 
                     {p.noteRelais && (

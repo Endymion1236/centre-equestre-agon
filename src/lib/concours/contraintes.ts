@@ -177,6 +177,29 @@ export function compterPassagesPoneys(concours: Concours): Record<string, number
   }
   return cpt;
 }
+
+/**
+ * Personnes déjà occupées (en piste ou tenant un poste) pendant le créneau de
+ * PASSAGE d'un passage donné. Sert à bloquer l'affectation à un rôle de
+ * quelqu'un qui est déjà pris sur ce créneau (la prépa/camion, souple, ne bloque pas).
+ */
+export function personnesOccupeesAuPassage(concours: Concours, passageId: string): Set<string> {
+  const cible = concours.passages.find((p) => p.id === passageId);
+  const occupes = new Set<string>();
+  if (!cible || cible.evenement) return occupes;
+  const fCible = fenetrePassage(cible);
+  if (!fCible) return occupes;
+  for (const [pid, liste] of occupationsParPersonne(concours)) {
+    for (const o of liste) {
+      if (!estDure(o.type)) continue; // prépa/camion = souple
+      if (chevauche(o.fenetre, fCible)) {
+        occupes.add(pid);
+        break;
+      }
+    }
+  }
+  return occupes;
+}
 export function analyser(concours: Concours): Conflit[] {
   const conflits: Conflit[] = [];
   const nom = (id: string): string => {
