@@ -123,19 +123,21 @@ export function occupationsParPersonne(concours: Concours): Map<string, Occupati
         });
     }
 
-    if (fPass) {
-      for (const r of p.roles) {
-        // Le camion (prépa) est souple : on le traite comme de la prépa, pas comme
-        // un poste bloquant à la minute exacte du passage.
-        const typeOcc: TypeOccupation = r.type === "camion" ? "prepa" : "role";
-        for (const pid of r.personneIds) {
-          add(pid, {
-            passageId: p.id,
-            fenetre: fPass,
-            type: typeOcc,
-            detail: `${LIBELLE_ROLE[r.type]} (${p.nomEquipe})`,
-          });
-        }
+    for (const r of p.roles) {
+      // Placeurs / juges / coach : calés sur le PASSAGE de l'équipe.
+      // Aide camion : calé sur la PRÉPA de l'équipe (souple) — c'est au camion,
+      // pendant la préparation, pas pendant le passage en piste.
+      const estCamion = r.type === "camion";
+      const fenetre = estCamion ? fPrep ?? fPass : fPass;
+      if (!fenetre) continue;
+      const typeOcc: TypeOccupation = estCamion ? "prepa" : "role";
+      for (const pid of r.personneIds) {
+        add(pid, {
+          passageId: p.id,
+          fenetre,
+          type: typeOcc,
+          detail: `${LIBELLE_ROLE[r.type]} (${p.nomEquipe})`,
+        });
       }
     }
   }
@@ -183,6 +185,39 @@ export function analyser(concours: Concours): Conflit[] {
     }
   }
   conflits.push(...chevauchements.values());
+
+  // 1bis) Cumuls sur un même passage : une personne ne peut pas être à la fois
+  // cavalière et tenir un poste "en piste" (placeur/juge/coach) sur SON passage,
+  // ni cumuler deux de ces postes. (L'aide camion, qui est sur la prépa, est exclue.)
+  const joindre = (arr: string[]): string =>
+    arr.length <= 1 ? arr[0] ?? "" : `${arr.slice(0, -1).join(", ")} et ${arr[arr.length - 1]}`;
+  const LABEL_DUTY: Record<string, string> = { cavalier: "cavalier", coach: "coach", placeur: "placeur", juge: "juge" };
+  for (const p of concours.passages) {
+    if (p.evenement) continue;
+    const duties = new Map<string, Set<string>>();
+    const addDuty = (pid: string, duty: string) => {
+      if (!pid) return;
+      const s = duties.get(pid) ?? new Set<string>();
+      s.add(duty);
+      duties.set(pid, s);
+    };
+    for (const part of p.participants) addDuty(part.personneId, "cavalier");
+    for (const r of p.roles) {
+      if (r.type === "camion" || r.type === "detente") continue; // postes souples / prépa
+      for (const pid of r.personneIds) addDuty(pid, r.type);
+    }
+    for (const [pid, set] of duties) {
+      if (set.size >= 2) {
+        const libelles = [...set].map((d) => LABEL_DUTY[d] ?? d);
+        conflits.push({
+          gravite: "erreur",
+          personneId: pid,
+          passageIds: [p.id],
+          message: `${nom(pid)} ne peut pas être à la fois ${joindre(libelles)} sur « ${p.nomEquipe} » (${p.heurePassage ?? p.heureACheval}).`,
+        });
+      }
+    }
+  }
 
   // 2) Rôles non pourvus (hors rôles optionnels comme l'aide camion).
   for (const p of concours.passages) {
