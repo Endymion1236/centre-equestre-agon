@@ -163,12 +163,41 @@ export default function EditeurConcours() {
     const cr = creneauxJour.find((x) => x.id === creneauId);
     if (!cr) return;
     update((c) => {
-      const dejaLa = new Set(c.personnes.map((p) => p.cavalierId).filter(Boolean));
-      const ajouts = cr.inscrits
-        .filter((i) => !dejaLa.has(i.childId))
-        .map((i) => ({ id: `cav-${i.childId}`, prenom: i.prenom, cavalierId: i.childId, familyId: i.familyId }));
-      if (ajouts.length === 0) return c;
-      return { ...c, personnes: [...c.personnes, ...ajouts] };
+      const chevaux = c.chevaux.map((ch) => ({ ...ch }));
+      // Retrouve (ou ajoute) le poney attribué et renvoie son id dans le concours.
+      const resoudrePoney = (poneyNom?: string): string | undefined => {
+        if (!poneyNom || !poneyNom.trim()) return undefined;
+        const cible = poneyNom.trim().toLowerCase();
+        const exist = chevaux.find((ch) => ch.nom.trim().toLowerCase() === cible);
+        if (exist) return exist.id;
+        const base = poneyBase.find((po) => po.nom.trim().toLowerCase() === cible);
+        if (base) {
+          const id = `eq-${base.equideId}`;
+          if (!chevaux.some((ch) => ch.id === id)) chevaux.push({ id, nom: base.nom, equideId: base.equideId });
+          return id;
+        }
+        const id = genId(poneyNom);
+        chevaux.push({ id, nom: poneyNom.trim() });
+        return id;
+      };
+
+      const personnes = c.personnes.map((p) => ({ ...p }));
+      for (const i of cr.inscrits) {
+        const poneyId = resoudrePoney(i.poneyNom);
+        const existant = personnes.find((p) => p.cavalierId === i.childId);
+        if (existant) {
+          if (poneyId && !existant.poneyAttribueId) existant.poneyAttribueId = poneyId;
+        } else {
+          personnes.push({
+            id: `cav-${i.childId}`,
+            prenom: i.prenom,
+            cavalierId: i.childId,
+            familyId: i.familyId,
+            poneyAttribueId: poneyId,
+          });
+        }
+      }
+      return { ...c, personnes, chevaux };
     });
   };
 
@@ -223,16 +252,19 @@ export default function EditeurConcours() {
   const setMembre = (eid: string, idx: number, field: "personneId" | "chevalId", value: string) =>
     update((c) => ({
       ...c,
-      equipes: (c.equipes || []).map((e) =>
-        e.id === eid
-          ? {
-              ...e,
-              membres: e.membres.map((m, i) =>
-                i === idx ? { ...m, [field]: field === "chevalId" ? value || undefined : value } : m,
-              ),
-            }
-          : e,
-      ),
+      equipes: (c.equipes || []).map((e) => {
+        if (e.id !== eid) return e;
+        return {
+          ...e,
+          membres: e.membres.map((m, i) => {
+            if (i !== idx) return m;
+            if (field === "chevalId") return { ...m, chevalId: value || undefined };
+            // Choix d'un cavalier : pré-remplit son poney attribué si la case est vide.
+            const pers = c.personnes.find((p) => p.id === value);
+            return { ...m, personneId: value, chevalId: m.chevalId || pers?.poneyAttribueId || undefined };
+          }),
+        };
+      }),
     }));
   const supprimerMembre = (eid: string, idx: number) =>
     update((c) => ({
@@ -281,7 +313,12 @@ export default function EditeurConcours() {
   const setParticipant = (pid: string, idx: number, field: "personneId" | "chevalId", value: string) =>
     patchPassageFn(pid, (p) => ({
       ...p,
-      participants: p.participants.map((x, i) => (i === idx ? { ...x, [field]: value || undefined } : x)),
+      participants: p.participants.map((x, i) => {
+        if (i !== idx) return x;
+        if (field === "chevalId") return { ...x, chevalId: value || undefined };
+        const pers = concours?.personnes.find((pe) => pe.id === value);
+        return { ...x, personneId: value, chevalId: x.chevalId || pers?.poneyAttribueId || undefined };
+      }),
     }));
   const supprimerParticipant = (pid: string, idx: number) =>
     patchPassageFn(pid, (p) => ({ ...p, participants: p.participants.filter((_, i) => i !== idx) }));
@@ -439,7 +476,10 @@ export default function EditeurConcours() {
           <div className="space-y-1.5 max-h-72 overflow-auto">
             {concours.personnes.map((p) => (
               <div key={p.id} className="flex items-center gap-2 text-sm">
-                <span className="font-body text-gray-800 w-24 truncate shrink-0">{p.prenom}</span>
+                <span className="font-body text-gray-800 truncate shrink-0 max-w-[150px]" title={p.poneyAttribueId ? `Poney attribué : ${concours.chevaux.find((ch) => ch.id === p.poneyAttribueId)?.nom ?? ""}` : undefined}>
+                  {p.prenom}
+                  {p.poneyAttribueId && <span className="text-blue-500"> · {concours.chevaux.find((ch) => ch.id === p.poneyAttribueId)?.nom ?? ""}</span>}
+                </span>
                 <label className="inline-flex items-center gap-1 text-xs text-gray-500"><input type="checkbox" checked={!!p.peutCoacher} onChange={() => toggleCap(p.id, "peutCoacher")} /> coach</label>
                 <label className="inline-flex items-center gap-1 text-xs text-gray-500"><input type="checkbox" checked={!!p.peutJuger} onChange={() => toggleCap(p.id, "peutJuger")} /> juge</label>
                 <label className="inline-flex items-center gap-1 text-xs text-gray-500" title="Peut être responsable de la prépa au camion"><input type="checkbox" checked={!!p.peutResponsableCamion} onChange={() => toggleCap(p.id, "peutResponsableCamion")} /> camion</label>

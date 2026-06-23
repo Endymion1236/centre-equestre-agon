@@ -72,6 +72,8 @@ export interface Personne {
   /** Si la personne vient de la base cavaliers : id du cavalier (families/children) + sa famille. */
   cavalierId?: string;
   familyId?: string;
+  /** Poney attribué pour la journée (importé du montoir) — pré-rempli dans les équipes/passages. */
+  poneyAttribueId?: string;
 }
 
 // -----------------------------------------------------------------------------

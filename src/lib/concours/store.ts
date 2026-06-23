@@ -137,7 +137,7 @@ export interface CreneauImport {
   titre: string;
   heure: string;
   type: string;
-  inscrits: { childId: string; prenom: string; familyId: string }[];
+  inscrits: { childId: string; prenom: string; familyId: string; poneyNom?: string }[];
 }
 
 /** Récupère les séances du planning à une date donnée (ISO "AAAA-MM-JJ"). */
@@ -152,6 +152,7 @@ export async function listerCreneauxDuJour(date: string): Promise<CreneauImport[
           childId: e.childId,
           prenom: e.childName || e.firstName || "?",
           familyId: e.familyId || "",
+          poneyNom: e.horseName || undefined,
         }))
         .filter((x: any) => x.childId);
       return {
