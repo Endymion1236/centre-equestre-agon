@@ -7,7 +7,7 @@ import {
   AlertOctagon, AlertTriangle, CheckCircle2, UserPlus, Users,
 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
-import { analyser } from "@/lib/concours/contraintes";
+import { analyser, compterPassagesPoneys } from "@/lib/concours/contraintes";
 import {
   getConcours, saveConcours,
   listerCavaliersBase, listerPoneysBase, listerCreneauxDuJour,
@@ -105,6 +105,7 @@ export default function EditeurConcours() {
   const conflits = useMemo(() => (concours ? analyser(concours) : []), [concours]);
   const erreurs = conflits.filter((c) => c.gravite === "erreur");
   const alertes = conflits.filter((c) => c.gravite === "alerte");
+  const passagesParPoney = useMemo(() => (concours ? compterPassagesPoneys(concours) : {}), [concours]);
 
   const update = (mut: (c: Concours) => Concours) => {
     setConcours((prev) => (prev ? mut(prev) : prev));
@@ -467,6 +468,7 @@ export default function EditeurConcours() {
             {concours.chevaux.map((ch) => (
               <span key={ch.id} className="inline-flex items-center gap-1 text-xs bg-gray-100 rounded-full pl-2.5 pr-1 py-1">
                 {ch.nom}
+                {passagesParPoney[ch.id] ? <span className="text-blue-600 font-semibold">· {passagesParPoney[ch.id]} passage{passagesParPoney[ch.id] > 1 ? "s" : ""}</span> : null}
                 <button onClick={() => supprimerCheval(ch.id)} className="text-gray-400 hover:text-red-500"><X size={13} /></button>
               </span>
             ))}

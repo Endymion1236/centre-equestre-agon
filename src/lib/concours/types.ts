@@ -187,6 +187,8 @@ export interface Conflit {
   gravite: GraviteConflit;
   /** Personne concernée (si applicable). */
   personneId?: string;
+  /** Poney concerné (si applicable). */
+  chevalId?: string;
   /** Passages en cause. */
   passageIds: string[];
   /** Explication lisible : "Julie est juge en carrière ET à cheval au manège à 10h00". */

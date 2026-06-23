@@ -144,15 +144,46 @@ export function occupationsParPersonne(concours: Concours): Map<string, Occupati
   return map;
 }
 
-// ---------------------------------------------------------------------------
-// Analyse : la fonction que la page appelle
-// ---------------------------------------------------------------------------
+/** Construit la liste des occupations de chaque poney (un poney = une ressource). */
+export function occupationsParCheval(concours: Concours): Map<string, Occupation[]> {
+  const map = new Map<string, Occupation[]>();
+  const add = (chevalId: string, occ: Occupation) => {
+    const arr = map.get(chevalId) ?? [];
+    arr.push(occ);
+    map.set(chevalId, arr);
+  };
+  for (const p of concours.passages) {
+    if (p.evenement) continue;
+    const fPass = fenetrePassage(p);
+    const fPrep = fenetrePrepa(p);
+    for (const part of p.participants) {
+      if (!part.chevalId) continue;
+      if (fPass) add(part.chevalId, { passageId: p.id, fenetre: fPass, type: "piste", detail: `monté sur « ${p.nomEquipe} »` });
+      if (fPrep) add(part.chevalId, { passageId: p.id, fenetre: fPrep, type: "prepa", detail: `en échauffement pour « ${p.nomEquipe} »` });
+    }
+  }
+  return map;
+}
+
+/** Nombre de passages où chaque poney est monté (chevalId -> nombre). */
+export function compterPassagesPoneys(concours: Concours): Record<string, number> {
+  const cpt: Record<string, number> = {};
+  for (const p of concours.passages) {
+    if (p.evenement) continue;
+    for (const part of p.participants) {
+      if (!part.chevalId) continue;
+      cpt[part.chevalId] = (cpt[part.chevalId] ?? 0) + 1;
+    }
+  }
+  return cpt;
+}
 export function analyser(concours: Concours): Conflit[] {
   const conflits: Conflit[] = [];
   const nom = (id: string): string => {
     const pers = concours.personnes.find((x) => x.id === id);
     return pers ? pers.prenom : id;
   };
+  const nomCheval = (id: string): string => concours.chevaux.find((x) => x.id === id)?.nom ?? id;
 
   // 1) Chevauchements : une même personne à deux endroits en même temps.
   // On garde un seul signalement par (personne + paire de passages), le plus grave.
@@ -185,6 +216,35 @@ export function analyser(concours: Concours): Conflit[] {
     }
   }
   conflits.push(...chevauchements.values());
+
+  // 1ter) Un poney ne peut pas être à deux endroits en même temps.
+  // piste + piste = impossible (erreur). Avec de l'échauffement = alerte
+  // (échauffement à anticiper, typiquement un poney partagé entre deux cavaliers).
+  const conflitsPoney = new Map<string, Conflit>();
+  const occCh = occupationsParCheval(concours);
+  for (const [chevalId, liste] of occCh) {
+    for (let i = 0; i < liste.length; i++) {
+      for (let j = i + 1; j < liste.length; j++) {
+        const a = liste[i];
+        const b = liste[j];
+        if (a.passageId === b.passageId) continue;
+        if (!chevauche(a.fenetre, b.fenetre)) continue;
+        const dur = estDure(a.type) && estDure(b.type);
+        const cle = `${chevalId}|${[a.passageId, b.passageId].sort().join(",")}`;
+        const existant = conflitsPoney.get(cle);
+        if (existant && existant.gravite === "erreur") continue;
+        conflitsPoney.set(cle, {
+          gravite: dur ? "erreur" : "alerte",
+          chevalId,
+          passageIds: [a.passageId, b.passageId],
+          message: dur
+            ? `Le poney ${nomCheval(chevalId)} est monté sur deux passages en même temps (${a.detail} / ${b.detail}).`
+            : `Le poney ${nomCheval(chevalId)} est ${a.detail} et ${b.detail} sur un créneau serré — anticipe l'échauffement.`,
+        });
+      }
+    }
+  }
+  conflits.push(...conflitsPoney.values());
 
   // 1bis) Cumuls sur un même passage : une personne ne peut pas être à la fois
   // cavalière et tenir un poste "en piste" (placeur/juge/coach) sur SON passage,
