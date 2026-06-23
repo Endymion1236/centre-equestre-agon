@@ -438,26 +438,23 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     onRefresh();
   };
 
-  // ── Vider une journée entière (toutes les tâches de tous les salariés) ──
-  const viderJournee = async (jour: JourSemaine) => {
-    const jourTaches = taches.filter(t => t.jour === jour);
-    if (jourTaches.length === 0) {
-      toast(`Aucune tâche à supprimer le ${JOURS_LABELS[jour]}`, "info");
-      return;
-    }
+  // ── Vider une case : toutes les tâches d'une personne sur un jour précis ──
+  const viderCellule = async (salarieId: string, jour: JourSemaine) => {
+    const cellTaches = taches.filter(t => t.salarieId === salarieId && t.jour === jour);
+    if (cellTaches.length === 0) return;
+    const sal = salaries.find(s => s.id === salarieId);
     if (!confirm(
-      `Supprimer TOUTES les tâches du ${JOURS_LABELS[jour]} ?\n\n` +
-      `${jourTaches.length} tâche(s) de tous les salariés seront définitivement supprimées.\n` +
-      `Cette action est irréversible.`
+      `Supprimer toutes les tâches de ${sal?.nom || "ce salarié"} le ${JOURS_LABELS[jour]} ?\n\n` +
+      `${cellTaches.length} tâche(s) seront définitivement supprimées (cours/stages importés inclus).`
     )) return;
     try {
-      // writeBatch est limité à 500 opérations → on découpe par lots de 450.
-      for (let i = 0; i < jourTaches.length; i += 450) {
+      // writeBatch limité à 500 opérations → découpage par lots de 450.
+      for (let i = 0; i < cellTaches.length; i += 450) {
         const batch = writeBatch(db);
-        jourTaches.slice(i, i + 450).forEach(t => batch.delete(doc(db, "taches-planifiees", t.id)));
+        cellTaches.slice(i, i + 450).forEach(t => batch.delete(doc(db, "taches-planifiees", t.id)));
         await batch.commit();
       }
-      toast(`${jourTaches.length} tâche(s) supprimée(s) — ${JOURS_LABELS[jour]} vidé`, "success");
+      toast(`${cellTaches.length} tâche(s) supprimée(s) — ${sal?.nom || ""} ${JOURS_LABELS[jour]}`, "success");
       onRefresh();
     } catch (e: any) {
       toast(`Erreur : ${e.message}`, "error");
@@ -753,32 +750,52 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       }
     }
 
-    // ── 2. Lister ce qu'on va supprimer ──
-    // Toutes les tâches importées depuis le planning (tacheTypeId === "__planning__")
-    // et qui appartiennent à la semaine en cours. Les tâches manuelles ajoutées
-    // (avec un vrai tacheTypeId) ne sont PAS touchées.
-    const tachesAEffacer = taches.filter(t =>
+    // ── 2. Synchro non destructive : on garde les cours/stages déjà importés ──
+    // (et leur statut 'fait'), on crée seulement les manquants, on retire les
+    // obsolètes. Clé d'unicité d'un cours/stage : salarié + jour + heure + titre.
+    // Les tâches manuelles (vrai tacheTypeId) ne sont JAMAIS touchées.
+    const keyOf = (salarieId: string, jour: string, heure: string, label: string) =>
+      `${salarieId}|${jour}|${heure}|${(label || "").trim()}`;
+
+    const existantes = taches.filter(t =>
       t.tacheTypeId === "__planning__" && t.semaine === semaine
     );
+    const existKeys = new Map<string, TachePlanifiee>();
+    existantes.forEach(t => existKeys.set(keyOf(t.salarieId, t.jour, t.heureDebut, t.tacheLabel), t));
 
-    // ── 3. Garde-fou : si rien à faire dans les deux sens, on sort ──
-    if (targetCreneaux.length === 0 && tachesAEffacer.length === 0) {
-      toast("Aucun cours/stage avec moniteur reconnu cette semaine", "info");
+    const aCreer: typeof targetCreneaux = [];
+    const keysVues = new Set<string>();
+    for (const tc of targetCreneaux) {
+      const k = keyOf(tc.salarieId, tc.jour, tc.creneau.startTime, tc.creneau.activityTitle);
+      if (keysVues.has(k)) continue;       // doublon entre deux créneaux identiques → ignoré
+      keysVues.add(k);
+      if (!existKeys.has(k)) aCreer.push(tc); // déjà présent → on garde, sinon à créer
+    }
+    // Obsolètes : tâches __planning__ qui ne correspondent plus à aucun créneau actuel
+    const aSupprimer = existantes.filter(t =>
+      !keysVues.has(keyOf(t.salarieId, t.jour, t.heureDebut, t.tacheLabel))
+    );
+    const nbGardees = existantes.length - aSupprimer.length;
+
+    // ── 3. Garde-fou : si rien à créer ni à supprimer, le planning est déjà à jour ──
+    if (aCreer.length === 0 && aSupprimer.length === 0) {
+      toast(targetCreneaux.length === 0
+        ? "Aucun cours/stage avec moniteur reconnu cette semaine"
+        : "Planning déjà à jour — aucun doublon créé", "info");
       return;
     }
 
     // ── 4. Confirmation utilisateur avec récap clair ──
     const confirmed = confirm(
-      `Réimporter le planning de la semaine ?\n\n` +
-      (tachesAEffacer.length > 0
-        ? `🗑️ ${tachesAEffacer.length} ancienne(s) tâche(s) importée(s) seront SUPPRIMÉES (y compris si déjà cochées 'fait')\n`
-        : "") +
-      `📥 ${targetCreneaux.length} nouvelle(s) tâche(s) seront créées depuis le planning actuel\n\n` +
-      (targetCreneaux.length > 0
-        ? targetCreneaux.slice(0, 6).map(m =>
+      `Synchroniser le planning de la semaine ?\n\n` +
+      (nbGardees > 0 ? `✅ ${nbGardees} cours/stage déjà présent(s) CONSERVÉS (statut 'fait' gardé)\n` : "") +
+      (aCreer.length > 0 ? `📥 ${aCreer.length} nouveau(x) cours/stage ajouté(s)\n` : "") +
+      (aSupprimer.length > 0 ? `🗑️ ${aSupprimer.length} cours/stage obsolète(s) (plus au planning) supprimé(s)\n` : "") +
+      (aCreer.length > 0
+        ? "\n" + aCreer.slice(0, 6).map(m =>
             `• ${JOURS_LABELS[m.jour]} ${m.creneau.startTime}→${m.creneau.endTime} : ${m.creneau.activityTitle} (${m.salarieName})`
           ).join("\n") +
-          (targetCreneaux.length > 6 ? `\n… et ${targetCreneaux.length - 6} autres` : "")
+          (aCreer.length > 6 ? `\n… et ${aCreer.length - 6} autres` : "")
         : "") +
       `\n\nLes tâches manuelles (non issues du planning) ne sont PAS touchées.`
     );
@@ -786,13 +803,13 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
 
     setImporting(true);
     try {
-      // ── 5. Supprimer les anciennes tâches __planning__ de la semaine ──
-      const deletePromises = tachesAEffacer.map(t => deleteDoc(doc(db, "taches-planifiees", t.id)));
+      // ── 5. Supprimer uniquement les cours/stages obsolètes ──
+      const deletePromises = aSupprimer.map(t => deleteDoc(doc(db, "taches-planifiees", t.id)));
       await Promise.all(deletePromises);
 
-      // ── 6. Recréer toutes les tâches depuis le planning actuel ──
+      // ── 6. Créer uniquement les nouveaux cours/stages (jamais de doublon) ──
       const createPromises: Promise<any>[] = [];
-      for (const { creneau, salarieId, salarieName, jour } of targetCreneaux) {
+      for (const { creneau, salarieId, salarieName, jour } of aCreer) {
         const startMin = heureToMin(creneau.startTime);
         const endMin = heureToMin(creneau.endTime);
         const duree = endMin - startMin;
@@ -815,19 +832,18 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       }
       await Promise.all(createPromises);
 
-      // Si on a importé au moins un créneau le dimanche, on active l'affichage
-      // du dimanche pour que l'admin voie bien ce qui vient d'être créé.
-      // (sinon l'utilisateur peut croire que rien n'a été importé puisque la
-      // colonne dimanche est cachée par défaut)
-      const hasSunday = targetCreneaux.some(t => t.jour === "dimanche");
+      // Si on a ajouté au moins un créneau le dimanche, on active l'affichage
+      // du dimanche pour que l'admin voie bien ce qui vient d'être ajouté.
+      const hasSunday = aCreer.some(t => t.jour === "dimanche");
       if (hasSunday && !inclureDimanche) {
         setInclureDimanche(true);
       }
 
       // ── 7. Toast récap ──
       const parts: string[] = [];
-      if (tachesAEffacer.length > 0) parts.push(`${tachesAEffacer.length} ancienne(s) supprimée(s)`);
-      if (targetCreneaux.length > 0) parts.push(`${targetCreneaux.length} nouvelle(s) importée(s)`);
+      if (aCreer.length > 0) parts.push(`${aCreer.length} ajouté(s)`);
+      if (nbGardees > 0) parts.push(`${nbGardees} conservé(s)`);
+      if (aSupprimer.length > 0) parts.push(`${aSupprimer.length} obsolète(s) retiré(s)`);
       toast(`✅ ${parts.join(" · ")}`, "success");
       onRefresh();
     } catch (e: any) {
@@ -1131,25 +1147,11 @@ Réponds de façon concise et pratique, en français.`,
             <th style={{padding:"6px 6px", textAlign:"left", fontSize:10, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0"}}>
               Salarié
             </th>
-            {jourDates.slice(0, nbJours).map(({jour, label}) => {
-              const nbJourTaches = taches.filter(t => t.jour === jour).length;
-              return (
-              <th key={jour} style={{padding:"6px 3px", textAlign:"center", fontSize:10, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0"}}>
-                <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:3}}>
-                  <span style={{whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"100%"}}>{label}</span>
-                  {isAdmin && nbJourTaches > 0 && (
-                    <button
-                      onClick={() => viderJournee(jour)}
-                      title={`Vider la journée — supprimer les ${nbJourTaches} tâche${nbJourTaches>1?"s":""}`}
-                      style={{display:"inline-flex", alignItems:"center", gap:3, padding:"1px 6px", fontSize:9, fontWeight:600, color:"#dc2626", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:6, cursor:"pointer", whiteSpace:"nowrap"}}
-                    >
-                      <Trash2 size={10}/> Vider
-                    </button>
-                  )}
-                </div>
+            {jourDates.slice(0, nbJours).map(({jour, label}) => (
+              <th key={jour} style={{padding:"6px 3px", textAlign:"center", fontSize:10, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>
+                {label}
               </th>
-              );
-            })}
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -1439,6 +1441,13 @@ Réponds de façon concise et pratique, en français.`,
                               title="Compacter la journée (tasser les tâches sans toucher aux cours)"
                               style={{padding:"3px 6px", borderRadius:6, border:"1px dashed #cbd5e1", background:"transparent", color:"#64748b", fontFamily:"sans-serif", fontSize:11, cursor:"pointer", display:"flex", alignItems:"center", gap:2}}>
                               <AlignVerticalSpaceAround size={11}/>
+                            </button>
+                          )}
+                          {cellTaches.length > 0 && (
+                            <button onClick={() => viderCellule(sal.id, jour)}
+                              title={`Vider — supprimer les ${cellTaches.length} tâche${cellTaches.length>1?"s":""} de ${sal.nom} le ${JOURS_LABELS[jour]}`}
+                              style={{padding:"3px 6px", borderRadius:6, border:"1px dashed #fecaca", background:"transparent", color:"#dc2626", fontFamily:"sans-serif", fontSize:11, cursor:"pointer", display:"flex", alignItems:"center", gap:2}}>
+                              <Trash2 size={11}/>
                             </button>
                           )}
                         </div>
