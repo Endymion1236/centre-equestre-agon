@@ -436,7 +436,9 @@ export default function PlanningPage() {
           await updateDoc(doc(db, "creneaux", t.id), update);
         }
         toast(`✅ Stage mis à jour (${targets.length} jour${targets.length > 1 ? "s" : ""})`, "success");
-      } else if (editApplyAll) {
+      } else if (editApplyAll && !isStageType) {
+        // Cours récurrents UNIQUEMENT (jamais les stages : eux passent par la
+        // branche stage ci-dessus, bornée à la semaine).
         // Charger TOUS les créneaux futurs depuis Firestore (pas seulement la semaine affichée)
         const today = new Date().toISOString().split("T")[0];
         const allSnap = await getDocs(query(

@@ -65,6 +65,7 @@ export default function EditCreneauModal({
   const moniteurChanged = JSON.stringify([...currentMoniteurs].sort()) !== JSON.stringify([...initialMoniteurs].sort());
   const enrolledCount = ((creneau as any).enrolled || []).length;
   const titleChanged = (form.activityTitle || "").trim() !== (creneau.activityTitle || "").trim();
+  const isStage = creneau.activityType === "stage" || creneau.activityType === "stage_journee";
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
       <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
@@ -149,8 +150,12 @@ export default function EditCreneauModal({
               );
             })()}
 
-            {/* Portée du changement de moniteur — apparaît uniquement si changement détecté */}
-            {moniteurChanged && (
+            {/* Portée du changement de moniteur — apparaît si changement détecté.
+                Masqué pour les STAGES : leur portée est gérée par la case verte
+                "tous les jours de ce stage" (bornée à la semaine). Le sélecteur
+                ambre ci-dessous est la logique des cours récurrents (même jour de
+                la semaine sur toutes les dates), inadaptée aux stages multijours. */}
+            {moniteurChanged && !isStage && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex flex-col gap-2">
                 <div className="font-body text-xs font-semibold text-amber-800">
                   📋 Appliquer ce changement de moniteur à…
