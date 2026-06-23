@@ -5,6 +5,7 @@ import { loadTemplate } from "@/lib/email-template-loader";
 import { compareCreneaux } from "@/lib/creneau-sort";
 import { logEmail } from "@/lib/email-log";
 import { addDaysParis } from "@/lib/date-local";
+import { isRecipientAllowed, blockedLog } from "@/lib/email-guard";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -21,9 +22,9 @@ export async function GET(req: NextRequest) {
   }
 
   const results = {
-    monitorRecap: { pushSent: 0, emailsSent: 0, monitors: [] as string[] },
-    familyReminders: { pushSent: 0, emailsSent: 0, errors: 0, families: 0 },
-    soldeStagej7: { emailsSent: 0, errors: 0 },
+    monitorRecap: { pushSent: 0, emailsSent: 0, blocked: 0, monitors: [] as string[] },
+    familyReminders: { pushSent: 0, emailsSent: 0, errors: 0, blocked: 0, families: 0 },
+    soldeStagej7: { emailsSent: 0, errors: 0, blocked: 0 },
   };
 
   const resendKey = process.env.RESEND_API_KEY;
@@ -153,6 +154,11 @@ export async function GET(req: NextRequest) {
           </div>`;
 
           for (const email of emails) {
+            if (!isRecipientAllowed(email)) {
+              results.monitorRecap.blocked++;
+              console.log(blockedLog(email, "cron_monitor_recap"));
+              continue;
+            }
             const subject = `📋 Planning ${todayLabel} — ${isPersonal ? `${monitorCreneaux.length} cours` : `${coursToShow.length} cours`}`;
             try {
               const resendRes = await fetch("https://api.resend.com/emails", {
@@ -251,6 +257,11 @@ export async function GET(req: NextRequest) {
       if (resendKey) {
         for (const [email, { parentName, items }] of recipients) {
           try {
+            if (!isRecipientAllowed(email)) {
+              results.familyReminders.blocked++;
+              console.log(blockedLog(email, "cron_rappel_j1"));
+              continue;
+            }
             const childrenStr = [...new Set(items.map(i => i.childName))].filter(Boolean).join(", ");
 
             // Construire les blocs HTML pour chaque séance
@@ -349,6 +360,11 @@ export async function GET(req: NextRequest) {
 
       for (const [familyId, data] of Object.entries(familiesJ7)) {
         try {
+          if (!isRecipientAllowed(data.email)) {
+            results.soldeStagej7.blocked++;
+            console.log(blockedLog(data.email, "cron_stage_solde"));
+            continue;
+          }
           const totalSolde = data.items.reduce((s, i) => s + i.solde, 0);
           const activites = data.items.map(i => i.activityTitle).join(", ");
 
