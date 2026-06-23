@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   Save, Printer, ArrowLeft, Plus, Trash2, Loader2, X,
-  AlertOctagon, AlertTriangle, CheckCircle2, UserPlus, Users,
+  AlertOctagon, AlertTriangle, CheckCircle2, UserPlus, Users, Wand2,
 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { analyser, compterPassagesPoneys, personnesOccupeesAuPassage } from "@/lib/concours/contraintes";
+import { attribuerAuto } from "@/lib/concours/attribution";
 import {
   getConcours, saveConcours,
   listerCavaliersBase, listerPoneysBase, listerCreneauxDuJour,
@@ -189,9 +190,11 @@ export default function EditeurConcours() {
       const personnes = c.personnes.map((p) => ({ ...p }));
       for (const i of cr.inscrits) {
         const poneyId = resoudrePoney(i.poneyNom);
+        const cav = cavBase.find((x) => x.childId === i.childId);
         const existant = personnes.find((p) => p.cavalierId === i.childId);
         if (existant) {
           if (poneyId && !existant.poneyAttribueId) existant.poneyAttribueId = poneyId;
+          if (cav?.naissance && !existant.naissance) existant.naissance = cav.naissance;
         } else {
           personnes.push({
             id: `cav-${i.childId}`,
@@ -199,6 +202,7 @@ export default function EditeurConcours() {
             cavalierId: i.childId,
             familyId: i.familyId,
             poneyAttribueId: poneyId,
+            naissance: cav?.naissance,
           });
         }
       }
@@ -217,7 +221,7 @@ export default function EditeurConcours() {
         ...c,
         personnes: [
           ...c.personnes,
-          { id: `cav-${childId}`, prenom: cav.prenom, cavalierId: cav.childId, familyId: cav.familyId },
+          { id: `cav-${childId}`, prenom: cav.prenom, cavalierId: cav.childId, familyId: cav.familyId, naissance: cav.naissance },
         ],
       };
     });
@@ -391,6 +395,22 @@ export default function EditeurConcours() {
   const passagesTerrain = (t: string) => concours.passages.filter((p) => p.terrain === t).sort((a, b) => a.ordre - b.ordre);
   const rappelsTexte = (concours.rappels ?? []).join("\n");
 
+  // Toutes les équipes sont-elles déterminées ? (chaque passage non-événement a des cavaliers)
+  const passagesReels = concours.passages.filter((p) => !p.evenement);
+  const equipesDeterminees = passagesReels.length > 0 && passagesReels.every((p) => p.participants.length > 0);
+
+  const lancerAttributionAuto = () => {
+    const res = attribuerAuto(concours);
+    update(() => res.concours);
+    const reste = res.nonPourvus.reduce((s, x) => s + x.manque, 0);
+    toast(
+      reste > 0
+        ? `${res.pourvus} poste(s) attribué(s) · ${reste} non pourvu(s), à compléter à la main`
+        : `${res.pourvus} poste(s) attribué(s) automatiquement`,
+      "success",
+    );
+  };
+
   return (
     <div className="max-w-[1200px] mx-auto px-4 py-6">
       {/* Barre du haut */}
@@ -402,6 +422,14 @@ export default function EditeurConcours() {
           <h1 className="font-display text-xl font-bold text-blue-900 truncate">{concours.titre || "Concours"}</h1>
           {dirty && <span className="text-xs text-amber-600 font-semibold">Modifications non enregistrées</span>}
         </div>
+        <button
+          onClick={lancerAttributionAuto}
+          disabled={!equipesDeterminees}
+          title={equipesDeterminees ? "Attribuer automatiquement les postes manquants" : "Détermine d'abord toutes les équipes (un cavalier au moins par passage)"}
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-purple-300 text-purple-700 font-body text-sm font-semibold hover:bg-purple-50 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Wand2 size={15} /> Attribution auto
+        </button>
         <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-blue-500/20 text-blue-700 font-body text-sm font-semibold hover:bg-blue-50">
           <Printer size={15} /> Imprimer
         </button>

@@ -74,6 +74,8 @@ export interface Personne {
   familyId?: string;
   /** Poney attribué pour la journée (importé du montoir) — pré-rempli dans les équipes/passages. */
   poneyAttribueId?: string;
+  /** Date de naissance ISO (pour la règle « juge 14 ans minimum »). */
+  naissance?: string;
 }
 
 // -----------------------------------------------------------------------------

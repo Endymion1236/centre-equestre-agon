@@ -50,14 +50,14 @@ interface Fenetre {
 }
 
 /** Fenêtre "en piste" d'un passage (quand les rôles support sont nécessaires). */
-function fenetrePassage(p: Passage): Fenetre | null {
+export function fenetrePassage(p: Passage): Fenetre | null {
   const cheval = toMinutes(p.heurePassage) ?? toMinutes(p.heureACheval);
   if (cheval == null) return null;
   return { debut: cheval, fin: cheval + DUREE_PASSAGE_MIN };
 }
 
 /** Fenêtre de prépa/détente d'un cavalier (souple) : du début de prépa jusqu'au passage. */
-function fenetrePrepa(p: Passage): Fenetre | null {
+export function fenetrePrepa(p: Passage): Fenetre | null {
   const fp = fenetrePassage(p);
   if (!fp) return null;
   const acheval = toMinutes(p.heureACheval);
@@ -69,7 +69,7 @@ function fenetrePrepa(p: Passage): Fenetre | null {
   return { debut, fin: fp.debut };
 }
 
-function chevauche(a: Fenetre, b: Fenetre): boolean {
+export function chevauche(a: Fenetre, b: Fenetre): boolean {
   return a.debut < b.fin && b.debut < a.fin;
 }
 
@@ -345,4 +345,28 @@ export function analyser(concours: Concours): Conflit[] {
   return conflits.sort((a, b) =>
     a.gravite === b.gravite ? 0 : a.gravite === "erreur" ? -1 : 1,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Récap par personne : la timeline de chacun dans la journée
+// ---------------------------------------------------------------------------
+export interface PlanningPersonne {
+  personneId: string;
+  prenom: string;
+  lignes: { heure: string; label: string }[];
+}
+
+/** Pour chaque personne : ses occupations triées par heure (prépa, en piste, postes…). */
+export function planningParPersonne(concours: Concours): PlanningPersonne[] {
+  const occ = occupationsParPersonne(concours);
+  const res: PlanningPersonne[] = [];
+  for (const [pid, liste] of occ) {
+    const pers = concours.personnes.find((p) => p.id === pid);
+    const lignes = liste
+      .slice()
+      .sort((a, b) => a.fenetre.debut - b.fenetre.debut)
+      .map((o) => ({ heure: toHHMM(o.fenetre.debut), label: o.detail }));
+    res.push({ personneId: pid, prenom: pers?.prenom ?? pid, lignes });
+  }
+  return res.sort((a, b) => a.prenom.localeCompare(b.prenom, "fr"));
 }

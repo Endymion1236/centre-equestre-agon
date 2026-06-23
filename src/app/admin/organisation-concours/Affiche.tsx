@@ -1,6 +1,7 @@
 "use client";
 
 import { Trophy } from "lucide-react";
+import { planningParPersonne } from "@/lib/concours/contraintes";
 import type { Concours, Passage, RoleType } from "@/lib/concours/types";
 
 const LIBELLE_ROLE: Record<RoleType, string> = {
@@ -44,6 +45,8 @@ export default function Affiche({ concours }: { concours: Concours }) {
   };
   const rolesPresents = (p: Passage): RoleType[] =>
     ORDRE_ROLE.filter((t) => p.roles.some((r) => r.type === t));
+
+  const recap = planningParPersonne(concours);
 
   return (
     <div id="affiche-print">
@@ -137,6 +140,20 @@ export default function Affiche({ concours }: { concours: Concours }) {
           );
         })}
       </div>
+
+      {recap.length > 0 && (
+        <div className="mt-5">
+          <div className="font-display font-bold text-blue-900 mb-2 text-base">Planning par personne</div>
+          <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1.5">
+            {recap.map((r) => (
+              <div key={r.personneId} className="text-xs font-body" style={{ breakInside: "avoid" }}>
+                <span className="font-semibold text-gray-800">{r.prenom}</span>
+                <span className="text-gray-600"> — {r.lignes.map((l) => `${l.heure} ${l.label}`).join("  ·  ")}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {concours.rappels && concours.rappels.length > 0 && (
         <div className="mt-5 rounded-xl bg-purple-50 border border-purple-200 p-4">

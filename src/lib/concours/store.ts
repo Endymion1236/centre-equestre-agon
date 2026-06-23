@@ -92,11 +92,22 @@ export interface CavalierBase {
   famille: string;
   galop?: string;
   familyId: string;
+  naissance?: string;
 }
 
 export interface PoneyBase {
   equideId: string;
   nom: string;
+}
+
+/** Convertit un champ date Firestore (Timestamp / Date / string) en ISO "AAAA-MM-JJ". */
+function toISODate(v: any): string | undefined {
+  if (!v) return undefined;
+  if (typeof v === "string") return v.slice(0, 10);
+  if (typeof v?.toDate === "function") return v.toDate().toISOString().slice(0, 10);
+  if (typeof v?.seconds === "number") return new Date(v.seconds * 1000).toISOString().slice(0, 10);
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  return undefined;
 }
 
 /** Aplatit tous les cavaliers (children) de toutes les familles. */
@@ -114,6 +125,7 @@ export async function listerCavaliersBase(): Promise<CavalierBase[]> {
         famille,
         galop: c.galopLevel,
         familyId: d.id,
+        naissance: toISODate(c.birthDate),
       });
     });
   });
