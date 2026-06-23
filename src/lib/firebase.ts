@@ -3,8 +3,7 @@ import { getAuth, GoogleAuthProvider, FacebookAuthProvider, browserLocalPersiste
 import {
   initializeFirestore,
   getFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
+  memoryLocalCache,
   type Firestore,
 } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
@@ -32,36 +31,33 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0
 
 export const auth = getAuth(app);
 
-// ─── Firestore avec cache local IndexedDB ──────────────────────────────
-// persistentLocalCache : met en cache les données lues localement, les
-// requêtes suivantes sont servies depuis le cache (2-3× plus rapide sur
-// les rechargements de page).
-// persistentMultipleTabManager : gère proprement le cas où l'utilisateur
-// ouvre plusieurs onglets (sinon erreur "failed-precondition").
+// ─── Firestore avec cache MÉMOIRE (memoryLocalCache) ───────────────────
+// On utilise un cache EN MÉMOIRE (pas IndexedDB) volontairement.
 //
-// Pourquoi ce try/catch ?
-// initializeFirestore ne peut être appelé qu'UNE SEULE FOIS par app. En
-// développement, Next.js fait du Hot Module Reload qui peut réévaluer ce
-// module → second appel → FirebaseError "Firestore has already been started".
-// Quand ça arrive, on retombe sur getFirestore(app) qui retourne l'instance
-// déjà initialisée. En prod, le try réussit toujours du premier coup.
+// Pourquoi ? persistentLocalCache (IndexedDB) impose un "primary lease" :
+// un seul contexte (onglet/PWA) peut détenir le verrou du cache disque à la
+// fois. Quand l'utilisateur a l'onglet navigateur ET l'appli bureau (PWA)
+// ouverts en même temps sur la même origine, les deux se battent pour ce
+// verrou → erreur "Failed to obtain primary lease" → chargements bloqués.
+//
+// Le cache mémoire n'a AUCUN verrou partagé : chaque instance a son propre
+// cache, indépendant. Aucun conflit possible entre onglet et appli bureau.
+// Compromis : pas de cache persistant entre rechargements (un poil moins
+// rapide) et pas d'offline — sans impact pour un outil d'admin en ligne.
+//
+// Le try/catch reste pour le Hot Module Reload de Next.js en dev :
+// initializeFirestore ne peut être appelé qu'une fois par app.
 let _db: Firestore;
 try {
   _db = initializeFirestore(app, {
-    localCache: persistentLocalCache({
-      tabManager: persistentMultipleTabManager(),
-    }),
+    localCache: memoryLocalCache(),
   });
 } catch (e: any) {
-  // En cas de réinit HMR, on récupère l'instance existante. En production
-  // ce cas ne se produit jamais (pas de hot-reload sur Vercel).
+  // Réinit HMR en dev → on récupère l'instance existante.
   if (e?.code === "failed-precondition" || /already been/i.test(e?.message || "")) {
     _db = getFirestore(app);
   } else {
-    // Autre erreur (ex: IndexedDB bloqué par le navigateur, quota plein) :
-    // on retombe sur le mode par défaut sans cache persistant — l'app
-    // continue de fonctionner, juste sans bénéficier du speedup.
-    console.warn("Firestore persistent cache unavailable, using default:", e);
+    console.warn("Firestore cache init failed, using default:", e);
     _db = getFirestore(app);
   }
 }
