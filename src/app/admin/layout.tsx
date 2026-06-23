@@ -44,6 +44,7 @@ import {
   BookMarked,
   RotateCw,
   MessageSquare,
+  Trophy,
 } from "lucide-react";
 
 const navItems = [
@@ -53,6 +54,7 @@ const navItems = [
   { href: "/admin/planning", icon: CalendarDays, label: "Planning" },
   { href: "/admin/montoir", icon: ClipboardList, label: "Montoir" },
   { href: "/admin/competitions", icon: Ticket, label: "Compétitions" },
+  { href: "/admin/organisation-concours", icon: Trophy, label: "Orga concours" },
   { href: "/admin/cavalerie", icon: Heart, label: "Cavalerie" },
   { href: "/admin/recurrences", icon: RotateCw, label: "Récurrences" },
   { href: "/admin/pedagogie", icon: GraduationCap, label: "Suivi péda." },

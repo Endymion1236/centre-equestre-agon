@@ -539,6 +539,11 @@ service cloud.firestore {
       allow write: if isStaff();
     }
 
+    // Organisation de concours (staff)
+    match /concours/{docId} {
+      allow read, write: if isStaff();
+    }
+
     // ── Bloc par défaut — DENY ALL ────────────────────────────────────────
     // Toute collection non listée ci-dessus est bloquée
     match /{document=**} {
