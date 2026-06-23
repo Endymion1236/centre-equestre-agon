@@ -125,12 +125,11 @@ export function occupationsParPersonne(concours: Concours): Map<string, Occupati
 
     for (const r of p.roles) {
       // Placeurs / juges / coach : calés sur le PASSAGE de l'équipe.
-      // Aide camion : calé sur la PRÉPA de l'équipe (souple) — c'est au camion,
-      // pendant la préparation, pas pendant le passage en piste.
-      const estCamion = r.type === "camion";
-      const fenetre = estCamion ? fPrep ?? fPass : fPass;
+      // Aide camion & détente : calés sur la PRÉPA (souples) — c'est avant le passage.
+      const souple = r.type === "camion" || r.type === "detente";
+      const fenetre = souple ? fPrep ?? fPass : fPass;
       if (!fenetre) continue;
-      const typeOcc: TypeOccupation = estCamion ? "prepa" : "role";
+      const typeOcc: TypeOccupation = souple ? "prepa" : "role";
       for (const pid of r.personneIds) {
         add(pid, {
           passageId: p.id,

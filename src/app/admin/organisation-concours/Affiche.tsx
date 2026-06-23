@@ -13,9 +13,9 @@ const LIBELLE_ROLE: Record<RoleType, string> = {
 };
 const ORDRE_ROLE: RoleType[] = ["coach", "placeur", "juge", "camion", "detente"];
 
-/** Heure à laquelle un poste s'exerce : aide camion = prépa, le reste = passage. */
+/** Heure à laquelle un poste s'exerce : aide camion & détente = prépa, le reste = passage. */
 function heureRole(p: Passage, type: RoleType): string {
-  if (type === "camion") return p.heurePrepa || p.heureACheval || p.heurePassage || "";
+  if (type === "camion" || type === "detente") return p.heurePrepa || p.heureACheval || p.heurePassage || "";
   return p.heurePassage || p.heureACheval || "";
 }
 

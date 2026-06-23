@@ -43,6 +43,7 @@ export interface ResultatAttribution {
  */
 export function attribuerAuto(concours: Concours): ResultatAttribution {
   const personnes = concours.personnes;
+  const byId = new Map(personnes.map((p) => [p.id, p]));
   const nonPourvus: ResultatAttribution["nonPourvus"] = [];
   let pourvus = 0;
 
@@ -62,7 +63,7 @@ export function attribuerAuto(concours: Concours): ResultatAttribution {
     const fPrep = fenetrePrepa(p);
     if (fPass) for (const part of p.participants) addBusy(part.personneId, fPass);
     for (const r of p.roles) {
-      const f = r.type === "camion" ? fPrep ?? fPass : fPass;
+      const f = r.type === "camion" || r.type === "detente" ? fPrep ?? fPass : fPass;
       if (!f) continue;
       for (const pid of r.personneIds) addBusy(pid, f);
     }
@@ -90,14 +91,21 @@ export function attribuerAuto(concours: Concours): ResultatAttribution {
     roles: p.roles.map((r) => ({ ...r, personneIds: [...r.personneIds] })),
   }));
 
+  // On remplit les postes contraints d'abord (coach/détente = vivier coach,
+  // juge = âge), les placeurs (ouverts à tous) en dernier, en gardant les coachs
+  // en réserve pour ne pas les gaspiller comme placeurs.
+  const PRIORITE: RoleType[] = ["coach", "juge", "placeur", "detente", "camion"];
+
   for (const p of passages) {
     if (p.evenement) continue;
     const fPass = fenetrePassage(p);
     const fPrep = fenetrePrepa(p);
     const ridersIci = new Set(p.participants.map((x) => x.personneId));
 
-    for (const r of p.roles) {
-      const fenetre = r.type === "camion" ? fPrep ?? fPass : fPass;
+    for (const type of PRIORITE) {
+      const r = p.roles.find((x) => x.type === type);
+      if (!r) continue;
+      const fenetre = type === "camion" || type === "detente" ? fPrep ?? fPass : fPass;
       if (!fenetre) continue;
       const dejaSurPassage = new Set<string>(p.roles.flatMap((x) => x.personneIds));
 
@@ -105,11 +113,19 @@ export function attribuerAuto(concours: Concours): ResultatAttribution {
         .filter((pe) => {
           if (ridersIci.has(pe.id)) return false; // pas les cavaliers de ce passage
           if (dejaSurPassage.has(pe.id)) return false; // pas deux postes sur le même passage
-          if (!eligible(pe, r.type)) return false;
+          if (!eligible(pe, type)) return false;
           return libre(pe.id, fenetre);
         })
         .map((pe) => pe.id)
-        .sort((a, b) => (charge.get(a) ?? 0) - (charge.get(b) ?? 0));
+        .sort((a, b) => {
+          // Sauf pour coach/détente, on garde les coachs (Nicolas/Emmeline) en réserve.
+          if (type !== "coach" && type !== "detente") {
+            const ca = byId.get(a)?.peutCoacher ? 1 : 0;
+            const cb = byId.get(b)?.peutCoacher ? 1 : 0;
+            if (ca !== cb) return ca - cb;
+          }
+          return (charge.get(a) ?? 0) - (charge.get(b) ?? 0);
+        });
 
       let k = 0;
       while (r.personneIds.length < r.nbRequis && k < candidats.length) {
@@ -120,7 +136,7 @@ export function attribuerAuto(concours: Concours): ResultatAttribution {
         pourvus++;
       }
       const manque = r.nbRequis - r.personneIds.length;
-      if (manque > 0 && !r.optionnel) nonPourvus.push({ passage: p.nomEquipe, role: r.type, manque });
+      if (manque > 0 && !r.optionnel) nonPourvus.push({ passage: p.nomEquipe, role: type, manque });
     }
   }
 

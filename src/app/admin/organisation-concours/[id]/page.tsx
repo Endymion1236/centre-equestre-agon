@@ -24,15 +24,25 @@ const inpSm = "px-2 py-1.5 rounded-md border border-blue-500/15 font-body text-s
 const LIBELLE_ROLE: Record<RoleType, string> = {
   coach: "Coach", placeur: "Placeurs", juge: "Juge", camion: "Aide camion", detente: "Détente",
 };
-const ROLES_EDITABLES: RoleType[] = ["coach", "placeur", "juge", "camion"];
+const ROLES_EDITABLES: RoleType[] = ["coach", "placeur", "juge", "detente", "camion"];
 
 function rolesDefaut(): RoleAssignation[] {
   return [
     { type: "coach", personneIds: [], nbRequis: 1 },
     { type: "placeur", personneIds: [], nbRequis: 2 },
     { type: "juge", personneIds: [], nbRequis: 1 },
+    { type: "detente", personneIds: [], nbRequis: 1, optionnel: true },
     { type: "camion", personneIds: [], nbRequis: 1, optionnel: true },
   ];
+}
+
+/** Complète un passage avec les postes manquants (migration des anciens passages). */
+function completerRoles(roles: RoleAssignation[]): RoleAssignation[] {
+  const out = [...roles];
+  for (const r of rolesDefaut()) {
+    if (!out.some((x) => x.type === r.type)) out.push(r);
+  }
+  return out;
 }
 
 function genId(base: string): string {
@@ -93,6 +103,7 @@ export default function EditeurConcours() {
       setLoading(true);
       try {
         const c = await getConcours(id);
+        if (c) c.passages = c.passages.map((p) => (p.evenement ? p : { ...p, roles: completerRoles(p.roles) }));
         setConcours(c);
       } catch (e) {
         console.error(e);
