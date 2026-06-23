@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
     monitorRecap: { pushSent: 0, emailsSent: 0, blocked: 0, monitors: [] as string[] },
     familyReminders: { pushSent: 0, emailsSent: 0, errors: 0, blocked: 0, families: 0 },
     soldeStagej7: { emailsSent: 0, errors: 0, blocked: 0 },
+    saisonRappel: { emailsSent: 0, errors: 0, blocked: 0, families: 0 },
   };
 
   const resendKey = process.env.RESEND_API_KEY;
@@ -202,8 +203,26 @@ export async function GET(req: NextRequest) {
     if (tomorrowCreneaux.length > 0) {
       const recipients = new Map<string, { parentName: string; familyId: string; items: { childName: string; coursTitle: string; horaire: string; moniteur: string; isStage: boolean }[] }>();
 
+      // ── Rappel J-1 = STAGES UNIQUEMENT, et seulement la veille du JOUR 1 ──
+      // Les cours réguliers ne reçoivent plus de rappel J-1 (cf. rappel de saison).
+      // "Jour 1" d'un stage = aucun créneau du même stage la veille de "demain".
+      // Comme les stages tournent lun→ven avec un week-end de battement, le 1er
+      // jour est toujours détecté (la veille — dimanche — n'a pas le stage).
+      const veilleStr = addDaysParis(dayShift); // jour précédant "demain"
+      const veilleSnap = await adminDb.collection("creneaux").where("date", "==", veilleStr).get();
+      const stagesDejaEnCours = new Set<string>(
+        veilleSnap.docs
+          .map(d => d.data() as any)
+          .filter((c: any) => c.activityType === "stage" || c.activityType === "stage_journee")
+          .map((c: any) => c.activityTitle)
+      );
+
       for (const c of tomorrowCreneaux) {
         const isStage = c.activityType === "stage" || c.activityType === "stage_journee";
+        // Plus aucun rappel J-1 pour les cours réguliers — uniquement les stages.
+        if (!isStage) continue;
+        // Stage déjà présent la veille → ce n'est pas le jour 1 → pas de rappel.
+        if (stagesDejaEnCours.has(c.activityTitle)) continue;
         for (const e of (c.enrolled || [])) {
           if (!e.familyId) continue;
 
@@ -423,6 +442,105 @@ export async function GET(req: NextRequest) {
       }
     } else {
       console.log("  → Aucun stage dans 7 jours");
+    }
+
+    // ══════════════════════════════════════
+    // JOB 4 : RAPPEL DE DÉBUT DE SAISON (cours réguliers) — envoi UNIQUE
+    // ══════════════════════════════════════
+    // Remplace les rappels hebdomadaires des cours : un seul email à la veille
+    // de la rentrée, listant à chaque famille son/ses créneau(x) récurrent(s).
+    // Config Vercel : SAISON_DEBUT_DATE = "2026-09-21" (jour de rentrée des cours).
+    // L'email part la VEILLE (20/09). Idempotent via un marqueur Firestore.
+    const saisonDebut = process.env.SAISON_DEBUT_DATE; // ex "2026-09-21"
+    if (saisonDebut && /^\d{4}-\d{2}-\d{2}$/.test(saisonDebut)) {
+      const debutDate = new Date(`${saisonDebut}T12:00:00`);
+      const veilleRentree = addDaysParis(-1, debutDate); // veille de la rentrée
+      const realToday = addDaysParis(0);                 // date réelle Paris (indépendante de target)
+
+      if (realToday === veilleRentree) {
+        const flagRef = adminDb.collection("system-flags").doc(`saison-rappel-${saisonDebut}`);
+        const flagSnap = await flagRef.get();
+        if (flagSnap.exists) {
+          console.log(`\n🎒 [JOB 4] Rappel de saison déjà envoyé pour ${saisonDebut} — skip`);
+        } else {
+          console.log(`\n🎒 [JOB 4] Rappel de début de saison (rentrée ${saisonDebut})`);
+          // Fenêtre = 1ère semaine de cours (rentrée → +6 jours) = le motif récurrent
+          const weekEnd = addDaysParis(6, debutDate);
+          const seasonSnap = await adminDb.collection("creneaux")
+            .where("date", ">=", saisonDebut).where("date", "<=", weekEnd).get();
+          const seasonCreneaux = seasonSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+            .filter((c: any) => c.activityType !== "stage" && c.activityType !== "stage_journee" && c.status !== "closed") as any[];
+
+          // Regrouper par famille → créneaux récurrents distincts (jour + heure + titre)
+          type Slot = { title: string; jour: string; horaire: string; moniteur: string };
+          const famSeason = new Map<string, { parentName: string; familyId: string; slots: Map<string, Slot> }>();
+          for (const c of seasonCreneaux) {
+            const [yy, mm, dd] = (c.date as string).split("-").map(Number);
+            const jourLabel = new Date(yy, mm - 1, dd, 12).toLocaleDateString("fr-FR", { weekday: "long" });
+            for (const e of (c.enrolled || [])) {
+              if (!e.familyId) continue;
+              let famEmail = e.familyEmail || "";
+              let parentName = e.familyName || "";
+              if (!famEmail) {
+                try {
+                  const fs = await adminDb.collection("families").doc(e.familyId).get();
+                  if (fs.exists) { famEmail = fs.data()!.parentEmail || ""; parentName = parentName || fs.data()!.parentName || ""; }
+                } catch {}
+              }
+              if (!famEmail) continue;
+              if (!famSeason.has(famEmail)) famSeason.set(famEmail, { parentName, familyId: e.familyId, slots: new Map() });
+              const slotKey = `${c.activityTitle}|${jourLabel}|${c.startTime}`;
+              famSeason.get(famEmail)!.slots.set(slotKey, {
+                title: c.activityTitle, jour: jourLabel,
+                horaire: `${c.startTime}–${c.endTime}`, moniteur: c.monitor || "",
+              });
+            }
+          }
+          results.saisonRappel.families = famSeason.size;
+
+          for (const [email, { parentName, slots }] of famSeason) {
+            if (!isRecipientAllowed(email)) {
+              results.saisonRappel.blocked++;
+              console.log(blockedLog(email, "cron_saison_rappel"));
+              continue;
+            }
+            try {
+              const lignes = [...slots.values()]
+                .sort((a, b) => a.jour.localeCompare(b.jour) || a.horaire.localeCompare(b.horaire))
+                .map(s => `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;margin:8px 0;">
+                  <p style="margin:0;color:#1e40af;font-weight:600;font-size:14px;">🐴 ${s.title}</p>
+                  <p style="margin:6px 0 0;color:#555;font-size:13px;">📅 ${s.jour} · 🕐 ${s.horaire}${s.moniteur ? ` · 👤 ${s.moniteur}` : ""}</p>
+                </div>`).join("");
+              const subject = `🐴 Reprise des cours — votre planning de la saison`;
+              const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+                <p>Bonjour ${parentName || "cher parent"},</p>
+                <p>Les cours reprennent le <strong>${debutDate.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</strong>. Voici votre planning récurrent pour la saison :</p>
+                ${lignes}
+                <p style="color:#888;font-size:12px;margin-top:16px;">Ce créneau est le vôtre chaque semaine pour toute la saison. À très vite au club ! 🐴</p>
+              </div>`;
+              const res = await fetch("https://api.resend.com/emails", {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ from: fromEmail, to: email, ...(process.env.RESEND_BCC_EMAIL ? { bcc: process.env.RESEND_BCC_EMAIL } : {}), subject, html }),
+              });
+              if (res.ok) {
+                results.saisonRappel.emailsSent++;
+                await logEmail({ to: email, subject, context: "cron_saison_rappel", template: "saisonRappel", status: "sent", sentBy: "system" });
+                console.log(`  ✅ Rappel saison → ${email} (${slots.size} créneau(x))`);
+              } else {
+                results.saisonRappel.errors++;
+                const errText = await res.text().catch(() => "");
+                await logEmail({ to: email, subject, context: "cron_saison_rappel", template: "saisonRappel", status: "failed", error: `HTTP ${res.status}: ${errText}`.slice(0, 500), sentBy: "system" });
+              }
+            } catch (e: any) {
+              results.saisonRappel.errors++;
+              await logEmail({ to: email, subject: "Rappel saison", context: "cron_saison_rappel", template: "saisonRappel", status: "failed", error: e?.message || String(e), sentBy: "system" });
+            }
+          }
+          // Marqueur d'idempotence : plus jamais d'envoi pour cette rentrée.
+          await flagRef.set({ sentAt: new Date().toISOString(), families: famSeason.size, emailsSent: results.saisonRappel.emailsSent });
+        }
+      }
     }
 
     console.log("\n✅ Cron daily-notifications terminé");
