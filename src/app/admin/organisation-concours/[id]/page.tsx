@@ -148,7 +148,7 @@ export default function EditeurConcours() {
         roles: pa.roles.map((r) => ({ ...r, personneIds: r.personneIds.filter((x) => x !== pid) })),
       })),
     }));
-  const toggleCap = (pid: string, cap: "peutCoacher" | "peutJuger" | "peutResponsableCamion") =>
+  const toggleCap = (pid: string, cap: "peutCoacher" | "peutJuger" | "peutResponsableCamion" | "peutDetente") =>
     update((c) => ({
       ...c,
       personnes: c.personnes.map((p) => (p.id === pid ? { ...p, [cap]: !p[cap] } : p)),
@@ -526,6 +526,7 @@ export default function EditeurConcours() {
                 </span>
                 <label className="inline-flex items-center gap-1 text-xs text-gray-500"><input type="checkbox" checked={!!p.peutCoacher} onChange={() => toggleCap(p.id, "peutCoacher")} /> coach</label>
                 <label className="inline-flex items-center gap-1 text-xs text-gray-500"><input type="checkbox" checked={!!p.peutJuger} onChange={() => toggleCap(p.id, "peutJuger")} /> juge</label>
+                <label className="inline-flex items-center gap-1 text-xs text-gray-500" title="Peut assurer la détente (échauffement)"><input type="checkbox" checked={!!p.peutDetente} onChange={() => toggleCap(p.id, "peutDetente")} /> détente</label>
                 <label className="inline-flex items-center gap-1 text-xs text-gray-500" title="Peut être responsable de la prépa au camion"><input type="checkbox" checked={!!p.peutResponsableCamion} onChange={() => toggleCap(p.id, "peutResponsableCamion")} /> camion</label>
                 <button onClick={() => supprimerPersonne(p.id)} className="ml-auto text-gray-300 hover:text-red-500"><X size={15} /></button>
               </div>

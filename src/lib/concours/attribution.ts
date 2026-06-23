@@ -74,7 +74,8 @@ export function attribuerAuto(concours: Concours): ResultatAttribution {
   const inc = (pid: string) => charge.set(pid, (charge.get(pid) ?? 0) + 1);
 
   const eligible = (pe: Personne, type: RoleType): boolean => {
-    if (type === "coach" || type === "detente") return pe.peutCoacher === true;
+    if (type === "coach") return pe.peutCoacher === true;
+    if (type === "detente") return pe.peutDetente === true || pe.peutCoacher === true;
     if (type === "juge") {
       if (pe.peutJuger === false) return false;
       const age = ageA(pe.naissance, concours.date);
@@ -115,11 +116,12 @@ export function attribuerAuto(concours: Concours): ResultatAttribution {
         })
         .map((pe) => pe.id)
         .sort((a, b) => {
-          // Sauf pour coach/détente, on garde les coachs (Nicolas/Emmeline) en réserve.
+          // Sauf pour coach/détente, on garde en réserve ceux qui peuvent coacher
+          // ou faire la détente (vivier rare), pour ne pas les gaspiller ailleurs.
           if (type !== "coach" && type !== "detente") {
-            const ca = byId.get(a)?.peutCoacher ? 1 : 0;
-            const cb = byId.get(b)?.peutCoacher ? 1 : 0;
-            if (ca !== cb) return ca - cb;
+            const ra = byId.get(a)?.peutCoacher || byId.get(a)?.peutDetente ? 1 : 0;
+            const rb = byId.get(b)?.peutCoacher || byId.get(b)?.peutDetente ? 1 : 0;
+            if (ra !== rb) return ra - rb;
           }
           return (charge.get(a) ?? 0) - (charge.get(b) ?? 0);
         });

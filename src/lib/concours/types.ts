@@ -67,6 +67,8 @@ export interface Personne {
   peutJuger?: boolean;
   /** Peut être RESPONSABLE de la préparation au camion (pas les plus jeunes). */
   peutResponsableCamion?: boolean;
+  /** Peut assurer la détente (échauffer un poney). */
+  peutDetente?: boolean;
   // Tout le monde peut être placeur par défaut, donc pas de flag dédié.
 
   /** Si la personne vient de la base cavaliers : id du cavalier (families/children) + sa famille. */
