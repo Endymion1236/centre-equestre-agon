@@ -1,7 +1,7 @@
 "use client";
 
 import { Trophy } from "lucide-react";
-import { planningParPersonne } from "@/lib/concours/contraintes";
+import { planningParPersonne, heuresDerivees } from "@/lib/concours/contraintes";
 import type { Concours, Passage, RoleType } from "@/lib/concours/types";
 
 const LIBELLE_ROLE: Record<RoleType, string> = {
@@ -13,10 +13,13 @@ const LIBELLE_ROLE: Record<RoleType, string> = {
 };
 const ORDRE_ROLE: RoleType[] = ["coach", "placeur", "juge", "camion", "detente"];
 
-/** Heure à laquelle un poste s'exerce : aide camion & détente = prépa, le reste = passage. */
+/** Heure d'un poste : aide camion = prépa (−1h), détente = −30 min, le reste = passage. */
 function heureRole(p: Passage, type: RoleType): string {
-  if (type === "camion" || type === "detente") return p.heurePrepa || p.heureACheval || p.heurePassage || "";
-  return p.heurePassage || p.heureACheval || "";
+  const h = heuresDerivees(p);
+  if (!h) return "";
+  if (type === "camion") return h.prepa;
+  if (type === "detente") return h.detente;
+  return h.passage;
 }
 
 /** Rendu "affiche" d'un concours : utilisé pour l'aperçu et l'impression. */
@@ -92,14 +95,17 @@ export default function Affiche({ concours }: { concours: Concours }) {
                       </div>
                     </div>
 
-                    {/* Horaires clés */}
-                    <div className="flex flex-wrap gap-1.5 mb-2">
-                      {p.heurePrepa && <span className="text-[11px] bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">Prépa {p.heurePrepa}</span>}
-                      {p.heureACheval && <span className="text-[11px] bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">À cheval {p.heureACheval}</span>}
-                      {(p.heurePassage || p.heureACheval) && (
-                        <span className="text-[11px] bg-blue-100 text-blue-700 font-semibold rounded px-1.5 py-0.5">Passage {p.heurePassage || p.heureACheval}</span>
-                      )}
-                    </div>
+                    {/* Horaires clés (dérivés de l'heure de passage) */}
+                    {(() => {
+                      const h = heuresDerivees(p);
+                      return h ? (
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          <span className="text-[11px] bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">Prépa {h.prepa}</span>
+                          <span className="text-[11px] bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">Détente {h.detente}</span>
+                          <span className="text-[11px] bg-blue-100 text-blue-700 font-semibold rounded px-1.5 py-0.5">Passage {h.passage}</span>
+                        </div>
+                      ) : null;
+                    })()}
 
                     {/* Cavaliers */}
                     {riders(p) && (

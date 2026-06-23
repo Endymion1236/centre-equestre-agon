@@ -7,7 +7,7 @@ import {
   AlertOctagon, AlertTriangle, CheckCircle2, UserPlus, Users, Wand2,
 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
-import { analyser, compterPassagesPoneys, personnesOccupeesAuPassage } from "@/lib/concours/contraintes";
+import { analyser, compterPassagesPoneys, personnesOccupeesAuPassage, heuresDerivees } from "@/lib/concours/contraintes";
 import { attribuerAuto } from "@/lib/concours/attribution";
 import {
   getConcours, saveConcours,
@@ -639,12 +639,22 @@ export default function EditeurConcours() {
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <input className={inpSm} placeholder="Catégorie" value={p.categorie} onChange={(e) => patchPassage(p.id, { categorie: e.target.value })} />
-                      <div className="grid grid-cols-3 gap-1">
-                        <input className={inpSm} placeholder="Prépa" value={p.heurePrepa ?? ""} onChange={(e) => patchPassage(p.id, { heurePrepa: e.target.value || undefined })} title="Prépa (HH:MM)" />
-                        <input className={inpSm} placeholder="À chev." value={p.heureACheval} onChange={(e) => patchPassage(p.id, { heureACheval: e.target.value })} title="À cheval (HH:MM)" />
-                        <input className={inpSm} placeholder="Passage" value={p.heurePassage ?? ""} onChange={(e) => patchPassage(p.id, { heurePassage: e.target.value || undefined })} title="Passage (HH:MM)" />
-                      </div>
+                      <input
+                        className={inpSm}
+                        placeholder="Heure de passage (HH:MM)"
+                        value={p.heurePassage ?? ""}
+                        onChange={(e) => patchPassage(p.id, { heurePassage: e.target.value || undefined })}
+                        title="Heure de passage. La détente (−30 min) et la préparation (−1h) sont calculées automatiquement."
+                      />
                     </div>
+                    {(() => {
+                      const h = heuresDerivees(p);
+                      return h ? (
+                        <div className="text-[11px] text-gray-400">
+                          Prépa {h.prepa} · Détente {h.detente} · <span className="text-blue-600 font-semibold">Passage {h.passage}</span>
+                        </div>
+                      ) : null;
+                    })()}
 
                     {/* Participants */}
                     <div>

@@ -9,7 +9,7 @@
 // =============================================================================
 
 import type { Concours, Personne, RoleType } from "./types";
-import { fenetrePassage, fenetrePrepa, chevauche } from "./contraintes";
+import { fenetrePassage, fenetreRole, chevauche } from "./contraintes";
 
 interface Fenetre {
   debut: number;
@@ -60,10 +60,9 @@ export function attribuerAuto(concours: Concours): ResultatAttribution {
   for (const p of concours.passages) {
     if (p.evenement) continue;
     const fPass = fenetrePassage(p);
-    const fPrep = fenetrePrepa(p);
     if (fPass) for (const part of p.participants) addBusy(part.personneId, fPass);
     for (const r of p.roles) {
-      const f = r.type === "camion" || r.type === "detente" ? fPrep ?? fPass : fPass;
+      const f = fenetreRole(p, r.type);
       if (!f) continue;
       for (const pid of r.personneIds) addBusy(pid, f);
     }
@@ -98,14 +97,12 @@ export function attribuerAuto(concours: Concours): ResultatAttribution {
 
   for (const p of passages) {
     if (p.evenement) continue;
-    const fPass = fenetrePassage(p);
-    const fPrep = fenetrePrepa(p);
     const ridersIci = new Set(p.participants.map((x) => x.personneId));
 
     for (const type of PRIORITE) {
       const r = p.roles.find((x) => x.type === type);
       if (!r) continue;
-      const fenetre = type === "camion" || type === "detente" ? fPrep ?? fPass : fPass;
+      const fenetre = fenetreRole(p, type);
       if (!fenetre) continue;
       const dejaSurPassage = new Set<string>(p.roles.flatMap((x) => x.personneIds));
 

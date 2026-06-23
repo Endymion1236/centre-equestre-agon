@@ -10,10 +10,12 @@
 
 import type { Concours, Passage, Personne, RoleType, Conflit } from "./types";
 
-/** Durée pendant laquelle une équipe est "en piste" (fenêtre des rôles support). */
+/** Durée pendant laquelle une équipe est "en piste". */
 const DUREE_PASSAGE_MIN = 15;
-/** Prépa par défaut avant l'heure "à cheval", si heurePrepa n'est pas renseignée. */
-const PREPA_AVANT_MIN = 30;
+/** La détente a lieu 30 min avant le passage. */
+const DETENTE_AVANT_MIN = 30;
+/** La préparation (camion) a lieu 1h avant le passage. */
+const PREPA_AVANT_MIN = 60;
 
 const LIBELLE_ROLE: Record<RoleType, string> = {
   coach: "coach",
@@ -49,28 +51,59 @@ interface Fenetre {
   fin: number;
 }
 
-/** Fenêtre "en piste" d'un passage (quand les rôles support sont nécessaires). */
-export function fenetrePassage(p: Passage): Fenetre | null {
-  const cheval = toMinutes(p.heurePassage) ?? toMinutes(p.heureACheval);
-  if (cheval == null) return null;
-  return { debut: cheval, fin: cheval + DUREE_PASSAGE_MIN };
+/** Heure de passage en minutes — la source unique des horaires. */
+function heurePassageMin(p: Passage): number | null {
+  return toMinutes(p.heurePassage) ?? toMinutes(p.heureACheval);
 }
 
-/** Fenêtre de prépa/détente d'un cavalier (souple) : du début de prépa jusqu'au passage. */
-export function fenetrePrepa(p: Passage): Fenetre | null {
-  const fp = fenetrePassage(p);
-  if (!fp) return null;
-  const acheval = toMinutes(p.heureACheval);
-  const prepa =
-    toMinutes(p.heurePrepa) ??
-    (acheval != null ? acheval - PREPA_AVANT_MIN : fp.debut - PREPA_AVANT_MIN);
-  const debut = Math.min(prepa, fp.debut);
-  if (debut >= fp.debut) return null;
-  return { debut, fin: fp.debut };
+/** Fenêtre "en piste" : de l'heure de passage à +15 min. */
+export function fenetrePassage(p: Passage): Fenetre | null {
+  const t = heurePassageMin(p);
+  if (t == null) return null;
+  return { debut: t, fin: t + DUREE_PASSAGE_MIN };
+}
+
+/** Fenêtre de détente : 30 min avant le passage. */
+export function fenetreDetente(p: Passage): Fenetre | null {
+  const t = heurePassageMin(p);
+  if (t == null) return null;
+  return { debut: t - DETENTE_AVANT_MIN, fin: t };
+}
+
+/** Fenêtre de préparation au camion : de 1h avant à 30 min avant le passage. */
+export function fenetreCamion(p: Passage): Fenetre | null {
+  const t = heurePassageMin(p);
+  if (t == null) return null;
+  return { debut: t - PREPA_AVANT_MIN, fin: t - DETENTE_AVANT_MIN };
+}
+
+/** Fenêtre où un cavalier est mobilisé avant son passage : 1h avant jusqu'au passage. */
+export function fenetreAvant(p: Passage): Fenetre | null {
+  const t = heurePassageMin(p);
+  if (t == null) return null;
+  return { debut: t - PREPA_AVANT_MIN, fin: t };
+}
+
+/** Fenêtre d'un poste selon son type (camion = prépa, détente = détente, sinon passage). */
+export function fenetreRole(p: Passage, type: RoleType): Fenetre | null {
+  if (type === "camion") return fenetreCamion(p);
+  if (type === "detente") return fenetreDetente(p);
+  return fenetrePassage(p);
 }
 
 export function chevauche(a: Fenetre, b: Fenetre): boolean {
   return a.debut < b.fin && b.debut < a.fin;
+}
+
+/** Horaires dérivés pour l'affichage, à partir de l'heure de passage. */
+export function heuresDerivees(p: Passage): { prepa: string; detente: string; passage: string } | null {
+  const t = heurePassageMin(p);
+  if (t == null) return null;
+  return {
+    prepa: toHHMM(Math.max(0, t - PREPA_AVANT_MIN)),
+    detente: toHHMM(Math.max(0, t - DETENTE_AVANT_MIN)),
+    passage: toHHMM(t),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +137,7 @@ export function occupationsParPersonne(concours: Concours): Map<string, Occupati
     if (p.evenement) continue; // remise des prix, etc.
 
     const fPass = fenetrePassage(p);
-    const fPrep = fenetrePrepa(p);
+    const fAvant = fenetreAvant(p);
 
     for (const part of p.participants) {
       if (fPass)
@@ -114,20 +147,20 @@ export function occupationsParPersonne(concours: Concours): Map<string, Occupati
           type: "piste",
           detail: `en piste (${p.nomEquipe})`,
         });
-      if (fPrep)
+      if (fAvant)
         add(part.personneId, {
           passageId: p.id,
-          fenetre: fPrep,
+          fenetre: fAvant,
           type: "prepa",
           detail: `en prépa/détente (${p.nomEquipe})`,
         });
     }
 
     for (const r of p.roles) {
-      // Placeurs / juges / coach : calés sur le PASSAGE de l'équipe.
-      // Aide camion & détente : calés sur la PRÉPA (souples) — c'est avant le passage.
+      // Placeurs / juges / coach : à l'heure du PASSAGE.
+      // Détente : 30 min avant. Aide camion : 1h avant. (souples)
       const souple = r.type === "camion" || r.type === "detente";
-      const fenetre = souple ? fPrep ?? fPass : fPass;
+      const fenetre = fenetreRole(p, r.type);
       if (!fenetre) continue;
       const typeOcc: TypeOccupation = souple ? "prepa" : "role";
       for (const pid of r.personneIds) {
@@ -154,11 +187,11 @@ export function occupationsParCheval(concours: Concours): Map<string, Occupation
   for (const p of concours.passages) {
     if (p.evenement) continue;
     const fPass = fenetrePassage(p);
-    const fPrep = fenetrePrepa(p);
+    const fAvant = fenetreAvant(p);
     for (const part of p.participants) {
       if (!part.chevalId) continue;
       if (fPass) add(part.chevalId, { passageId: p.id, fenetre: fPass, type: "piste", detail: `monté sur « ${p.nomEquipe} »` });
-      if (fPrep) add(part.chevalId, { passageId: p.id, fenetre: fPrep, type: "prepa", detail: `en échauffement pour « ${p.nomEquipe} »` });
+      if (fAvant) add(part.chevalId, { passageId: p.id, fenetre: fAvant, type: "prepa", detail: `en échauffement pour « ${p.nomEquipe} »` });
     }
   }
   return map;
