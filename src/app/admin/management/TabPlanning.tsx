@@ -438,6 +438,32 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     onRefresh();
   };
 
+  // ── Vider une journée entière (toutes les tâches de tous les salariés) ──
+  const viderJournee = async (jour: JourSemaine) => {
+    const jourTaches = taches.filter(t => t.jour === jour);
+    if (jourTaches.length === 0) {
+      toast(`Aucune tâche à supprimer le ${JOURS_LABELS[jour]}`, "info");
+      return;
+    }
+    if (!confirm(
+      `Supprimer TOUTES les tâches du ${JOURS_LABELS[jour]} ?\n\n` +
+      `${jourTaches.length} tâche(s) de tous les salariés seront définitivement supprimées.\n` +
+      `Cette action est irréversible.`
+    )) return;
+    try {
+      // writeBatch est limité à 500 opérations → on découpe par lots de 450.
+      for (let i = 0; i < jourTaches.length; i += 450) {
+        const batch = writeBatch(db);
+        jourTaches.slice(i, i + 450).forEach(t => batch.delete(doc(db, "taches-planifiees", t.id)));
+        await batch.commit();
+      }
+      toast(`${jourTaches.length} tâche(s) supprimée(s) — ${JOURS_LABELS[jour]} vidé`, "success");
+      onRefresh();
+    } catch (e: any) {
+      toast(`Erreur : ${e.message}`, "error");
+    }
+  };
+
   // ── Sauvegarder la semaine comme modèle ─────────────────────────────
   const handleSaveAsModele = async () => {
     if (!saveModeleName.trim()) { toast("Nom du modèle requis", "error"); return; }
@@ -1105,11 +1131,25 @@ Réponds de façon concise et pratique, en français.`,
             <th style={{padding:"6px 6px", textAlign:"left", fontSize:10, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0"}}>
               Salarié
             </th>
-            {jourDates.slice(0, nbJours).map(({jour, label}) => (
-              <th key={jour} style={{padding:"6px 3px", textAlign:"center", fontSize:10, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>
-                {label}
+            {jourDates.slice(0, nbJours).map(({jour, label}) => {
+              const nbJourTaches = taches.filter(t => t.jour === jour).length;
+              return (
+              <th key={jour} style={{padding:"6px 3px", textAlign:"center", fontSize:10, fontWeight:700, color:"#475569", background:"#f1f5f9", borderBottom:"2px solid #e2e8f0"}}>
+                <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:3}}>
+                  <span style={{whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"100%"}}>{label}</span>
+                  {isAdmin && nbJourTaches > 0 && (
+                    <button
+                      onClick={() => viderJournee(jour)}
+                      title={`Vider la journée — supprimer les ${nbJourTaches} tâche${nbJourTaches>1?"s":""}`}
+                      style={{display:"inline-flex", alignItems:"center", gap:3, padding:"1px 6px", fontSize:9, fontWeight:600, color:"#dc2626", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:6, cursor:"pointer", whiteSpace:"nowrap"}}
+                    >
+                      <Trash2 size={10}/> Vider
+                    </button>
+                  )}
+                </div>
               </th>
-            ))}
+              );
+            })}
           </tr>
         </thead>
         <tbody>
