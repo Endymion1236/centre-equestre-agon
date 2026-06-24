@@ -10,8 +10,15 @@
 
 import type { Concours, Passage, Personne, RoleType, Conflit } from "./types";
 
-/** Durée pendant laquelle une équipe est "en piste". */
-const DUREE_PASSAGE_MIN = 15;
+/** Durée d'un passage selon la taille de l'équipe. */
+const DUREE_PETITE_EQUIPE_MIN = 30; // équipes de 2-3 cavaliers
+const DUREE_GRANDE_EQUIPE_MIN = 45; // équipes de 4-5 cavaliers
+const SEUIL_GRANDE_EQUIPE = 4; // à partir de 4 cavaliers = grande équipe
+
+/** Durée "en piste" d'un passage, déduite du nombre de cavaliers. */
+export function dureePassage(p: Passage): number {
+  return (p.participants?.length ?? 0) >= SEUIL_GRANDE_EQUIPE ? DUREE_GRANDE_EQUIPE_MIN : DUREE_PETITE_EQUIPE_MIN;
+}
 /** La détente a lieu 30 min avant le passage. */
 const DETENTE_AVANT_MIN = 30;
 /** La préparation (camion) a lieu 1h avant le passage. */
@@ -56,11 +63,11 @@ function heurePassageMin(p: Passage): number | null {
   return toMinutes(p.heurePassage) ?? toMinutes(p.heureACheval);
 }
 
-/** Fenêtre "en piste" : de l'heure de passage à +15 min. */
+/** Fenêtre "en piste" : de l'heure de passage à +durée (30 ou 45 min selon l'équipe). */
 export function fenetrePassage(p: Passage): Fenetre | null {
   const t = heurePassageMin(p);
   if (t == null) return null;
-  return { debut: t, fin: t + DUREE_PASSAGE_MIN };
+  return { debut: t, fin: t + dureePassage(p) };
 }
 
 /** Fenêtre de détente : 30 min avant le passage. */
@@ -96,13 +103,16 @@ export function chevauche(a: Fenetre, b: Fenetre): boolean {
 }
 
 /** Horaires dérivés pour l'affichage, à partir de l'heure de passage. */
-export function heuresDerivees(p: Passage): { prepa: string; detente: string; passage: string } | null {
+export function heuresDerivees(p: Passage): { prepa: string; detente: string; passage: string; fin: string; duree: number } | null {
   const t = heurePassageMin(p);
   if (t == null) return null;
+  const duree = dureePassage(p);
   return {
     prepa: toHHMM(Math.max(0, t - PREPA_AVANT_MIN)),
     detente: toHHMM(Math.max(0, t - DETENTE_AVANT_MIN)),
     passage: toHHMM(t),
+    fin: toHHMM(t + duree),
+    duree,
   };
 }
 
@@ -369,6 +379,35 @@ export function analyser(concours: Concours): Conflit[] {
             message: `${pers.prenom} ne peut pas être ${LIBELLE_ROLE[r.type]} (${p.nomEquipe}).`,
           });
         }
+      }
+    }
+  }
+
+  // 5) Chevauchement de passages sur un même terrain : deux équipes en piste
+  // au même moment (durée 30 min pour 2-3 cavaliers, 45 min pour 4-5). Signale
+  // que l'écart entre deux passages du même terrain est trop court.
+  const parTerrain = new Map<string, Passage[]>();
+  for (const p of concours.passages) {
+    if (p.evenement) continue;
+    if (heurePassageMin(p) == null) continue;
+    const arr = parTerrain.get(p.terrain) ?? [];
+    arr.push(p);
+    parTerrain.set(p.terrain, arr);
+  }
+  for (const [terrain, liste] of parTerrain) {
+    const nomTerrain = concours.terrains.find((t) => t.id === terrain)?.nom ?? terrain;
+    for (let i = 0; i < liste.length; i++) {
+      for (let j = i + 1; j < liste.length; j++) {
+        const fa = fenetrePassage(liste[i]);
+        const fb = fenetrePassage(liste[j]);
+        if (!fa || !fb || !chevauche(fa, fb)) continue;
+        const da = dureePassage(liste[i]);
+        const db = dureePassage(liste[j]);
+        conflits.push({
+          gravite: "erreur",
+          passageIds: [liste[i].id, liste[j].id],
+          message: `${nomTerrain} : « ${liste[i].nomEquipe} » (${da} min) et « ${liste[j].nomEquipe} » (${db} min) se chevauchent — espace davantage les passages.`,
+        });
       }
     }
   }
