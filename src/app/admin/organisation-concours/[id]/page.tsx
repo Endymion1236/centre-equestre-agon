@@ -10,7 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import { analyser, compterPassagesPoneys, personnesOccupeesAuPassage, heuresDerivees } from "@/lib/concours/contraintes";
 import { attribuerAuto } from "@/lib/concours/attribution";
 import {
-  getConcours, saveConcours,
+  getConcours, saveConcours, listConcours,
   listerCavaliersBase, listerPoneysBase, listerCreneauxDuJour,
   type CavalierBase, type PoneyBase, type CreneauImport,
 } from "@/lib/concours/store";
@@ -71,6 +71,7 @@ export default function EditeurConcours() {
   const [poneyBase, setPoneyBase] = useState<PoneyBase[]>([]);
   // séances du planning à la date du concours (pour importer les inscrits)
   const [creneauxJour, setCreneauxJour] = useState<CreneauImport[]>([]);
+  const [autresConcours, setAutresConcours] = useState<Concours[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -105,6 +106,12 @@ export default function EditeurConcours() {
         const c = await getConcours(id);
         if (c) c.passages = c.passages.map((p) => (p.evenement ? p : { ...p, roles: completerRoles(p.roles) }));
         setConcours(c);
+        try {
+          const tous = await listConcours();
+          setAutresConcours(tous.filter((x) => x.id !== id));
+        } catch {
+          setAutresConcours([]);
+        }
       } catch (e) {
         console.error(e);
         toast("Chargement impossible", "error");
@@ -262,6 +269,52 @@ export default function EditeurConcours() {
     }));
   const renommerEquipe = (eid: string, nom: string) =>
     update((c) => ({ ...c, equipes: (c.equipes || []).map((e) => (e.id === eid ? { ...e, nom } : e)) }));
+
+  // Duplique les équipes d'un concours précédent. Recopie au passage les
+  // personnes et poneys référencés qui ne sont pas encore dans ce concours
+  // (les cavaliers/poneys de base ont des ids stables, donc ils se recollent
+  // tout seuls s'ils ont déjà été importés du montoir).
+  const dupliquerEquipesDe = (sourceId: string) => {
+    if (!sourceId) return;
+    const source = autresConcours.find((x) => x.id === sourceId);
+    if (!source || !(source.equipes || []).length) {
+      toast("Ce concours n'a pas d'équipes.", "error");
+      return;
+    }
+    update((c) => {
+      const personnes = [...c.personnes];
+      const chevaux = [...c.chevaux];
+      const nomsExistants = new Set((c.equipes || []).map((e) => e.nom.trim().toLowerCase()));
+      const equipes = [...(c.equipes || [])];
+      let ajoutees = 0;
+      let ignorees = 0;
+      for (const se of source.equipes || []) {
+        if (nomsExistants.has(se.nom.trim().toLowerCase())) {
+          ignorees++;
+          continue;
+        }
+        const membres = se.membres.map((m) => {
+          if (m.personneId && !personnes.some((p) => p.id === m.personneId)) {
+            const sp = source.personnes.find((p) => p.id === m.personneId);
+            if (sp) personnes.push({ ...sp });
+          }
+          if (m.chevalId && !chevaux.some((ch) => ch.id === m.chevalId)) {
+            const sch = source.chevaux.find((ch) => ch.id === m.chevalId);
+            if (sch) chevaux.push({ ...sch });
+          }
+          return { personneId: m.personneId, chevalId: m.chevalId };
+        });
+        equipes.push({ id: genId(se.nom), nom: se.nom, membres });
+        nomsExistants.add(se.nom.trim().toLowerCase());
+        ajoutees++;
+      }
+      toast(
+        `${ajoutees} équipe${ajoutees > 1 ? "s" : ""} importée${ajoutees > 1 ? "s" : ""}${ignorees > 0 ? ` · ${ignorees} ignorée${ignorees > 1 ? "s" : ""} (nom déjà présent)` : ""}`,
+        "success",
+      );
+      return { ...c, personnes, chevaux, equipes };
+    });
+  };
   const ajouterMembre = (eid: string) =>
     update((c) => ({
       ...c,
@@ -576,6 +629,26 @@ export default function EditeurConcours() {
           <input className={inp} placeholder="Nom de l'équipe…" value={nouvEquipe} onChange={(e) => setNouvEquipe(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ajouterEquipe()} />
           <button onClick={ajouterEquipe} className="px-3 rounded-lg bg-blue-600 text-white shrink-0 inline-flex items-center gap-1 text-sm font-semibold"><Plus size={15} /> Équipe</button>
         </div>
+        {autresConcours.length > 0 && (
+          <div className="mb-3 max-w-md">
+            <select
+              className={`${inp} min-w-0`}
+              value=""
+              onChange={(e) => { dupliquerEquipesDe(e.target.value); e.currentTarget.value = ""; }}
+              title="Reprendre les équipes d'un concours précédent. Les cavaliers/poneys manquants sont recopiés automatiquement."
+            >
+              <option value="">↻ Dupliquer les équipes d'un concours…</option>
+              {[...autresConcours]
+                .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+                .map((x) => (
+                  <option key={x.id} value={x.id} disabled={!(x.equipes || []).length}>
+                    {(x.titre || "Concours")}{x.date ? ` — ${x.date.split("-").reverse().join("/")}` : ""} ({(x.equipes || []).length} éq.)
+                  </option>
+                ))}
+            </select>
+            <div className="text-[11px] text-gray-400 mt-1">Les équipes au nom déjà présent sont ignorées.</div>
+          </div>
+        )}
         <div className="grid sm:grid-cols-2 gap-3">
           {(concours.equipes || []).map((eq) => (
             <div key={eq.id} className="rounded-lg border border-blue-500/10 p-3">
