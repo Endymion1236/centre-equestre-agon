@@ -102,7 +102,7 @@ export default function Affiche({ concours }: { concours: Concours }) {
                         <div className="flex flex-wrap gap-1.5 mb-2">
                           <span className="text-[11px] bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">Prépa {h.prepa}</span>
                           <span className="text-[11px] bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">Détente {h.detente}</span>
-                          <span className="text-[11px] bg-blue-100 text-blue-700 font-semibold rounded px-1.5 py-0.5">Passage {h.passage}</span>
+                          <span className="text-[11px] bg-blue-100 text-blue-700 font-semibold rounded px-1.5 py-0.5">Passage {h.passage} → {h.fin}</span>
                         </div>
                       ) : null;
                     })()}

@@ -656,7 +656,7 @@ export default function EditeurConcours() {
                       const h = heuresDerivees(p);
                       return h ? (
                         <div className="text-[11px] text-gray-400">
-                          Prépa {h.prepa} · Détente {h.detente} · <span className="text-blue-600 font-semibold">Passage {h.passage}</span>
+                          Prépa {h.prepa} · Détente {h.detente} · <span className="text-blue-600 font-semibold">Passage {h.passage} → {h.fin}</span> <span className="text-gray-400">({h.duree} min · {p.participants.length} cav.)</span>
                         </div>
                       ) : null;
                     })()}
