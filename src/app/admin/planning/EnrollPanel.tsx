@@ -61,7 +61,7 @@ import {
   fetchVacationPeriods, fetchDiscountSettings,
   type VacationPeriod, type DiscountSettings,
 } from "@/lib/discounts";
-import { X, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera, FileImage, Mail, Sparkles, Send, FileText, Printer, StickyNote, ChevronDown, ChevronUp, Clock } from "lucide-react";
+import { X, Plus, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera, FileImage, Mail, Sparkles, Send, FileText, Printer, StickyNote, ChevronDown, ChevronUp, Clock } from "lucide-react";
 import type { Activity, Family } from "@/types";
 import { Creneau, EnrolledChild, payModes, typeColors, fmtDate, itemMatchesCreneau, isForfaitChildPaye, sameStage } from "./types";
 import { authFetch } from "@/lib/auth-fetch";
@@ -143,9 +143,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [licenceType, setLicenceType] = useState<"moins18" | "plus18">("moins18");
   // ── Mode compétition ──
   const isCompetition = creneau.activityType === "competition";
-  const [compEngagement, setCompEngagement] = useState("");
+  const [compEpreuves, setCompEpreuves] = useState<{ epreuve: string; montant: string }[]>([{ epreuve: "", montant: "" }]);
   const [compCoaching, setCompCoaching] = useState("");
-  const [compEpreuve, setCompEpreuve] = useState("");
   const [adhesion, setAdhesion] = useState(true);
   const [licence, setLicence] = useState(true);
   const [assuranceOccasionnelle, setAssuranceOccasionnelle] = useState(false);
@@ -1639,17 +1638,20 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       // Alerter pour chaque seance qui passe complete apres inscription annuelle
       await checkAndAlertIfFull(allSlotsToEnroll.map(s => s.id));
     } else {
-      // ── Mode Compétition : items engagement + coaching libres ──
+      // ── Mode Compétition : un engagement par épreuve/passage + coaching global ──
       if (isCompetition) {
-        const engagementTTC = parseFloat(compEngagement) || 0;
         const coachingTTC = parseFloat(compCoaching) || 0;
         const compItems: any[] = [];
-        if (engagementTTC > 0) compItems.push({
-          activityTitle: `Engagement — ${compEpreuve || creneau.activityTitle}`,
-          childId: selChild, childName, creneauId: creneau.id, activityType: "competition",
-          description: compEpreuve || "Engagement compétition",
-          priceHT: engagementTTC / 1.055, tva: 5.5, priceTTC: engagementTTC,
-        });
+        for (const ep of compEpreuves) {
+          const montantTTC = parseFloat(ep.montant) || 0;
+          if (montantTTC <= 0) continue;
+          compItems.push({
+            activityTitle: `Engagement — ${ep.epreuve || creneau.activityTitle}`,
+            childId: selChild, childName, creneauId: creneau.id, activityType: "competition",
+            description: ep.epreuve || "Engagement compétition",
+            priceHT: montantTTC / 1.055, tva: 5.5, priceTTC: montantTTC,
+          });
+        }
         if (coachingTTC > 0) compItems.push({
           activityTitle: `Coaching — ${creneau.activityTitle}`,
           childId: selChild, childName, creneauId: creneau.id, activityType: "competition",
@@ -2683,39 +2685,57 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             )}
 
             {/* Choix du mode d'inscription — COURS réguliers uniquement */}
-            {/* ── Mode Compétition : tarifs libres engagement + coaching ── */}
-            {selChild && isCompetition && (
+            {/* ── Mode Compétition : un engagement par épreuve/passage + coaching global ── */}
+            {selChild && isCompetition && (() => {
+              const totalEngagement = compEpreuves.reduce((s, e) => s + (parseFloat(e.montant) || 0), 0);
+              const totalCoaching = parseFloat(compCoaching) || 0;
+              return (
               <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex flex-col gap-3">
                 <div className="font-body text-sm font-semibold text-orange-800">🏆 Compétition — tarifs libres</div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="font-body text-xs font-semibold text-slate-600">Épreuves / passages</label>
+                  {compEpreuves.map((ep, i) => (
+                    <div key={i} className="flex gap-2 items-center">
+                      <input value={ep.epreuve}
+                        onChange={e => setCompEpreuves(prev => prev.map((x, idx) => idx === i ? { ...x, epreuve: e.target.value } : x))}
+                        placeholder="Ex: CSO 70cm, Pony Games..."
+                        className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-orange-200 font-body text-sm bg-white focus:outline-none focus:border-orange-400" />
+                      <input type="number" min="0" step="0.50" value={ep.montant}
+                        onChange={e => setCompEpreuves(prev => prev.map((x, idx) => idx === i ? { ...x, montant: e.target.value } : x))}
+                        placeholder="€"
+                        className="w-20 shrink-0 px-2 py-2 rounded-lg border border-orange-200 font-body text-sm bg-white focus:outline-none focus:border-orange-400" />
+                      <button onClick={() => setCompEpreuves(prev => prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev)}
+                        disabled={compEpreuves.length === 1}
+                        className="px-1 text-slate-300 hover:text-red-500 disabled:opacity-30 disabled:cursor-not-allowed shrink-0" title="Retirer cette épreuve">
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                  <button onClick={() => setCompEpreuves(prev => [...prev, { epreuve: "", montant: "" }])}
+                    className="self-start font-body text-xs text-orange-700 font-semibold inline-flex items-center gap-1 hover:underline">
+                    <Plus size={13} /> épreuve
+                  </button>
+                  <div className="font-body text-[10px] text-slate-400">Un engagement par passage. Le cavalier reste inscrit une seule fois au créneau.</div>
+                </div>
+
                 <div>
-                  <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Épreuve / Discipline</label>
-                  <input value={compEpreuve} onChange={e => setCompEpreuve(e.target.value)}
-                    placeholder="Ex: CSO 70cm, Pony Games, Équifun..."
+                  <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Coaching (€)</label>
+                  <input type="number" min="0" step="0.50" value={compCoaching} onChange={e => setCompCoaching(e.target.value)}
+                    placeholder="0.00"
                     className="w-full px-3 py-2 rounded-lg border border-orange-200 font-body text-sm bg-white focus:outline-none focus:border-orange-400" />
+                  <div className="font-body text-[10px] text-slate-400 mt-0.5">Accompagnement moniteur (global, une seule fois)</div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Engagement (€)</label>
-                    <input type="number" min="0" step="0.50" value={compEngagement} onChange={e => setCompEngagement(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full px-3 py-2 rounded-lg border border-orange-200 font-body text-sm bg-white focus:outline-none focus:border-orange-400" />
-                    <div className="font-body text-[10px] text-slate-400 mt-0.5">Frais d'inscription à la compétition</div>
-                  </div>
-                  <div>
-                    <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Coaching (€)</label>
-                    <input type="number" min="0" step="0.50" value={compCoaching} onChange={e => setCompCoaching(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full px-3 py-2 rounded-lg border border-orange-200 font-body text-sm bg-white focus:outline-none focus:border-orange-400" />
-                    <div className="font-body text-[10px] text-slate-400 mt-0.5">Accompagnement moniteur</div>
-                  </div>
-                </div>
-                {(parseFloat(compEngagement) > 0 || parseFloat(compCoaching) > 0) && (
+
+                {(totalEngagement > 0 || totalCoaching > 0) && (
                   <div className="bg-white rounded-lg px-3 py-2 border border-orange-100">
                     <div className="font-body text-xs text-slate-600 mb-1">Récapitulatif :</div>
-                    {parseFloat(compEngagement) > 0 && <div className="font-body text-xs text-slate-700">Engagement : <strong>{parseFloat(compEngagement).toFixed(2)}€</strong></div>}
-                    {parseFloat(compCoaching) > 0 && <div className="font-body text-xs text-slate-700">Coaching : <strong>{parseFloat(compCoaching).toFixed(2)}€</strong></div>}
+                    {compEpreuves.filter(e => (parseFloat(e.montant) || 0) > 0).map((e, i) => (
+                      <div key={i} className="font-body text-xs text-slate-700">Engagement{e.epreuve ? ` — ${e.epreuve}` : ""} : <strong>{(parseFloat(e.montant) || 0).toFixed(2)}€</strong></div>
+                    ))}
+                    {totalCoaching > 0 && <div className="font-body text-xs text-slate-700">Coaching : <strong>{totalCoaching.toFixed(2)}€</strong></div>}
                     <div className="font-body text-sm font-bold text-orange-700 mt-1">
-                      Total : {((parseFloat(compEngagement) || 0) + (parseFloat(compCoaching) || 0)).toFixed(2)}€
+                      Total : {(totalEngagement + totalCoaching).toFixed(2)}€
                     </div>
                   </div>
                 )}
@@ -2730,7 +2750,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   </button>
                 )}</div>}
               </div>
-            )}
+              );
+            })()}
 
             {selChild && !isStage && !isCompetition && (() => {
               const isCours = creneau.activityType === "cours" || creneau.activityType === "cours_collectif" || creneau.activityType === "cours_particulier";
