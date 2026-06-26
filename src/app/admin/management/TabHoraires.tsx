@@ -405,16 +405,22 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                           </td>
                           <td style={{ padding: "3px 4px", textAlign: "center", fontWeight: 800, color: "#1e3a5f", borderBottom: "2px solid #cbd5e1", fontSize: 9 }}>
                             {fmtDuree(weekSummaryRow.travaille)}
-                            {weekSummaryRow.absMin > 0 && (
-                              <span style={{ color: "#0ea5e9", fontSize: 8, marginLeft: 3 }}>+{fmtDuree(weekSummaryRow.absMin)} abs.</span>
-                            )}
-                            {weekSummaryRow.surplus > 0 && (
-                              <span style={{ color: weekSummaryRow.mode === "recup" ? "#0f766e" : "#dc2626", fontSize: 8, marginLeft: 3 }}>
-                                +{fmtDuree(weekSummaryRow.surplus)} {weekSummaryRow.mode === "recup" ? "récup" : "sup"}
-                              </span>
-                            )}
-                            {weekSummaryRow.deficit > 0 && (
-                              <span style={{ color: "#b45309", fontSize: 8, marginLeft: 3 }}>−{fmtDuree(weekSummaryRow.deficit)}</span>
+                            {weekSummaryRow.aVenir ? (
+                              <span style={{ color: "#94a3b8", fontSize: 8, marginLeft: 3, fontStyle: "italic" }}>à venir</span>
+                            ) : (
+                              <>
+                                {weekSummaryRow.absMin > 0 && (
+                                  <span style={{ color: "#0ea5e9", fontSize: 8, marginLeft: 3 }}>+{fmtDuree(weekSummaryRow.absMin)} abs.</span>
+                                )}
+                                {weekSummaryRow.surplus > 0 && (
+                                  <span style={{ color: weekSummaryRow.mode === "recup" ? "#0f766e" : "#dc2626", fontSize: 8, marginLeft: 3 }}>
+                                    +{fmtDuree(weekSummaryRow.surplus)} {weekSummaryRow.mode === "recup" ? "récup" : "sup"}
+                                  </span>
+                                )}
+                                {weekSummaryRow.deficit > 0 && (
+                                  <span style={{ color: "#b45309", fontSize: 8, marginLeft: 3 }}>−{fmtDuree(weekSummaryRow.deficit)}</span>
+                                )}
+                              </>
                             )}
                           </td>
                           <td style={{ borderBottom: "2px solid #cbd5e1" }}></td>
@@ -500,9 +506,15 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                         </td>
                         <td style={{ padding: "3px 4px", textAlign: "center", fontWeight: 800, color: "#1e3a5f", borderBottom: "2px solid #cbd5e1", fontSize: 9 }}>
                           {fmtDuree(lastWs.travaille)}
-                          {lastWs.absMin > 0 && <span style={{ color: "#0ea5e9", fontSize: 8, marginLeft: 3 }}>+{fmtDuree(lastWs.absMin)} abs.</span>}
-                          {lastWs.surplus > 0 && <span style={{ color: lastWs.mode === "recup" ? "#0f766e" : "#dc2626", fontSize: 8, marginLeft: 3 }}>+{fmtDuree(lastWs.surplus)} {lastWs.mode === "recup" ? "récup" : "sup"}</span>}
-                          {lastWs.deficit > 0 && <span style={{ color: "#b45309", fontSize: 8, marginLeft: 3 }}>−{fmtDuree(lastWs.deficit)}</span>}
+                          {lastWs.aVenir ? (
+                            <span style={{ color: "#94a3b8", fontSize: 8, marginLeft: 3, fontStyle: "italic" }}>à venir</span>
+                          ) : (
+                            <>
+                              {lastWs.absMin > 0 && <span style={{ color: "#0ea5e9", fontSize: 8, marginLeft: 3 }}>+{fmtDuree(lastWs.absMin)} abs.</span>}
+                              {lastWs.surplus > 0 && <span style={{ color: lastWs.mode === "recup" ? "#0f766e" : "#dc2626", fontSize: 8, marginLeft: 3 }}>+{fmtDuree(lastWs.surplus)} {lastWs.mode === "recup" ? "récup" : "sup"}</span>}
+                              {lastWs.deficit > 0 && <span style={{ color: "#b45309", fontSize: 8, marginLeft: 3 }}>−{fmtDuree(lastWs.deficit)}</span>}
+                            </>
+                          )}
                         </td>
                         <td style={{ borderBottom: "2px solid #cbd5e1" }}></td>
                       </tr>
