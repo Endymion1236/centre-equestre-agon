@@ -81,6 +81,8 @@ export interface BilanHebdo {
   surplusMode: "paye" | "recup";
   /** Semaine clôturée : sa contribution a déjà été intégrée au compteur du salarié. */
   clos?: boolean;
+  /** Minutes effectivement ajoutées au compteur lors de la clôture (à retrancher si on rouvre). */
+  contributionAppliquee?: number;
   updatedAt?: any;
 }
 
@@ -207,10 +209,8 @@ export function calcTempsTravailJour(
 ): number {
   const travail = tachesDuJour.filter(t => t.categorie !== "pause");
   if (travail.length === 0) return 0;
-  const sorted = [...travail].sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
-  const debutMin = _heureToMin(sorted[0].heureDebut);
-  const lastT = sorted[sorted.length - 1];
-  const finMin = _heureToMin(lastT.heureDebut) + lastT.dureeMinutes;
+  const debutMin = Math.min(...travail.map(t => _heureToMin(t.heureDebut)));
+  const finMin = Math.max(...travail.map(t => _heureToMin(t.heureDebut) + t.dureeMinutes));
   const amplitude = finMin - debutMin;
   const pauseMin = tachesDuJour
     .filter(t => t.categorie === "pause")
@@ -228,9 +228,8 @@ export function bornesJournee(
 ): { debut: string; fin: string } | null {
   const travail = tachesDuJour.filter(t => t.categorie !== "pause");
   if (travail.length === 0) return null;
-  const sorted = [...travail].sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
-  const lastT = sorted[sorted.length - 1];
-  const finMin = _heureToMin(lastT.heureDebut) + (lastT.dureeMinutes || 0);
+  const debut = travail.reduce((m, t) => (_heureToMin(t.heureDebut) < _heureToMin(m) ? t.heureDebut : m), travail[0].heureDebut);
+  const finMin = Math.max(...travail.map(t => _heureToMin(t.heureDebut) + (t.dureeMinutes || 0)));
   const minToH = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-  return { debut: sorted[0].heureDebut, fin: minToH(finMin) };
+  return { debut, fin: minToH(finMin) };
 }

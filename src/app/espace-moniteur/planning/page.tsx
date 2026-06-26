@@ -4,7 +4,7 @@ import { collection, getDocs, query, where, updateDoc, doc, serverTimestamp } fr
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { ChevronLeft, ChevronRight, Check, Loader2 } from "lucide-react";
-import { CATEGORIES, JOURS, JOURS_LABELS, getLundideSemaine, getISOWeek, formatDateCourte, fmtDuree } from "@/app/admin/management/types";
+import { CATEGORIES, JOURS, JOURS_LABELS, getLundideSemaine, getISOWeek, formatDateCourte, fmtDuree, calcTempsTravailJour } from "@/app/admin/management/types";
 import type { TachePlanifiee, Salarie, JourSemaine } from "@/app/admin/management/types";
 
 function heureToMin(h: string) { const [hh, mm] = h.split(":").map(Number); return hh * 60 + mm; }
@@ -122,7 +122,9 @@ export default function EspaceMoniteurPlanning() {
       {salaries.map(sal => {
         const isMe = sal.id === mySalId;
         const salTaches = taches.filter(t => t.salarieId === sal.id);
-        const totalCharge = salTaches.filter(t => t.categorie !== "pause").reduce((s, t) => s + t.dureeMinutes, 0);
+        // Charge de la semaine = somme du temps travaillé de chaque jour (amplitude,
+        // pauses exclues). Deux stages en parallèle ne sont pas comptés en double.
+        const totalCharge = JOURS.reduce((sum, j) => sum + calcTempsTravailJour(salTaches.filter(t => t.jour === j)), 0);
         const doneTaches = salTaches.filter(t => t.done).length;
 
         return (
@@ -152,9 +154,10 @@ export default function EspaceMoniteurPlanning() {
                 // (pauses exclues). Utile pour que la monitrice sache d'un
                 // coup d'œil quand elle finit, sans avoir à regarder chaque
                 // tâche individuellement.
-                const dureeTravailJour = dayTaches
-                  .filter(t => t.categorie !== "pause")
-                  .reduce((s, t) => s + t.dureeMinutes, 0);
+                // Temps travaillé du jour = amplitude (première→dernière), pauses
+                // exclues. Deux stages en parallèle (ex. argent + bronze 10-12)
+                // comptent 2h, pas 4h.
+                const dureeTravailJour = calcTempsTravailJour(dayTaches);
                 const heureFinJour = dayTaches.length > 0
                   ? minToHeure(Math.max(...dayTaches.map(t => heureToMin(t.heureDebut) + t.dureeMinutes)))
                   : "";
