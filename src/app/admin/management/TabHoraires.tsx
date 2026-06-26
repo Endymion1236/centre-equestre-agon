@@ -70,6 +70,7 @@ type WeekSummary = {
   clos: boolean;
   contribution: number; // ce qui irait au compteur : (recup? surplus:0) − deficit
   supPayee: number;     // heures sup payées de la semaine
+  aVenir: boolean;      // semaine entièrement future (non comptée au compteur)
 };
 
 export default function TabHoraires({ semaine, setSemaine, taches, salaries }: Props) {
@@ -152,7 +153,19 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
     await majSalarie(sal.id, { compteurMinutes: courant + contributionMin });
     const id = `${sal.id}_${semaine}`;
     const existing = allBilans.find(b => b.id === id);
-    const payload: BilanHebdo = { id, salarieId: sal.id, semaine, surplusMode: existing?.surplusMode ?? "paye", clos: true, updatedAt: serverTimestamp() };
+    const payload: BilanHebdo = { id, salarieId: sal.id, semaine, surplusMode: existing?.surplusMode ?? "paye", clos: true, contributionAppliquee: contributionMin, updatedAt: serverTimestamp() };
+    await setDoc(doc(db, "bilans-heures", id), payload, { merge: true });
+    setAllBilans(prev => { const o = prev.filter(b => b.id !== id); return [...o, payload]; });
+  };
+
+  // Rouvre une semaine close : retranche du compteur ce qui avait été appliqué.
+  const decloturerSemaine = async (sal: Salarie, semaine: string) => {
+    const id = `${sal.id}_${semaine}`;
+    const existing = allBilans.find(b => b.id === id);
+    const aRetrancher = existing?.contributionAppliquee ?? 0;
+    const courant = salFusion(sal).compteurMinutes ?? 0;
+    await majSalarie(sal.id, { compteurMinutes: courant - aRetrancher });
+    const payload: BilanHebdo = { id, salarieId: sal.id, semaine, surplusMode: existing?.surplusMode ?? "paye", clos: false, contributionAppliquee: 0, updatedAt: serverTimestamp() };
     await setDoc(doc(db, "bilans-heures", id), payload, { merge: true });
     setAllBilans(prev => { const o = prev.filter(b => b.id !== id); return [...o, payload]; });
   };
@@ -230,6 +243,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
     const weekMap: Record<string, number> = {};
     rows.forEach(r => { weekMap[r.isoWeek] = (weekMap[r.isoWeek] || 0) + r.duree; });
 
+    const debutAujourdhui = new Date(); debutAujourdhui.setHours(0, 0, 0, 0);
     const weekSummaries: WeekSummary[] = weeksOfMonth.map(w => {
       const travaille = weekMap[w] || 0;
       const absMin = allAbsences
@@ -241,15 +255,19 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
       const bilan = allBilans.find(b => b.id === `${salId}_${w}`);
       const mode = bilan?.surplusMode ?? "paye";
       const clos = !!bilan?.clos;
-      const contribution = (mode === "recup" ? surplus : 0) - deficit;
-      const supPayee = mode === "paye" ? surplus : 0;
-      return { isoWeek: w, travaille, absMin, cible, surplus, deficit, mode, clos, contribution, supPayee };
+      // Semaine entièrement future (son lundi est après aujourd'hui) : pas encore
+      // travaillée, on ne la compte pas en déficit ni au compteur.
+      const aVenir = getLundideSemaine(w).getTime() > debutAujourdhui.getTime();
+      const contribution = aVenir ? 0 : (mode === "recup" ? surplus : 0) - deficit;
+      const supPayee = aVenir ? 0 : (mode === "paye" ? surplus : 0);
+      return { isoWeek: w, travaille, absMin, cible, surplus, deficit, mode, clos, contribution, supPayee, aVenir };
     });
 
     const totalSupPayee = weekSummaries.reduce((s, w) => s + w.supPayee, 0);
-    // Compteur : valeur stockée (déjà augmentée des semaines closes) + prévision des semaines non closes.
+    // Compteur : valeur stockée (déjà augmentée des semaines closes) + prévision des
+    // semaines non closes et non futures.
     const compteurStocke = sal.compteurMinutes ?? 0;
-    const previsionMois = weekSummaries.filter(w => !w.clos).reduce((s, w) => s + w.contribution, 0);
+    const previsionMois = weekSummaries.filter(w => !w.clos && !w.aVenir).reduce((s, w) => s + w.contribution, 0);
     const compteurPrev = compteurStocke + previsionMois;
 
     return { rows, totalMois, weekSummaries, totalSupPayee, compteurStocke, previsionMois, compteurPrev, contrat };
@@ -315,6 +333,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                 onSupprimerAbsence={supprimerAbsence}
                 onSetMode={setMode}
                 onAppliquerSemaine={appliquerSemaine}
+                onDecloturer={decloturerSemaine}
                 onAjusterCompteur={ajusterCompteur}
               />
               {/* Header */}
@@ -545,7 +564,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
 // ─────────────────────────────────────────────────────────────────────────────
 function PanneauRH({
   sal, weekSummaries, compteurStocke, previsionMois, compteurPrev, absences,
-  onMajSalarie, onAjouterAbsence, onSupprimerAbsence, onSetMode, onAppliquerSemaine, onAjusterCompteur,
+  onMajSalarie, onAjouterAbsence, onSupprimerAbsence, onSetMode, onAppliquerSemaine, onDecloturer, onAjusterCompteur,
 }: {
   sal: Salarie;
   weekSummaries: WeekSummary[];
@@ -557,6 +576,7 @@ function PanneauRH({
   onSupprimerAbsence: (absId: string) => void;
   onSetMode: (salId: string, semaine: string, mode: "paye" | "recup") => void;
   onAppliquerSemaine: (sal: Salarie, semaine: string, contributionMin: number) => void;
+  onDecloturer: (sal: Salarie, semaine: string) => void;
   onAjusterCompteur: (sal: Salarie, deltaMin: number) => void;
 }) {
   const [absDate, setAbsDate] = useState("");
@@ -599,30 +619,44 @@ function PanneauRH({
         </span>
       </div>
 
-      {/* Semaines avec surplus / déficit */}
-      {weekSummaries.some(w => w.surplus > 0 || w.deficit > 0) && (
+      {/* Semaines du mois */}
+      {weekSummaries.length > 0 && (
         <div className="flex flex-col gap-1.5">
-          {weekSummaries.filter(w => w.surplus > 0 || w.deficit > 0).map(w => (
+          {weekSummaries.map(w => (
             <div key={w.isoWeek} className="flex flex-wrap items-center gap-2 text-xs font-body">
               <span className="font-semibold text-slate-700 w-16 shrink-0">Sem. {w.isoWeek.split("-W")[1]}</span>
               <span className="text-slate-500">{fmtDuree(w.travaille)} / cible {fmtDuree(w.cible)}</span>
-              {w.surplus > 0 && (
-                <span className="inline-flex rounded-md overflow-hidden border border-gray-200">
-                  <button onClick={() => onSetMode(sal.id, w.isoWeek, "paye")} disabled={w.clos}
-                    className={`px-2 py-1 ${w.mode === "paye" ? "bg-red-500 text-white" : "bg-white text-slate-500"} disabled:opacity-40`}>sup payée</button>
-                  <button onClick={() => onSetMode(sal.id, w.isoWeek, "recup")} disabled={w.clos}
-                    className={`px-2 py-1 ${w.mode === "recup" ? "bg-teal-600 text-white" : "bg-white text-slate-500"} disabled:opacity-40`}>récup</button>
-                </span>
-              )}
-              {w.surplus > 0 && <span className={w.mode === "recup" ? "text-teal-700 font-semibold" : "text-red-600 font-semibold"}>+{fmtDuree(w.surplus)}</span>}
-              {w.deficit > 0 && <span className="text-amber-700 font-semibold">−{fmtDuree(w.deficit)} déficit</span>}
-              {w.clos ? (
-                <span className="ml-auto text-slate-400">intégré ✓</span>
+              {w.aVenir ? (
+                <span className="text-slate-400 italic">à venir</span>
+              ) : w.surplus === 0 && w.deficit === 0 ? (
+                <span className="text-emerald-600">à l'équilibre</span>
               ) : (
-                <button onClick={() => onAppliquerSemaine(sal, w.isoWeek, w.contribution)}
-                  className="ml-auto px-2 py-1 rounded bg-blue-600 text-white font-semibold">
-                  Clôturer ({fmtSigne(w.contribution)})
-                </button>
+                <>
+                  {w.surplus > 0 && (
+                    <span className="inline-flex rounded-md overflow-hidden border border-gray-200">
+                      <button onClick={() => onSetMode(sal.id, w.isoWeek, "paye")} disabled={w.clos}
+                        className={`px-2 py-1 ${w.mode === "paye" ? "bg-red-500 text-white" : "bg-white text-slate-500"} disabled:opacity-40`}>sup payée</button>
+                      <button onClick={() => onSetMode(sal.id, w.isoWeek, "recup")} disabled={w.clos}
+                        className={`px-2 py-1 ${w.mode === "recup" ? "bg-teal-600 text-white" : "bg-white text-slate-500"} disabled:opacity-40`}>récup</button>
+                    </span>
+                  )}
+                  {w.surplus > 0 && <span className={w.mode === "recup" ? "text-teal-700 font-semibold" : "text-red-600 font-semibold"}>+{fmtDuree(w.surplus)}</span>}
+                  {w.deficit > 0 && <span className="text-amber-700 font-semibold">−{fmtDuree(w.deficit)} déficit</span>}
+                </>
+              )}
+              {!w.aVenir && (
+                w.clos ? (
+                  <span className="ml-auto inline-flex items-center gap-2">
+                    <span className="text-slate-400">intégré ✓</span>
+                    <button onClick={() => onDecloturer(sal, w.isoWeek)}
+                      className="px-2 py-1 rounded bg-gray-100 text-slate-600 font-semibold hover:bg-gray-200">Rouvrir</button>
+                  </span>
+                ) : (
+                  <button onClick={() => onAppliquerSemaine(sal, w.isoWeek, w.contribution)}
+                    className="ml-auto px-2 py-1 rounded bg-blue-600 text-white font-semibold">
+                    Clôturer ({fmtSigne(w.contribution)})
+                  </button>
+                )
               )}
             </div>
           ))}

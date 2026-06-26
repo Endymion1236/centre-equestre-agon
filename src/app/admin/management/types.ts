@@ -81,6 +81,8 @@ export interface BilanHebdo {
   surplusMode: "paye" | "recup";
   /** Semaine clôturée : sa contribution a déjà été intégrée au compteur du salarié. */
   clos?: boolean;
+  /** Minutes effectivement ajoutées au compteur lors de la clôture (à retrancher si on rouvre). */
+  contributionAppliquee?: number;
   updatedAt?: any;
 }
 
