@@ -22,6 +22,8 @@ const contratMinDe = (s: Salarie) => Math.round((s.heuresContratSemaine ?? 35) *
 const joursTravDe = (s: Salarie) => s.joursTravailles ?? 5;
 /** Valeur par défaut (minutes) d'un jour d'absence pour un salarié. */
 const jourMinDe = (s: Salarie) => Math.round(contratMinDe(s) / Math.max(1, joursTravDe(s)));
+/** "YYYY-MM-DD" en date locale (les jours du mois sont construits en local). */
+const dateISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 
 function getWeeksOfMonth(year: number, month: number): string[] {
@@ -58,6 +60,8 @@ type RowData = {
   duree: number;        // durée travaillée (pauses exclues)
   isSamedi: boolean;
   isoWeek: string;
+  absenceLabel?: string; // ex. "Congé payé" si une absence couvre ce jour
+  absenceMin?: number;   // durée de l'absence (minutes)
 };
 type WeekSummary = {
   isoWeek: string;
@@ -196,8 +200,12 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
       const pauses = dayTaches.filter(t => t.categorie === "pause");
       const travail = dayTaches.filter(t => t.categorie !== "pause");
 
+      // Absence éventuelle couvrant ce jour (congé payé, récup, maladie…)
+      const abs = allAbsences.find(a => a.salarieId === salId && a.date === dateISO(date));
+      const absX = abs ? { absenceLabel: LIBELLE_ABSENCE[abs.type], absenceMin: abs.dureeMinutes } : {};
+
       if (travail.length === 0) {
-        rows.push({ date, jour, debut: "", fin: "", debutAprem: "", finAprem: "", pauseMin: 0, duree: 0, isSamedi: dow === 5, isoWeek });
+        rows.push({ date, jour, debut: "", fin: "", debutAprem: "", finAprem: "", pauseMin: 0, duree: 0, isSamedi: dow === 5, isoWeek, ...absX });
         return;
       }
 
@@ -226,6 +234,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
           debutAprem, finAprem: fin,
           pauseMin,
           duree,
+          ...absX,
         });
       } else {
         // Aucune pause explicite : journée continue
@@ -235,6 +244,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
           debutAprem: "", finAprem: "",
           pauseMin: 0,
           duree,
+          ...absX,
         });
       }
     });
@@ -447,6 +457,14 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                           }
                           const cellStyle = { padding: "2px 4px", borderBottom: "1px solid #eef2f7", textAlign: "center" as const, fontWeight: 600 };
                           const colorIf = (v: string) => v ? "#1e293b" : "#d1d5db";
+                          // Jour d'absence sans travail : libellé sur les 4 colonnes horaires
+                          if (row.absenceLabel && row.duree === 0) {
+                            return (
+                              <td colSpan={4} style={{ ...cellStyle, color: "#0284c7", fontStyle: "italic", background: "#f0f9ff" }}>
+                                {row.absenceLabel}{row.absenceMin ? ` · ${fmtDuree(row.absenceMin)}` : ""}
+                              </td>
+                            );
+                          }
                           return <>
                             <td style={{ ...cellStyle, color: colorIf(matinDeb) }}>{matinDeb || "—"}</td>
                             <td style={{ ...cellStyle, color: colorIf(matinFin) }}>{matinFin || "—"}</td>
