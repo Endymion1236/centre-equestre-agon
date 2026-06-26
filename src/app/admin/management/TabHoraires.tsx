@@ -250,7 +250,10 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
         .filter(a => a.salarieId === salId && a.semaine === w && a.type !== "sans_solde")
         .reduce((s, a) => s + (a.dureeMinutes || 0), 0);
       const cible = Math.max(0, contrat - absMin);
-      const surplus = Math.max(0, travaille - cible);
+      // Déficit : mesuré sur la cible réduite -> un congé protège du déficit.
+      // Surplus : mesuré sur le CONTRAT PLEIN à partir des heures réellement
+      // travaillées -> un congé ne fabrique jamais d'heures sup.
+      const surplus = Math.max(0, travaille - contrat);
       const deficit = Math.max(0, cible - travaille);
       const bilan = allBilans.find(b => b.id === `${salId}_${w}`);
       const mode = bilan?.surplusMode ?? "paye";
@@ -625,7 +628,7 @@ function PanneauRH({
           {weekSummaries.map(w => (
             <div key={w.isoWeek} className="flex flex-wrap items-center gap-2 text-xs font-body">
               <span className="font-semibold text-slate-700 w-16 shrink-0">Sem. {w.isoWeek.split("-W")[1]}</span>
-              <span className="text-slate-500">{fmtDuree(w.travaille)} / cible {fmtDuree(w.cible)}</span>
+              <span className="text-slate-500">{fmtDuree(w.travaille)} / cible {fmtDuree(w.cible)}{w.absMin > 0 ? <span className="text-sky-600"> · {fmtDuree(w.absMin)} congé</span> : null}</span>
               {w.aVenir ? (
                 <span className="text-slate-400 italic">à venir</span>
               ) : w.surplus === 0 && w.deficit === 0 ? (
