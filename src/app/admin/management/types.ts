@@ -40,7 +40,48 @@ export interface Salarie {
   nom: string;
   couleur: string;    // couleur d'affichage
   actif: boolean;
+  /** Heures contractuelles par semaine (défaut 35). Pour temps partiel. */
+  heuresContratSemaine?: number;
+  /** Nombre de jours travaillés/semaine (défaut 5) — sert à la valeur par défaut d'un jour d'absence. */
+  joursTravailles?: number;
+  /** Compteur d'heures cumulé (banque d'heures), en MINUTES. + = à récupérer, − = doit des heures. */
+  compteurMinutes?: number;
   createdAt?: any;
+}
+
+export type TypeAbsence = "conge_paye" | "recup" | "maladie" | "ferie" | "sans_solde";
+
+export const LIBELLE_ABSENCE: Record<TypeAbsence, string> = {
+  conge_paye: "Congé payé",
+  recup: "Récupération",
+  maladie: "Maladie",
+  ferie: "Férié",
+  sans_solde: "Sans solde",
+};
+
+/** Une absence d'un salarié sur un jour donné. Neutralise le contrat de ce jour. */
+export interface Absence {
+  id: string;
+  salarieId: string;
+  salarieName: string;
+  date: string;            // "2026-07-15" (ISO)
+  semaine: string;         // "2026-W29" (pour requêter par semaine)
+  type: TypeAbsence;
+  dureeMinutes: number;    // durée neutralisée ce jour (défaut = contrat/joursTravailles)
+  notes?: string;
+  createdAt?: any;
+}
+
+/** Décision hebdomadaire sur le surplus d'heures d'un salarié. */
+export interface BilanHebdo {
+  id: string;              // `${salarieId}_${semaine}`
+  salarieId: string;
+  semaine: string;         // "2026-W29"
+  /** Que fait-on du surplus de la semaine : payé en heures sup, ou mis en récupération. */
+  surplusMode: "paye" | "recup";
+  /** Semaine clôturée : sa contribution a déjà été intégrée au compteur du salarié. */
+  clos?: boolean;
+  updatedAt?: any;
 }
 
 export interface TachePlanifiee {

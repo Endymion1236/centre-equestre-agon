@@ -449,6 +449,16 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ── RH : absences/congés et bilans d'heures (compteur récup) ───────────
+    match /absences-management/{docId} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+    match /bilans-heures/{docId} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+
     // ── Tâches planifiées (cron, rappels) ─────────────────────────────────
     // Lecture : staff (moniteurs voient leur planning)
     // Écriture : admin OU le moniteur qui toggle 'done' sur sa propre tâche
