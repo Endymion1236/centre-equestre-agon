@@ -190,9 +190,9 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
 
       // Amplitude = première tâche de travail → fin de la dernière tâche de travail
       const debut = travail[0].heureDebut;
-      const lastT = travail[travail.length - 1];
-      const fin = minToHeure(heureToMin(lastT.heureDebut) + lastT.dureeMinutes);
-      const amplitudeMin = heureToMin(fin) - heureToMin(debut);
+      const finMinJour = Math.max(...travail.map(t => heureToMin(t.heureDebut) + t.dureeMinutes));
+      const fin = minToHeure(finMinJour);
+      const amplitudeMin = finMinJour - heureToMin(debut);
 
       // Somme des durées de TOUTES les pauses explicites
       const pauseMin = pauses.reduce((s, p) => s + p.dureeMinutes, 0);
