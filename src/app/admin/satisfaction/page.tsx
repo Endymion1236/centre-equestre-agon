@@ -51,18 +51,39 @@ function Stars({ n, size = 14 }: { n: number; size?: number }) {
 }
 
 export default function SatisfactionPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
   const [avis, setAvis] = useState<Avis[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterActivite, setFilterActivite] = useState<string>("");
   const [filterNote, setFilterNote] = useState<number>(0);
   const [view, setView] = useState<"global" | "enseignant">("global");
+  const [filterPeriode, setFilterPeriode] = useState<string>("");
   // Générateur de lien de test
   const [genStage, setGenStage] = useState("");
   const [genChild, setGenChild] = useState("");
   const [genMoniteurs, setGenMoniteurs] = useState("");
   const [genLink, setGenLink] = useState("");
   const [genBusy, setGenBusy] = useState(false);
+  // Test du cron d'envoi
+  const [testDate, setTestDate] = useState("");
+  const [testBusy, setTestBusy] = useState(false);
+  const [testResult, setTestResult] = useState("");
+
+  const lancerCron = async (envoyer: boolean) => {
+    if (!user) return;
+    setTestBusy(true); setTestResult("");
+    try {
+      const token = await user.getIdToken();
+      const params = new URLSearchParams();
+      if (testDate) params.set("date", testDate);
+      if (envoyer && user.email) params.set("to", user.email); else params.set("dry", "1");
+      const res = await fetch(`/api/cron/satisfaction-stages?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      setTestResult(JSON.stringify(data, null, 2));
+    } catch (e: any) {
+      setTestResult("Erreur : " + (e?.message || e));
+    } finally { setTestBusy(false); }
+  };
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -123,11 +144,33 @@ export default function SatisfactionPage() {
     return { moyenne, parAspect, distrib, total: filtered.length };
   }, [filtered]);
 
-  // Bilan par enseignant (uniquement les avis post-stage avec moniteurs nommés)
+  // Mois (YYYY-MM) d'un avis de stage : dateFin > semaine > createdAt
+  const moisDeAvis = (a: Avis): string => {
+    const d = (a as any).dateFin || (a as any).semaine;
+    if (typeof d === "string" && /^\d{4}-\d{2}/.test(d)) return d.slice(0, 7);
+    if (a.createdAt?.seconds) { const dt = new Date(a.createdAt.seconds * 1000); return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`; }
+    return "";
+  };
+  const labelPeriode = (ym: string) => {
+    const [y, m] = ym.split("-").map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  };
+
+  const stageAvis = useMemo(
+    () => avis.filter(a => a.source === "stage" && Array.isArray(a.moniteurs)),
+    [avis]
+  );
+  const periodesStage = useMemo(() => {
+    const set = new Set<string>();
+    stageAvis.forEach(a => { const m = moisDeAvis(a); if (m) set.add(m); });
+    return Array.from(set).sort().reverse();
+  }, [stageAvis]);
+
+  // Bilan par enseignant (avis post-stage, filtrés par période éventuelle)
   const bilan = useMemo(() => {
-    const stageAvis = avis.filter(a => a.source === "stage" && Array.isArray(a.moniteurs)) as unknown as AvisStage[];
-    return bilanParEnseignant(stageAvis);
-  }, [avis]);
+    const list = (filterPeriode ? stageAvis.filter(a => moisDeAvis(a) === filterPeriode) : stageAvis) as unknown as AvisStage[];
+    return bilanParEnseignant(list);
+  }, [stageAvis, filterPeriode]);
 
   const genererLienTest = async () => {
     const moniteurs = genMoniteurs.split(",").map(s => s.trim()).filter(Boolean);
@@ -187,6 +230,20 @@ export default function SatisfactionPage() {
         </div>
       ) : view === "enseignant" ? (
         <>
+          {/* Filtre période */}
+          {periodesStage.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <Filter size={14} className="text-slate-400" />
+              <select value={filterPeriode} onChange={e => setFilterPeriode(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-slate-200 font-body text-sm bg-white capitalize">
+                <option value="">Toute la saison</option>
+                {periodesStage.map(p => <option key={p} value={p}>{labelPeriode(p)}</option>)}
+              </select>
+              {filterPeriode && (
+                <button onClick={() => setFilterPeriode("")} className="font-body text-xs text-blue-500 hover:underline">Réinitialiser</button>
+              )}
+            </div>
+          )}
           {/* Tableau par enseignant */}
           {bilan.length === 0 ? (
             <div className="text-center py-10 font-body text-slate-500">
@@ -259,6 +316,25 @@ export default function SatisfactionPage() {
                 <a href={genLink} target="_blank" rel="noreferrer" className="font-body text-xs text-blue-600 truncate flex-1">{genLink}</a>
                 <button onClick={() => navigator.clipboard?.writeText(genLink)} className="text-slate-400 hover:text-slate-700" title="Copier"><Copy size={14} /></button>
               </div>
+            )}
+          </div>
+
+          {/* Test du cron d'envoi automatique */}
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mt-4">
+            <div className="font-body text-sm font-semibold text-slate-700 mb-1 flex items-center gap-1.5"><MessageSquare size={15} /> Cron d'envoi (stages terminés la veille)</div>
+            <p className="font-body text-xs text-slate-500 mb-3">
+              « Aperçu » liste ce qui serait envoyé, sans rien créer ni envoyer. « M'envoyer un test » redirige tous les mails vers ton adresse ({user?.email}).
+              Laisse la date vide pour traiter <strong>hier</strong>, ou choisis le dernier jour d'un stage passé.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <input type="date" value={testDate} onChange={e => setTestDate(e.target.value)} className="px-3 py-2 rounded-lg border border-slate-200 font-body text-sm bg-white" />
+              <button onClick={() => lancerCron(false)} disabled={testBusy}
+                className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 font-body text-sm font-semibold disabled:opacity-50">Aperçu</button>
+              <button onClick={() => lancerCron(true)} disabled={testBusy}
+                className="px-3 py-2 rounded-lg bg-emerald-600 text-white font-body text-sm font-semibold disabled:opacity-50">M'envoyer un test</button>
+            </div>
+            {testResult && (
+              <pre className="mt-3 bg-slate-900 text-slate-100 rounded-lg p-3 text-[11px] overflow-auto max-h-64 whitespace-pre-wrap">{testResult}</pre>
             )}
           </div>
         </>
