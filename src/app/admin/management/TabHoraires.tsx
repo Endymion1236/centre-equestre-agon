@@ -210,22 +210,31 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
       }
 
       // Amplitude = première tâche de travail → fin de la dernière tâche de travail
-      const debut = travail[0].heureDebut;
+      const debutMinJour = Math.min(...travail.map(t => heureToMin(t.heureDebut)));
       const finMinJour = Math.max(...travail.map(t => heureToMin(t.heureDebut) + t.dureeMinutes));
+      const debut = minToHeure(debutMinJour);
       const fin = minToHeure(finMinJour);
-      const amplitudeMin = finMinJour - heureToMin(debut);
+      const amplitudeMin = finMinJour - debutMinJour;
 
-      // Somme des durées de TOUTES les pauses explicites
-      const pauseMin = pauses.reduce((s, p) => s + p.dureeMinutes, 0);
+      // Seules les pauses situées DANS l'amplitude travaillée comptent : une pause
+      // avant le 1er créneau ou après le dernier ne réduit pas le travail.
+      const pausesInternes = pauses.filter(p => {
+        const ps = heureToMin(p.heureDebut); const pe = ps + p.dureeMinutes;
+        return Math.min(pe, finMinJour) - Math.max(ps, debutMinJour) > 0;
+      });
+      const pauseMin = pausesInternes.reduce((s, p) => {
+        const ps = heureToMin(p.heureDebut); const pe = ps + p.dureeMinutes;
+        return s + Math.max(0, Math.min(pe, finMinJour) - Math.max(ps, debutMinJour));
+      }, 0);
 
-      // Durée travaillée = amplitude − pauses explicites
+      // Durée travaillée = amplitude − pauses internes
       // (les battements courts entre tâches de travail sont comptés en travail)
       const duree = Math.max(0, amplitudeMin - pauseMin);
       totalMois += duree;
 
-      if (pauses.length > 0) {
-        // On coupe l'affichage matin/aprem autour de la PREMIÈRE pause de la journée
-        const premierePause = pauses[0];
+      if (pausesInternes.length > 0) {
+        // On coupe l'affichage matin/aprem autour de la PREMIÈRE pause interne
+        const premierePause = pausesInternes[0];
         const finMatin = premierePause.heureDebut;
         const debutAprem = minToHeure(heureToMin(premierePause.heureDebut) + premierePause.dureeMinutes);
         rows.push({

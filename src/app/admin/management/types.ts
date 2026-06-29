@@ -212,9 +212,15 @@ export function calcTempsTravailJour(
   const debutMin = Math.min(...travail.map(t => _heureToMin(t.heureDebut)));
   const finMin = Math.max(...travail.map(t => _heureToMin(t.heureDebut) + t.dureeMinutes));
   const amplitude = finMin - debutMin;
+  // On ne déduit que la portion d'une pause qui tombe DANS l'amplitude travaillée.
+  // Une pause avant le 1er créneau ou après le dernier ne réduit pas le travail.
   const pauseMin = tachesDuJour
     .filter(t => t.categorie === "pause")
-    .reduce((s, t) => s + t.dureeMinutes, 0);
+    .reduce((s, t) => {
+      const ps = _heureToMin(t.heureDebut);
+      const pe = ps + t.dureeMinutes;
+      return s + Math.max(0, Math.min(pe, finMin) - Math.max(ps, debutMin));
+    }, 0);
   return Math.max(0, amplitude - pauseMin);
 }
 
