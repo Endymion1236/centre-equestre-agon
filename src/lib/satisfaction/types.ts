@@ -72,28 +72,37 @@ export function moyenne(vals: number[]): number | null {
   return Math.round((v.reduce((s, n) => s + n, 0) / v.length) * 10) / 10;
 }
 
+export interface DetailAvisEnseignant {
+  childName: string;
+  stageLabel: string;
+  noteEncadrement: number;
+  globalNote: number;
+  recommande?: boolean;
+  commentaire?: string;
+  date?: any;
+}
+
 export interface BilanEnseignant {
   nom: string;
   nbNotes: number;            // nb de notes d'encadrement reçues
   moyenneEncadrement: number | null;
   moyenneGlobaleStage: number | null; // moyenne des notes globales des stages encadrés
   recommandePct: number | null;       // % de "recommande" sur ses stages
-  commentaires: Array<{ stageLabel: string; commentaire: string; date?: any }>;
+  details: DetailAvisEnseignant[];     // une ligne par réponse (pour le détail)
 }
 
 /**
  * Agrège les avis (source stage) par enseignant nommé.
  * Chaque entrée `moniteurs:[{nom,note}]` alimente la moyenne d'encadrement du
  * moniteur ; la note globale et la reco du stage sont attribuées à chacun de
- * ses moniteurs (informatif).
+ * ses moniteurs (informatif). `details` garde le détail par réponse.
  */
 export function bilanParEnseignant(avis: AvisStage[]): BilanEnseignant[] {
   const map = new Map<string, {
-    notesEnc: number[]; notesGlob: number[]; recos: boolean[];
-    commentaires: Array<{ stageLabel: string; commentaire: string; date?: any }>;
+    notesEnc: number[]; notesGlob: number[]; recos: boolean[]; details: DetailAvisEnseignant[];
   }>();
   const get = (nom: string) => {
-    if (!map.has(nom)) map.set(nom, { notesEnc: [], notesGlob: [], recos: [], commentaires: [] });
+    if (!map.has(nom)) map.set(nom, { notesEnc: [], notesGlob: [], recos: [], details: [] });
     return map.get(nom)!;
   };
   for (const a of avis) {
@@ -104,9 +113,15 @@ export function bilanParEnseignant(avis: AvisStage[]): BilanEnseignant[] {
       if (typeof m.note === "number" && m.note > 0) e.notesEnc.push(m.note);
       if (typeof a.globalNote === "number" && a.globalNote > 0) e.notesGlob.push(a.globalNote);
       if (typeof a.recommande === "boolean") e.recos.push(a.recommande);
-      if (a.commentaire && a.commentaire.trim()) {
-        e.commentaires.push({ stageLabel: a.stageLabel || a.activityTitle || "", commentaire: a.commentaire.trim(), date: a.createdAt });
-      }
+      e.details.push({
+        childName: a.childName || "",
+        stageLabel: a.stageLabel || a.activityTitle || "",
+        noteEncadrement: typeof m.note === "number" ? m.note : 0,
+        globalNote: a.globalNote || 0,
+        recommande: a.recommande,
+        commentaire: a.commentaire?.trim() || "",
+        date: a.createdAt,
+      });
     }
   }
   return Array.from(map.entries())
@@ -116,7 +131,8 @@ export function bilanParEnseignant(avis: AvisStage[]): BilanEnseignant[] {
       moyenneEncadrement: moyenne(e.notesEnc),
       moyenneGlobaleStage: moyenne(e.notesGlob),
       recommandePct: e.recos.length ? Math.round((e.recos.filter(Boolean).length / e.recos.length) * 100) : null,
-      commentaires: e.commentaires,
+      // Les notes les plus basses d'abord : l'insatisfaction remonte en tête.
+      details: e.details.sort((a, b) => a.noteEncadrement - b.noteEncadrement),
     }))
     .sort((a, b) => (b.moyenneEncadrement ?? -1) - (a.moyenneEncadrement ?? -1));
 }

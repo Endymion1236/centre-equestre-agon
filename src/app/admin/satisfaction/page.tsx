@@ -7,11 +7,11 @@
 // l'espace cavalier (collection 'avis-satisfaction'). Note moyenne globale,
 // moyenne par aspect, filtres par activite et par note, liste detaillee.
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, Fragment } from "react";
 import { collection, getDocs, query, orderBy, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
-import { Star, MessageSquare, TrendingUp, Filter, Users, Link2, Copy } from "lucide-react";
+import { Star, MessageSquare, TrendingUp, Filter, Users, Link2, Copy, ChevronDown, ChevronRight } from "lucide-react";
 import { bilanParEnseignant, type AvisStage } from "@/lib/satisfaction/types";
 
 const ASPECTS = [
@@ -58,6 +58,7 @@ export default function SatisfactionPage() {
   const [filterNote, setFilterNote] = useState<number>(0);
   const [view, setView] = useState<"global" | "enseignant">("global");
   const [filterPeriode, setFilterPeriode] = useState<string>("");
+  const [expandedEns, setExpandedEns] = useState<string | null>(null);
   // Générateur de lien de test
   const [genStage, setGenStage] = useState("");
   const [genChild, setGenChild] = useState("");
@@ -265,40 +266,61 @@ export default function SatisfactionPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {bilan.map(b => (
-                    <tr key={b.nom} className="border-t border-slate-100">
-                      <td className="px-4 py-3 font-body font-semibold text-slate-800">{b.nom}</td>
-                      <td className="px-3 py-3 text-center">
-                        <div className="inline-flex items-center gap-1.5">
-                          <Stars n={Math.round(b.moyenneEncadrement || 0)} />
-                          <span className="font-body text-xs font-semibold text-slate-500">{b.moyenneEncadrement?.toFixed(1) ?? "—"}</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 text-center font-body text-slate-600">{b.moyenneGlobaleStage?.toFixed(1) ?? "—"}</td>
-                      <td className="px-3 py-3 text-center font-body text-slate-600">{b.recommandePct === null ? "—" : `${b.recommandePct}%`}</td>
-                      <td className="px-3 py-3 text-center font-body text-slate-500">{b.nbNotes}</td>
-                    </tr>
-                  ))}
+                  {bilan.map(b => {
+                    const open = expandedEns === b.nom;
+                    return (
+                      <Fragment key={b.nom}>
+                        <tr className="border-t border-slate-100 cursor-pointer hover:bg-slate-50" onClick={() => setExpandedEns(open ? null : b.nom)}>
+                          <td className="px-4 py-3 font-body font-semibold text-slate-800">
+                            <span className="inline-flex items-center gap-1.5">
+                              {open ? <ChevronDown size={15} className="text-slate-400" /> : <ChevronRight size={15} className="text-slate-400" />}
+                              {b.nom}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 text-center">
+                            <div className="inline-flex items-center gap-1.5">
+                              <Stars n={Math.round(b.moyenneEncadrement || 0)} />
+                              <span className="font-body text-xs font-semibold text-slate-500">{b.moyenneEncadrement?.toFixed(1) ?? "—"}</span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-3 text-center font-body text-slate-600">{b.moyenneGlobaleStage?.toFixed(1) ?? "—"}</td>
+                          <td className="px-3 py-3 text-center font-body text-slate-600">{b.recommandePct === null ? "—" : `${b.recommandePct}%`}</td>
+                          <td className="px-3 py-3 text-center font-body text-slate-500">{b.nbNotes}</td>
+                        </tr>
+                        {open && (
+                          <tr className="bg-slate-50/60">
+                            <td colSpan={5} className="px-4 py-3">
+                              <div className="flex flex-col gap-2">
+                                {b.details.map((d, i) => {
+                                  const bas = d.noteEncadrement > 0 && d.noteEncadrement <= 3;
+                                  return (
+                                    <div key={i} className={`rounded-lg border p-3 ${bas ? "border-rose-200 bg-rose-50" : "border-slate-200 bg-white"}`}>
+                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="font-body text-sm">
+                                          <span className="font-semibold text-slate-800">{d.childName || "Enfant"}</span>
+                                          <span className="text-slate-400"> · {d.stageLabel}</span>
+                                        </div>
+                                        <div className="flex items-center gap-3 font-body text-xs text-slate-500">
+                                          <span className="inline-flex items-center gap-1">Encadr. <Stars n={d.noteEncadrement} /> <span className={bas ? "text-rose-600 font-bold" : "font-semibold"}>{d.noteEncadrement || "—"}</span></span>
+                                          <span>Stage {d.globalNote || "—"}/5</span>
+                                          {d.recommande === false && <span className="text-rose-600 font-semibold">ne recommande pas</span>}
+                                        </div>
+                                      </div>
+                                      {d.commentaire && (
+                                        <p className="font-body text-sm text-slate-700 italic mt-2">« {d.commentaire} »</p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
-            </div>
-          )}
-
-          {/* Commentaires par enseignant */}
-          {bilan.some(b => b.commentaires.length > 0) && (
-            <div className="space-y-4 mb-6">
-              {bilan.filter(b => b.commentaires.length > 0).map(b => (
-                <div key={b.nom} className="bg-white border border-slate-200 rounded-2xl p-4">
-                  <div className="font-body font-semibold text-slate-800 mb-2">{b.nom}</div>
-                  <div className="space-y-2">
-                    {b.commentaires.map((c, i) => (
-                      <p key={i} className="font-body text-sm text-slate-700 italic bg-slate-50 rounded-lg p-3">
-                        « {c.commentaire} » <span className="not-italic text-slate-400 text-xs">— {c.stageLabel}</span>
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              ))}
             </div>
           )}
 
