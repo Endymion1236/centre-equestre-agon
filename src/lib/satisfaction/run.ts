@@ -77,7 +77,7 @@ export async function runSatisfactionStages(opts: RunOptions = {}) {
 
   const apiKey = process.env.RESEND_API_KEY || "";
   const resend = apiKey ? new Resend(apiKey) : null;
-  const result: any = { dateFin, dry, stages: [] as any[], invitations: 0, emails: 0, bloques: 0, sansEmail: 0, sansResend: 0 };
+  const result: any = { dateFin, dry, stages: [] as any[], invitations: 0, emails: 0, bloques: 0, sansEmail: 0, sansResend: 0, echecs: 0, erreurs: [] as string[], crees: [] as any[] };
 
   for (const g of groups.values()) {
     const dates = [...new Set(g.jours.map(j => j.date).filter(Boolean))].sort();
@@ -122,6 +122,7 @@ export async function runSatisfactionStages(opts: RunOptions = {}) {
 
       const ref = await adminDb.collection("satisfaction-invitations").add(invitation);
       result.invitations++;
+      if (result.crees.length < 10) result.crees.push({ token: ref.id, childName: invitation.childName, stageLabel: label });
       const link = `${APP_URL}/satisfaction/${ref.id}`;
       const dest = toOverride || email;
       if (!dest) { result.sansEmail++; continue; }
@@ -135,6 +136,8 @@ export async function runSatisfactionStages(opts: RunOptions = {}) {
         result.emails++; report.envoyes++;
         await logEmail({ to: dest, subject, context: "cron_satisfaction_stage", template: "satisfactionStage", status: "sent", familyId: invitation.familyId, sentBy: "system" }).catch(() => {});
       } catch (err: any) {
+        result.echecs++;
+        if (result.erreurs.length < 3) result.erreurs.push(String(err?.message || err));
         await logEmail({ to: dest, subject, context: "cron_satisfaction_stage", status: "failed", error: String(err?.message || err), sentBy: "system" }).catch(() => {});
       }
     }

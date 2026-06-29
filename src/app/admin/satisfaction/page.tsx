@@ -68,6 +68,7 @@ export default function SatisfactionPage() {
   const [testDate, setTestDate] = useState("");
   const [testBusy, setTestBusy] = useState(false);
   const [testResult, setTestResult] = useState("");
+  const [testLinks, setTestLinks] = useState<Array<{ url: string; childName: string; stageLabel: string }>>([]);
 
   const lancerCron = async (envoyer: boolean) => {
     if (!user) return;
@@ -80,6 +81,8 @@ export default function SatisfactionPage() {
       const res = await fetch(`/api/admin/satisfaction-stages?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       setTestResult(JSON.stringify(data, null, 2));
+      const crees = Array.isArray(data?.crees) ? data.crees : [];
+      setTestLinks(crees.map((c: any) => ({ url: `${window.location.origin}/satisfaction/${c.token}`, childName: c.childName || "", stageLabel: c.stageLabel || "" })));
     } catch (e: any) {
       setTestResult("Erreur : " + (e?.message || e));
     } finally { setTestBusy(false); }
@@ -333,6 +336,18 @@ export default function SatisfactionPage() {
               <button onClick={() => lancerCron(true)} disabled={testBusy}
                 className="px-3 py-2 rounded-lg bg-emerald-600 text-white font-body text-sm font-semibold disabled:opacity-50">M'envoyer un test</button>
             </div>
+            {testLinks.length > 0 && (
+              <div className="mt-3 bg-white border border-slate-200 rounded-lg p-3">
+                <div className="font-body text-xs font-semibold text-slate-600 mb-2">Liens créés — ouvre-les pour tester le formulaire :</div>
+                <div className="flex flex-col gap-1.5">
+                  {testLinks.map((l, i) => (
+                    <a key={i} href={l.url} target="_blank" rel="noreferrer" className="font-body text-xs text-blue-600 hover:underline truncate">
+                      {l.childName || "Enfant"} · {l.stageLabel} →
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
             {testResult && (
               <pre className="mt-3 bg-slate-900 text-slate-100 rounded-lg p-3 text-[11px] overflow-auto max-h-64 whitespace-pre-wrap">{testResult}</pre>
             )}
