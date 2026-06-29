@@ -73,8 +73,9 @@ export async function runSatisfactionStages(opts: RunOptions = {}) {
     }
   }
 
-  const resend = new Resend(process.env.RESEND_API_KEY);
-  const result: any = { dateFin, dry, stages: [] as any[], invitations: 0, emails: 0, bloques: 0, sansEmail: 0 };
+  const apiKey = process.env.RESEND_API_KEY || "";
+  const resend = apiKey ? new Resend(apiKey) : null;
+  const result: any = { dateFin, dry, stages: [] as any[], invitations: 0, emails: 0, bloques: 0, sansEmail: 0, sansResend: 0 };
 
   for (const g of groups.values()) {
     const dates = [...new Set(g.jours.map(j => j.date).filter(Boolean))].sort();
@@ -120,6 +121,7 @@ export async function runSatisfactionStages(opts: RunOptions = {}) {
       const dest = toOverride || email;
       if (!dest) { result.sansEmail++; continue; }
       if (!isRecipientAllowed(dest)) { console.log(blockedLog(dest, "satisfaction-stage")); result.bloques++; continue; }
+      if (!resend) { result.sansResend++; continue; }
 
       const childFirst = (info.childName || "").split(" ")[0];
       const subject = `Votre avis sur le stage${childFirst ? ` de ${childFirst}` : ""}`;

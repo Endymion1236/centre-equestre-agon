@@ -14,12 +14,17 @@ async function handle(req: NextRequest) {
   const auth = await verifyAuth(req, { adminOnly: true });
   if (auth instanceof NextResponse) return auth;
 
-  const result = await runSatisfactionStages({
-    date: req.nextUrl.searchParams.get("date") || undefined,
-    dry: req.nextUrl.searchParams.get("dry") === "1",
-    toOverride: req.nextUrl.searchParams.get("to") || undefined,
-  });
-  return NextResponse.json(result);
+  try {
+    const result = await runSatisfactionStages({
+      date: req.nextUrl.searchParams.get("date") || undefined,
+      dry: req.nextUrl.searchParams.get("dry") === "1",
+      toOverride: req.nextUrl.searchParams.get("to") || undefined,
+    });
+    return NextResponse.json(result);
+  } catch (e: any) {
+    console.error("satisfaction-stages (admin):", e);
+    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });
+  }
 }
 
 export async function GET(req: NextRequest) { return handle(req); }
