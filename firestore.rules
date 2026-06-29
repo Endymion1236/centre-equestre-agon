@@ -479,6 +479,13 @@ service cloud.firestore {
       allow create: if isAuth();
     }
 
+    // ── Invitations satisfaction post-stage ───────────────────────────────
+    // Création/lecture admin (générateur de lien de test). Le formulaire public
+    // lit/écrit via le SDK admin (route API), pas via ces règles.
+    match /satisfaction-invitations/{docId} {
+      allow read, write: if isAdmin();
+    }
+
     // ── Liste d'attente ───────────────────────────────────────────────────
     // Lecture : staff (moniteurs voient les inscrits en attente au planning)
     // Écriture : admin (validation/suppression), création par tous utilisateurs auth
