@@ -1,0 +1,26 @@
+/**
+ * Déclenchement ADMIN du questionnaire de satisfaction post-stage (test).
+ * Auth : token Firebase admin (le middleware exige un Bearer ; verifyAuth valide).
+ * Params : ?date=YYYY-MM-DD  ?dry=1  ?to=email
+ * Même logique que le cron, mais accessible à un admin connecté pour tester.
+ */
+import { NextRequest, NextResponse } from "next/server";
+import { verifyAuth } from "@/lib/api-auth";
+import { runSatisfactionStages } from "@/lib/satisfaction/run";
+
+export const dynamic = "force-dynamic";
+
+async function handle(req: NextRequest) {
+  const auth = await verifyAuth(req, { adminOnly: true });
+  if (auth instanceof NextResponse) return auth;
+
+  const result = await runSatisfactionStages({
+    date: req.nextUrl.searchParams.get("date") || undefined,
+    dry: req.nextUrl.searchParams.get("dry") === "1",
+    toOverride: req.nextUrl.searchParams.get("to") || undefined,
+  });
+  return NextResponse.json(result);
+}
+
+export async function GET(req: NextRequest) { return handle(req); }
+export async function POST(req: NextRequest) { return handle(req); }
