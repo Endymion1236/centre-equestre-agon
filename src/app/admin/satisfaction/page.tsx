@@ -73,7 +73,7 @@ export default function SatisfactionPage() {
     if (!user) return;
     setTestBusy(true); setTestResult("");
     try {
-      const token = await user.getIdToken();
+      const token = await user.getIdToken(true);
       const params = new URLSearchParams();
       if (testDate) params.set("date", testDate);
       if (envoyer && user.email) params.set("to", user.email); else params.set("dry", "1");
