@@ -19,6 +19,7 @@ async function handle(req: NextRequest) {
       date: req.nextUrl.searchParams.get("date") || undefined,
       dry: req.nextUrl.searchParams.get("dry") === "1",
       toOverride: req.nextUrl.searchParams.get("to") || undefined,
+      limit: Number(req.nextUrl.searchParams.get("limit")) || undefined,
     });
     return NextResponse.json(result);
   } catch (e: any) {

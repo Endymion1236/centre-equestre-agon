@@ -15,6 +15,8 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon
 const norm = (s: string) => (s || "")
   .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
   .toLowerCase().replace(/\(.*?\)/g, "").replace(/\bstage\b/g, "").replace(/\s+/g, " ").trim();
+/** Libellé propre pour l'affichage/email : retire les mentions "(copie)". */
+const cleanLabel = (s: string) => (s || "").replace(/\s*\((copie|copy)\)\s*/gi, " ").replace(/\s+/g, " ").trim();
 
 export const parisDate = (d: Date) => new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 const addDays = (s: string, n: number) => { const d = new Date(s + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
@@ -40,7 +42,7 @@ function emailHtml(childFirst: string, stageLabel: string, link: string) {
   </div>`;
 }
 
-export interface RunOptions { date?: string; dry?: boolean; toOverride?: string; }
+export interface RunOptions { date?: string; dry?: boolean; toOverride?: string; limit?: number; }
 
 export async function runSatisfactionStages(opts: RunOptions = {}) {
   const dateFin = opts.date || parisDate(new Date(Date.now() - 86400000));
@@ -97,14 +99,17 @@ export async function runSatisfactionStages(opts: RunOptions = {}) {
     const exist = await adminDb.collection("satisfaction-invitations").where("stageKey", "==", stageKey).get();
     const dejaInvite = new Set(exist.docs.map(d => (d.data() as any).childId));
 
-    const report = { stageLabel: g.title, dateFin, enfants: 0, envoyes: 0 };
+    if (!dry && opts.limit && result.invitations >= opts.limit) break;
+    const label = cleanLabel(g.title);
+    const report = { stageLabel: label, dateFin, enfants: 0, envoyes: 0 };
     for (const [childId, info] of childMon) {
       if (dejaInvite.has(childId)) continue;
+      if (!dry && opts.limit && result.invitations >= opts.limit) break;
       report.enfants++;
       const fam = childFam.get(childId);
       const email = fam?.email || "";
       const invitation = {
-        stageKey, stageLabel: g.title, semaine, dateFin,
+        stageKey, stageLabel: label, semaine, dateFin,
         childId, childName: info.childName || fam?.childName || "",
         familyId: info.familyId || fam?.familyId || "",
         familyName: info.familyName || fam?.familyName || "",
@@ -126,7 +131,7 @@ export async function runSatisfactionStages(opts: RunOptions = {}) {
       const childFirst = (info.childName || "").split(" ")[0];
       const subject = `Votre avis sur le stage${childFirst ? ` de ${childFirst}` : ""}`;
       try {
-        await resend.emails.send({ from: FROM, to: dest, ...(BCC ? { bcc: BCC } : {}), subject, html: emailHtml(childFirst, g.title, link) });
+        await resend.emails.send({ from: FROM, to: dest, ...(BCC ? { bcc: BCC } : {}), subject, html: emailHtml(childFirst, label, link) });
         result.emails++; report.envoyes++;
         await logEmail({ to: dest, subject, context: "cron_satisfaction_stage", template: "satisfactionStage", status: "sent", familyId: invitation.familyId, sentBy: "system" }).catch(() => {});
       } catch (err: any) {

@@ -76,7 +76,7 @@ export default function SatisfactionPage() {
       const token = await user.getIdToken(true);
       const params = new URLSearchParams();
       if (testDate) params.set("date", testDate);
-      if (envoyer && user.email) params.set("to", user.email); else params.set("dry", "1");
+      if (envoyer && user.email) { params.set("to", user.email); params.set("limit", "2"); } else params.set("dry", "1");
       const res = await fetch(`/api/admin/satisfaction-stages?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       setTestResult(JSON.stringify(data, null, 2));
