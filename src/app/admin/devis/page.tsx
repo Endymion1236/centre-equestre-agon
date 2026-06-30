@@ -66,6 +66,7 @@ export default function DevisPage() {
 
   // Form state
   const [selFamily, setSelFamily] = useState("");
+  const [selChild, setSelChild] = useState("");
   const [familySearch, setFamilySearch] = useState("");
   const [items, setItems] = useState<DevisItem[]>([{ label: "", qty: 1, priceTTC: 0, tva: 5.5 }]);
 
@@ -164,6 +165,16 @@ export default function DevisPage() {
     { label: "Assurance occasionnelle 1 mois", priceTTC: 10, tva: 20 },
   ], [tarifs]);
   const fam = families.find(f => f.firestoreId === selFamily);
+  const child = fam?.children?.find((c: any) => c.id === selChild);
+
+  // Déduit -18/+18 de la date de naissance de l'enfant sélectionné
+  useEffect(() => {
+    if (!(child as any)?.birthDate) return;
+    const b = new Date((child as any).birthDate);
+    if (isNaN(b.getTime())) return;
+    const age = Math.floor((Date.now() - b.getTime()) / (365.25 * 24 * 3600 * 1000));
+    setPMoins18(age < 18);
+  }, [selChild]); // eslint-disable-line react-hooks/exhaustive-deps
   const filteredFams = familySearch
     ? families.filter(f => f.parentName?.toLowerCase().includes(familySearch.toLowerCase()))
     : families;
@@ -193,7 +204,7 @@ export default function DevisPage() {
       await fetchData();
       setShowForm(false);
       setItems([{ label: "", qty: 1, priceTTC: 0, tva: 5.5 }]);
-      setSelFamily(""); setNote(""); setFamilySearch("");
+      setSelFamily(""); setSelChild(""); setNote(""); setFamilySearch("");
     } catch (e) { console.error(e); }
     setSaving(false);
   };
@@ -213,9 +224,10 @@ export default function DevisPage() {
       familyDiscountRules: familyRules,
       frequenceDejaInscrite: pDeja,
     });
+    const suffixe = child ? ` — ${`${(child as any).firstName || ""} ${(child as any).lastName || ""}`.trim()}` : "";
     const nouvelles: DevisItem[] = res.detailLignes
       .filter(l => Math.round(l.montantTTC * 100) !== 0)
-      .map(l => ({ label: l.label, qty: 1, priceTTC: Math.round(l.montantTTC * 100) / 100, tva: /licence/i.test(l.label) ? 0 : 5.5 }));
+      .map(l => ({ label: l.label + suffixe, qty: 1, priceTTC: Math.round(l.montantTTC * 100) / 100, tva: /licence/i.test(l.label) ? 0 : 5.5 }));
     setItems(prev => [...prev.filter(i => i.label), ...nouvelles]);
     setShowInscr(false);
   };
@@ -348,17 +360,34 @@ export default function DevisPage() {
             {/* Famille */}
             <div>
               <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Famille *</label>
-              <input value={familySearch} onChange={e => { setFamilySearch(e.target.value); setSelFamily(""); }}
+              <input value={familySearch} onChange={e => { setFamilySearch(e.target.value); setSelFamily(""); setSelChild(""); }}
                 placeholder="Rechercher une famille..." className={inp} />
               {familySearch && !selFamily && (
                 <div className="mt-1 border border-gray-200 rounded-lg overflow-hidden shadow-sm">
                   {filteredFams.slice(0, 6).map(f => (
-                    <button key={f.firestoreId} onClick={() => { setSelFamily(f.firestoreId); setFamilySearch(f.parentName || ""); }}
+                    <button key={f.firestoreId} onClick={() => { setSelFamily(f.firestoreId); setSelChild(""); setFamilySearch(f.parentName || ""); }}
                       className="w-full text-left px-3 py-2 font-body text-sm hover:bg-blue-50 bg-white border-none cursor-pointer border-b border-gray-100 last:border-0">
                       <div className="font-semibold text-blue-800">{f.parentName}</div>
                       <div className="text-xs text-slate-400">{(f as any).parentEmail}</div>
                     </button>
                   ))}
+                </div>
+              )}
+              {fam && (fam.children?.length || 0) > 0 && (
+                <div className="mt-2">
+                  <div className="font-body text-[11px] text-slate-500 mb-1">Enfant concerné (optionnel — nomme les lignes et déduit -18/+18) :</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(fam.children || []).map((c: any) => {
+                      const nom = `${c.firstName || ""} ${c.lastName || ""}`.trim();
+                      const on = selChild === c.id;
+                      return (
+                        <button key={c.id} onClick={() => setSelChild(on ? "" : c.id)}
+                          className={`px-3 py-1.5 rounded-lg border font-body text-xs cursor-pointer ${on ? "bg-blue-500 text-white border-blue-500" : "bg-white text-blue-700 border-blue-200 hover:bg-blue-50"}`}>
+                          {nom || "Enfant"}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
