@@ -45,6 +45,7 @@ import {
   RotateCw,
   MessageSquare,
   Trophy,
+  UserMinus,
 } from "lucide-react";
 
 const navItems = [
@@ -75,6 +76,7 @@ const navItems = [
   { href: "/admin/comptabilite", icon: BookOpen, label: "Comptabilité" },
   { href: "/admin/statistiques", icon: TrendingUp, label: "Statistiques" },
   { href: "/admin/satisfaction", icon: MessageSquare, label: "Satisfaction" },
+  { href: "/admin/reinscriptions", icon: UserMinus, label: "Réinscriptions" },
   { href: "/admin/communication", icon: Mail, label: "Communication" },
   { href: "/admin/email-templates", icon: Mail, label: "Templates email" },
   { href: "/admin/email-reprise", icon: Send, label: "Email reprise" },
