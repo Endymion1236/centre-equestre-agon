@@ -140,7 +140,7 @@ export default function DevisPage() {
       try {
         const g = await getDoc(doc(db, "settings", "degressivite"));
         if (g.exists()) {
-          const rules = (g.data() as any).familyDiscountRules;
+          const rules = (g.data() as any).familyDiscount;
           if (Array.isArray(rules)) setFamilyRules(rules);
         }
       } catch (e) { console.warn("settings/degressivite:", e); }
