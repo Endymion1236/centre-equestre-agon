@@ -89,6 +89,10 @@ export default function ResetBasePage() {
   const [finalConfirm, setFinalConfirm] = useState(false);
   const [resetResult, setResetResult] = useState<any>(null);
   const [backupDone, setBackupDone] = useState(false);
+  const [isProd, setIsProd] = useState(false);
+  const [activeProjectId, setActiveProjectId] = useState("");
+  const [prodUnlockPhrase, setProdUnlockPhrase] = useState("");
+  const [prodUnlock, setProdUnlock] = useState("");
 
   // ── Reset financier d'une seule famille (préserve enfants + inscriptions) ──
   // Sous-fonctionnalité distincte du reset par collection : utile pour
@@ -187,6 +191,9 @@ export default function ResetBasePage() {
       const data = await res.json();
       setCounts(data.counts || {});
       if (data.confirmationPhrase) setConfirmationPhrase(data.confirmationPhrase);
+      setIsProd(!!data.isProd);
+      setActiveProjectId(data.activeProjectId || "");
+      setProdUnlockPhrase(data.prodUnlockPhrase || "");
     } catch (e) {
       console.error(e);
       toast("Impossible de charger le comptage.", "error");
@@ -271,8 +278,15 @@ export default function ResetBasePage() {
       toast(`Tapez exactement : ${confirmationPhrase}`, "warning");
       return;
     }
+    if (isProd && prodUnlock !== prodUnlockPhrase) {
+      toast("Base de PRODUCTION : tapez la phrase de déblocage prod pour confirmer.", "warning");
+      return;
+    }
     if (!backupDone) {
       if (!confirm("Vous n'avez pas téléchargé de sauvegarde. Continuer quand même ?")) return;
+    }
+    if (isProd) {
+      if (!confirm(`⚠️ BASE DE PRODUCTION (${activeProjectId}).\n\nVous allez supprimer définitivement ${totalToDelete} documents RÉELS. Cette action est IRRÉVERSIBLE. Confirmer ?`)) return;
     }
     setWorking(true);
     try {
@@ -283,6 +297,7 @@ export default function ResetBasePage() {
           collections: Array.from(selected),
           confirmation,
           dryRun: false,
+          ...(isProd ? { confirmProdReset: prodUnlock } : {}),
         }),
       });
       const data = await res.json();
@@ -293,6 +308,7 @@ export default function ResetBasePage() {
       await fetchCounts();
       setSelected(new Set());
       setConfirmation("");
+      setProdUnlock("");
       setFinalConfirm(false);
       setDryRunResult(null);
     } catch (e: any) {
@@ -577,6 +593,26 @@ export default function ResetBasePage() {
             }`}
           />
 
+          {isProd && (
+            <div className="mb-4 rounded-lg border-2 border-red-500 bg-red-100/60 p-3">
+              <div className="font-body text-sm font-bold text-red-800 mb-1">⚠️ BASE DE PRODUCTION ({activeProjectId})</div>
+              <p className="font-body text-xs text-red-700 mb-2">
+                Tu es sur la base réelle, pas sur l'environnement de test. Pour supprimer en production
+                en connaissance de cause, tape aussi la phrase de déblocage :
+              </p>
+              <div className="mb-2">
+                <code className="inline-block bg-white px-3 py-1.5 rounded font-mono text-sm text-red-700 font-bold select-all">{prodUnlockPhrase}</code>
+              </div>
+              <input
+                type="text"
+                value={prodUnlock}
+                onChange={e => setProdUnlock(e.target.value)}
+                placeholder="Phrase de déblocage production..."
+                className={`w-full font-mono text-sm px-3 py-2 rounded-lg border ${prodUnlock === prodUnlockPhrase ? "border-green-500 bg-green-50/40" : "border-red-300 bg-white"}`}
+              />
+            </div>
+          )}
+
           <label className="flex items-start gap-2 mb-4 cursor-pointer">
             <input type="checkbox" checked={finalConfirm} onChange={e => setFinalConfirm(e.target.checked)}
               className="mt-0.5 cursor-pointer" />
@@ -589,7 +625,7 @@ export default function ResetBasePage() {
 
           <button
             onClick={handleReset}
-            disabled={working || !finalConfirm || confirmation !== confirmationPhrase || selected.size === 0}
+            disabled={working || !finalConfirm || confirmation !== confirmationPhrase || selected.size === 0 || (isProd && prodUnlock !== prodUnlockPhrase)}
             className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-body text-sm font-bold px-4 py-3 rounded-lg border-none cursor-pointer">
             {working ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
             {working ? "Suppression en cours..." : `Supprimer définitivement ${totalToDelete} document${totalToDelete > 1 ? "s" : ""}`}
