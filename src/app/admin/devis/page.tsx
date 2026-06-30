@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
@@ -51,20 +51,6 @@ const statusColors: Record<string, "gray"|"blue"|"green"|"red"|"orange"> = {
 const statusLabels: Record<string, string> = {
   draft: "Brouillon", sent: "Envoyé", accepted: "Accepté", refused: "Refusé", converted: "Converti",
 };
-
-const QUICK_LINES = [
-  { label: "Forfait annuel 1×/semaine", priceTTC: 650, tva: 5.5 },
-  { label: "Forfait annuel 2×/semaine", priceTTC: 1100, tva: 5.5 },
-  { label: "Forfait annuel 3×/semaine", priceTTC: 1400, tva: 5.5 },
-  { label: "Adhésion 1er enfant", priceTTC: 60, tva: 5.5 },
-  { label: "Adhésion 2ème enfant", priceTTC: 40, tva: 5.5 },
-  { label: "Adhésion 3ème enfant", priceTTC: 20, tva: 5.5 },
-  { label: "Licence FFE -18 ans", priceTTC: 25, tva: 0 },
-  { label: "Licence FFE +18 ans", priceTTC: 36, tva: 0 },
-  { label: "Stage vacances semaine", priceTTC: 175, tva: 5.5 },
-  { label: "Stage journée", priceTTC: 45, tva: 5.5 },
-  { label: "Assurance occasionnelle 1 mois", priceTTC: 10, tva: 20 },
-];
 
 const inp = "w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
 
@@ -161,6 +147,22 @@ export default function DevisPage() {
   }, []);
 
   const totalTTC = items.reduce((s, i) => s + lineTTC(i), 0);
+
+  // Lignes rapides : forfaits / adhésions / licences pilotés par les Paramètres,
+  // stages & assurance en valeurs fixes (hors réglages d'inscription).
+  const quickLines = useMemo(() => [
+    { label: "Forfait annuel 1×/semaine", priceTTC: tarifs.forfait1x, tva: 5.5 },
+    { label: "Forfait annuel 2×/semaine", priceTTC: tarifs.forfait2x, tva: 5.5 },
+    { label: "Forfait annuel 3×/semaine", priceTTC: tarifs.forfait3x, tva: 5.5 },
+    { label: "Adhésion 1er enfant", priceTTC: tarifs.adhesion1, tva: 5.5 },
+    { label: "Adhésion 2ème enfant", priceTTC: tarifs.adhesion2, tva: 5.5 },
+    { label: "Adhésion 3ème enfant", priceTTC: tarifs.adhesion3, tva: 5.5 },
+    { label: "Licence FFE -18 ans", priceTTC: tarifs.licenceMoins18 ?? 25, tva: 0 },
+    { label: "Licence FFE +18 ans", priceTTC: tarifs.licencePlus18 ?? 36, tva: 0 },
+    { label: "Stage vacances semaine", priceTTC: 175, tva: 5.5 },
+    { label: "Stage journée", priceTTC: 45, tva: 5.5 },
+    { label: "Assurance occasionnelle 1 mois", priceTTC: 10, tva: 20 },
+  ], [tarifs]);
   const fam = families.find(f => f.firestoreId === selFamily);
   const filteredFams = familySearch
     ? families.filter(f => f.parentName?.toLowerCase().includes(familySearch.toLowerCase()))
@@ -427,7 +429,7 @@ export default function DevisPage() {
               </button>
               {showQuick && (
                 <div className="flex flex-wrap gap-1.5 mb-3">
-                  {QUICK_LINES.map(q => (
+                  {quickLines.map(q => (
                     <button key={q.label} onClick={() => setItems(prev => [...prev.filter(i => i.label), { label: q.label, qty: 1, priceTTC: q.priceTTC, tva: q.tva }])}
                       className="px-3 py-1.5 rounded-lg border border-blue-200 bg-white font-body text-xs text-blue-700 cursor-pointer hover:bg-blue-50">
                       {q.label} — {q.priceTTC}€
