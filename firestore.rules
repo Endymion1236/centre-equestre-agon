@@ -448,6 +448,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ── Doublons potentiels ignorés (revue admin) ─────────────────────────
+    match /doublons-ignores/{docId} {
+      allow read, write: if isAdmin();
+    }
+
     // ── Salariés management (planning équipe) ─────────────────────────────
     // Lecture : staff (admins + moniteurs voient l'équipe et leurs propres tâches)
     // Écriture : admin uniquement

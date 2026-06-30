@@ -46,6 +46,7 @@ import {
   MessageSquare,
   Trophy,
   UserMinus,
+  GitMerge,
 } from "lucide-react";
 
 const navItems = [
@@ -64,6 +65,7 @@ const navItems = [
   // ─── Commercial ───
   { separator: true, label: "Commercial" },
   { href: "/admin/cavaliers", icon: Users, label: "Cavaliers" },
+  { href: "/admin/doublons", icon: GitMerge, label: "Doublons" },
   { href: "/admin/paiements", icon: CreditCard, label: "Paiements" },
   { href: "/admin/devis", icon: FileText, label: "Devis" },
   { href: "/admin/forfaits", icon: CalendarDays, label: "Forfaits" },
