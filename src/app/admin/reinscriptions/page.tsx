@@ -13,6 +13,7 @@ interface Data {
   saison: number; prochaine: number; rentree: string; today: string; apresRentree: boolean;
   totalN: number; reinscrits: number; nonReinscritsCount: number; partisCount: number;
   retentionPct: number | null; nonReinscrits: Cavalier[]; partis: Cavalier[];
+  diag?: { creneauxSaisonN: number; coursSaisonN: number; inscritsCoursN: number; creneauxSaisonN1: number; coursSaisonN1: number; inscritsCoursN1: number; nbForfaits: number };
 }
 
 const STATUT_BADGE: Record<string, { label: string; cls: string; icon: any }> = {
@@ -30,7 +31,7 @@ function CavalierRow({ c }: { c: Cavalier }) {
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-body text-xs text-slate-600">
         {c.galop && <span className="inline-flex items-center gap-1"><Award size={12} className="text-slate-400" />{c.galop}</span>}
-        <span>{c.anciennete} saison{c.anciennete > 1 ? "s" : ""}</span>
+        {c.anciennete > 0 && <span>{c.anciennete} saison{c.anciennete > 1 ? "s" : ""}</span>}
         {c.avoirEur > 0 && <span className="inline-flex items-center gap-1 text-emerald-700"><Wallet size={12} />{c.avoirEur.toFixed(2)} €</span>}
         {c.fidelite > 0 && <span className="inline-flex items-center gap-1 text-amber-600"><Star size={12} />{c.fidelite} pts</span>}
       </div>
@@ -130,6 +131,14 @@ export default function ReinscriptionsPage() {
               <div className="font-display text-3xl font-bold text-slate-800">{data.totalN}</div>
             </div>
           </div>
+
+          {data.diag && (
+            <div className="font-body text-[11px] text-slate-400 mb-4">
+              Données : {data.diag.coursSaisonN} cours en {data.saison}–{data.saison + 1} ({data.diag.inscritsCoursN} inscrits) ·
+              {" "}{data.diag.coursSaisonN1} cours en {data.prochaine}–{data.prochaine + 1} ({data.diag.inscritsCoursN1} inscrits) ·
+              {" "}{data.diag.nbForfaits} forfait{data.diag.nbForfaits > 1 ? "s" : ""}
+            </div>
+          )}
 
           {!data.apresRentree && (
             <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-5 font-body text-xs text-blue-800">
