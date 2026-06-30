@@ -441,6 +441,13 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ── Chèques différés (encaissement échelonné de chèques) ──────────────
+    // Lus/créés depuis les pages de paiement admin. Lecture staff, écriture admin.
+    match /cheques-differes/{docId} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+
     // ── Salariés management (planning équipe) ─────────────────────────────
     // Lecture : staff (admins + moniteurs voient l'équipe et leurs propres tâches)
     // Écriture : admin uniquement
