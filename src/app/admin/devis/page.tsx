@@ -1,20 +1,34 @@
 "use client";
 import { useState, useEffect } from "react";
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { Plus, Trash2, Send, Check, Loader2, X, Copy, FileText, ChevronDown, ChevronUp } from "lucide-react";
 import type { Family } from "@/types";
 import { authFetch } from "@/lib/auth-fetch";
+import { calculerForfaitAnnuel, type ForfaitTarifs, type FamilyDiscountRule } from "@/lib/forfait-pricing";
 
 interface DevisItem {
   label: string;
   description?: string;
   qty: number;
-  priceTTC: number;
+  priceTTC: number;       // prix unitaire TTC (plein)
   tva: number;
+  remisePct?: number;     // remise en % appliquée à la ligne
 }
+
+/** Total TTC d'une ligne, remise comprise. */
+const lineTTC = (i: { qty?: number; priceTTC?: number; remisePct?: number }) =>
+  Math.round((i.qty || 1) * (i.priceTTC || 0) * (1 - (i.remisePct || 0) / 100) * 100) / 100;
+
+// Tarifs par défaut (fallback si settings absent). Source réelle : Firestore
+// settings/inscription + settings/degressivite (mêmes valeurs que l'inscription).
+const TARIFS_DEFAUT: ForfaitTarifs = {
+  forfait1x: 650, forfait2x: 1100, forfait3x: 1400,
+  adhesion1: 60, adhesion2: 40, adhesion3: 20, adhesion4plus: 0,
+  licenceMoins18: 25, licencePlus18: 36,
+};
 
 interface Devis {
   id?: string;
@@ -68,6 +82,19 @@ export default function DevisPage() {
   const [selFamily, setSelFamily] = useState("");
   const [familySearch, setFamilySearch] = useState("");
   const [items, setItems] = useState<DevisItem[]>([{ label: "", qty: 1, priceTTC: 0, tva: 5.5 }]);
+
+  // Tarifs + règles de dégressivité (mêmes valeurs que l'inscription annuelle)
+  const [tarifs, setTarifs] = useState<ForfaitTarifs>(TARIFS_DEFAUT);
+  const [familyRules, setFamilyRules] = useState<FamilyDiscountRule[]>([]);
+
+  // Panneau "Inscription annuelle" (génère des lignes avec dégressivité)
+  const [showInscr, setShowInscr] = useState(false);
+  const [pFreq, setPFreq] = useState<1 | 2 | 3>(1);
+  const [pRang, setPRang] = useState(1);
+  const [pDeja, setPDeja] = useState(0);          // fréquence déjà inscrite (différentiel cours)
+  const [pAdhesion, setPAdhesion] = useState(true);
+  const [pLicence, setPLicence] = useState(true);
+  const [pMoins18, setPMoins18] = useState(true);
   const [note, setNote] = useState("");
   const [validUntil, setValidUntil] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() + 30);
@@ -103,7 +130,37 @@ export default function DevisPage() {
   };
   useEffect(() => { fetchData(); }, []);
 
-  const totalTTC = items.reduce((s, i) => s + (i.qty || 1) * (i.priceTTC || 0), 0);
+  // Charge tarifs (settings/inscription) + dégressivité famille (settings/degressivite)
+  useEffect(() => {
+    (async () => {
+      try {
+        const s = await getDoc(doc(db, "settings", "inscription"));
+        if (s.exists()) {
+          const d = s.data() as any;
+          setTarifs({
+            forfait1x: d.forfait1x ?? TARIFS_DEFAUT.forfait1x,
+            forfait2x: d.forfait2x ?? TARIFS_DEFAUT.forfait2x,
+            forfait3x: d.forfait3x ?? TARIFS_DEFAUT.forfait3x,
+            adhesion1: d.adhesion1 ?? TARIFS_DEFAUT.adhesion1,
+            adhesion2: d.adhesion2 ?? TARIFS_DEFAUT.adhesion2,
+            adhesion3: d.adhesion3 ?? TARIFS_DEFAUT.adhesion3,
+            adhesion4plus: d.adhesion4plus ?? TARIFS_DEFAUT.adhesion4plus,
+            licenceMoins18: d.licenceMoins18 ?? TARIFS_DEFAUT.licenceMoins18,
+            licencePlus18: d.licencePlus18 ?? TARIFS_DEFAUT.licencePlus18,
+          });
+        }
+      } catch (e) { console.warn("settings/inscription:", e); }
+      try {
+        const g = await getDoc(doc(db, "settings", "degressivite"));
+        if (g.exists()) {
+          const rules = (g.data() as any).familyDiscountRules;
+          if (Array.isArray(rules)) setFamilyRules(rules);
+        }
+      } catch (e) { console.warn("settings/degressivite:", e); }
+    })();
+  }, []);
+
+  const totalTTC = items.reduce((s, i) => s + lineTTC(i), 0);
   const fam = families.find(f => f.firestoreId === selFamily);
   const filteredFams = familySearch
     ? families.filter(f => f.parentName?.toLowerCase().includes(familySearch.toLowerCase()))
@@ -139,6 +196,28 @@ export default function DevisPage() {
     setSaving(false);
   };
 
+  /** Génère les lignes d'une inscription annuelle avec TOUTE la dégressivité
+   *  (cours via le différentiel, famille via le rang + réduction), identique
+   *  au calcul de l'inscription en ligne. */
+  const ajouterInscription = () => {
+    const res = calculerForfaitAnnuel({
+      frequence: pFreq,
+      sessionsRestantes: 1, sessionsTotalSaison: 1, // devis = saison pleine (prorata 100%)
+      rangEnfant: pRang,
+      avecAdhesion: pAdhesion,
+      avecLicence: pLicence,
+      licenceMoins18: pMoins18,
+      tarifs,
+      familyDiscountRules: familyRules,
+      frequenceDejaInscrite: pDeja,
+    });
+    const nouvelles: DevisItem[] = res.detailLignes
+      .filter(l => Math.round(l.montantTTC * 100) !== 0)
+      .map(l => ({ label: l.label, qty: 1, priceTTC: Math.round(l.montantTTC * 100) / 100, tva: /licence/i.test(l.label) ? 0 : 5.5 }));
+    setItems(prev => [...prev.filter(i => i.label), ...nouvelles]);
+    setShowInscr(false);
+  };
+
   const handleSend = async (d: Devis) => {
     if (!d.familyEmail) { alert("Pas d'email pour cette famille."); return; }
     setSendingId(d.id!);
@@ -148,8 +227,8 @@ export default function DevisPage() {
         <tr>
           <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#1e3a5f;">${i.label}${i.description ? `<br><span style="font-size:11px;color:#94a3b8;">${i.description}</span>` : ""}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:center;font-size:13px;color:#475569;">${i.qty}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right;font-size:13px;color:#475569;">${i.priceTTC.toFixed(2)}€</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right;font-size:13px;font-weight:600;color:#1e3a5f;">${((i.qty || 1) * i.priceTTC).toFixed(2)}€</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right;font-size:13px;color:#475569;">${i.priceTTC.toFixed(2)}€${i.remisePct ? ` <span style="color:#dc2626;">(-${i.remisePct}%)</span>` : ""}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right;font-size:13px;font-weight:600;color:#1e3a5f;">${lineTTC(i).toFixed(2)}€</td>
         </tr>`).join("");
 
       const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
@@ -210,13 +289,16 @@ export default function DevisPage() {
       await addDoc(collection(db, "payments"), {
         familyId: d.familyId,
         familyName: d.familyName,
-        items: d.items.map(i => ({
-          activityTitle: i.label,
-          childName: "",
-          priceHT: Math.round(i.priceTTC / (1 + i.tva / 100) * 100) / 100,
-          tva: i.tva,
-          priceTTC: Math.round((i.qty || 1) * i.priceTTC * 100) / 100,
-        })),
+        items: d.items.map(i => {
+          const unitNet = (i.priceTTC || 0) * (1 - (i.remisePct || 0) / 100);
+          return {
+            activityTitle: i.label,
+            childName: "",
+            priceHT: Math.round(unitNet / (1 + i.tva / 100) * 100) / 100,
+            tva: i.tva,
+            priceTTC: lineTTC(i),
+          };
+        }),
         totalTTC: d.totalTTC,
         paidAmount: 0,
         status: "pending",
@@ -287,6 +369,56 @@ export default function DevisPage() {
               </div>
             </div>
 
+            {/* Inscription annuelle (dégressivité câblée) */}
+            <div>
+              <button onClick={() => setShowInscr(!showInscr)}
+                className="flex items-center gap-2 font-body text-xs text-emerald-700 bg-emerald-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-emerald-100 mb-2">
+                🎓 Inscription annuelle (dégressivité) {showInscr ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
+              </button>
+              {showInscr && (
+                <div className="bg-emerald-50/60 border border-emerald-100 rounded-xl p-3 mb-3 flex flex-col gap-3">
+                  <p className="font-body text-[11px] text-emerald-800/80">
+                    Génère les lignes avec toute la dégressivité (différentiel cours + rang famille + adhésion/licence), calculées comme l'inscription en ligne. Tarifs lus depuis les Paramètres.
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <label className="font-body text-xs text-slate-600">Cours/semaine ajoutés
+                      <select value={pFreq} onChange={e => setPFreq(Number(e.target.value) as 1 | 2 | 3)} className={inp}>
+                        <option value={1}>1×/semaine</option><option value={2}>2×/semaine</option><option value={3}>3×/semaine</option>
+                      </select>
+                    </label>
+                    <label className="font-body text-xs text-slate-600">Déjà inscrit (×/sem)
+                      <select value={pDeja} onChange={e => setPDeja(Number(e.target.value))} className={inp}>
+                        <option value={0}>0 (1ère inscr.)</option><option value={1}>1×</option><option value={2}>2×</option>
+                      </select>
+                    </label>
+                    <label className="font-body text-xs text-slate-600">Rang de l'enfant
+                      <select value={pRang} onChange={e => setPRang(Number(e.target.value))} className={inp}>
+                        <option value={1}>1er enfant</option><option value={2}>2e enfant</option><option value={3}>3e enfant</option><option value={4}>4e+ enfant</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="font-body text-xs text-slate-700 flex items-center gap-1.5 cursor-pointer">
+                      <input type="checkbox" checked={pAdhesion} onChange={e => setPAdhesion(e.target.checked)} /> Adhésion
+                    </label>
+                    <label className="font-body text-xs text-slate-700 flex items-center gap-1.5 cursor-pointer">
+                      <input type="checkbox" checked={pLicence} onChange={e => setPLicence(e.target.checked)} /> Licence FFE
+                    </label>
+                    {pLicence && (
+                      <div className="flex items-center gap-1">
+                        <button type="button" onClick={() => setPMoins18(true)} className={`px-2 py-1 rounded text-xs font-semibold border ${pMoins18 ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-500 border-slate-200"}`}>-18 ans</button>
+                        <button type="button" onClick={() => setPMoins18(false)} className={`px-2 py-1 rounded text-xs font-semibold border ${!pMoins18 ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-500 border-slate-200"}`}>+18 ans</button>
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={ajouterInscription}
+                    className="self-start px-3 py-2 rounded-lg bg-emerald-600 text-white font-body text-xs font-semibold border-none cursor-pointer hover:bg-emerald-500">
+                    + Ajouter ces lignes au devis
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* Lignes rapides */}
             <div>
               <button onClick={() => setShowQuick(!showQuick)}
@@ -312,11 +444,13 @@ export default function DevisPage() {
                 {items.map((item, idx) => (
                   <div key={idx} className="grid grid-cols-12 gap-2 items-center">
                     <input value={item.label} onChange={e => setItems(prev => prev.map((it, i) => i === idx ? { ...it, label: e.target.value } : it))}
-                      placeholder="Prestation..." className={`col-span-5 ${inp}`} />
+                      placeholder="Prestation..." className={`col-span-4 ${inp}`} />
                     <input type="number" min="1" value={item.qty} onChange={e => setItems(prev => prev.map((it, i) => i === idx ? { ...it, qty: parseInt(e.target.value) || 1 } : it))}
                       className={`col-span-1 ${inp} text-center`} />
                     <input type="number" step="0.01" value={item.priceTTC} onChange={e => setItems(prev => prev.map((it, i) => i === idx ? { ...it, priceTTC: parseFloat(e.target.value) || 0 } : it))}
-                      placeholder="Prix €" className={`col-span-3 ${inp} text-right`} />
+                      placeholder="Prix €" className={`col-span-2 ${inp} text-right`} />
+                    <input type="number" step="1" min="0" max="100" value={item.remisePct ?? ""} onChange={e => setItems(prev => prev.map((it, i) => i === idx ? { ...it, remisePct: Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)) } : it))}
+                      placeholder="0" className={`col-span-2 ${inp} text-center ${item.remisePct ? "border-rose-400 text-rose-600 font-semibold" : ""}`} />
                     <select value={item.tva} onChange={e => setItems(prev => prev.map((it, i) => i === idx ? { ...it, tva: parseFloat(e.target.value) } : it))}
                       className={`col-span-2 ${inp}`}>
                       <option value={0}>0%</option>
@@ -331,8 +465,8 @@ export default function DevisPage() {
                   </div>
                 ))}
                 <div className="grid grid-cols-12 gap-2 text-[10px] text-slate-400 px-1">
-                  <span className="col-span-5">Libellé</span><span className="col-span-1 text-center">Qté</span>
-                  <span className="col-span-3 text-right">Prix TTC</span><span className="col-span-2">TVA</span>
+                  <span className="col-span-4">Libellé</span><span className="col-span-1 text-center">Qté</span>
+                  <span className="col-span-2 text-right">Prix TTC</span><span className="col-span-2 text-center">Remise %</span><span className="col-span-2">TVA</span>
                 </div>
               </div>
               <button onClick={() => setItems(prev => [...prev, { label: "", qty: 1, priceTTC: 0, tva: 5.5 }])}
