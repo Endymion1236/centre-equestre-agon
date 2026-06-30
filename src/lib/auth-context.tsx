@@ -79,7 +79,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const familySnap = await getDoc(familyRef);
 
         if (familySnap.exists()) {
-          setFamily({ id: familySnap.id, ...familySnap.data() } as Family);
+          const data = familySnap.data() as any;
+          let resolved = false;
+          // Compte fusionné : on bascule sur le compte conservé.
+          if (data.status === "merged" && data.mergedInto) {
+            try {
+              const keptSnap = await getDoc(doc(db, "families", data.mergedInto));
+              if (keptSnap.exists()) { setFamily({ id: keptSnap.id, ...keptSnap.data() } as Family); resolved = true; }
+            } catch { /* fallback ci-dessous */ }
+          }
+          if (!resolved) setFamily({ id: familySnap.id, ...familySnap.data() } as Family);
         } else {
           // 2. Chercher une fiche famille existante par email (créée par l'admin)
           let linked = false;

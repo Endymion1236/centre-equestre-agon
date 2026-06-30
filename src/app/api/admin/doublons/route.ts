@@ -40,7 +40,9 @@ async function handle(req: NextRequest) {
       children: { name: string; birthDate: string }[];
       nameK: string; phoneK: string; childKs: Set<string>; createdAt: any;
     };
-    const fams: Fam[] = famSnap.docs.map(d => {
+    const fams: Fam[] = famSnap.docs
+      .filter(d => (d.data() as any).status !== "merged")
+      .map(d => {
       const f = d.data() as any;
       const children = (f.children || []).map((c: any) => ({ name: `${c.firstName || ""} ${c.lastName || ""}`.trim(), birthDate: birthKey(c?.birthDate) }));
       return {

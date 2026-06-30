@@ -58,7 +58,7 @@ export default function CavaliersPage() {
         getDocs(collection(db, "fidelite")),
       ]);
 
-      setFamilies(famSnap.docs.map(d => ({ firestoreId: d.id, ...d.data() })) as any);
+      setFamilies(famSnap.docs.map(d => ({ firestoreId: d.id, ...d.data() })).filter((f: any) => f.status !== "merged") as any);
       setAllReservations(resSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setAllPayments(paySnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setAllAvoirs(avoirsSnap.docs.map(d => ({ id: d.id, ...d.data() })));

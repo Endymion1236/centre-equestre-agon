@@ -39,6 +39,11 @@ export default function DoublonsPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [mergePair, setMergePair] = useState<Paire | null>(null);
+  const [keepId, setKeepId] = useState("");
+  const [preview, setPreview] = useState<any>(null);
+  const [merging, setMerging] = useState(false);
+  const [mergeErr, setMergeErr] = useState("");
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -53,6 +58,31 @@ export default function DoublonsPage() {
   }, [user]);
 
   useEffect(() => { if (isAdmin && user) load(); }, [isAdmin, user, load]);
+
+  const openMerge = (p: Paire) => { setMergePair(p); setKeepId(p.a.id); setPreview(null); setMergeErr(""); };
+  const mergeId = mergePair ? (keepId === mergePair.a.id ? mergePair.b.id : mergePair.a.id) : "";
+
+  const callMerge = async (dryRun: boolean) => {
+    if (!user || !mergePair) return;
+    setMerging(true); setMergeErr("");
+    try {
+      const token = await user.getIdToken(true);
+      const res = await fetch("/api/admin/doublons-merge", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ keepId, mergeId, dryRun, confirm: !dryRun }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d?.error || "Erreur");
+      if (dryRun) { setPreview(d.apercu); }
+      else {
+        const pid = [mergePair.a.id, mergePair.b.id].sort().join("__");
+        setPaires(prev => prev.filter(p => [p.a.id, p.b.id].sort().join("__") !== pid));
+        setMergePair(null); setPreview(null);
+        load();
+      }
+    } catch (e: any) { setMergeErr(e?.message || String(e)); } finally { setMerging(false); }
+  };
 
   const ignorer = async (a: string, b: string) => {
     if (!user) return;
@@ -107,12 +137,60 @@ export default function DoublonsPage() {
                 <button onClick={() => ignorer(p.a.id, p.b.id)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-body text-xs font-semibold text-slate-500 hover:bg-slate-50">
                   <X size={12} /> Pas un doublon
                 </button>
-                <button disabled title="Fusion à venir (Phase 2)" className="px-3 py-1.5 rounded-lg bg-slate-100 font-body text-xs font-semibold text-slate-400 cursor-not-allowed">
-                  Fusionner (à venir)
+                <button onClick={() => openMerge(p)} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white font-body text-xs font-semibold hover:bg-blue-500">
+                  Fusionner…
                 </button>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Modale de fusion */}
+      {mergePair && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => !merging && setMergePair(null)}>
+          <div className="bg-white rounded-2xl max-w-lg w-full p-5 max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-display text-lg font-bold text-slate-900">Fusionner les comptes</h2>
+              <button onClick={() => setMergePair(null)} disabled={merging} className="text-slate-400"><X size={18} /></button>
+            </div>
+            <p className="font-body text-xs text-slate-500 mb-3">
+              Choisis le <strong>compte à conserver</strong>. Les enfants, forfaits, avoirs, fidélité, devis, réservations et l'historique de paiement de l'autre compte y seront rattachés. Les encaissements (immuables) ne sont pas modifiés. Le compte absorbé est masqué (réversible).
+            </p>
+            <div className="space-y-2 mb-3">
+              {[mergePair.a, mergePair.b].map(f => (
+                <label key={f.id} className={`flex items-start gap-2 p-3 rounded-xl border cursor-pointer ${keepId === f.id ? "border-blue-400 bg-blue-50/50" : "border-slate-200"}`}>
+                  <input type="radio" name="keep" checked={keepId === f.id} onChange={() => { setKeepId(f.id); setPreview(null); }} className="mt-1" />
+                  <div className="min-w-0">
+                    <div className="font-body text-sm font-semibold text-slate-800">{f.parentName || "—"} <span className="text-[10px] font-normal text-blue-600">{keepId === f.id ? "· conservé" : "· absorbé"}</span></div>
+                    <div className="font-body text-xs text-slate-500 truncate">{f.parentEmail}{f.parentPhone ? ` · ${f.parentPhone}` : ""}</div>
+                    {f.children.length > 0 && <div className="font-body text-[11px] text-slate-400 truncate">{f.children.map(c => c.name).join(", ")}</div>}
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            {preview && (
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-3 font-body text-xs text-slate-600">
+                <div className="font-semibold text-slate-700 mb-1">Ce qui sera déplacé vers « {preview.keep.name} » :</div>
+                <div className="flex flex-wrap gap-x-4 gap-y-0.5">
+                  <span>{preview.enfantsAjoutes} enfant(s)</span>
+                  {Object.entries(preview.reassign).map(([k, v]: any) => v > 0 && <span key={k}>{v} {k}</span>)}
+                  {preview.creneauxTouches > 0 && <span>{preview.creneauxTouches} créneau(x)</span>}
+                </div>
+              </div>
+            )}
+            {mergeErr && <div className="bg-rose-50 border border-rose-200 rounded-lg p-2 font-body text-xs text-rose-700 mb-3">{mergeErr}</div>}
+
+            <div className="flex items-center justify-end gap-2">
+              <button onClick={() => callMerge(true)} disabled={merging} className="px-3 py-2 rounded-lg border border-slate-300 bg-white font-body text-xs font-semibold text-slate-700 disabled:opacity-50">
+                {merging && !preview ? <Loader2 size={13} className="animate-spin inline" /> : "Prévisualiser"}
+              </button>
+              <button onClick={() => callMerge(false)} disabled={merging || !preview} title={!preview ? "Prévisualise d'abord" : ""} className="px-3 py-2 rounded-lg bg-blue-600 text-white font-body text-xs font-semibold disabled:opacity-40">
+                {merging && preview ? <Loader2 size={13} className="animate-spin inline" /> : "Fusionner définitivement"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
