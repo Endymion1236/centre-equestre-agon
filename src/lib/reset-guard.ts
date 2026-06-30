@@ -28,7 +28,7 @@ const PROD_PROJECT_ID = "gestion-2026";
 
 // Phrase de deblocage pour reset la prod en connaissance de cause.
 // Volontairement longue et explicite : impossible a taper par accident.
-const PROD_UNLOCK_PHRASE = "OUI-JE-VEUX-EFFACER-LA-PROD-2026";
+export const PROD_UNLOCK_PHRASE = "OUI-JE-VEUX-EFFACER-LA-PROD-2026";
 
 /**
  * Retourne le projectId Firebase reellement actif au runtime.

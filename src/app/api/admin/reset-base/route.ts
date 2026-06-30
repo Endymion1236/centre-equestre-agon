@@ -21,7 +21,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb, adminAuth } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { assertResetAllowed } from "@/lib/reset-guard";
+import { assertResetAllowed, isProdEnvironment, getActiveProjectId, PROD_UNLOCK_PHRASE } from "@/lib/reset-guard";
 
 // Emails admin reconnus sans custom claim (aligne avec api-auth.ts).
 // Permet le reset sur une base sans claims (ex: base de test).
@@ -261,6 +261,9 @@ export async function GET(req: NextRequest) {
       collections: RESETTABLE_COLLECTIONS,
       counts,
       confirmationPhrase: CONFIRMATION_PHRASE,
+      isProd: isProdEnvironment(),
+      activeProjectId: getActiveProjectId(),
+      prodUnlockPhrase: PROD_UNLOCK_PHRASE,
     });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Erreur" }, { status: 500 });
