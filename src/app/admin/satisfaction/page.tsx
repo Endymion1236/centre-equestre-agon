@@ -70,6 +70,10 @@ export default function SatisfactionPage() {
   const [testBusy, setTestBusy] = useState(false);
   const [testResult, setTestResult] = useState("");
   const [testLinks, setTestLinks] = useState<Array<{ url: string; childName: string; stageLabel: string }>>([]);
+  const [anneeSaison, setAnneeSaison] = useState<number>(() => { const n = new Date(); return n.getMonth() >= 8 ? n.getFullYear() : n.getFullYear() - 1; });
+  const [anneeBusy, setAnneeBusy] = useState(false);
+  const [anneeResult, setAnneeResult] = useState("");
+  const [anneeLinks, setAnneeLinks] = useState<Array<{ url: string; childName: string; stageLabel: string }>>([]);
 
   const lancerCron = async (envoyer: boolean) => {
     if (!user) return;
@@ -87,6 +91,22 @@ export default function SatisfactionPage() {
     } catch (e: any) {
       setTestResult("Erreur : " + (e?.message || e));
     } finally { setTestBusy(false); }
+  };
+
+  const lancerAnnee = async (envoyer: boolean) => {
+    if (!user) return;
+    setAnneeBusy(true); setAnneeResult("");
+    try {
+      const token = await user.getIdToken(true);
+      const params = new URLSearchParams();
+      params.set("saison", String(anneeSaison));
+      if (envoyer && user.email) { params.set("to", user.email); params.set("limit", "2"); } else params.set("dry", "1");
+      const res = await fetch(`/api/admin/satisfaction-annee?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      setAnneeResult(JSON.stringify(data, null, 2));
+      const crees = Array.isArray(data?.crees) ? data.crees : [];
+      setAnneeLinks(crees.map((c: any) => ({ url: `${window.location.origin}/satisfaction/${c.token}`, childName: c.childName || "", stageLabel: c.stageLabel || "" })));
+    } catch (e: any) { setAnneeResult("Erreur : " + (e?.message || e)); } finally { setAnneeBusy(false); }
   };
 
   useEffect(() => {
@@ -372,6 +392,38 @@ export default function SatisfactionPage() {
             )}
             {testResult && (
               <pre className="mt-3 bg-slate-900 text-slate-100 rounded-lg p-3 text-[11px] overflow-auto max-h-64 whitespace-pre-wrap">{testResult}</pre>
+            )}
+          </div>
+
+          {/* Questionnaire de fin de saison */}
+          <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 mt-4">
+            <div className="font-body text-sm font-semibold text-indigo-800 mb-1 flex items-center gap-1.5"><MessageSquare size={15} /> Questionnaire de fin de saison</div>
+            <p className="font-body text-xs text-indigo-700/80 mb-3">
+              Envoie un avis « bilan de l'année » à chaque cavalier ayant monté en cours pendant la saison, avec ses moniteurs de l'année. Les réponses alimentent la colonne « avis annuel » dans Réinscriptions. « Aperçu » ne crée rien ; « M'envoyer un test » t'envoie 2 mails.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <select value={anneeSaison} onChange={e => setAnneeSaison(Number(e.target.value))} className="px-3 py-2 rounded-lg border border-slate-200 font-body text-sm bg-white">
+                {(() => { const y = new Date().getFullYear(); const arr = []; for (let s = y; s >= y - 4; s--) arr.push(s); return arr.map(s => <option key={s} value={s}>Saison {s}–{s + 1}</option>); })()}
+              </select>
+              <button onClick={() => lancerAnnee(false)} disabled={anneeBusy}
+                className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 font-body text-sm font-semibold disabled:opacity-50">Aperçu</button>
+              <button onClick={() => lancerAnnee(true)} disabled={anneeBusy}
+                className="px-3 py-2 rounded-lg bg-indigo-600 text-white font-body text-sm font-semibold disabled:opacity-50">M'envoyer un test</button>
+            </div>
+            {anneeLinks.length > 0 && (
+              <div className="mt-3 bg-white border border-slate-200 rounded-lg p-3">
+                <div className="font-body text-xs font-semibold text-slate-600 mb-2">Liens créés — ouvre-les pour tester le formulaire :</div>
+                <div className="flex flex-col gap-1.5">
+                  {anneeLinks.map((l, i) => (
+                    <a key={i} href={l.url} target="_blank" rel="noreferrer" className="font-body text-xs text-blue-600 hover:underline truncate">
+                      {l.childName || "Enfant"} · {l.stageLabel} →
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+            {anneeResult && (
+              <pre className="mt-3 bg-slate-900 text-slate-100 rounded-lg p-3 text-[11px] overflow-auto max-h-64 whitespace-pre-wrap">{anneeResult}</pre>
             )}
           </div>
         </>

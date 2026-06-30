@@ -106,6 +106,21 @@ async function handle(req: NextRequest) {
       fSnap.forEach(d => { const fd = d.data() as any; if (fd.familyId) fidByFam.set(fd.familyId, (fd.points || 0) - (fd.pointsUtilises || 0)); });
     } catch { /* ignore */ }
 
+    // Avis annuel (questionnaire de fin de saison N) par enfant — pour le ciblage
+    const avisByChild = new Map<string, { note: number; commentaire: string; recommande?: boolean }>();
+    try {
+      const aSnap = await adminDb.collection("avis-satisfaction").where("source", "==", "annee").get();
+      aSnap.forEach(d => {
+        const a = d.data() as any;
+        if (Number(a.saison) !== N || !a.childId) return;
+        const prev = avisByChild.get(a.childId);
+        const at = a.createdAt?.toMillis?.() || 0;
+        if (!prev || at >= ((prev as any)._at || 0)) {
+          avisByChild.set(a.childId, { note: a.globalNote || 0, commentaire: (a.commentaire || "").trim(), recommande: a.recommande, _at: at } as any);
+        }
+      });
+    } catch { /* ignore */ }
+
     const enrich = (childId: string, meta: ChildMeta, statut: string) => ({
       childId,
       childName: meta.childName,
@@ -118,6 +133,7 @@ async function handle(req: NextRequest) {
       anciennete: forfaitSeasons.get(childId)?.size || 0,
       avoirEur: Math.round((avoirByFam.get(meta.familyId) || 0) * 100) / 100,
       fidelite: fidByFam.get(meta.familyId) || 0,
+      avisAnnuel: avisByChild.get(childId) ? { note: avisByChild.get(childId)!.note, commentaire: avisByChild.get(childId)!.commentaire, recommande: avisByChild.get(childId)!.recommande } : null,
     });
 
     let totalN = 0, reinscrits = 0;
