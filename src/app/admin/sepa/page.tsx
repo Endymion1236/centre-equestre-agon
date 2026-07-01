@@ -25,6 +25,7 @@ interface MandatSepa {
   bic: string;
   dateSignature: string; // YYYY-MM-DD
   titulaire: string;     // Nom sur le compte bancaire
+  libelle?: string;      // Libellé pour distinguer 2 mandats (ex: "Père", "Mère")
   status: "active" | "revoked";
   createdAt: any;
 }
@@ -112,7 +113,7 @@ export default function SepaPage() {
 
   // Forms
   const [showNewMandat, setShowNewMandat] = useState(false);
-  const [newMandat, setNewMandat] = useState({ familyId: "", iban: "", bic: "", titulaire: "", dateSignature: new Date().toISOString().split("T")[0] });
+  const [newMandat, setNewMandat] = useState({ familyId: "", iban: "", bic: "", titulaire: "", libelle: "", dateSignature: new Date().toISOString().split("T")[0] });
   const [showNewEcheancier, setShowNewEcheancier] = useState(false);
   const [newEcheancier, setNewEcheancier] = useState({ mandatId: "", montantTotal: "", nbEcheances: "10", dateDebut: "", description: "" });
   const [saving, setSaving] = useState(false);
@@ -183,12 +184,13 @@ export default function SepaPage() {
         bic,
         dateSignature: newMandat.dateSignature,
         titulaire: newMandat.titulaire,
+        libelle: newMandat.libelle || "",
         status: "active",
         createdAt: serverTimestamp(),
       });
       toast("Mandat SEPA créé", "success");
       setShowNewMandat(false);
-      setNewMandat({ familyId: "", iban: "", bic: "", titulaire: "", dateSignature: new Date().toISOString().split("T")[0] });
+      setNewMandat({ familyId: "", iban: "", bic: "", titulaire: "", libelle: "", dateSignature: new Date().toISOString().split("T")[0] });
       fetchAll();
     } catch (e: any) { toast(e.message, "error"); }
     setSaving(false);
@@ -656,6 +658,12 @@ export default function SepaPage() {
                         className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm" />
                     </div>
                     <div>
+                      <label className="font-body text-xs font-semibold text-gray-400 block mb-1">Libellé <span className="text-gray-300 font-normal">(pour distinguer 2 mandats — ex : Père, Mère)</span></label>
+                      <input value={newMandat.libelle} onChange={e => setNewMandat({ ...newMandat, libelle: e.target.value })}
+                        placeholder="Père / Mère / Compte principal…"
+                        className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm" />
+                    </div>
+                    <div>
                       <label className="font-body text-xs font-semibold text-gray-400 block mb-1">IBAN</label>
                       <input value={newMandat.iban} onChange={e => {
                         const iban = e.target.value.replace(/\s/g, "").toUpperCase();
@@ -708,7 +716,7 @@ export default function SepaPage() {
                             <div>
                               <div className="font-body text-sm font-semibold text-blue-800">{m.familyName}</div>
                               <div className="font-body text-xs text-gray-500 mt-0.5">
-                                Titulaire : {m.titulaire} · Mandat : <span className="font-mono text-blue-500">{m.mandatId}</span>
+                                Titulaire : {m.titulaire}{m.libelle ? ` · ${m.libelle}` : ""} · Mandat : <span className="font-mono text-blue-500">{m.mandatId}</span>
                               </div>
                               <div className="font-body text-xs text-gray-400 mt-0.5 font-mono">
                                 IBAN : {formatIban(m.iban)} · BIC : {m.bic}
@@ -778,7 +786,7 @@ export default function SepaPage() {
                         className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white">
                         <option value="">Choisir...</option>
                         {mandats.filter(m => m.status === "active").map(m => (
-                          <option key={m.id} value={m.id}>{m.familyName} — {m.mandatId}</option>
+                          <option key={m.id} value={m.id}>{m.familyName}{m.libelle ? ` — ${m.libelle}` : ` — ${m.titulaire}`} ({m.mandatId})</option>
                         ))}
                       </select>
                     </div>

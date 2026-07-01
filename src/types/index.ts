@@ -9,6 +9,7 @@ export interface Family {
   civilite?: "M." | "Mme" | null; // Civilité (admin only, non exposé côté cavalier)
   parentEmail: string;
   parentPhone: string;
+  parentPhone2?: string;
   address?: string; // Adresse postale (rue, n°)
   zipCode?: string; // Code postal
   city?: string; // Ville
