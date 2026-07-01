@@ -25,6 +25,7 @@ interface MandatSepa {
   bic: string;
   dateSignature: string; // YYYY-MM-DD
   titulaire: string;     // Nom sur le compte bancaire
+  libelle?: string;      // Libellé pour distinguer 2 mandats (ex: "Père", "Mère")
   status: "active" | "revoked";
   createdAt: any;
 }
@@ -112,9 +113,10 @@ export default function SepaPage() {
 
   // Forms
   const [showNewMandat, setShowNewMandat] = useState(false);
-  const [newMandat, setNewMandat] = useState({ familyId: "", iban: "", bic: "", titulaire: "", dateSignature: new Date().toISOString().split("T")[0] });
+  const [newMandat, setNewMandat] = useState({ familyId: "", iban: "", bic: "", titulaire: "", libelle: "", dateSignature: new Date().toISOString().split("T")[0] });
   const [showNewEcheancier, setShowNewEcheancier] = useState(false);
-  const [newEcheancier, setNewEcheancier] = useState({ mandatId: "", montantTotal: "", nbEcheances: "10", dateDebut: "", description: "" });
+  const [newEcheancier, setNewEcheancier] = useState({ mandatId: "", mandatId2: "", montantTotal: "", montant2: "", nbEcheances: "10", dateDebut: "", description: "" });
+  const [repartir, setRepartir] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Remise creation
@@ -183,55 +185,78 @@ export default function SepaPage() {
         bic,
         dateSignature: newMandat.dateSignature,
         titulaire: newMandat.titulaire,
+        libelle: newMandat.libelle || "",
         status: "active",
         createdAt: serverTimestamp(),
       });
       toast("Mandat SEPA créé", "success");
       setShowNewMandat(false);
-      setNewMandat({ familyId: "", iban: "", bic: "", titulaire: "", dateSignature: new Date().toISOString().split("T")[0] });
+      setNewMandat({ familyId: "", iban: "", bic: "", titulaire: "", libelle: "", dateSignature: new Date().toISOString().split("T")[0] });
       fetchAll();
     } catch (e: any) { toast(e.message, "error"); }
     setSaving(false);
   };
 
-  // ─── Créer un échéancier ───
+  // ─── Générer les échéances d'un mandat (helper réutilisable) ───
+  const genererEcheances = async (mandat: MandatSepa, total: number, nb: number, dateDebut: string, description: string, reference: string) => {
+    const montantEcheance = Math.floor(total / nb * 100) / 100;
+    const reste = Math.round((total - montantEcheance * nb) * 100) / 100;
+    const startDate = new Date(dateDebut);
+    for (let i = 0; i < nb; i++) {
+      const d = new Date(startDate);
+      d.setMonth(d.getMonth() + i);
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const montant = i === nb - 1 ? montantEcheance + reste : montantEcheance;
+      await addDoc(collection(db, "echeances-sepa"), {
+        familyId: mandat.familyId,
+        familyName: mandat.familyName,
+        mandatId: mandat.mandatId,
+        montant: Math.round(montant * 100) / 100,
+        dateEcheance: dateStr,
+        reference,
+        description: description || `Échéance ${i + 1}/${nb}`,
+        status: "pending",
+        remiseId: null,
+        paymentId: null,
+        createdAt: serverTimestamp(),
+      });
+    }
+  };
+
+  // ─── Créer un échéancier (1 mandat, ou réparti sur 2) ───
   const handleCreateEcheancier = async () => {
     const mandat = mandats.find(m => m.id === newEcheancier.mandatId);
     if (!mandat || !newEcheancier.montantTotal || !newEcheancier.dateDebut) return;
+    const nb = parseInt(newEcheancier.nbEcheances);
+    if (!nb || nb < 1) { toast("Nombre d'échéances invalide", "error"); return; }
+    const montant1 = parseFloat(newEcheancier.montantTotal);
+
+    if (repartir) {
+      const mandat2 = mandats.find(m => m.id === newEcheancier.mandatId2);
+      const montant2 = parseFloat(newEcheancier.montant2);
+      if (!mandat2) { toast("Choisis le 2e mandat", "error"); return; }
+      if (mandat2.id === mandat.id) { toast("Les 2 mandats doivent être différents", "error"); return; }
+      if (!montant2 || montant2 <= 0) { toast("Montant du 2e mandat manquant", "error"); return; }
+      setSaving(true);
+      try {
+        const ref = `SPLIT-${Date.now()}`;
+        await genererEcheances(mandat, montant1, nb, newEcheancier.dateDebut, newEcheancier.description, ref);
+        await genererEcheances(mandat2, montant2, nb, newEcheancier.dateDebut, newEcheancier.description, ref);
+        toast(`Réparti : ${montant1.toFixed(2)}€ + ${montant2.toFixed(2)}€ = ${(montant1 + montant2).toFixed(2)}€`, "success");
+        setShowNewEcheancier(false); setRepartir(false);
+        setNewEcheancier({ mandatId: "", mandatId2: "", montantTotal: "", montant2: "", nbEcheances: "10", dateDebut: "", description: "" });
+        fetchAll();
+      } catch (e: any) { toast(e.message, "error"); }
+      setSaving(false);
+      return;
+    }
+
     setSaving(true);
     try {
-      const total = parseFloat(newEcheancier.montantTotal);
-      const nb = parseInt(newEcheancier.nbEcheances);
-      const montantEcheance = Math.floor(total / nb * 100) / 100;
-      const reste = Math.round((total - montantEcheance * nb) * 100) / 100;
-
-      const startDate = new Date(newEcheancier.dateDebut);
-
-      for (let i = 0; i < nb; i++) {
-        const d = new Date(startDate);
-        d.setMonth(d.getMonth() + i);
-        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-        // Dernière échéance absorbe le reste
-        const montant = i === nb - 1 ? montantEcheance + reste : montantEcheance;
-
-        await addDoc(collection(db, "echeances-sepa"), {
-          familyId: mandat.familyId,
-          familyName: mandat.familyName,
-          mandatId: mandat.mandatId,
-          montant: Math.round(montant * 100) / 100,
-          dateEcheance: dateStr,
-          reference: "",
-          description: newEcheancier.description || `Échéance ${i + 1}/${nb}`,
-          status: "pending",
-          remiseId: null,
-          paymentId: null,
-          createdAt: serverTimestamp(),
-        });
-      }
-
+      await genererEcheances(mandat, montant1, nb, newEcheancier.dateDebut, newEcheancier.description, "");
       toast(`${nb} échéances créées pour ${mandat.familyName}`, "success");
       setShowNewEcheancier(false);
-      setNewEcheancier({ mandatId: "", montantTotal: "", nbEcheances: "10", dateDebut: "", description: "" });
+      setNewEcheancier({ mandatId: "", mandatId2: "", montantTotal: "", montant2: "", nbEcheances: "10", dateDebut: "", description: "" });
       fetchAll();
     } catch (e: any) { toast(e.message, "error"); }
     setSaving(false);
@@ -656,6 +681,12 @@ export default function SepaPage() {
                         className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm" />
                     </div>
                     <div>
+                      <label className="font-body text-xs font-semibold text-gray-400 block mb-1">Libellé <span className="text-gray-300 font-normal">(pour distinguer 2 mandats — ex : Père, Mère)</span></label>
+                      <input value={newMandat.libelle} onChange={e => setNewMandat({ ...newMandat, libelle: e.target.value })}
+                        placeholder="Père / Mère / Compte principal…"
+                        className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm" />
+                    </div>
+                    <div>
                       <label className="font-body text-xs font-semibold text-gray-400 block mb-1">IBAN</label>
                       <input value={newMandat.iban} onChange={e => {
                         const iban = e.target.value.replace(/\s/g, "").toUpperCase();
@@ -708,7 +739,7 @@ export default function SepaPage() {
                             <div>
                               <div className="font-body text-sm font-semibold text-blue-800">{m.familyName}</div>
                               <div className="font-body text-xs text-gray-500 mt-0.5">
-                                Titulaire : {m.titulaire} · Mandat : <span className="font-mono text-blue-500">{m.mandatId}</span>
+                                Titulaire : {m.titulaire}{m.libelle ? ` · ${m.libelle}` : ""} · Mandat : <span className="font-mono text-blue-500">{m.mandatId}</span>
                               </div>
                               <div className="font-body text-xs text-gray-400 mt-0.5 font-mono">
                                 IBAN : {formatIban(m.iban)} · BIC : {m.bic}
@@ -771,6 +802,10 @@ export default function SepaPage() {
               {showNewEcheancier && (
                 <Card padding="md" className="mb-5 border-2 border-blue-500/20">
                   <h3 className="font-body text-sm font-semibold text-blue-800 mb-4">Créer un échéancier</h3>
+                  <label className="flex items-center gap-2 mb-4 cursor-pointer font-body text-sm text-slate-700">
+                    <input type="checkbox" checked={repartir} onChange={e => setRepartir(e.target.checked)} />
+                    Répartir sur 2 mandats (ex. parents séparés)
+                  </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                     <div>
                       <label className="font-body text-xs font-semibold text-gray-400 block mb-1">Mandat SEPA</label>
@@ -778,16 +813,36 @@ export default function SepaPage() {
                         className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white">
                         <option value="">Choisir...</option>
                         {mandats.filter(m => m.status === "active").map(m => (
-                          <option key={m.id} value={m.id}>{m.familyName} — {m.mandatId}</option>
+                          <option key={m.id} value={m.id}>{m.familyName}{m.libelle ? ` — ${m.libelle}` : ` — ${m.titulaire}`} ({m.mandatId})</option>
                         ))}
                       </select>
                     </div>
                     <div>
-                      <label className="font-body text-xs font-semibold text-gray-400 block mb-1">Montant total TTC</label>
+                      <label className="font-body text-xs font-semibold text-gray-400 block mb-1">{repartir ? "Montant sur mandat 1" : "Montant total TTC"}</label>
                       <input type="number" step="0.01" value={newEcheancier.montantTotal} onChange={e => setNewEcheancier({ ...newEcheancier, montantTotal: e.target.value })}
                         placeholder="ex: 700"
                         className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm" />
                     </div>
+                    {repartir && (
+                      <>
+                        <div>
+                          <label className="font-body text-xs font-semibold text-gray-400 block mb-1">Mandat SEPA n°2</label>
+                          <select value={newEcheancier.mandatId2} onChange={e => setNewEcheancier({ ...newEcheancier, mandatId2: e.target.value })}
+                            className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white">
+                            <option value="">Choisir...</option>
+                            {mandats.filter(m => m.status === "active" && m.id !== newEcheancier.mandatId).map(m => (
+                              <option key={m.id} value={m.id}>{m.familyName}{m.libelle ? ` — ${m.libelle}` : ` — ${m.titulaire}`} ({m.mandatId})</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="font-body text-xs font-semibold text-gray-400 block mb-1">Montant sur mandat 2</label>
+                          <input type="number" step="0.01" value={newEcheancier.montant2} onChange={e => setNewEcheancier({ ...newEcheancier, montant2: e.target.value })}
+                            placeholder="ex: 300"
+                            className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm" />
+                        </div>
+                      </>
+                    )}
                     <div>
                       <label className="font-body text-xs font-semibold text-gray-400 block mb-1">Nombre d&apos;échéances</label>
                       <select value={newEcheancier.nbEcheances} onChange={e => setNewEcheancier({ ...newEcheancier, nbEcheances: e.target.value })}
@@ -810,17 +865,23 @@ export default function SepaPage() {
                     </div>
                   </div>
                   {/* Preview */}
-                  {newEcheancier.montantTotal && newEcheancier.nbEcheances && (
+                  {!repartir && newEcheancier.montantTotal && newEcheancier.nbEcheances && (
                     <div className="bg-sand rounded-lg px-4 py-3 mb-4 font-body text-sm text-blue-800">
                       💡 {newEcheancier.nbEcheances} × <strong>{(parseFloat(newEcheancier.montantTotal) / parseInt(newEcheancier.nbEcheances)).toFixed(2)}€</strong> = {parseFloat(newEcheancier.montantTotal).toFixed(2)}€
                     </div>
                   )}
+                  {repartir && newEcheancier.montantTotal && newEcheancier.montant2 && newEcheancier.nbEcheances && (
+                    <div className="bg-sand rounded-lg px-4 py-3 mb-4 font-body text-sm text-blue-800">
+                      💡 Mandat 1 : {newEcheancier.nbEcheances}× <strong>{(parseFloat(newEcheancier.montantTotal) / parseInt(newEcheancier.nbEcheances)).toFixed(2)}€</strong> · Mandat 2 : {newEcheancier.nbEcheances}× <strong>{(parseFloat(newEcheancier.montant2) / parseInt(newEcheancier.nbEcheances)).toFixed(2)}€</strong>
+                      <div className="text-xs text-blue-600 mt-0.5">Total : {(parseFloat(newEcheancier.montantTotal) + parseFloat(newEcheancier.montant2)).toFixed(2)}€</div>
+                    </div>
+                  )}
                   <div className="flex gap-2">
-                    <button onClick={handleCreateEcheancier} disabled={saving || !newEcheancier.mandatId || !newEcheancier.montantTotal || !newEcheancier.dateDebut}
+                    <button onClick={handleCreateEcheancier} disabled={saving || !newEcheancier.mandatId || !newEcheancier.montantTotal || !newEcheancier.dateDebut || (repartir && (!newEcheancier.mandatId2 || !newEcheancier.montant2))}
                       className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50">
                       {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Créer {newEcheancier.nbEcheances} échéances
                     </button>
-                    <button onClick={() => setShowNewEcheancier(false)} className="font-body text-sm text-gray-500 bg-gray-100 px-4 py-2 rounded-lg border-none cursor-pointer">Annuler</button>
+                    <button onClick={() => { setShowNewEcheancier(false); setRepartir(false); }} className="font-body text-sm text-gray-500 bg-gray-100 px-4 py-2 rounded-lg border-none cursor-pointer">Annuler</button>
                   </div>
                 </Card>
               )}

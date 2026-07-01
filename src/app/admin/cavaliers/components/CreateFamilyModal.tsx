@@ -42,7 +42,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
 
   const [newFamily, setNewFamily] = useState({
     civilite: "" as "" | "M." | "Mme",
-    parentName: "", parentEmail: "", parentPhone: "",
+    parentName: "", parentEmail: "", parentPhone: "", parentPhone2: "",
     lastName: "", firstName: "",
     address: "", zipCode: "", city: "",
     accountType: "particulier" as AccountType,
@@ -84,6 +84,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
         firstName: firstName || null,
         parentEmail: newFamily.parentEmail.trim(),
         parentPhone: newFamily.parentPhone.trim(),
+        parentPhone2: (newFamily.parentPhone2 || "").trim(),
         address: newFamily.address.trim(),
         zipCode: newFamily.zipCode.trim(),
         city: newFamily.city.trim(),
@@ -223,6 +224,11 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
                   <label className={labelStyle}>Téléphone</label>
                   <input type="tel" className={inputStyle} value={newFamily.parentPhone}
                     onChange={e => setNewFamily({ ...newFamily, parentPhone: e.target.value })} placeholder="06 00 00 00 00"/>
+                </div>
+                <div>
+                  <label className={labelStyle}>Téléphone 2 <span className="text-slate-400 font-normal">(optionnel)</span></label>
+                  <input type="tel" className={inputStyle} value={newFamily.parentPhone2 || ""}
+                    onChange={e => setNewFamily({ ...newFamily, parentPhone2: e.target.value })} placeholder="Autre parent / contact"/>
                 </div>
               </div>
               <div>

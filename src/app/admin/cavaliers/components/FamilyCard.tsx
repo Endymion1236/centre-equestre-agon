@@ -84,7 +84,7 @@ export default function FamilyCard({
   });
   // ── Édition famille ────────────────────────────────────────────────────────
   const [editingFamily, setEditingFamily] = useState(false);
-  const [editForm, setEditForm] = useState({ civilite: "", parentName: "", lastName: "", firstName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
+  const [editForm, setEditForm] = useState({ civilite: "", parentName: "", lastName: "", firstName: "", parentEmail: "", parentPhone: "", parentPhone2: "", address: "", zipCode: "", city: "" });
   const [editTags, setEditTags] = useState<string[]>([]);
 
   const startEditFamily = () => {
@@ -95,7 +95,7 @@ export default function FamilyCard({
       lastName: (family as any).lastName || "",
       firstName: (family as any).firstName || "",
       parentEmail: family.parentEmail || "",
-      parentPhone: family.parentPhone || "", address: family.address || "",
+      parentPhone: family.parentPhone || "", parentPhone2: (family as any).parentPhone2 || "", address: family.address || "",
       zipCode: family.zipCode || "", city: family.city || "",
     });
     setEditTags(family.tags || []);
@@ -138,7 +138,7 @@ export default function FamilyCard({
           parentName: computedName,
           lastName: lastName || null,
           firstName: firstName || null,
-          parentPhone: editForm.parentPhone.trim(), address: editForm.address.trim(),
+          parentPhone: editForm.parentPhone.trim(), parentPhone2: editForm.parentPhone2.trim(), address: editForm.address.trim(),
           zipCode: editForm.zipCode.trim(), city: editForm.city.trim(),
           tags: editTags,
           updatedAt: serverTimestamp(),
@@ -152,7 +152,7 @@ export default function FamilyCard({
           lastName: lastName || null,
           firstName: firstName || null,
           parentEmail: newEmail,
-          parentPhone: editForm.parentPhone.trim(), address: editForm.address.trim(),
+          parentPhone: editForm.parentPhone.trim(), parentPhone2: editForm.parentPhone2.trim(), address: editForm.address.trim(),
           zipCode: editForm.zipCode.trim(), city: editForm.city.trim(),
           tags: editTags,
           updatedAt: serverTimestamp(),
@@ -429,7 +429,7 @@ export default function FamilyCard({
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 mb-3">
-                  {[["Email", "parentEmail", "email"], ["Téléphone", "parentPhone", "tel"]].map(([label, key, type]) => (
+                  {[["Email", "parentEmail", "email"], ["Téléphone", "parentPhone", "tel"], ["Téléphone 2", "parentPhone2", "tel"]].map(([label, key, type]) => (
                     <div key={key}>
                       <label className={labelStyle}>{label}</label>
                       <input type={type} value={(editForm as any)[key]} onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))} className={inputStyle}/>
@@ -503,7 +503,7 @@ export default function FamilyCard({
                 {/* Infos contact */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div><div className={labelStyle}>Email</div><div className="font-body text-sm break-all">{family.parentEmail ? <a href={`mailto:${family.parentEmail}`} className="text-blue-800 no-underline hover:underline">{family.parentEmail}</a> : "—"}</div></div>
-                  <div><div className={labelStyle}>Téléphone</div><div className="font-body text-sm">{family.parentPhone ? <a href={`tel:${family.parentPhone.replace(/[\s.]/g, "")}`} className="text-blue-800 no-underline hover:underline">📞 {family.parentPhone}</a> : "Non renseigné"}</div></div>
+                  <div><div className={labelStyle}>Téléphone</div><div className="font-body text-sm">{family.parentPhone ? <a href={`tel:${family.parentPhone.replace(/[\s.]/g, "")}`} className="text-blue-800 no-underline hover:underline">📞 {family.parentPhone}</a> : "Non renseigné"}{(family as any).parentPhone2 ? <a href={`tel:${(family as any).parentPhone2.replace(/[\s.]/g, "")}`} className="text-blue-800 no-underline hover:underline block mt-0.5">📞 {(family as any).parentPhone2}</a> : null}</div></div>
                   <div><div className={labelStyle}>Inscription</div><div className="font-body text-sm text-blue-800">{family.authProvider === "admin" ? "Créé par l'admin" : `Via ${family.authProvider}`}</div></div>
                 </div>
                 {(family.address || family.city) && (
