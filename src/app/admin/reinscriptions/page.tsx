@@ -23,7 +23,7 @@ const STATUT_BADGE: Record<string, { label: string; cls: string; icon: any }> = 
   parti: { label: "Parti en cours", cls: "bg-amber-100 text-amber-700", icon: UserMinus },
 };
 
-function CavalierRow({ c }: { c: Cavalier }) {
+function CavalierRow({ c, onRelance }: { c: Cavalier; onRelance: (c: Cavalier) => void }) {
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
       <div className="min-w-[160px]">
@@ -44,6 +44,67 @@ function CavalierRow({ c }: { c: Cavalier }) {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 ml-auto font-body text-xs">
         {c.email && <a href={`mailto:${c.email}`} className="inline-flex items-center gap-1 text-blue-600 hover:underline"><Mail size={12} />{c.email}</a>}
         {c.phone && <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1 text-slate-500"><Phone size={12} />{c.phone}</a>}
+        {c.email && (
+          <button onClick={() => onRelance(c)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-500">
+            <Mail size={12} /> Relancer
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RelanceModal({ c, prochaine, user, onClose }: { c: Cavalier; prochaine: number; user: any; onClose: () => void }) {
+  const saison = `${prochaine}–${prochaine + 1}`;
+  const prenom = (c.childName || "").split(" ")[0] || c.childName || "";
+  const [subject, setSubject] = useState(`${prenom} : réinscription pour la saison ${saison} 🐴`);
+  const [body, setBody] = useState(
+    `Bonjour,\n\nNous espérons que ${prenom} a passé une belle saison à cheval au Centre Équestre d'Agon !\n\n` +
+    `Les inscriptions pour la saison ${saison} sont ouvertes, et ce serait un plaisir de retrouver ${prenom} parmi nos cavaliers.\n` +
+    (c.avoirEur > 0 ? `\nBonne nouvelle : il vous reste ${c.avoirEur.toFixed(2)} € d'avoir à utiliser pour la réinscription.\n` : "") +
+    (c.fidelite > 0 ? `Vous avez également ${c.fidelite} points de fidélité.\n` : "") +
+    `\nPour réinscrire ${prenom}, répondez simplement à ce message ou contactez-nous directement.\n\nÀ très bientôt,\nL'équipe du Centre Équestre d'Agon`
+  );
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const send = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const token = await user.getIdToken(true);
+      const res = await fetch("/api/admin/reinscriptions/relance", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ to: c.email, subject, body, familyId: c.familyId, childName: c.childName }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d?.error || "Erreur");
+      if (d.blocked) setMsg({ ok: false, text: d.message || "Envoi bloqué (mode restreint : seuls les admins reçoivent)." });
+      else setMsg({ ok: true, text: "Email envoyé ✅" });
+    } catch (e: any) { setMsg({ ok: false, text: e?.message || String(e) }); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => !busy && onClose()}>
+      <div className="bg-white rounded-2xl max-w-lg w-full p-5 max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-display text-lg font-bold text-slate-900">Relancer {prenom}</h2>
+          <button onClick={onClose} disabled={busy} className="text-slate-400 text-xl leading-none">×</button>
+        </div>
+        <div className="font-body text-xs text-slate-500 mb-3">Destinataire : <span className="text-slate-700 font-medium">{c.email}</span></div>
+        <label className="font-body text-[11px] font-semibold text-slate-500 block mb-1">Objet</label>
+        <input value={subject} onChange={e => setSubject(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-slate-200 font-body text-sm mb-3" />
+        <label className="font-body text-[11px] font-semibold text-slate-500 block mb-1">Message (modifiable)</label>
+        <textarea value={body} onChange={e => setBody(e.target.value)} rows={12} className="w-full px-3 py-2 rounded-lg border border-slate-200 font-body text-sm mb-3 resize-y" />
+        {msg && <div className={`rounded-lg p-2 font-body text-xs mb-3 ${msg.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>{msg.text}</div>}
+        <div className="flex items-center justify-end gap-2">
+          <button onClick={onClose} disabled={busy} className="px-3 py-2 rounded-lg border border-slate-200 bg-white font-body text-xs font-semibold text-slate-600">Fermer</button>
+          {!(msg && msg.ok) && (
+            <button onClick={send} disabled={busy} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white font-body text-xs font-semibold disabled:opacity-50">
+              {busy ? <Loader2 size={13} className="animate-spin" /> : <Mail size={13} />} Envoyer
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -51,6 +112,7 @@ function CavalierRow({ c }: { c: Cavalier }) {
 
 export default function ReinscriptionsPage() {
   const { isAdmin, user } = useAuth();
+  const [relanceCav, setRelanceCav] = useState<Cavalier | null>(null);
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -169,7 +231,7 @@ export default function ReinscriptionsPage() {
                         <div className="absolute -left-2 top-3">
                           {(() => { const b = STATUT_BADGE[c.statut]; const I = b?.icon; return I ? <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${b.cls}`}><I size={10} />{b.label}</span> : null; })()}
                         </div>
-                        <div className="pt-5"><CavalierRow c={c} /></div>
+                        <div className="pt-5"><CavalierRow c={c} onRelance={setRelanceCav} /></div>
                       </div>
                     ))}
                   </div>
@@ -183,10 +245,14 @@ export default function ReinscriptionsPage() {
             <div>
               <h2 className="font-display text-lg font-bold text-amber-700 mb-2 flex items-center gap-2"><UserMinus size={18} /> Partis en cours de saison {data.saison}</h2>
               <p className="font-body text-xs text-slate-500 mb-2">Forfait annulé avant la fin de la saison — signal différent d'une simple non-réinscription.</p>
-              <div className="space-y-2">{data.partis.map(c => <CavalierRow key={c.childId} c={c} />)}</div>
+              <div className="space-y-2">{data.partis.map(c => <CavalierRow key={c.childId} c={c} onRelance={setRelanceCav} />)}</div>
             </div>
           )}
         </>
+      )}
+
+      {relanceCav && data && (
+        <RelanceModal c={relanceCav} prochaine={data.prochaine} user={user} onClose={() => setRelanceCav(null)} />
       )}
     </div>
   );
