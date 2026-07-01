@@ -329,14 +329,14 @@ export default function FamilyCard({
       <Card padding="md">
         {/* ── Header famille ───────────────────────────────────────────── */}
         <div className="flex items-center justify-between cursor-pointer" onClick={() => setIsExpanded(e => !e)}>
-          <div className="flex items-center gap-3">
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-body text-sm font-bold text-white ${accountColor}`}>
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-body text-sm font-bold text-white shrink-0 ${accountColor}`}>
               {((family as any).lastName?.[0] || family.parentName?.[0] || "?").toUpperCase()}
               {((family as any).firstName?.[0] || family.parentName?.split(" ")?.[1]?.[0] || "").toUpperCase()}
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <div className="font-body text-base font-semibold text-blue-800">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="font-body text-base font-semibold text-blue-800 truncate min-w-0">
                   {(family as any).lastName
                     ? <><span className="uppercase">{(family as any).lastName}</span>{(family as any).firstName ? ` ${(family as any).firstName}` : ""}</>
                     : family.parentName || "Sans nom"
@@ -349,7 +349,7 @@ export default function FamilyCard({
                 {family.accountType === "collectivite" && <span className="font-body text-[10px] font-semibold text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded">COLLECTIVITÉ</span>}
                 {(family.tags || []).map((tag: string) => {
                   const t = FAMILY_TAGS.find(ft => ft.id === tag);
-                  return t ? <span key={tag} className={`font-body text-[10px] font-semibold ${t.color} px-1.5 py-0.5 rounded`}>{t.emoji} {t.label}</span> : null;
+                  return t ? <span key={tag} className={`font-body text-[10px] font-semibold ${t.color} px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap`}>{t.emoji} {t.label}</span> : null;
                 })}
               </div>
               <div className="font-body text-xs text-slate-600 flex items-center gap-1.5 flex-wrap">
@@ -383,19 +383,21 @@ export default function FamilyCard({
               )}
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             {/* Mobile : bouton d'appel taille pouce (le lien texte existe mais
                 sa cible de tap est trop petite — c'est LE geste quotidien) */}
             {family.parentPhone && (
               <a href={`tel:${family.parentPhone.replace(/[\s.]/g, "")}`} onClick={(e) => e.stopPropagation()}
                 title={`Appeler ${family.parentName || ""}`}
-                className="sm:hidden flex items-center justify-center w-10 h-10 rounded-full bg-green-500 text-white no-underline shadow-sm active:scale-95 transition-transform">
+                className="sm:hidden flex items-center justify-center w-10 h-10 rounded-full bg-green-500 text-white no-underline shadow-sm active:scale-95 transition-transform shrink-0">
                 <Phone size={17} />
               </a>
             )}
-            <Badge color={family.authProvider === "admin" ? "gray" : family.authProvider === "google" ? "blue" : "purple"}>
-              {family.authProvider === "admin" ? "Créé admin" : family.authProvider === "google" ? "Google" : "Facebook"}
-            </Badge>
+            <span className="hidden sm:block">
+              <Badge color={family.authProvider === "admin" ? "gray" : family.authProvider === "google" ? "blue" : "purple"}>
+                {family.authProvider === "admin" ? "Créé admin" : family.authProvider === "google" ? "Google" : "Facebook"}
+              </Badge>
+            </span>
             {isExpanded ? <ChevronUp size={18} className="text-slate-600"/> : <ChevronDown size={18} className="text-slate-600"/>}
           </div>
         </div>
