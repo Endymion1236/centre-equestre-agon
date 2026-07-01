@@ -17,8 +17,16 @@
       "schedule": "0 8 25 * *"
     },
     {
+      "path": "/api/cron/daily-backup",
+      "schedule": "0 22 * * *"
+    },
+    {
       "path": "/api/cron/satisfaction-stages",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/satisfaction-annee",
+      "schedule": "0 7 1 7 *"
     }
   ]
 }

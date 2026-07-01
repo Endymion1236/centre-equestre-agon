@@ -37,6 +37,8 @@ export async function GET(req: NextRequest) {
     stageLabel: d.stageLabel || "",
     childName: d.childName || "",
     moniteurs: Array.isArray(d.moniteurs) ? d.moniteurs : [],
+    type: d.type === "annee" ? "annee" : "stage",
+    saison: typeof d.saison === "number" ? d.saison : null,
     repondu: !!d.repondu,
   });
 }
@@ -69,8 +71,11 @@ export async function POST(req: NextRequest) {
   const recommande = typeof body.recommande === "boolean" ? body.recommande : undefined;
   const commentaire = String(body.commentaire || "").slice(0, 2000).trim();
 
+  const estAnnee = inv.type === "annee";
   const avis = {
-    source: "stage",
+    source: estAnnee ? "annee" : "stage",
+    type: estAnnee ? "annee" : "stage",
+    saison: typeof inv.saison === "number" ? inv.saison : null,
     invitationId: token,
     stageLabel: inv.stageLabel || "",
     semaine: inv.semaine || "",

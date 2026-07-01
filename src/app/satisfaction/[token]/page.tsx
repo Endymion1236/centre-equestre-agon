@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Star, Loader2, CheckCircle2 } from "lucide-react";
 
-interface Invitation { stageLabel: string; childName: string; moniteurs: string[]; repondu: boolean; }
+interface Invitation { stageLabel: string; childName: string; moniteurs: string[]; type?: "stage" | "annee"; saison?: number | null; repondu: boolean; }
 
 function StarRating({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   const [hover, setHover] = useState(0);
@@ -21,11 +21,11 @@ function StarRating({ value, onChange }: { value: number; onChange: (n: number) 
   );
 }
 
-const QUESTIONS = [
-  { id: "globalNote", label: "Note globale du stage" },
-  { id: "noteProgres", label: "Les progrès de votre enfant" },
+const questionsFor = (annee: boolean) => [
+  { id: "globalNote", label: annee ? "Note globale de l'année" : "Note globale du stage" },
+  { id: "noteProgres", label: annee ? "Les progrès de votre enfant sur l'année" : "Les progrès de votre enfant" },
   { id: "notePoneyNiveau", label: "L'adéquation poney / niveau" },
-  { id: "noteOrganisation", label: "L'organisation (accueil, horaires, infos)" },
+  { id: "noteOrganisation", label: annee ? "L'organisation (accueil, planning, infos)" : "L'organisation (accueil, horaires, infos)" },
 ] as const;
 
 export default function SatisfactionPage() {
@@ -101,7 +101,7 @@ export default function SatisfactionPage() {
         <div className="max-w-md text-center bg-white rounded-2xl shadow-sm border border-slate-100 p-8">
           <CheckCircle2 className="mx-auto text-emerald-500 mb-3" size={48} />
           <h1 className="text-xl font-bold text-slate-800">Merci pour votre retour !</h1>
-          <p className="text-slate-500 mt-2">Votre avis nous aide à améliorer nos stages. À très bientôt au Centre Équestre d'Agon-Coutainville.</p>
+          <p className="text-slate-500 mt-2">Votre avis nous aide à progresser. À très bientôt au Centre Équestre d'Agon-Coutainville.</p>
         </div>
       </div>
     );
@@ -112,14 +112,14 @@ export default function SatisfactionPage() {
       <div className="max-w-xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="bg-[#1e3a5f] text-white px-6 py-5">
           <div className="text-xs uppercase tracking-wide text-white/70">Centre Équestre d'Agon-Coutainville</div>
-          <h1 className="text-lg font-bold mt-1">Votre avis sur le stage</h1>
+          <h1 className="text-lg font-bold mt-1">{inv?.type === "annee" ? "Votre avis sur l'année" : "Votre avis sur le stage"}</h1>
           <p className="text-white/80 text-sm mt-1">
             {inv?.stageLabel}{inv?.childName ? ` · ${inv.childName}` : ""}
           </p>
         </div>
 
         <div className="p-6 flex flex-col gap-6">
-          {QUESTIONS.map(q => (
+          {questionsFor(inv?.type === "annee").map(q => (
             <div key={q.id} className="flex flex-col gap-1.5">
               <label className="text-sm font-semibold text-slate-700">{q.label}</label>
               <StarRating value={notes[q.id] || 0} onChange={n => setNote(q.id, n)} />
@@ -128,7 +128,7 @@ export default function SatisfactionPage() {
 
           {(inv?.moniteurs || []).length > 0 && (
             <div className="flex flex-col gap-2 border-t border-slate-100 pt-5">
-              <div className="text-sm font-semibold text-slate-700">L'encadrement</div>
+              <div className="text-sm font-semibold text-slate-700">{inv?.type === "annee" ? "Vos moniteurs cette année" : "L'encadrement"}</div>
               {(inv?.moniteurs || []).map(nom => (
                 <div key={nom} className="flex items-center justify-between gap-3">
                   <span className="text-slate-600">{nom}</span>

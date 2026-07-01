@@ -8,6 +8,7 @@ interface Cavalier {
   childId: string; childName: string; familyId: string; familyName: string;
   statut: string; email: string; phone: string; moniteurs: string[];
   galop: string; anciennete: number; avoirEur: number; fidelite: number;
+  avisAnnuel?: { note: number; commentaire: string; recommande?: boolean } | null;
 }
 interface Data {
   saison: number; prochaine: number; rentree: string; today: string; apresRentree: boolean;
@@ -34,6 +35,11 @@ function CavalierRow({ c }: { c: Cavalier }) {
         {c.anciennete > 0 && <span>{c.anciennete} saison{c.anciennete > 1 ? "s" : ""}</span>}
         {c.avoirEur > 0 && <span className="inline-flex items-center gap-1 text-emerald-700"><Wallet size={12} />{c.avoirEur.toFixed(2)} €</span>}
         {c.fidelite > 0 && <span className="inline-flex items-center gap-1 text-amber-600"><Star size={12} />{c.fidelite} pts</span>}
+        {c.avisAnnuel && c.avisAnnuel.note > 0 && (
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${c.avisAnnuel.note >= 4 ? "bg-emerald-100 text-emerald-700" : c.avisAnnuel.note >= 3 ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"}`} title={c.avisAnnuel.commentaire || ""}>
+            Avis année <Star size={11} className="fill-current" />{c.avisAnnuel.note}/5{c.avisAnnuel.recommande === false ? " · ne recommande pas" : ""}
+          </span>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 ml-auto font-body text-xs">
         {c.email && <a href={`mailto:${c.email}`} className="inline-flex items-center gap-1 text-blue-600 hover:underline"><Mail size={12} />{c.email}</a>}
