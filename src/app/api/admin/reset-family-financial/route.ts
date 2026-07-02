@@ -87,30 +87,66 @@ export async function POST(req: NextRequest) {
     const famData = famDoc.data();
     const familyName = famData?.parentName || famData?.name || familyId;
 
+    // Ensemble des identifiants à purger. Les données client (réservations,
+    // liste d'attente…) sont rattachées à l'UID de connexion (user.uid), qui
+    // n'est pas toujours égal à l'ID du document famille (fiche créée par
+    // l'admin, compte relié, compte recréé…). On purge donc par l'ID du doc
+    // ET l'authUid, et pour les réservations aussi par sourceFamilyId.
+    const idSet = Array.from(new Set([familyId, famData?.authUid].filter(Boolean))) as string[];
+
+    // Cas des comptes en double (fiche créée admin + fiche sous l'UID de
+    // connexion partageant le même email) : on ajoute toutes les fiches du
+    // même email et leurs authUid, sinon le reset rate les données rattachées
+    // à l'autre fiche.
+    const email = (famData?.parentEmail || famData?.email || "").trim().toLowerCase();
+    if (email) {
+      try {
+        const sameEmail = await adminDb.collection("families").where("parentEmail", "==", famData?.parentEmail).get();
+        sameEmail.forEach(d => {
+          if (!idSet.includes(d.id)) idSet.push(d.id);
+          const au = (d.data() as any)?.authUid;
+          if (au && !idSet.includes(au)) idSet.push(au);
+        });
+      } catch { /* champ absent : ignore */ }
+    }
+    const SOURCE_FIELD_COLLECTIONS = new Set(["reservations", "waitlist"]);
+
+    // Récupère les IDs de docs d'une collection correspondant à l'un des idSet
+    // (champ familyId, + sourceFamilyId pour les collections concernées).
+    const gatherIds = async (colName: string): Promise<string[]> => {
+      const found = new Set<string>();
+      for (let i = 0; i < idSet.length; i += 10) {
+        const chunk = idSet.slice(i, i + 10);
+        const snap = await adminDb.collection(colName).where("familyId", "in", chunk).get();
+        snap.forEach(d => found.add(d.id));
+        if (SOURCE_FIELD_COLLECTIONS.has(colName)) {
+          try {
+            const snap2 = await adminDb.collection(colName).where("sourceFamilyId", "in", chunk).get();
+            snap2.forEach(d => found.add(d.id));
+          } catch { /* champ absent : ignore */ }
+        }
+      }
+      return Array.from(found);
+    };
+
     // ── Phase 1 : inventaire ─────────────────────────────────────────
     // On compte (et liste les IDs) ce qui SERA supprimé. Permet à
     // l'admin de valider avant le coup fatal.
     const inventory: Record<string, { count: number; ids: string[] }> = {};
 
     for (const colName of COLLECTIONS_BY_FAMILYID) {
-      const snap = await adminDb
-        .collection(colName)
-        .where("familyId", "==", familyId)
-        .get();
-      inventory[colName] = {
-        count: snap.size,
-        ids: snap.docs.map(d => d.id),
-      };
+      const ids = await gatherIds(colName);
+      inventory[colName] = { count: ids.length, ids };
     }
 
-    // Collections ou le doc ID EST le familyId : check existence direct
+    // Collections ou le doc ID EST le familyId : check existence pour chaque id
     for (const colName of COLLECTIONS_BY_DOC_ID) {
-      const docSnap = await adminDb.collection(colName).doc(familyId).get();
-      if (docSnap.exists) {
-        inventory[colName] = { count: 1, ids: [familyId] };
-      } else {
-        inventory[colName] = { count: 0, ids: [] };
+      const ids: string[] = [];
+      for (const id of idSet) {
+        const docSnap = await adminDb.collection(colName).doc(id).get();
+        if (docSnap.exists) ids.push(id);
       }
+      inventory[colName] = { count: ids.length, ids };
     }
 
     const totalDocs = Object.values(inventory).reduce((s, x) => s + x.count, 0);
@@ -122,7 +158,7 @@ export async function POST(req: NextRequest) {
       const allCreneauxSnap = await adminDb.collection("creneaux").get();
       for (const doc of allCreneauxSnap.docs) {
         const enrolled = (doc.data().enrolled || []) as any[];
-        if (enrolled.some(e => e.familyId === familyId)) creneauxConcernes++;
+        if (enrolled.some(e => idSet.includes(e.familyId))) creneauxConcernes++;
       }
       return NextResponse.json({
         success: true,
@@ -177,7 +213,7 @@ export async function POST(req: NextRequest) {
       const data = doc.data();
       const enrolled = (data.enrolled || []) as any[];
       if (enrolled.length === 0) continue;
-      const filtered = enrolled.filter(e => e.familyId !== familyId);
+      const filtered = enrolled.filter(e => !idSet.includes(e.familyId));
       if (filtered.length === enrolled.length) continue; // pas concerne
       // Mise a jour : nouveau enrolled + enrolledCount
       await doc.ref.update({
