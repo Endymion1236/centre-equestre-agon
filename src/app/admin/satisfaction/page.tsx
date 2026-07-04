@@ -246,7 +246,7 @@ export default function SatisfactionPage() {
   };
 
   const stageAvis = useMemo(
-    () => avis.filter(a => a.source === "stage" && Array.isArray(a.moniteurs)),
+    () => avis.filter(a => (a.source === "stage" || a.source === "annee") && Array.isArray(a.moniteurs)),
     [avis]
   );
   const periodesStage = useMemo(() => {
@@ -340,7 +340,7 @@ export default function SatisfactionPage() {
           {/* Tableau par enseignant */}
           {bilan.length === 0 ? (
             <div className="text-center py-10 font-body text-slate-500">
-              Aucun retour de stage avec moniteur nommé pour l'instant. Génère un lien de test ci-dessous pour essayer.
+              Aucun retour (stage ou année) avec moniteur nommé pour l'instant. Génère un lien de test ci-dessous pour essayer.
             </div>
           ) : (
             <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden mb-6">
@@ -391,7 +391,7 @@ export default function SatisfactionPage() {
                                         </div>
                                         <div className="flex items-center gap-3 font-body text-xs text-slate-500">
                                           <span className="inline-flex items-center gap-1">Encadr. <Stars n={d.noteEncadrement} /> <span className={bas ? "text-rose-600 font-bold" : "font-semibold"}>{d.noteEncadrement || "—"}</span></span>
-                                          <span>Stage {d.globalNote || "—"}/5</span>
+                                          <span>Note {d.globalNote || "—"}/5</span>
                                           {d.recommande === false && <span className="text-rose-600 font-semibold">ne recommande pas</span>}
                                         </div>
                                       </div>
