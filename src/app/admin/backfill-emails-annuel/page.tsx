@@ -58,6 +58,7 @@ export default function BackfillEmailsAnnuelPage() {
   const [erreur, setErreur] = useState("");
   const [result, setResult] = useState<any>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [saison, setSaison] = useState(2025); // 2025 = saison 2025-2026 (fin juin 2026)
 
   async function buildRows() {
     if (!file) throw new Error("Sélectionne d'abord le fichier CSV Celeris.");
@@ -110,7 +111,7 @@ export default function BackfillEmailsAnnuelPage() {
       const res = await authFetch("/api/admin/backfill-emails-annuel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows, dryRun, confirmProd }),
+        body: JSON.stringify({ rows, dryRun, confirmProd, saison }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Erreur serveur");
@@ -153,6 +154,21 @@ export default function BackfillEmailsAnnuelPage() {
           background: "#f8fafc",
         }}
       >
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 13, color: "#334155", marginRight: 8 }}>Saison ciblée :</label>
+          <select
+            value={saison}
+            onChange={(e) => setSaison(Number(e.target.value))}
+            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13 }}
+          >
+            <option value={2025}>2025-2026 (actifs jusqu'à fin juin 2026)</option>
+            <option value={2026}>2026-2027</option>
+            <option value={2024}>2024-2025</option>
+          </select>
+          <span style={{ fontSize: 12, color: "#94a3b8", marginLeft: 8 }}>
+            = cavaliers inscrits dans un cours daté du 1/9 au 30/6 de la saison
+          </span>
+        </div>
         <input
           type="file"
           accept=".csv,text/csv"
@@ -252,7 +268,8 @@ export default function BackfillEmailsAnnuelPage() {
               marginBottom: 12,
             }}
           >
-            Base : <strong>{s.projectId}</strong> {s.isProd ? "(PRODUCTION)" : "(test)"} —{" "}
+            Base : <strong>{s.projectId}</strong> {s.isProd ? "(PRODUCTION)" : "(test)"} · Saison{" "}
+            <strong>{s.saison}</strong> ({s.periode}) —{" "}
             {s.dryRun ? "aperçu (aucune écriture)" : `✅ ${s.appliedCount} fiche(s) mise(s) à jour`}
           </div>
 

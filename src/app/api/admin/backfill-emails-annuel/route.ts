@@ -3,10 +3,10 @@ import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Normalisation identique au reste du projet (route doublons) :
-// NFD → suppression accents → minuscules → alphanum + espaces.
+// Normalisation identique au reste du projet (route doublons).
 const norm = (s: string) =>
   (s || "")
     .normalize("NFD")
@@ -16,14 +16,9 @@ const norm = (s: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
-// Une inscription "forfait annuel" = un document `forfaits` avec ces statuts.
-const ACTIF = new Set(["actif", "active"]);
-
 type CsvRow = { nom: string; prenom: string; emailCav: string; emailTut: string };
 
-// Déduit nom de famille + prénom du parent à partir de la fiche.
-// Priorité aux champs lastName/firstName ; sinon on parse parentName
-// ("NOM Prénom" : les tokens tout en MAJUSCULES = nom de famille).
+// Déduit nom de famille + prénom du parent depuis la fiche.
 function parseFamilyName(fam: any): { surname: string; first: string } {
   const ln = norm(fam.lastName || "");
   const fn = norm(fam.firstName || "");
@@ -58,10 +53,14 @@ export async function POST(req: NextRequest) {
   const rows: CsvRow[] = Array.isArray(body?.rows) ? body.rows : [];
   const dryRun = body?.dryRun !== false; // aperçu par défaut
   const confirmProd = String(body?.confirmProd || "");
-  const seasonFilter =
-    body?.seasonStartYear === null || body?.seasonStartYear === undefined
-      ? null
-      : Number(body.seasonStartYear);
+
+  // Saison N : créneaux cours datés du 1/9/N au 30/6/N+1.
+  // Défaut : N = 2025 → saison 2025-2026 (forfaits actifs jusqu'à fin juin 2026).
+  const N = Number.isFinite(Number(body?.saison)) && Number(body?.saison) > 2000
+    ? Number(body.saison)
+    : 2025;
+  const start = `${N}-09-01`;
+  const end = `${N + 1}-06-30`;
 
   if (!rows.length) {
     return NextResponse.json({ error: "Aucune ligne CSV fournie." }, { status: 400 });
@@ -79,8 +78,6 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 1. Map "nom|prénom" → emails (tuteur prioritaire, sinon cavalier) ──
-  //     Un même nom|prénom peut renvoyer plusieurs emails distincts
-  //     (homonymes) → on les garde tous pour détecter l'ambiguïté.
   const map = new Map<string, { email: string; source: "tuteur" | "cavalier" }[]>();
   for (const r of rows) {
     const key = `${norm(r.nom)}|${norm(r.prenom)}`;
@@ -95,26 +92,45 @@ export async function POST(req: NextRequest) {
     map.set(key, arr);
   }
 
-  // ── 2. Familles "forfait annuel" = ≥1 forfait actif ──
-  const forfaitsSnap = await adminDb.collection("forfaits").get();
-  const annualFamilyIds = new Set<string>();
-  for (const d of forfaitsSnap.docs) {
-    const f = d.data();
-    if (!ACTIF.has(String(f.status || ""))) continue;
-    if (seasonFilter !== null && Number(f.seasonStartYear) !== seasonFilter) continue;
-    if (f.familyId) annualFamilyIds.add(String(f.familyId));
-  }
-
-  // ── 3. Parcours des familles annuelles SANS email ──
+  // ── 2. Charger les familles (+ index childId → familyId) ──
   const famSnap = await adminDb.collection("families").get();
+  const famById = new Map<string, any>();
+  const childToFamily = new Map<string, string>();
+  famSnap.forEach((d) => {
+    const fam = d.data();
+    famById.set(d.id, fam);
+    for (const c of fam.children || []) {
+      if (c?.id) childToFamily.set(String(c.id), d.id);
+    }
+  });
+
+  // ── 3. Population "forfait annuel" = enfants inscrits (enrolled) dans un
+  //      créneau de type "cours" daté dans la saison N (1/9/N → 30/6/N+1).
+  //      Source de vérité identique à l'outil de réinscriptions.
+  const cSnap = await adminDb
+    .collection("creneaux")
+    .where("date", ">=", start)
+    .where("date", "<=", end)
+    .get();
+
+  const annualFamilyIds = new Set<string>();
+  cSnap.forEach((d) => {
+    const c = d.data();
+    if (c.activityType !== "cours") return;
+    for (const e of c.enrolled || []) {
+      if (!e?.childId) continue;
+      const famId = e.familyId ? String(e.familyId) : childToFamily.get(String(e.childId)) || "";
+      if (famId && famById.has(famId)) annualFamilyIds.add(famId);
+    }
+  });
+
+  // ── 4. Pour chaque famille annuelle SANS email : chercher dans le CSV ──
   const proposals: any[] = [];
-  let annualCount = 0;
   let alreadyHaveEmail = 0;
 
-  for (const d of famSnap.docs) {
-    if (!annualFamilyIds.has(d.id)) continue;
-    annualCount++;
-    const fam = d.data();
+  for (const famId of annualFamilyIds) {
+    const fam = famById.get(famId);
+    if (!fam) continue;
 
     const currentEmail = String(fam.parentEmail || "").trim();
     if (currentEmail) {
@@ -125,7 +141,6 @@ export async function POST(req: NextRequest) {
     const { surname, first } = parseFamilyName(fam);
     const children = Array.isArray(fam.children) ? fam.children : [];
 
-    // Clés candidates : chaque enfant, puis le parent lui-même.
     const candidates: { label: string; key: string }[] = [];
     for (const c of children) {
       const cSurname = norm(c?.lastName || "") || surname;
@@ -149,7 +164,7 @@ export async function POST(req: NextRequest) {
     const ambiguous = seenEmails.size > 1;
 
     proposals.push({
-      familyId: d.id,
+      familyId: famId,
       parentName: fam.parentName || "",
       children: children.map((c: any) => c?.firstName).filter(Boolean),
       proposedEmail: found?.email || "",
@@ -160,7 +175,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // ── 4. Application (uniquement status "ok") ──
+  // ── 5. Application (uniquement status "ok") ──
   let appliedCount = 0;
   if (!dryRun) {
     const toApply = proposals.filter((p) => p.status === "ok" && p.proposedEmail);
@@ -178,12 +193,16 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const order: Record<string, number> = { ok: 0, ambigu: 1, non_trouve: 2 };
+  proposals.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+
   const summary = {
     projectId,
     isProd,
     dryRun,
-    seasonFilter,
-    annualFamilies: annualCount,
+    saison: `${N}-${N + 1}`,
+    periode: `${start} → ${end}`,
+    annualFamilies: annualFamilyIds.size,
     alreadyHaveEmail,
     withoutEmail: proposals.length,
     ok: proposals.filter((p) => p.status === "ok").length,
@@ -191,10 +210,6 @@ export async function POST(req: NextRequest) {
     nonTrouve: proposals.filter((p) => p.status === "non_trouve").length,
     appliedCount,
   };
-
-  // Tri : ok d'abord, puis ambigu, puis non trouvés (lecture plus simple).
-  const order: Record<string, number> = { ok: 0, ambigu: 1, non_trouve: 2 };
-  proposals.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
 
   return NextResponse.json({ summary, proposals });
 }
