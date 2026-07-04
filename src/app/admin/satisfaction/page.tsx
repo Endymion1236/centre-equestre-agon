@@ -109,6 +109,33 @@ export default function SatisfactionPage() {
     } catch (e: any) { setAnneeResult("Erreur : " + (e?.message || e)); } finally { setAnneeBusy(false); }
   };
 
+  // Envoi RÉEL du questionnaire de fin de saison à TOUTES les familles annuelles.
+  // Ni dry, ni to, ni limit → la route envoie à tout le monde (sous garde-fou email).
+  const envoyerAnneeTous = async () => {
+    if (!user) return;
+    const ok = window.confirm(
+      `Envoi RÉEL du questionnaire de fin de saison ${anneeSaison}–${anneeSaison + 1} à TOUTES les familles annuelles.\n\n` +
+      `⚠️ À faire AVANT :\n` +
+      `• remplir les emails manquants (page « Renseigner les emails »),\n` +
+      `• mettre EMAIL_RESTRICTED_MODE=off dans Vercel (sinon les familles sont bloquées).\n\n` +
+      `Continuer ?`
+    );
+    if (!ok) return;
+    const mot = window.prompt("Pour confirmer l'envoi réel à TOUTES les familles, tapez : ENVOYER-TOUS");
+    if (mot !== "ENVOYER-TOUS") { setAnneeResult("Envoi annulé (mot-clé incorrect)."); return; }
+    setAnneeBusy(true); setAnneeResult("");
+    try {
+      const token = await user.getIdToken(true);
+      const params = new URLSearchParams();
+      params.set("saison", String(anneeSaison));
+      const res = await fetch(`/api/admin/satisfaction-annee?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      setAnneeResult(JSON.stringify(data, null, 2));
+      const crees = Array.isArray(data?.crees) ? data.crees : [];
+      setAnneeLinks(crees.map((c: any) => ({ url: `${window.location.origin}/satisfaction/${c.token}`, childName: c.childName || "", stageLabel: c.stageLabel || "" })));
+    } catch (e: any) { setAnneeResult("Erreur : " + (e?.message || e)); } finally { setAnneeBusy(false); }
+  };
+
   useEffect(() => {
     if (!isAdmin) return;
     (async () => {
@@ -409,6 +436,8 @@ export default function SatisfactionPage() {
                 className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 font-body text-sm font-semibold disabled:opacity-50">Aperçu</button>
               <button onClick={() => lancerAnnee(true)} disabled={anneeBusy}
                 className="px-3 py-2 rounded-lg bg-indigo-600 text-white font-body text-sm font-semibold disabled:opacity-50">M'envoyer un test</button>
+              <button onClick={envoyerAnneeTous} disabled={anneeBusy}
+                className="px-3 py-2 rounded-lg bg-rose-600 text-white font-body text-sm font-semibold disabled:opacity-50">Envoyer à toutes les familles</button>
             </div>
             {anneeLinks.length > 0 && (
               <div className="mt-3 bg-white border border-slate-200 rounded-lg p-3">
