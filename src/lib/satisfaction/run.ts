@@ -168,7 +168,7 @@ function emailHtmlAnnee(childFirst: string, saisonLabel: string, link: string) {
   </div>`;
 }
 
-export interface RunAnneeOptions { saison?: number; dry?: boolean; toOverride?: string; limit?: number; }
+export interface RunAnneeOptions { saison?: number; dry?: boolean; toOverride?: string; limit?: number; noBcc?: boolean; }
 
 /**
  * Questionnaire de fin de saison : une invitation par enfant ayant monté en
@@ -255,7 +255,7 @@ export async function runSatisfactionAnnee(opts: RunAnneeOptions = {}) {
     const childFirst = (meta.childName || "").split(" ")[0];
     const subject = `Votre avis sur l'année${childFirst ? ` de ${childFirst}` : ""}`;
     try {
-      await resend.emails.send({ from: FROM, to: dest, ...(BCC ? { bcc: BCC } : {}), subject, html: emailHtmlAnnee(childFirst, saisonLabel, link) });
+      await resend.emails.send({ from: FROM, to: dest, ...((BCC && !opts.noBcc) ? { bcc: BCC } : {}), subject, html: emailHtmlAnnee(childFirst, saisonLabel, link) });
       result.emails++;
       await logEmail({ to: dest, subject, context: "cron_satisfaction_annee", template: "satisfactionAnnee", status: "sent", familyId: invitation.familyId, sentBy: "system" }).catch(() => {});
     } catch (err: any) {
