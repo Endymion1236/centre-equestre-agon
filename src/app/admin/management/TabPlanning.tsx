@@ -29,6 +29,42 @@ const TIME_SLOTS = Array.from({length: (20-7)*4+1}, (_,i) => {
 function heureToMin(h: string) { const [hh,mm] = h.split(":").map(Number); return hh*60+mm; }
 function minToHeure(m: number) { return `${String(Math.floor(m/60)).padStart(2,"0")}:${String(m%60).padStart(2,"0")}`; }
 
+// ── Découpage automatique des tâches chevauchées ───────────────────────────
+// Quand on insère une nouvelle tâche [newStart, newEnd] (en minutes) sur un
+// même salarié/jour, on ajuste les tâches existantes qui la chevauchent :
+//   - entièrement à l'intérieur → coupée en deux (avant + après)
+//   - chevauchement d'un côté   → raccourcie
+//   - entièrement recouverte    → supprimée
+type DecoupeOps = {
+  updates: { id: string; heureDebut: string; dureeMinutes: number; label: string; ancien: string }[];
+  creates: { from: TachePlanifiee; heureDebut: string; dureeMinutes: number; label: string }[];
+  deletes: { id: string; label: string; plage: string }[];
+};
+function planDecoupage(existing: TachePlanifiee[], newStart: number, newEnd: number): DecoupeOps {
+  const ops: DecoupeOps = { updates: [], creates: [], deletes: [] };
+  for (const t of existing) {
+    const s = heureToMin(t.heureDebut);
+    const e = s + t.dureeMinutes;
+    if (!(s < newEnd && e > newStart)) continue; // pas de chevauchement
+    const beforeStart = s, beforeEnd = Math.min(e, newStart);
+    const afterStart = Math.max(s, newEnd), afterEnd = e;
+    const hasBefore = beforeEnd > beforeStart;
+    const hasAfter = afterEnd > afterStart;
+    const ancien = `${t.heureDebut}→${minToHeure(e)}`;
+    if (hasBefore && hasAfter) {
+      ops.updates.push({ id: t.id, heureDebut: minToHeure(beforeStart), dureeMinutes: beforeEnd - beforeStart, label: t.tacheLabel, ancien });
+      ops.creates.push({ from: t, heureDebut: minToHeure(afterStart), dureeMinutes: afterEnd - afterStart, label: t.tacheLabel });
+    } else if (hasBefore) {
+      ops.updates.push({ id: t.id, heureDebut: minToHeure(beforeStart), dureeMinutes: beforeEnd - beforeStart, label: t.tacheLabel, ancien });
+    } else if (hasAfter) {
+      ops.updates.push({ id: t.id, heureDebut: minToHeure(afterStart), dureeMinutes: afterEnd - afterStart, label: t.tacheLabel, ancien });
+    } else {
+      ops.deletes.push({ id: t.id, label: t.tacheLabel, plage: ancien });
+    }
+  }
+  return ops;
+}
+
 /**
  * Arrondit une duree au quart d'heure le plus proche, avec un minimum de
  * 15 min. Utilise pour les pre-remplissages depuis tachesType (qui peuvent
@@ -45,6 +81,8 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   const { isAdmin } = useAuth();
   const { toast } = useToast();
   const [addCell, setAddCell] = useState<{ salarieId: string; jour: JourSemaine } | null>(null);
+  // Aperçu du découpage automatique avant application (chevauchements détectés).
+  const [pendingSplit, setPendingSplit] = useState<{ newTasks: any[]; decoupes: any[] } | null>(null);
   // binomeIds : si la tache est marquée binomeRequis, contient les ids des salariés
   // additionnels à assigner sur le même créneau. La tache du salarié principal +
   // une tache identique pour chaque binôme sont créées en une fois.
@@ -134,68 +172,92 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     setAddCell({ salarieId, jour });
   };
 
-  const addTache = async () => {
-    if (!addCell || !addForm.tacheTypeId) return;
-    setSaving(true);
+  // Construit la liste des nouvelles tâches à créer + le plan de découpage
+  // des tâches existantes chevauchées (par salarié/jour).
+  const construirePlan = () => {
     const tt = tachesType.find(t => t.id === addForm.tacheTypeId)!;
-    const sal = salaries.find(s => s.id === addCell.salarieId)!;
     const joursToAdd: JourSemaine[] = addForm.joursSelectionnes.length > 0
       ? addForm.joursSelectionnes
-      : [addCell.jour];
+      : [addCell!.jour];
+    const allSalIds = [addCell!.salarieId, ...addForm.binomeIds.filter(id => id && id !== addCell!.salarieId)];
+    const duree = addForm.dureeMinutes || roundToQuarter(tt.dureeMinutes);
 
-    // Liste complète des salariés à assigner : le principal + les binômes choisis.
-    // Si la tâche n'est pas marquée binomeRequis OU qu'aucun binôme n'a été sélectionné,
-    // c'est juste le salarié principal (comportement historique).
-    const allSalIds = [addCell.salarieId, ...addForm.binomeIds.filter(id => id && id !== addCell.salarieId)];
+    const newTasks: any[] = [];
+    const decoupes: any[] = [];
 
-    try {
-      const batch: Promise<any>[] = [];
-      const details: string[] = [];
-      for (const jour of joursToAdd) {
-        // Calculer l'heure de début pour ce jour (basée sur le planning du
-        // salarié principal — les binômes le rejoignent à la même heure).
-        let heureDebut = addForm.heureDebut;
-        if (addForm.enchainer && joursToAdd.length > 1) {
-          const jourTaches = taches
-            .filter(t => t.salarieId === addCell.salarieId && t.jour === jour)
-            .sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
-          if (jourTaches.length > 0) {
-            const last = jourTaches[jourTaches.length - 1];
-            heureDebut = minToHeure(heureToMin(last.heureDebut) + last.dureeMinutes);
-          }
+    for (const jour of joursToAdd) {
+      let heureDebut = addForm.heureDebut;
+      if (addForm.enchainer && joursToAdd.length > 1) {
+        const jourTaches = taches
+          .filter(t => t.salarieId === addCell!.salarieId && t.jour === jour)
+          .sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
+        if (jourTaches.length > 0) {
+          const last = jourTaches[jourTaches.length - 1];
+          heureDebut = minToHeure(heureToMin(last.heureDebut) + last.dureeMinutes);
         }
+      }
+      const newStart = heureToMin(heureDebut);
+      const newEnd = newStart + duree;
 
-        details.push(`${JOURS_LABELS[jour].slice(0, 3)} ${heureDebut}`);
+      for (const salId of allSalIds) {
+        const salObj = salaries.find(s => s.id === salId);
+        if (!salObj) continue;
+        newTasks.push({
+          tacheTypeId: addForm.tacheTypeId, tacheLabel: tt.label, categorie: tt.categorie,
+          salarieId: salId, salarieName: salObj.nom, jour, heureDebut, dureeMinutes: duree, semaine,
+        });
+        const existing = taches.filter(t => t.salarieId === salId && t.jour === jour && t.semaine === semaine);
+        const ops = planDecoupage(existing, newStart, newEnd);
+        if (ops.updates.length || ops.creates.length || ops.deletes.length) {
+          decoupes.push({
+            salarieName: salObj.nom, jour,
+            nouvelle: `${tt.label} ${heureDebut}→${minToHeure(newEnd)}`,
+            ...ops,
+          });
+        }
+      }
+    }
+    return { newTasks, decoupes };
+  };
 
-        // Une tache par salarié assigné (principal + binômes), même heure et durée.
-        for (const salId of allSalIds) {
-          const salObj = salaries.find(s => s.id === salId);
-          if (!salObj) continue;
-          batch.push(addDoc(collection(db, "taches-planifiees"), {
-            tacheTypeId: addForm.tacheTypeId,
-            tacheLabel: tt.label,
-            categorie: tt.categorie,
-            salarieId: salId,
-            salarieName: salObj.nom,
-            jour,
-            heureDebut,
-            dureeMinutes: addForm.dureeMinutes || roundToQuarter(tt.dureeMinutes),
-            semaine,
-            done: false,
-            createdAt: serverTimestamp(),
+  const addTache = async () => {
+    if (!addCell || !addForm.tacheTypeId) return;
+    const { newTasks, decoupes } = construirePlan();
+    // S'il y a des chevauchements, on montre l'aperçu à valider avant d'écrire.
+    if (decoupes.length > 0) { setPendingSplit({ newTasks, decoupes }); return; }
+    await ecrireTaches(newTasks, []);
+  };
+
+  // Écrit les nouvelles tâches + applique le découpage (raccourcir / couper / supprimer).
+  const ecrireTaches = async (newTasks: any[], decoupes: any[]) => {
+    setSaving(true);
+    try {
+      const ops: Promise<any>[] = [];
+      for (const nt of newTasks) {
+        ops.push(addDoc(collection(db, "taches-planifiees"), { ...nt, done: false, createdAt: serverTimestamp() }));
+      }
+      for (const d of decoupes) {
+        for (const u of d.updates) {
+          ops.push(updateDoc(doc(db, "taches-planifiees", u.id), { heureDebut: u.heureDebut, dureeMinutes: u.dureeMinutes, updatedAt: serverTimestamp() }));
+        }
+        for (const c of d.creates) {
+          ops.push(addDoc(collection(db, "taches-planifiees"), {
+            tacheTypeId: c.from.tacheTypeId, tacheLabel: c.from.tacheLabel, categorie: c.from.categorie,
+            salarieId: c.from.salarieId, salarieName: c.from.salarieName, jour: c.from.jour,
+            heureDebut: c.heureDebut, dureeMinutes: c.dureeMinutes, semaine: c.from.semaine,
+            done: false, createdAt: serverTimestamp(),
           }));
         }
+        for (const del of d.deletes) {
+          ops.push(deleteDoc(doc(db, "taches-planifiees", del.id)));
+        }
       }
-      await Promise.all(batch);
-      // Toast récap : on précise s'il y a binôme + nombre de jours
-      const nbBinomes = allSalIds.length - 1;
-      const recapBinome = nbBinomes > 0 ? ` (👥 ${nbBinomes + 1} pers.)` : "";
-      if (joursToAdd.length > 1 || nbBinomes > 0) {
-        toast(`${tt.label}${recapBinome} ajoutée : ${details.join(", ")}`, "success");
-      }
+      await Promise.all(ops);
+      toast(decoupes.length > 0 ? "Tâche ajoutée et planning ajusté" : "Tâche ajoutée", "success");
       setAddCell(null);
+      setPendingSplit(null);
       onRefresh();
-    } catch(e:any) { toast(`Erreur : ${e.message}`, "error"); }
+    } catch (e: any) { toast(`Erreur : ${e.message}`, "error"); }
     setSaving(false);
   };
 
@@ -2472,6 +2534,59 @@ Réponds de façon concise et pratique, en français.`,
                   fontFamily: "sans-serif", fontSize: 13, fontWeight: 500, cursor: "pointer",
                 }}
               >
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Aperçu du découpage automatique à valider */}
+      {pendingSplit && (
+        <div onClick={() => setPendingSplit(null)}
+          style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", backdropFilter:"blur(2px)", zIndex:60, display:"flex", alignItems:"center", justifyContent:"center", padding:16}}>
+          <div onClick={e => e.stopPropagation()}
+            style={{background:"white", borderRadius:16, boxShadow:"0 20px 60px rgba(0,0,0,0.2)", width:"100%", maxWidth:560, padding:24, maxHeight:"90vh", overflowY:"auto"}}>
+            <h3 style={{fontFamily:"serif", fontSize:18, fontWeight:700, color:"#1e3a5f", marginBottom:4}}>
+              Ajuster le planning ?
+            </h3>
+            <p style={{fontFamily:"sans-serif", fontSize:12, color:"#94a3b8", marginBottom:16}}>
+              La nouvelle tâche chevauche des tâches existantes. Voici ce qui sera fait :
+            </p>
+
+            {pendingSplit.decoupes.map((d: any, i: number) => (
+              <div key={i} style={{border:"1px solid #e2e8f0", borderRadius:12, padding:12, marginBottom:10}}>
+                <div style={{fontFamily:"sans-serif", fontSize:12, fontWeight:600, color:"#334155", marginBottom:6}}>
+                  {d.salarieName} · {JOURS_LABELS[d.jour as JourSemaine]}
+                </div>
+                <div style={{fontFamily:"sans-serif", fontSize:13, color:"#0f766e", marginBottom:4}}>
+                  ➕ {d.nouvelle} <span style={{color:"#94a3b8"}}>(nouvelle)</span>
+                </div>
+                {d.updates.map((u: any, j: number) => (
+                  <div key={`u${j}`} style={{fontFamily:"sans-serif", fontSize:13, color:"#b45309"}}>
+                    ✂️ {u.label} : <span style={{textDecoration:"line-through", color:"#94a3b8"}}>{u.ancien}</span> → {u.heureDebut}→{minToHeure(heureToMin(u.heureDebut) + u.dureeMinutes)}
+                  </div>
+                ))}
+                {d.creates.map((c: any, j: number) => (
+                  <div key={`c${j}`} style={{fontFamily:"sans-serif", fontSize:13, color:"#0f766e"}}>
+                    ➕ {c.label} {c.heureDebut}→{minToHeure(heureToMin(c.heureDebut) + c.dureeMinutes)} <span style={{color:"#94a3b8"}}>(2ᵉ morceau)</span>
+                  </div>
+                ))}
+                {d.deletes.map((del: any, j: number) => (
+                  <div key={`d${j}`} style={{fontFamily:"sans-serif", fontSize:13, color:"#dc2626"}}>
+                    🗑️ {del.label} {del.plage} <span style={{color:"#94a3b8"}}>(supprimée, entièrement recouverte)</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+
+            <div style={{display:"flex", gap:8, marginTop:14}}>
+              <button onClick={() => ecrireTaches(pendingSplit.newTasks, pendingSplit.decoupes)} disabled={saving}
+                style={{flex:1, padding:"12px 14px", background:"#16a34a", color:"white", border:"none", borderRadius:10, fontFamily:"sans-serif", fontSize:13, fontWeight:600, cursor:saving?"not-allowed":"pointer", opacity:saving?0.6:1}}>
+                Appliquer
+              </button>
+              <button onClick={() => setPendingSplit(null)} disabled={saving}
+                style={{padding:"12px 18px", background:"#f1f5f9", color:"#475569", border:"none", borderRadius:10, fontFamily:"sans-serif", fontSize:13, fontWeight:500, cursor:"pointer"}}>
                 Annuler
               </button>
             </div>
