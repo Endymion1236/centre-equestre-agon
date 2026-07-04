@@ -109,7 +109,31 @@ export default function SatisfactionPage() {
     } catch (e: any) { setAnneeResult("Erreur : " + (e?.message || e)); } finally { setAnneeBusy(false); }
   };
 
-  // Envoi RÉEL du questionnaire de fin de saison à TOUTES les familles annuelles.
+  // Réinitialise les invitations de la saison (supprime uniquement celles SANS
+  // réponse). Utile pour repartir propre avant l'envoi réel, ex. après des tests.
+  const resetAnnee = async () => {
+    if (!user) return;
+    const ok = window.confirm(
+      `Réinitialiser les invitations de la saison ${anneeSaison}–${anneeSaison + 1} ?\n\n` +
+      `Supprime UNIQUEMENT les invitations sans réponse (utile pour repartir propre ` +
+      `avant l'envoi, ex. après des tests). Les réponses déjà reçues sont conservées.`
+    );
+    if (!ok) return;
+    const mot = window.prompt("Pour confirmer la réinitialisation, tapez : RESET-ANNEE-PROD");
+    if (mot !== "RESET-ANNEE-PROD") { setAnneeResult("Réinitialisation annulée (mot-clé incorrect)."); return; }
+    setAnneeBusy(true); setAnneeResult("");
+    try {
+      const token = await user.getIdToken(true);
+      const res = await fetch(`/api/admin/satisfaction-reset-annee`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ saison: anneeSaison, dryRun: false, confirmProd: "RESET-ANNEE-PROD" }),
+      });
+      const data = await res.json();
+      setAnneeResult(JSON.stringify(data, null, 2));
+      setAnneeLinks([]);
+    } catch (e: any) { setAnneeResult("Erreur : " + (e?.message || e)); } finally { setAnneeBusy(false); }
+  };
   // Ni dry, ni to, ni limit → la route envoie à tout le monde (sous garde-fou email).
   const envoyerAnneeTous = async () => {
     if (!user) return;
@@ -438,6 +462,8 @@ export default function SatisfactionPage() {
                 className="px-3 py-2 rounded-lg bg-indigo-600 text-white font-body text-sm font-semibold disabled:opacity-50">M'envoyer un test</button>
               <button onClick={envoyerAnneeTous} disabled={anneeBusy}
                 className="px-3 py-2 rounded-lg bg-rose-600 text-white font-body text-sm font-semibold disabled:opacity-50">Envoyer à toutes les familles</button>
+              <button onClick={resetAnnee} disabled={anneeBusy}
+                className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-600 font-body text-sm font-semibold disabled:opacity-50">Réinitialiser (avant envoi)</button>
             </div>
             {anneeLinks.length > 0 && (
               <div className="mt-3 bg-white border border-slate-200 rounded-lg p-3">
