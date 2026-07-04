@@ -92,7 +92,7 @@ export async function runSatisfactionStages(opts: RunOptions = {}) {
       for (const e of j.enrolled) {
         if (!e?.childId) continue;
         if (!childMon.has(e.childId)) childMon.set(e.childId, { childName: e.childName || "", familyId: e.familyId || "", familyName: e.familyName || "", mons: new Set() });
-        if (j.monitor) childMon.get(e.childId)!.mons.add(j.monitor);
+        if (j.monitor) for (const m of j.monitor.split(",").map((x: string) => x.trim()).filter(Boolean)) childMon.get(e.childId)!.mons.add(m);
       }
     }
 
@@ -193,11 +193,14 @@ export async function runSatisfactionAnnee(opts: RunAnneeOptions = {}) {
   crSnap.forEach(d => {
     const c = d.data() as any;
     if (c.activityType !== "cours") return;
-    const mon = c.monitor || "";
+    const mons = (c.monitor || "").split(",").map((x: string) => x.trim()).filter(Boolean);
     for (const e of (c.enrolled || [])) {
       if (!e?.childId) continue;
       if (!enrolled.has(e.childId)) enrolled.set(e.childId, { childName: e.childName || "", familyId: e.familyId || "", familyName: e.familyName || "" });
-      if (mon) { if (!monByChild.has(e.childId)) monByChild.set(e.childId, new Set()); monByChild.get(e.childId)!.add(mon); }
+      if (mons.length) {
+        if (!monByChild.has(e.childId)) monByChild.set(e.childId, new Set());
+        for (const m of mons) monByChild.get(e.childId)!.add(m);
+      }
     }
   });
 
