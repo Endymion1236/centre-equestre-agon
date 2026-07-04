@@ -247,7 +247,7 @@ export async function runSatisfactionAnnee(opts: RunAnneeOptions = {}) {
 
     const ref = await adminDb.collection("satisfaction-invitations").add(invitation);
     result.invitations++;
-    if (result.crees.length < 10) result.crees.push({ token: ref.id, childName: meta.childName, stageLabel: saisonLabel });
+    if (!toOverride && result.crees.length < 10) result.crees.push({ token: ref.id, childName: meta.childName, stageLabel: saisonLabel });
     const link = `${APP_URL}/satisfaction/${ref.id}`;
 
     const childFirst = (meta.childName || "").split(" ")[0];
@@ -261,6 +261,11 @@ export async function runSatisfactionAnnee(opts: RunAnneeOptions = {}) {
       if (result.erreurs.length < 3) result.erreurs.push(String(err?.message || err));
       await logEmail({ to: dest, subject, context: "cron_satisfaction_annee", status: "failed", error: String(err?.message || err), sentBy: "system" }).catch(() => {});
     }
+
+    // Envoi de TEST (destinataire imposé) : on retire l'invitation juste après
+    // l'envoi, pour ne pas "brûler" l'enfant (sinon il serait marqué invité et
+    // ignoré lors de l'envoi réel à toutes les familles).
+    if (toOverride) { await ref.delete().catch(() => {}); result.invitations--; }
   }
 
   return result;
