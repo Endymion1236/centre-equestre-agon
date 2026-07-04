@@ -1,7 +1,7 @@
 /**
  * Déclenchement ADMIN du questionnaire de fin de saison (test).
  * Auth : token Firebase admin (verifyAuth).
- * Params : ?saison=N  ?dry=1  ?to=email  ?limit=N
+ * Params : ?saison=N  ?dry=1  ?to=email  ?limit=N  ?bcc=0 (retire la copie cachée)
  */
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/api-auth";
@@ -18,6 +18,7 @@ async function handle(req: NextRequest) {
       dry: req.nextUrl.searchParams.get("dry") === "1",
       toOverride: req.nextUrl.searchParams.get("to") || undefined,
       limit: Number(req.nextUrl.searchParams.get("limit")) || undefined,
+      noBcc: req.nextUrl.searchParams.get("bcc") === "0",
     });
     return NextResponse.json(result);
   } catch (e: any) {

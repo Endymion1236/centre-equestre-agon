@@ -72,6 +72,7 @@ export default function SatisfactionPage() {
   const [testResult, setTestResult] = useState("");
   const [testLinks, setTestLinks] = useState<Array<{ url: string; childName: string; stageLabel: string }>>([]);
   const [anneeSaison, setAnneeSaison] = useState<number>(() => { const n = new Date(); return n.getMonth() >= 8 ? n.getFullYear() : n.getFullYear() - 1; });
+  const [testEmail, setTestEmail] = useState("");
   const [anneeBusy, setAnneeBusy] = useState(false);
   const [anneeResult, setAnneeResult] = useState("");
   const [anneeLinks, setAnneeLinks] = useState<Array<{ url: string; childName: string; stageLabel: string }>>([]);
@@ -101,7 +102,10 @@ export default function SatisfactionPage() {
       const token = await user.getIdToken(true);
       const params = new URLSearchParams();
       params.set("saison", String(anneeSaison));
-      if (envoyer && user.email) { params.set("to", user.email); params.set("limit", "2"); } else params.set("dry", "1");
+      if (envoyer) {
+        const cible = (testEmail.trim() || user.email || "");
+        if (cible) { params.set("to", cible); params.set("limit", "2"); }
+      } else params.set("dry", "1");
       const res = await fetch(`/api/admin/satisfaction-annee?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       setAnneeResult(JSON.stringify(data, null, 2));
@@ -153,6 +157,7 @@ export default function SatisfactionPage() {
       const token = await user.getIdToken(true);
       const params = new URLSearchParams();
       params.set("saison", String(anneeSaison));
+      params.set("bcc", "0"); // envoi de masse : pas de copie cachée (réduit le volume)
       const res = await fetch(`/api/admin/satisfaction-annee?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       setAnneeResult(JSON.stringify(data, null, 2));
@@ -464,8 +469,13 @@ export default function SatisfactionPage() {
             <p className="font-body text-xs text-indigo-700/80 mb-3">
               Envoie un avis « bilan de l'année » à chaque cavalier ayant monté en cours pendant la saison, avec ses moniteurs de l'année. Les réponses alimentent la colonne « avis annuel » dans Réinscriptions. « Aperçu » ne crée rien ; « M'envoyer un test » t'envoie 2 mails.
             </p>
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <input value={testEmail} onChange={e => setTestEmail(e.target.value)}
+                placeholder={`Adresse du test (déf. ${user?.email || "ton compte"})`}
+                className="px-3 py-2 rounded-lg border border-slate-200 font-body text-sm bg-white flex-1 min-w-[220px]" />
+              <span className="font-body text-xs text-slate-400">ex. l'adresse fournie par mail-tester.com</span>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
-              <select value={anneeSaison} onChange={e => setAnneeSaison(Number(e.target.value))} className="px-3 py-2 rounded-lg border border-slate-200 font-body text-sm bg-white">
                 {(() => { const y = new Date().getFullYear(); const arr = []; for (let s = y; s >= y - 4; s--) arr.push(s); return arr.map(s => <option key={s} value={s}>Saison {s}–{s + 1}</option>); })()}
               </select>
               <button onClick={() => lancerAnnee(false)} disabled={anneeBusy}
