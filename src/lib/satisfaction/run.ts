@@ -219,6 +219,21 @@ export async function runSatisfactionAnnee(opts: RunAnneeOptions = {}) {
     if (opts.limit && result.invitations >= opts.limit) break;
 
     const email = meta.familyId ? (famEmail.get(meta.familyId) || "") : "";
+    const dest = toOverride || email;
+
+    // Aperçu : on compte l'invitation potentielle sans rien créer.
+    if (dry) { result.invitations++; continue; }
+
+    // ── Pré-conditions d'envoi — AVANT toute création ───────────────────
+    // On ne crée l'invitation QUE si on peut réellement envoyer le mail.
+    // Sinon la famille serait "brûlée" : marquée invitée (donc ignorée aux
+    // envois suivants) sans jamais avoir été contactée. En sautant ici,
+    // elle reste éligible pour un envoi ultérieur (ex. une fois son email
+    // renseigné, ou le mode restreint désactivé).
+    if (!dest) { result.sansEmail++; continue; }
+    if (!isRecipientAllowed(dest)) { console.log(blockedLog(dest, "satisfaction-annee")); result.bloques++; continue; }
+    if (!resend) { result.sansResend++; continue; }
+
     const invitation = {
       stageKey, stageLabel: saisonLabel, type: "annee", saison: N,
       childId, childName: meta.childName,
@@ -226,16 +241,11 @@ export async function runSatisfactionAnnee(opts: RunAnneeOptions = {}) {
       moniteurs: [...(monByChild.get(childId) || [])],
       repondu: false, createdAt: new Date(),
     };
-    if (dry) { result.invitations++; continue; }
 
     const ref = await adminDb.collection("satisfaction-invitations").add(invitation);
     result.invitations++;
     if (result.crees.length < 10) result.crees.push({ token: ref.id, childName: meta.childName, stageLabel: saisonLabel });
     const link = `${APP_URL}/satisfaction/${ref.id}`;
-    const dest = toOverride || email;
-    if (!dest) { result.sansEmail++; continue; }
-    if (!isRecipientAllowed(dest)) { console.log(blockedLog(dest, "satisfaction-annee")); result.bloques++; continue; }
-    if (!resend) { result.sansResend++; continue; }
 
     const childFirst = (meta.childName || "").split(" ")[0];
     const subject = `Votre avis sur l'année${childFirst ? ` de ${childFirst}` : ""}`;
