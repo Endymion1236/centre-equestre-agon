@@ -71,7 +71,7 @@ export async function runSatisfactionStages(opts: RunOptions = {}) {
   for (const d of famSnap.docs) {
     const f = d.data() as any;
     for (const ch of (f.children || [])) {
-      childFam.set(ch.id, { email: f.email || "", familyName: f.parentName || "", familyId: d.id, childName: `${ch.firstName || ""} ${ch.lastName || ""}`.trim() });
+      childFam.set(ch.id, { email: f.parentEmail || f.email || "", familyName: f.parentName || "", familyId: d.id, childName: `${ch.firstName || ""} ${ch.lastName || ""}`.trim() });
     }
   }
 
@@ -204,7 +204,7 @@ export async function runSatisfactionAnnee(opts: RunAnneeOptions = {}) {
   // Email famille
   const famSnap = await adminDb.collection("families").get();
   const famEmail = new Map<string, string>();
-  famSnap.forEach(d => { const f = d.data() as any; famEmail.set(d.id, f.email || ""); });
+  famSnap.forEach(d => { const f = d.data() as any; famEmail.set(d.id, f.parentEmail || f.email || ""); });
 
   // Déjà invités cette saison
   const exist = await adminDb.collection("satisfaction-invitations").where("stageKey", "==", stageKey).get();
