@@ -65,6 +65,7 @@ export default function SatisfactionPage() {
   const [genMoniteurs, setGenMoniteurs] = useState("");
   const [genLink, setGenLink] = useState("");
   const [genBusy, setGenBusy] = useState(false);
+  const [genType, setGenType] = useState<"annee" | "stage">("annee");
   // Test du cron d'envoi
   const [testDate, setTestDate] = useState("");
   const [testBusy, setTestBusy] = useState(false);
@@ -249,13 +250,17 @@ export default function SatisfactionPage() {
 
   const genererLienTest = async () => {
     const moniteurs = genMoniteurs.split(",").map(s => s.trim()).filter(Boolean);
-    if (!genStage.trim() || moniteurs.length === 0) return;
+    const isAnnee = genType === "annee";
+    const stageLabel = genStage.trim() || (isAnnee ? `Saison ${anneeSaison}–${anneeSaison + 1}` : "");
+    if (!stageLabel || moniteurs.length === 0) return;
     setGenBusy(true); setGenLink("");
     try {
       const ref = await addDoc(collection(db, "satisfaction-invitations"), {
-        stageLabel: genStage.trim(),
+        stageLabel,
         childName: genChild.trim(),
         moniteurs,
+        type: genType,
+        saison: isAnnee ? anneeSaison : null,
         repondu: false,
         test: true,
         createdAt: serverTimestamp(),
@@ -398,8 +403,15 @@ export default function SatisfactionPage() {
           {/* Générateur de lien de test */}
           <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4">
             <div className="font-body text-sm font-semibold text-blue-900 mb-3 flex items-center gap-1.5"><Link2 size={15} /> Générer un lien de test</div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
-              <input value={genStage} onChange={e => setGenStage(e.target.value)} placeholder="Libellé du stage" className="px-3 py-2 rounded-lg border border-slate-200 font-body text-sm bg-white" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+              <select value={genType} onChange={e => setGenType(e.target.value as "annee" | "stage")}
+                className="px-3 py-2 rounded-lg border border-slate-200 font-body text-sm bg-white">
+                <option value="annee">Questionnaire — Année</option>
+                <option value="stage">Questionnaire — Stage</option>
+              </select>
+              <input value={genStage} onChange={e => setGenStage(e.target.value)}
+                placeholder={genType === "annee" ? `Libellé (déf. Saison ${anneeSaison}–${anneeSaison + 1})` : "Libellé du stage"}
+                className="px-3 py-2 rounded-lg border border-slate-200 font-body text-sm bg-white" />
               <input value={genChild} onChange={e => setGenChild(e.target.value)} placeholder="Prénom de l'enfant" className="px-3 py-2 rounded-lg border border-slate-200 font-body text-sm bg-white" />
               <input value={genMoniteurs} onChange={e => setGenMoniteurs(e.target.value)} placeholder="Moniteurs (séparés par ,)" className="px-3 py-2 rounded-lg border border-slate-200 font-body text-sm bg-white" />
             </div>
