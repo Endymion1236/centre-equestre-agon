@@ -217,9 +217,10 @@ export async function runSatisfactionAnnee(opts: RunAnneeOptions = {}) {
   const resend = apiKey ? new Resend(apiKey) : null;
   const result: any = { saison: N, saisonLabel, dry, eligibles: enrolled.size, invitations: 0, emails: 0, bloques: 0, sansEmail: 0, sansResend: 0, echecs: 0, erreurs: [] as string[], crees: [] as any[] };
 
+  let processed = 0; // envois réellement effectués — sert de base à la limite (mode test)
   for (const [childId, meta] of enrolled) {
     if (dejaInvite.has(childId)) continue;
-    if (opts.limit && result.invitations >= opts.limit) break;
+    if (opts.limit && processed >= opts.limit) break;
 
     const email = meta.familyId ? (famEmail.get(meta.familyId) || "") : "";
     const dest = toOverride || email;
@@ -236,6 +237,7 @@ export async function runSatisfactionAnnee(opts: RunAnneeOptions = {}) {
     if (!dest) { result.sansEmail++; continue; }
     if (!isRecipientAllowed(dest)) { console.log(blockedLog(dest, "satisfaction-annee")); result.bloques++; continue; }
     if (!resend) { result.sansResend++; continue; }
+    processed++; // on va effectivement envoyer un mail à ce destinataire
 
     const invitation = {
       stageKey, stageLabel: saisonLabel, type: "annee", saison: N,
