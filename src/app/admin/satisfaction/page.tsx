@@ -21,6 +21,14 @@ const ASPECTS = [
   { id: "ambiance", label: "Ambiance générale" },
 ];
 
+// Aspects propres au questionnaire de fin de saison (année).
+const ASPECTS_ANNEE = [
+  { id: "moniteur", label: "Moniteur / encadrement" },
+  { id: "progres", label: "Progrès sur l'année" },
+  { id: "poneyNiveau", label: "Adéquation poney / niveau" },
+  { id: "organisation", label: "Organisation" },
+];
+
 interface Avis {
   id: string;
   familyName?: string;
@@ -615,7 +623,7 @@ export default function SatisfactionPage() {
                   )}
                   {a.aspects && Object.keys(a.aspects).length > 0 && (
                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
-                      {ASPECTS.map(asp => {
+                      {(a.source === "annee" ? ASPECTS_ANNEE : ASPECTS).map(asp => {
                         const v = a.aspects?.[asp.id];
                         if (!v) return null;
                         return (
@@ -624,6 +632,11 @@ export default function SatisfactionPage() {
                           </span>
                         );
                       })}
+                    </div>
+                  )}
+                  {typeof a.recommande === "boolean" && (
+                    <div className="font-body text-[11px] text-slate-500 mt-1">
+                      Recommande le club : <span className={a.recommande ? "text-emerald-600 font-semibold" : "text-rose-600 font-semibold"}>{a.recommande ? "Oui" : "Non"}</span>
                     </div>
                   )}
                 </div>
