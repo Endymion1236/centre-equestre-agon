@@ -476,6 +476,7 @@ export default function SatisfactionPage() {
               <span className="font-body text-xs text-slate-400">ex. l'adresse fournie par mail-tester.com</span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <select value={anneeSaison} onChange={e => setAnneeSaison(Number(e.target.value))} className="px-3 py-2 rounded-lg border border-slate-200 font-body text-sm bg-white">
                 {(() => { const y = new Date().getFullYear(); const arr = []; for (let s = y; s >= y - 4; s--) arr.push(s); return arr.map(s => <option key={s} value={s}>Saison {s}–{s + 1}</option>); })()}
               </select>
               <button onClick={() => lancerAnnee(false)} disabled={anneeBusy}
