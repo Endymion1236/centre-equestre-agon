@@ -398,6 +398,28 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
               </button>
             )}
 
+            {/* Thèmes déjà vus (séances passées où l'enfant était inscrit avec un thème) */}
+            {(() => {
+              const themesVus = Array.from(new Set(
+                allCreneaux
+                  .filter((c: any) => c.themeStage && (c.enrolled || []).some((e: any) => e.childId === child.id))
+                  .sort((a: any, b: any) => (b.date || "").localeCompare(a.date || ""))
+                  .map((c: any) => String(c.themeStage).trim())
+                  .filter(Boolean)
+              ));
+              if (themesVus.length === 0) return null;
+              return (
+                <div className="mb-3">
+                  <div className="font-body text-[10px] text-teal-600 font-semibold uppercase tracking-wider mb-2 flex items-center gap-1">🎯 Thèmes déjà vus ({themesVus.length})</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {themesVus.map((t: string) => (
+                      <span key={t} className="font-body text-[11px] text-teal-700 bg-teal-50 border border-teal-100 rounded-full px-2.5 py-1">{t}</span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Prochaines séances */}
             <div>
               <div className="font-body text-[10px] text-green-600 font-semibold uppercase tracking-wider mb-2 flex items-center gap-1"><CalendarDays size={12} /> Prochaines séances ({upcoming.length})</div>
