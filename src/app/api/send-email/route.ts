@@ -3,6 +3,25 @@ import { Resend } from "resend";
 import { verifyAuth } from "@/lib/api-auth";
 import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, isEmailRestricted, blockedLog } from "@/lib/email-guard";
+import { adminDb } from "@/lib/firebase-admin";
+
+// Emails du personnel (moniteurs / salariés) : TOUJOURS autorisés, même en mode
+// restreint — plus besoin de les ajouter à la main dans EMAIL_ALLOWLIST.
+// Mis en cache 5 min pour éviter une lecture Firestore à chaque envoi.
+let staffCache: { set: Set<string>; at: number } | null = null;
+async function staffEmails(): Promise<Set<string>> {
+  if (staffCache && Date.now() - staffCache.at < 5 * 60 * 1000) return staffCache.set;
+  const set = new Set<string>();
+  const low = (e: string) => (e || "").trim().toLowerCase();
+  try {
+    for (const col of ["moniteurs", "salaries-management"]) {
+      const snap = await adminDb.collection(col).get();
+      snap.forEach(d => { const e = low((d.data() as any).email || ""); if (e) set.add(e); });
+    }
+  } catch (e) { console.error("staffEmails (email-guard personnel):", e); }
+  staffCache = { set, at: Date.now() };
+  return set;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -82,10 +101,15 @@ export async function POST(request: NextRequest) {
     );
 
     // 🔒 Garde-fou phase de préparation : en mode restreint, on ne garde que
-    //    les destinataires autorisés (admins / moniteurs / compte test).
-    const allowedRecipients = validRecipients.filter((e: string) => isRecipientAllowed(e));
+    //    les destinataires autorisés (admins / compte test / EMAIL_ALLOWLIST)
+    //    ET le personnel (moniteurs/salariés), toujours autorisé automatiquement.
+    const staffSet = isEmailRestricted() ? await staffEmails() : new Set<string>();
+    const low = (e: string) => (e || "").trim().toLowerCase();
+    const estAutorise = (e: string) => isRecipientAllowed(e) || staffSet.has(low(e));
+
+    const allowedRecipients = validRecipients.filter((e: string) => estAutorise(e));
     if (isEmailRestricted() && allowedRecipients.length < validRecipients.length) {
-      const bloques = validRecipients.filter((e: string) => !isRecipientAllowed(e));
+      const bloques = validRecipients.filter((e: string) => !estAutorise(e));
       console.warn(blockedLog(bloques.join(", "), logContext));
     }
     if (allowedRecipients.length === 0) {
