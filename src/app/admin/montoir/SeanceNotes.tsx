@@ -139,6 +139,9 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
         <button onClick={() => setOpen(o => !o)}
           className="flex-1 min-w-0 bg-transparent border-none cursor-pointer text-left p-0">
           <div className="font-body text-[10px] font-semibold text-blue-600 uppercase tracking-wider">📝 Notes de séance</div>
+          {creneau.themeStage && (
+            <div className="font-body text-xs font-semibold text-teal-700 mb-0.5">🎯 Thème : {creneau.themeStage}</div>
+          )}
           {!open && prepPreview ? (
             <p className="font-body text-sm text-slate-700 truncate">{prepPreview}</p>
           ) : !open ? (
