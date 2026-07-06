@@ -349,7 +349,7 @@ export default function SatisfactionPage() {
                   <tr className="bg-slate-50 text-slate-500 font-body text-xs uppercase tracking-wider">
                     <th className="text-left px-4 py-3">Enseignant</th>
                     <th className="px-3 py-3">Encadrement</th>
-                    <th className="px-3 py-3">Note stage</th>
+                    <th className="px-3 py-3">Note globale</th>
                     <th className="px-3 py-3">Recommande</th>
                     <th className="px-3 py-3">Avis</th>
                   </tr>
