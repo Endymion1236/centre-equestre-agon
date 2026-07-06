@@ -109,14 +109,19 @@ export function bilanParEnseignant(avis: AvisStage[]): BilanEnseignant[] {
     if (!Array.isArray(a.moniteurs)) continue;
     for (const m of a.moniteurs) {
       if (!m?.nom) continue;
+      // On ne rattache la réponse à cet enseignant QUE s'il a réellement été
+      // noté (> 0). Sinon la ligne apparaîtrait avec des étoiles vides et
+      // fausserait le compteur d'avis (réponse qui mentionne l'enseignant
+      // sans l'évaluer, ex. moniteur laissé à 0 dans le questionnaire année).
+      if (typeof m.note !== "number" || m.note <= 0) continue;
       const e = get(m.nom);
-      if (typeof m.note === "number" && m.note > 0) e.notesEnc.push(m.note);
+      e.notesEnc.push(m.note);
       if (typeof a.globalNote === "number" && a.globalNote > 0) e.notesGlob.push(a.globalNote);
       if (typeof a.recommande === "boolean") e.recos.push(a.recommande);
       e.details.push({
         childName: a.childName || "",
         stageLabel: a.stageLabel || a.activityTitle || "",
-        noteEncadrement: typeof m.note === "number" ? m.note : 0,
+        noteEncadrement: m.note,
         globalNote: a.globalNote || 0,
         recommande: a.recommande,
         commentaire: a.commentaire?.trim() || "",
