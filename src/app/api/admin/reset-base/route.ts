@@ -44,7 +44,7 @@ export const maxDuration = 300; // 5 minutes (Pro Vercel plan) pour laisser le t
 // Pour être complet, l'idéal est de SUPPRIMER entièrement ce fichier après
 // usage (voir docs/PROCEDURE_BASCULE_PROD.md). Cette date butoir est une
 // protection supplémentaire au cas où la suppression serait oubliée.
-const DATE_BUTOIR = new Date("2026-07-01T00:00:00Z");
+const DATE_BUTOIR = new Date("2026-09-01T00:00:00Z");
 // ═════════════════════════════════════════════════════════════════════════
 
 // Collections que l'utilisateur peut choisir d'effacer

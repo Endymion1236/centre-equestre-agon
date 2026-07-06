@@ -553,7 +553,7 @@ export default function SatisfactionPage() {
                 <TrendingUp size={12} /> Détail par aspect
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {ASPECTS.map(asp => {
+                {[...ASPECTS, ...ASPECTS_ANNEE.filter(a => !ASPECTS.some(s => s.id === a.id))].map(asp => {
                   const data = stats.parAspect[asp.id];
                   if (!data) return null;
                   const moy = data.sum / data.count;

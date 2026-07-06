@@ -354,7 +354,7 @@ export default function ResetBasePage() {
           Les règles d'inaltérabilité des encaissements sont contournées uniquement par cette route API
           administrative, et chaque opération est tracée dans un log d'audit.
           <br/><br/>
-          <strong>⏳ Cet outil s'auto-désactive le 1er juillet 2026.</strong> Il est réservé à la phase
+          <strong>⏳ Cet outil s'auto-désactive le 1er septembre 2026.</strong> Il est réservé à la phase
           de test avant la bascule en production officielle. Après cette date butoir, aucune
           réinitialisation ne sera plus possible, même par l'admin. À noter : l'outil doit aussi être
           supprimé du code après usage (voir docs/PROCEDURE_BASCULE_PROD.md).
