@@ -9,10 +9,11 @@ export async function POST(req: NextRequest) {
 
   try {
     const CLUB = await getClubInfo();
-    const { recipientName, activity, amount, fromName, message, validUntil } = await req.json();
+    const { recipientName, activity, amount, fromName, message, validUntil, code: codeFourni } = await req.json();
 
-    // Generate a unique voucher code
-    const code = `BON-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    // Utiliser le VRAI code du bon s'il est fourni (bon déjà enregistré) ;
+    // sinon en générer un (aperçu avant enregistrement).
+    const code = codeFourni || `BON-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
     // Generate HTML voucher (will be converted to PDF client-side via print)
     const html = `
