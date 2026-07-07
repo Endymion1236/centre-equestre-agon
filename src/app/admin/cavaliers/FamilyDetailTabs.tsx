@@ -131,7 +131,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
   const [sanitaryExpanded, setSanitaryExpanded] = useState<string | null>(null);
 
   const [editingMandat, setEditingMandat] = useState(false);
-  const [mandatForm, setMandatForm] = useState({ iban: "", bic: "", titulaire: family.parentName || "", dateSignature: new Date().toISOString().split("T")[0] });
+  const [mandatForm, setMandatForm] = useState({ iban: "", bic: "", titulaire: family.parentName || "", dateSignature: new Date().toISOString().split("T")[0], address: family.address || "", zipCode: family.zipCode || "", city: family.city || "" });
   const [mandatSaving, setMandatSaving] = useState(false);
   // Photo de l'autorisation de prélèvement signée. scanOverride :
   //   undefined = pas de changement (on affiche mandat.scanUrl)
@@ -176,6 +176,14 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
     setMandatSaving(true);
     try {
       const cleanIban = mandatForm.iban.replace(/\s/g, "").toUpperCase();
+      // L'adresse du titulaire est enregistrée sur la fiche famille (réutilisée
+      // par l'autorisation pré-remplie, qui la lit automatiquement).
+      await updateDoc(doc(db, "families", fid), {
+        address: mandatForm.address.trim(),
+        zipCode: mandatForm.zipCode.trim(),
+        city: mandatForm.city.trim(),
+        updatedAt: serverTimestamp(),
+      });
       if (mandat) {
         await updateDoc(doc(db, "mandats-sepa", mandat.id), { iban: cleanIban, bic: mandatForm.bic, titulaire: mandatForm.titulaire, dateSignature: mandatForm.dateSignature, updatedAt: serverTimestamp() });
       } else {
@@ -617,7 +625,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                 <button onClick={downloadMandatePdf} disabled={mandatPdfLoading} className="font-body text-[10px] text-slate-500 hover:text-blue-600 bg-transparent border-none cursor-pointer flex items-center gap-1 disabled:opacity-50" title="Télécharger l'autorisation de prélèvement pré-remplie (à imprimer / faire signer)">
                   {mandatPdfLoading ? <Loader2 size={10} className="animate-spin" /> : <span>📄</span>} Autorisation pré-remplie
                 </button>
-                {!editingMandat && <button onClick={() => { setMandatForm({ iban: mandat?.iban || "", bic: mandat?.bic || "", titulaire: mandat?.titulaire || family.parentName || "", dateSignature: mandat?.dateSignature || new Date().toISOString().split("T")[0] }); setEditingMandat(true); }} className="font-body text-[10px] text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1"><Plus size={10} /> {mandat ? "Modifier" : "Ajouter"}</button>}
+                {!editingMandat && <button onClick={() => { setMandatForm({ iban: mandat?.iban || "", bic: mandat?.bic || "", titulaire: mandat?.titulaire || family.parentName || "", dateSignature: mandat?.dateSignature || new Date().toISOString().split("T")[0], address: family.address || "", zipCode: family.zipCode || "", city: family.city || "" }); setEditingMandat(true); }} className="font-body text-[10px] text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1"><Plus size={10} /> {mandat ? "Modifier" : "Ajouter"}</button>}
               </div>
             </div>
             {editingMandat ? (
@@ -628,6 +636,11 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                   <input placeholder="Titulaire *" value={mandatForm.titulaire} onChange={e => setMandatForm({ ...mandatForm, titulaire: e.target.value })} className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
                 </div>
                 <input type="date" value={mandatForm.dateSignature} onChange={e => setMandatForm({ ...mandatForm, dateSignature: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
+                <input placeholder="Adresse (n° et rue)" value={mandatForm.address} onChange={e => setMandatForm({ ...mandatForm, address: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
+                <div className="flex gap-2">
+                  <input placeholder="Code postal" value={mandatForm.zipCode} onChange={e => setMandatForm({ ...mandatForm, zipCode: e.target.value })} className="w-28 px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
+                  <input placeholder="Ville" value={mandatForm.city} onChange={e => setMandatForm({ ...mandatForm, city: e.target.value })} className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
+                </div>
                 <div className="flex gap-2">
                   <button onClick={handleSaveMandat} disabled={mandatSaving || !mandatForm.iban || !mandatForm.titulaire} className="flex items-center gap-1 font-body text-xs font-semibold text-white bg-blue-500 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">{mandatSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer</button>
                   <button onClick={() => setEditingMandat(false)} className="font-body text-xs text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
