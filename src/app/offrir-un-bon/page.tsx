@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const PRESETS = [30, 50, 100, 150];
 
@@ -12,6 +12,12 @@ export default function OffrirUnBonPage() {
   const [busy, setBusy] = useState(false);
   const [erreur, setErreur] = useState("");
 
+  useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("cancelled")) {
+      setErreur("Le paiement a été annulé ou n'a pas abouti. Aucun montant n'a été débité.");
+    }
+  }, []);
+
   const inp = "w-full px-4 py-3 rounded-xl border border-blue-900/10 bg-white font-body text-sm focus:outline-none focus:border-blue-500";
 
   const payer = async () => {
@@ -21,12 +27,23 @@ export default function OffrirUnBonPage() {
     if (!acheteurEmail.includes("@")) { setErreur("Indique un email valide pour recevoir le bon."); return; }
     setBusy(true);
     try {
-      // Sous-étape suivante : appel du paiement en ligne (CAWL) puis redirection.
-      // Pour l'instant, l'achat en ligne est en cours d'activation.
-      setErreur("Le paiement en ligne est en cours d'activation — cette page sera bientôt pleinement fonctionnelle. Merci de votre patience !");
+      const res = await fetch("/api/bon-cadeau/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ montant: m, beneficiaire, message, acheteurNom, acheteurEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.redirectUrl) {
+        setErreur(data.error || "Le paiement est momentanément indisponible. Réessaie dans un instant.");
+        setBusy(false);
+        return;
+      }
+      // Redirection vers la page de paiement sécurisée CAWL.
+      window.location.href = data.redirectUrl;
     } catch {
       setErreur("Une erreur est survenue. Réessaie dans un instant.");
-    } finally { setBusy(false); }
+      setBusy(false);
+    }
   };
 
   return (
