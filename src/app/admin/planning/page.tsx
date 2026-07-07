@@ -294,14 +294,23 @@ export default function PlanningPage() {
     setDeleteWeekCount(0);
     setDeleteSerieCount(0);
     try {
-      // Similaires sur toute l'année (même titre + même heure + même jour semaine)
+      // Similaires sur la SAISON du créneau (même titre + même heure + même
+      // jour de semaine + même activité), bornés à la saison sept→août pour ne
+      // pas englober les autres saisons (le libellé 'toute l'année' = la saison).
       const dow = new Date(c.date).getDay();
+      const cd = new Date(c.date);
+      const ssy = cd.getMonth() >= 8 ? cd.getFullYear() : cd.getFullYear() - 1;
+      const seasonStart = `${ssy}-09-01`, seasonEnd = `${ssy + 1}-08-31`;
       const snap = await getDocs(query(
         collection(db, "creneaux"),
         where("activityTitle", "==", c.activityTitle),
         where("startTime", "==", c.startTime),
       ));
-      setDeleteCount(snap.docs.filter(d => new Date((d.data() as any).date).getDay() === dow && (d.data() as any).activityId === (c as any).activityId).length);
+      setDeleteCount(snap.docs.filter(d => {
+        const data = d.data() as any;
+        return new Date(data.date).getDay() === dow && data.activityId === (c as any).activityId
+          && data.date >= seasonStart && data.date <= seasonEnd;
+      }).length);
 
       // [DIAGNOSTIC] type du créneau cliqué (toujours loggé)
 
@@ -360,12 +369,19 @@ export default function PlanningPage() {
         toast(`🗑️ Stage supprimé (${weekTargets.length} créneaux)`, "success");
       } else if (mode === "similar") {
         const dow = new Date(deleteCreneau.date).getDay();
+        const dcd = new Date(deleteCreneau.date);
+        const dssy = dcd.getMonth() >= 8 ? dcd.getFullYear() : dcd.getFullYear() - 1;
+        const dStart = `${dssy}-09-01`, dEnd = `${dssy + 1}-08-31`;
         const snap = await getDocs(query(
           collection(db, "creneaux"),
           where("activityTitle", "==", deleteCreneau.activityTitle),
           where("startTime", "==", deleteCreneau.startTime),
         ));
-        const targets = snap.docs.filter(d => new Date((d.data() as any).date).getDay() === dow && (d.data() as any).activityId === (deleteCreneau as any).activityId);
+        const targets = snap.docs.filter(d => {
+          const data = d.data() as any;
+          return new Date(data.date).getDay() === dow && data.activityId === (deleteCreneau as any).activityId
+            && data.date >= dStart && data.date <= dEnd;
+        });
         for (const t of targets) await deleteDoc(doc(db, "creneaux", t.id));
         toast(`🗑️ ${targets.length} créneaux supprimés`, "success");
       } else if (mode === "serie") {

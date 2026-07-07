@@ -43,7 +43,7 @@ export default function DeleteCreneauModal({
           {!isStageType(creneau) && deleteCount > 1 && (
             <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 mb-3 text-center">
               <p className="font-body text-xs text-orange-700">
-                <strong>{deleteCount} créneaux similaires</strong> dans toute l'année<br/>
+                <strong>{deleteCount} créneaux similaires</strong> sur la saison (sept→août)<br/>
                 (même titre · même jour · même heure)
               </p>
             </div>
@@ -64,7 +64,7 @@ export default function DeleteCreneauModal({
             {!isStageType(creneau) && deleteCount > 1 && (
               <button onClick={() => onConfirm("similar")} disabled={deleting}
                 className="w-full py-3 rounded-xl font-body text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 border-none cursor-pointer disabled:opacity-50">
-                Supprimer les {deleteCount} créneaux similaires (même jour de semaine, toute l'année)
+                Supprimer les {deleteCount} créneaux similaires (même jour de semaine, sur la saison)
               </button>
             )}
             {!isStageType(creneau) && deleteSerieCount > 1 && (
