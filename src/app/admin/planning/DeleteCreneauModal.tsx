@@ -43,7 +43,7 @@ export default function DeleteCreneauModal({
           {!isStageType(creneau) && deleteCount > 1 && (
             <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 mb-3 text-center">
               <p className="font-body text-xs text-orange-700">
-                <strong>{deleteCount} créneaux similaires</strong> sur la saison (sept→août)<br/>
+                <strong>{deleteCount} créneaux similaires</strong> sur la saison (sept→juin)<br/>
                 (même titre · même jour · même heure)
               </p>
             </div>
