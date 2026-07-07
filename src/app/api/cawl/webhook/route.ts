@@ -9,6 +9,7 @@ import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed } from "@/lib/email-guard";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
+import { traiterBonCadeauSession } from "@/lib/bon-cadeau-traitement";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +64,16 @@ export async function POST(req: NextRequest) {
 
     // ── Paiement confirmé ─────────────────────────────────────────────────
     if (status === "CAPTURED" || status === "PAID" || status === "PENDING_CAPTURE") {
+
+      // ── Bon cadeau (achat en ligne : pas de payment associé) ─────────────
+      // Traité en priorité et de façon idempotente. Si c'en est un, on s'arrête.
+      if (hostedCheckoutId) {
+        const bonCode = await traiterBonCadeauSession(hostedCheckoutId, "webhook");
+        if (bonCode) {
+          console.log(`✅ CAWL webhook: bon cadeau confirmé ${hostedCheckoutId} → ${bonCode}`);
+          return NextResponse.json({ received: true });
+        }
+      }
 
       // Chercher le payment par cawlRef (merchantReference)
       let payRef = null;
