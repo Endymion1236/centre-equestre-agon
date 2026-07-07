@@ -1319,7 +1319,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         panelToast(`${noms} inscrit(s) — ${stageTotalTTC.toFixed(2)}€${showAcompte ? ` (acompte ${stageAcompte}€ + solde J-7)` : " — paiement en attente"}`, "success");
       } catch (e) { console.error(e); panelToast("Erreur lors de l'inscription", "error"); }
       setSelectedChildren([]);
-      setSelFam(""); setSearch(""); setEnrolling(false);
+      setSelChild(""); setSelFam(""); setSearch(""); setEnrolling(false);
       setTimeout(() => setJustEnrolled(""), 6000);
 
       // Si mode jour : proposer d'inscrire dans d'autres jours du stage
