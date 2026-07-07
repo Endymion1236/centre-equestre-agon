@@ -66,6 +66,7 @@ export default function FacturesPage() {
   const [cards, setCards] = useState<Card10[]>([]);
   const [loading, setLoading] = useState(true);
   const [payingOnline, setPayingOnline] = useState<string | null>(null);
+  const [applyingBon, setApplyingBon] = useState<string | null>(null);
   const [declaringPayment, setDeclaringPayment] = useState<Payment | null>(null); // modal déclaration
   const [declareMode, setDeclareMode] = useState<"cheque" | "especes">("cheque");
   const [declareMontant, setDeclareMontant] = useState("");
@@ -379,6 +380,34 @@ export default function FacturesPage() {
                                   className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
                                   {payingOnline === p.id ? <Loader2 size={12} className="animate-spin" /> : <CreditCard size={12} />}
                                   CB
+                                </button>
+                                <button
+                                  disabled={applyingBon === p.id}
+                                  onClick={async () => {
+                                    const code = (prompt("Entrez le code de votre bon cadeau (ex. BON-XXXX) :") || "").trim().toUpperCase();
+                                    if (!code) return;
+                                    setApplyingBon(p.id!);
+                                    try {
+                                      const res = await authFetch("/api/bon-cadeau/appliquer", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ code, paymentId: p.id }),
+                                      });
+                                      const data = await res.json();
+                                      if (!res.ok) { alert(data.error || "Bon non appliqué."); }
+                                      else {
+                                        alert(
+                                          data.facturePayee
+                                            ? `Bon appliqué : ${data.applique.toFixed(2)}€. Facture réglée !${data.soldeRestantBon > 0 ? ` (reste ${data.soldeRestantBon.toFixed(2)}€ sur votre bon)` : ""}`
+                                            : `Bon appliqué : ${data.applique.toFixed(2)}€. Reste à payer : ${data.resteAPayer.toFixed(2)}€.`
+                                        );
+                                        window.location.reload();
+                                      }
+                                    } catch { alert("Erreur. Réessayez."); }
+                                    setApplyingBon(null);
+                                  }}
+                                  className="flex items-center gap-1.5 font-body text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                                  {applyingBon === p.id ? <Loader2 size={12} className="animate-spin" /> : "🎁"} Bon cadeau
                                 </button>
                                 <button
                                   onClick={() => {
