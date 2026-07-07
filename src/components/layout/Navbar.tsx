@@ -13,6 +13,7 @@ const navLinks = [
   { href: "/equipe", label: "Équipe" },
   { href: "/galerie", label: "Galerie" },
   { href: "/tarifs", label: "Tarifs" },
+  { href: "/offrir-un-bon", label: "Bon cadeau" },
   { href: "/contact", label: "Contact" },
 ];
 
