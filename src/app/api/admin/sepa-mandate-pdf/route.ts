@@ -84,6 +84,10 @@ export async function POST(request: NextRequest) {
 
     const mandat = !mandatSnap.empty ? (mandatSnap.docs[0].data() as any) : null;
     const rum = mandat?.mandatId || "À compléter par le centre";
+    // Coordonnées bancaires : pré-remplies si le mandat les connaît, sinon vides.
+    const rawIban = (mandat?.iban || "").replace(/\s/g, "").toUpperCase();
+    const debtorIban = rawIban ? rawIban.replace(/(.{4})/g, "$1 ").trim() : "";
+    const debtorBic = (mandat?.bic || "").toUpperCase();
 
     const creditorAddress = club.address || "";
 
@@ -138,8 +142,8 @@ export async function POST(request: NextRequest) {
             field("", undefined),
           ),
           React.createElement(View, { style: { ...s.row, marginBottom: 0 } },
-            field("IBAN (à compléter)"),
-            field("BIC (à compléter)"),
+            field(debtorIban ? "IBAN" : "IBAN (à compléter)", debtorIban || undefined),
+            field(debtorBic ? "BIC" : "BIC (à compléter)", debtorBic || undefined),
           ),
         ),
 
