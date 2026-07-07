@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { updateDoc, addDoc, doc, getDoc, collection, serverTimestamp, Timestamp } from "firebase/firestore";
+import { updateDoc, addDoc, doc, getDoc, getDocs, query, where, collection, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { emailTemplates } from "@/lib/email-templates";
 import { safeNumber, generateOrderId } from "@/lib/utils";
@@ -56,6 +56,8 @@ export function TabEncaisser({
   const [activityDropdownOpen, setActivityDropdownOpen] = useState(false);
   const [selectedChild, setSelectedChild] = useState("");
   const [selectedFamily, setSelectedFamily] = useState("");
+  const [codeBon, setCodeBon] = useState("");
+  const [bonBusy, setBonBusy] = useState(false);
   const [customLabel, setCustomLabel] = useState("");
   const [customPrice, setCustomPrice] = useState("");
   const [customTva, setCustomTva] = useState("5.5");
@@ -503,6 +505,60 @@ export function TabEncaisser({
                   </div>
                 );
               })()}
+
+              {/* Appliquer un bon cadeau (par code) */}
+              {totalPending > 0 && (
+                <div className="mb-3 p-2 bg-emerald-50 rounded-lg">
+                  <div className="font-body text-xs font-semibold text-emerald-700 mb-1">🎁 Bon cadeau</div>
+                  <div className="flex gap-2">
+                    <input value={codeBon} onChange={e => setCodeBon(e.target.value.toUpperCase())} placeholder="Code (ex. BON-XXXX)"
+                      className="flex-1 px-2 py-1.5 rounded-lg border border-emerald-200 font-mono text-xs bg-white focus:outline-none focus:border-emerald-500" />
+                    <button disabled={bonBusy || !codeBon.trim()} onClick={async () => {
+                      const code = codeBon.trim().toUpperCase();
+                      setBonBusy(true);
+                      try {
+                        const snap = await getDocs(query(collection(db, "bons-cadeaux"), where("code", "==", code)));
+                        if (snap.empty) { toast("Bon introuvable.", "error"); setBonBusy(false); return; }
+                        const bonDoc = snap.docs[0];
+                        const bon = bonDoc.data() as any;
+                        const solde = typeof bon.solde === "number" ? bon.solde : (bon.montant || 0);
+                        if (bon.statut && bon.statut !== "actif") { toast(`Bon ${bon.statut}.`, "error"); setBonBusy(false); return; }
+                        if (solde <= 0) { toast("Bon déjà épuisé.", "error"); setBonBusy(false); return; }
+                        if (bon.validUntil) {
+                          const today = new Date().toISOString().split("T")[0];
+                          if (bon.validUntil < today) { toast("Bon expiré.", "error"); setBonBusy(false); return; }
+                        }
+                        const toUse = Math.min(solde, totalPending);
+                        if (!confirm(`Appliquer ${toUse.toFixed(2)}€ du bon ${code} sur les paiements de cette famille ?`)) { setBonBusy(false); return; }
+                        // Application directe en mode "avoir" (crédit, pas de nouvelle recette) sur les paiements dus.
+                        let reste = toUse;
+                        for (const p of familyPending) {
+                          if (reste <= 0) break;
+                          const du = (p.totalTTC || 0) - (p.paidAmount || 0);
+                          const paye = Math.min(du, reste);
+                          if (paye <= 0) continue;
+                          await enregistrerEncaissement(p.id!, p, paye, "avoir", "", `Bon cadeau ${code}`);
+                          reste -= paye;
+                        }
+                        // Décrément du solde du bon (le solde restant reste utilisable via le code).
+                        const nouveauSolde = solde - toUse;
+                        await updateDoc(doc(db, "bons-cadeaux", bonDoc.id), {
+                          solde: nouveauSolde,
+                          statut: nouveauSolde <= 0 ? "utilise" : "actif",
+                          usedFamilyId: selectedFamily || bon.usedFamilyId || "",
+                          updatedAt: serverTimestamp(),
+                        });
+                        toast(`${toUse.toFixed(2)}€ appliqués${nouveauSolde > 0 ? ` (reste ${nouveauSolde.toFixed(2)}€ sur le bon)` : ""} !`);
+                        setCodeBon("");
+                        await refreshAll();
+                      } catch (e) { console.error(e); toast("Erreur.", "error"); }
+                      setBonBusy(false);
+                    }} className="px-3 py-1.5 rounded-lg font-body text-xs font-semibold text-white bg-emerald-600 border-none cursor-pointer hover:bg-emerald-500 disabled:opacity-50">
+                      {bonBusy ? "..." : "Appliquer"}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Réduction / Code promo */}
               <div className="mb-3 border border-blue-500/8 rounded-lg p-2.5">
