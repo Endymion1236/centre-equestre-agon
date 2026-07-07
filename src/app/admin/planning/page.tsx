@@ -300,7 +300,7 @@ export default function PlanningPage() {
       const dow = new Date(c.date).getDay();
       const cd = new Date(c.date);
       const ssy = cd.getMonth() >= 8 ? cd.getFullYear() : cd.getFullYear() - 1;
-      const seasonStart = `${ssy}-09-01`, seasonEnd = `${ssy + 1}-08-31`;
+      const seasonStart = `${ssy}-09-01`, seasonEnd = `${ssy + 1}-06-30`;
       const snap = await getDocs(query(
         collection(db, "creneaux"),
         where("activityTitle", "==", c.activityTitle),
@@ -371,7 +371,7 @@ export default function PlanningPage() {
         const dow = new Date(deleteCreneau.date).getDay();
         const dcd = new Date(deleteCreneau.date);
         const dssy = dcd.getMonth() >= 8 ? dcd.getFullYear() : dcd.getFullYear() - 1;
-        const dStart = `${dssy}-09-01`, dEnd = `${dssy + 1}-08-31`;
+        const dStart = `${dssy}-09-01`, dEnd = `${dssy + 1}-06-30`;
         const snap = await getDocs(query(
           collection(db, "creneaux"),
           where("activityTitle", "==", deleteCreneau.activityTitle),
