@@ -162,6 +162,24 @@ export function TabEncaisser({
     }]);
   };
 
+  const vendreBonCadeau = () => {
+    if (!selectedFamily) { toast("Sélectionne d'abord la famille (l'acheteur)", "warning"); return; }
+    const montantStr = prompt("Montant du bon cadeau (€) :");
+    if (!montantStr) return;
+    const montant = safeNumber(montantStr);
+    if (!montant || montant <= 0) { toast("Montant invalide", "warning"); return; }
+    const dest = (prompt("Nom du bénéficiaire (optionnel) :") || "").trim();
+    setBasket([...basket, {
+      id: `bon-${Date.now()}`,
+      activityTitle: `Bon cadeau${dest ? ` — ${dest}` : ""}`,
+      childId: "", childName: "—",
+      description: "Vente d'un bon cadeau",
+      priceHT: montant, tva: 0, priceTTC: montant,
+      category: "bon_cadeau", compteComptable: "708000",
+      isBonCadeau: true, recipientName: dest,
+    } as any]);
+  };
+
   const basketSubtotal = basket.reduce((s, i) => s + i.priceTTC, 0);
   const promoDiscount = appliedPromo
     ? (appliedPromo.discountMode === "percent" ? basketSubtotal * appliedPromo.discountValue / 100 : appliedPromo.discountValue)
@@ -335,8 +353,23 @@ export function TabEncaisser({
         totalTTC: revisedTotal,
       }, paid, paymentMode, paymentRef, revisedBasket.map(i => i.activityTitle).join(", "), encaissementDate);
     }
+    // Génération des bons cadeaux vendus (un bon par article "bon cadeau" du panier).
+    const bonsGeneres: string[] = [];
+    for (const item of revisedBasket) {
+      if (!(item as any).isBonCadeau) continue;
+      const code = "BON-" + (Date.now().toString(36).slice(-4) + Math.random().toString(36).slice(2, 5)).toUpperCase();
+      await addDoc(collection(db, "bons-cadeaux"), {
+        code, montant: item.priceTTC, solde: item.priceTTC, statut: "actif",
+        recipientName: (item as any).recipientName || "",
+        fromName: selectedFam?.parentName || "",
+        source: "vente", paymentId: payRef.id, acheteurFamilyId: selectedFamily,
+        createdAt: serverTimestamp(),
+      });
+      bonsGeneres.push(code);
+    }
     setBasket([]); setPaymentRef(""); setPaidAmount("");
     setEncaissementDate(new Date().toISOString().split("T")[0]);
+    if (bonsGeneres.length > 0) toast(`🎁 Bon(s) créé(s) : ${bonsGeneres.join(", ")} — à remettre à l'acheteur.`, "success");
     setSuccess(true);
     setTimeout(() => setSuccess(false), 3000);
     await refreshAll();
@@ -816,6 +849,13 @@ export function TabEncaisser({
                 ${customLabel && customPrice ? "bg-gold-400 text-blue-800" : "bg-gray-200 text-slate-600"}`}>
               <Plus size={16} className="inline mr-1" /> Ajouter
             </button>
+          </div>
+          <div className="mt-3 pt-3 border-t border-blue-500/8">
+            <button onClick={vendreBonCadeau}
+              className="px-4 py-2 rounded-lg font-body text-sm font-semibold border-none cursor-pointer bg-emerald-600 text-white hover:bg-emerald-500">
+              🎁 Vendre un bon cadeau
+            </button>
+            <span className="ml-2 font-body text-xs text-gray-400">Ajoute un bon au panier. Le code est généré et la vente enregistrée en recette au paiement.</span>
           </div>
         </div>
       </Card>
