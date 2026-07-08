@@ -1334,8 +1334,8 @@ Réponds de façon concise et pratique, en français.`,
                             </select>
                             <select value={addForm.dureeMinutes} onChange={e=>setAddForm({...addForm,dureeMinutes:parseInt(e.target.value)})}
                               style={{flex:1,padding:"3px 4px",borderRadius:6,border:"1px solid #bfdbfe",fontFamily:"sans-serif",fontSize:10,background:"white"}}>
-                              {/* Toutes durees au quart d'heure : de 15 min a 4h, par pas de 15 min */}
-                              {[15,30,45,60,75,90,105,120,135,150,165,180,195,210,225,240].map(d=>{
+                              {/* Toutes durees au quart d'heure : de 15 min a 5h, par pas de 15 min */}
+                              {[15,30,45,60,75,90,105,120,135,150,165,180,195,210,225,240,255,270,285,300].map(d=>{
                                 const h = Math.floor(d/60);
                                 const m = d%60;
                                 const label = h === 0 ? `${m}min` : (m === 0 ? `${h}h` : `${h}h${String(m).padStart(2,"0")}`);
@@ -2357,7 +2357,7 @@ Réponds de façon concise et pratique, en français.`,
                       pas un multiple de 15 (ex: ancienne tache a 20min), on l'ajoute en tete
                       pour ne pas la perdre lors de l'edition. */}
                   {(() => {
-                    const standard = [15,30,45,60,75,90,105,120,135,150,165,180,195,210,225,240];
+                    const standard = [15,30,45,60,75,90,105,120,135,150,165,180,195,210,225,240,255,270,285,300];
                     const current = editForm.dureeMinutes;
                     const all = standard.includes(current) ? standard : [current, ...standard].sort((a,b)=>a-b);
                     return all.map(d => {
