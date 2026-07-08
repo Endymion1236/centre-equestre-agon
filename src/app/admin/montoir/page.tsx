@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useRef } from "react";
-import { collection, getDocs, getDoc, updateDoc, addDoc, doc, query, where, serverTimestamp, runTransaction } from "firebase/firestore";
+import { collection, getDocs, getDoc, updateDoc, addDoc, doc, query, where, serverTimestamp, runTransaction, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { validateChildrenUpdate } from "@/lib/utils";
 import { compareCreneaux } from "@/lib/creneau-sort";
@@ -22,7 +22,7 @@ import PoneyChargeView from "./PoneyChargeView";
 import ThemeSuggestion from "./ThemeSuggestion";
 import QuickAddRider from "./QuickAddRider";
 import SeanceNotes from "./SeanceNotes";
-import { Loader2, ChevronLeft, ChevronRight, XCircle, AlertCircle, Printer, ClipboardList, Mic, MicOff, Sparkles, TrendingUp,
+import { Loader2, ChevronLeft, ChevronRight, XCircle, AlertCircle, Printer, ClipboardList, Mic, MicOff, Sparkles, TrendingUp, AlertTriangle, Trash2, X,
 } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 
@@ -42,6 +42,13 @@ export default function MontoirPage() {
   const [families, setFamilies] = useState<any[]>([]);
   const [forfaits, setForfaits] = useState<any[]>([]);
   const [addCreneau, setAddCreneau] = useState<any | null>(null);
+  // ── Registre des chutes ──────────────────────────────────────────────────
+  // Une chute par cavalier et par séance, id déterministe `${creneauId}_${childId}`.
+  // Le bouton n'est PAS obligatoire : on ne l'active que s'il y a eu une chute.
+  const [chutes, setChutes] = useState<Record<string, any>>({});
+  const [chuteModal, setChuteModal] = useState<{ c: Creneau; e: any } | null>(null);
+  const [chuteForm, setChuteForm] = useState<{ circonstances: string; gravite: string; suites: string }>({ circonstances: "", gravite: "", suites: "" });
+  const [chuteSaving, setChuteSaving] = useState(false);
   const currentDay = useMemo(() => { const d = new Date(); d.setDate(d.getDate()+dayOffset); return d; }, [dayOffset]);
   // Date LOCALE (Europe/Paris) — surtout PAS toISOString(), qui convertit en UTC
   // et renvoie la VEILLE entre 00h et 02h du matin l'été (Paris = UTC+2). C'est ce
@@ -50,7 +57,7 @@ export default function MontoirPage() {
 
   const fetchData = async () => {
     try {
-      const [cSnap, eSnap, iSnap, cartSnap, famSnap, centreSnap, forfSnap] = await Promise.all([
+      const [cSnap, eSnap, iSnap, cartSnap, famSnap, centreSnap, forfSnap, chutesSnap] = await Promise.all([
         getDocs(query(collection(db,"creneaux"),where("date","==",dateStr))),
         getDocs(collection(db,"equides")),
         getDocs(collection(db,"indisponibilites")),
@@ -58,6 +65,7 @@ export default function MontoirPage() {
         getDocs(collection(db,"families")),
         getDoc(doc(db,"settings","centre")),
         getDocs(query(collection(db,"forfaits"),where("status","==","actif"))),
+        getDocs(query(collection(db,"chutes"),where("date","==",dateStr))),
       ]);
       if (centreSnap.exists()) {
         const d = centreSnap.data() as any;
@@ -74,6 +82,9 @@ export default function MontoirPage() {
       setCartes(cartSnap.docs.map(d=>({id:d.id,...d.data()})));
       setFamilies(famSnap.docs.map(d=>({id:d.id,...d.data()})));
       setForfaits(forfSnap.docs.map(d=>({id:d.id,...d.data()})));
+      const chutesMap: Record<string, any> = {};
+      chutesSnap.docs.forEach(d => { chutesMap[d.id] = { id: d.id, ...(d.data() as any) }; });
+      setChutes(chutesMap);
 
       // Contexte agent — données montoir du jour
       // Nouvelle logique "presence par defaut" : un cavalier sans statut
@@ -273,6 +284,52 @@ export default function MontoirPage() {
   const [quickNoteChild, setQuickNoteChild] = useState<{ cid: string; children: any[] } | null>(null);
   const [quickNotes, setQuickNotes] = useState<Record<string, string>>({});
   // ── Bilan IA ──────────────────────────────────────────────────────────────
+  // ── Registre des chutes : ouverture / enregistrement / suppression ─────────
+  const chuteKey = (cid: string, childId: string) => `${cid}_${childId}`;
+  const openChute = (c: Creneau, e: any) => {
+    const ex = chutes[chuteKey(c.id, e.childId)];
+    setChuteForm({ circonstances: ex?.circonstances || "", gravite: ex?.gravite || "", suites: ex?.suites || "" });
+    setChuteModal({ c, e });
+  };
+  const saveChute = async () => {
+    if (!chuteModal) return;
+    const { c, e } = chuteModal;
+    if (!chuteForm.circonstances.trim()) { toast("Merci d'indiquer les circonstances de la chute.", "error"); return; }
+    setChuteSaving(true);
+    const id = chuteKey(c.id, e.childId);
+    const isNew = !chutes[id];
+    const data: any = {
+      date: dateStr,
+      creneauId: c.id, activityTitle: c.activityTitle || "",
+      startTime: c.startTime || "", endTime: c.endTime || "",
+      childId: e.childId, childName: e.childName || "", familyName: e.familyName || "",
+      horseName: e.horseName || "", horseDisplay: displayFromHorseName(e.horseName) || "",
+      monitor: c.monitor || "",
+      circonstances: chuteForm.circonstances.trim(), gravite: chuteForm.gravite || "", suites: chuteForm.suites.trim(),
+      updatedAt: serverTimestamp(),
+    };
+    try {
+      await setDoc(doc(db, "chutes", id), isNew ? { ...data, createdAt: serverTimestamp() } : data, { merge: true });
+      setChutes(prev => ({ ...prev, [id]: { id, ...data } }));
+      toast(isNew ? "Chute enregistrée dans le registre." : "Chute mise à jour.", "success");
+      setChuteModal(null);
+    } catch (err) { console.error(err); toast("Erreur lors de l'enregistrement de la chute.", "error"); }
+    setChuteSaving(false);
+  };
+  const deleteChute = async () => {
+    if (!chuteModal) return;
+    const { c, e } = chuteModal;
+    const id = chuteKey(c.id, e.childId);
+    setChuteSaving(true);
+    try {
+      await deleteDoc(doc(db, "chutes", id));
+      setChutes(prev => { const n = { ...prev }; delete n[id]; return n; });
+      toast("Chute retirée du registre.", "success");
+      setChuteModal(null);
+    } catch (err) { console.error(err); toast("Erreur lors de la suppression.", "error"); }
+    setChuteSaving(false);
+  };
+
   const [recording, setRecording] = useState<string | null>(null); // childId en cours d'enregistrement
   const [transcripts, setTranscripts] = useState<Record<string, string>>({}); // childId → texte dicté
   const [iaLoading, setIaLoading] = useState<Record<string, boolean>>({}); // childId → loading
@@ -792,6 +849,10 @@ export default function MontoirPage() {
             className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-600 px-3 sm:px-4 py-2 rounded-lg no-underline hover:bg-blue-500">
             📺 Projeter
           </a>
+          <a href="/admin/registre-chutes" title="Registre des chutes"
+            className="flex items-center gap-2 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 no-underline hover:bg-gray-50">
+            ⚠️ Registre chutes
+          </a>
           <button onClick={()=>window.print()} className="flex items-center gap-2 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><Printer size={16} /> Imprimer</button>
         </div>
       </div>
@@ -1020,6 +1081,9 @@ export default function MontoirPage() {
                   );
                 })() : <span className="block truncate font-body text-xs font-semibold text-blue-800">{displayFromHorseName(e.horseName) || "—"}</span>}</span>
                 <span className="shrink-0 ml-auto sm:ml-0 sm:w-32 flex justify-end sm:justify-center gap-1 sm:gap-2">{!closed ? <>
+                  {/* Bouton "Chute" (facultatif) : à activer UNIQUEMENT s'il y a eu
+                      une chute. Rouge plein = chute enregistrée dans le registre. */}
+                  <button onClick={()=>openChute(c,e)} title={chutes[chuteKey(c.id,e.childId)] ? "Chute enregistrée — cliquer pour modifier" : "Signaler une chute"} className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${chutes[chuteKey(c.id,e.childId)] ? "bg-red-600 text-white" : "bg-gray-100 text-slate-600 hover:bg-red-100"}`}><AlertTriangle size={17}/></button>
                   {/* Bouton "Present" retire (mai 2026, demande Nicolas) :
                       tout cavalier non explicitement marque absent/non
                       justifie est considere present par defaut. On ne
@@ -1030,12 +1094,57 @@ export default function MontoirPage() {
                       pour le distinguer visuellement du rouge "absent justifié". */}
                   <button onClick={()=>togglePresence(c,e.childId,"absent_nonjustified")} title="Absent non justifié (séance perdue, pas de rattrapage) — recliquer pour annuler" className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent_nonjustified"?"bg-amber-500 text-white":"bg-gray-100 text-slate-600 hover:bg-amber-100"}`}><AlertCircle size={18}/></button>
                   <span className="hidden print:inline font-body text-xs font-semibold">{e.presence==="absent"?"✗ Absent":e.presence==="absent_nonjustified"?"⚠ NJ":"✓ Présent"}</span>
-                </> : <Badge color={e.presence==="absent"?"red":e.presence==="absent_nonjustified"?"orange":"green"}>{e.presence==="absent"?"Absent":e.presence==="absent_nonjustified"?"Absent non justifié":"Présent"}</Badge>}</span>
+                </> : <span className="flex items-center gap-1.5">{chutes[chuteKey(c.id,e.childId)] && <Badge color="red">⚠️ Chute</Badge>}<Badge color={e.presence==="absent"?"red":e.presence==="absent_nonjustified"?"orange":"green"}>{e.presence==="absent"?"Absent":e.presence==="absent_nonjustified"?"Absent non justifié":"Présent"}</Badge></span>}</span>
               </div>
             ))}
           </div>}
         </Card>); })}</div>}
       </>}
+
+      {/* ── Modal : circonstances d'une chute ─────────────────────────────── */}
+      {chuteModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onClick={() => setChuteModal(null)}>
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[92vh] overflow-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-red-600"><AlertTriangle size={16} className="text-white" /></div>
+                <div>
+                  <h2 className="font-display text-lg font-bold text-blue-800">Signaler une chute</h2>
+                  <p className="font-body text-xs text-slate-600">{chuteModal.e.childName}{chuteModal.e.horseName ? ` — 🐴 ${displayFromHorseName(chuteModal.e.horseName)}` : ""} · {chuteModal.c.activityTitle} ({chuteModal.c.startTime})</p>
+                </div>
+              </div>
+              <button onClick={() => setChuteModal(null)} className="text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer"><X size={20} /></button>
+            </div>
+            <div className="p-4 flex flex-col gap-4">
+              <div>
+                <label className="block font-body text-xs font-semibold text-blue-800 mb-1">Circonstances de la chute <span className="text-red-600">*</span></label>
+                <textarea autoFocus value={chuteForm.circonstances} onChange={ev => setChuteForm(f => ({ ...f, circonstances: ev.target.value }))} rows={4} placeholder="Ex : refus à l'obstacle, le cavalier a basculé par-dessus l'encolure. Réception sur le côté, pas de perte de connaissance." className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm resize-y" />
+              </div>
+              <div>
+                <label className="block font-body text-xs font-semibold text-blue-800 mb-1">Gravité <span className="font-normal text-slate-400">(facultatif)</span></label>
+                <div className="flex gap-2">
+                  {([["legere","Légère","bg-green-100 text-green-800 border-green-300"],["moderee","Modérée","bg-amber-100 text-amber-800 border-amber-300"],["grave","Grave","bg-red-100 text-red-800 border-red-300"]] as const).map(([val,lbl,cls]) => (
+                    <button key={val} type="button" onClick={() => setChuteForm(f => ({ ...f, gravite: f.gravite === val ? "" : val }))} className={`flex-1 font-body text-xs font-semibold px-3 py-2 rounded-lg border cursor-pointer ${chuteForm.gravite === val ? cls : "bg-white text-slate-500 border-gray-200 hover:bg-gray-50"}`}>{lbl}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block font-body text-xs font-semibold text-blue-800 mb-1">Suites / actions <span className="font-normal text-slate-400">(facultatif)</span></label>
+                <textarea value={chuteForm.suites} onChange={ev => setChuteForm(f => ({ ...f, suites: ev.target.value }))} rows={2} placeholder="Ex : parents prévenus, pas de suite / passage chez le médecin conseillé." className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm resize-y" />
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-100 flex items-center justify-between gap-2">
+              {chutes[chuteKey(chuteModal.c.id, chuteModal.e.childId)] ? (
+                <button onClick={deleteChute} disabled={chuteSaving} className="flex items-center gap-1.5 font-body text-sm font-semibold text-red-600 bg-red-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-red-100 disabled:opacity-50"><Trash2 size={15} /> Retirer</button>
+              ) : <span />}
+              <div className="flex gap-2">
+                <button onClick={() => setChuteModal(null)} disabled={chuteSaving} className="font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer disabled:opacity-50">Annuler</button>
+                <button onClick={saveChute} disabled={chuteSaving} className="flex items-center gap-1.5 font-body text-sm font-semibold text-white bg-red-600 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-red-500 disabled:opacity-50">{chuteSaving ? <Loader2 size={15} className="animate-spin" /> : <AlertTriangle size={15} />} Enregistrer</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Panel bilan pédagogique IA post-clôture */}
       {quickNoteChild && (
