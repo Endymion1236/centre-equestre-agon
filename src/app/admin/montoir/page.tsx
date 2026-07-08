@@ -876,7 +876,7 @@ export default function MontoirPage() {
       <>
       {/* Charge journalière poneys */}
       {equides.length > 0 && Object.keys(poneyCharge).length > 0 && (
-        <Card padding="sm" className="mb-3 print:hidden">
+        <Card padding="sm" className="mb-3 print:hidden hidden sm:block">
           <div className="font-body text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Charge poneys aujourd'hui</div>
           <div className="flex flex-wrap gap-1.5">
             {availableHorses.map(h => {
@@ -895,7 +895,7 @@ export default function MontoirPage() {
 
       {/* Vue timeline charge poneys */}
       {equides.length > 0 && creneaux.some(c => (c.enrolled || []).some((e: any) => e.horseName)) && (
-        <div className="mb-4 print:hidden">
+        <div className="mb-4 print:hidden hidden sm:block">
           <PoneyChargeView creneaux={creneaux} equides={equides} availableHorses={availableHorses} />
         </div>
       )}
