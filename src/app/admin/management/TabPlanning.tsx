@@ -1433,17 +1433,19 @@ Réponds de façon concise et pratique, en français.`,
                               )}
                             </div>
                           )}
-                          {/* Zone binôme : visible uniquement si la tâche choisie est marquée
-                              binomeRequis dans la bibliothèque. Permet d'assigner un (ou plusieurs)
-                              salariés supplémentaires sur le même créneau. */}
+                          {/* Zone multi-personnes : proposée SYSTÉMATIQUEMENT dès qu'une tâche
+                              est choisie. Permet d'affecter la même tâche à d'autres salariés
+                              (une tâche identique est créée pour chacun). Le libellé s'adapte
+                              selon que la tâche exige un binôme ou non. */}
                           {(() => {
                             const ttSel = tachesType.find(t => t.id === addForm.tacheTypeId);
-                            if (!ttSel?.binomeRequis) return null;
+                            if (!ttSel) return null;
                             const otherSals = salaries.filter(s => s.actif && s.id !== addCell?.salarieId);
+                            if (otherSals.length === 0) return null;
                             return (
                               <div style={{background:"#faf5ff", border:"1px solid #e9d5ff", borderRadius:6, padding:6}}>
                                 <div style={{fontFamily:"sans-serif", fontSize:10, fontWeight:600, color:"#7c3aed", marginBottom:4, display:"flex", alignItems:"center", gap:3}}>
-                                  👥 Cette tâche nécessite un binôme
+                                  👥 {ttSel.binomeRequis ? "Cette tâche nécessite un binôme" : "Affecter aussi à d'autres personnes (facultatif)"}
                                 </div>
                                 <div style={{display:"flex", flexWrap:"wrap", gap:3}}>
                                   {otherSals.map(s => {
