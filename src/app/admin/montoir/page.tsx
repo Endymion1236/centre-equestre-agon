@@ -47,7 +47,7 @@ export default function MontoirPage() {
   // Le bouton n'est PAS obligatoire : on ne l'active que s'il y a eu une chute.
   const [chutes, setChutes] = useState<Record<string, any>>({});
   const [chuteModal, setChuteModal] = useState<{ c: Creneau; e: any } | null>(null);
-  const [chuteForm, setChuteForm] = useState<{ circonstances: string; gravite: string; suites: string }>({ circonstances: "", gravite: "", suites: "" });
+  const [chuteForm, setChuteForm] = useState<{ circonstances: string; gravite: string; consequence: string; suites: string }>({ circonstances: "", gravite: "", consequence: "", suites: "" });
   const [chuteSaving, setChuteSaving] = useState(false);
   const currentDay = useMemo(() => { const d = new Date(); d.setDate(d.getDate()+dayOffset); return d; }, [dayOffset]);
   // Date LOCALE (Europe/Paris) — surtout PAS toISOString(), qui convertit en UTC
@@ -296,7 +296,7 @@ export default function MontoirPage() {
   const chuteKey = (cid: string, childId: string) => `${cid}_${childId}`;
   const openChute = (c: Creneau, e: any) => {
     const ex = chutes[chuteKey(c.id, e.childId)];
-    setChuteForm({ circonstances: ex?.circonstances || "", gravite: ex?.gravite || "", suites: ex?.suites || "" });
+    setChuteForm({ circonstances: ex?.circonstances || "", gravite: ex?.gravite || "", consequence: ex?.consequence || "", suites: ex?.suites || "" });
     setChuteModal({ c, e });
   };
   const saveChute = async () => {
@@ -313,7 +313,7 @@ export default function MontoirPage() {
       childId: e.childId, childName: e.childName || "", familyName: e.familyName || "",
       horseName: e.horseName || "", horseDisplay: displayFromHorseName(e.horseName) || "",
       monitor: c.monitor || "",
-      circonstances: chuteForm.circonstances.trim(), gravite: chuteForm.gravite || "", suites: chuteForm.suites.trim(),
+      circonstances: chuteForm.circonstances.trim(), gravite: chuteForm.gravite || "", consequence: chuteForm.consequence || "", suites: chuteForm.suites.trim(),
       updatedAt: serverTimestamp(),
     };
     try {
@@ -1133,6 +1133,14 @@ export default function MontoirPage() {
                 <div className="flex gap-2">
                   {([["legere","Légère","bg-green-100 text-green-800 border-green-300"],["moderee","Modérée","bg-amber-100 text-amber-800 border-amber-300"],["grave","Grave","bg-red-100 text-red-800 border-red-300"]] as const).map(([val,lbl,cls]) => (
                     <button key={val} type="button" onClick={() => setChuteForm(f => ({ ...f, gravite: f.gravite === val ? "" : val }))} className={`flex-1 font-body text-xs font-semibold px-3 py-2 rounded-lg border cursor-pointer ${chuteForm.gravite === val ? cls : "bg-white text-slate-500 border-gray-200 hover:bg-gray-50"}`}>{lbl}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block font-body text-xs font-semibold text-blue-800 mb-1">Conséquence <span className="font-normal text-slate-400">(facultatif)</span></label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  {([["remonte","Est remonté","bg-green-100 text-green-800 border-green-300"],["refuse","A refusé de remonter","bg-amber-100 text-amber-800 border-amber-300"],["arret","Arrête l'équitation","bg-red-100 text-red-800 border-red-300"]] as const).map(([val,lbl,cls]) => (
+                    <button key={val} type="button" onClick={() => setChuteForm(f => ({ ...f, consequence: f.consequence === val ? "" : val }))} className={`flex-1 font-body text-xs font-semibold px-3 py-2 rounded-lg border cursor-pointer ${chuteForm.consequence === val ? cls : "bg-white text-slate-500 border-gray-200 hover:bg-gray-50"}`}>{lbl}</button>
                   ))}
                 </div>
               </div>
