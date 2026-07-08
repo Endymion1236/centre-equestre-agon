@@ -49,6 +49,8 @@ export default function MontoirPage() {
   const [chuteModal, setChuteModal] = useState<{ c: Creneau; e: any } | null>(null);
   const [chuteForm, setChuteForm] = useState<{ circonstances: string; gravite: string; consequence: string; suites: string }>({ circonstances: "", gravite: "", consequence: "", suites: "" });
   const [chuteSaving, setChuteSaving] = useState(false);
+  const [poneyChuteCount, setPoneyChuteCount] = useState<Record<string, number>>({});
+  const SEUIL_CHUTES_PONEY = 3; // à partir de N chutes sur la saison → signal visuel
   const currentDay = useMemo(() => { const d = new Date(); d.setDate(d.getDate()+dayOffset); return d; }, [dayOffset]);
   // Date LOCALE (Europe/Paris) — surtout PAS toISOString(), qui convertit en UTC
   // et renvoie la VEILLE entre 00h et 02h du matin l'été (Paris = UTC+2). C'est ce
@@ -84,14 +86,26 @@ export default function MontoirPage() {
       // Registre des chutes : requête ISOLÉE et tolérante aux erreurs.
       // Si la règle Firestore "chutes" n'est pas encore publiée (ou toute autre
       // erreur), on ne doit surtout PAS faire échouer le chargement du Montoir.
+      // On charge la saison en cours pour en déduire (1) les chutes du jour
+      // (état des boutons) et (2) le cumul de chutes par poney (signal affectation).
       try {
-        const chutesSnap = await getDocs(query(collection(db,"chutes"),where("date","==",dateStr)));
+        const now = new Date();
+        const seasonStartYear = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+        const seasonStart = `${seasonStartYear}-09-01`;
+        const chutesSnap = await getDocs(query(collection(db,"chutes"),where("date",">=",seasonStart)));
         const chutesMap: Record<string, any> = {};
-        chutesSnap.docs.forEach(d => { chutesMap[d.id] = { id: d.id, ...(d.data() as any) }; });
+        const poneyCount: Record<string, number> = {};
+        chutesSnap.docs.forEach(d => {
+          const data = d.data() as any;
+          if (data.date === dateStr) chutesMap[d.id] = { id: d.id, ...data };
+          if (data.horseName) poneyCount[data.horseName] = (poneyCount[data.horseName] || 0) + 1;
+        });
         setChutes(chutesMap);
+        setPoneyChuteCount(poneyCount);
       } catch (e) {
         console.warn("Registre chutes indisponible (règle Firestore non publiée ?) :", e);
         setChutes({});
+        setPoneyChuteCount({});
       }
 
       // Contexte agent — données montoir du jour
@@ -1073,12 +1087,19 @@ export default function MontoirPage() {
                           const blockedOther = usedOther && !c.rotationPoneys;
                           const charge = poneyCharge[h.name];
                           const chargeStr = charge ? ` (${charge.seances}s)` : "";
+                          const nbChutes = poneyChuteCount[h.name] || 0;
+                          const chuteStr = nbChutes >= SEUIL_CHUTES_PONEY ? ` ⚠️${nbChutes}` : "";
                           return <option key={h.id} value={h.name} disabled={usedHere || blockedOther}
                             style={usedHere || blockedOther ? {color:"#ccc"} : charge?.seances >= seuilPoney.orange ? {color:"#f59e0b"} : {}}>
-                            {displayName(h)}{chargeStr}{usedHere ? " ✗" : blockedOther ? " ✗" : usedOther ? " ↺" : ""}
+                            {displayName(h)}{chargeStr}{chuteStr}{usedHere ? " ✗" : blockedOther ? " ✗" : usedOther ? " ↺" : ""}
                           </option>;
                         })}
                       </select>
+                      {e.horseName && (poneyChuteCount[e.horseName] || 0) >= SEUIL_CHUTES_PONEY && (
+                        <div className="font-body text-[9px] font-semibold text-red-600 flex items-center gap-1" title={`${poneyChuteCount[e.horseName]} chutes enregistrées cette saison avec ce poney`}>
+                          ⚠️ {poneyChuteCount[e.horseName]} chutes cette saison
+                        </div>
+                      )}
                       {/* Historique 4 derniers poneys du cavalier */}
                       {(childHorseHistory[e.childId] || []).length > 0 && (
                         <div className="font-body text-[9px] text-slate-400 truncate" title={`Historique : ${childHorseHistory[e.childId].join(" → ")}`}>
