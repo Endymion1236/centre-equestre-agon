@@ -43,7 +43,10 @@ export default function MontoirPage() {
   const [forfaits, setForfaits] = useState<any[]>([]);
   const [addCreneau, setAddCreneau] = useState<any | null>(null);
   const currentDay = useMemo(() => { const d = new Date(); d.setDate(d.getDate()+dayOffset); return d; }, [dayOffset]);
-  const dateStr = currentDay.toISOString().split("T")[0];
+  // Date LOCALE (Europe/Paris) — surtout PAS toISOString(), qui convertit en UTC
+  // et renvoie la VEILLE entre 00h et 02h du matin l'été (Paris = UTC+2). C'est ce
+  // décalage qui affichait le montoir du 6 alors qu'on était le 7 au petit matin.
+  const dateStr = `${currentDay.getFullYear()}-${String(currentDay.getMonth() + 1).padStart(2, "0")}-${String(currentDay.getDate()).padStart(2, "0")}`;
 
   const fetchData = async () => {
     try {
