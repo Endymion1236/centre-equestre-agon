@@ -3,20 +3,26 @@ import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { AlertTriangle, Search, User, BarChart3 } from "lucide-react";
+import { AlertTriangle, Search, User, BarChart3, Download } from "lucide-react";
+import { toLocalDateString } from "@/lib/date-local";
+
+type Period = "mois" | "saison" | "tout";
+
+const gravLabel = (g: string) => g === "grave" ? "Grave" : g === "moderee" ? "Modérée" : g === "legere" ? "Légère" : "";
+const consLabel = (v: string) => v === "arret" ? "Arrête l'équitation" : v === "refuse" ? "A refusé de remonter" : v === "remonte" ? "Est remonté" : "";
 
 export default function RegistreChutesPage() {
   const [chutes, setChutes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [showStats, setShowStats] = useState(true);
+  const [period, setPeriod] = useState<Period>("saison");
 
   useEffect(() => {
     (async () => {
       try {
         const snap = await getDocs(collection(db, "chutes"));
         const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-        // Tri par date décroissante, puis par heure de créneau décroissante.
         rows.sort((a, b) => {
           if ((a.date || "") !== (b.date || "")) return (a.date || "") < (b.date || "") ? 1 : -1;
           return (b.startTime || "").localeCompare(a.startTime || "");
@@ -28,6 +34,19 @@ export default function RegistreChutesPage() {
       setLoading(false);
     })();
   }, []);
+
+  // ── Filtre période ────────────────────────────────────────────────────────
+  const periodStart = useMemo(() => {
+    const now = new Date();
+    if (period === "mois") return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    if (period === "saison") { const y = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1; return `${y}-09-01`; }
+    return "";
+  }, [period]);
+
+  const periodChutes = useMemo(
+    () => (period === "tout" ? chutes : chutes.filter((c) => (c.date || "") >= periodStart)),
+    [chutes, period, periodStart]
+  );
 
   const gravBadge = (g: string) =>
     g === "grave" ? <Badge color="red">Grave</Badge>
@@ -49,15 +68,15 @@ export default function RegistreChutesPage() {
     }
   };
 
-  // ── Statistiques globales (sur toutes les chutes enregistrées) ─────────────
+  // ── Statistiques (sur la période sélectionnée) ─────────────────────────────
   const stats = useMemo(() => {
     const countBy = (getKey: (c: any) => string) => {
       const m: Record<string, number> = {};
-      chutes.forEach((c) => { const k = (getKey(c) || "").trim(); if (k) m[k] = (m[k] || 0) + 1; });
+      periodChutes.forEach((c) => { const k = (getKey(c) || "").trim(); if (k) m[k] = (m[k] || 0) + 1; });
       return Object.entries(m).sort((a, b) => b[1] - a[1]);
     };
     const cons = { remonte: 0, refuse: 0, arret: 0, none: 0 };
-    chutes.forEach((c) => {
+    periodChutes.forEach((c) => {
       if (c.consequence === "remonte") cons.remonte++;
       else if (c.consequence === "refuse") cons.refuse++;
       else if (c.consequence === "arret") cons.arret++;
@@ -68,7 +87,7 @@ export default function RegistreChutesPage() {
       parCheval: countBy((c) => c.horseDisplay || c.horseName),
       cons,
     };
-  }, [chutes]);
+  }, [periodChutes]);
 
   const RankedList = ({ rows, emptyLabel }: { rows: [string, number][]; emptyLabel: string }) => {
     if (rows.length === 0) return <p className="font-body text-xs text-slate-400">{emptyLabel}</p>;
@@ -89,7 +108,7 @@ export default function RegistreChutesPage() {
   };
 
   const norm = (s: string) => (s || "").toLowerCase();
-  const filtered = chutes.filter((c) => {
+  const filtered = periodChutes.filter((c) => {
     if (!q.trim()) return true;
     const t = norm(q);
     return (
@@ -101,9 +120,38 @@ export default function RegistreChutesPage() {
     );
   });
 
+  // ── Export CSV (ce qui est affiché : période + recherche) ──────────────────
+  const exportCSV = () => {
+    const headers = ["Date", "Cavalier", "Poney", "Enseignant", "Créneau", "Gravité", "Conséquence", "Circonstances", "Suites"];
+    const esc = (v: any) => `"${String(v ?? "").replace(/"/g, '""').replace(/[\r\n]+/g, " / ")}"`;
+    const lines = filtered.map((c) => [
+      c.date,
+      c.childName,
+      c.horseDisplay || c.horseName,
+      c.monitor,
+      `${c.activityTitle || ""} (${c.startTime || ""}${c.endTime ? "–" + c.endTime : ""})`,
+      gravLabel(c.gravite),
+      consLabel(c.consequence),
+      c.circonstances,
+      c.suites,
+    ].map(esc).join(";"));
+    const csv = "\uFEFF" + [headers.map(esc).join(";"), ...lines].join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `registre-chutes_${period}_${toLocalDateString()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const periodLabel: Record<Period, string> = { mois: "ce mois", saison: "cette saison", tout: "au total" };
+
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-red-600 flex items-center justify-center">
             <AlertTriangle size={18} className="text-white" />
@@ -124,15 +172,39 @@ export default function RegistreChutesPage() {
         </div>
       </div>
 
+      {/* ── Barre période + export ────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
+          {(["mois", "saison", "tout"] as Period[]).map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => setPeriod(p)}
+              className={`font-body text-xs font-semibold px-3 py-1.5 rounded-md cursor-pointer border-none ${period === p ? "bg-blue-800 text-white" : "bg-transparent text-slate-500 hover:bg-gray-50"}`}
+            >
+              {p === "mois" ? "Ce mois" : p === "saison" ? "Cette saison" : "Tout"}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={exportCSV}
+          disabled={filtered.length === 0}
+          className={`flex items-center gap-1.5 font-body text-xs font-semibold px-3 py-2 rounded-lg border cursor-pointer ${filtered.length === 0 ? "bg-gray-50 text-slate-300 border-gray-100 cursor-not-allowed" : "bg-white text-blue-800 border-gray-200 hover:bg-blue-50"}`}
+        >
+          <Download size={14} /> Exporter CSV
+        </button>
+      </div>
+
       {/* ── Statistiques ──────────────────────────────────────────────────── */}
-      {!loading && chutes.length > 0 && (
+      {!loading && periodChutes.length > 0 && (
         <div className="mb-5">
           <button
             type="button"
             onClick={() => setShowStats((s) => !s)}
             className="flex items-center gap-2 font-body text-sm font-semibold text-blue-800 bg-transparent border-none cursor-pointer mb-2 p-0"
           >
-            <BarChart3 size={16} /> Statistiques {showStats ? "▾" : "▸"}
+            <BarChart3 size={16} /> Statistiques ({periodLabel[period]}) {showStats ? "▾" : "▸"}
           </button>
           {showStats && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -172,9 +244,9 @@ export default function RegistreChutesPage() {
         </div>
       )}
 
-      {!loading && chutes.length > 0 && (
+      {!loading && periodChutes.length > 0 && (
         <p className="font-body text-xs text-slate-500 mb-3">
-          {filtered.length} chute{filtered.length > 1 ? "s" : ""}{q.trim() ? ` sur ${chutes.length}` : " au total"}
+          {filtered.length} chute{filtered.length > 1 ? "s" : ""}{q.trim() ? ` sur ${periodChutes.length}` : ` (${periodLabel[period]})`}
         </p>
       )}
 
@@ -183,7 +255,11 @@ export default function RegistreChutesPage() {
       ) : filtered.length === 0 ? (
         <Card>
           <div className="py-10 text-center font-body text-sm text-slate-500">
-            {chutes.length === 0 ? "Aucune chute enregistrée. Tant mieux !" : "Aucun résultat pour cette recherche."}
+            {chutes.length === 0
+              ? "Aucune chute enregistrée. Tant mieux !"
+              : periodChutes.length === 0
+              ? `Aucune chute ${periodLabel[period]}.`
+              : "Aucun résultat pour cette recherche."}
           </div>
         </Card>
       ) : (
