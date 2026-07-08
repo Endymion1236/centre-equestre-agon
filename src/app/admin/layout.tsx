@@ -48,6 +48,7 @@ import {
   Trophy,
   UserMinus,
   GitMerge,
+  AlertTriangle,
 } from "lucide-react";
 
 const navItems = [
@@ -56,6 +57,7 @@ const navItems = [
   { separator: true, label: "Terrain" },
   { href: "/admin/planning", icon: CalendarDays, label: "Planning" },
   { href: "/admin/montoir", icon: ClipboardList, label: "Montoir" },
+  { href: "/admin/registre-chutes", icon: AlertTriangle, label: "Registre chutes" },
   { href: "/admin/competitions", icon: Ticket, label: "Compétitions" },
   { href: "/admin/organisation-concours", icon: Trophy, label: "Orga concours" },
   { href: "/admin/cavalerie", icon: Heart, label: "Cavalerie" },
@@ -106,6 +108,7 @@ function AdminSidebar({ nbImpayes }: { nbImpayes: number }) {
     "/admin/dashboard",
     "/admin/planning",
     "/admin/montoir",
+    "/admin/registre-chutes",
     "/admin/cavalerie",
     "/admin/pedagogie",
     "/admin/management",

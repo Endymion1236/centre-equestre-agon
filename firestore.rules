@@ -157,6 +157,12 @@ service cloud.firestore {
       allow read, write: if isStaff();
     }
 
+    // ── Registre des chutes ───────────────────────────────────────────────
+    // Signalées en séance par les moniteurs, consultées par l'admin.
+    match /chutes/{docId} {
+      allow read, create, update, delete: if isStaff();
+    }
+
     // (Collections 'mouvements' et 'documents-equides' retirées :
     //  seules 'mouvements_registre' et 'documents_equide' sont utilisées)
 
