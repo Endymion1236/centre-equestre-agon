@@ -57,7 +57,7 @@ export default function MontoirPage() {
 
   const fetchData = async () => {
     try {
-      const [cSnap, eSnap, iSnap, cartSnap, famSnap, centreSnap, forfSnap, chutesSnap] = await Promise.all([
+      const [cSnap, eSnap, iSnap, cartSnap, famSnap, centreSnap, forfSnap] = await Promise.all([
         getDocs(query(collection(db,"creneaux"),where("date","==",dateStr))),
         getDocs(collection(db,"equides")),
         getDocs(collection(db,"indisponibilites")),
@@ -65,7 +65,6 @@ export default function MontoirPage() {
         getDocs(collection(db,"families")),
         getDoc(doc(db,"settings","centre")),
         getDocs(query(collection(db,"forfaits"),where("status","==","actif"))),
-        getDocs(query(collection(db,"chutes"),where("date","==",dateStr))),
       ]);
       if (centreSnap.exists()) {
         const d = centreSnap.data() as any;
@@ -82,9 +81,18 @@ export default function MontoirPage() {
       setCartes(cartSnap.docs.map(d=>({id:d.id,...d.data()})));
       setFamilies(famSnap.docs.map(d=>({id:d.id,...d.data()})));
       setForfaits(forfSnap.docs.map(d=>({id:d.id,...d.data()})));
-      const chutesMap: Record<string, any> = {};
-      chutesSnap.docs.forEach(d => { chutesMap[d.id] = { id: d.id, ...(d.data() as any) }; });
-      setChutes(chutesMap);
+      // Registre des chutes : requête ISOLÉE et tolérante aux erreurs.
+      // Si la règle Firestore "chutes" n'est pas encore publiée (ou toute autre
+      // erreur), on ne doit surtout PAS faire échouer le chargement du Montoir.
+      try {
+        const chutesSnap = await getDocs(query(collection(db,"chutes"),where("date","==",dateStr)));
+        const chutesMap: Record<string, any> = {};
+        chutesSnap.docs.forEach(d => { chutesMap[d.id] = { id: d.id, ...(d.data() as any) }; });
+        setChutes(chutesMap);
+      } catch (e) {
+        console.warn("Registre chutes indisponible (règle Firestore non publiée ?) :", e);
+        setChutes({});
+      }
 
       // Contexte agent — données montoir du jour
       // Nouvelle logique "presence par defaut" : un cavalier sans statut
