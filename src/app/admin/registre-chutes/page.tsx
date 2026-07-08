@@ -161,26 +161,26 @@ export default function RegistreChutesPage() {
             <p className="font-body text-xs text-slate-600">Chutes signalées en séance · poney, circonstances, conséquence et suites</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
-          <Search size={15} className="text-slate-400" />
+        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 w-full sm:w-auto">
+          <Search size={15} className="text-slate-400 shrink-0" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Rechercher (cavalier, poney, moniteur…)"
-            className="font-body text-sm border-none outline-none w-56 max-w-full bg-transparent"
+            className="font-body text-sm border-none outline-none flex-1 sm:w-56 bg-transparent min-w-0"
           />
         </div>
       </div>
 
       {/* ── Barre période + export ────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 w-full sm:w-auto">
           {(["mois", "saison", "tout"] as Period[]).map((p) => (
             <button
               key={p}
               type="button"
               onClick={() => setPeriod(p)}
-              className={`font-body text-xs font-semibold px-3 py-1.5 rounded-md cursor-pointer border-none ${period === p ? "bg-blue-800 text-white" : "bg-transparent text-slate-500 hover:bg-gray-50"}`}
+              className={`flex-1 sm:flex-initial font-body text-xs font-semibold px-3 py-1.5 rounded-md cursor-pointer border-none ${period === p ? "bg-blue-800 text-white" : "bg-transparent text-slate-500 hover:bg-gray-50"}`}
             >
               {p === "mois" ? "Ce mois" : p === "saison" ? "Cette saison" : "Tout"}
             </button>
@@ -190,7 +190,7 @@ export default function RegistreChutesPage() {
           type="button"
           onClick={exportCSV}
           disabled={filtered.length === 0}
-          className={`flex items-center gap-1.5 font-body text-xs font-semibold px-3 py-2 rounded-lg border cursor-pointer ${filtered.length === 0 ? "bg-gray-50 text-slate-300 border-gray-100 cursor-not-allowed" : "bg-white text-blue-800 border-gray-200 hover:bg-blue-50"}`}
+          className={`flex items-center justify-center gap-1.5 font-body text-xs font-semibold px-3 py-2 rounded-lg border cursor-pointer w-full sm:w-auto ${filtered.length === 0 ? "bg-gray-50 text-slate-300 border-gray-100 cursor-not-allowed" : "bg-white text-blue-800 border-gray-200 hover:bg-blue-50"}`}
         >
           <Download size={14} /> Exporter CSV
         </button>
