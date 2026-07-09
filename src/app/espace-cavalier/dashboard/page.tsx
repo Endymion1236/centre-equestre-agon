@@ -23,6 +23,9 @@ export default function DashboardPage() {
   const [openCardId, setOpenCardId] = useState<string | null>(null);
   const [convertingPoints, setConvertingPoints] = useState(false);
   const [showFidHistory, setShowFidHistory] = useState(false);
+  const [waCommunity, setWaCommunity] = useState("");
+  const [waReprises, setWaReprises] = useState<{ key: string; label: string; url: string }[]>([]);
+  const [waHasForfait, setWaHasForfait] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -89,6 +92,45 @@ export default function DashboardPage() {
     };
     load();
   }, [user]);
+
+  // Liens WhatsApp : réservés aux familles ayant un FORFAIT ANNUEL.
+  // On affiche la communauté du centre + le(s) groupe(s) de la/les reprise(s)
+  // où un enfant est inscrit AU FORFAIT (marqueur enrolled.paymentSource === "forfait").
+  useEffect(() => {
+    if (!user?.uid || !family) return;
+    (async () => {
+      try {
+        const wSnap = await getDoc(doc(db, "settings", "whatsapp"));
+        const w = wSnap.exists() ? (wSnap.data() as any) : {};
+        const community = w.communityUrl || "";
+        const urls: Record<string, string> = w.reprises || {};
+        if (!community && Object.keys(urls).length === 0) { setWaHasForfait(false); return; }
+        const childIds = new Set((family.children || []).map((c: any) => c.id));
+        const today = todayLocalString();
+        const end = new Date(); end.setDate(end.getDate() + 28);
+        const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+        const snap = await getDocs(query(collection(db, "creneaux"), where("date", ">=", today), where("date", "<=", endStr)));
+        const days = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+        const found: Record<string, { label: string; url: string }> = {};
+        let hasForfait = false;
+        snap.docs.forEach((d) => {
+          const c = d.data() as any;
+          if (c.activityType === "stage" || c.activityType === "stage_journee" || !c.activityId) return;
+          // Uniquement les inscriptions couvertes par un forfait annuel
+          const isForfaitMember = (c.enrolled || []).some((e: any) => childIds.has(e.childId) && e.paymentSource === "forfait");
+          if (!isForfaitMember) return;
+          hasForfait = true;
+          const dow = (new Date(c.date).getDay() + 6) % 7;
+          const key = `${c.activityId}-${dow}-${c.startTime}`;
+          const url = urls[key];
+          if (url && !found[key]) found[key] = { label: `${c.activityTitle} · ${days[dow]} · ${c.startTime}`, url };
+        });
+        setWaHasForfait(hasForfait);
+        setWaCommunity(community);
+        setWaReprises(Object.entries(found).map(([key, v]) => ({ key, ...v })));
+      } catch (e) { console.warn("WhatsApp:", e); }
+    })();
+  }, [user, family]);
 
   const hasIncompleteChildren = family?.children?.some(
     (c) => !c.sanitaryForm
@@ -404,6 +446,29 @@ export default function DashboardPage() {
           </Link>
         ))}
       </div>
+
+      {waHasForfait && (waCommunity || waReprises.length > 0) && (
+        <Card className="mb-5" padding="sm">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">💬</span>
+            <p className="font-body text-sm font-bold text-blue-800">Groupes WhatsApp</p>
+          </div>
+          <div className="flex flex-col gap-2">
+            {waCommunity && (
+              <a href={waCommunity} target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg font-body text-sm font-semibold text-white bg-green-600 hover:bg-green-500 no-underline">
+                Rejoindre la communauté du centre
+              </a>
+            )}
+            {waReprises.map((r) => (
+              <a key={r.key} href={r.url} target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg font-body text-sm font-semibold text-green-800 bg-green-50 border border-green-200 hover:bg-green-100 no-underline">
+                Groupe de ma reprise · {r.label}
+              </a>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Family members */}
       {family && family.children.length > 0 && (
