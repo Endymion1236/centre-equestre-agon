@@ -412,6 +412,72 @@ export default function PlanningPage() {
   const handleDuplicateWeek = async () => { if (creneaux.length===0) return; setDuplicating(true); const { count, skipped } = await duplicateWeekCreneaux(creneaux, dupWeeks); setDuplicating(false);setShowDuplicate(false);toast(`${count} créneau${count>1?"x":""} créé${count>1?"s":""}${skipped > 0 ? ` (${skipped} doublon${skipped>1?"s":""})` : ""}`, "success");fetchData(); };
 
 
+  // Prévenir les familles inscrites qu'un créneau change (activité et/ou horaire).
+  // Envoie un email récapitulatif (ancien → nouveau) via l'API send-email.
+  const [notifyingEnrolled, setNotifyingEnrolled] = useState(false);
+  const handleNotifyEnrolled = async () => {
+    if (!editCreneau) return;
+    const enrolled = ((editCreneau as any).enrolled || []) as any[];
+    if (enrolled.length === 0) return;
+    const oldTitle = (editCreneau.activityTitle || "").trim();
+    const newTitle = (editForm.activityTitle || "").trim();
+    const oldHoraire = `${editCreneau.startTime}–${editCreneau.endTime}`;
+    const newHoraire = `${editForm.startTime}–${editForm.endTime}`;
+    const titleChanged = newTitle !== oldTitle;
+    const timeChanged = editForm.startTime !== editCreneau.startTime || editForm.endTime !== editCreneau.endTime;
+    if (!titleChanged && !timeChanged) { toast("Aucun changement d'activité ou d'horaire à signaler", "info"); return; }
+    setNotifyingEnrolled(true);
+    try {
+      const dateFR = new Date(editCreneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+      const dateCourt = new Date(editCreneau.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+      // Regroupe par email de famille (un seul email même si plusieurs enfants inscrits)
+      const byEmail = new Map<string, { parentName: string; children: string[] }>();
+      for (const e of enrolled) {
+        const fam = families.find(f => f.firestoreId === e.familyId);
+        if (!fam?.parentEmail) continue;
+        const entry = byEmail.get(fam.parentEmail) || { parentName: fam.parentName || "", children: [] };
+        entry.children.push(e.childName);
+        byEmail.set(fam.parentEmail, entry);
+      }
+      if (byEmail.size === 0) { toast("Aucun email de famille trouvé pour les inscrits", "error"); setNotifyingEnrolled(false); return; }
+      const changesHtml = [
+        titleChanged ? `<li>Activité : <span style="text-decoration:line-through;color:#94a3b8">${oldTitle}</span> → <strong>${newTitle}</strong></li>` : "",
+        timeChanged ? `<li>Horaire : <span style="text-decoration:line-through;color:#94a3b8">${oldHoraire}</span> → <strong>${newHoraire}</strong></li>` : "",
+      ].join("");
+      let sent = 0;
+      for (const [email, info] of byEmail) {
+        const quiEst = info.children.length > 1 ? `sont inscrit·e·s ${info.children.join(", ")}` : `est inscrit·e ${info.children[0]}`;
+        const html = `<div style="font-family:sans-serif;font-size:14px;color:#1e293b;line-height:1.5">
+          <p>Bonjour${info.parentName ? " " + info.parentName : ""},</p>
+          <p>La séance du <strong>${dateFR}</strong> à laquelle ${quiEst} a été modifiée :</p>
+          <ul>${changesHtml}</ul>
+          <p>Si ce changement ne vous convient pas, contactez-nous et nous ajusterons ou annulerons votre réservation.</p>
+          <p>À bientôt,<br/>Le Centre Équestre d'Agon-Coutainville</p>
+        </div>`;
+        try {
+          await authFetch("/api/send-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              to: email,
+              subject: `Modification de votre séance du ${dateCourt}`,
+              html,
+              context: "admin_creneau_modifie",
+              template: "creneauModifie",
+              creneauId: editCreneau.id,
+            }),
+          });
+          sent++;
+        } catch (e) { console.warn("Email inscrit:", e); }
+      }
+      toast(`✉️ ${sent} famille${sent > 1 ? "s" : ""} prévenue${sent > 1 ? "s" : ""}`, "success");
+    } catch (e) {
+      console.error("Notify inscrits:", e);
+      toast("Erreur lors de l'envoi", "error");
+    }
+    setNotifyingEnrolled(false);
+  };
+
   const handleEditSave = async () => {
     if (!editCreneau) return;
     setEditSaving(true);
@@ -1855,6 +1921,8 @@ export default function PlanningPage() {
           creneau={editCreneau}
           form={editForm}
           activities={activities}
+          onNotifyEnrolled={handleNotifyEnrolled}
+          notifyingEnrolled={notifyingEnrolled}
           saving={editSaving}
           applyAll={editApplyAll}
           applyStage={editApplyStage}
