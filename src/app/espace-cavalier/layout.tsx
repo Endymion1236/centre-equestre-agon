@@ -24,6 +24,7 @@ import {
   Loader2,
   ExternalLink,
   FlaskConical,
+  Award,
 } from "lucide-react";
 
 const navItems = [
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/espace-cavalier/factures", icon: Receipt, label: "Mes factures" },
   { href: "/espace-cavalier/profil", icon: Users, label: "Profil famille" },
   { href: "/espace-cavalier/progression", icon: TrendingUp, label: "Progression" },
+  { href: "/espace-cavalier/badges", icon: Award, label: "Mes badges" },
   { href: "/espace-cavalier/satisfaction", icon: Star, label: "Satisfaction" },
   { href: "/espace-cavalier/test-protocol", icon: FlaskConical, label: "Tests" },
 ];
@@ -591,6 +593,7 @@ function EspaceCavalierLayoutInner({
   // Menu "Plus" mobile — items accessibles via le drawer (état déclaré plus haut)
   const moreItems = [
     { href: "/espace-cavalier/progression", icon: TrendingUp, label: "Progression" },
+    { href: "/espace-cavalier/badges", icon: Award, label: "Mes badges" },
     { href: "/espace-cavalier/satisfaction", icon: Star, label: "Satisfaction" },
     { href: "/espace-cavalier/test-protocol", icon: FlaskConical, label: "Tests" },
   ];
