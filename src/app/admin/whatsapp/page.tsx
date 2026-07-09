@@ -8,6 +8,10 @@ import { MessageCircle, Loader2, Save } from "lucide-react";
 
 const dayLabels = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 
+// Début de la saison 2026-2027. On ne liste que les reprises à partir de cette
+// date (les créneaux d'été, stages et anciens créneaux sont ignorés).
+const SAISON_DEBUT = "2026-09-21";
+
 // Clé de reprise stable, identique à l'inscription annuelle (hors saison) :
 // activité + jour de la semaine + heure de début.
 function repriseKey(activityId: string, dow: number, startTime: string) {
@@ -39,6 +43,7 @@ export default function WhatsAppAdminPage() {
           const c = d.data() as any;
           if (c.activityType === "stage" || c.activityType === "stage_journee") return;
           if (!c.activityId || !c.date || !c.startTime) return;
+          if (c.date < SAISON_DEBUT) return; // saison 2026-2027 uniquement
           const dow = (new Date(c.date).getDay() + 6) % 7;
           const key = repriseKey(c.activityId, dow, c.startTime);
           if (!map[key]) {
@@ -114,7 +119,7 @@ export default function WhatsAppAdminPage() {
 
           <Card>
             <p className="font-body text-sm font-bold text-blue-800 mb-1">Par reprise <span className="font-normal text-slate-400">({filledCount}/{reprises.length} renseignées)</span></p>
-            <p className="font-body text-xs text-slate-500 mb-3">Colle le lien d&apos;invitation du groupe WhatsApp de chaque reprise. Laisse vide s&apos;il n&apos;y a pas de groupe. Astuce : dans WhatsApp, ouvre le groupe → Infos du groupe → « Inviter via un lien ».</p>
+            <p className="font-body text-xs text-slate-500 mb-3">Reprises de la saison 2026-2027 (à partir du 21 septembre). Colle le lien d&apos;invitation du groupe WhatsApp de chaque reprise. Laisse vide s&apos;il n&apos;y a pas de groupe. Astuce : dans WhatsApp, ouvre le groupe → Infos du groupe → « Inviter via un lien ».</p>
             {reprises.length === 0 ? (
               <p className="font-body text-xs text-slate-400">Aucune reprise trouvée dans le planning.</p>
             ) : (
