@@ -45,12 +45,14 @@ interface Props {
   onClose: () => void;
   onSave: () => void;
   onDuplicate?: () => void;
+  onNotifyEnrolled?: () => void;
+  notifyingEnrolled?: boolean;
 }
 
 const PRESET_COLORS = ["#2050A0","#27ae60","#e67e22","#7c3aed","#D63031","#16a085","#F0A010","#0ea5e9","#db2777","#64748b"];
 
 export default function EditCreneauModal({
-  creneau, form, activities, saving, applyAll, applyStage, onFormChange, onApplyAllChange, onApplyStageChange, onClose, onSave, onDuplicate
+  creneau, form, activities, saving, applyAll, applyStage, onFormChange, onApplyAllChange, onApplyStageChange, onClose, onSave, onDuplicate, onNotifyEnrolled, notifyingEnrolled
 }: Props) {
   const [moniteurs, setMoniteurs] = useState<string[]>([]);
   const [themes, setThemes] = useState<{ id: string; label: string }[]>([]);
@@ -76,6 +78,8 @@ export default function EditCreneauModal({
     });
   };
   const activityChanged = !!form.activityId && form.activityId !== (creneau as any).activityId;
+  const timeChanged = form.startTime !== creneau.startTime || form.endTime !== creneau.endTime;
+  const enrolledList = ((creneau as any).enrolled || []) as any[];
 
   useEffect(() => {
     getDocs(collection(db, "moniteurs")).then(snap => {
@@ -322,6 +326,23 @@ export default function EditCreneauModal({
                 <div className="font-body text-xs text-slate-500 mt-0.5">Même titre · même jour de la semaine · même heure de départ</div>
               </div>
             </label>
+          )}
+          {enrolledList.length > 0 && (activityChanged || titleChanged || timeChanged) && onNotifyEnrolled && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+              <div className="font-body text-xs font-semibold text-blue-800 mb-1">
+                {enrolledList.length} inscrit{enrolledList.length > 1 ? "s" : ""} sur ce créneau
+              </div>
+              <div className="font-body text-[11px] text-slate-600 mb-2 leading-snug">
+                {enrolledList.map((e: any) => e.childName).filter(Boolean).join(", ")}
+              </div>
+              <p className="font-body text-[11px] text-slate-600 mb-2 leading-snug">
+                Ces familles ont réservé l&apos;activité et l&apos;horaire d&apos;origine. Pense à les prévenir du changement (surtout si l&apos;heure change). L&apos;email récapitule l&apos;ancien et le nouveau créneau.
+              </p>
+              <button type="button" onClick={onNotifyEnrolled} disabled={notifyingEnrolled}
+                className="w-full py-2 rounded-lg font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-400 border-none cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5">
+                {notifyingEnrolled ? <Loader2 size={13} className="animate-spin"/> : "✉️"} Prévenir les inscrits par email
+              </button>
+            </div>
           )}
         </div>
         {/* Footer fixe avec les boutons */}
