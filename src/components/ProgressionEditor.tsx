@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { db } from "@/lib/firebase";
 import { authFetch } from "@/lib/auth-fetch";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { GALOPS_PROGRAMME, DOMAINE_LABELS, getNiveauById, type Domaine } from "@/lib/galops-programme";
+import { GALOPS_PROGRAMME, DOMAINE_LABELS, getNiveauById, galopLevelToNiveauId, type Domaine } from "@/lib/galops-programme";
 import { CheckCircle2, Circle, ChevronDown, ChevronRight, Save } from "lucide-react";
 import {
   type Acquis,
@@ -67,10 +67,10 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
           setAcquis(data.acquis || {});
           setSelectedNiveau(data.niveauEnCours || GALOPS_PROGRAMME[0].id);
         } else {
-          // Initialiser avec le niveau actuel du cavalier
-          const defaultNiveau = galopLevel && GALOPS_PROGRAMME.find(n => n.id === galopLevel)
-            ? galopLevel
-            : GALOPS_PROGRAMME[0].id;
+          // Initialiser avec le niveau actuel du cavalier.
+          // On convertit le libellé libre (ex. "Argent", "Poney Or") vers l'id
+          // technique du programme ; sinon on ouvre sur le premier niveau.
+          const defaultNiveau = galopLevelToNiveauId(galopLevel) || GALOPS_PROGRAMME[0].id;
           setSelectedNiveau(defaultNiveau);
         }
       } catch (e) { console.error(e); }

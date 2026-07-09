@@ -443,3 +443,46 @@ export const DOMAINE_LABELS: Record<Domaine, string> = {
 export function getNiveauById(id: string): NiveauGalop | undefined {
   return GALOPS_PROGRAMME.find(n => n.id === id);
 }
+
+/**
+ * Convertit un libellé de niveau "libre" (valeurs stockées dans child.galopLevel,
+ * ex. "Poney Argent", "Argent", "G3", "Galop 5"…) vers l'id technique d'un niveau
+ * du programme (ex. "poney_argent", "galop_argent", "G3").
+ *
+ * Corrige le bug où l'éditeur de bilan retombait systématiquement sur poney_bronze
+ * faute de correspondance exacte entre le libellé affiché et l'id technique.
+ *
+ * Convention : "Poney Bronze/Argent/Or" → niveau poney ; "Bronze/Argent/Or" seul
+ * → niveau Galop ; "G1/G2" (sans équivalent direct) → Galop de Bronze/Argent.
+ * Retourne undefined si aucune correspondance (ex. "—" / débutant).
+ */
+export function galopLevelToNiveauId(label?: string): string | undefined {
+  if (!label) return undefined;
+  const raw = label.trim();
+  if (!raw || raw === "—") return undefined;
+  // Déjà un id valide ? (ex. "poney_argent", "G3")
+  if (GALOPS_PROGRAMME.some(n => n.id === raw)) return raw;
+  const norm = raw
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // enlève les accents
+    .replace(/['’]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const map: Record<string, string> = {
+    "poney bronze": "poney_bronze", "poney de bronze": "poney_bronze",
+    "poney argent": "poney_argent", "poney d argent": "poney_argent",
+    "poney or": "poney_or", "poney d or": "poney_or",
+    "bronze": "galop_bronze", "galop bronze": "galop_bronze", "galop de bronze": "galop_bronze",
+    "argent": "galop_argent", "galop argent": "galop_argent", "galop d argent": "galop_argent",
+    "or": "galop_or", "galop or": "galop_or", "galop d or": "galop_or",
+    "g1": "galop_bronze", "galop 1": "galop_bronze",
+    "g2": "galop_argent", "galop 2": "galop_argent",
+    "g3": "G3", "galop 3": "G3",
+    "g4": "G4", "galop 4": "G4",
+    "g5": "G5", "galop 5": "G5",
+    "g6": "G6", "galop 6": "G6",
+    "g7": "G7", "galop 7": "G7",
+  };
+  const id = map[norm];
+  return id && GALOPS_PROGRAMME.some(n => n.id === id) ? id : undefined;
+}
