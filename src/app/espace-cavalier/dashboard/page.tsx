@@ -25,7 +25,6 @@ export default function DashboardPage() {
   const [showFidHistory, setShowFidHistory] = useState(false);
   const [waCommunity, setWaCommunity] = useState("");
   const [waReprises, setWaReprises] = useState<{ key: string; label: string; url: string }[]>([]);
-  const [waHasForfait, setWaHasForfait] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -93,18 +92,19 @@ export default function DashboardPage() {
     load();
   }, [user]);
 
-  // Liens WhatsApp : réservés aux familles ayant un FORFAIT ANNUEL.
-  // On affiche la communauté du centre + le(s) groupe(s) de la/les reprise(s)
-  // où un enfant est inscrit AU FORFAIT (marqueur enrolled.paymentSource === "forfait").
+  // Liens WhatsApp :
+  //  - la COMMUNAUTÉ du centre est proposée à toutes les familles ;
+  //  - les groupes de REPRISE ne s'affichent que pour un enfant inscrit AU FORFAIT
+  //    annuel sur cette reprise (marqueur enrolled.paymentSource === "forfait").
   useEffect(() => {
     if (!user?.uid || !family) return;
     (async () => {
       try {
         const wSnap = await getDoc(doc(db, "settings", "whatsapp"));
         const w = wSnap.exists() ? (wSnap.data() as any) : {};
-        const community = w.communityUrl || "";
+        setWaCommunity(w.communityUrl || "");
         const urls: Record<string, string> = w.reprises || {};
-        if (!community && Object.keys(urls).length === 0) { setWaHasForfait(false); return; }
+        if (Object.keys(urls).length === 0) { setWaReprises([]); return; }
         const childIds = new Set((family.children || []).map((c: any) => c.id));
         const today = todayLocalString();
         const end = new Date(); end.setDate(end.getDate() + 28);
@@ -112,21 +112,16 @@ export default function DashboardPage() {
         const snap = await getDocs(query(collection(db, "creneaux"), where("date", ">=", today), where("date", "<=", endStr)));
         const days = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
         const found: Record<string, { label: string; url: string }> = {};
-        let hasForfait = false;
         snap.docs.forEach((d) => {
           const c = d.data() as any;
           if (c.activityType === "stage" || c.activityType === "stage_journee" || !c.activityId) return;
-          // Uniquement les inscriptions couvertes par un forfait annuel
           const isForfaitMember = (c.enrolled || []).some((e: any) => childIds.has(e.childId) && e.paymentSource === "forfait");
           if (!isForfaitMember) return;
-          hasForfait = true;
           const dow = (new Date(c.date).getDay() + 6) % 7;
           const key = `${c.activityId}-${dow}-${c.startTime}`;
           const url = urls[key];
           if (url && !found[key]) found[key] = { label: `${c.activityTitle} · ${days[dow]} · ${c.startTime}`, url };
         });
-        setWaHasForfait(hasForfait);
-        setWaCommunity(community);
         setWaReprises(Object.entries(found).map(([key, v]) => ({ key, ...v })));
       } catch (e) { console.warn("WhatsApp:", e); }
     })();
@@ -447,7 +442,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {waHasForfait && (waCommunity || waReprises.length > 0) && (
+      {(waCommunity || waReprises.length > 0) && (
         <Card className="mb-5" padding="sm">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-lg">💬</span>
