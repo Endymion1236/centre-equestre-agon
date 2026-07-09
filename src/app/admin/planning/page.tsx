@@ -430,6 +430,7 @@ export default function PlanningPage() {
     try {
       const dateFR = new Date(editCreneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
       const dateCourt = new Date(editCreneau.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+      const estStage = editCreneau.activityType === "stage" || editCreneau.activityType === "stage_journee";
       // Regroupe par email de famille (un seul email même si plusieurs enfants inscrits)
       const byEmail = new Map<string, { parentName: string; children: string[] }>();
       for (const e of enrolled) {
@@ -447,9 +448,12 @@ export default function PlanningPage() {
       let sent = 0;
       for (const [email, info] of byEmail) {
         const quiEst = info.children.length > 1 ? `sont inscrit·e·s ${info.children.join(", ")}` : `est inscrit·e ${info.children[0]}`;
+        const intro = estStage
+          ? `Le stage <strong>${newTitle || oldTitle}</strong> (${dateFR}) auquel ${quiEst} a été modifié :`
+          : `La séance du <strong>${dateFR}</strong> à laquelle ${quiEst} a été modifiée :`;
         const html = `<div style="font-family:sans-serif;font-size:14px;color:#1e293b;line-height:1.5">
           <p>Bonjour${info.parentName ? " " + info.parentName : ""},</p>
-          <p>La séance du <strong>${dateFR}</strong> à laquelle ${quiEst} a été modifiée :</p>
+          <p>${intro}</p>
           <ul>${changesHtml}</ul>
           <p>Si ce changement ne vous convient pas, contactez-nous et nous ajusterons ou annulerons votre réservation.</p>
           <p>À bientôt,<br/>Le Centre Équestre d'Agon-Coutainville</p>
@@ -460,7 +464,7 @@ export default function PlanningPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               to: email,
-              subject: `Modification de votre séance du ${dateCourt}`,
+              subject: estStage ? `Modification de votre stage — ${dateCourt}` : `Modification de votre séance du ${dateCourt}`,
               html,
               context: "admin_creneau_modifie",
               template: "creneauModifie",
