@@ -5,6 +5,8 @@ import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Creneau } from "./types";
 import { moniteursUniques } from "./types";
+import type { Activity } from "@/types";
+import ActivityPicker from "./ActivityPicker";
 
 // Créneaux horaires disponibles de 7h à 23h par tranches de 15min
 const TIME_OPTIONS = Array.from({ length: (23 - 7) * 4 + 1 }, (_, i) => {
@@ -15,6 +17,9 @@ const TIME_OPTIONS = Array.from({ length: (23 - 7) * 4 + 1 }, (_, i) => {
 });
 
 export interface EditForm {
+  activityId?: string;
+  activityType?: string;
+  tvaTaux?: number;
   activityTitle: string;
   monitor: string;
   startTime: string;
@@ -30,6 +35,7 @@ export interface EditForm {
 interface Props {
   creneau: Creneau & { id: string };
   form: EditForm;
+  activities: Activity[];
   saving: boolean;
   applyAll: boolean;
   applyStage?: boolean;
@@ -44,12 +50,32 @@ interface Props {
 const PRESET_COLORS = ["#2050A0","#27ae60","#e67e22","#7c3aed","#D63031","#16a085","#F0A010","#0ea5e9","#db2777","#64748b"];
 
 export default function EditCreneauModal({
-  creneau, form, saving, applyAll, applyStage, onFormChange, onApplyAllChange, onApplyStageChange, onClose, onSave, onDuplicate
+  creneau, form, activities, saving, applyAll, applyStage, onFormChange, onApplyAllChange, onApplyStageChange, onClose, onSave, onDuplicate
 }: Props) {
   const [moniteurs, setMoniteurs] = useState<string[]>([]);
   const [themes, setThemes] = useState<{ id: string; label: string }[]>([]);
   const [moniteurPortee, setMoniteurPortee] = useState<"single" | "all">("single");
   const initialMoniteurs = (creneau.monitor || "").split(",").map(s => s.trim()).filter(Boolean);
+
+  // Changement d'activité : ré-applique les propriétés de l'activité choisie
+  // (titre, type, prix, TVA) pour que la réservation en ligne la retrouve sous
+  // le bon intitulé et la bonne catégorie. On NE touche PAS aux places (logistique
+  // du créneau) ni au moniteur.
+  const onPickActivity = (id: string) => {
+    if (!id) return;
+    const a = activities.find(x => x.id === id);
+    if (!a) return;
+    const ttc = (a as any).priceTTC ?? ((a.priceHT || 0) * (1 + (a.tvaTaux || 5.5) / 100));
+    onFormChange({
+      ...form,
+      activityId: a.id,
+      activityType: a.type,
+      activityTitle: a.title,
+      priceTTC: ttc,
+      tvaTaux: a.tvaTaux || 5.5,
+    });
+  };
+  const activityChanged = !!form.activityId && form.activityId !== (creneau as any).activityId;
 
   useEffect(() => {
     getDocs(collection(db, "moniteurs")).then(snap => {
@@ -79,6 +105,20 @@ export default function EditCreneauModal({
         </div>
         {/* Contenu scrollable */}
         <div className="p-5 flex flex-col gap-4 overflow-y-auto flex-1">
+          {!isStage && (
+            <div>
+              <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Activité</label>
+              <ActivityPicker activities={activities} value={form.activityId || ""} onChange={onPickActivity} />
+              <p className="font-body text-[10px] text-slate-400 mt-1">Changer l&apos;activité met à jour l&apos;intitulé, le type et le prix — utile pour la réservation en ligne (ex. passer une promenade en « coucher de soleil »).</p>
+              {activityChanged && enrolledCount > 0 && (
+                <div className="mt-2 bg-red-50 border border-red-200 rounded-lg p-2.5">
+                  <p className="font-body text-[11px] text-red-800 leading-snug">
+                    ⚠️ Ce créneau a déjà <strong>{enrolledCount} inscrit{enrolledCount > 1 ? "s" : ""}</strong>. Changer l&apos;activité modifie l&apos;intitulé, le type et le prix : les inscriptions et paiements déjà enregistrés peuvent se retrouver <strong>désynchronisés</strong>. À réserver de préférence aux créneaux <strong>sans réservation</strong>.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
           <div>
             <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Titre</label>
             <input value={form.activityTitle}
