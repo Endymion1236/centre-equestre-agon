@@ -33,6 +33,8 @@ interface Props {
   children: Child[];
   familyId: string;
   onBook: (creneau: Creneau) => void; // ouvre le modal de réservation existant
+  stagesAvailable?: number; // nb de stages dispo (affichés en vue Liste)
+  onSeeStages?: () => void;  // bascule vers la vue Liste
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -115,7 +117,7 @@ function isRelevantForFamily(creneau: Creneau, children: Child[]): "perfect" | "
   return "maybe";
 }
 
-export default function TimelineReservation({ creneaux, children, familyId, onBook }: Props) {
+export default function TimelineReservation({ creneaux, children, familyId, onBook, stagesAvailable = 0, onSeeStages }: Props) {
   const [selectedDate, setSelectedDate] = useState<Date>(() => { const d = new Date(); d.setHours(0,0,0,0); return d; });
   const [weekStart, setWeekStart] = useState<Date>(() => { const d = new Date(); d.setHours(0,0,0,0); return d; });
   const [filter, setFilter] = useState<"tous" | "pour_moi" | "cours" | "stage" | "balade">("pour_moi");
@@ -349,8 +351,20 @@ export default function TimelineReservation({ creneaux, children, familyId, onBo
       {dayCreneaux.length === 0 ? (
         <Card padding="lg" className="text-center">
           <div className="text-3xl mb-2">🐴</div>
-          <p className="font-body text-sm text-slate-500 mb-1">Pas de créneau ce jour-là.</p>
-          <p className="font-body text-xs text-slate-400">Naviguez sur un autre jour ou changez le filtre.</p>
+          <p className="font-body text-sm text-slate-500 mb-1">Pas de cours ce jour-là.</p>
+          {stagesAvailable > 0 ? (
+            <>
+              <p className="font-body text-xs text-slate-400 mb-3">Mais {stagesAvailable} stage{stagesAvailable > 1 ? "s sont proposés" : " est proposé"} sur la période — les stages s&apos;affichent en vue Liste.</p>
+              {onSeeStages && (
+                <button type="button" onClick={onSeeStages}
+                  className="font-body text-sm font-semibold text-white bg-green-600 hover:bg-green-500 border-none rounded-lg px-4 py-2 cursor-pointer">
+                  Voir les stages
+                </button>
+              )}
+            </>
+          ) : (
+            <p className="font-body text-xs text-slate-400">Naviguez sur un autre jour ou changez le filtre.</p>
+          )}
         </Card>
       ) : (
         <div className="flex flex-col gap-3">

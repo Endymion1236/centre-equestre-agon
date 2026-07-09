@@ -864,6 +864,8 @@ export default function ReserverPage() {
           children={(family?.children || []).map((c: any) => ({ id: c.id, firstName: c.firstName, galopLevel: c.galopLevel }))}
           familyId={familyId}
           onBook={(creneau) => { setBookingCreneau(creneau as any); }}
+          stagesAvailable={Object.keys(stageGroups).length}
+          onSeeStages={() => setViewMode("liste")}
         />
       </>)}
 
