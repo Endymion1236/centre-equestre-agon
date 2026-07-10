@@ -63,6 +63,23 @@ export default function AdminDenseModulePolish() {
         padding: 1rem 1rem .8rem;
       }
 
+      [data-admin-section="montoir"] .card > div[class*="border-b"] [class~="text-base"][class~="font-semibold"][class~="text-blue-800"] {
+        display: inline-flex;
+        max-width: 100%;
+        align-items: center;
+        padding: .48rem .72rem;
+        border: 1px solid rgba(32,80,160,.13);
+        border-radius: .85rem;
+        background: linear-gradient(135deg, rgba(235,243,255,.96), rgba(255,255,255,.98));
+        color: #0b2f66 !important;
+        font-size: clamp(1.05rem, 2vw, 1.2rem) !important;
+        font-weight: 800 !important;
+        line-height: 1.2;
+        letter-spacing: -.025em;
+        text-wrap: balance;
+        box-shadow: 0 5px 16px rgba(32,80,160,.08);
+      }
+
       [data-admin-section="montoir"] .card .rounded-lg[class*="bg-sand"] {
         background: rgba(248,250,252,.86) !important;
       }
@@ -209,6 +226,12 @@ export default function AdminDenseModulePolish() {
         [data-admin-section="montoir"] .card > div[class*="border-b"] {
           margin: -.85rem -.85rem .75rem;
           padding: .85rem;
+        }
+
+        [data-admin-section="montoir"] .card > div[class*="border-b"] [class~="text-base"][class~="font-semibold"][class~="text-blue-800"] {
+          width: 100%;
+          padding: .55rem .7rem;
+          font-size: 1.1rem !important;
         }
 
         [data-admin-section="cavaliers"] .card .flex.justify-end.mb-2 {
