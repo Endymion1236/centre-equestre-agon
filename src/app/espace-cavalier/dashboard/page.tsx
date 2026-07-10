@@ -191,6 +191,29 @@ export default function DashboardPage() {
         </Card>
       )}
 
+      {(waCommunity || waReprises.length > 0) && (
+        <Card className="mb-5 border border-green-200 bg-green-50/40" padding="sm">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">💬</span>
+            <p className="font-body text-sm font-bold text-blue-800">Groupes WhatsApp</p>
+          </div>
+          <div className="flex flex-col gap-2">
+            {waCommunity && (
+              <a href={waCommunity} target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full py-3 rounded-lg font-body text-sm font-bold text-white bg-green-600 hover:bg-green-500 no-underline shadow-sm">
+                💬 Rejoindre la communauté du centre
+              </a>
+            )}
+            {waReprises.map((r) => (
+              <a key={r.key} href={r.url} target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg font-body text-sm font-semibold text-green-800 bg-green-50 border border-green-200 hover:bg-green-100 no-underline">
+                Groupe de ma reprise · {r.label}
+              </a>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {/* Quick stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
         <Card padding="sm">
@@ -441,29 +464,6 @@ export default function DashboardPage() {
           </Link>
         ))}
       </div>
-
-      {(waCommunity || waReprises.length > 0) && (
-        <Card className="mb-5" padding="sm">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-lg">💬</span>
-            <p className="font-body text-sm font-bold text-blue-800">Groupes WhatsApp</p>
-          </div>
-          <div className="flex flex-col gap-2">
-            {waCommunity && (
-              <a href={waCommunity} target="_blank" rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg font-body text-sm font-semibold text-white bg-green-600 hover:bg-green-500 no-underline">
-                Rejoindre la communauté du centre
-              </a>
-            )}
-            {waReprises.map((r) => (
-              <a key={r.key} href={r.url} target="_blank" rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg font-body text-sm font-semibold text-green-800 bg-green-50 border border-green-200 hover:bg-green-100 no-underline">
-                Groupe de ma reprise · {r.label}
-              </a>
-            ))}
-          </div>
-        </Card>
-      )}
 
       {/* Family members */}
       {family && family.children.length > 0 && (
