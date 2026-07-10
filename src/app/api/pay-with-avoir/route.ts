@@ -56,6 +56,15 @@ export async function POST(req: NextRequest) {
     const familyName = family.parentName || "—";
     const familyEmail = family.parentEmail || auth.email || "";
 
+    // Sécurité (audit P0 #2/#3) : l'enfant doit appartenir à la famille connectée
+    // (sauf réservation liée explicite via sourceFamilyId).
+    const childIds = new Set((family.children || []).map((c: any) => c.id));
+    for (const item of cart) {
+      if (item?.childId && !childIds.has(item.childId) && !(item as any).sourceFamilyId) {
+        return NextResponse.json({ error: "Enfant non autorisé" }, { status: 403 });
+      }
+    }
+
     // ── Calculer le total du panier (on ne fait PAS confiance au client) ───
     // Pour être safe, on revalide chaque prix contre le document créneau si possible.
     // Par simplicité ici, on utilise prixFinal envoyé mais on le traitera comme
@@ -171,6 +180,11 @@ export async function POST(req: NextRequest) {
           const crData = crSnap.data() as any;
           const enrolled = crData.enrolled || [];
           if (enrolled.some((e: any) => e.childId === item.childId)) continue;
+          // Sécurité (audit P0 #7) : ne pas dépasser la capacité du créneau.
+          const maxP = typeof crData.maxPlaces === "number" ? crData.maxPlaces : Number.POSITIVE_INFINITY;
+          if (enrolled.length >= maxP) {
+            throw new Error(`COMPLET:${item.activityTitle || cid}`);
+          }
 
           const newEntry: any = {
             childId: item.childId,
@@ -244,8 +258,15 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("pay-with-avoir error:", error);
+    const msg: string = error?.message || "Erreur interne";
+    if (msg.startsWith("COMPLET:")) {
+      return NextResponse.json(
+        { error: `Créneau complet : ${msg.slice("COMPLET:".length)}. Aucun avoir n'a été utilisé.` },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
-      { error: error.message || "Erreur interne" },
+      { error: msg },
       { status: 500 }
     );
   }
