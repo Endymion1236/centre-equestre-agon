@@ -50,6 +50,14 @@ export async function POST(req: NextRequest) {
     const family = famSnap.data() as any;
     const childrenMap = new Map<string, string>();
     (family.children || []).forEach((c: any) => childrenMap.set(c.id, c.firstName || c.prenom || ""));
+    // Enfants LIÉS : autorisés explicitement par l'admin (fiche famille → « Lier
+    // des cavaliers »). Chaque entrée porte le childId + sa sourceFamilyId. C'est
+    // la relation enregistrée qui autorise à réserver pour un enfant d'une autre
+    // famille — connaître un sourceFamilyId ne suffit plus (audit).
+    const linkedMap = new Map<string, { sourceFamilyId: string; childName: string }>();
+    (family.linkedChildren || []).forEach((c: any) => {
+      if (c?.childId) linkedMap.set(c.childId, { sourceFamilyId: c.sourceFamilyId || "", childName: c.childName || "" });
+    });
     const familyName = family.parentName || "";
 
     const enrolled: string[] = [];
@@ -63,19 +71,18 @@ export async function POST(req: NextRequest) {
 
       // ── Autorisation de l'enfant (nom pris à la source, jamais du client) ──
       // - soit l'enfant appartient à la famille connectée ;
-      // - soit une réservation liée : l'enfant doit RÉELLEMENT appartenir à la
-      //   famille source (on la charge et on vérifie). La simple présence de
-      //   sourceFamilyId ne suffit plus (faille corrigée).
+      // - soit c'est un enfant LIÉ, explicitement autorisé par l'admin, ET la
+      //   sourceFamilyId annoncée correspond à celle enregistrée dans le lien.
       let childName: string;
       if (childrenMap.has(item.childId)) {
         childName = childrenMap.get(item.childId) || "";
-      } else if (item.sourceFamilyId) {
-        const srcSnap = await adminDb.collection("families").doc(item.sourceFamilyId).get();
-        const srcChild = srcSnap.exists
-          ? ((srcSnap.data() as any).children || []).find((c: any) => c.id === item.childId)
-          : null;
-        if (!srcChild) { notOwned.push(item.childId); continue; }
-        childName = srcChild.firstName || srcChild.prenom || "";
+      } else if (linkedMap.has(item.childId)) {
+        const link = linkedMap.get(item.childId)!;
+        // La sourceFamilyId annoncée doit correspondre au lien enregistré.
+        if (item.sourceFamilyId && item.sourceFamilyId !== link.sourceFamilyId) {
+          notOwned.push(item.childId); continue;
+        }
+        childName = link.childName;
       } else {
         notOwned.push(item.childId);
         continue;
