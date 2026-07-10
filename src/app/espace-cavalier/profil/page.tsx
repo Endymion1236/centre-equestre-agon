@@ -1,156 +1,243 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useAuth } from "@/lib/auth-context";
-import { doc, updateDoc, arrayUnion, serverTimestamp, collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { Card, Badge, Button } from "@/components/ui";
-import { Plus, ChevronDown, ChevronUp, Edit3, Save, Loader2, Users, Building2, AlertTriangle, AlertCircle } from "lucide-react";
-import type { Child, SanitaryForm } from "@/types";
-import { toLocalDateString, todayLocalString } from "@/lib/date-local";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import {
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  CreditCard,
+  Edit3,
+  Landmark,
+  Loader2,
+  Plus,
+  Save,
+  ShieldCheck,
+  UserRound,
+  Users,
+  X,
+} from "lucide-react";
+import {
+  arrayUnion,
+  collection,
+  doc,
+  getDocs,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+} from "firebase/firestore";
+import { Badge, Card } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
+import { useAuth } from "@/lib/auth-context";
+import { db } from "@/lib/firebase";
+import { toLocalDateString, todayLocalString } from "@/lib/date-local";
+import type { Child } from "@/types";
 
-function AddChildForm({ onAdd }: { onAdd: () => void }) {
+type ProfileTab = "famille" | "cavaliers" | "paiement";
+
+type FamilyForm = {
+  firstName: string;
+  lastName: string;
+  parentPhone: string;
+  address: string;
+  zipCode: string;
+  city: string;
+};
+
+type ChildForm = {
+  firstName: string;
+  lastName: string;
+  birthDate: string;
+};
+
+type SanitaryFormState = {
+  allergies: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  parentalAuthorization: boolean;
+};
+
+const EMPTY_FAMILY_FORM: FamilyForm = {
+  firstName: "",
+  lastName: "",
+  parentPhone: "",
+  address: "",
+  zipCode: "",
+  city: "",
+};
+
+const EMPTY_CHILD_FORM: ChildForm = {
+  firstName: "",
+  lastName: "",
+  birthDate: "",
+};
+
+const EMPTY_SANITARY_FORM: SanitaryFormState = {
+  allergies: "",
+  emergencyContactName: "",
+  emergencyContactPhone: "",
+  parentalAuthorization: false,
+};
+
+function dateInputValue(value: any) {
+  if (!value) return "";
+  try {
+    const date = value?.toDate
+      ? value.toDate()
+      : value?.seconds
+        ? new Date(value.seconds * 1000)
+        : new Date(value);
+    return Number.isNaN(date.getTime()) ? "" : toLocalDateString(date);
+  } catch {
+    return "";
+  }
+}
+
+function formatBirthDate(value: any) {
+  const inputValue = dateInputValue(value);
+  if (!inputValue) return "Non renseignée";
+  return new Date(`${inputValue}T00:00:00`).toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function AddChildForm({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
   const { user } = useAuth();
-  const [firstName, setFirstName] = useState("");
-  const [birthDate, setBirthDate] = useState("");
-  const [allergies, setAllergies] = useState("");
-  const [emergencyName, setEmergencyName] = useState("");
-  const [emergencyPhone, setEmergencyPhone] = useState("");
-  const [authorization, setAuthorization] = useState(false);
+  const { toast } = useToast();
+  const [form, setForm] = useState<ChildForm>(EMPTY_CHILD_FORM);
+  const [sanitary, setSanitary] = useState<SanitaryFormState>(EMPTY_SANITARY_FORM);
   const [saving, setSaving] = useState(false);
 
-  const handleSubmit = async () => {
-    if (!firstName || !birthDate || !user) return;
+  const save = async () => {
+    if (!user || !form.firstName.trim() || !form.birthDate) return;
     setSaving(true);
-
-    const newChild: Child = {
-      id: Date.now().toString(),
-      firstName,
-      birthDate: new Date(birthDate),
-      galopLevel: "—",
-      sanitaryForm: authorization
-        ? {
-            allergies,
-            emergencyContactName: emergencyName,
-            emergencyContactPhone: emergencyPhone,
-            parentalAuthorization: true,
-            updatedAt: new Date(),
-          }
-        : null,
-    };
-
     try {
-      const familyRef = doc(db, "families", user.uid);
-      await updateDoc(familyRef, {
+      const newChild: any = {
+        id: Date.now().toString(),
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        birthDate: new Date(`${form.birthDate}T00:00:00`),
+        galopLevel: "—",
+        sanitaryForm: sanitary.parentalAuthorization
+          ? { ...sanitary, updatedAt: new Date().toISOString() }
+          : null,
+      };
+
+      await updateDoc(doc(db, "families", user.uid), {
         children: arrayUnion(newChild),
         updatedAt: serverTimestamp(),
       });
-      onAdd();
-      // Reset form
-      setFirstName("");
-      setBirthDate("");
-      setAllergies("");
-      setEmergencyName("");
-      setEmergencyPhone("");
-      setAuthorization(false);
+      toast("Cavalier ajouté.", "success");
+      onDone();
     } catch (error) {
       console.error("Erreur ajout enfant:", error);
+      toast("Impossible d’ajouter le cavalier.", "error");
     }
     setSaving(false);
   };
 
   return (
-    <Card className="mt-4" padding="md">
-      <h3 className="font-body text-sm font-semibold text-blue-800 mb-4">
-        Ajouter un cavalier
-      </h3>
-      <div className="flex flex-col gap-4">
-        <div className="flex gap-3">
-          <div className="flex-1">
-            <label className="font-body text-xs font-semibold text-blue-800 block mb-1">
-              Prénom *
-            </label>
+    <Card padding="md" className="mb-5 !border-blue-200 !bg-blue-50/40">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div>
+          <h3 className="font-display text-lg font-bold text-blue-800">Ajouter un cavalier</h3>
+          <p className="font-body text-xs text-gray-600 mt-0.5">Les informations essentielles d’abord, la fiche sanitaire juste dessous.</p>
+        </div>
+        <button type="button" onClick={onCancel} className="w-9 h-9 rounded-xl bg-white border border-gray-200 flex items-center justify-center cursor-pointer">
+          <X size={17} className="text-gray-500" />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Prénom *</label>
+          <input
+            value={form.firstName}
+            onChange={(event) => setForm({ ...form, firstName: event.target.value })}
+            className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400"
+          />
+        </div>
+        <div>
+          <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Nom</label>
+          <input
+            value={form.lastName}
+            onChange={(event) => setForm({ ...form, lastName: event.target.value })}
+            className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400"
+          />
+        </div>
+        <div>
+          <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Date de naissance *</label>
+          <input
+            type="date"
+            max={todayLocalString()}
+            value={form.birthDate}
+            onChange={(event) => setForm({ ...form, birthDate: event.target.value })}
+            className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400"
+          />
+        </div>
+      </div>
+
+      <div className="mt-5 pt-5 border-t border-blue-100">
+        <div className="flex items-center gap-2 mb-3">
+          <ShieldCheck size={17} className="text-blue-500" />
+          <span className="font-body text-sm font-bold text-blue-800">Fiche sanitaire</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Allergies</label>
             <input
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
-              placeholder="Prénom de l'enfant"
+              value={sanitary.allergies}
+              onChange={(event) => setSanitary({ ...sanitary, allergies: event.target.value })}
+              placeholder="Aucune ou précisez"
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400"
             />
           </div>
-          <div className="flex-1">
-            <label className="font-body text-xs font-semibold text-blue-800 block mb-1">
-              Date de naissance *
-            </label>
+          <div>
+            <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Contact d’urgence</label>
             <input
-              type="date"
-              value={birthDate}
-              max={todayLocalString()}
-              onChange={(e) => setBirthDate(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
+              value={sanitary.emergencyContactName}
+              onChange={(event) => setSanitary({ ...sanitary, emergencyContactName: event.target.value })}
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400"
+            />
+          </div>
+          <div>
+            <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Téléphone d’urgence</label>
+            <input
+              value={sanitary.emergencyContactPhone}
+              onChange={(event) => setSanitary({ ...sanitary, emergencyContactPhone: event.target.value })}
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400"
             />
           </div>
         </div>
+        <label className="mt-4 flex items-start gap-2 font-body text-xs text-gray-600 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={sanitary.parentalAuthorization}
+            onChange={(event) => setSanitary({ ...sanitary, parentalAuthorization: event.target.checked })}
+            className="accent-blue-500 w-4 h-4 mt-0.5"
+          />
+          J’autorise ce cavalier à participer aux activités équestres du centre.
+        </label>
+      </div>
 
-        <div className="border-t border-blue-500/8 pt-4">
-          <div className="font-body text-xs font-semibold text-blue-800 mb-3">
-            📋 Fiche sanitaire
-          </div>
-          <div className="flex flex-col gap-3">
-            <div>
-              <label className="font-body text-xs font-semibold text-gray-600 block mb-1">
-                Allergies connues
-              </label>
-              <input
-                value={allergies}
-                onChange={(e) => setAllergies(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
-                placeholder="Ex: arachides, pollen..."
-              />
-            </div>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className="font-body text-xs font-semibold text-gray-600 block mb-1">
-                  Contact urgence — Nom
-                </label>
-                <input
-                  value={emergencyName}
-                  onChange={(e) => setEmergencyName(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
-                  placeholder="Nom"
-                />
-              </div>
-              <div className="flex-1">
-                <label className="font-body text-xs font-semibold text-gray-600 block mb-1">
-                  Téléphone urgence
-                </label>
-                <input
-                  value={emergencyPhone}
-                  onChange={(e) => setEmergencyPhone(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
-                  placeholder="06..."
-                />
-              </div>
-            </div>
-            <label className="flex items-center gap-2 font-body text-xs text-gray-600 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={authorization}
-                onChange={(e) => setAuthorization(e.target.checked)}
-                className="accent-blue-500 w-4 h-4"
-              />
-              J&apos;autorise mon enfant à participer aux activités équestres du centre
-            </label>
-          </div>
-        </div>
-
-        <Button
-          variant="secondary"
-          onClick={handleSubmit}
-          disabled={!firstName || !birthDate || saving}
+      <div className="flex gap-2 mt-5">
+        <button
+          type="button"
+          onClick={save}
+          disabled={saving || !form.firstName.trim() || !form.birthDate}
+          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-body text-sm font-bold text-white bg-blue-500 border-none cursor-pointer disabled:opacity-50"
         >
-          {saving ? "Enregistrement..." : "Ajouter ce cavalier"}
-        </Button>
+          {saving ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
+          Ajouter ce cavalier
+        </button>
+        <button type="button" onClick={onCancel} className="px-4 py-2.5 rounded-xl font-body text-sm text-gray-600 bg-white border border-gray-200 cursor-pointer">
+          Annuler
+        </button>
       </div>
     </Card>
   );
@@ -159,566 +246,550 @@ function AddChildForm({ onAdd }: { onAdd: () => void }) {
 export default function ProfilPage() {
   const { user, family } = useAuth();
   const { toast } = useToast();
-  const [showAddChild, setShowAddChild] = useState(false);
-  const [expandedChild, setExpandedChild] = useState<string | null>(null);
+  const [tab, setTab] = useState<ProfileTab>("famille");
   const [editingProfile, setEditingProfile] = useState(false);
-  const [editForm, setEditForm] = useState({
-    firstName: "",
-    lastName: "",
-    parentPhone: "",
-    address: "",
-    zipCode: "",
-    city: "",
-  });
+  const [familyForm, setFamilyForm] = useState<FamilyForm>(EMPTY_FAMILY_FORM);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [showAddChild, setShowAddChild] = useState(false);
   const [editingChild, setEditingChild] = useState<string | null>(null);
-  const [editingChildForm, setEditingChildForm] = useState({ firstName: "", lastName: "", birthDate: "" });
+  const [childForm, setChildForm] = useState<ChildForm>(EMPTY_CHILD_FORM);
   const [editingSanitary, setEditingSanitary] = useState<string | null>(null);
-  const [sanitaryForm, setSanitaryForm] = useState({ allergies: "", emergencyContactName: "", emergencyContactPhone: "", parentalAuthorization: false });
+  const [sanitaryForm, setSanitaryForm] = useState<SanitaryFormState>(EMPTY_SANITARY_FORM);
+  const [expandedChild, setExpandedChild] = useState<string | null>(null);
   const [savingChild, setSavingChild] = useState(false);
-  const [mandat, setMandat] = useState<any>(null);
-  const [revokingMandat, setRevokingMandat] = useState(false);
+  const [mandate, setMandate] = useState<any>(null);
+  const [revokingMandate, setRevokingMandate] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     getDocs(query(collection(db, "mandats-sepa"), where("familyId", "==", user.uid)))
-      .then(snap => {
-        const active = snap.docs.find(d => d.data().status === "active");
-        if (active) setMandat({ id: active.id, ...active.data() });
+      .then((snapshot) => {
+        const active = snapshot.docs.find((item) => item.data().status === "active");
+        setMandate(active ? { id: active.id, ...active.data() } : null);
       })
-      .catch(() => {});
+      .catch(() => setMandate(null));
   }, [user]);
 
-  const handleRevokeMandat = async () => {
-    if (!mandat || !confirm("Êtes-vous sûr de vouloir révoquer votre mandat de prélèvement SEPA ? Les prélèvements en cours seront annulés.")) return;
-    setRevokingMandat(true);
-    try {
-      await updateDoc(doc(db, "mandats-sepa", mandat.id), { status: "revoked", revokedAt: serverTimestamp() });
-      setMandat(null);
-    } catch (e) { console.error(e); }
-    setRevokingMandat(false);
-  };
+  const missingBillingFields = useMemo(() => {
+    const current: any = family || {};
+    const missing: string[] = [];
+    if (!((current.firstName && current.lastName) || current.parentName)) missing.push("nom et prénom");
+    if (!current.address) missing.push("adresse");
+    if (!current.zipCode) missing.push("code postal");
+    if (!current.city) missing.push("ville");
+    return missing;
+  }, [family]);
 
-  const startEdit = () => {
-    // Préremplir : priorité aux nouveaux champs firstName/lastName, fallback
-    // sur parentName pour les anciens comptes qui n'ont que ce champ (format
-    // libre ex: "Richard Nicolas"). On le met entièrement dans firstName pour
-    // que le cavalier puisse le redispatcher manuellement.
-    const existingFirst = (family as any)?.firstName || "";
-    const existingLast = (family as any)?.lastName || "";
-    const fallbackToFirstName = !existingFirst && !existingLast && family?.parentName
-      ? family.parentName
-      : "";
+  const children = (family?.children || []) as Child[];
+  const incompleteChildren = children.filter((child) => {
+    const childAny: any = child;
+    return !child.firstName?.trim() || !childAny.lastName?.trim() || !childAny.birthDate || !child.sanitaryForm;
+  }).length;
 
-    setEditForm({
-      firstName: existingFirst || fallbackToFirstName,
-      lastName: existingLast,
-      parentPhone: family?.parentPhone || "",
-      address: (family as any)?.address || "",
-      zipCode: (family as any)?.zipCode || "",
-      city: (family as any)?.city || "",
+  const startProfileEdit = () => {
+    const current: any = family || {};
+    const fallbackName = !current.firstName && !current.lastName ? current.parentName || "" : "";
+    setFamilyForm({
+      firstName: current.firstName || fallbackName,
+      lastName: current.lastName || "",
+      parentPhone: current.parentPhone || "",
+      address: current.address || "",
+      zipCode: current.zipCode || "",
+      city: current.city || "",
     });
     setEditingProfile(true);
   };
 
-  const handleSaveProfile = async () => {
+  const saveProfile = async () => {
     if (!user) return;
     setSavingProfile(true);
     try {
-      // Normalisation (comme en admin) : nom en UPPERCASE, prénom en Title-ish
-      // (on garde la casse saisie). parentName est recalculé automatiquement
-      // pour maintenir la compatibilité avec le reste du code qui le lit.
-      const lastName = editForm.lastName.trim().toUpperCase();
-      const firstName = editForm.firstName.trim();
-      const computedName = lastName && firstName
+      const firstName = familyForm.firstName.trim();
+      const lastName = familyForm.lastName.trim().toUpperCase();
+      const parentName = lastName && firstName
         ? `${lastName} ${firstName}`
         : lastName || firstName || family?.parentName || "";
 
       await updateDoc(doc(db, "families", user.uid), {
         firstName: firstName || null,
         lastName: lastName || null,
-        parentName: computedName,
-        parentPhone: editForm.parentPhone.trim(),
-        address: editForm.address.trim(),
-        zipCode: editForm.zipCode.trim(),
-        city: editForm.city.trim(),
+        parentName,
+        parentPhone: familyForm.parentPhone.trim(),
+        address: familyForm.address.trim(),
+        zipCode: familyForm.zipCode.trim(),
+        city: familyForm.city.trim(),
         updatedAt: serverTimestamp(),
       });
+      toast("Informations enregistrées.", "success");
       setEditingProfile(false);
       window.location.reload();
-    } catch (e) { console.error(e); toast("Erreur de sauvegarde.", "error"); }
+    } catch (error) {
+      console.error(error);
+      toast("Erreur de sauvegarde.", "error");
+    }
     setSavingProfile(false);
   };
 
-  // Détection des champs manquants pour la facturation
-  const missingBillingFields = (() => {
-    const fam: any = family || {};
-    const missing: string[] = [];
-    // Nom + prénom requis (soit les deux séparés, soit parentName en fallback)
-    const hasName = (fam.firstName && fam.lastName) || fam.parentName;
-    if (!hasName) missing.push("Nom et prénom");
-    if (!fam.address) missing.push("Adresse");
-    if (!fam.zipCode) missing.push("Code postal");
-    if (!fam.city) missing.push("Ville");
-    return missing;
-  })();
-
-  const handleChildAdded = () => {
-    setShowAddChild(false);
-    window.location.reload();
-  };
-
-  const startEditChild = (child: Child) => {
-    setEditingChild(child.id);
-    setEditingChildForm({
-      firstName: child.firstName,
-      lastName: (child as any).lastName || "",
-      birthDate: child.birthDate ? toLocalDateString(new Date(child.birthDate)) : "",
+  const startChildEdit = (child: Child) => {
+    const childAny: any = child;
+    setChildForm({
+      firstName: child.firstName || "",
+      lastName: childAny.lastName || "",
+      birthDate: dateInputValue(childAny.birthDate),
     });
+    setEditingChild(child.id);
+    setEditingSanitary(null);
   };
 
   const saveChild = async (childId: string) => {
     if (!user || !family) return;
     setSavingChild(true);
     try {
-      const updatedChildren = family.children.map((c: Child) =>
-        c.id === childId ? { ...c, firstName: editingChildForm.firstName.trim(), lastName: editingChildForm.lastName.trim(), birthDate: editingChildForm.birthDate ? new Date(editingChildForm.birthDate) : c.birthDate } : c
+      const updatedChildren = children.map((child) =>
+        child.id === childId
+          ? {
+              ...child,
+              firstName: childForm.firstName.trim(),
+              lastName: childForm.lastName.trim(),
+              birthDate: childForm.birthDate ? new Date(`${childForm.birthDate}T00:00:00`) : (child as any).birthDate,
+            }
+          : child,
       );
-      await updateDoc(doc(db, "families", user.uid), { children: updatedChildren, updatedAt: serverTimestamp() });
+      await updateDoc(doc(db, "families", user.uid), {
+        children: updatedChildren,
+        updatedAt: serverTimestamp(),
+      });
+      toast("Cavalier mis à jour.", "success");
       setEditingChild(null);
       window.location.reload();
-    } catch (e) { console.error(e); }
+    } catch (error) {
+      console.error(error);
+      toast("Impossible d’enregistrer les informations.", "error");
+    }
     setSavingChild(false);
   };
 
-  const startEditSanitary = (child: Child) => {
-    setEditingSanitary(child.id);
+  const startSanitaryEdit = (child: Child) => {
     setSanitaryForm({
       allergies: child.sanitaryForm?.allergies || "",
       emergencyContactName: child.sanitaryForm?.emergencyContactName || "",
       emergencyContactPhone: child.sanitaryForm?.emergencyContactPhone || "",
-      parentalAuthorization: child.sanitaryForm?.parentalAuthorization || false,
+      parentalAuthorization: Boolean(child.sanitaryForm?.parentalAuthorization),
     });
+    setEditingSanitary(child.id);
+    setEditingChild(null);
   };
 
   const saveSanitary = async (childId: string) => {
     if (!user || !family) return;
     setSavingChild(true);
     try {
-      const updatedChildren = family.children.map((c: Child) =>
-        c.id === childId ? { ...c, sanitaryForm: { ...sanitaryForm, updatedAt: new Date().toISOString() } } : c
+      const updatedChildren = children.map((child) =>
+        child.id === childId
+          ? { ...child, sanitaryForm: { ...sanitaryForm, updatedAt: new Date().toISOString() } }
+          : child,
       );
-      await updateDoc(doc(db, "families", user.uid), { children: updatedChildren, updatedAt: serverTimestamp() });
+      await updateDoc(doc(db, "families", user.uid), {
+        children: updatedChildren,
+        updatedAt: serverTimestamp(),
+      });
+      toast("Fiche sanitaire enregistrée.", "success");
       setEditingSanitary(null);
       window.location.reload();
-    } catch (e) { console.error(e); }
+    } catch (error) {
+      console.error(error);
+      toast("Impossible d’enregistrer la fiche sanitaire.", "error");
+    }
     setSavingChild(false);
   };
 
+  const revokeMandate = async () => {
+    if (!mandate || !confirm("Révoquer ce mandat de prélèvement SEPA ? Les prélèvements déjà transmis à la banque peuvent encore être exécutés.")) return;
+    setRevokingMandate(true);
+    try {
+      await updateDoc(doc(db, "mandats-sepa", mandate.id), {
+        status: "revoked",
+        revokedAt: serverTimestamp(),
+      });
+      setMandate(null);
+      toast("Mandat révoqué.", "success");
+    } catch (error) {
+      console.error(error);
+      toast("Impossible de révoquer le mandat.", "error");
+    }
+    setRevokingMandate(false);
+  };
+
+  const tabs: { id: ProfileTab; label: string; icon: any; note?: string }[] = [
+    { id: "famille", label: "Ma famille", icon: Users },
+    { id: "cavaliers", label: "Mes cavaliers", icon: UserRound, note: incompleteChildren > 0 ? String(incompleteChildren) : undefined },
+    { id: "paiement", label: "Paiement", icon: CreditCard },
+  ];
+
+  const familyAny: any = family || {};
+  const address = [familyAny.address, [familyAny.zipCode, familyAny.city].filter(Boolean).join(" ")].filter(Boolean).join("\n");
+
   return (
-    <div>
-      <h1 className="font-display text-2xl font-bold text-blue-800 mb-6">
-        Profil famille
-      </h1>
-
-      {/* Bandeau alerte si champs de facturation manquants */}
-      {missingBillingFields.length > 0 && !editingProfile && (
-        <Card className="!bg-orange-50 !border-orange-300 mb-5" padding="sm">
-          <div className="flex items-start gap-3">
-            <AlertCircle size={20} className="text-orange-500 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="font-body text-sm font-bold text-orange-800">
-                Informations incomplètes pour la facturation
-              </p>
-              <p className="font-body text-xs text-orange-600 mt-0.5">
-                Il manque {missingBillingFields.length === 1 ? "un champ obligatoire" : "des champs obligatoires"} pour émettre vos factures :{" "}
-                <span className="font-semibold">{missingBillingFields.join(", ")}</span>.
-                Merci de compléter votre profil.
-              </p>
-              <button onClick={startEdit}
-                className="mt-2 font-body text-xs font-semibold text-white bg-orange-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-orange-400">
-                Compléter mes informations →
-              </button>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {/* Parent info */}
-      <Card padding="md" className="mb-5">
-        <div className="flex justify-between items-start mb-4">
-          <span className="font-body text-sm font-semibold text-blue-800 flex items-center gap-2">
-            <Users size={16} className="text-blue-500" /> Parent titulaire
-          </span>
-          {!editingProfile && (
-            <button onClick={startEdit}
-              className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
-              <Edit3 size={12} /> Modifier
-            </button>
-          )}
-        </div>
-
-        {editingProfile ? (
-          <div className="flex flex-col gap-3">
-            {/* Prénom + Nom */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">
-                  Prénom <span className="text-orange-500">*</span>
-                </label>
-                <input value={editForm.firstName} onChange={e => setEditForm({ ...editForm, firstName: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400"
-                  placeholder="Nicolas" />
-              </div>
-              <div>
-                <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">
-                  Nom <span className="text-orange-500">*</span>
-                </label>
-                <input value={editForm.lastName} onChange={e => setEditForm({ ...editForm, lastName: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400 uppercase"
-                  placeholder="RICHARD" />
-              </div>
-            </div>
-
-            {/* Téléphone */}
-            <div>
-              <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">Téléphone</label>
-              <input type="tel" value={editForm.parentPhone} onChange={e => setEditForm({ ...editForm, parentPhone: e.target.value })}
-                className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400"
-                placeholder="06 00 00 00 00" />
-            </div>
-
-            {/* Adresse */}
-            <div>
-              <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">
-                Adresse <span className="text-orange-500">*</span>
-              </label>
-              <input value={editForm.address} onChange={e => setEditForm({ ...editForm, address: e.target.value })}
-                className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400"
-                placeholder="12 rue de la Mer" />
-            </div>
-
-            {/* Code postal + Ville */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">
-                  Code postal <span className="text-orange-500">*</span>
-                </label>
-                <input value={editForm.zipCode} onChange={e => setEditForm({ ...editForm, zipCode: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400"
-                  placeholder="50230" inputMode="numeric" maxLength={5} />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">
-                  Ville <span className="text-orange-500">*</span>
-                </label>
-                <input value={editForm.city} onChange={e => setEditForm({ ...editForm, city: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400"
-                  placeholder="Agon-Coutainville" />
-              </div>
-            </div>
-
-            {/* Email + Connexion (non modifiables) */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">Email</label>
-                <div className="font-body text-sm text-gray-600 py-2.5">{family?.parentEmail || "—"} <span className="text-xs text-gray-400">(non modifiable)</span></div>
-              </div>
-              <div>
-                <label className="font-body text-xs font-semibold text-gray-600 mb-1 block">Connexion</label>
-                <div className="font-body text-sm text-gray-600 py-2.5">{family?.authProvider === "google" ? "Google" : "Facebook"}</div>
-              </div>
-            </div>
-
-            <p className="font-body text-xs text-gray-500">
-              <span className="text-orange-500">*</span> Champs obligatoires pour la facturation
-            </p>
-
-            <div className="flex gap-2">
-              <button onClick={handleSaveProfile} disabled={savingProfile}
-                className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-600 disabled:opacity-50">
-                {savingProfile ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer
-              </button>
-              <button onClick={() => setEditingProfile(false)}
-                className="font-body text-xs text-gray-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {[
-              { label: "Nom et prénom", value: family?.parentName || "—" },
-              { label: "Email", value: family?.parentEmail || "—" },
-              { label: "Téléphone", value: family?.parentPhone || "Non renseigné" },
-              {
-                label: "Adresse",
-                value: (() => {
-                  const fam: any = family || {};
-                  const street = fam.address || "";
-                  const cp = fam.zipCode || "";
-                  const city = fam.city || "";
-                  const line2 = [cp, city].filter(Boolean).join(" ");
-                  if (!street && !line2) return "Non renseignée";
-                  return (
-                    <>
-                      {street && <div>{street}</div>}
-                      {line2 && <div>{line2}</div>}
-                    </>
-                  );
-                })(),
-              },
-              { label: "Connexion", value: `${family?.authProvider === "google" ? "Google" : "Facebook"}` },
-            ].map((field, i) => (
-              <div key={i}>
-                <div className="font-body text-xs font-semibold text-gray-600 mb-0.5">
-                  {field.label}
-                </div>
-                <div className="font-body text-sm text-blue-800">{field.value}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      {/* Children */}
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="font-display text-lg font-bold text-blue-800">
-          Cavaliers
-        </h2>
-        <button
-          onClick={() => setShowAddChild(!showAddChild)}
-          className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-400 transition-colors"
-        >
-          <Plus size={16} />
-          Ajouter un enfant
-        </button>
+    <div className="pb-8">
+      <div className="mb-5">
+        <h1 className="font-display text-2xl font-bold text-blue-800 mb-1">Ma famille</h1>
+        <p className="font-body text-sm text-gray-600">Coordonnées, cavaliers, fiches sanitaires et moyens de paiement.</p>
       </div>
 
-      {showAddChild && <AddChildForm onAdd={handleChildAdded} />}
+      <div className="grid grid-cols-3 gap-2 mb-6">
+        {tabs.map(({ id, label, icon: Icon, note }) => (
+          <button
+            type="button"
+            key={id}
+            onClick={() => setTab(id)}
+            className={`relative flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-2 py-3 rounded-xl border font-body text-xs sm:text-sm font-bold cursor-pointer transition-all ${
+              tab === id
+                ? "bg-blue-800 text-white border-blue-800 shadow-sm"
+                : "bg-white text-gray-600 border-gray-200"
+            }`}
+          >
+            <Icon size={17} />
+            <span>{label}</span>
+            {note && <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-orange-500 text-white text-[10px] flex items-center justify-center">{note}</span>}
+          </button>
+        ))}
+      </div>
 
-      {family?.children && family.children.length > 0 ? (
-        <div className="flex flex-col gap-3 mt-4">
-          {family.children.map((child) => (
-            <Card key={child.id} padding="md">
-              {/* En-tête enfant */}
-              <div className="flex justify-between items-center flex-wrap gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-2xl">🧒</div>
-                  <div>
-                    <div className="font-body text-base font-semibold text-blue-800">
-                      {child.firstName} {(child as any).lastName || ""}
-                    </div>
-                    <div className="font-body text-xs text-gray-600">Niveau : {child.galopLevel || "—"}</div>
-                    {(child as any).licencePayee && (child as any).licenceNumber && (
-                      <div className="font-body text-xs text-green-700 mt-0.5">Licence FFE : {(child as any).licenceNumber}</div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {(() => {
-                    const lastName = (child as any).lastName || "";
-                    const birthDate = (child as any).birthDate;
-                    const isProfileIncomplete = !child.firstName?.trim() || !lastName.trim() || !birthDate;
-                    return isProfileIncomplete ? (
-                      <Badge color="red">⚠ Profil incomplet</Badge>
-                    ) : null;
-                  })()}
-                  {child.sanitaryForm ? (
-                    <Badge color="green">✓ Attestation OK</Badge>
-                  ) : (
-                    <Badge color="red">⚠ Attestation médicale manquante</Badge>
-                  )}
-                  <button onClick={() => startEditChild(child)}
-                    className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
-                    <Edit3 size={11} /> Modifier
+      {tab === "famille" && (
+        <>
+          {missingBillingFields.length > 0 && !editingProfile && (
+            <Card padding="sm" className="mb-5 !bg-orange-50 !border-orange-200">
+              <div className="flex items-start gap-3">
+                <AlertCircle size={20} className="text-orange-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <div className="font-body text-sm font-bold text-orange-800">Informations à compléter</div>
+                  <p className="font-body text-xs text-orange-700 mt-1 mb-3">Il manque : {missingBillingFields.join(", ")}.</p>
+                  <button type="button" onClick={startProfileEdit} className="font-body text-sm font-bold text-white bg-orange-500 px-4 py-2 rounded-lg border-none cursor-pointer">
+                    Compléter mes informations
                   </button>
                 </div>
               </div>
-
-              {/* Formulaire modification enfant */}
-              {editingChild === child.id && (
-                <div className="mt-4 pt-4 border-t border-blue-500/8 flex flex-col gap-3">
-                  <div className="font-body text-xs font-semibold text-blue-800 mb-1">Modifier le cavalier</div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="font-body text-xs text-gray-600 block mb-1">Prénom</label>
-                      <input value={editingChildForm.firstName} onChange={e => setEditingChildForm({ ...editingChildForm, firstName: e.target.value })}
-                        className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400" />
-                    </div>
-                    <div>
-                      <label className="font-body text-xs text-gray-600 block mb-1">Nom</label>
-                      <input value={editingChildForm.lastName} onChange={e => setEditingChildForm({ ...editingChildForm, lastName: e.target.value })}
-                        className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400" />
-                    </div>
-                    <div>
-                      <label className="font-body text-xs text-gray-600 block mb-1">Date de naissance</label>
-                      <input type="date" value={editingChildForm.birthDate} max={todayLocalString()} onChange={e => setEditingChildForm({ ...editingChildForm, birthDate: e.target.value })}
-                        className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400" />
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => saveChild(child.id)} disabled={savingChild}
-                      className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-600 disabled:opacity-50">
-                      {savingChild ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer
-                    </button>
-                    <button onClick={() => setEditingChild(null)}
-                      className="font-body text-xs text-gray-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-                  </div>
-                </div>
-              )}
-
-              {/* Fiche sanitaire */}
-              {!editingChild && (
-                <div className="mt-3 pt-3 border-t border-blue-500/8">
-                  {editingSanitary === child.id ? (
-                    <div className="flex flex-col gap-3">
-                      <div className="font-body text-xs font-semibold text-blue-800">📋 Fiche sanitaire</div>
-                      <div>
-                        <label className="font-body text-xs text-gray-600 block mb-1">Allergies connues</label>
-                        <input value={sanitaryForm.allergies} onChange={e => setSanitaryForm({ ...sanitaryForm, allergies: e.target.value })}
-                          placeholder="Ex: arachides, pollen... (ou Aucune)"
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400" />
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="font-body text-xs text-gray-600 block mb-1">Contact urgence — Nom</label>
-                          <input value={sanitaryForm.emergencyContactName} onChange={e => setSanitaryForm({ ...sanitaryForm, emergencyContactName: e.target.value })}
-                            className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400" />
-                        </div>
-                        <div>
-                          <label className="font-body text-xs text-gray-600 block mb-1">Téléphone urgence</label>
-                          <input value={sanitaryForm.emergencyContactPhone} onChange={e => setSanitaryForm({ ...sanitaryForm, emergencyContactPhone: e.target.value })}
-                            className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400" placeholder="06..." />
-                        </div>
-                      </div>
-                      <label className="flex items-center gap-2 cursor-pointer font-body text-xs text-gray-600">
-                        <input type="checkbox" checked={sanitaryForm.parentalAuthorization} onChange={e => setSanitaryForm({ ...sanitaryForm, parentalAuthorization: e.target.checked })}
-                          className="accent-blue-500 w-4 h-4" />
-                        J&apos;autorise mon enfant à participer aux activités équestres
-                      </label>
-                      <div className="flex gap-2">
-                        <button onClick={() => saveSanitary(child.id)} disabled={savingChild}
-                          className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-green-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-green-600 disabled:opacity-50">
-                          {savingChild ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer la fiche
-                        </button>
-                        <button onClick={() => setEditingSanitary(null)}
-                          className="font-body text-xs text-gray-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      {child.sanitaryForm ? (
-                        <>
-                          <button onClick={() => setExpandedChild(expandedChild === child.id ? null : child.id)}
-                            className="font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1">
-                            {expandedChild === child.id ? <>Masquer la fiche <ChevronUp size={14} /></> : <>Voir la fiche sanitaire <ChevronDown size={14} /></>}
-                          </button>
-                          {expandedChild === child.id && (
-                            <div className="mt-3 grid grid-cols-2 gap-3">
-                              <div>
-                                <div className="font-body text-xs font-semibold text-gray-600">Allergies</div>
-                                <div className="font-body text-sm text-blue-800">{child.sanitaryForm.allergies || "Aucune"}</div>
-                              </div>
-                              <div>
-                                <div className="font-body text-xs font-semibold text-gray-600">Contact urgence</div>
-                                <div className="font-body text-sm text-blue-800">{child.sanitaryForm.emergencyContactName} — {child.sanitaryForm.emergencyContactPhone}</div>
-                              </div>
-                              <div>
-                                <div className="font-body text-xs font-semibold text-gray-600">Autorisation parentale</div>
-                                <div className="font-body text-sm text-green-600">✓ Accordée</div>
-                              </div>
-                            </div>
-                          )}
-                          <button onClick={() => startEditSanitary(child)}
-                            className="mt-2 font-body text-xs text-gray-600 bg-transparent border-none cursor-pointer hover:text-blue-500 flex items-center gap-1">
-                            <Edit3 size={11} /> Modifier la fiche sanitaire
-                          </button>
-                        </>
-                      ) : (
-                        <button onClick={() => startEditSanitary(child)}
-                          className="font-body text-xs text-orange-600 bg-orange-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-orange-100 flex items-center gap-1.5 w-full justify-center">
-                          📋 Compléter la fiche sanitaire
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
             </Card>
-          ))}
-        </div>
-      ) : (
-        !showAddChild && (
-          <Card padding="lg" className="text-center mt-4">
-            <span className="text-4xl block mb-3">👶</span>
-            <p className="font-body text-sm text-gray-600 mb-4">
-              Aucun cavalier enregistré. Ajoutez vos enfants pour pouvoir
-              réserver des activités.
-            </p>
-            <Button variant="primary" onClick={() => setShowAddChild(true)}>
-              Ajouter mon premier cavalier
-            </Button>
+          )}
+
+          <Card padding="md" className="mb-5">
+            <div className="flex items-center justify-between gap-3 mb-5">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center"><Users size={20} className="text-blue-500" /></div>
+                <div>
+                  <div className="font-display text-lg font-bold text-blue-800">Coordonnées du titulaire</div>
+                  <div className="font-body text-xs text-gray-600">Utilisées pour les factures et les informations du club.</div>
+                </div>
+              </div>
+              {!editingProfile && (
+                <button type="button" onClick={startProfileEdit} className="inline-flex items-center gap-1.5 font-body text-xs font-bold text-blue-600 bg-blue-50 px-3 py-2 rounded-lg border-none cursor-pointer">
+                  <Edit3 size={13} /> Modifier
+                </button>
+              )}
+            </div>
+
+            {editingProfile ? (
+              <div className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Prénom *</label>
+                    <input value={familyForm.firstName} onChange={(event) => setFamilyForm({ ...familyForm, firstName: event.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400" />
+                  </div>
+                  <div>
+                    <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Nom *</label>
+                    <input value={familyForm.lastName} onChange={(event) => setFamilyForm({ ...familyForm, lastName: event.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm uppercase focus:outline-none focus:border-blue-400" />
+                  </div>
+                </div>
+                <div>
+                  <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Téléphone</label>
+                  <input type="tel" value={familyForm.parentPhone} onChange={(event) => setFamilyForm({ ...familyForm, parentPhone: event.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400" />
+                </div>
+                <div>
+                  <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Adresse *</label>
+                  <input value={familyForm.address} onChange={(event) => setFamilyForm({ ...familyForm, address: event.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400" />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Code postal *</label>
+                    <input inputMode="numeric" maxLength={5} value={familyForm.zipCode} onChange={(event) => setFamilyForm({ ...familyForm, zipCode: event.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Ville *</label>
+                    <input value={familyForm.city} onChange={(event) => setFamilyForm({ ...familyForm, city: event.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400" />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={saveProfile} disabled={savingProfile} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-body text-sm font-bold text-white bg-blue-500 border-none cursor-pointer disabled:opacity-50">
+                    {savingProfile ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Enregistrer
+                  </button>
+                  <button type="button" onClick={() => setEditingProfile(false)} className="px-4 py-2.5 rounded-xl font-body text-sm text-gray-600 bg-gray-100 border-none cursor-pointer">Annuler</button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div>
+                  <div className="font-body text-xs font-semibold text-gray-500 mb-1">Nom et prénom</div>
+                  <div className="font-body text-sm font-bold text-blue-800">{family?.parentName || "Non renseigné"}</div>
+                </div>
+                <div>
+                  <div className="font-body text-xs font-semibold text-gray-500 mb-1">Téléphone</div>
+                  <div className="font-body text-sm text-blue-800">{family?.parentPhone || "Non renseigné"}</div>
+                </div>
+                <div>
+                  <div className="font-body text-xs font-semibold text-gray-500 mb-1">Email</div>
+                  <div className="font-body text-sm text-blue-800 break-all">{family?.parentEmail || user?.email || "Non renseigné"}</div>
+                </div>
+                <div>
+                  <div className="font-body text-xs font-semibold text-gray-500 mb-1">Adresse</div>
+                  <div className="font-body text-sm text-blue-800 whitespace-pre-line">{address || "Non renseignée"}</div>
+                </div>
+              </div>
+            )}
           </Card>
-        )
+
+          <Card padding="sm" className="mb-7">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="font-body text-sm font-bold text-blue-800">Compte de connexion</div>
+                <div className="font-body text-xs text-gray-600 mt-0.5">{family?.parentEmail || user?.email || "—"}</div>
+              </div>
+              <Badge color="blue">{family?.authProvider === "google" ? "Google" : family?.authProvider === "facebook" ? "Facebook" : "Email"}</Badge>
+            </div>
+          </Card>
+
+          <div className="pt-7 border-t border-gray-100">
+            <div className="font-body text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Données personnelles</div>
+            <p className="font-body text-xs text-gray-500 leading-relaxed mb-3">Vous pouvez demander la suppression de votre compte. Les données de facturation soumises à une obligation légale restent conservées pendant la durée prévue par la réglementation.</p>
+            <a
+              href={`mailto:ceagon@orange.fr?subject=Demande de suppression de compte RGPD&body=Bonjour,%0A%0AJe souhaite demander la suppression de mon compte.%0A%0ACompte : ${user?.email || ""}`}
+              className="inline-flex items-center gap-2 font-body text-sm text-red-500 no-underline border border-red-200 px-4 py-2 rounded-lg"
+            >
+              Demander la suppression de mon compte
+            </a>
+          </div>
+        </>
       )}
 
-      {/* ── Mandat SEPA ── */}
-      {mandat && (
-        <div className="mt-8">
-          <h2 className="font-display text-lg font-bold text-blue-800 mb-4">Prélèvement SEPA</h2>
-          <Card padding="md">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
-                <Building2 size={24} className="text-blue-500" />
-              </div>
+      {tab === "cavaliers" && (
+        <>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <h2 className="font-display text-lg font-bold text-blue-800">Mes cavaliers</h2>
+              <p className="font-body text-xs text-gray-600">Identité, niveau et fiche sanitaire de chaque cavalier.</p>
+            </div>
+            <button type="button" onClick={() => setShowAddChild(true)} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-body text-sm font-bold text-white bg-blue-500 border-none cursor-pointer">
+              <Plus size={15} /> Ajouter
+            </button>
+          </div>
+
+          {showAddChild && (
+            <AddChildForm
+              onCancel={() => setShowAddChild(false)}
+              onDone={() => {
+                setShowAddChild(false);
+                window.location.reload();
+              }}
+            />
+          )}
+
+          {children.length === 0 && !showAddChild ? (
+            <Card padding="lg" className="text-center">
+              <div className="text-5xl mb-3">🐴</div>
+              <div className="font-display text-lg font-bold text-blue-800">Aucun cavalier enregistré</div>
+              <p className="font-body text-sm text-gray-600 mt-1 mb-4">Ajoutez un cavalier pour réserver des cours, stages et balades.</p>
+              <button type="button" onClick={() => setShowAddChild(true)} className="px-5 py-2.5 rounded-xl font-body text-sm font-bold text-white bg-blue-500 border-none cursor-pointer">Ajouter mon premier cavalier</button>
+            </Card>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {children.map((child) => {
+                const childAny: any = child;
+                const identityComplete = Boolean(child.firstName?.trim() && childAny.lastName?.trim() && childAny.birthDate);
+                const sanitaryComplete = Boolean(child.sanitaryForm);
+                const expanded = expandedChild === child.id;
+
+                return (
+                  <Card key={child.id} padding="md">
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-2xl flex-shrink-0">🐴</div>
+                        <div className="min-w-0">
+                          <div className="font-display text-lg font-bold text-blue-800 truncate">{child.firstName} {childAny.lastName || ""}</div>
+                          <div className="font-body text-xs text-gray-600 mt-0.5">Niveau : {child.galopLevel || "—"}</div>
+                          {childAny.licencePayee && childAny.licenceNumber && <div className="font-body text-xs text-green-700 mt-0.5">Licence FFE : {childAny.licenceNumber}</div>}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge color={identityComplete ? "green" : "red"}>{identityComplete ? "Profil complet" : "Profil incomplet"}</Badge>
+                        <Badge color={sanitaryComplete ? "green" : "red"}>{sanitaryComplete ? "Attestation OK" : "Attestation manquante"}</Badge>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 mt-4">
+                      <button type="button" onClick={() => startChildEdit(child)} className="inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-body text-sm font-semibold text-blue-600 bg-blue-50 border-none cursor-pointer">
+                        <Edit3 size={14} /> Informations
+                      </button>
+                      <button type="button" onClick={() => startSanitaryEdit(child)} className={`inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${sanitaryComplete ? "text-green-700 bg-green-50" : "text-orange-700 bg-orange-50"}`}>
+                        <ShieldCheck size={14} /> Fiche sanitaire
+                      </button>
+                    </div>
+
+                    {editingChild === child.id && (
+                      <div className="mt-4 pt-4 border-t border-gray-100">
+                        <div className="font-body text-sm font-bold text-blue-800 mb-3">Modifier les informations</div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Prénom</label>
+                            <input value={childForm.firstName} onChange={(event) => setChildForm({ ...childForm, firstName: event.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400" />
+                          </div>
+                          <div>
+                            <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Nom</label>
+                            <input value={childForm.lastName} onChange={(event) => setChildForm({ ...childForm, lastName: event.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400" />
+                          </div>
+                          <div>
+                            <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Date de naissance</label>
+                            <input type="date" max={todayLocalString()} value={childForm.birthDate} onChange={(event) => setChildForm({ ...childForm, birthDate: event.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400" />
+                          </div>
+                        </div>
+                        <div className="flex gap-2 mt-4">
+                          <button type="button" onClick={() => saveChild(child.id)} disabled={savingChild} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-body text-sm font-bold text-white bg-blue-500 border-none cursor-pointer disabled:opacity-50">
+                            {savingChild ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Enregistrer
+                          </button>
+                          <button type="button" onClick={() => setEditingChild(null)} className="px-4 py-2.5 rounded-xl font-body text-sm text-gray-600 bg-gray-100 border-none cursor-pointer">Annuler</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {editingSanitary === child.id && (
+                      <div className="mt-4 pt-4 border-t border-gray-100">
+                        <div className="font-body text-sm font-bold text-blue-800 mb-3">Fiche sanitaire</div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Allergies</label>
+                            <input value={sanitaryForm.allergies} onChange={(event) => setSanitaryForm({ ...sanitaryForm, allergies: event.target.value })} placeholder="Aucune ou précisez" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400" />
+                          </div>
+                          <div>
+                            <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Contact d’urgence</label>
+                            <input value={sanitaryForm.emergencyContactName} onChange={(event) => setSanitaryForm({ ...sanitaryForm, emergencyContactName: event.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400" />
+                          </div>
+                          <div>
+                            <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Téléphone d’urgence</label>
+                            <input value={sanitaryForm.emergencyContactPhone} onChange={(event) => setSanitaryForm({ ...sanitaryForm, emergencyContactPhone: event.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400" />
+                          </div>
+                        </div>
+                        <label className="mt-4 flex items-start gap-2 font-body text-xs text-gray-600 cursor-pointer">
+                          <input type="checkbox" checked={sanitaryForm.parentalAuthorization} onChange={(event) => setSanitaryForm({ ...sanitaryForm, parentalAuthorization: event.target.checked })} className="accent-blue-500 w-4 h-4 mt-0.5" />
+                          J’autorise ce cavalier à participer aux activités équestres du centre.
+                        </label>
+                        <div className="flex gap-2 mt-4">
+                          <button type="button" onClick={() => saveSanitary(child.id)} disabled={savingChild} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-body text-sm font-bold text-white bg-green-600 border-none cursor-pointer disabled:opacity-50">
+                            {savingChild ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Enregistrer
+                          </button>
+                          <button type="button" onClick={() => setEditingSanitary(null)} className="px-4 py-2.5 rounded-xl font-body text-sm text-gray-600 bg-gray-100 border-none cursor-pointer">Annuler</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {sanitaryComplete && editingSanitary !== child.id && editingChild !== child.id && (
+                      <div className="mt-3 pt-3 border-t border-gray-100">
+                        <button type="button" onClick={() => setExpandedChild(expanded ? null : child.id)} className="w-full flex items-center justify-between gap-2 font-body text-xs font-semibold text-gray-600 bg-transparent border-none cursor-pointer px-0 py-1">
+                          <span>Voir les informations complémentaires</span>
+                          {expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                        </button>
+                        {expanded && (
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3 bg-gray-50 rounded-xl p-3">
+                            <div>
+                              <div className="font-body text-xs font-semibold text-gray-500">Date de naissance</div>
+                              <div className="font-body text-sm text-blue-800 mt-0.5">{formatBirthDate(childAny.birthDate)}</div>
+                            </div>
+                            <div>
+                              <div className="font-body text-xs font-semibold text-gray-500">Allergies</div>
+                              <div className="font-body text-sm text-blue-800 mt-0.5">{child.sanitaryForm?.allergies || "Aucune"}</div>
+                            </div>
+                            <div>
+                              <div className="font-body text-xs font-semibold text-gray-500">Contact d’urgence</div>
+                              <div className="font-body text-sm text-blue-800 mt-0.5">{child.sanitaryForm?.emergencyContactName || "—"}{child.sanitaryForm?.emergencyContactPhone ? ` · ${child.sanitaryForm.emergencyContactPhone}` : ""}</div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {tab === "paiement" && (
+        <>
+          <div className="mb-4">
+            <h2 className="font-display text-lg font-bold text-blue-800">Paiement et prélèvements</h2>
+            <p className="font-body text-xs text-gray-600 mt-0.5">Votre mandat SEPA et l’accès à vos paiements.</p>
+          </div>
+
+          <Card padding="md" className="mb-4">
+            <div className="flex items-start gap-3">
+              <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0"><CreditCard size={20} className="text-blue-500" /></div>
               <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-body text-sm font-semibold text-blue-800">{mandat.titulaire}</span>
-                  <Badge color="green">Actif</Badge>
-                </div>
-                <div className="font-body text-xs text-gray-500 font-mono mb-1">
-                  IBAN : {mandat.iban?.replace(/\s/g, "").replace(/(.{4})/g, "$1 ").trim()}
-                </div>
-                <div className="font-body text-xs text-gray-400">
-                  Mandat {mandat.mandatId} · Signé le {new Date(mandat.dateSignature).toLocaleDateString("fr-FR")}
-                </div>
+                <div className="font-body text-sm font-bold text-blue-800">Mes paiements et factures</div>
+                <p className="font-body text-xs text-gray-600 mt-1 mb-3">Consultez le reste à régler, vos avoirs, cartes de séances et factures.</p>
+                <Link href="/espace-cavalier/factures" className="inline-flex items-center gap-2 font-body text-sm font-bold text-white bg-blue-500 px-4 py-2.5 rounded-xl no-underline">
+                  Ouvrir Mes paiements
+                </Link>
               </div>
             </div>
-            <div className="mt-4 pt-3 border-t border-gray-100">
-              <button onClick={handleRevokeMandat} disabled={revokingMandat}
-                className="flex items-center gap-2 font-body text-xs text-red-500 hover:text-red-700 bg-transparent border border-red-200 hover:border-red-400 px-3 py-2 rounded-lg cursor-pointer transition-colors disabled:opacity-50">
-                {revokingMandat ? <Loader2 size={12} className="animate-spin" /> : <AlertTriangle size={12} />}
-                Révoquer mon mandat de prélèvement
-              </button>
-              <p className="font-body text-xs text-gray-400 mt-2">
-                La révocation prend effet immédiatement. Les prélèvements déjà soumis à la banque ne pourront pas être annulés par cette action.
-              </p>
+          </Card>
+
+          {mandate ? (
+            <Card padding="md">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="flex items-start gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-green-50 flex items-center justify-center flex-shrink-0"><Landmark size={20} className="text-green-600" /></div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="font-body text-sm font-bold text-blue-800">Mandat SEPA actif</div>
+                      <Badge color="green">Actif</Badge>
+                    </div>
+                    <div className="font-body text-xs text-gray-600 mt-2">Titulaire : <span className="font-semibold">{mandate.titulaire || "—"}</span></div>
+                    <div className="font-body text-xs text-gray-600 mt-0.5 font-mono">
+                      IBAN : {(() => {
+                        const iban = String(mandate.iban || "").replace(/\s/g, "");
+                        return iban.length > 8 ? `${iban.slice(0, 4)} •••• •••• •••• ${iban.slice(-4)}` : "••••";
+                      })()}
+                    </div>
+                    {mandate.dateSignature && <div className="font-body text-xs text-gray-400 mt-0.5">Signé le {new Date(mandate.dateSignature).toLocaleDateString("fr-FR")}</div>}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <button type="button" onClick={revokeMandate} disabled={revokingMandate} className="inline-flex items-center gap-2 font-body text-xs font-semibold text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg cursor-pointer disabled:opacity-50">
+                  {revokingMandate ? <Loader2 size={13} className="animate-spin" /> : <AlertTriangle size={13} />}
+                  Révoquer le mandat
+                </button>
+                <p className="font-body text-xs text-gray-400 mt-2">Les prélèvements déjà transmis à la banque peuvent encore être exécutés.</p>
+              </div>
+            </Card>
+          ) : (
+            <Card padding="md" className="!bg-gray-50">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center"><Landmark size={20} className="text-gray-400" /></div>
+                <div>
+                  <div className="font-body text-sm font-bold text-blue-800">Aucun mandat SEPA actif</div>
+                  <div className="font-body text-xs text-gray-600 mt-0.5">Les prélèvements n’apparaîtront ici que lorsqu’un mandat aura été créé.</div>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          <Card padding="sm" className="mt-4 !bg-blue-50 !border-blue-100">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 size={18} className="text-blue-500 flex-shrink-0 mt-0.5" />
+              <div className="font-body text-xs text-blue-800 leading-relaxed">Les informations bancaires sont affichées de manière masquée. Les échéances de prélèvement se consultent dans la page Mes paiements lorsqu’elles existent.</div>
             </div>
           </Card>
-        </div>
+        </>
       )}
-
-      {/* ── RGPD — Supprimer mon compte ── */}
-      <div className="mt-10 pt-8 border-t border-gray-100">
-        <p className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-          Données personnelles
-        </p>
-        <p className="font-body text-sm text-gray-500 mb-4 leading-relaxed">
-          Conformément au RGPD, vous pouvez demander la suppression de votre compte et de vos données personnelles.
-          Cette action est irréversible. Vos données de facturation sont conservées 10 ans (obligation légale).
-        </p>
-        <a
-          href={`mailto:ceagon@orange.fr?subject=Demande de suppression de compte RGPD&body=Bonjour,%0A%0AJe souhaite exercer mon droit à l'effacement conformément au RGPD.%0A%0ACompte associé à l'adresse : ${user?.email || ""}%0A%0AMerci.`}
-          className="inline-flex items-center gap-2 font-body text-sm text-red-500 hover:text-red-700 no-underline border border-red-200 hover:border-red-400 px-4 py-2 rounded-lg transition-colors"
-        >
-          🗑️ Demander la suppression de mon compte
-        </a>
-        <p className="font-body text-xs text-gray-400 mt-3">
-          Délai de traitement : 30 jours —{" "}
-          <a href="/confidentialite" className="text-blue-500 no-underline hover:underline">
-            Politique de confidentialité
-          </a>
-        </p>
-      </div>
     </div>
   );
 }
