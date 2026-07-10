@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import AdminContextBar from "@/components/admin/AdminContextBar";
 import AdminDenseModulePolish from "@/components/admin/AdminDenseModulePolish";
+import AdminModuleSpotlight from "@/components/admin/AdminModuleSpotlight";
 import AdminUxPolish from "@/components/admin/AdminUxPolish";
 
 function getAdminSection(pathname: string) {
@@ -19,10 +20,10 @@ export default function AdminTemplate({ children }: { children: React.ReactNode 
       data-admin-section={getAdminSection(pathname)}
       className="admin-page-shell"
     >
-      {/* Les deux couches visuelles restent séparées de la navigation contextuelle. */}
       <AdminUxPolish />
       <AdminDenseModulePolish />
       <AdminContextBar />
+      <AdminModuleSpotlight />
       {children}
     </div>
   );
