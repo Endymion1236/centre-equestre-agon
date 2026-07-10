@@ -103,6 +103,8 @@ export default function PlanningPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editApplyAll, setEditApplyAll] = useState(false);
   const [editApplyStage, setEditApplyStage] = useState(false);
+  const [editStageDays, setEditStageDays] = useState<{ id: string; date: string }[]>([]);
+  const [editSelectedDayIds, setEditSelectedDayIds] = useState<string[]>([]);
   const [showDuplicate, setShowDuplicate] = useState(false); const [dupWeeks, setDupWeeks] = useState(1); const [duplicating, setDuplicating] = useState(false);
   // ─── Menus déroulants barre d'actions (moderne) ───
   const [menuAddOpen, setMenuAddOpen] = useState(false);
@@ -341,12 +343,45 @@ export default function PlanningPage() {
   };
 
   const openEdit = (c: Creneau & { id: string }) => {
-    setEditCreneau(c);
-    setEditForm({ activityId: (c as any).activityId || "", activityType: c.activityType, tvaTaux: (c as any).tvaTaux || 5.5, activityTitle: c.activityTitle, monitor: c.monitor || "", startTime: c.startTime, endTime: c.endTime, maxPlaces: c.maxPlaces, priceTTC: (c as any).priceTTC || 0, color: (c as any).color || "", allowDayBooking: (c as any).allowDayBooking || false, priceTTCDay: (c as any).priceTTCDay || "", themeStage: (c as any).themeStage || "" });
+    setEditCreneau(c);    setEditForm({ activityId: (c as any).activityId || "", activityType: c.activityType, tvaTaux: (c as any).tvaTaux || 5.5, activityTitle: c.activityTitle, monitor: c.monitor || "", startTime: c.startTime, endTime: c.endTime, maxPlaces: c.maxPlaces, priceTTC: (c as any).priceTTC || 0, color: (c as any).color || "", allowDayBooking: (c as any).allowDayBooking || false, priceTTCDay: (c as any).priceTTCDay || "", themeStage: (c as any).themeStage || "" });
     setEditApplyAll(false);
     // Pour un stage multi-jours : appliquer par défaut à tous les jours du stage
     setEditApplyStage(c.activityType === "stage" || c.activityType === "stage_journee");
   };
+
+  // Quand on ouvre l'édition d'un STAGE : charger la liste de ses jours (semaine)
+  // pour permettre de choisir précisément les jours à modifier. Par défaut, seul
+  // le jour cliqué est coché.
+  useEffect(() => {
+    const isStage = editCreneau && (editCreneau.activityType === "stage" || editCreneau.activityType === "stage_journee");
+    if (!editCreneau || !isStage) { setEditStageDays([]); setEditSelectedDayIds([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const d = new Date(editCreneau.date + "T12:00:00");
+        const mon = new Date(d); mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+        const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+        const snap = await getDocs(query(
+          collection(db, "creneaux"),
+          where("date", ">=", fmtDate(mon)),
+          where("date", "<=", fmtDate(sun)),
+        ));
+        const days = snap.docs
+          .filter(dd => { const cc: any = dd.data(); return sameStage(cc, editCreneau) && (cc.activityType === "stage" || cc.activityType === "stage_journee"); })
+          .map(dd => ({ id: dd.id, date: (dd.data() as any).date as string }))
+          .sort((a, b) => a.date.localeCompare(b.date));
+        if (cancelled) return;
+        setEditStageDays(days);
+        setEditSelectedDayIds([editCreneau.id]);
+      } catch (e) {
+        if (cancelled) return;
+        console.warn("[stage days] chargement impossible:", e);
+        setEditStageDays([]);
+        setEditSelectedDayIds([editCreneau.id]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [editCreneau]);
 
   const confirmDelete = async (mode: "single" | "similar" | "week" | "serie") => {
     if (!deleteCreneau) return;
@@ -448,8 +483,10 @@ export default function PlanningPage() {
       let sent = 0;
       for (const [email, info] of byEmail) {
         const quiEst = info.children.length > 1 ? `sont inscrit·e·s ${info.children.join(", ")}` : `est inscrit·e ${info.children[0]}`;
+        const nbJours = editSelectedDayIds.length || 1;
+        const joursTxt = estStage ? ` (${nbJours} jour${nbJours > 1 ? "s" : ""} concerné${nbJours > 1 ? "s" : ""})` : "";
         const intro = estStage
-          ? `Le stage <strong>${newTitle || oldTitle}</strong> (${dateFR}) auquel ${quiEst} a été modifié :`
+          ? `Le stage <strong>${newTitle || oldTitle}</strong> (${dateFR}) a été modifié${joursTxt}, pour ${quiEst} :`
           : `La séance du <strong>${dateFR}</strong> à laquelle ${quiEst} a été modifiée :`;
         const html = `<div style="font-family:sans-serif;font-size:14px;color:#1e293b;line-height:1.5">
           <p>Bonjour${info.parentName ? " " + info.parentName : ""},</p>
@@ -504,27 +541,14 @@ export default function PlanningPage() {
       if (editForm.color) update.color = editForm.color;
 
       const isStageType = editCreneau.activityType === "stage" || editCreneau.activityType === "stage_journee";
-      if (isStageType && editApplyStage) {
-        // ── Appliquer à TOUS les jours de ce stage (même semaine) ──
-        // Filtre par activityId + titre d'origine : deux stages homonymes
-        // la même semaine restent indépendants.
-        const d = new Date(editCreneau.date + "T12:00:00");
-        const mon = new Date(d); mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-        const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-        const weekSnap = await getDocs(query(
-          collection(db, "creneaux"),
-          where("date", ">=", fmtDate(mon)),
-          where("date", "<=", fmtDate(sun)),
-        ));
-        const targets = weekSnap.docs.filter(dd => {
-          const c: any = dd.data();
-          return sameStage(c, editCreneau) &&
-            (c.activityType === "stage" || c.activityType === "stage_journee");
-        });
-        for (const t of targets) {
-          await updateDoc(doc(db, "creneaux", t.id), update);
+      if (isStageType) {
+        // ── Appliquer aux jours SÉLECTIONNÉS du stage ──
+        // L'admin choisit les jours dans la modale ; par défaut = le jour cliqué.
+        const dayIds = editSelectedDayIds.length > 0 ? editSelectedDayIds : [editCreneau.id];
+        for (const id of dayIds) {
+          await updateDoc(doc(db, "creneaux", id), update);
         }
-        toast(`✅ Stage mis à jour (${targets.length} jour${targets.length > 1 ? "s" : ""})`, "success");
+        toast(`✅ Stage mis à jour (${dayIds.length} jour${dayIds.length > 1 ? "s" : ""})`, "success");
       } else if (editApplyAll && !isStageType) {
         // Cours récurrents UNIQUEMENT (jamais les stages : eux passent par la
         // branche stage ci-dessus, bornée à la semaine).
@@ -1931,6 +1955,9 @@ export default function PlanningPage() {
           applyAll={editApplyAll}
           applyStage={editApplyStage}
           onApplyStageChange={setEditApplyStage}
+          stageDays={editStageDays}
+          selectedDayIds={editSelectedDayIds}
+          onSelectedDayIdsChange={setEditSelectedDayIds}
           onFormChange={setEditForm}
           onApplyAllChange={setEditApplyAll}
           onClose={() => setEditCreneau(null)}
