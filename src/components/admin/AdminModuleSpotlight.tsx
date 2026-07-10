@@ -1,29 +1,30 @@
 "use client";
 
+import type { ComponentType } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ArrowRight,
   BarChart3,
-  BookOpenCheck,
   Calculator,
+  CalendarDays,
   ClipboardCheck,
   CreditCard,
   FileText,
-  HeartPulse,
-  Horse,
+  Heart,
   Mail,
   Receipt,
   ShieldCheck,
   Sparkles,
   Users,
-  WalletCards,
 } from "lucide-react";
+
+type SpotlightIcon = ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
 
 type ModuleAction = {
   label: string;
   href: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: SpotlightIcon;
 };
 
 type ModuleConfig = {
@@ -31,7 +32,7 @@ type ModuleConfig = {
   title: string;
   description: string;
   gradient: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: SpotlightIcon;
   actions: ModuleAction[];
   note: string;
 };
@@ -45,9 +46,9 @@ const MODULES: Record<string, ModuleConfig> = {
     icon: ClipboardCheck,
     note: "Pensé pour être utilisé debout, vite, et souvent sur téléphone.",
     actions: [
-      { label: "Planning", href: "/admin/planning", icon: BookOpenCheck },
-      { label: "Cavalerie", href: "/admin/cavalerie", icon: Horse },
-      { label: "Registre des chutes", href: "/admin/registre-chutes", icon: HeartPulse },
+      { label: "Planning", href: "/admin/planning", icon: CalendarDays },
+      { label: "Cavalerie", href: "/admin/cavalerie", icon: Heart },
+      { label: "Registre des chutes", href: "/admin/registre-chutes", icon: ShieldCheck },
     ],
   },
   paiements: {
@@ -58,7 +59,7 @@ const MODULES: Record<string, ModuleConfig> = {
     icon: CreditCard,
     note: "Les actions financières restent inchangées, seule leur lecture est simplifiée.",
     actions: [
-      { label: "Avoirs", href: "/admin/avoirs", icon: WalletCards },
+      { label: "Avoirs", href: "/admin/avoirs", icon: FileText },
       { label: "SEPA", href: "/admin/sepa", icon: ShieldCheck },
       { label: "Factures", href: "/admin/factures", icon: Receipt },
     ],
@@ -73,7 +74,7 @@ const MODULES: Record<string, ModuleConfig> = {
     actions: [
       { label: "Communication", href: "/admin/communication", icon: Mail },
       { label: "Paiements", href: "/admin/paiements", icon: CreditCard },
-      { label: "Planning", href: "/admin/planning", icon: BookOpenCheck },
+      { label: "Planning", href: "/admin/planning", icon: CalendarDays },
     ],
   },
   comptabilite: {
@@ -111,8 +112,8 @@ const MODULES: Record<string, ModuleConfig> = {
     note: "Le suivi reste détaillé, mais la prochaine action devient plus évidente.",
     actions: [
       { label: "Cavaliers", href: "/admin/cavaliers", icon: Users },
-      { label: "Progression", href: "/admin/pedagogie", icon: Sparkles },
-      { label: "Planning", href: "/admin/planning", icon: BookOpenCheck },
+      { label: "Statistiques", href: "/admin/statistiques", icon: BarChart3 },
+      { label: "Planning", href: "/admin/planning", icon: CalendarDays },
     ],
   },
 };
@@ -139,7 +140,7 @@ export default function AdminModuleSpotlight() {
           <div className="min-w-0">
             <div className="font-body text-[10px] font-bold uppercase tracking-[0.18em] text-white/65">{config.eyebrow}</div>
             <h2 className="mt-1 font-display text-2xl font-bold leading-tight text-white sm:text-[28px]">{config.title}</h2>
-            <p className="mt-2 max-w-2xl font-body text-sm leading-relaxed text-white/74">{config.description}</p>
+            <p className="mt-2 max-w-2xl font-body text-sm leading-relaxed text-white/75">{config.description}</p>
             <div className="mt-3 flex items-center gap-2 font-body text-[11px] text-white/55">
               <span className="h-1.5 w-1.5 rounded-full bg-gold-300" />
               {config.note}
@@ -154,7 +155,7 @@ export default function AdminModuleSpotlight() {
               <Link
                 key={`${section}-${action.label}`}
                 href={action.href}
-                className="group inline-flex items-center gap-2 rounded-xl border border-white/12 bg-white/[0.09] px-3.5 py-2.5 font-body text-xs font-bold text-white no-underline backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:bg-white/[0.16]"
+                className="group inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3.5 py-2.5 font-body text-xs font-bold text-white no-underline backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:bg-white/[0.16]"
               >
                 <ActionIcon size={14} className="text-white/75" />
                 {action.label}
