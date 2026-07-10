@@ -1364,7 +1364,7 @@ export default function InscriptionAnnuellePage() {
                         ${moyenPaiement === id ? "border-blue-500 bg-blue-50 text-blue-500 font-semibold" : "border-gray-200 bg-white text-gray-500"}`}>
                       <span className="block text-lg mb-0.5">{icon}</span>
                       {label}
-                      <span className="block font-body text-[10px] font-normal text-gray-400 mt-0.5">{sub}</span>
+                      <span className="block font-body text-xs font-normal text-gray-400 mt-0.5">{sub}</span>
                     </button>
                   ))}
                 </div>

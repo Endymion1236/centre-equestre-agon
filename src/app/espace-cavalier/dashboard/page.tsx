@@ -244,11 +244,11 @@ export default function DashboardPage() {
           </div>
         </Card>
         {stats.avoir > 0 && (
-          <Card padding="sm" className="bg-purple-50">
+          <Card padding="sm" className="bg-amber-50">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center"><Wallet size={20} className="text-purple-600" /></div>
+              <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center"><Wallet size={20} className="text-amber-600" /></div>
               <div>
-                <div className="font-body text-xl font-bold text-purple-600">{stats.avoir.toFixed(0)}€</div>
+                <div className="font-body text-xl font-bold text-amber-600">{stats.avoir.toFixed(0)}€</div>
                 <div className="font-body text-xs text-gray-600">Avoir</div>
               </div>
             </div>
@@ -290,19 +290,19 @@ export default function DashboardPage() {
                     <div className="h-full rounded-full bg-gradient-to-r from-gold-400 to-gold-300 transition-all" style={{ width: `${pct}%` }} />
                   </div>
                   <div className="flex justify-between mt-1">
-                    <span className="font-body text-[10px] text-gray-600">{card.usedSessions} utilisée{card.usedSessions > 1 ? "s" : ""}</span>
-                    <span className="font-body text-[10px] font-semibold text-gold-500">{card.remainingSessions} restante{card.remainingSessions > 1 ? "s" : ""}</span>
+                    <span className="font-body text-xs text-gray-600">{card.usedSessions} utilisée{card.usedSessions > 1 ? "s" : ""}</span>
+                    <span className="font-body text-xs font-semibold text-gold-500">{card.remainingSessions} restante{card.remainingSessions > 1 ? "s" : ""}</span>
                   </div>
                   {(card.history || []).length > 0 && (
                     <button onClick={() => setOpenCardId(isOpen ? null : card.id)}
-                      className="w-full font-body text-[10px] text-gray-500 bg-transparent border-none cursor-pointer pt-2 hover:text-blue-500">
+                      className="w-full font-body text-xs text-gray-500 bg-transparent border-none cursor-pointer pt-2 hover:text-blue-500">
                       {isOpen ? "▲ Masquer" : `▼ Historique (${(card.history || []).filter((h: any) => !h.credit && h.presence !== "absent").length})`}
                     </button>
                   )}
                   {isOpen && (
                     <div className="flex flex-col gap-1 mt-2">
                       {[...(card.history || [])].reverse().slice(0, 5).map((h: any, i: number) => (
-                        <div key={i} className={`flex items-center justify-between px-2 py-1 rounded text-[10px] font-body ${h.credit ? "bg-green-50" : "bg-sand"}`}>
+                        <div key={i} className={`flex items-center justify-between px-2 py-1 rounded text-xs font-body ${h.credit ? "bg-green-50" : "bg-sand"}`}>
                           <span className="text-blue-800">{h.activityTitle || "Séance"} · {h.date ? new Date(h.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : ""}</span>
                           <span className={h.credit ? "text-green-500 font-semibold" : "text-gold-500"}>{h.credit ? "+1" : "✓"}</span>
                         </div>
@@ -335,16 +335,16 @@ export default function DashboardPage() {
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-yellow-400 flex items-center justify-center text-2xl flex-shrink-0">🏆</div>
                 <div className="flex-1">
-                  <div className="font-body text-[10px] text-yellow-600 uppercase font-semibold tracking-wider">Solde de points</div>
+                  <div className="font-body text-xs text-yellow-600 uppercase font-semibold tracking-wider">Solde de points</div>
                   <div className="font-display text-3xl font-bold text-yellow-700">{points}</div>
-                  <div className="font-body text-[10px] text-yellow-600">
+                  <div className="font-body text-xs text-yellow-600">
                     = {valeurEuros}€ de réduction
                   </div>
                 </div>
               </div>
               {/* Comment ça marche */}
               <div className="mt-3 pt-3 border-t border-yellow-200/50">
-                <div className="font-body text-[10px] text-yellow-700 space-y-1">
+                <div className="font-body text-xs text-yellow-700 space-y-1">
                   <p className="m-0">💰 <strong>1€ dépensé = 1 point</strong> gagné automatiquement</p>
                   <p className="m-0">🎁 <strong>{taux} points = 1€</strong> de réduction convertible en avoir</p>
                   <p className="m-0">⏰ Points valables <strong>1 an</strong> après chaque gain</p>
@@ -391,7 +391,7 @@ export default function DashboardPage() {
                     <span className="font-body text-xs text-gray-500">
                       Encore <strong>{minPoints - points} pts</strong> avant conversion
                     </span>
-                    <span className="font-body text-[10px] text-yellow-600 font-semibold">{Math.round(points / minPoints * 100)}%</span>
+                    <span className="font-body text-xs text-yellow-600 font-semibold">{Math.round(points / minPoints * 100)}%</span>
                   </div>
                   <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">
                     <div className="h-full rounded-full bg-gradient-to-r from-yellow-300 to-yellow-500 transition-all" style={{ width: `${Math.min(100, (points / minPoints) * 100)}%` }} />
@@ -406,7 +406,7 @@ export default function DashboardPage() {
                 <button onClick={() => setShowFidHistory(!showHistory)}
                   className="w-full flex justify-between items-center bg-transparent border-none cursor-pointer p-0">
                   <span className="font-body text-xs font-semibold text-blue-800">📋 Historique des points</span>
-                  <span className="font-body text-[10px] text-gray-400">{showHistory ? "▲ Masquer" : `▼ ${history.length} mouvement${history.length > 1 ? "s" : ""}`}</span>
+                  <span className="font-body text-xs text-gray-400">{showHistory ? "▲ Masquer" : `▼ ${history.length} mouvement${history.length > 1 ? "s" : ""}`}</span>
                 </button>
                 {showHistory && (
                   <div className="mt-3 flex flex-col gap-1.5 max-h-48 overflow-y-auto">
@@ -417,7 +417,7 @@ export default function DashboardPage() {
                         <div key={i} className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0">
                           <div className="flex-1 min-w-0">
                             <div className="font-body text-xs text-gray-700 truncate">{h.label || (isGain ? "Encaissement" : "Conversion")}</div>
-                            <div className="font-body text-[10px] text-gray-400">{d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}</div>
+                            <div className="font-body text-xs text-gray-400">{d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}</div>
                           </div>
                           <span className={`font-body text-sm font-bold flex-shrink-0 ml-2 ${isGain ? "text-green-600" : "text-red-500"}`}>
                             {isGain ? "+" : ""}{h.points} pts
@@ -426,7 +426,7 @@ export default function DashboardPage() {
                       );
                     })}
                     {history.length > 20 && (
-                      <div className="font-body text-[10px] text-gray-400 text-center py-1">
+                      <div className="font-body text-xs text-gray-400 text-center py-1">
                         + {history.length - 20} mouvement(s) plus ancien(s)
                       </div>
                     )}

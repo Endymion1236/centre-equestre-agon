@@ -350,8 +350,8 @@ function LoginScreen() {
           <div className="mt-6 pt-5 border-t border-blue-500/8 text-center">
             <p className="font-body text-xs text-gray-600 leading-relaxed">
               En vous connectant, vous acceptez nos{" "}
-              <a href="#" className="text-blue-500 no-underline">CGV</a> et notre{" "}
-              <a href="#" className="text-blue-500 no-underline">politique de confidentialité</a>.
+              <a href="/cgv" target="_blank" rel="noopener noreferrer" className="text-blue-500 no-underline">CGV</a> et notre{" "}
+              <a href="/confidentialite" target="_blank" rel="noopener noreferrer" className="text-blue-500 no-underline">politique de confidentialité</a>.
             </p>
           </div>
         </div>
@@ -386,7 +386,7 @@ function CavalierSidebar() {
           </div>
           <div>
             <div className="font-display text-xs font-bold text-white leading-tight">Centre Équestre</div>
-            <div className="font-body text-[10px] text-white/50 leading-tight">Agon-Coutainville</div>
+            <div className="font-body text-xs text-white/50 leading-tight">Agon-Coutainville</div>
           </div>
         </div>
         {/* Famille */}
@@ -394,7 +394,7 @@ function CavalierSidebar() {
           <div className="font-body text-xs font-bold text-white truncate">
             {family?.parentName || "Ma famille"}
           </div>
-          <div className="font-body text-[10px] mt-0.5" style={{ color: "#F0A010" }}>
+          <div className="font-body text-xs mt-0.5" style={{ color: "#F0A010" }}>
             🐴 {family?.children?.length || 0} cavalier{(family?.children?.length || 0) > 1 ? "s" : ""}
           </div>
         </div>
@@ -466,6 +466,17 @@ function EspaceCavalierLayoutInner({
   const pathname = usePathname();
   const router = useRouter();
   const [showVoice, setShowVoice] = useState(false);
+  // Bulle d'accueil de l'assistant, montrée une seule fois (1re visite).
+  const [showAssistantHint, setShowAssistantHint] = useState(false);
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem("ce_assistant_hint_seen")) setShowAssistantHint(true);
+    } catch { /* localStorage indisponible */ }
+  }, []);
+  const dismissAssistantHint = () => {
+    setShowAssistantHint(false);
+    try { localStorage.setItem("ce_assistant_hint_seen", "1"); } catch { /* ignore */ }
+  };
   const [voiceContext, setVoiceContext] = useState<Record<string, any>>({});
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
@@ -653,8 +664,25 @@ function EspaceCavalierLayoutInner({
             />
           </div>
         )}
+        {showAssistantHint && !showVoice && (
+          <div className="relative w-[calc(100vw-2rem)] sm:w-[300px] bg-white rounded-2xl shadow-xl border border-gray-100 p-3.5 pr-8">
+            <button onClick={dismissAssistantHint}
+              className="absolute top-2 right-2 text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer p-0"
+              aria-label="Fermer">
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>
+            </button>
+            <p className="font-body text-sm font-semibold text-blue-800 mb-0.5">Besoin d&apos;aide ? 💬</p>
+            <p className="font-body text-xs text-slate-600 leading-snug">
+              Demandez-moi les prochains stages, les horaires ou les places disponibles.
+            </p>
+            <button onClick={() => { dismissAssistantHint(); setShowVoice(true); }}
+              className="mt-2 font-body text-xs font-semibold text-green-700 bg-green-50 hover:bg-green-100 border-none rounded-lg px-2.5 py-1.5 cursor-pointer">
+              Essayer l&apos;assistant →
+            </button>
+          </div>
+        )}
         <button
-          onClick={() => setShowVoice(!showVoice)}
+          onClick={() => { setShowVoice(!showVoice); if (showAssistantHint) dismissAssistantHint(); }}
           className="w-14 h-14 rounded-full flex items-center justify-center text-white shadow-lg border-none cursor-pointer hover:scale-105 transition-transform"
           style={{ background: "linear-gradient(135deg,#1a6b3c,#0C1A2E)" }}
           title="Assistant IA">
@@ -696,7 +724,7 @@ function EspaceCavalierLayoutInner({
               className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg no-underline transition-all min-w-[56px]
                 ${active ? "text-blue-500" : "text-gray-600"}`}>
               <Icon size={20} strokeWidth={active ? 2 : 1.5} />
-              <span className={`font-body text-[10px] ${active ? "font-semibold" : "font-normal"}`}>{item.label}</span>
+              <span className={`font-body text-xs ${active ? "font-semibold" : "font-normal"}`}>{item.label}</span>
             </Link>
           );
         })}
@@ -704,7 +732,7 @@ function EspaceCavalierLayoutInner({
         <button onClick={() => setShowMoreMenu(m => !m)}
           className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg cursor-pointer border-none bg-transparent transition-colors ${showMoreMenu ? "text-blue-500" : "text-slate-400"}`}>
           <MoreHorizontal size={22} className={showMoreMenu ? "text-blue-500" : "text-slate-400"}/>
-          <span className="font-body text-[10px] font-medium">Plus</span>
+          <span className="font-body text-xs font-medium">Plus</span>
         </button>
       </div>
     </div>
