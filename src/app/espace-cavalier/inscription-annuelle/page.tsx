@@ -502,29 +502,23 @@ export default function InscriptionAnnuellePage() {
       // Collect all creneauIds from all selected slots
       const allCreneauIds = selectedSlotsData.flatMap(s => s.creneauIds);
 
-      // Batch enroll child in all creneaux
-      for (const creneauId of allCreneauIds) {
-        const creneau = creneaux.find(c => c.id === creneauId);
-        if (!creneau) continue;
-        // Check not already enrolled
-        if ((creneau.enrolled || []).some((e: any) => e.childId === selectedChild)) continue;
-
-        const newEnrolled = [...(creneau.enrolled || []), {
-          childId: selectedChild,
-          childName: (child as any).firstName || "—",
-          familyId: user.uid,
-          familyName: family.parentName || "—",
-          enrolledAt: new Date().toISOString(),
-          // Marqueur : inscription couverte par un forfait annuel.
-          // Évite qu'une désinscription d'UN créneau crée un avoir
-          // alors que le paiement annuel reste valide pour le reste.
-          paymentSource: "forfait",
-          forfaitId: null,
-        }];
-        await updateDoc(doc(db, "creneaux", creneauId), {
-          enrolled: newEnrolled,
-          enrolledCount: newEnrolled.length,
-        });
+      // Inscription sécurisée côté serveur (audit P0 #3 + #7), marqueur forfait annuel.
+      const enrollRes = await authFetch("/api/enroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enrollments: [{
+            childId: selectedChild,
+            childName: (child as any).firstName || "—",
+            creneauIds: allCreneauIds,
+            paymentSource: "forfait",
+            forfaitId: null,
+          }],
+        }),
+      });
+      if (!enrollRes.ok) {
+        const err = await enrollRes.json().catch(() => ({} as any));
+        throw new Error(err.error || "Inscription refusée (créneau complet ?)");
       }
 
       // Create reservation records for tracking
@@ -638,26 +632,27 @@ export default function InscriptionAnnuellePage() {
     const reservationIds: string[] = [];
 
     // 1. Inscrire l'enfant dans tous les créneaux de ses slots
-    for (const creneauId of item.creneauIds) {
-      const creneau = creneaux.find(c => c.id === creneauId);
-      if (!creneau) continue;
-      if ((creneau.enrolled || []).some((e: any) => e.childId === item.childId)) continue;
-      const newEnrolled = [...(creneau.enrolled || []), {
-        childId: item.childId,
-        childName: item.childName,
-        familyId: user.uid,
-        familyName: family.parentName || "—",
-        enrolledAt: new Date().toISOString(),
-        paymentSource: "forfait",
-        forfaitId: null,
-        // Place tenue mais NON confirmée tant que l'admin n'a pas validé le règlement.
-        ...(deferred ? { pending: true, paymentMethod: payMethod } : {}),
-      }];
-      await updateDoc(doc(db, "creneaux", creneauId), {
-        enrolled: newEnrolled,
-        enrolledCount: newEnrolled.length,
-      });
-      if (deferred) pendingEnrollments.push({ creneauId, childId: item.childId });
+    // Inscription sécurisée côté serveur (audit P0 #3 + #7).
+    const enrollRes = await authFetch("/api/enroll", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enrollments: [{
+          childId: item.childId,
+          childName: item.childName,
+          creneauIds: item.creneauIds,
+          paymentSource: "forfait",
+          forfaitId: null,
+          ...(deferred ? { pending: true, paymentMethod: payMethod } : {}),
+        }],
+      }),
+    });
+    if (!enrollRes.ok) {
+      const err = await enrollRes.json().catch(() => ({} as any));
+      throw new Error(err.error || "Inscription refusée (créneau complet ?)");
+    }
+    if (deferred) {
+      for (const creneauId of item.creneauIds) pendingEnrollments.push({ creneauId, childId: item.childId });
     }
 
     // 2. Réservations (une par slot)

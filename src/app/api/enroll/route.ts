@@ -24,6 +24,10 @@ interface EnrollItem {
   creneauIds: string[];
   sourceFamilyId?: string;
   childName?: string;
+  paymentSource?: string;      // ex. "forfait" pour une inscription annuelle
+  forfaitId?: string | null;
+  pending?: boolean;           // place tenue mais non confirmée (paiement différé)
+  paymentMethod?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -84,6 +88,9 @@ export async function POST(req: NextRequest) {
               enrolledAt: new Date().toISOString(),
             };
             if (item.sourceFamilyId) entry.sourceFamilyId = item.sourceFamilyId;
+            if (item.paymentSource) entry.paymentSource = item.paymentSource;
+            if ("forfaitId" in item) entry.forfaitId = item.forfaitId ?? null;
+            if (item.pending) { entry.pending = true; if (item.paymentMethod) entry.paymentMethod = item.paymentMethod; }
             tx.update(crRef, { enrolled: [...list, entry], enrolledCount: list.length + 1 });
             return "ok";
           });
