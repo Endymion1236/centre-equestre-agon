@@ -40,6 +40,9 @@ interface Props {
   applyAll: boolean;
   applyStage?: boolean;
   onApplyStageChange?: (v: boolean) => void;
+  stageDays?: { id: string; date: string }[];
+  selectedDayIds?: string[];
+  onSelectedDayIdsChange?: (ids: string[]) => void;
   onFormChange: (form: EditForm) => void;
   onApplyAllChange: (v: boolean) => void;
   onClose: () => void;
@@ -52,7 +55,7 @@ interface Props {
 const PRESET_COLORS = ["#2050A0","#27ae60","#e67e22","#7c3aed","#D63031","#16a085","#F0A010","#0ea5e9","#db2777","#64748b"];
 
 export default function EditCreneauModal({
-  creneau, form, activities, saving, applyAll, applyStage, onFormChange, onApplyAllChange, onApplyStageChange, onClose, onSave, onDuplicate, onNotifyEnrolled, notifyingEnrolled
+  creneau, form, activities, saving, applyAll, applyStage, onFormChange, onApplyAllChange, onApplyStageChange, onClose, onSave, onDuplicate, onNotifyEnrolled, notifyingEnrolled, stageDays = [], selectedDayIds = [], onSelectedDayIdsChange
 }: Props) {
   const [moniteurs, setMoniteurs] = useState<string[]>([]);
   const [themes, setThemes] = useState<{ id: string; label: string }[]>([]);
@@ -304,19 +307,43 @@ export default function EditCreneauModal({
             </div>
           )}
 
-          {/* Case "appliquer à tous" — masquée si le changement moniteur gère déjà la portée */}
+          {/* Sélection des jours du stage à modifier */}
           {(creneau.activityType === "stage" || creneau.activityType === "stage_journee") ? (
-            <label className="flex items-start gap-3 bg-green-50 rounded-xl p-3 cursor-pointer">
-              <input type="checkbox" checked={!!applyStage} onChange={e => onApplyStageChange?.(e.target.checked)}
-                className="accent-green-600 w-4 h-4 mt-0.5"/>
-              <div>
-                <div className="font-body text-sm font-semibold text-green-800">Appliquer à tous les jours de ce stage</div>
-                <div className="font-body text-xs text-slate-500 mt-0.5">
-                  Horaires, moniteur, places et prix appliqués à tous les jours du stage cette semaine.
-                  Décochez pour ne modifier que le {new Date(creneau.date + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}.
-                </div>
+            <div className="bg-green-50 rounded-xl p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="font-body text-sm font-semibold text-green-800">Jours du stage à modifier</div>
+                {stageDays.length > 1 && (
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => onSelectedDayIdsChange?.(stageDays.map(d => d.id))}
+                      className="font-body text-[11px] text-green-700 underline bg-transparent border-none cursor-pointer p-0">Tout</button>
+                    <button type="button" onClick={() => onSelectedDayIdsChange?.([creneau.id])}
+                      className="font-body text-[11px] text-slate-500 underline bg-transparent border-none cursor-pointer p-0">Ce jour seul</button>
+                  </div>
+                )}
               </div>
-            </label>
+              <div className="flex flex-col gap-1.5">
+                {(stageDays.length > 0 ? stageDays : [{ id: creneau.id, date: creneau.date }]).map(day => {
+                  const checked = selectedDayIds.includes(day.id);
+                  return (
+                    <label key={day.id} className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={checked}
+                        onChange={(e) => {
+                          if (e.target.checked) onSelectedDayIdsChange?.([...selectedDayIds, day.id]);
+                          else onSelectedDayIdsChange?.(selectedDayIds.filter(id => id !== day.id));
+                        }}
+                        className="accent-green-600 w-4 h-4" />
+                      <span className="font-body text-sm text-slate-700 capitalize">
+                        {new Date(day.date + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
+                        {day.id === creneau.id && <span className="text-[11px] text-green-600"> · jour ouvert</span>}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="font-body text-[11px] text-slate-500 mt-2">
+                Les modifications (horaires, moniteur, places, prix) s&apos;appliquent uniquement aux jours cochés.
+              </div>
+            </div>
           ) : !moniteurChanged && (
             <label className="flex items-start gap-3 bg-blue-50 rounded-xl p-3 cursor-pointer">
               <input type="checkbox" checked={applyAll} onChange={e => onApplyAllChange(e.target.checked)}
