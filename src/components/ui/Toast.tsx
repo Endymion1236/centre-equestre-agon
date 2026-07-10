@@ -21,25 +21,25 @@ const config = {
     icon: Check,
     title: "C’est fait",
     iconClass: "bg-emerald-50 text-emerald-600 ring-emerald-100",
-    barClass: "bg-emerald-500",
+    accentClass: "bg-emerald-500",
   },
   error: {
     icon: AlertTriangle,
     title: "Action impossible",
     iconClass: "bg-red-50 text-red-600 ring-red-100",
-    barClass: "bg-red-500",
+    accentClass: "bg-red-500",
   },
   warning: {
     icon: AlertTriangle,
     title: "À vérifier",
     iconClass: "bg-orange-50 text-orange-600 ring-orange-100",
-    barClass: "bg-orange-500",
+    accentClass: "bg-orange-500",
   },
   info: {
     icon: Info,
     title: "Information",
     iconClass: "bg-blue-50 text-blue-600 ring-blue-100",
-    barClass: "bg-blue-500",
+    accentClass: "bg-blue-500",
   },
 };
 
@@ -49,7 +49,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const addToast = useCallback((message: string, type: Toast["type"] = "success", duration = 4000) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     setToasts((current) => [...current.slice(-3), { id, message, type, duration }]);
-    window.setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), duration);
+    setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), duration);
   }, []);
 
   const removeToast = (id: string) => setToasts((current) => current.filter((toast) => toast.id !== id));
@@ -70,9 +70,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               key={toast.id}
               data-testid={`toast-${toast.type}`}
               role={toast.type === "error" ? "alert" : "status"}
-              className="pointer-events-auto relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 px-4 py-3.5 text-slate-700 shadow-[0_20px_55px_rgba(6,13,23,0.18)] backdrop-blur-xl animate-slide-up"
+              className="pointer-events-auto relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white px-4 py-3.5 text-slate-700 shadow-[0_20px_55px_rgba(6,13,23,0.18)] animate-slide-up"
             >
-              <div className="flex items-start gap-3">
+              <div className={`absolute inset-y-0 left-0 w-1 ${item.accentClass}`} />
+              <div className="flex items-start gap-3 pl-1">
                 <div className={`mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ring-1 ${item.iconClass}`}>
                   <Icon size={17} strokeWidth={2.4} />
                 </div>
@@ -89,25 +90,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   <X size={14} />
                 </button>
               </div>
-              <div className="absolute inset-x-0 bottom-0 h-0.5 bg-slate-100">
-                <div
-                  className={`h-full origin-left ${item.barClass}`}
-                  style={{ animation: `toast-progress ${toast.duration || 4000}ms linear forwards` }}
-                />
-              </div>
             </div>
           );
         })}
       </div>
-      <style jsx global>{`
-        @keyframes toast-progress {
-          from { transform: scaleX(1); }
-          to { transform: scaleX(0); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          [data-testid^="toast-"] * { animation: none !important; }
-        }
-      `}</style>
     </ToastContext.Provider>
   );
 }
