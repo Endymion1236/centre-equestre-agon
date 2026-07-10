@@ -1,12 +1,24 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { collection, getDocs, query, where, orderBy, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { collection, deleteDoc, doc, getDocs, query, where } from "firebase/firestore";
+import {
+  Bell,
+  Calendar,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  History,
+  Loader2,
+  X,
+  XCircle,
+} from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
-import { Card, Badge } from "@/components/ui";
-import { Loader2, Calendar, Check, Clock, XCircle, Bell, X } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { Badge, Card } from "@/components/ui";
 import { todayLocalString } from "@/lib/date-local";
 
 interface Reservation {
@@ -15,69 +27,107 @@ interface Reservation {
   activityTitle: string;
   activityType: string;
   childName: string;
-  date: string;
+  date: any;
   startTime: string;
   endTime: string;
   priceTTC: number;
-  status: "confirmed" | "pending" | "cancelled";
+  status: "confirmed" | "pending" | "pending_payment" | "pending_validation" | "cancelled";
   createdAt: any;
+  type?: string;
+  dayLabel?: string;
+  totalSessions?: number;
 }
 
-const statusConfig: Record<string, { label: string; color: "green" | "orange" | "red" | "gray"; icon: any }> = {
-  confirmed: { label: "Confirmée", color: "green", icon: Check },
-  pending: { label: "En attente de paiement", color: "orange", icon: Clock },
-  pending_payment: { label: "Paiement non finalisé", color: "orange", icon: Clock },
-  pending_validation: { label: "En attente de validation", color: "orange", icon: Clock },
-  cancelled: { label: "Annulée", color: "red", icon: XCircle },
+const statusConfig: Record<string, { label: string; color: "green" | "orange" | "red" | "gray" }> = {
+  confirmed: { label: "Confirmée", color: "green" },
+  pending: { label: "En attente de paiement", color: "orange" },
+  pending_payment: { label: "Paiement à finaliser", color: "orange" },
+  pending_validation: { label: "En attente de validation", color: "orange" },
+  cancelled: { label: "Annulée", color: "red" },
 };
+
+function reservationDate(value: any): Date | null {
+  if (!value) return null;
+  try {
+    const date = value?.seconds ? new Date(value.seconds * 1000) : new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  } catch {
+    return null;
+  }
+}
+
+function fullDate(value: any) {
+  const date = reservationDate(value);
+  return date
+    ? date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    : "Date à confirmer";
+}
+
+function shortDate(value: any) {
+  const date = reservationDate(value);
+  return date ? date.toLocaleDateString("fr-FR") : "Date à confirmer";
+}
+
+function dateTile(value: any) {
+  const date = reservationDate(value);
+  if (!date) return { day: "—", number: "—" };
+  return {
+    day: date.toLocaleDateString("fr-FR", { weekday: "short" }),
+    number: String(date.getDate()),
+  };
+}
 
 export default function ReservationsPage() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
+  const success = searchParams.get("success");
+
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [waitlistEntries, setWaitlistEntries] = useState<any[]>([]);
   const [cancellingWaitlist, setCancellingWaitlist] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const searchParams = useSearchParams();
-  const success = searchParams.get("success");
-  const deposit = searchParams.get("deposit");
-
-  // Le paiement est confirmé par le webhook CAWL côté serveur
-  // On affiche juste un message de confirmation sans modifier Firestore
+  const [showWaitlist, setShowWaitlist] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     if (!user) return;
-    const fetch = async () => {
-      // Réservations directes
+
+    const load = async () => {
       let own: Reservation[] = [];
       try {
         const ownSnap = await getDocs(query(collection(db, "reservations"), where("familyId", "==", user.uid)));
-        own = ownSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Reservation[];
-      } catch (e) { console.error("[reservations] own:", e); }
+        own = ownSnap.docs.map((item) => ({ id: item.id, ...item.data() })) as Reservation[];
+      } catch (error) {
+        console.error("[reservations] own:", error);
+      }
 
-      // Réservations liées (sourceFamilyId) — optionnel, ne bloque pas si échoue
       let linked: Reservation[] = [];
       try {
         const linkedSnap = await getDocs(query(collection(db, "reservations"), where("sourceFamilyId", "==", user.uid)));
-        linked = linkedSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Reservation[];
-      } catch (e) { /* pas de réservations liées */ }
+        linked = linkedSnap.docs.map((item) => ({ id: item.id, ...item.data() })) as Reservation[];
+      } catch {
+        // Les réservations liées sont optionnelles.
+      }
 
-      // Inscriptions en liste d'attente (en cours uniquement)
       try {
-        const wlSnap = await getDocs(query(collection(db, "waitlist"), where("familyId", "==", user.uid)));
+        const waitlistSnap = await getDocs(query(collection(db, "waitlist"), where("familyId", "==", user.uid)));
         const today = todayLocalString();
-        const wl = wlSnap.docs
-          .map(d => ({ id: d.id, ...d.data() }))
-          .filter((w: any) => (w.status === "waiting" || w.status === "notified") && (!w.date || w.date >= today))
+        const entries = waitlistSnap.docs
+          .map((item) => ({ id: item.id, ...item.data() }))
+          .filter((entry: any) =>
+            (entry.status === "waiting" || entry.status === "notified") && (!entry.date || entry.date >= today),
+          )
           .sort((a: any, b: any) => (a.date || "").localeCompare(b.date || ""));
-        setWaitlistEntries(wl);
-      } catch (e) { console.error("[reservations] waitlist:", e); }
+        setWaitlistEntries(entries);
+      } catch (error) {
+        console.error("[reservations] waitlist:", error);
+      }
 
-      // Dédupliquer par id
-      const all = [...own, ...linked.filter(r => !own.some(o => o.id === r.id))];
-      setReservations(all);
+      setReservations([...own, ...linked.filter((item) => !own.some((ownItem) => ownItem.id === item.id))]);
       setLoading(false);
     };
-    fetch();
+
+    load();
   }, [user]);
 
   const cancelWaitlist = async (entry: any) => {
@@ -85,158 +135,231 @@ export default function ReservationsPage() {
     setCancellingWaitlist(entry.id);
     try {
       await deleteDoc(doc(db, "waitlist", entry.id));
-      setWaitlistEntries(prev => prev.filter(w => w.id !== entry.id));
-    } catch (e) {
-      console.error("[waitlist] annulation:", e);
+      setWaitlistEntries((current) => current.filter((item) => item.id !== entry.id));
+    } catch (error) {
+      console.error("[waitlist] annulation:", error);
       alert("Impossible d'annuler pour le moment. Réessayez ou contactez le centre.");
     }
     setCancellingWaitlist(null);
   };
 
-  // Les inscriptions annuelles sont récurrentes (même jour chaque semaine) et
-  // n'ont pas de champ `date` unique : on les sort de l'axe upcoming/past et on
-  // les affiche dans une section dédiée.
-  const isAnnual = (r: Reservation) => (r as any).type === "annual" || !(r as any).date;
-  const annual = reservations.filter(isAnnual);
-  const ponctuelles = reservations.filter((r) => !isAnnual(r));
+  const isAnnual = (reservation: Reservation) => reservation.type === "annual" || !reservation.date;
+  const annual = reservations.filter(isAnnual).filter((reservation) => reservation.status !== "cancelled");
+  const punctual = reservations.filter((reservation) => !isAnnual(reservation));
 
-  // Group by upcoming / past
-  const today = todayLocalString();
-  const upcoming = ponctuelles.filter((r) => r.date >= today).sort((a, b) => a.date.localeCompare(b.date));
-  const past = ponctuelles.filter((r) => r.date < today).sort((a, b) => b.date.localeCompare(a.date));
-  const pendingPayment = reservations.filter((r) => (r.status as string) === "pending_payment");
+  const today = new Date(`${todayLocalString()}T00:00:00`);
+  const upcoming = punctual
+    .filter((reservation) => {
+      const date = reservationDate(reservation.date);
+      return date && date >= today && reservation.status !== "cancelled";
+    })
+    .sort((a, b) => {
+      const aDate = reservationDate(a.date)?.getTime() || 0;
+      const bDate = reservationDate(b.date)?.getTime() || 0;
+      if (aDate !== bDate) return aDate - bDate;
+      return (a.startTime || "").localeCompare(b.startTime || "");
+    });
+
+  const past = punctual
+    .filter((reservation) => {
+      const date = reservationDate(reservation.date);
+      return Boolean(date && date < today);
+    })
+    .sort((a, b) => (reservationDate(b.date)?.getTime() || 0) - (reservationDate(a.date)?.getTime() || 0));
+
+  const pendingPayment = reservations.filter((reservation) => reservation.status === "pending_payment");
+  const nextReservation = upcoming[0] || null;
+  const laterReservations = upcoming.slice(1);
+  const urgentWaitlist = waitlistEntries.filter((entry) =>
+    entry.status === "notified" && entry.holdUntil && new Date(entry.holdUntil).getTime() > Date.now(),
+  );
+  const quietWaitlist = waitlistEntries.filter((entry) => !urgentWaitlist.some((urgent) => urgent.id === entry.id));
+
+  const renderWaitlistCard = (entry: any, urgent = false) => {
+    const holdStillValid = urgent && entry.holdUntil && new Date(entry.holdUntil).getTime() > Date.now();
+    return (
+      <Card key={entry.id} padding="md" className={urgent ? "!border-green-300 !bg-green-50" : ""}>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="min-w-0 flex-1">
+            <div className="font-body text-sm font-bold text-blue-800">{entry.activityTitle}</div>
+            <div className="font-body text-xs text-gray-600 mt-1">
+              {entry.childName}
+              {entry.date && <> · {fullDate(entry.date)}</>}
+              {entry.startTime && <> · {entry.startTime}–{entry.endTime}</>}
+            </div>
+            {holdStillValid ? (
+              <div className="font-body text-xs text-green-700 font-semibold mt-2">
+                🎉 Une place vous est réservée jusqu’au {new Date(entry.holdUntil).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}.
+              </div>
+            ) : (
+              <div className="font-body text-xs text-gray-500 mt-2">Vous serez prévenu si une place se libère.</div>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge color={urgent ? "green" : "orange"}>{urgent ? "Place disponible" : "En attente"}</Badge>
+            <button
+              type="button"
+              onClick={() => cancelWaitlist(entry)}
+              disabled={cancellingWaitlist === entry.id}
+              className="flex items-center gap-1 font-body text-xs text-gray-500 bg-white border border-gray-200 px-2.5 py-1.5 rounded-lg cursor-pointer hover:border-red-300 hover:text-red-500 disabled:opacity-50"
+            >
+              {cancellingWaitlist === entry.id ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />}
+              Retirer
+            </button>
+          </div>
+        </div>
+        {holdStillValid && (
+          <Link href="/espace-cavalier/reserver" className="mt-3 flex items-center justify-center gap-1.5 font-body text-sm font-bold text-white bg-green-600 px-4 py-2.5 rounded-xl no-underline">
+            Réserver cette place <ChevronRight size={15} />
+          </Link>
+        )}
+      </Card>
+    );
+  };
 
   return (
-    <div>
-      <h1 className="font-display text-2xl font-bold text-blue-800 mb-2">Mes réservations</h1>
-      <p className="font-body text-sm text-gray-600 mb-6">Retrouvez ici toutes vos réservations passées et à venir.</p>
+    <div className="pb-8">
+      <div className="mb-6">
+        <h1 className="font-display text-2xl font-bold text-blue-800 mb-1">Mes réservations</h1>
+        <p className="font-body text-sm text-gray-600">Vos prochaines activités, vos inscriptions à l’année et votre historique.</p>
+      </div>
 
-      {/* Bandeau paiement non finalisé */}
-      {pendingPayment.length > 0 && (
-        <Card className="!bg-orange-50 !border-orange-300 mb-5" padding="sm">
-          <div className="flex items-start gap-3">
-            <Clock size={20} className="text-orange-500 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="font-body text-sm font-bold text-orange-800">
-                {pendingPayment.length} réservation{pendingPayment.length > 1 ? "s" : ""} en attente de paiement
-              </p>
-              <p className="font-body text-xs text-orange-600 mt-0.5">
-                Votre place est réservée mais le paiement n&apos;a pas été finalisé.
-                Réglez votre inscription pour la confirmer définitivement.
-              </p>
-              <a href="/espace-cavalier/reserver">
-                <button className="mt-2 font-body text-xs font-semibold text-white bg-orange-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-orange-400">
-                  Finaliser le paiement →
-                </button>
-              </a>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {/* Success message */}
       {success === "true" && (
         <Card className="!bg-green-50 !border-green-200 mb-5" padding="sm">
           <div className="flex items-center gap-3">
             <Check size={20} className="text-green-600" />
             <div className="font-body text-sm text-green-800">
-              <strong>Paiement confirmé !</strong> Votre réservation est enregistrée. À bientôt au centre équestre !
+              <strong>Paiement confirmé.</strong> Votre réservation est bien enregistrée.
             </div>
           </div>
         </Card>
       )}
 
-      {/* ── Liste d'attente ── */}
-      {waitlistEntries.length > 0 && (
-        <div className="mb-8">
-          <h2 className="font-body text-sm font-bold text-orange-700 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Bell size={14} /> Liste d&apos;attente ({waitlistEntries.length})
-          </h2>
-          <div className="flex flex-col gap-3">
-            {waitlistEntries.map((w: any) => {
-              const notified = w.status === "notified";
-              const holdStillValid = notified && w.holdUntil && new Date(w.holdUntil).getTime() > Date.now();
-              return (
-                <Card key={w.id} padding="md" className={notified ? "!border-green-300 !bg-green-50/50" : ""}>
-                  <div className="flex items-center justify-between flex-wrap gap-3">
-                    <div>
-                      <div className="font-body text-sm font-semibold text-blue-800">{w.activityTitle}</div>
-                      <div className="font-body text-xs text-gray-500 mt-0.5">
-                        {w.childName}
-                        {w.date && <> · {new Date(w.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</>}
-                        {w.startTime && <> · {w.startTime}–{w.endTime}</>}
-                      </div>
-                      {holdStillValid ? (
-                        <div className="font-body text-xs text-green-700 font-semibold mt-1">
-                          🎉 Une place s&apos;est libérée ! Elle vous est réservée jusqu&apos;au{" "}
-                          {new Date(w.holdUntil).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} à{" "}
-                          {new Date(w.holdUntil).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })} —{" "}
-                          <a href="/espace-cavalier/reserver" className="text-green-700 underline">réserver maintenant →</a>
-                        </div>
-                      ) : notified ? (
-                        <div className="font-body text-xs text-orange-600 mt-1">
-                          Une place s&apos;était libérée — vérifiez sa disponibilité sur la{" "}
-                          <a href="/espace-cavalier/reserver" className="text-orange-600 underline">page de réservation</a>.
-                        </div>
-                      ) : (
-                        <div className="font-body text-xs text-gray-400 mt-1">
-                          Vous serez notifié par email si une place se libère.
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge color={notified ? "green" : "orange"}>{notified ? "Place disponible" : "En attente"}</Badge>
-                      <button onClick={() => cancelWaitlist(w)} disabled={cancellingWaitlist === w.id}
-                        title="Retirer de la liste d'attente"
-                        className="flex items-center gap-1 font-body text-xs text-gray-500 bg-white border border-gray-200 px-2.5 py-1.5 rounded-lg cursor-pointer hover:border-red-300 hover:text-red-500 disabled:opacity-50">
-                        {cancellingWaitlist === w.id ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />} Annuler
-                      </button>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
+      {pendingPayment.length > 0 && (
+        <Card className="!bg-orange-50 !border-orange-200 mb-5" padding="md">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
+              <Clock size={20} className="text-orange-600" />
+            </div>
+            <div className="flex-1">
+              <div className="font-body text-sm font-bold text-orange-800">Paiement à finaliser</div>
+              <p className="font-body text-xs text-orange-700 mt-1 mb-3">
+                {pendingPayment.length} réservation{pendingPayment.length > 1 ? "s sont" : " est"} en attente de règlement.
+              </p>
+              <Link href="/espace-cavalier/factures" className="inline-flex items-center gap-1.5 font-body text-sm font-bold text-white bg-orange-500 px-4 py-2 rounded-lg no-underline">
+                Voir et régler <ChevronRight size={15} />
+              </Link>
+            </div>
           </div>
-        </div>
+        </Card>
+      )}
+
+      {urgentWaitlist.length > 0 && (
+        <section className="mb-6">
+          <div className="font-body text-xs font-bold uppercase tracking-wider text-green-700 mb-2 flex items-center gap-2">
+            <Bell size={14} /> Une place s’est libérée
+          </div>
+          <div className="flex flex-col gap-3">{urgentWaitlist.map((entry) => renderWaitlistCard(entry, true))}</div>
+        </section>
       )}
 
       {loading ? (
-        <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div>
+        <div className="text-center py-16">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" />
+        </div>
       ) : reservations.length === 0 ? (
         <Card padding="lg" className="text-center">
           <span className="text-5xl block mb-4">📋</span>
           <h2 className="font-display text-lg font-bold text-blue-800 mb-2">Aucune réservation</h2>
-          <p className="font-body text-sm text-gray-600 mb-4">Vous n&apos;avez pas encore de réservation.</p>
-          <a href="/espace-cavalier/reserver" className="font-body text-sm font-semibold text-blue-500 no-underline">
-            Réserver une activité →
-          </a>
+          <p className="font-body text-sm text-gray-600 mb-4">Découvrez les prochains stages, cours et balades.</p>
+          <Link href="/espace-cavalier/reserver" className="inline-flex items-center gap-1.5 font-body text-sm font-bold text-white bg-blue-500 px-5 py-2.5 rounded-xl no-underline">
+            Réserver une activité <ChevronRight size={15} />
+          </Link>
         </Card>
       ) : (
-        <div className="flex flex-col gap-8">
-          {/* Inscriptions à l'année (récurrentes) */}
-          {annual.length > 0 && (
-            <div>
-              <h2 className="font-body text-sm font-bold text-blue-800 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <Calendar size={14} /> Inscriptions à l&apos;année ({annual.length})
-              </h2>
+        <>
+          {/* Prochaine activité */}
+          {nextReservation && (() => {
+            const tile = dateTile(nextReservation.date);
+            const status = statusConfig[nextReservation.status] || statusConfig.pending;
+            return (
+              <section className="mb-7">
+                <div className="font-body text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Prochaine activité</div>
+                <Card padding="md" className="!bg-gradient-to-br !from-blue-800 !to-blue-600 !border-blue-700 text-white">
+                  <div className="flex items-start gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-white/15 flex flex-col items-center justify-center flex-shrink-0">
+                      <span className="font-body text-xs font-bold uppercase text-blue-100">{tile.day}</span>
+                      <span className="font-display text-xl font-bold text-white">{tile.number}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-display text-xl font-bold text-white">{nextReservation.activityTitle}</div>
+                      <div className="font-body text-sm text-blue-50 mt-1">🐴 {nextReservation.childName}</div>
+                      <div className="font-body text-sm text-blue-100 mt-2 capitalize">
+                        {fullDate(nextReservation.date)}
+                        {nextReservation.startTime && ` · ${nextReservation.startTime}${nextReservation.endTime ? `–${nextReservation.endTime}` : ""}`}
+                      </div>
+                    </div>
+                    <Badge color={status.color}>{status.label}</Badge>
+                  </div>
+                </Card>
+              </section>
+            );
+          })()}
+
+          {/* Activités suivantes */}
+          {laterReservations.length > 0 && (
+            <section className="mb-7">
+              <h2 className="font-display text-lg font-bold text-blue-800 mb-3">Ensuite</h2>
               <div className="flex flex-col gap-3">
-                {annual.map((r) => {
-                  const status = statusConfig[r.status] || statusConfig.pending;
-                  const dayLabel = (r as any).dayLabel || "";
+                {laterReservations.map((reservation) => {
+                  const tile = dateTile(reservation.date);
+                  const status = statusConfig[reservation.status] || statusConfig.pending;
                   return (
-                    <Card key={r.id} padding="md">
-                      <div className="flex items-center justify-between flex-wrap gap-3">
-                        <div className="flex items-center gap-4">
-                          <div className="w-14 h-14 rounded-xl bg-blue-50 flex flex-col items-center justify-center shrink-0">
-                            <span className="text-xl">🐴</span>
+                    <Card key={reservation.id} padding="md">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-12 h-12 rounded-xl bg-blue-50 flex flex-col items-center justify-center flex-shrink-0">
+                            <span className="font-body text-xs font-bold text-blue-500 uppercase">{tile.day}</span>
+                            <span className="font-display text-lg font-bold text-blue-800">{tile.number}</span>
                           </div>
-                          <div>
-                            <div className="font-body text-base font-semibold text-blue-800">{r.activityTitle}</div>
-                            <div className="font-body text-xs text-gray-600">
-                              🧒 {r.childName}{dayLabel ? ` · tous les ${dayLabel.toLowerCase()}` : ""}{r.startTime ? ` · ${r.startTime}${r.endTime ? `–${r.endTime}` : ""}` : ""}
+                          <div className="min-w-0">
+                            <div className="font-body text-sm font-bold text-blue-800">{reservation.activityTitle}</div>
+                            <div className="font-body text-xs text-gray-600 mt-0.5">
+                              {reservation.childName} · {reservation.startTime || ""}{reservation.endTime ? `–${reservation.endTime}` : ""}
                             </div>
-                            {(r as any).totalSessions ? (
-                              <div className="font-body text-xs text-gray-400">{(r as any).totalSessions} séances sur l&apos;année</div>
+                            <div className="font-body text-xs text-gray-400 mt-0.5 capitalize">{fullDate(reservation.date)}</div>
+                          </div>
+                        </div>
+                        <Badge color={status.color}>{status.label}</Badge>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* Inscriptions annuelles */}
+          {annual.length > 0 && (
+            <section className="mb-7">
+              <h2 className="font-display text-lg font-bold text-blue-800 mb-3">Cours à l’année</h2>
+              <div className="flex flex-col gap-3">
+                {annual.map((reservation) => {
+                  const status = statusConfig[reservation.status] || statusConfig.pending;
+                  return (
+                    <Card key={reservation.id} padding="md">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-3">
+                          <div className="w-11 h-11 rounded-xl bg-gold-50 flex items-center justify-center text-xl">🐴</div>
+                          <div>
+                            <div className="font-body text-sm font-bold text-blue-800">{reservation.activityTitle}</div>
+                            <div className="font-body text-xs text-gray-600 mt-0.5">
+                              {reservation.childName}
+                              {reservation.dayLabel ? ` · tous les ${reservation.dayLabel.toLowerCase()}` : ""}
+                              {reservation.startTime ? ` · ${reservation.startTime}${reservation.endTime ? `–${reservation.endTime}` : ""}` : ""}
+                            </div>
+                            {reservation.totalSessions ? (
+                              <div className="font-body text-xs text-gray-400 mt-0.5">{reservation.totalSessions} séances sur l’année</div>
                             ) : null}
                           </div>
                         </div>
@@ -246,78 +369,68 @@ export default function ReservationsPage() {
                   );
                 })}
               </div>
-            </div>
+            </section>
           )}
 
-          {/* Upcoming */}
-          {upcoming.length > 0 && (
-            <div>
-              <h2 className="font-body text-sm font-bold text-blue-800 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <Calendar size={14} /> À venir ({upcoming.length})
-              </h2>
-              <div className="flex flex-col gap-3">
-                {upcoming.map((r) => {
-                  const status = statusConfig[r.status] || statusConfig.pending;
-                  const StatusIcon = status.icon;
-                  return (
-                    <Card key={r.id} padding="md">
-                      <div className="flex items-center justify-between flex-wrap gap-3">
-                        <div className="flex items-center gap-4">
-                          <div className="w-14 h-14 rounded-xl bg-blue-50 flex flex-col items-center justify-center">
-                            <div className="font-body text-xs font-bold text-blue-500">
-                              {(() => { try { const d = (r as any).date?.seconds ? new Date((r as any).date.seconds * 1000) : new Date(r.date); return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("fr-FR", { weekday: "short" }); } catch { return "—"; }})()}
-                            </div>
-                            <div className="font-body text-lg font-bold text-blue-800">
-                              {(() => { try { const d = (r as any).date?.seconds ? new Date((r as any).date.seconds * 1000) : new Date(r.date); return isNaN(d.getTime()) ? "—" : d.getDate(); } catch { return "—"; }})()}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="font-body text-base font-semibold text-blue-800">{r.activityTitle}</div>
-                            <div className="font-body text-xs text-gray-600">
-                              🧒 {r.childName} · {r.startTime || ""}–{r.endTime || ""}
-                            </div>
-                            <div className="font-body text-xs text-gray-600">
-                              {(() => { try { const d = (r as any).date?.seconds ? new Date((r as any).date.seconds * 1000) : new Date(r.date); return isNaN(d.getTime()) ? (typeof r.date === "string" ? r.date : "Date non disponible") : d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }); } catch { return typeof r.date === "string" ? r.date : "—"; }})()}
-                            </div>
-                          </div>
+          {/* Liste d’attente repliable */}
+          {quietWaitlist.length > 0 && (
+            <section className="mb-7">
+              <button
+                type="button"
+                onClick={() => setShowWaitlist((value) => !value)}
+                className="w-full flex items-center justify-between gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3 cursor-pointer text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center"><Bell size={17} className="text-orange-600" /></div>
+                  <div>
+                    <div className="font-body text-sm font-bold text-blue-800">Liste d’attente</div>
+                    <div className="font-body text-xs text-gray-600">{quietWaitlist.length} demande{quietWaitlist.length > 1 ? "s" : ""} en cours</div>
+                  </div>
+                </div>
+                <ChevronDown size={18} className={`text-gray-400 transition-transform ${showWaitlist ? "rotate-180" : ""}`} />
+              </button>
+              {showWaitlist && <div className="flex flex-col gap-3 mt-3">{quietWaitlist.map((entry) => renderWaitlistCard(entry))}</div>}
+            </section>
+          )}
+
+          {/* Historique repliable */}
+          {past.length > 0 && (
+            <section>
+              <button
+                type="button"
+                onClick={() => setShowHistory((value) => !value)}
+                className="w-full flex items-center justify-between gap-3 bg-transparent border-none px-0 py-2 cursor-pointer text-left"
+              >
+                <div className="flex items-center gap-2">
+                  <History size={17} className="text-gray-400" />
+                  <span className="font-body text-sm font-bold text-gray-600">Historique</span>
+                  <span className="font-body text-xs text-gray-400">{past.length} activité{past.length > 1 ? "s" : ""}</span>
+                </div>
+                <ChevronDown size={18} className={`text-gray-400 transition-transform ${showHistory ? "rotate-180" : ""}`} />
+              </button>
+
+              {showHistory && (
+                <div className="flex flex-col gap-2 mt-2">
+                  {past.map((reservation) => (
+                    <Card key={reservation.id} padding="sm" className="opacity-75">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-body text-sm font-semibold text-gray-700">{reservation.activityTitle}</div>
+                          <div className="font-body text-xs text-gray-500 mt-0.5">{reservation.childName} · {shortDate(reservation.date)}</div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          {/* Tarif volontairement non affiché ici : la logistique est dans
-                              Mes réservations, l'argent (payé / reste dû) dans Mes factures. */}
-                          <Badge color={status.color}>{status.label}</Badge>
-                        </div>
+                        {reservation.status === "cancelled" && <Badge color="red"><XCircle size={10} className="inline mr-1" />Annulée</Badge>}
                       </div>
                     </Card>
-                  );
-                })}
-              </div>
-            </div>
+                  ))}
+                </div>
+              )}
+            </section>
           )}
 
-          {/* Past */}
-          {past.length > 0 && (
-            <div>
-              <h2 className="font-body text-sm font-bold text-gray-600 uppercase tracking-wider mb-3">
-                Passées ({past.length})
-              </h2>
-              <div className="flex flex-col gap-2">
-                {past.map((r) => (
-                  <Card key={r.id} padding="sm" className="opacity-60">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="font-body text-xs text-gray-600">
-                          {(() => { try { const d = (r as any).date?.seconds ? new Date((r as any).date.seconds * 1000) : new Date(r.date); return isNaN(d.getTime()) ? (typeof r.date === "string" ? r.date : "—") : d.toLocaleDateString("fr-FR"); } catch { return "—"; }})()}
-                        </span>
-                        <span className="font-body text-sm text-gray-600">{r.activityTitle}</span>
-                        <span className="font-body text-xs text-gray-600">🧒 {r.childName}</span>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+          <Link href="/espace-cavalier/reserver" className="mt-8 flex items-center justify-center gap-1.5 font-body text-sm font-bold text-blue-500 bg-blue-50 py-3 rounded-xl no-underline">
+            Réserver une nouvelle activité <ChevronRight size={15} />
+          </Link>
+        </>
       )}
     </div>
   );
