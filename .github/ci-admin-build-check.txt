@@ -1,2 +1,2 @@
 Temporary marker used to trigger the admin preview build check.
-Run: admin-communication-v5
+Run: admin-final-ux-v6
