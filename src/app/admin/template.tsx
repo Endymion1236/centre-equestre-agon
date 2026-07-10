@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import AdminContextBar from "@/components/admin/AdminContextBar";
+import AdminDenseModulePolish from "@/components/admin/AdminDenseModulePolish";
 import AdminUxPolish from "@/components/admin/AdminUxPolish";
 
 function getAdminSection(pathname: string) {
@@ -19,6 +20,7 @@ export default function AdminTemplate({ children }: { children: React.ReactNode 
       className="admin-page-shell"
     >
       <AdminUxPolish />
+      <AdminDenseModulePolish />
       <AdminContextBar />
       {children}
     </div>
