@@ -1,7 +1,16 @@
 "use client";
-import { useState, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Users, Clock, Star, Check, Sparkles } from "lucide-react";
-import { Card, Badge } from "@/components/ui";
+
+import { useMemo, useState } from "react";
+import {
+  CalendarDays,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Sparkles,
+  Users,
+} from "lucide-react";
+import { Badge, Card } from "@/components/ui";
 import { compareCreneaux } from "@/lib/creneau-sort";
 
 interface Creneau {
@@ -32,404 +41,404 @@ interface Props {
   creneaux: Creneau[];
   children: Child[];
   familyId: string;
-  onBook: (creneau: Creneau) => void; // ouvre le modal de réservation existant
-  stagesAvailable?: number; // nb de stages dispo (affichés en vue Liste)
-  onSeeStages?: () => void;  // bascule vers la vue Liste
+  onBook: (creneau: Creneau) => void;
+  stagesAvailable?: number;
+  onSeeStages?: () => void;
 }
+
+type FilterId = "pour_moi" | "cours" | "balade" | "tous";
 
 const TYPE_COLORS: Record<string, string> = {
   cours: "#2050A0",
-  stage: "#27ae60",
-  stage_journee: "#16a085",
   cycle: "#0ea5e9",
   balade: "#e67e22",
   competition: "#7c3aed",
   anniversaire: "#D63031",
 };
 
-const TYPE_LABELS: Record<string, string> = {
-  cours: "Cours",
-  stage: "Stage",
-  stage_journee: "Stage journée",
-  cycle: "Cycle",
-  balade: "Balade",
-  competition: "Compét.",
-  anniversaire: "Anniversaire",
-};
-
 const DAYS_FR = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
 const DAYS_FULL_FR = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
 
-function fmtDate(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+function fmtDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
-// Déduire les niveaux compatibles d'un galop
-function getCompatibleLevels(galopLevel: string): string[] {
-  if (!galopLevel || galopLevel === "—") return [];
-  const n = parseInt(galopLevel.replace(/[^0-9]/g, ""));
-  if (isNaN(n)) return [];
-  // Compatible : niveau enfant ±1, et tout ce qui est inférieur
-  const levels: string[] = [];
-  for (let i = Math.max(1, n - 1); i <= n + 1; i++) {
-    levels.push(String(i));
-    levels.push(`G${i}`);
-    levels.push(`Galop ${i}`);
-  }
-  return levels;
-}
-
-// Est-ce qu'un créneau est pertinent pour ces enfants ?
 function isRelevantForFamily(creneau: Creneau, children: Child[]): "perfect" | "ok" | "maybe" {
   if (children.length === 0) return "ok";
+  if (creneau.activityType === "balade") return "ok";
 
   const title = creneau.activityTitle.toLowerCase();
-  const type = creneau.activityType;
-
-  // Balades et stages sont pour tout le monde
-  if (type === "balade" || type === "stage" || type === "stage_journee") return "ok";
-
-  // Chercher un niveau de galop dans le titre
   const galopMatch = title.match(/galop\s*(\d+)|g(\d+)|[gG](\d+)/);
-  if (!galopMatch) return "ok"; // pas de niveau mentionné → ouvert à tous
+  if (!galopMatch) return "ok";
 
   const titleLevel = parseInt(galopMatch[1] || galopMatch[2] || galopMatch[3]);
+  const levels = children
+    .map((child) => parseInt((child.galopLevel || "").replace(/[^0-9]/g, "")))
+    .filter((level) => !Number.isNaN(level));
 
-  // Vérifier si un enfant correspond exactement
-  const perfectMatch = children.some(child => {
-    if (!child.galopLevel || child.galopLevel === "—") return false;
-    const childLevel = parseInt(child.galopLevel.replace(/[^0-9]/g, ""));
-    return childLevel === titleLevel;
-  });
-  if (perfectMatch) return "perfect";
-
-  // Vérifier si un enfant est proche (±1)
-  const okMatch = children.some(child => {
-    if (!child.galopLevel || child.galopLevel === "—") return false;
-    const childLevel = parseInt(child.galopLevel.replace(/[^0-9]/g, ""));
-    return Math.abs(childLevel - titleLevel) <= 1;
-  });
-  if (okMatch) return "ok";
-
+  if (levels.some((level) => level === titleLevel)) return "perfect";
+  if (levels.some((level) => Math.abs(level - titleLevel) <= 1)) return "ok";
   return "maybe";
 }
 
-export default function TimelineReservation({ creneaux, children, familyId, onBook, stagesAvailable = 0, onSeeStages }: Props) {
-  const [selectedDate, setSelectedDate] = useState<Date>(() => { const d = new Date(); d.setHours(0,0,0,0); return d; });
-  const [weekStart, setWeekStart] = useState<Date>(() => { const d = new Date(); d.setHours(0,0,0,0); return d; });
-  const [filter, setFilter] = useState<"tous" | "pour_moi" | "cours" | "stage" | "balade">("pour_moi");
-  const [selectedChild, setSelectedChild] = useState<string>("tous");
-  const [showDatePicker, setShowDatePicker] = useState(false);
+export default function TimelineReservation({
+  creneaux,
+  children,
+  familyId,
+  onBook,
+  stagesAvailable = 0,
+  onSeeStages,
+}: Props) {
+  const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  });
+  const [weekStart, setWeekStart] = useState<Date>(() => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  });
+  const [filter, setFilter] = useState<FilterId>("pour_moi");
+  const [selectedChild, setSelectedChild] = useState("tous");
 
   const todayStr = fmtDate(new Date());
   const currentDayStr = fmtDate(selectedDate);
-  const currentDay = selectedDate;
 
-  // 7 jours glissants depuis weekStart
-  const weekDays = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(weekStart);
-      d.setDate(d.getDate() + i);
-      return d;
-    });
-  }, [weekStart]);
+  const weekDays = useMemo(
+    () => Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(weekStart);
+      date.setDate(date.getDate() + index);
+      return date;
+    }),
+    [weekStart],
+  );
 
-  const goToDay = (d: Date) => {
-    setSelectedDate(new Date(d));
-    const ds = fmtDate(d);
-    const weekStrs = Array.from({ length: 7 }, (_, i) => {
-      const wd = new Date(weekStart); wd.setDate(wd.getDate() + i); return fmtDate(wd);
-    });
-    if (!weekStrs.includes(ds)) {
-      const newStart = new Date(d);
-      newStart.setDate(newStart.getDate() - 3);
-      const today = new Date(); today.setHours(0,0,0,0);
-      if (newStart < today) newStart.setTime(today.getTime());
-      setWeekStart(newStart);
-    }
-  };
-
-  const prevDay = () => {
-    const d = new Date(selectedDate); d.setDate(d.getDate() - 1);
-    if (fmtDate(d) >= todayStr) goToDay(d);
-  };
-  const nextDay = () => { const d = new Date(selectedDate); d.setDate(d.getDate() + 1); goToDay(d); };
-  const prevWeek = () => {
-    const d = new Date(weekStart); d.setDate(d.getDate() - 7);
-    const today = new Date(); today.setHours(0,0,0,0);
-    if (d < today) d.setTime(today.getTime());
-    setWeekStart(d); setSelectedDate(new Date(d));
-  };
-  const nextWeek = () => {
-    const d = new Date(weekStart); d.setDate(d.getDate() + 7);
-    setWeekStart(d); setSelectedDate(new Date(d));
-  };
-
-  // Enfants sélectionnés pour le filtre
   const activeChildren = useMemo(() => {
     if (selectedChild === "tous") return children;
-    return children.filter(c => c.id === selectedChild);
+    return children.filter((child) => child.id === selectedChild);
   }, [children, selectedChild]);
 
-  // Créneaux du jour courant, filtrés
-  const dayCreneaux = useMemo(() => {
-    let result = creneaux.filter(c => c.date === currentDayStr && c.date >= todayStr);
-
+  const applyFilter = (items: Creneau[]) => {
     if (filter === "pour_moi") {
-      result = result.filter(c => isRelevantForFamily(c, activeChildren) !== "maybe");
-    } else if (filter !== "tous") {
-      if (filter === "stage") {
-        result = result.filter(c => c.activityType === "stage" || c.activityType === "stage_journee");
-      } else {
-        result = result.filter(c => c.activityType === filter);
-      }
+      return items.filter((creneau) => isRelevantForFamily(creneau, activeChildren) !== "maybe");
     }
+    if (filter === "tous") return items;
+    return items.filter((creneau) => creneau.activityType === filter);
+  };
 
-    return result.sort(compareCreneaux);
-  }, [creneaux, currentDayStr, filter, activeChildren, todayStr]);
+  const dayCreneaux = useMemo(() => {
+    const items = creneaux.filter((creneau) => creneau.date === currentDayStr && creneau.date >= todayStr);
+    return applyFilter(items).sort(compareCreneaux);
+  }, [creneaux, currentDayStr, todayStr, filter, activeChildren]);
 
-  // Nb créneaux par jour (pour les points indicateurs)
   const creneauxByDay = useMemo(() => {
     const counts: Record<string, number> = {};
-    weekDays.forEach(d => {
-      const ds = fmtDate(d);
-      let dayC = creneaux.filter(c => c.date === ds);
-      if (filter === "pour_moi") {
-        dayC = dayC.filter(c => isRelevantForFamily(c, activeChildren) !== "maybe");
-      } else if (filter !== "tous") {
-        if (filter === "stage") {
-          dayC = dayC.filter(c => c.activityType === "stage" || c.activityType === "stage_journee");
-        } else {
-          dayC = dayC.filter(c => c.activityType === filter);
-        }
-      }
-      counts[ds] = dayC.length;
+    weekDays.forEach((date) => {
+      const dateStr = fmtDate(date);
+      counts[dateStr] = applyFilter(creneaux.filter((creneau) => creneau.date === dateStr)).length;
     });
     return counts;
   }, [creneaux, weekDays, filter, activeChildren]);
 
-  // Place réservée 24h (hold liste d'attente) : masquée pour les autres
-  // familles, visible pour la famille notifiée. Hold actif = non expiré et
-  // enfant concerné pas encore inscrit.
-  const holdActive = (c: any) => {
-    const h = c?.waitlistHold;
-    if (!h?.until) return false;
-    if (new Date(h.until).getTime() < Date.now()) return false;
-    if ((c.enrolled || []).some((e: any) => e.childId === h.childId)) return false;
+  const goToDay = (date: Date) => {
+    const normalized = new Date(date);
+    normalized.setHours(0, 0, 0, 0);
+    setSelectedDate(normalized);
+
+    const dateStr = fmtDate(normalized);
+    const visibleDates = weekDays.map(fmtDate);
+    if (!visibleDates.includes(dateStr)) {
+      const nextStart = new Date(normalized);
+      nextStart.setDate(nextStart.getDate() - 3);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (nextStart < today) nextStart.setTime(today.getTime());
+      setWeekStart(nextStart);
+    }
+  };
+
+  const moveWeek = (direction: -1 | 1) => {
+    const nextStart = new Date(weekStart);
+    nextStart.setDate(nextStart.getDate() + direction * 7);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (nextStart < today) nextStart.setTime(today.getTime());
+    setWeekStart(nextStart);
+    setSelectedDate(new Date(nextStart));
+  };
+
+  const holdActive = (creneau: any) => {
+    const hold = creneau?.waitlistHold;
+    if (!hold?.until) return false;
+    if (new Date(hold.until).getTime() < Date.now()) return false;
+    if ((creneau.enrolled || []).some((entry: any) => entry.childId === hold.childId)) return false;
     return true;
   };
-  const spotsLeft = (c: Creneau) => {
-    const base = c.maxPlaces - (c.enrolled?.length || 0);
-    if (holdActive(c) && (c as any).waitlistHold?.familyId !== familyId) return Math.max(0, base - 1);
+
+  const spotsLeft = (creneau: Creneau) => {
+    const base = creneau.maxPlaces - (creneau.enrolled?.length || 0);
+    if (holdActive(creneau) && (creneau as any).waitlistHold?.familyId !== familyId) {
+      return Math.max(0, base - 1);
+    }
     return base;
   };
-  // Un enfant au moins de la famille est inscrit (pour le badge)
-  const hasFamilyEnrolled = (c: Creneau) =>
-    (c.enrolled || []).some((e: any) => e.familyId === familyId);
-  // Tous les enfants de la famille sont inscrits (pour masquer le bouton Réserver)
-  const isAlreadyEnrolled = (c: Creneau) =>
-    children.length > 0 &&
-    children.every((ch: any) => (c.enrolled || []).some((e: any) => e.childId === ch.id));
 
-  const prix = (c: Creneau) => c.priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
+  const hasFamilyEnrolled = (creneau: Creneau) =>
+    (creneau.enrolled || []).some((entry: any) => entry.familyId === familyId);
+
+  const isAlreadyEnrolled = (creneau: Creneau) =>
+    children.length > 0 &&
+    children.every((child) => (creneau.enrolled || []).some((entry: any) => entry.childId === child.id));
+
+  const price = (creneau: Creneau) =>
+    creneau.priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux || 5.5) / 100);
+
+  const filterOptions: { id: FilterId; label: string; icon: string }[] = [
+    { id: "pour_moi", label: "Pour vous", icon: "✨" },
+    { id: "cours", label: "Cours", icon: "🐴" },
+    { id: "balade", label: "Balades", icon: "🌅" },
+    { id: "tous", label: "Tout voir", icon: "＋" },
+  ];
 
   return (
     <div>
-      {/* ── Filtre enfant ── */}
+      {/* Choix du cavalier */}
       {children.length > 1 && (
-        <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
-          <button onClick={() => setSelectedChild("tous")}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-full font-body text-xs font-semibold border cursor-pointer transition-all ${selectedChild === "tous" ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
-            Tous les cavaliers
-          </button>
-          {children.map(child => (
-            <button key={child.id} onClick={() => setSelectedChild(child.id)}
-              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full font-body text-xs font-semibold border cursor-pointer transition-all ${selectedChild === child.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
-              {child.firstName}
-              {child.galopLevel && child.galopLevel !== "—" && (
-                <span className={`text-[9px] px-1 py-0.5 rounded ${selectedChild === child.id ? "bg-white/20" : "bg-blue-50 text-blue-600"}`}>
-                  G{child.galopLevel}
-                </span>
-              )}
+        <section className="mb-5">
+          <div className="font-body text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Pour qui ?</div>
+          <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
+            <button
+              type="button"
+              onClick={() => setSelectedChild("tous")}
+              className={`flex-shrink-0 px-4 py-2 rounded-xl font-body text-sm font-semibold border cursor-pointer transition-all ${
+                selectedChild === "tous"
+                  ? "bg-blue-800 text-white border-blue-800"
+                  : "bg-white text-slate-600 border-gray-200"
+              }`}
+            >
+              Toute la famille
+            </button>
+            {children.map((child) => (
+              <button
+                type="button"
+                key={child.id}
+                onClick={() => setSelectedChild(child.id)}
+                className={`flex-shrink-0 px-4 py-2 rounded-xl font-body text-sm font-semibold border cursor-pointer transition-all ${
+                  selectedChild === child.id
+                    ? "bg-blue-800 text-white border-blue-800"
+                    : "bg-white text-slate-600 border-gray-200"
+                }`}
+              >
+                {child.firstName}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Catégories principales */}
+      <section className="mb-5">
+        <div className="font-body text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Que recherchez-vous ?</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {filterOptions.map((option) => (
+            <button
+              type="button"
+              key={option.id}
+              onClick={() => setFilter(option.id)}
+              className={`flex items-center gap-2 px-3 py-3 rounded-xl border font-body text-sm font-semibold cursor-pointer transition-all text-left ${
+                filter === option.id
+                  ? "bg-blue-500 text-white border-blue-500 shadow-sm"
+                  : "bg-white text-blue-800 border-gray-200 hover:border-blue-200"
+              }`}
+            >
+              <span className="text-lg">{option.icon}</span>
+              <span>{option.label}</span>
             </button>
           ))}
         </div>
-      )}
 
-      {/* ── Filtres type ── */}
-      <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1">
-        {([
-          ["pour_moi", "✨ Pour moi"],
-          ["tous", "Tout voir"],
-          ["cours", "Cours"],
-          ["stage", "Stages"],
-          ["balade", "Balades"],
-        ] as const).map(([id, label]) => (
-          <button key={id} onClick={() => setFilter(id)}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-full font-body text-xs font-semibold border cursor-pointer transition-all ${filter === id ? "bg-gold-400 text-blue-800 border-gold-400" : "bg-white text-slate-600 border-gray-200"}`}>
-            {label}
+        {stagesAvailable > 0 && onSeeStages && (
+          <button
+            type="button"
+            onClick={onSeeStages}
+            className="mt-2 w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-green-200 bg-green-50 text-left cursor-pointer hover:bg-green-100 transition-colors"
+          >
+            <span>
+              <span className="font-body text-sm font-bold text-green-800">🏇 Voir les stages</span>
+              <span className="font-body text-xs text-green-700 block mt-0.5">
+                {stagesAvailable} stage{stagesAvailable > 1 ? "s" : ""} disponible{stagesAvailable > 1 ? "s" : ""}
+              </span>
+            </span>
+            <ChevronRight size={18} className="text-green-700" />
           </button>
-        ))}
-      </div>
+        )}
+      </section>
 
-      {/* ── Navigation semaine + sélecteur de date ── */}
-      <div className="flex items-center gap-1.5 mb-1">
-        <button onClick={prevWeek}
-          disabled={fmtDate(weekStart) <= todayStr}
-          className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center cursor-pointer disabled:opacity-30 flex-shrink-0">
-          <ChevronLeft size={16} className="text-slate-600"/>
-        </button>
-        <div className="flex gap-1 overflow-x-auto flex-1 pb-1">
-          {weekDays.map((d, i) => {
-            const ds = fmtDate(d);
-            const isActive = ds === currentDayStr;
-            const isToday = ds === todayStr;
-            const count = creneauxByDay[ds] || 0;
+      {/* Navigation dans les jours */}
+      <section className="mb-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <div className="font-display text-lg font-bold text-blue-800">Planning des activités</div>
+            <div className="font-body text-xs text-gray-600">Choisissez un jour pour voir les places disponibles.</div>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => moveWeek(-1)}
+              disabled={fmtDate(weekStart) <= todayStr}
+              className="w-9 h-9 rounded-xl bg-white border border-gray-200 flex items-center justify-center cursor-pointer disabled:opacity-30"
+              aria-label="Semaine précédente"
+            >
+              <ChevronLeft size={17} />
+            </button>
+            <button
+              type="button"
+              onClick={() => moveWeek(1)}
+              className="w-9 h-9 rounded-xl bg-white border border-gray-200 flex items-center justify-center cursor-pointer"
+              aria-label="Semaine suivante"
+            >
+              <ChevronRight size={17} />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-7 gap-1.5">
+          {weekDays.map((date) => {
+            const dateStr = fmtDate(date);
+            const active = dateStr === currentDayStr;
+            const today = dateStr === todayStr;
+            const count = creneauxByDay[dateStr] || 0;
             return (
-              <button key={i} onClick={() => goToDay(d)}
-                className={`flex-shrink-0 flex flex-col items-center py-2 px-2.5 rounded-xl cursor-pointer border transition-all min-w-[46px] ${
-                  isActive ? "bg-blue-500 text-white border-blue-500 shadow-md" :
-                  isToday ? "bg-blue-50 text-blue-600 border-blue-200" :
-                  "bg-white text-slate-600 border-gray-200"
-                }`}>
-                <span className="font-body text-[9px] uppercase tracking-wide opacity-70">{DAYS_FR[d.getDay()]}</span>
-                <span className={`font-body text-sm font-bold ${isActive ? "text-white" : ""}`}>{d.getDate()}</span>
-                <div className="flex gap-0.5 mt-0.5 h-1.5">
-                  {count > 0 && Array.from({ length: Math.min(count, 4) }, (_, j) => (
-                    <span key={j} className={`w-1.5 h-1.5 rounded-full ${isActive ? "bg-white/70" : "bg-blue-400"}`}/>
-                  ))}
-                </div>
+              <button
+                type="button"
+                key={dateStr}
+                onClick={() => goToDay(date)}
+                className={`min-w-0 rounded-xl border py-2 px-1 cursor-pointer transition-all ${
+                  active
+                    ? "bg-blue-500 text-white border-blue-500 shadow-sm"
+                    : today
+                      ? "bg-blue-50 text-blue-700 border-blue-200"
+                      : "bg-white text-slate-600 border-gray-200"
+                }`}
+              >
+                <span className="font-body text-[10px] uppercase block opacity-75">{DAYS_FR[date.getDay()]}</span>
+                <span className="font-body text-base font-bold block">{date.getDate()}</span>
+                <span className={`font-body text-[10px] block mt-0.5 ${active ? "text-blue-100" : count > 0 ? "text-blue-500" : "text-gray-300"}`}>
+                  {count > 0 ? count : "·"}
+                </span>
               </button>
             );
           })}
         </div>
-        <button onClick={nextWeek}
-          className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center cursor-pointer flex-shrink-0">
-          <ChevronRight size={16} className="text-slate-600"/>
-        </button>
-      </div>
+      </section>
 
-      {/* ── Titre du jour + sélecteur de date ── */}
-      <div className="mb-4 flex items-center justify-between">
+      {/* Résumé du jour */}
+      <div className="flex items-center justify-between gap-3 mb-3">
         <div>
-          <div className="flex items-center gap-2">
-            <button onClick={prevDay} disabled={currentDayStr <= todayStr}
-              className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center cursor-pointer disabled:opacity-30 border-none">
-              <ChevronLeft size={12} className="text-slate-600"/>
-            </button>
-            <div className="font-display text-base font-bold text-blue-800 capitalize">
-              {DAYS_FULL_FR[currentDay.getDay()]} {currentDay.getDate()} {currentDay.toLocaleDateString("fr-FR", { month: "long" })}
-            </div>
-            <button onClick={nextDay}
-              className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center cursor-pointer border-none">
-              <ChevronRight size={12} className="text-slate-600"/>
-            </button>
+          <div className="font-display text-base font-bold text-blue-800 capitalize">
+            {DAYS_FULL_FR[selectedDate.getDay()]} {selectedDate.getDate()} {selectedDate.toLocaleDateString("fr-FR", { month: "long" })}
           </div>
-          <div className="font-body text-xs text-slate-500 mt-0.5">
-            {dayCreneaux.length === 0 ? "Aucun créneau ce jour" : `${dayCreneaux.length} créneau${dayCreneaux.length > 1 ? "x" : ""} disponible${dayCreneaux.length > 1 ? "s" : ""}`}
-            {filter === "pour_moi" && children.length > 0 && (
-              <span className="ml-1 text-blue-500">· filtrés pour {selectedChild === "tous" ? "votre famille" : children.find(c => c.id === selectedChild)?.firstName}</span>
-            )}
+          <div className="font-body text-xs text-gray-600 mt-0.5">
+            {dayCreneaux.length === 0
+              ? "Aucune activité disponible ce jour"
+              : `${dayCreneaux.length} activité${dayCreneaux.length > 1 ? "s" : ""} disponible${dayCreneaux.length > 1 ? "s" : ""}`}
           </div>
         </div>
-        <div className="relative flex-shrink-0">
+        <label className="relative flex items-center gap-2 font-body text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-100 px-3 py-2 rounded-xl cursor-pointer">
+          <CalendarDays size={15} />
+          <span className="hidden sm:inline">Choisir une date</span>
           <input
             type="date"
             min={todayStr}
             value={currentDayStr}
-            onChange={e => { if (e.target.value) { const d = new Date(e.target.value + "T00:00:00"); goToDay(d); } }}
-            className="font-body text-xs font-semibold text-blue-600 px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 cursor-pointer focus:outline-none focus:border-blue-400"
-            style={{ colorScheme: "light" }}
+            onChange={(event) => {
+              if (event.target.value) goToDay(new Date(`${event.target.value}T00:00:00`));
+            }}
+            className="absolute inset-0 opacity-0 cursor-pointer"
+            aria-label="Choisir une date"
           />
-        </div>
+        </label>
       </div>
 
-      {/* ── Liste créneaux du jour ── */}
+      {/* Activités du jour */}
       {dayCreneaux.length === 0 ? (
         <Card padding="lg" className="text-center">
-          <div className="text-3xl mb-2">🐴</div>
-          <p className="font-body text-sm text-slate-500 mb-1">Pas de cours ce jour-là.</p>
-          {stagesAvailable > 0 ? (
-            <>
-              <p className="font-body text-xs text-slate-400 mb-3">Mais {stagesAvailable} stage{stagesAvailable > 1 ? "s sont proposés" : " est proposé"} sur la période — les stages s&apos;affichent en vue Liste.</p>
-              {onSeeStages && (
-                <button type="button" onClick={onSeeStages}
-                  className="font-body text-sm font-semibold text-white bg-green-600 hover:bg-green-500 border-none rounded-lg px-4 py-2 cursor-pointer">
-                  Voir les stages
-                </button>
-              )}
-            </>
-          ) : (
-            <p className="font-body text-xs text-slate-400">Naviguez sur un autre jour ou changez le filtre.</p>
-          )}
+          <div className="text-4xl mb-3">🌾</div>
+          <div className="font-body text-sm font-bold text-blue-800">Rien de prévu ce jour-là</div>
+          <p className="font-body text-xs text-gray-600 mt-1 mb-0">Essayez un autre jour ou une autre catégorie.</p>
         </Card>
       ) : (
         <div className="flex flex-col gap-3">
-          {dayCreneaux.map(c => {
-            const spots = spotsLeft(c);
+          {dayCreneaux.map((creneau) => {
+            const spots = spotsLeft(creneau);
             const full = spots <= 0;
-            const familyEnrolled = hasFamilyEnrolled(c);
-            const enrolled = isAlreadyEnrolled(c);
-            const relevance = isRelevantForFamily(c, activeChildren);
-            const col = c.color || TYPE_COLORS[c.activityType] || "#666";
-            const p = prix(c);
+            const familyEnrolled = hasFamilyEnrolled(creneau);
+            const enrolled = isAlreadyEnrolled(creneau);
+            const relevance = isRelevantForFamily(creneau, activeChildren);
+            const color = creneau.color || TYPE_COLORS[creneau.activityType] || "#2050A0";
+            const amount = price(creneau);
 
             return (
-              <div key={c.id}
+              <div
+                key={creneau.id}
                 className={`rounded-2xl border overflow-hidden transition-all ${
-                  familyEnrolled ? "border-green-200 bg-green-50" :
-                  full ? "border-gray-200 bg-gray-50 opacity-70" :
-                  "border-blue-500/10 bg-white shadow-sm"
+                  familyEnrolled
+                    ? "border-green-200 bg-green-50"
+                    : full
+                      ? "border-gray-200 bg-gray-50"
+                      : "border-blue-500/10 bg-white shadow-sm"
                 }`}
-                style={{ borderLeftWidth: 4, borderLeftColor: col }}>
+                style={{ borderLeftWidth: 4, borderLeftColor: color }}
+              >
                 <div className="p-4">
-                  {/* Header */}
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-body text-sm font-bold text-blue-800">{c.activityTitle}</span>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <div className="font-body text-base font-bold text-blue-800">{creneau.activityTitle}</div>
                         {relevance === "perfect" && (
-                          <span className="flex items-center gap-0.5 font-body text-xs font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">
-                            <Sparkles size={9}/> Parfait pour toi
+                          <span className="inline-flex items-center gap-1 font-body text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
+                            <Sparkles size={10} /> Recommandé
                           </span>
                         )}
                         {familyEnrolled && (
-                          <span className="flex items-center gap-0.5 font-body text-xs font-semibold text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full">
-                            <Check size={9}/> Inscrit
+                          <span className="inline-flex items-center gap-1 font-body text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                            <Check size={10} /> Inscrit
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-3 mt-1">
-                        <span className="flex items-center gap-1 font-body text-xs text-slate-500">
-                          <Clock size={11}/>{c.startTime}–{c.endTime}
+
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-slate-500">
+                        <span className="flex items-center gap-1 font-body text-xs">
+                          <Clock size={12} /> {creneau.startTime}–{creneau.endTime}
                         </span>
-                        {c.monitor && (
-                          <span className="font-body text-xs text-slate-400">avec {c.monitor}</span>
-                        )}
+                        {creneau.monitor && <span className="font-body text-xs">avec {creneau.monitor}</span>}
                       </div>
                     </div>
+
                     <div className="text-right flex-shrink-0">
-                      {p > 0 && <div className="font-body text-base font-bold text-blue-500">{p.toFixed(0)}€</div>}
+                      {amount > 0 && <div className="font-body text-lg font-bold text-blue-500">{amount.toFixed(0)}€</div>}
                       <Badge color={full ? "red" : spots <= 3 ? "orange" : "green"}>
-                        <Users size={10} className="inline mr-0.5"/>
+                        <Users size={10} className="inline mr-0.5" />
                         {full ? "Complet" : `${spots} place${spots > 1 ? "s" : ""}`}
                       </Badge>
                     </div>
                   </div>
 
-                  {/* Action */}
                   {!enrolled && (
                     <button
-                      onClick={() => onBook(c)}
-                      className={`w-full py-2.5 rounded-xl font-body text-sm font-semibold cursor-pointer transition-all ${
-                        full ? "bg-orange-50 text-orange-600 border border-orange-200 hover:bg-orange-100" :
-                        relevance === "perfect" ? "text-white border-none" : "bg-blue-500 text-white border-none hover:bg-blue-600"
+                      type="button"
+                      onClick={() => onBook(creneau)}
+                      className={`w-full mt-4 py-2.5 rounded-xl font-body text-sm font-bold cursor-pointer transition-all ${
+                        full
+                          ? "bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100"
+                          : "bg-blue-500 text-white border-none hover:bg-blue-600"
                       }`}
-                      style={relevance === "perfect" && !full ? { background: `linear-gradient(135deg, ${col}, #2050A0)` } : {}}>
-                      {full ? "Complet — liste d'attente →" : "Réserver →"}
+                    >
+                      {full ? "Rejoindre la liste d’attente" : "Choisir cette activité"}
                     </button>
                   )}
                 </div>
@@ -439,10 +448,9 @@ export default function TimelineReservation({ creneaux, children, familyId, onBo
         </div>
       )}
 
-      {/* ── Astuce filtre ── */}
-      {filter === "pour_moi" && children.some(c => !c.galopLevel || c.galopLevel === "—") && (
+      {filter === "pour_moi" && children.some((child) => !child.galopLevel || child.galopLevel === "—") && (
         <p className="font-body text-xs text-slate-400 text-center mt-4">
-          💡 Renseignez le niveau de galop de vos cavaliers dans votre profil pour un filtre encore plus précis.
+          💡 Renseignez le niveau de vos cavaliers dans le profil pour affiner les recommandations.
         </p>
       )}
     </div>
