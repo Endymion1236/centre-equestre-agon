@@ -58,28 +58,52 @@ export async function POST(req: NextRequest) {
 
     for (const item of items) {
       if (!item?.childId || !Array.isArray(item.creneauIds)) continue;
+      const creneauIds = item.creneauIds.filter(Boolean);
+      if (creneauIds.length === 0) continue;
 
-      const owned = childrenMap.has(item.childId);
-      // On autorise l'enfant s'il appartient à la famille, OU si une réservation
-      // liée explicite est demandée (sourceFamilyId) — cas rare conservé.
-      if (!owned && !item.sourceFamilyId) {
+      // ── Autorisation de l'enfant (nom pris à la source, jamais du client) ──
+      // - soit l'enfant appartient à la famille connectée ;
+      // - soit une réservation liée : l'enfant doit RÉELLEMENT appartenir à la
+      //   famille source (on la charge et on vérifie). La simple présence de
+      //   sourceFamilyId ne suffit plus (faille corrigée).
+      let childName: string;
+      if (childrenMap.has(item.childId)) {
+        childName = childrenMap.get(item.childId) || "";
+      } else if (item.sourceFamilyId) {
+        const srcSnap = await adminDb.collection("families").doc(item.sourceFamilyId).get();
+        const srcChild = srcSnap.exists
+          ? ((srcSnap.data() as any).children || []).find((c: any) => c.id === item.childId)
+          : null;
+        if (!srcChild) { notOwned.push(item.childId); continue; }
+        childName = srcChild.firstName || srcChild.prenom || "";
+      } else {
         notOwned.push(item.childId);
         continue;
       }
-      const childName = owned ? (childrenMap.get(item.childId) || "") : (item.childName || "");
 
-      for (const cid of item.creneauIds) {
-        if (!cid) continue;
-        try {
-          const outcome = await adminDb.runTransaction(async (tx) => {
-            const crRef = adminDb.collection("creneaux").doc(cid);
-            const crSnap = await tx.get(crRef);
-            if (!crSnap.exists) return "missing";
-            const cr = crSnap.data() as any;
+      // ── Inscription ATOMIQUE de l'item : on lit TOUS les créneaux, on vérifie
+      // que chacun a de la place (ou l'enfant déjà inscrit), puis on inscrit
+      // PARTOUT ou NULLE PART. Évite qu'un stage soit inscrit à moitié mais
+      // facturé en entier (faille corrigée).
+      try {
+        const outcome = await adminDb.runTransaction(async (tx) => {
+          const refs = creneauIds.map((cid) => adminDb.collection("creneaux").doc(cid));
+          const snaps = await Promise.all(refs.map((r) => tx.get(r)));
+          // 1) Vérifier tous les créneaux avant toute écriture
+          for (let i = 0; i < snaps.length; i++) {
+            const s = snaps[i];
+            if (!s.exists) return { status: "missing" as const, cid: creneauIds[i] };
+            const cr = s.data() as any;
             const list: any[] = cr.enrolled || [];
-            if (list.some((e: any) => e.childId === item.childId)) return "already";
+            if (list.some((e: any) => e.childId === item.childId)) continue; // déjà inscrit = ok
             const maxP = typeof cr.maxPlaces === "number" ? cr.maxPlaces : Number.POSITIVE_INFINITY;
-            if (list.length >= maxP) return "full";
+            if (list.length >= maxP) return { status: "full" as const, cid: creneauIds[i] };
+          }
+          // 2) Tout est bon → inscrire partout
+          for (let i = 0; i < snaps.length; i++) {
+            const cr = snaps[i].data() as any;
+            const list: any[] = cr.enrolled || [];
+            if (list.some((e: any) => e.childId === item.childId)) continue;
             const entry: any = {
               childId: item.childId,
               childName,
@@ -91,19 +115,22 @@ export async function POST(req: NextRequest) {
             if (item.paymentSource) entry.paymentSource = item.paymentSource;
             if ("forfaitId" in item) entry.forfaitId = item.forfaitId ?? null;
             if (item.pending) { entry.pending = true; if (item.paymentMethod) entry.paymentMethod = item.paymentMethod; }
-            tx.update(crRef, { enrolled: [...list, entry], enrolledCount: list.length + 1 });
-            return "ok";
-          });
-          if (outcome === "ok" || outcome === "already") enrolled.push(cid);
-          else if (outcome === "full") full.push(cid);
-        } catch (e) {
-          console.error(`/api/enroll — échec créneau ${cid}:`, e);
-        }
+            tx.update(refs[i], { enrolled: [...list, entry], enrolledCount: list.length + 1 });
+          }
+          return { status: "ok" as const };
+        });
+        if (outcome.status === "ok") enrolled.push(...creneauIds);
+        else if (outcome.status === "full") full.push(outcome.cid);
+        // "missing" : on ignore (créneau introuvable)
+      } catch (e) {
+        console.error(`/api/enroll — échec item (child ${item.childId}):`, e);
+        full.push(creneauIds[0]);
       }
     }
 
-    // Si tout ce qui était demandé est complet (rien inscrit), on le signale.
-    if (enrolled.length === 0 && full.length > 0) {
+    // Un item n'a pas pu être inscrit entièrement (complet) → on refuse, pour que
+    // le client n'aille pas facturer une inscription partielle.
+    if (full.length > 0) {
       return NextResponse.json({ error: "Créneau(x) complet(s)", full, notOwned }, { status: 409 });
     }
     if (enrolled.length === 0 && notOwned.length > 0) {
