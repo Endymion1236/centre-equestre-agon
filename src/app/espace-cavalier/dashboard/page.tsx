@@ -1,519 +1,355 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useAuth } from "@/lib/auth-context";
-import { Card, Badge, Button } from "@/components/ui";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Calendar, Receipt, Users, Star, CreditCard, Wallet, Bell, BellOff } from "lucide-react";
-import { collection, getDocs, query, where, doc, getDoc, updateDoc, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { Calendar, ChevronRight, CreditCard, Bell, Wallet, Sparkles } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
+import { Card } from "@/components/ui";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { todayLocalString } from "@/lib/date-local";
-import { useToast } from "@/components/ui/Toast";
+
+type UpcomingReservation = {
+  id: string;
+  activityTitle?: string;
+  childName?: string;
+  date?: string;
+  startTime?: string;
+  endTime?: string;
+  monitor?: string;
+  status?: string;
+};
+
+type SessionCard = {
+  id: string;
+  childName?: string;
+  familiale?: boolean;
+  activityType?: string;
+  totalSessions?: number;
+  remainingSessions?: number;
+  status?: string;
+  dateFin?: string;
+};
 
 export default function DashboardPage() {
   const { user, family } = useAuth();
-  const { toast } = useToast();
-  const firstName = user?.displayName?.split(" ")[0] || "Bonjour";
-  const [stats, setStats] = useState({ reservations: 0, resteDu: 0, avoir: 0, totalPaye: 0 });
-  const { permission, loading, error: pushError, requestPermission } = usePushNotifications(user?.uid || null);
-  const [cards, setCards] = useState<any[]>([]);
-  const [fidelite, setFidelite] = useState<any>(null);
-  const [fideliteSettings, setFideliteSettings] = useState<{ taux: number; minPoints: number; enabled: boolean } | null>(null);
-  const [openCardId, setOpenCardId] = useState<string | null>(null);
-  const [convertingPoints, setConvertingPoints] = useState(false);
-  const [showFidHistory, setShowFidHistory] = useState(false);
+  const firstName = user?.displayName?.split(" ")[0] || family?.parentName?.split(" ").slice(-1)[0] || "";
+  const { permission, loading: pushLoading, error: pushError, requestPermission } = usePushNotifications(user?.uid || null);
+
+  const [stats, setStats] = useState({ upcoming: 0, due: 0, credit: 0 });
+  const [nextReservation, setNextReservation] = useState<UpcomingReservation | null>(null);
+  const [cards, setCards] = useState<SessionCard[]>([]);
+  const [fidelity, setFidelity] = useState<{ points: number; rate: number; enabled: boolean } | null>(null);
   const [waCommunity, setWaCommunity] = useState("");
-  const [waReprises, setWaReprises] = useState<{ key: string; label: string; url: string }[]>([]);
+  const [waGroups, setWaGroups] = useState<{ key: string; label: string; url: string }[]>([]);
+  const [showWhatsApp, setShowWhatsApp] = useState(false);
 
   useEffect(() => {
     if (!user) return;
+
     const load = async () => {
+      const today = todayLocalString();
+
       try {
-        // Réservations à venir
-        const today = todayLocalString();
-        let resCount = 0;
-        try {
-          const resSnap = await getDocs(query(collection(db, "reservations"), where("familyId", "==", user.uid)));
-          resCount = resSnap.docs.filter(d => (d.data().date || "") >= today && d.data().status !== "cancelled").length;
-        } catch { /* index manquant */ }
+        const reservationsSnap = await getDocs(query(collection(db, "reservations"), where("familyId", "==", user.uid)));
+        const upcoming = reservationsSnap.docs
+          .map((d) => ({ id: d.id, ...d.data() } as UpcomingReservation))
+          .filter((r) => (r.date || "") >= today && r.status !== "cancelled")
+          .sort((a, b) => `${a.date || ""} ${a.startTime || ""}`.localeCompare(`${b.date || ""} ${b.startTime || ""}`));
+        setNextReservation(upcoming[0] || null);
+        setStats((s) => ({ ...s, upcoming: upcoming.length }));
+      } catch (e) {
+        console.warn("Dashboard reservations:", e);
+      }
 
-        // Paiements
-        let resteDu = 0, totalPaye = 0;
-        try {
-          const paySnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", user.uid)));
-          paySnap.docs.forEach(d => {
-            const p = d.data();
-            if (p.status === "cancelled") return;
-            totalPaye += p.paidAmount || 0;
-            resteDu += (p.totalTTC || 0) - (p.paidAmount || 0);
-          });
-        } catch { /* index manquant */ }
+      try {
+        const paymentsSnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", user.uid)));
+        const due = paymentsSnap.docs.reduce((sum, d) => {
+          const p = d.data();
+          if (p.status === "cancelled") return sum;
+          return sum + Math.max(0, (p.totalTTC || 0) - (p.paidAmount || 0));
+        }, 0);
+        setStats((s) => ({ ...s, due: Math.round(due * 100) / 100 }));
+      } catch (e) {
+        console.warn("Dashboard payments:", e);
+      }
 
-        // Avoirs
-        let avoir = 0;
-        try {
-          const avSnap = await getDocs(query(collection(db, "avoirs"), where("familyId", "==", user.uid)));
-          avSnap.docs.forEach(d => { const a = d.data(); if (a.status === "actif") avoir += a.remainingAmount || 0; });
-        } catch { /* index manquant */ }
+      try {
+        const creditsSnap = await getDocs(query(collection(db, "avoirs"), where("familyId", "==", user.uid)));
+        const credit = creditsSnap.docs.reduce((sum, d) => {
+          const a = d.data();
+          return a.status === "actif" ? sum + (a.remainingAmount || 0) : sum;
+        }, 0);
+        setStats((s) => ({ ...s, credit: Math.round(credit * 100) / 100 }));
+      } catch (e) {
+        console.warn("Dashboard credits:", e);
+      }
 
-        setStats({ reservations: resCount, resteDu: Math.max(0, Math.round(resteDu * 100) / 100), avoir: Math.round(avoir * 100) / 100, totalPaye: Math.round(totalPaye * 100) / 100 });
+      try {
+        const cardsSnap = await getDocs(query(collection(db, "cartes"), where("familyId", "==", user.uid)));
+        const activeCards = cardsSnap.docs
+          .map((d) => ({ id: d.id, ...d.data() } as SessionCard))
+          .filter((c) => c.status !== "used" && (c.remainingSessions || 0) > 0 && (!c.dateFin || new Date(c.dateFin) >= new Date()));
+        setCards(activeCards);
+      } catch (e) {
+        console.warn("Dashboard cards:", e);
+      }
 
-        // Cartes de séances
-        try {
-          let cSnap = await getDocs(query(collection(db, "cartes"), where("familyId", "==", user.uid)));
-          if (cSnap.empty) {
-            cSnap = await getDocs(collection(db, "cartes"));
-            const familyCards = cSnap.docs.filter(d => {
-              const data = d.data();
-              return data.familyId === user.uid || (family?.children || []).some((c: any) => c.id === data.childId);
-            });
-            setCards(familyCards.map(d => ({ id: d.id, ...d.data() })).filter((c: any) => c.status !== "used" && c.remainingSessions > 0));
-          } else {
-            setCards(cSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((c: any) => c.status !== "used" && c.remainingSessions > 0));
-          }
-        } catch { setCards([]); }
-
-        // Fidélité — chercher par uid puis par familyId
-        try {
-          const sDoc = await getDoc(doc(db, "settings", "fidelite"));
-          if (sDoc.exists()) setFideliteSettings(sDoc.data() as any);
-
-          let fDoc = await getDoc(doc(db, "fidelite", user.uid));
-          if (!fDoc.exists()) {
-            const fidQuery = await getDocs(query(collection(db, "fidelite"), where("familyId", "==", user.uid)));
-            if (!fidQuery.empty) fDoc = fidQuery.docs[0] as any;
-          }
-          if (fDoc.exists()) setFidelite(fDoc.data());
-        } catch {}
-
-      } catch (e) { console.error(e); }
+      try {
+        const settingsSnap = await getDoc(doc(db, "settings", "fidelite"));
+        const settings = settingsSnap.exists() ? settingsSnap.data() : {};
+        let fidelitySnap = await getDoc(doc(db, "fidelite", user.uid));
+        if (!fidelitySnap.exists()) {
+          const q = await getDocs(query(collection(db, "fidelite"), where("familyId", "==", user.uid)));
+          if (!q.empty) fidelitySnap = q.docs[0] as any;
+        }
+        setFidelity({
+          points: fidelitySnap.exists() ? (fidelitySnap.data()?.points || 0) : 0,
+          rate: settings.taux || 50,
+          enabled: settings.enabled !== false,
+        });
+      } catch (e) {
+        console.warn("Dashboard fidelity:", e);
+      }
     };
+
     load();
   }, [user]);
 
-  // Liens WhatsApp :
-  //  - la COMMUNAUTÉ du centre est proposée à toutes les familles ;
-  //  - les groupes de REPRISE ne s'affichent que pour un enfant inscrit AU FORFAIT
-  //    annuel sur cette reprise (marqueur enrolled.paymentSource === "forfait").
   useEffect(() => {
     if (!user?.uid || !family) return;
-    (async () => {
+
+    const loadWhatsApp = async () => {
       try {
-        const wSnap = await getDoc(doc(db, "settings", "whatsapp"));
-        const w = wSnap.exists() ? (wSnap.data() as any) : {};
-        setWaCommunity(w.communityUrl || "");
-        const urls: Record<string, string> = w.reprises || {};
-        if (Object.keys(urls).length === 0) { setWaReprises([]); return; }
+        const settingsSnap = await getDoc(doc(db, "settings", "whatsapp"));
+        const settings = settingsSnap.exists() ? settingsSnap.data() : {};
+        setWaCommunity(settings.communityUrl || "");
+
+        const urls: Record<string, string> = settings.reprises || {};
+        if (Object.keys(urls).length === 0) return;
+
         const childIds = new Set((family.children || []).map((c: any) => c.id));
         const today = todayLocalString();
-        const end = new Date(); end.setDate(end.getDate() + 28);
-        const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
-        const snap = await getDocs(query(collection(db, "creneaux"), where("date", ">=", today), where("date", "<=", endStr)));
+        const end = new Date();
+        end.setDate(end.getDate() + 28);
+        const endString = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+        const slotsSnap = await getDocs(query(collection(db, "creneaux"), where("date", ">=", today), where("date", "<=", endString)));
         const days = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
         const found: Record<string, { label: string; url: string }> = {};
-        snap.docs.forEach((d) => {
+
+        slotsSnap.docs.forEach((d) => {
           const c = d.data() as any;
-          if (c.activityType === "stage" || c.activityType === "stage_journee" || !c.activityId) return;
-          const isForfaitMember = (c.enrolled || []).some((e: any) => childIds.has(e.childId) && e.paymentSource === "forfait");
-          if (!isForfaitMember) return;
-          const dow = (new Date(c.date).getDay() + 6) % 7;
-          const key = `${c.activityId}-${dow}-${c.startTime}`;
-          const url = urls[key];
-          if (url && !found[key]) found[key] = { label: `${c.activityTitle} · ${days[dow]} · ${c.startTime}`, url };
+          if (!c.activityId || c.activityType === "stage" || c.activityType === "stage_journee") return;
+          const member = (c.enrolled || []).some((e: any) => childIds.has(e.childId) && e.paymentSource === "forfait");
+          if (!member) return;
+          const dayIndex = (new Date(c.date).getDay() + 6) % 7;
+          const key = `${c.activityId}-${dayIndex}-${c.startTime}`;
+          if (urls[key] && !found[key]) found[key] = { label: `${c.activityTitle} · ${days[dayIndex]} · ${c.startTime}`, url: urls[key] };
         });
-        setWaReprises(Object.entries(found).map(([key, v]) => ({ key, ...v })));
-      } catch (e) { console.warn("WhatsApp:", e); }
-    })();
+        setWaGroups(Object.entries(found).map(([key, value]) => ({ key, ...value })));
+      } catch (e) {
+        console.warn("Dashboard WhatsApp:", e);
+      }
+    };
+
+    loadWhatsApp();
   }, [user, family]);
 
-  const hasIncompleteChildren = family?.children?.some(
-    (c) => !c.sanitaryForm
-  );
+  const profileIssues = useMemo(() => {
+    if (!family) return [] as string[];
+    const issues: string[] = [];
+    if (!family.children?.length) issues.push("Ajoutez vos cavaliers pour pouvoir réserver.");
+    const missingSanitary = (family.children || []).filter((c: any) => !c.sanitaryForm).map((c: any) => c.firstName).filter(Boolean);
+    if (missingSanitary.length) issues.push(`Attestation sanitaire à compléter pour ${missingSanitary.join(", ")}.`);
+    return issues;
+  }, [family]);
+
+  const formattedNextDate = nextReservation?.date
+    ? new Date(`${nextReservation.date}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })
+    : "";
+
+  const hasWhatsApp = Boolean(waCommunity || waGroups.length);
+  const fidelityValue = fidelity ? fidelity.points / fidelity.rate : 0;
 
   return (
-    <div>
-      <h1 className="font-display text-2xl font-bold text-blue-800 mb-1">
-        Bonjour {firstName} 👋
-      </h1>
-      <p className="font-body text-sm text-gray-600 mb-8">
-        Voici un résumé de l&apos;activité de votre famille.
-      </p>
+    <div className="pb-8">
+      <div className="mb-6">
+        <h1 className="font-display text-2xl font-bold text-blue-800 mb-1">Bonjour {firstName} 👋</h1>
+        <p className="font-body text-sm text-gray-600">Voici l’essentiel pour votre famille.</p>
+      </div>
 
-      {/* Bannière activation notifications push */}
-      {permission === "default" && (
-        <Card className="!bg-blue-50 !border-blue-200 mb-5" padding="sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-              <Bell size={20} className="text-blue-500"/>
-            </div>
-            <div className="flex-1">
-              <div className="font-body text-sm font-semibold text-blue-800">Activez les notifications</div>
-              <div className="font-body text-xs text-blue-600">Rappels de cours, confirmations d'inscription, alertes de place disponible.</div>
-            </div>
-            <button onClick={requestPermission} disabled={loading}
-              className="font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 px-3 py-2 rounded-lg border-none cursor-pointer flex-shrink-0 disabled:opacity-50">
-              {loading ? "..." : "Activer"}
-            </button>
-          </div>
-        </Card>
-      )}
-      {permission === "granted" && (
-        <Card className="!bg-green-50 !border-green-200 mb-5" padding="sm">
-          <div className="flex items-center gap-2">
-            <Bell size={14} className="text-green-600"/>
-            <span className="font-body text-xs text-green-700 font-semibold">Notifications activées ✓</span>
-          </div>
-        </Card>
-      )}
-      {pushError && (
-        <div className="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded-lg font-body text-xs text-red-600">
-          ⚠️ Notifications : {pushError}
-        </div>
-      )}
-
-      {/* Alert: incomplete profile */}
-      {family && family.children.length === 0 && (
-        <Card className="!bg-gold-50 !border-gold-400/15 mb-5" padding="sm">
-          <div className="flex items-center gap-3">
-            <span className="text-xl">⚠️</span>
-            <div className="font-body text-sm text-blue-800">
-              <strong>Profil incomplet</strong> — Ajoutez vos enfants pour
-              pouvoir réserver.{" "}
-              <Link
-                href="/espace-cavalier/profil"
-                className="text-blue-500 font-semibold no-underline"
-              >
-                Compléter maintenant →
-              </Link>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {(waCommunity || waReprises.length > 0) && (
-        <Card className="mb-5 border border-green-200 bg-green-50/40" padding="sm">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-lg">💬</span>
-            <p className="font-body text-sm font-bold text-blue-800">Groupes WhatsApp</p>
-          </div>
-          <div className="flex flex-col gap-2">
-            {waCommunity && (
-              <a href={waCommunity} target="_blank" rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 w-full py-3 rounded-lg font-body text-sm font-bold text-white bg-green-600 hover:bg-green-500 no-underline shadow-sm">
-                💬 Rejoindre la communauté du centre
-              </a>
-            )}
-            {waReprises.map((r) => (
-              <a key={r.key} href={r.url} target="_blank" rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg font-body text-sm font-semibold text-green-800 bg-green-50 border border-green-200 hover:bg-green-100 no-underline">
-                Groupe de ma reprise · {r.label}
-              </a>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* Quick stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-        <Card padding="sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><Calendar size={20} className="text-blue-500" /></div>
-            <div>
-              <div className="font-body text-xl font-bold text-blue-500">{stats.reservations}</div>
-              <div className="font-body text-xs text-gray-600">Réservations</div>
-            </div>
-          </div>
-        </Card>
-        <Card padding="sm" className={stats.resteDu > 0 ? "bg-red-50" : "bg-green-50"}>
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${stats.resteDu > 0 ? "bg-red-100" : "bg-green-100"}`}><CreditCard size={20} className={stats.resteDu > 0 ? "text-red-500" : "text-green-600"} /></div>
-            <div>
-              <div className={`font-body text-xl font-bold ${stats.resteDu > 0 ? "text-red-500" : "text-green-600"}`}>{stats.resteDu.toFixed(0)}€</div>
-              <div className="font-body text-xs text-gray-600">{stats.resteDu > 0 ? "Reste dû" : "À jour"}</div>
-            </div>
-          </div>
-        </Card>
-        <Card padding="sm" className="bg-green-50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center"><Receipt size={20} className="text-green-600" /></div>
-            <div>
-              <div className="font-body text-xl font-bold text-green-600">{stats.totalPaye.toFixed(0)}€</div>
-              <div className="font-body text-xs text-gray-600">Payé</div>
-            </div>
-          </div>
-        </Card>
-        {stats.avoir > 0 && (
-          <Card padding="sm" className="bg-amber-50">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center"><Wallet size={20} className="text-amber-600" /></div>
-              <div>
-                <div className="font-body text-xl font-bold text-amber-600">{stats.avoir.toFixed(0)}€</div>
-                <div className="font-body text-xs text-gray-600">Avoir</div>
+      {/* 1. Prochaine activité */}
+      {nextReservation ? (
+        <Card padding="md" className="mb-4 !bg-gradient-to-br !from-blue-800 !to-blue-600 !border-blue-700 text-white overflow-hidden">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="font-body text-xs uppercase tracking-wider text-blue-100 font-semibold mb-2">Prochaine activité</div>
+              <div className="font-display text-xl font-bold text-white truncate">{nextReservation.activityTitle || "Activité équestre"}</div>
+              <div className="font-body text-sm text-blue-50 mt-1">{nextReservation.childName || "Votre cavalier"}</div>
+              <div className="font-body text-sm text-blue-100 mt-3 capitalize">
+                {formattedNextDate}{nextReservation.startTime ? ` · ${nextReservation.startTime}${nextReservation.endTime ? `–${nextReservation.endTime}` : ""}` : ""}
               </div>
+              {nextReservation.monitor && <div className="font-body text-xs text-blue-200 mt-1">Avec {nextReservation.monitor}</div>}
             </div>
+            <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center flex-shrink-0">
+              <Calendar size={24} />
+            </div>
+          </div>
+          <Link href="/espace-cavalier/reservations" className="mt-4 inline-flex items-center gap-1.5 font-body text-sm font-semibold text-white no-underline bg-white/15 hover:bg-white/20 px-3 py-2 rounded-lg">
+            Voir le détail <ChevronRight size={15} />
+          </Link>
+        </Card>
+      ) : (
+        <Card padding="md" className="mb-4 !bg-blue-50 !border-blue-100">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="font-body text-sm font-bold text-blue-800">Aucune activité à venir</div>
+              <div className="font-body text-xs text-gray-600 mt-1">Découvrez les prochains stages, cours et balades.</div>
+            </div>
+            <Calendar size={24} className="text-blue-400" />
+          </div>
+        </Card>
+      )}
+
+      {/* 2. Actions principales */}
+      <div className="grid grid-cols-2 gap-3 mb-5">
+        <Link href="/espace-cavalier/reserver" className="no-underline">
+          <Card hover padding="md" className="h-full !bg-blue-500 !border-blue-500 text-white">
+            <div className="text-2xl mb-3">📅</div>
+            <div className="font-body text-sm font-bold text-white">Réserver une activité</div>
+            <div className="font-body text-xs text-blue-100 mt-1">Stages, cours et balades</div>
           </Card>
+        </Link>
+        <Link href="/espace-cavalier/reservations" className="no-underline">
+          <Card hover padding="md" className="h-full">
+            <div className="text-2xl mb-3">📋</div>
+            <div className="font-body text-sm font-bold text-blue-800">Mes réservations</div>
+            <div className="font-body text-xs text-gray-600 mt-1">Voir les activités à venir</div>
+          </Card>
+        </Link>
+      </div>
+
+      {/* 3. Indicateurs utiles seulement */}
+      <div className={`grid gap-3 mb-5 ${stats.credit > 0 ? "grid-cols-3" : "grid-cols-2"}`}>
+        <Card padding="sm">
+          <div className="font-body text-xl font-bold text-blue-500">{stats.upcoming}</div>
+          <div className="font-body text-xs text-gray-600">À venir</div>
+        </Card>
+        <Link href="/espace-cavalier/factures" className="no-underline">
+          <Card padding="sm" className={stats.due > 0 ? "!bg-red-50 !border-red-100" : "!bg-green-50 !border-green-100"}>
+            <div className={`font-body text-xl font-bold ${stats.due > 0 ? "text-red-500" : "text-green-600"}`}>{stats.due > 0 ? `${stats.due.toFixed(0)}€` : "✓"}</div>
+            <div className="font-body text-xs text-gray-600">{stats.due > 0 ? "À régler" : "Paiements à jour"}</div>
+          </Card>
+        </Link>
+        {stats.credit > 0 && (
+          <Link href="/espace-cavalier/factures" className="no-underline">
+            <Card padding="sm" className="!bg-amber-50 !border-amber-100">
+              <div className="font-body text-xl font-bold text-amber-600">{stats.credit.toFixed(0)}€</div>
+              <div className="font-body text-xs text-gray-600">D’avoir</div>
+            </Card>
+          </Link>
         )}
       </div>
 
-      {/* ─── Cartes de séances ─── */}
-      {cards.length > 0 && (
-        <>
-          <h2 className="font-display text-lg font-bold text-blue-800 mb-4">Mes cartes</h2>
-          <div className="flex flex-col gap-3 mb-8">
-            {cards.map(card => {
-              const pct = card.totalSessions > 0 ? (card.remainingSessions / card.totalSessions) * 100 : 0;
-              const expired = card.dateFin && new Date(card.dateFin) < new Date();
-              if (expired) return null;
-              const isOpen = openCardId === card.id;
-              return (
-                <Card key={card.id} padding="md">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl" style={{ background: card.familiale ? "linear-gradient(135deg,#FFF8E8,#FAECC0)" : "#FFF8E8" }}>
-                        {card.familiale ? "👨‍👩‍👧" : "🎟️"}
-                      </div>
-                      <div>
-                        <div className="font-body text-sm font-semibold text-blue-800">
-                          Carte {card.totalSessions} séances · {card.activityType === "balade" ? "Balades" : "Cours"}
-                        </div>
-                        <div className="font-body text-xs text-gray-600">
-                          {card.familiale ? "Carte familiale" : card.childName}
-                        </div>
-                      </div>
-                    </div>
-                    <Badge color={card.remainingSessions > 2 ? "green" : "orange"}>
-                      {card.remainingSessions}/{card.totalSessions}
-                    </Badge>
-                  </div>
-                  <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">
-                    <div className="h-full rounded-full bg-gradient-to-r from-gold-400 to-gold-300 transition-all" style={{ width: `${pct}%` }} />
-                  </div>
-                  <div className="flex justify-between mt-1">
-                    <span className="font-body text-xs text-gray-600">{card.usedSessions} utilisée{card.usedSessions > 1 ? "s" : ""}</span>
-                    <span className="font-body text-xs font-semibold text-gold-500">{card.remainingSessions} restante{card.remainingSessions > 1 ? "s" : ""}</span>
-                  </div>
-                  {(card.history || []).length > 0 && (
-                    <button onClick={() => setOpenCardId(isOpen ? null : card.id)}
-                      className="w-full font-body text-xs text-gray-500 bg-transparent border-none cursor-pointer pt-2 hover:text-blue-500">
-                      {isOpen ? "▲ Masquer" : `▼ Historique (${(card.history || []).filter((h: any) => !h.credit && h.presence !== "absent").length})`}
-                    </button>
-                  )}
-                  {isOpen && (
-                    <div className="flex flex-col gap-1 mt-2">
-                      {[...(card.history || [])].reverse().slice(0, 5).map((h: any, i: number) => (
-                        <div key={i} className={`flex items-center justify-between px-2 py-1 rounded text-xs font-body ${h.credit ? "bg-green-50" : "bg-sand"}`}>
-                          <span className="text-blue-800">{h.activityTitle || "Séance"} · {h.date ? new Date(h.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : ""}</span>
-                          <span className={h.credit ? "text-green-500 font-semibold" : "text-gold-500"}>{h.credit ? "+1" : "✓"}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </Card>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      {/* ─── Fidélité ─── */}
-      {fideliteSettings?.enabled && (() => {
-        const points = fidelite?.points || 0;
-        const taux = fideliteSettings.taux || 50;
-        const minPoints = fideliteSettings.minPoints || 500;
-        const valeurEuros = (points / taux).toFixed(2);
-        const canConvert = points >= minPoints;
-        const history = (fidelite?.history || []).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        const [showHistory, setShowHistory2] = [showFidHistory, setShowFidHistory];
-
-        return (
-        <>
-          <h2 className="font-display text-lg font-bold text-blue-800 mb-4">🏆 Fidélité</h2>
-          <div className="flex flex-col gap-3 mb-8">
-            {/* Solde + explication */}
-            <Card padding="md" className="bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-200">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-yellow-400 flex items-center justify-center text-2xl flex-shrink-0">🏆</div>
-                <div className="flex-1">
-                  <div className="font-body text-xs text-yellow-600 uppercase font-semibold tracking-wider">Solde de points</div>
-                  <div className="font-display text-3xl font-bold text-yellow-700">{points}</div>
-                  <div className="font-body text-xs text-yellow-600">
-                    = {valeurEuros}€ de réduction
-                  </div>
-                </div>
-              </div>
-              {/* Comment ça marche */}
-              <div className="mt-3 pt-3 border-t border-yellow-200/50">
-                <div className="font-body text-xs text-yellow-700 space-y-1">
-                  <p className="m-0">💰 <strong>1€ dépensé = 1 point</strong> gagné automatiquement</p>
-                  <p className="m-0">🎁 <strong>{taux} points = 1€</strong> de réduction convertible en avoir</p>
-                  <p className="m-0">⏰ Points valables <strong>1 an</strong> après chaque gain</p>
-                </div>
-              </div>
-            </Card>
-
-            {/* Barre de progression */}
-            <Card padding="sm">
-              {canConvert ? (
-                <button
-                  disabled={convertingPoints}
-                  onClick={async () => {
-                    if (!user || !fidelite) return;
-                    const montant = Math.floor(points / taux * 100) / 100;
-                    const pts = Math.floor(montant * taux);
-                    if (!confirm(`Convertir ${pts} points en ${montant.toFixed(2)}€ d'avoir ?`)) return;
-                    setConvertingPoints(true);
-                    try {
-                      const expiry = new Date(); expiry.setFullYear(expiry.getFullYear() + 1);
-                      await addDoc(collection(db, "avoirs"), {
-                        familyId: user.uid, familyName: fidelite.familyName || "", type: "avoir",
-                        amount: montant, usedAmount: 0, remainingAmount: montant,
-                        reason: `Conversion fidélité (${pts} pts)`, reference: `FID-${Date.now().toString(36).toUpperCase()}`,
-                        sourceType: "fidelite", status: "actif", expiryDate: expiry, usageHistory: [], createdAt: serverTimestamp(),
-                      });
-                      const newPts = points - pts;
-                      await updateDoc(doc(db, "fidelite", user.uid), {
-                        points: newPts,
-                        history: [...(fidelite.history || []), { date: new Date().toISOString(), points: -pts, type: "conversion", label: `Avoir ${montant.toFixed(2)}€` }],
-                        updatedAt: serverTimestamp(),
-                      });
-                      setFidelite({ ...fidelite, points: newPts });
-                      toast(`${montant.toFixed(2)}€ d'avoir créé !`, "success");
-                    } catch (e) { console.error(e); toast("Erreur lors de la conversion.", "error"); }
-                    setConvertingPoints(false);
-                  }}
-                  className="w-full py-3 rounded-xl font-body text-sm font-bold text-white bg-yellow-500 border-none cursor-pointer hover:bg-yellow-600 disabled:opacity-50">
-                  {convertingPoints ? "..." : `🎁 Convertir ${Math.floor(points / taux * 100) / 100}€ d'avoir`}
-                </button>
-              ) : (
-                <>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="font-body text-xs text-gray-500">
-                      Encore <strong>{minPoints - points} pts</strong> avant conversion
-                    </span>
-                    <span className="font-body text-xs text-yellow-600 font-semibold">{Math.round(points / minPoints * 100)}%</span>
-                  </div>
-                  <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">
-                    <div className="h-full rounded-full bg-gradient-to-r from-yellow-300 to-yellow-500 transition-all" style={{ width: `${Math.min(100, (points / minPoints) * 100)}%` }} />
-                  </div>
-                </>
-              )}
-            </Card>
-
-            {/* Historique des points */}
-            {history.length > 0 && (
-              <Card padding="sm">
-                <button onClick={() => setShowFidHistory(!showHistory)}
-                  className="w-full flex justify-between items-center bg-transparent border-none cursor-pointer p-0">
-                  <span className="font-body text-xs font-semibold text-blue-800">📋 Historique des points</span>
-                  <span className="font-body text-xs text-gray-400">{showHistory ? "▲ Masquer" : `▼ ${history.length} mouvement${history.length > 1 ? "s" : ""}`}</span>
-                </button>
-                {showHistory && (
-                  <div className="mt-3 flex flex-col gap-1.5 max-h-48 overflow-y-auto">
-                    {history.slice(0, 20).map((h: any, i: number) => {
-                      const isGain = h.type === "gain" || (h.points > 0);
-                      const d = new Date(h.date);
-                      return (
-                        <div key={i} className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0">
-                          <div className="flex-1 min-w-0">
-                            <div className="font-body text-xs text-gray-700 truncate">{h.label || (isGain ? "Encaissement" : "Conversion")}</div>
-                            <div className="font-body text-xs text-gray-400">{d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}</div>
-                          </div>
-                          <span className={`font-body text-sm font-bold flex-shrink-0 ml-2 ${isGain ? "text-green-600" : "text-red-500"}`}>
-                            {isGain ? "+" : ""}{h.points} pts
-                          </span>
-                        </div>
-                      );
-                    })}
-                    {history.length > 20 && (
-                      <div className="font-body text-xs text-gray-400 text-center py-1">
-                        + {history.length - 20} mouvement(s) plus ancien(s)
-                      </div>
-                    )}
-                  </div>
-                )}
-              </Card>
-            )}
-          </div>
-        </>
-      );})()}
-
-      {/* Quick actions */}
-      <h2 className="font-display text-lg font-bold text-blue-800 mb-4">
-        Actions rapides
-      </h2>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { href: "/espace-cavalier/reserver", icon: "📅", label: "Réserver une activité" },
-          { href: "/espace-cavalier/reserver?filter=balade", icon: "🌅", label: "Réserver une balade" },
-          { href: "/espace-cavalier/inscription-annuelle", icon: "📋", label: "Inscription annuelle" },
-          { href: "/espace-cavalier/factures", icon: "🧾", label: "Mes factures" },
-          { href: "/espace-cavalier/profil", icon: "👨‍👩‍👧‍👦", label: "Ma famille" },
-        ].map((action, i) => (
-          <Link key={i} href={action.href} className="no-underline">
-            <Card
-              hover
-              padding="sm"
-              className="text-center !py-5"
-            >
-              <span className="text-2xl block mb-2">{action.icon}</span>
-              <span className="font-body text-xs font-semibold text-blue-800">
-                {action.label}
-              </span>
-            </Card>
-          </Link>
-        ))}
-      </div>
-
-      {/* Family members */}
-      {family && family.children.length > 0 && (
-        <>
-          <h2 className="font-display text-lg font-bold text-blue-800 mb-4 mt-10">
-            Vos cavaliers
-          </h2>
+      {/* 4. Actions nécessaires regroupées */}
+      {(profileIssues.length > 0 || stats.due > 0 || permission === "default" || pushError) && (
+        <Card padding="md" className="mb-5 !bg-orange-50 !border-orange-200">
+          <div className="font-body text-sm font-bold text-orange-800 mb-3">À faire</div>
           <div className="flex flex-col gap-3">
-            {family.children.map((child) => (
-              <Card key={child.id} padding="sm">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-lg">
-                      🧒
-                    </div>
-                    <div>
-                      <div className="font-body text-sm font-semibold text-blue-800">
-                        {child.firstName}
-                      </div>
-                      <div className="font-body text-xs text-gray-600">
-                        Niveau : {child.galopLevel || "—"}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 flex-wrap">
-                    <Badge color={child.galopLevel && child.galopLevel !== "—" ? "blue" : "gray"}>
-                      {child.galopLevel && child.galopLevel !== "—"
-                        ? `Galop ${child.galopLevel}`
-                        : "Débutant"}
-                    </Badge>
-                    {(() => {
-                      const lastName = (child as any).lastName || "";
-                      const birthDate = (child as any).birthDate;
-                      const isProfileIncomplete = !child.firstName?.trim() || !lastName.trim() || !birthDate;
-                      return isProfileIncomplete ? (
-                        <Badge color="red">Profil incomplet</Badge>
-                      ) : null;
-                    })()}
-                    {child.sanitaryForm ? (
-                      <Badge color="green">Attestation OK</Badge>
-                    ) : (
-                      <Badge color="red">Attestation médicale manquante</Badge>
-                    )}
-                  </div>
-                </div>
-              </Card>
+            {stats.due > 0 && (
+              <Link href="/espace-cavalier/factures" className="flex items-center justify-between gap-3 no-underline">
+                <div className="flex items-center gap-2 font-body text-sm text-orange-800"><CreditCard size={16} /> Régler {stats.due.toFixed(2)}€</div>
+                <ChevronRight size={16} className="text-orange-500" />
+              </Link>
+            )}
+            {profileIssues.slice(0, 2).map((issue) => (
+              <Link key={issue} href="/espace-cavalier/profil" className="flex items-center justify-between gap-3 no-underline">
+                <div className="font-body text-sm text-orange-800">⚠️ {issue}</div>
+                <ChevronRight size={16} className="text-orange-500 flex-shrink-0" />
+              </Link>
             ))}
+            {permission === "default" && (
+              <button onClick={requestPermission} disabled={pushLoading} className="w-full flex items-center justify-between gap-3 bg-transparent border-none p-0 cursor-pointer text-left">
+                <div className="flex items-center gap-2 font-body text-sm text-orange-800"><Bell size={16} /> Activer les rappels et alertes</div>
+                <span className="font-body text-xs font-semibold text-orange-600">{pushLoading ? "..." : "Activer"}</span>
+              </button>
+            )}
+            {pushError && <div className="font-body text-xs text-red-600">Notifications : {pushError}</div>}
           </div>
-        </>
+        </Card>
       )}
+
+      {/* 5. WhatsApp compact */}
+      {hasWhatsApp && (
+        <Card padding="sm" className="mb-5">
+          <button onClick={() => setShowWhatsApp((v) => !v)} className="w-full flex items-center justify-between bg-transparent border-none cursor-pointer p-0 text-left">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center">💬</div>
+              <div>
+                <div className="font-body text-sm font-bold text-blue-800">Communauté et groupes WhatsApp</div>
+                <div className="font-body text-xs text-gray-600">Les liens utiles du centre</div>
+              </div>
+            </div>
+            <ChevronRight size={18} className={`text-gray-400 transition-transform ${showWhatsApp ? "rotate-90" : ""}`} />
+          </button>
+          {showWhatsApp && (
+            <div className="mt-3 pt-3 border-t border-gray-100 flex flex-col gap-2">
+              {waCommunity && <a href={waCommunity} target="_blank" rel="noopener noreferrer" className="font-body text-sm font-semibold text-green-700 no-underline bg-green-50 px-3 py-2.5 rounded-lg">Rejoindre la communauté du centre</a>}
+              {waGroups.map((g) => <a key={g.key} href={g.url} target="_blank" rel="noopener noreferrer" className="font-body text-sm text-green-800 no-underline bg-green-50/60 px-3 py-2.5 rounded-lg">{g.label}</a>)}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* 6. Cartes + fidélité regroupées */}
+      {(cards.length > 0 || fidelity?.enabled) && (
+        <div className="mb-5">
+          <h2 className="font-display text-lg font-bold text-blue-800 mb-3">Mes avantages</h2>
+          <Card padding="md">
+            <div className="flex flex-col divide-y divide-gray-100">
+              {cards.slice(0, 2).map((card) => (
+                <div key={card.id} className="flex items-center justify-between gap-3 py-3 first:pt-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gold-50 flex items-center justify-center">🎟️</div>
+                    <div>
+                      <div className="font-body text-sm font-semibold text-blue-800">Carte {card.totalSessions || ""} séances</div>
+                      <div className="font-body text-xs text-gray-600">{card.familiale ? "Carte familiale" : card.childName || "Carte de séances"}</div>
+                    </div>
+                  </div>
+                  <div className="font-body text-sm font-bold text-gold-600">{card.remainingSessions || 0} restantes</div>
+                </div>
+              ))}
+              {cards.length > 2 && <div className="font-body text-xs text-gray-500 py-2">+ {cards.length - 2} autre{cards.length > 3 ? "s" : ""} carte{cards.length > 3 ? "s" : ""}</div>}
+              {fidelity?.enabled && (
+                <div className="flex items-center justify-between gap-3 py-3 last:pb-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-yellow-50 flex items-center justify-center"><Sparkles size={19} className="text-yellow-600" /></div>
+                    <div>
+                      <div className="font-body text-sm font-semibold text-blue-800">Fidélité</div>
+                      <div className="font-body text-xs text-gray-600">{fidelity.points} points</div>
+                    </div>
+                  </div>
+                  <div className="font-body text-sm font-bold text-yellow-700">{fidelityValue.toFixed(2)}€</div>
+                </div>
+              )}
+            </div>
+            <Link href="/espace-cavalier/factures" className="mt-4 flex items-center justify-center gap-1.5 font-body text-sm font-semibold text-blue-500 no-underline bg-blue-50 py-2.5 rounded-lg">
+              Voir mes cartes et avantages <ChevronRight size={15} />
+            </Link>
+          </Card>
+        </div>
+      )}
+
+      {/* Raccourcis secondaires, volontairement discrets */}
+      <div className="grid grid-cols-2 gap-3">
+        <Link href="/espace-cavalier/inscription-annuelle" className="no-underline">
+          <Card hover padding="sm"><div className="font-body text-sm font-semibold text-blue-800">📋 Inscription annuelle</div></Card>
+        </Link>
+        <Link href="/espace-cavalier/profil" className="no-underline">
+          <Card hover padding="sm"><div className="font-body text-sm font-semibold text-blue-800">👨‍👩‍👧‍👦 Ma famille</div></Card>
+        </Link>
+      </div>
     </div>
   );
 }
