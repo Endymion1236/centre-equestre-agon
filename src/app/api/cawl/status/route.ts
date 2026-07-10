@@ -187,6 +187,33 @@ export async function GET(req: NextRequest) {
         ? (pData.acompteAmount || Math.round(totalTTC * depositPercent / 100 * 100) / 100)
         : totalEuros || totalTTC;
 
+      // ── Sécurité : contrôle du montant réellement payé ────────────────
+      // Compare le montant renvoyé par CAWL au montant attendu (stocké sur le
+      // paiement). Si CAWL fournit un montant (>0) et qu'il est nettement
+      // inférieur à l'attendu, on refuse de confirmer (tentative de
+      // manipulation du montant côté navigateur — cf. audit P0 #1) et on
+      // marque le paiement pour revue manuelle. On ne bloque JAMAIS quand
+      // CAWL ne renvoie pas de montant, pour ne pas casser les flux légitimes.
+      const expectedAmount = isDeposit
+        ? (pData.acompteAmount || Math.round(totalTTC * depositPercent / 100 * 100) / 100)
+        : totalTTC;
+      if (totalCents > 0 && expectedAmount > 0 && totalEuros < expectedAmount - 0.02) {
+        console.error(
+          `⚠️ CAWL montant incohérent — payé ${totalEuros}€ < attendu ${expectedAmount}€ ` +
+          `(payment=${payRef.id}, hc=${hostedCheckoutId}). Confirmation refusée.`
+        );
+        await payRef.update({
+          amountMismatch: true,
+          amountPaidReported: totalEuros,
+          amountExpected: expectedAmount,
+          needsReview: true,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+        return NextResponse.redirect(
+          new URL(`/espace-cavalier/reservations?review=true`, req.nextUrl.origin)
+        );
+      }
+
       // ── Verrou anti-doublon ──────────────────────────────────────────
       // Empêche status + webhook d'écrire tous les deux si appelés en
       // parallèle, et empêche aussi qu'un refresh navigateur déclenche un
