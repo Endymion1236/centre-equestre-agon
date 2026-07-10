@@ -7,12 +7,23 @@
 export default function AdminDenseModulePolish() {
   return (
     <style jsx global>{`
+      /* La barre contextuelle est un composant distinct de l'en-tête métier.
+         On neutralise ici tout habillage générique qui aurait pu atteindre son contenu. */
+      [data-admin-page] > div:not(:last-child) > div:first-child {
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+      }
+
       /* ───────────────────────── Planning ───────────────────────── */
-      [data-admin-section="planning"] > div {
+      [data-admin-section="planning"] > div:last-child {
         padding-bottom: 1rem;
       }
 
-      [data-admin-section="planning"] > div > div:first-child {
+      [data-admin-section="planning"] > div:last-child > div:first-child {
         margin-bottom: 1rem !important;
       }
 
@@ -26,7 +37,7 @@ export default function AdminDenseModulePolish() {
       }
 
       /* ───────────────────────── Montoir ───────────────────────── */
-      [data-admin-section="montoir"] > div > div:nth-child(2) {
+      [data-admin-section="montoir"] > div:last-child > div:nth-child(2) {
         border: 1px solid rgba(32, 80, 160, 0.075);
         border-radius: 18px;
         background: rgba(255,255,255,.92);
@@ -34,7 +45,7 @@ export default function AdminDenseModulePolish() {
         box-shadow: 0 6px 24px rgba(12,26,46,.035);
       }
 
-      [data-admin-section="montoir"] > div > div:nth-child(2) > div:first-child {
+      [data-admin-section="montoir"] > div:last-child > div:nth-child(2) > div:first-child {
         min-width: 210px;
       }
 
@@ -66,7 +77,7 @@ export default function AdminDenseModulePolish() {
       }
 
       /* ───────────────────────── Cavaliers ─────────────────────── */
-      [data-admin-section="cavaliers"] > div > div:first-child {
+      [data-admin-section="cavaliers"] > div:last-child > div:first-child {
         border-radius: 22px;
         background: linear-gradient(135deg, rgba(255,255,255,.98), rgba(244,248,255,.88));
         border: 1px solid rgba(32,80,160,.07);
@@ -96,11 +107,11 @@ export default function AdminDenseModulePolish() {
       }
 
       /* ───────────────────────── Paiements ─────────────────────── */
-      [data-admin-section="paiements"] > div > div:first-child {
+      [data-admin-section="paiements"] > div:last-child > div:first-child {
         align-items: center;
       }
 
-      [data-admin-section="paiements"] > div > div:nth-child(2) {
+      [data-admin-section="paiements"] > div:last-child > div:nth-child(2) {
         border-radius: 16px;
         background: rgba(255,255,255,.88);
         padding: .4rem;
@@ -139,7 +150,7 @@ export default function AdminDenseModulePolish() {
       }
 
       /* ───────────────────────── Comptabilité ──────────────────── */
-      [data-admin-section="comptabilite"] > div > div:first-child {
+      [data-admin-section="comptabilite"] > div:last-child > div:first-child {
         margin-bottom: 1rem !important;
       }
 
@@ -179,19 +190,19 @@ export default function AdminDenseModulePolish() {
       }
 
       @media (max-width: 767px) {
-        [data-admin-section="planning"] > div > div:first-child,
-        [data-admin-section="montoir"] > div > div:first-child,
-        [data-admin-section="cavaliers"] > div > div:first-child,
-        [data-admin-section="paiements"] > div > div:first-child {
+        [data-admin-section="planning"] > div:last-child > div:first-child,
+        [data-admin-section="montoir"] > div:last-child > div:first-child,
+        [data-admin-section="cavaliers"] > div:last-child > div:first-child,
+        [data-admin-section="paiements"] > div:last-child > div:first-child {
           margin-left: -.15rem;
           margin-right: -.15rem;
         }
 
-        [data-admin-section="montoir"] > div > div:nth-child(2) {
+        [data-admin-section="montoir"] > div:last-child > div:nth-child(2) {
           padding: .7rem;
         }
 
-        [data-admin-section="montoir"] > div > div:nth-child(2) > div:first-child {
+        [data-admin-section="montoir"] > div:last-child > div:nth-child(2) > div:first-child {
           min-width: 100%;
         }
 
