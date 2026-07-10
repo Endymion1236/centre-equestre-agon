@@ -92,11 +92,12 @@ interface CardProps {
   children: ReactNode;
   hover?: boolean;
   className?: string;
-  padding?: "sm" | "md" | "lg";
+  padding?: "none" | "sm" | "md" | "lg";
   onClick?: () => void;
 }
 
 const paddingStyles = {
+  none: "",
   sm: "p-4",
   md: "p-6",
   lg: "p-8",
