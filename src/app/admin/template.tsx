@@ -18,6 +18,7 @@ export default function AdminTemplate({ children }: { children: React.ReactNode 
       data-admin-section={getAdminSection(pathname)}
       className="admin-page-shell"
     >
+      {/* Commit témoin Vercel, sans changement fonctionnel. */}
       <AdminUxPolish />
       <AdminContextBar />
       {children}
