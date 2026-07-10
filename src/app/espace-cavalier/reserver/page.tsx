@@ -479,26 +479,28 @@ export default function ReserverPage() {
         // car le client peut n'avoir chargé qu'un seul mois
         const creneauIdsToEnroll = [...item.creneauIds];
         
-        for (const cid of creneauIdsToEnroll) {
-          // Relire le créneau depuis Firestore pour avoir l'état à jour
-          const creneauSnap = await getDoc(doc(db, "creneaux", cid));
-          if (!creneauSnap.exists()) continue;
-          const creneauData = creneauSnap.data();
-          const enrolled = creneauData.enrolled || [];
-          if (enrolled.some((e: any) => e.childId === item.childId)) continue;
-          await updateDoc(doc(db, "creneaux", cid), {
-            enrolled: [...enrolled, {
-              childId: item.childId, childName: item.childName,
-              familyId: user.uid, familyName: family.parentName,
+        // Inscription sécurisée côté serveur (audit P0 #3 + #7) : valide
+        // enfant↔famille, capacité (maxPlaces) et doublons en transaction.
+        // Le navigateur n'écrit plus directement le tableau `enrolled`.
+        const enrollRes = await authFetch("/api/enroll", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            enrollments: [{
+              childId: item.childId,
+              childName: item.childName,
+              creneauIds: creneauIdsToEnroll,
               ...(( item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
-              enrolledAt: new Date().toISOString(),
             }],
-            enrolledCount: enrolled.length + 1,
-          });
+          }),
+        });
+        if (!enrollRes.ok) {
+          const err = await enrollRes.json().catch(() => ({} as any));
+          throw new Error(err.error || "Inscription refusée (créneau complet ?)");
+        }
 
-          // Si cet enfant était en liste d'attente pour ce créneau, marquer
-          // l'entrée comme acceptée (le hold 24h éventuel devient sans objet
-          // automatiquement dès que l'enfant est inscrit). Non bloquant.
+        // Waitlist : marquer l'éventuel hold comme accepté pour chaque créneau. Non bloquant.
+        for (const cid of creneauIdsToEnroll) {
           try {
             const wlSnap = await getDocs(query(
               collection(db, "waitlist"),
@@ -1628,21 +1630,22 @@ export default function ReserverPage() {
                           try {
                             // 1. Inscrire + créer réservations + paiement pending
                             for (const item of cart) {
-                              for (const cid of item.creneauIds) {
-                                const crSnap = await getDoc(doc(db, "creneaux", cid));
-                                if (!crSnap.exists()) continue;
-                                const crData = crSnap.data();
-                                const enrolled = crData.enrolled || [];
-                                if (enrolled.some((e: any) => e.childId === item.childId)) continue;
-                                await updateDoc(doc(db, "creneaux", cid), {
-                                  enrolled: [...enrolled, {
-                                    childId: item.childId, childName: item.childName,
-                                    familyId: user.uid, familyName: family.parentName,
+                              // Inscription sécurisée côté serveur (audit P0 #3 + #7).
+                              const enrollRes = await authFetch("/api/enroll", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  enrollments: [{
+                                    childId: item.childId,
+                                    childName: item.childName,
+                                    creneauIds: item.creneauIds,
                                     ...((item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
-                                    enrolledAt: new Date().toISOString(),
                                   }],
-                                  enrolledCount: enrolled.length + 1,
-                                });
+                                }),
+                              });
+                              if (!enrollRes.ok) {
+                                const err = await enrollRes.json().catch(() => ({} as any));
+                                throw new Error(err.error || "Inscription refusée (créneau complet ?)");
                               }
                               const firstCr = creneaux.find(c => c.id === item.creneauIds[0]);
                               await addDoc(collection(db, "reservations"), {
