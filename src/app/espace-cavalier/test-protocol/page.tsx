@@ -413,7 +413,7 @@ export default function TestProtocolPage() {
         ].map(s => (
           <Card key={s.label} padding="sm" className="text-center">
             <div className={`font-body text-xl font-bold ${s.color}`}>{s.val}</div>
-            <div className="font-body text-[10px] text-slate-500">{s.label}</div>
+            <div className="font-body text-xs text-slate-500">{s.label}</div>
           </Card>
         ))}
       </div>
@@ -470,8 +470,8 @@ export default function TestProtocolPage() {
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <div className="flex gap-1">
-                    {scenOk > 0 && <span className="font-body text-[10px] font-semibold text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">{scenOk}✅</span>}
-                    {scenKo > 0 && <span className="font-body text-[10px] font-semibold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full">{scenKo}❌</span>}
+                    {scenOk > 0 && <span className="font-body text-xs font-semibold text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">{scenOk}✅</span>}
+                    {scenKo > 0 && <span className="font-body text-xs font-semibold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full">{scenKo}❌</span>}
                   </div>
                   {isOpen ? <ChevronDown size={16} className="text-slate-400"/> : <ChevronRight size={16} className="text-slate-400"/>}
                 </div>
@@ -491,7 +491,7 @@ export default function TestProtocolPage() {
                         {/* En-tête test */}
                         <div className="flex items-start gap-3 p-3">
                           <div className="flex-shrink-0 flex flex-col items-center gap-1 pt-0.5">
-                            <span className="font-body text-[10px] font-bold text-slate-400">{t.id}</span>
+                            <span className="font-body text-xs font-bold text-slate-400">{t.id}</span>
                             <span className="text-sm">{PRIO_CFG[t.priorite]}</span>
                           </div>
 
@@ -507,7 +507,7 @@ export default function TestProtocolPage() {
                               <div className="mt-3 space-y-2">
                                 {t.steps.map((step, i) => (
                                   <div key={i} className="flex gap-2">
-                                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-600 font-body text-[10px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
+                                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-600 font-body text-xs font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
                                     <div>
                                       <div className="font-body text-xs text-slate-700">{step.action}</div>
                                       <div className="font-body text-[11px] text-green-600 mt-0.5">→ {step.attendu}</div>

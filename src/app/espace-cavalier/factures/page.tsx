@@ -232,7 +232,7 @@ export default function FacturesPage() {
             className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all whitespace-nowrap
               ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
             <Icon size={16} /> {label}
-            {id === "factures" && payments.length > 0 && <span className="bg-white/20 text-[10px] px-1.5 py-0.5 rounded-full">{payments.length}</span>}
+            {id === "factures" && payments.length > 0 && <span className="bg-white/20 text-xs px-1.5 py-0.5 rounded-full">{payments.length}</span>}
           </button>
         ))}
         {/* Onglet SEPA : visible uniquement si la famille a au moins un mandat actif */}
@@ -243,7 +243,7 @@ export default function FacturesPage() {
               className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all whitespace-nowrap
                 ${tab === "sepa" ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
               🏦 Prélèvements SEPA
-              {pendingCount > 0 && <span className={`${tab === "sepa" ? "bg-white/20" : "bg-blue-100"} text-[10px] px-1.5 py-0.5 rounded-full`}>{pendingCount}</span>}
+              {pendingCount > 0 && <span className={`${tab === "sepa" ? "bg-white/20" : "bg-blue-100"} text-xs px-1.5 py-0.5 rounded-full`}>{pendingCount}</span>}
             </button>
           );
         })()}
@@ -267,20 +267,20 @@ export default function FacturesPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                     <Card padding="sm" className="text-center">
                       <div className="font-body text-xl font-bold text-blue-500">{totalFacture.toFixed(2)}€</div>
-                      <div className="font-body text-[10px] text-gray-600 uppercase">Total facturé</div>
+                      <div className="font-body text-xs text-gray-600 uppercase">Total facturé</div>
                     </Card>
                     <Card padding="sm" className="text-center bg-green-50">
                       <div className="font-body text-xl font-bold text-green-600">{totalPaye.toFixed(2)}€</div>
-                      <div className="font-body text-[10px] text-gray-600 uppercase">Payé</div>
+                      <div className="font-body text-xs text-gray-600 uppercase">Payé</div>
                     </Card>
                     <Card padding="sm" className={`text-center ${resteDu > 0 ? "bg-red-50" : "bg-green-50"}`}>
                       <div className={`font-body text-xl font-bold ${resteDu > 0 ? "text-red-500" : "text-green-600"}`}>{resteDu.toFixed(2)}€</div>
-                      <div className="font-body text-[10px] text-gray-600 uppercase">Reste dû</div>
+                      <div className="font-body text-xs text-gray-600 uppercase">Reste dû</div>
                     </Card>
                     {totalAvoir > 0 && (
                       <Card padding="sm" className="text-center bg-purple-50">
                         <div className="font-body text-xl font-bold text-purple-600">{totalAvoir.toFixed(2)}€</div>
-                        <div className="font-body text-[10px] text-purple-500 uppercase">Avoir</div>
+                        <div className="font-body text-xs text-purple-500 uppercase">Avoir</div>
                       </Card>
                     )}
                   </div>
@@ -301,7 +301,7 @@ export default function FacturesPage() {
                         <div className="flex items-center justify-between flex-wrap gap-3">
                           <div className="flex items-center gap-4">
                             <div className="w-12 h-12 rounded-xl bg-blue-50 flex flex-col items-center justify-center">
-                              <div className="font-body text-[10px] font-bold text-blue-500">{d.toLocaleDateString("fr-FR", { month: "short" })}</div>
+                              <div className="font-body text-xs font-bold text-blue-500">{d.toLocaleDateString("fr-FR", { month: "short" })}</div>
                               <div className="font-body text-lg font-bold text-blue-800">{d.getDate()}</div>
                             </div>
                             <div>
@@ -497,7 +497,7 @@ export default function FacturesPage() {
                         <div className="flex items-start justify-between flex-wrap gap-3">
                           <div className="flex items-start gap-4">
                             <div className="w-12 h-12 rounded-xl bg-green-50 flex flex-col items-center justify-center flex-shrink-0">
-                              <div className="font-body text-[10px] font-bold text-green-600">Stage</div>
+                              <div className="font-body text-xs font-bold text-green-600">Stage</div>
                               <div className="font-body text-base font-bold text-green-800">{sorted.length}j</div>
                             </div>
                             <div>
@@ -522,7 +522,7 @@ export default function FacturesPage() {
                                 {sorted.map((r, ri) => {
                                   const d = r.date ? new Date(r.date) : null;
                                   return (
-                                    <div key={ri} className="font-body text-[10px] bg-green-50 text-green-700 px-2 py-1 rounded-lg">
+                                    <div key={ri} className="font-body text-xs bg-green-50 text-green-700 px-2 py-1 rounded-lg">
                                       {d ? d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" }) : "—"}
                                       <span className="text-green-500 ml-1">{r.startTime}–{r.endTime}</span>
                                     </div>
@@ -546,7 +546,7 @@ export default function FacturesPage() {
                       <div className="flex items-center justify-between flex-wrap gap-3">
                         <div className="flex items-center gap-4">
                           <div className="w-12 h-12 rounded-xl bg-blue-50 flex flex-col items-center justify-center">
-                            <div className="font-body text-[10px] font-bold text-blue-500">
+                            <div className="font-body text-xs font-bold text-blue-500">
                               {r.date ? new Date(r.date).toLocaleDateString("fr-FR", { weekday: "short" }) : ""}
                             </div>
                             <div className="font-body text-lg font-bold text-blue-800">
@@ -611,7 +611,7 @@ export default function FacturesPage() {
                                 <div className="font-body text-xs text-gray-600">🧒 {card.childName}</div>
                               )}
                               {(card as any).dateDebut && (card as any).dateFin && (
-                                <div className="font-body text-[10px] text-gray-600 mt-0.5">
+                                <div className="font-body text-xs text-gray-600 mt-0.5">
                                   {new Date((card as any).dateDebut).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}
                                   {" → "}
                                   {new Date((card as any).dateFin).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}
@@ -653,7 +653,7 @@ export default function FacturesPage() {
                                       <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${h.credit ? "bg-green-400" : h.presence === "absent" ? "bg-red-400" : "bg-gold-400"}`} />
                                       <div className="min-w-0">
                                         <div className="text-blue-800 font-semibold truncate">{h.activityTitle || "Séance"}</div>
-                                        <div className="text-gray-600 text-[10px]">
+                                        <div className="text-gray-600 text-xs">
                                           {h.date ? new Date(h.date).toLocaleDateString("fr-FR", { weekday:"short", day:"numeric", month:"short" }) : ""}
                                           {h.horseName ? ` · ${h.horseName}` : ""}
                                           {h.credit ? " · Recrédit" : ""}
@@ -757,7 +757,7 @@ export default function FacturesPage() {
                     <div className="h-full rounded-full bg-yellow-400 transition-all"
                       style={{ width: `${Math.min(100, ((fidelite?.points || 0) / fideliteSettings.minPoints) * 100)}%` }} />
                   </div>
-                  <div className="flex justify-between font-body text-[10px] text-gray-600 mt-1">
+                  <div className="flex justify-between font-body text-xs text-gray-600 mt-1">
                     <span>{fidelite?.points || 0} pts</span>
                     <span>{fideliteSettings.minPoints} pts requis</span>
                   </div>
@@ -773,7 +773,7 @@ export default function FacturesPage() {
                       <div key={i} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
                         <div>
                           <div className="font-body text-xs font-semibold text-blue-800">{h.label}</div>
-                          <div className="font-body text-[10px] text-gray-600">
+                          <div className="font-body text-xs text-gray-600">
                             {h.date ? new Date(h.date).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" }) : ""}
                             {h.expiry && h.type === "gain" ? ` · expire le ${new Date(h.expiry).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}` : ""}
                           </div>
@@ -890,7 +890,7 @@ export default function FacturesPage() {
                               <div key={e.id} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
                                 <div>
                                   <div className="font-body text-xs font-semibold text-gray-700">{e.description || "Échéance"}</div>
-                                  <div className="font-body text-[10px] text-gray-500">{dateLabel} · {statusLabel}</div>
+                                  <div className="font-body text-xs text-gray-500">{dateLabel} · {statusLabel}</div>
                                 </div>
                                 <div className="font-body text-sm font-semibold text-gray-700">{(e.montant || 0).toFixed(2)}€</div>
                               </div>

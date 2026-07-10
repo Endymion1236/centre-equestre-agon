@@ -123,11 +123,11 @@ export default function ProgressionPage() {
                       <div key={i} className="bg-white rounded-lg p-3 border border-purple-100">
                         <div className="font-body text-sm text-slate-700 leading-relaxed">{note.text}</div>
                         <div className="flex items-center gap-2 mt-2">
-                          <span className="font-body text-[10px] text-purple-400">
+                          <span className="font-body text-xs text-purple-400">
                             {new Date(note.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
                           </span>
                           {note.activity && (
-                            <span className="font-body text-[10px] text-purple-300">· {note.activity}</span>
+                            <span className="font-body text-xs text-purple-300">· {note.activity}</span>
                           )}
                         </div>
                       </div>
@@ -233,7 +233,7 @@ function NiveauAccordeon({ child, niveau, acquis, isCurrent, openByDefault, open
           ) : (
             <div className="flex flex-col items-end gap-0">
               <span className="font-body text-[11px] font-semibold text-blue-600">{pctFFE}% <span className="text-[9px] text-slate-400 font-normal">validé</span></span>
-              <span className="font-body text-[10px] text-blue-400">{pctProgression}% <span className="text-[9px] text-slate-400 font-normal">progression</span></span>
+              <span className="font-body text-xs text-blue-400">{pctProgression}% <span className="text-[9px] text-slate-400 font-normal">progression</span></span>
             </div>
           )}
           {isOpen ? <ChevronDown size={16} className="text-slate-400"/> : <ChevronRight size={16} className="text-slate-400"/>}
@@ -254,8 +254,8 @@ function NiveauAccordeon({ child, niveau, acquis, isCurrent, openByDefault, open
           </div>
         )}
         <div className="flex justify-between mt-0.5">
-          <span className="font-body text-[10px] text-slate-400">{totalAcquis}/{total} compétences</span>
-          {isComplete && <span className="font-body text-[10px] text-green-500 font-semibold">🏆 Niveau validé !</span>}
+          <span className="font-body text-xs text-slate-400">{totalAcquis}/{total} compétences</span>
+          {isComplete && <span className="font-body text-xs text-green-500 font-semibold">🏆 Niveau validé !</span>}
         </div>
       </div>
 
@@ -326,7 +326,7 @@ function NiveauAccordeon({ child, niveau, acquis, isCurrent, openByDefault, open
                               })}
                             </div>
                             {level > 0 && (
-                              <div className="ml-7 mt-1 font-body text-[10px] text-slate-500">
+                              <div className="ml-7 mt-1 font-body text-xs text-slate-500">
                                 {echelleLabels[level - 1]}
                               </div>
                             )}
@@ -435,9 +435,9 @@ function JournalSeances({ child, familyId, journalCache, setJournalCache }: {
   })();
 
   const presenceBadge = (p: string) => {
-    if (p === "absent") return <span className="font-body text-[10px] font-semibold text-red-500 bg-red-50 px-2 py-0.5 rounded-full whitespace-nowrap">Absent</span>;
-    if (p === "absent_nonjustified") return <span className="font-body text-[10px] font-semibold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full whitespace-nowrap">Absent</span>;
-    if (p) return <span className="font-body text-[10px] font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full whitespace-nowrap">Présent</span>;
+    if (p === "absent") return <span className="font-body text-xs font-semibold text-red-500 bg-red-50 px-2 py-0.5 rounded-full whitespace-nowrap">Absent</span>;
+    if (p === "absent_nonjustified") return <span className="font-body text-xs font-semibold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full whitespace-nowrap">Absent</span>;
+    if (p) return <span className="font-body text-xs font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full whitespace-nowrap">Présent</span>;
     return null;
   };
 
@@ -470,7 +470,7 @@ function JournalSeances({ child, familyId, journalCache, setJournalCache }: {
                     <div key={horse} className="flex items-center gap-1.5 bg-amber-50 border border-amber-100 rounded-full px-3 py-1.5">
                       <span className="text-sm">{["🥇", "🥈", "🥉"][i]}</span>
                       <span className="font-body text-xs font-semibold text-amber-800">{horse}</span>
-                      <span className="font-body text-[10px] text-amber-500">×{n}</span>
+                      <span className="font-body text-xs text-amber-500">×{n}</span>
                     </div>
                   ))}
                 </div>

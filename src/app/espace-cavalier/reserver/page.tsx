@@ -819,7 +819,7 @@ export default function ReserverPage() {
           }
         }} className="relative flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600">
           <ShoppingCart size={16} /> Panier
-          {cart.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{cart.length}</span>}
+          {cart.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{cart.length}</span>}
         </button>
       </div>
 
@@ -1042,13 +1042,13 @@ export default function ReserverPage() {
                         </div>
                         <div className="text-right">
                           <div className="font-body text-lg font-bold text-green-600">{prix.toFixed(0)}€</div>
-                          <div className="font-body text-[10px] text-gray-600">
+                          <div className="font-body text-xs text-gray-600">
                             {joursUniques.length} {(() => {
                               const dur = parseInt(first.endTime) - parseInt(first.startTime);
                               return dur <= 4 ? "demi-journée" : "journée";
                             })()}{joursUniques.length > 1 ? "s" : ""}
                           </div>
-                          <div className="font-body text-[10px] text-gray-500">{first.startTime}–{first.endTime}</div>
+                          <div className="font-body text-xs text-gray-500">{first.startTime}–{first.endTime}</div>
                           <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>{spots} place{spots > 1 ? "s" : ""}</Badge>
                         </div>
                       </div>
@@ -1113,7 +1113,7 @@ export default function ReserverPage() {
                                     <button key={c.id} disabled={daySpots <= 0} onClick={(e) => { e.stopPropagation(); setSelectedDays(sel ? selectedDays.filter(x => x !== c.id) : [...selectedDays, c.id]); }}
                                       className={`px-3 py-2 rounded-lg border font-body text-sm cursor-pointer transition-all ${daySpots <= 0 ? "opacity-40 cursor-not-allowed bg-gray-100 border-gray-200 text-gray-400" : sel ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200 hover:border-green-400"}`}>
                                       {sel ? <Check size={12} className="inline mr-1" /> : null}{dayLabel}
-                                      {daySpots <= 2 && daySpots > 0 && <span className="text-[10px] ml-1 text-orange-500">({daySpots} pl.)</span>}
+                                      {daySpots <= 2 && daySpots > 0 && <span className="text-xs ml-1 text-orange-500">({daySpots} pl.)</span>}
                                     </button>
                                   );
                                 })}
@@ -1459,11 +1459,11 @@ export default function ReserverPage() {
                         <div className="flex-1">
                           <div className="font-body text-sm font-semibold text-blue-800">{item.activityTitle}</div>
                           <div className="font-body text-xs text-gray-600">{item.childName} · {item.dates}</div>
-                          {item.remiseEuros > 0 && <div className="font-body text-[10px] text-green-600">Reduction : -{item.remiseEuros}€</div>}
+                          {item.remiseEuros > 0 && <div className="font-body text-xs text-green-600">Reduction : -{item.remiseEuros}€</div>}
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="text-right">
-                            {item.remiseEuros > 0 && <div className="font-body text-[10px] text-gray-600 line-through">{item.prixBase.toFixed(0)}€</div>}
+                            {item.remiseEuros > 0 && <div className="font-body text-xs text-gray-600 line-through">{item.prixBase.toFixed(0)}€</div>}
                             <div className="font-body text-sm font-bold text-blue-500">{item.prixFinal.toFixed(2)}€</div>
                           </div>
                           <button onClick={() => removeFromCart(idx)} className="text-red-400 bg-transparent border-none cursor-pointer p-1 hover:text-red-600"><X size={14} /></button>
@@ -1498,7 +1498,7 @@ export default function ReserverPage() {
                       </div>
                       {depositMode === "deposit" && (
                         <div className="mt-2 space-y-2">
-                          <div className="font-body text-[10px] text-slate-500 text-center">
+                          <div className="font-body text-xs text-slate-500 text-center">
                             {nbEnfantsStage} enfant{nbEnfantsStage > 1 ? "s" : ""} × {ACOMPTE_PAR_ENFANT}€ = {acompteFixe}€ maintenant · solde {soldeFixe.toFixed(2)}€ prélevé automatiquement ~1 semaine avant le stage
                           </div>
                           <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5">
@@ -1532,7 +1532,7 @@ export default function ReserverPage() {
                       const totalAvoir = familyAvoirs.reduce((s, a) => s + (a.remainingAmount || 0), 0);
                       return (
                         <button onClick={() => setCartPayMode("avoir")}
-                          className={`w-full mt-2 py-2.5 rounded-xl font-body text-sm font-semibold border cursor-pointer transition-all ${cartPayMode === "avoir" ? "border-purple-500 bg-purple-50 text-purple-700" : "border-gray-200 bg-white text-purple-600 hover:border-purple-300"}`}>
+                          className={`w-full mt-2 py-2.5 rounded-xl font-body text-sm font-semibold border cursor-pointer transition-all ${cartPayMode === "avoir" ? "border-amber-500 bg-amber-50 text-amber-700" : "border-gray-200 bg-white text-amber-600 hover:border-amber-300"}`}>
                           💜 Utiliser mon avoir ({totalAvoir.toFixed(2)}€ disponible)
                         </button>
                       );
@@ -1547,7 +1547,7 @@ export default function ReserverPage() {
                         {paying ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
                         {paying ? "Paiement en cours..." : depositMode === "deposit" ? `Payer l'acompte ${acompteFixe.toFixed(2)}€` : `Payer ${cartTotal.toFixed(2)}€`}
                       </button>
-                      <p className="font-body text-[10px] text-gray-600 text-center mt-2">Paiement sécurisé par CAWL / Crédit Agricole</p>
+                      <p className="font-body text-xs text-gray-600 text-center mt-2">Paiement sécurisé par CAWL / Crédit Agricole</p>
                     </>
                   )}
 
@@ -1606,7 +1606,7 @@ export default function ReserverPage() {
                           }
                           setPaying(false);
                         }} disabled={paying}
-                          className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying ? "bg-gray-200 text-gray-600" : "bg-purple-600 text-white hover:bg-purple-500"}`}>
+                          className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying ? "bg-gray-200 text-gray-600" : "bg-amber-600 text-white hover:bg-amber-500"}`}>
                           {paying ? <Loader2 size={18} className="animate-spin" /> : null}
                           {paying ? "En cours..." : couvre ? `Payer avec mon avoir (${cartTotal.toFixed(2)}€)` : `Utiliser ${totalAvoir.toFixed(2)}€ d'avoir`}
                         </button>
@@ -1705,7 +1705,7 @@ export default function ReserverPage() {
                           {paying ? <Loader2 size={18} className="animate-spin" /> : null}
                           {paying ? "Envoi..." : `Déclarer mon paiement par ${cartPayMode === "cheque" ? "chèque" : cartPayMode === "especes" ? "espèces" : "virement"}`}
                         </button>
-                        <p className="font-body text-[10px] text-gray-500 text-center mt-2">
+                        <p className="font-body text-xs text-gray-500 text-center mt-2">
                           L'équipe confirmera réception lors de votre prochain passage.
                         </p>
                       </>

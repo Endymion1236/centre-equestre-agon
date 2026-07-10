@@ -678,7 +678,7 @@ export default function ProfilPage() {
                 <div className="font-body text-xs text-gray-500 font-mono mb-1">
                   IBAN : {mandat.iban?.replace(/\s/g, "").replace(/(.{4})/g, "$1 ").trim()}
                 </div>
-                <div className="font-body text-[10px] text-gray-400">
+                <div className="font-body text-xs text-gray-400">
                   Mandat {mandat.mandatId} · Signé le {new Date(mandat.dateSignature).toLocaleDateString("fr-FR")}
                 </div>
               </div>
@@ -689,7 +689,7 @@ export default function ProfilPage() {
                 {revokingMandat ? <Loader2 size={12} className="animate-spin" /> : <AlertTriangle size={12} />}
                 Révoquer mon mandat de prélèvement
               </button>
-              <p className="font-body text-[10px] text-gray-400 mt-2">
+              <p className="font-body text-xs text-gray-400 mt-2">
                 La révocation prend effet immédiatement. Les prélèvements déjà soumis à la banque ne pourront pas être annulés par cette action.
               </p>
             </div>

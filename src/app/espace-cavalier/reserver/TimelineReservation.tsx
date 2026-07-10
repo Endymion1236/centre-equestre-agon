@@ -392,12 +392,12 @@ export default function TimelineReservation({ creneaux, children, familyId, onBo
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-body text-sm font-bold text-blue-800">{c.activityTitle}</span>
                         {relevance === "perfect" && (
-                          <span className="flex items-center gap-0.5 font-body text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">
+                          <span className="flex items-center gap-0.5 font-body text-xs font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">
                             <Sparkles size={9}/> Parfait pour toi
                           </span>
                         )}
                         {familyEnrolled && (
-                          <span className="flex items-center gap-0.5 font-body text-[10px] font-semibold text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full">
+                          <span className="flex items-center gap-0.5 font-body text-xs font-semibold text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full">
                             <Check size={9}/> Inscrit
                           </span>
                         )}
