@@ -19,6 +19,7 @@ export default function AdminTemplate({ children }: { children: React.ReactNode 
       data-admin-section={getAdminSection(pathname)}
       className="admin-page-shell"
     >
+      {/* Les deux couches visuelles restent séparées de la navigation contextuelle. */}
       <AdminUxPolish />
       <AdminDenseModulePolish />
       <AdminContextBar />
