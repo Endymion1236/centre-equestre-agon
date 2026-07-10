@@ -1,42 +1,59 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { useAuth } from "@/lib/auth-context";
-import { Card, Badge } from "@/components/ui";
-import { Loader2, Receipt, CreditCard, Ticket, Download } from "lucide-react";
-import { downloadInvoicePdf } from "@/lib/download-invoice";
-import { authFetch } from "@/lib/auth-fetch";
+import { useEffect, useMemo, useState } from "react";
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+} from "firebase/firestore";
+import {
+  CheckCircle2,
+  ChevronDown,
+  CreditCard,
+  Download,
+  Gift,
+  Landmark,
+  Loader2,
+  Receipt,
+  Sparkles,
+  Ticket,
+  Wallet,
+} from "lucide-react";
+import { Badge, Card } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
+import { authFetch } from "@/lib/auth-fetch";
+import { useAuth } from "@/lib/auth-context";
+import { downloadInvoicePdf } from "@/lib/download-invoice";
+import { db } from "@/lib/firebase";
+
+interface PaymentItem {
+  activityTitle: string;
+  priceHT: number;
+  tva: number;
+  priceTTC: number;
+  childName?: string;
+}
 
 interface Payment {
   id: string;
   familyId: string;
   familyName: string;
-  items: { activityTitle: string; priceHT: number; tva: number; priceTTC: number }[];
+  items: PaymentItem[];
   totalTTC: number;
   paymentMode: string;
   paidAmount: number;
   status: string;
   date: any;
+  orderId?: string;
 }
 
-interface Reservation {
-  id: string;
-  familyId: string;
-  activityTitle: string;
-  childName: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  priceTTC: number;
-  status: string;
-  source: string;
-  createdAt: any;
-}
-
-interface Card10 {
+interface SessionCard {
   id: string;
   familyId: string;
   childName: string;
@@ -48,739 +65,640 @@ interface Card10 {
   activityType?: string;
   dateDebut?: string;
   dateFin?: string;
+  familiale?: boolean;
   history?: any[];
-  createdAt: any;
 }
 
 const modeLabels: Record<string, string> = {
-  cb_terminal: "CB", cb_online: "CB en ligne", cheque: "Chèque", especes: "Espèces",
-  cheque_vacances: "Chq. Vac.", pass_sport: "Pass'Sport", ancv: "ANCV",
-  virement: "Virement", avoir: "Avoir", carte: "Carte", prelevement_sepa: "🏦 SEPA",
+  cb_terminal: "CB",
+  cb_online: "CB en ligne",
+  cheque: "Chèque",
+  especes: "Espèces",
+  cheque_vacances: "Chèque-Vacances",
+  pass_sport: "Pass'Sport",
+  ancv: "ANCV",
+  virement: "Virement",
+  avoir: "Avoir",
+  carte: "Carte",
+  prelevement_sepa: "Prélèvement SEPA",
 };
+
+function paymentDate(payment: Payment) {
+  const raw = payment.date;
+  const date = raw?.seconds ? new Date(raw.seconds * 1000) : raw ? new Date(raw) : new Date();
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+function paymentTitle(payment: Payment) {
+  return (payment.items || []).map((item) => item.activityTitle).filter(Boolean).join(", ") || "Prestation équestre";
+}
+
+function remainingAmount(payment: Payment) {
+  return Math.max(0, Math.round(((payment.totalTTC || 0) - (payment.paidAmount || 0)) * 100) / 100);
+}
 
 export default function FacturesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [cards, setCards] = useState<Card10[]>([]);
+  const [cards, setCards] = useState<SessionCard[]>([]);
+  const [credits, setCredits] = useState<any[]>([]);
+  const [fidelity, setFidelity] = useState<any>(null);
+  const [fidelitySettings, setFidelitySettings] = useState<{ taux: number; minPoints: number; enabled: boolean } | null>(null);
+  const [familyData, setFamilyData] = useState<any>(null);
+  const [sepaMandates, setSepaMandates] = useState<any[]>([]);
+  const [sepaSchedules, setSepaSchedules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
   const [payingOnline, setPayingOnline] = useState<string | null>(null);
-  const [applyingBon, setApplyingBon] = useState<string | null>(null);
-  const [declaringPayment, setDeclaringPayment] = useState<Payment | null>(null); // modal déclaration
+  const [applyingGift, setApplyingGift] = useState<string | null>(null);
+  const [convertingPoints, setConvertingPoints] = useState(false);
+  const [openCardId, setOpenCardId] = useState<string | null>(null);
+  const [showCards, setShowCards] = useState(false);
+  const [showFidelity, setShowFidelity] = useState(false);
+  const [showSepa, setShowSepa] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const [declaringPayment, setDeclaringPayment] = useState<Payment | null>(null);
   const [declareMode, setDeclareMode] = useState<"cheque" | "especes">("cheque");
-  const [declareMontant, setDeclareMontant] = useState("");
+  const [declareAmount, setDeclareAmount] = useState("");
   const [declareNote, setDeclareNote] = useState("");
   const [declareChequeRef, setDeclareChequeRef] = useState("");
-  const [declareDateEncaissement, setDeclareDateEncaissement] = useState("");
+  const [declareCashDate, setDeclareCashDate] = useState("");
   const [declareSending, setDeclareSending] = useState(false);
-  const [declareSuccess, setDeclareSuccess] = useState(false); // paymentId en cours
-  const [tab, setTab] = useState<"factures" | "reservations" | "cartes" | "fidelite" | "sepa">("factures");
-  const [clientAvoirs, setClientAvoirs] = useState<any[]>([]);
-  const [openCardId, setOpenCardId] = useState<string | null>(null);
-  const [fidelite, setFidelite] = useState<any>(null);
-  const [fideliteSettings, setFideliteSettings] = useState<{ taux: number; minPoints: number; enabled: boolean } | null>(null);
-  const [convertingPoints, setConvertingPoints] = useState(false);
-  const [familyData, setFamilyData] = useState<any>(null);
-  // SEPA : mandats actifs + echeances a venir/passees pour la famille
-  const [sepaMandats, setSepaMandats] = useState<any[]>([]);
-  const [sepaEcheances, setSepaEcheances] = useState<any[]>([]);
+  const [declareSuccess, setDeclareSuccess] = useState(false);
 
   useEffect(() => {
     if (!user) return;
-    const fetchAll = async () => {
-      // Payments - try with familyId filter, fallback to loading all
+
+    const load = async () => {
       try {
-        const pSnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", user.uid)));
-        setPayments(pSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Payment[]);
+        const snapshot = await getDocs(query(collection(db, "payments"), where("familyId", "==", user.uid)));
+        setPayments(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as Payment[]);
       } catch {
         try {
-          // Fallback: load all and filter client-side
-          const pSnap = await getDocs(collection(db, "payments"));
-          setPayments(pSnap.docs.map(d => ({ id: d.id, ...d.data() } as Payment)).filter(p => p.familyId === user.uid));
-        } catch { setPayments([]); }
-      }
-
-      // Reservations
-      try {
-        const rSnap = await getDocs(query(collection(db, "reservations"), where("familyId", "==", user.uid)));
-        setReservations(rSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Reservation[]);
-      } catch {
-        try {
-          const rSnap = await getDocs(collection(db, "reservations"));
-          setReservations(rSnap.docs.map(d => ({ id: d.id, ...d.data() } as Reservation)).filter(r => r.familyId === user.uid));
-        } catch { setReservations([]); }
-      }
-
-      // Cards
-      try {
-        const cSnap = await getDocs(query(collection(db, "cartes"), where("familyId", "==", user.uid)));
-        setCards(cSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Card10[]);
-      } catch {
-        try {
-          const cSnap = await getDocs(collection(db, "cartes"));
-          setCards(cSnap.docs.map(d => ({ id: d.id, ...d.data() } as Card10)).filter(c => c.familyId === user.uid));
-        } catch { setCards([]); }
-      }
-
-      // Avoirs
-      try {
-        const aSnap = await getDocs(query(collection(db, "avoirs"), where("familyId", "==", user.uid)));
-        setClientAvoirs(aSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch {
-        try {
-          const aSnap = await getDocs(collection(db, "avoirs"));
-          setClientAvoirs(aSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((a: any) => a.familyId === user.uid));
-        } catch { setClientAvoirs([]); }
-      }
-
-      // Fidélité — chercher par uid puis par familyId
-      try {
-        const [settingsSnap] = await Promise.all([
-          getDoc(doc(db, "settings", "fidelite")),
-        ]);
-        if (settingsSnap.exists()) setFideliteSettings(settingsSnap.data() as any);
-
-        // Essayer d'abord avec user.uid comme ID du document
-        let fidSnap = await getDoc(doc(db, "fidelite", user.uid));
-        if (!fidSnap.exists()) {
-          // Fallback : chercher par champ familyId (cas admin a créé les points avec l'ancien ID)
-          const fidQuery = await getDocs(query(collection(db, "fidelite"), where("familyId", "==", user.uid)));
-          if (!fidQuery.empty) {
-            fidSnap = fidQuery.docs[0] as any;
-          } else {
-            // Dernier recours : chercher via la famille liée
-            const famSnap2 = await getDocs(collection(db, "fidelite"));
-            const match = famSnap2.docs.find(d => {
-              const data = d.data();
-              return data.familyId === user.uid || d.id === user.uid;
-            });
-            if (match) fidSnap = match as any;
-          }
+          const snapshot = await getDocs(collection(db, "payments"));
+          setPayments(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as Payment)).filter((item) => item.familyId === user.uid));
+        } catch {
+          setPayments([]);
         }
-        if (fidSnap.exists()) setFidelite({ id: fidSnap.id, ...fidSnap.data() });
-      } catch { /* pas de fidélité */ }
+      }
 
-      // Famille (pour adresse facture)
-      // Recherche par docId d'abord (pattern : doc(db, 'families', user.uid)),
-      // car c'est la convention. Fallback sur where uid== ou authUid== pour
-      // les anciens docs qui n'avaient pas le docId aligne.
       try {
-        const directDoc = await getDoc(doc(db, "families", user.uid));
-        if (directDoc.exists()) {
-          setFamilyData({ id: directDoc.id, ...directDoc.data() });
-        } else {
-          const famSnap = await getDocs(query(collection(db, "families"), where("uid", "==", user.uid)));
-          if (!famSnap.empty) {
-            setFamilyData({ id: famSnap.docs[0].id, ...famSnap.docs[0].data() });
-          } else {
-            // 2eme fallback : authUid (legacy)
-            const famSnap2 = await getDocs(query(collection(db, "families"), where("authUid", "==", user.uid)));
-            if (!famSnap2.empty) setFamilyData({ id: famSnap2.docs[0].id, ...famSnap2.docs[0].data() });
-          }
+        const snapshot = await getDocs(query(collection(db, "cartes"), where("familyId", "==", user.uid)));
+        setCards(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as SessionCard[]);
+      } catch {
+        setCards([]);
+      }
+
+      try {
+        const snapshot = await getDocs(query(collection(db, "avoirs"), where("familyId", "==", user.uid)));
+        setCredits(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
+      } catch {
+        setCredits([]);
+      }
+
+      try {
+        const settingsSnapshot = await getDoc(doc(db, "settings", "fidelite"));
+        if (settingsSnapshot.exists()) setFidelitySettings(settingsSnapshot.data() as any);
+
+        let fidelitySnapshot = await getDoc(doc(db, "fidelite", user.uid));
+        if (!fidelitySnapshot.exists()) {
+          const fallback = await getDocs(query(collection(db, "fidelite"), where("familyId", "==", user.uid)));
+          if (!fallback.empty) fidelitySnapshot = fallback.docs[0] as any;
         }
-      } catch (e) { console.error("Famille non trouvee:", e); }
+        if (fidelitySnapshot.exists()) setFidelity({ id: fidelitySnapshot.id, ...fidelitySnapshot.data() });
+      } catch {
+        // Le programme de fidélité est facultatif.
+      }
 
-      // SEPA : mandats + echeances pour cette famille
-      // On charge meme si pas de mandat, pour que l'onglet sache afficher
-      // 'Aucun pr\u00e9l\u00e8vement en cours' au lieu d'un onglet manquant.
       try {
-        const mSnap = await getDocs(query(collection(db, "mandats-sepa"), where("familyId", "==", user.uid)));
-        setSepaMandats(mSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (e) { console.error("[espace-cavalier] charge mandats-sepa echec:", e); setSepaMandats([]); }
+        const direct = await getDoc(doc(db, "families", user.uid));
+        if (direct.exists()) setFamilyData({ id: direct.id, ...direct.data() });
+      } catch {
+        // L'adresse n'est utile que pour le PDF.
+      }
+
       try {
-        const eSnap = await getDocs(query(collection(db, "echeances-sepa"), where("familyId", "==", user.uid)));
-        setSepaEcheances(eSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (e) { console.error("[espace-cavalier] charge echeances-sepa echec:", e); setSepaEcheances([]); }
+        const snapshot = await getDocs(query(collection(db, "mandats-sepa"), where("familyId", "==", user.uid)));
+        setSepaMandates(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
+      } catch {
+        setSepaMandates([]);
+      }
+
+      try {
+        const snapshot = await getDocs(query(collection(db, "echeances-sepa"), where("familyId", "==", user.uid)));
+        setSepaSchedules(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
+      } catch {
+        setSepaSchedules([]);
+      }
 
       setLoading(false);
     };
-    fetchAll();
+
+    load();
   }, [user]);
 
-  const totalPaid = payments.reduce((s, p) => s + (p.paidAmount || p.totalTTC || 0), 0);
-  const sortedPayments = [...payments].sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
-  const sortedReservations = [...reservations].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  const activePayments = useMemo(
+    () => payments.filter((payment) => payment.status !== "cancelled"),
+    [payments],
+  );
 
-  // Regrouper les réservations de stage par titre + enfant
-  const { stageReservationGroups, soloReservations } = useMemo(() => {
-    const groups: Record<string, Reservation[]> = {};
-    const solo: Reservation[] = [];
-    for (const r of sortedReservations) {
-      if ((r as any).activityType === "stage") {
-        const key = `${r.activityTitle}__${r.childName}`;
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(r);
-      } else {
-        solo.push(r);
-      }
+  const duePayments = useMemo(
+    () => activePayments
+      .filter((payment) => remainingAmount(payment) > 0.009)
+      .sort((a, b) => paymentDate(b).getTime() - paymentDate(a).getTime()),
+    [activePayments],
+  );
+
+  const settledPayments = useMemo(
+    () => payments
+      .filter((payment) => payment.status === "cancelled" || remainingAmount(payment) <= 0.009)
+      .sort((a, b) => paymentDate(b).getTime() - paymentDate(a).getTime()),
+    [payments],
+  );
+
+  const totalDue = duePayments.reduce((sum, payment) => sum + remainingAmount(payment), 0);
+  const totalCredit = credits
+    .filter((credit: any) => credit.status === "actif")
+    .reduce((sum: number, credit: any) => sum + (credit.remainingAmount || 0), 0);
+
+  const activeCards = cards.filter((card) => {
+    const expired = card.dateFin && new Date(card.dateFin) < new Date();
+    return card.status !== "used" && !expired && (card.remainingSessions || 0) > 0;
+  });
+
+  const activeMandate = sepaMandates.find((mandate: any) => mandate.status === "active");
+  const upcomingSepa = sepaSchedules
+    .filter((schedule: any) => schedule.status === "pending")
+    .sort((a: any, b: any) => (a.dateEcheance || "").localeCompare(b.dateEcheance || ""));
+  const pastSepa = sepaSchedules
+    .filter((schedule: any) => schedule.status !== "pending")
+    .sort((a: any, b: any) => (b.dateEcheance || "").localeCompare(a.dateEcheance || ""));
+
+  const startOnlinePayment = async (payment: Payment) => {
+    if (!user) return;
+    setPayingOnline(payment.id);
+    try {
+      const remaining = remainingAmount(payment);
+      const response = await authFetch("/api/cawl/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          familyId: user.uid,
+          familyEmail: user.email,
+          familyName: payment.familyName,
+          paymentId: payment.id,
+          items: [{ name: paymentTitle(payment), priceInCents: Math.round(remaining * 100), quantity: 1 }],
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Paiement indisponible");
+      if (data.url) window.location.href = data.url;
+      else toast("Le lien de paiement n'a pas pu être créé.", "error");
+    } catch (error) {
+      console.error(error);
+      toast("Impossible d'ouvrir le paiement en ligne.", "error");
     }
-    // Trier solo par date décroissante
-    solo.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-    return { stageReservationGroups: Object.values(groups), soloReservations: solo };
-  }, [sortedReservations]);
+    setPayingOnline(null);
+  };
+
+  const applyGiftCode = async (payment: Payment) => {
+    const code = (prompt("Entrez le code de votre bon cadeau (ex. BON-XXXX) :") || "").trim().toUpperCase();
+    if (!code) return;
+    setApplyingGift(payment.id);
+    try {
+      const response = await authFetch("/api/bon-cadeau/appliquer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, paymentId: payment.id }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Bon non appliqué");
+      toast(
+        data.facturePayee
+          ? `Bon appliqué : ${data.applique.toFixed(2)}€. Facture réglée.`
+          : `Bon appliqué : ${data.applique.toFixed(2)}€. Reste ${data.resteAPayer.toFixed(2)}€ à régler.`,
+        "success",
+      );
+      window.location.reload();
+    } catch (error: any) {
+      toast(error?.message || "Impossible d'appliquer ce bon.", "error");
+    }
+    setApplyingGift(null);
+  };
+
+  const openDeclaration = (payment: Payment) => {
+    setDeclaringPayment(payment);
+    setDeclareAmount(remainingAmount(payment).toFixed(2));
+    setDeclareMode("cheque");
+    setDeclareNote("");
+    setDeclareChequeRef("");
+    setDeclareCashDate("");
+    setDeclareSuccess(false);
+  };
+
+  const downloadReceipt = async (payment: Payment) => {
+    const date = paymentDate(payment);
+    const items = payment.items || [];
+    const totalHT = items.reduce((sum, item) => sum + (item.priceHT || 0), 0);
+    const totalTTC = payment.totalTTC || 0;
+    const civilite = familyData?.civilite ? `${familyData.civilite} ` : "";
+    const address = [
+      familyData?.address,
+      [familyData?.zipCode, familyData?.city].filter(Boolean).join(" "),
+    ].filter(Boolean).join("\n");
+
+    await downloadInvoicePdf({
+      invoiceNumber: payment.orderId || `F-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}-${payment.id.slice(-4).toUpperCase()}`,
+      date: date.toLocaleDateString("fr-FR"),
+      familyName: `${civilite}${payment.familyName || familyData?.parentName || ""}`,
+      familyEmail: user?.email || "",
+      familyAddress: address,
+      items: items.map((item) => ({ ...item, childName: item.childName || "" })),
+      totalHT,
+      totalTVA: totalTTC - totalHT,
+      totalTTC,
+      paidAmount: payment.paidAmount || 0,
+      paymentMode: modeLabels[payment.paymentMode] || payment.paymentMode || "",
+      paymentDate: payment.paidAmount > 0 ? date.toLocaleDateString("fr-FR") : "",
+      paymentId: payment.id,
+    });
+  };
+
+  const convertPoints = async () => {
+    if (!user || !fidelity || !fidelitySettings) return;
+    const amount = Math.floor((fidelity.points || 0) / fidelitySettings.taux * 100) / 100;
+    const usedPoints = Math.floor(amount * fidelitySettings.taux);
+    if (amount <= 0) return;
+    if (!confirm(`Convertir ${usedPoints} points en ${amount.toFixed(2)}€ d'avoir ?`)) return;
+
+    setConvertingPoints(true);
+    try {
+      const expiry = new Date();
+      expiry.setFullYear(expiry.getFullYear() + 1);
+      await addDoc(collection(db, "avoirs"), {
+        familyId: user.uid,
+        familyName: fidelity.familyName || familyData?.parentName || "",
+        type: "avoir",
+        amount,
+        usedAmount: 0,
+        remainingAmount: amount,
+        reason: `Conversion fidélité (${usedPoints} pts)`,
+        reference: `FID-${Date.now().toString(36).toUpperCase()}`,
+        sourceType: "fidelite",
+        status: "actif",
+        expiryDate: expiry,
+        usageHistory: [],
+        createdAt: serverTimestamp(),
+      });
+
+      const newPoints = (fidelity.points || 0) - usedPoints;
+      await updateDoc(doc(db, "fidelite", fidelity.id || user.uid), {
+        points: newPoints,
+        history: [
+          ...(fidelity.history || []),
+          { date: new Date().toISOString(), points: -usedPoints, type: "conversion", label: `Avoir ${amount.toFixed(2)}€` },
+        ],
+        updatedAt: serverTimestamp(),
+      });
+      setFidelity({ ...fidelity, points: newPoints });
+      setCredits((current) => [...current, { id: `local-${Date.now()}`, status: "actif", remainingAmount: amount }]);
+      toast(`${amount.toFixed(2)}€ d'avoir créé.`, "success");
+    } catch (error) {
+      console.error(error);
+      toast("Erreur lors de la conversion.", "error");
+    }
+    setConvertingPoints(false);
+  };
+
+  const sendDeclaration = async () => {
+    if (!declaringPayment || !user) return;
+    const amount = parseFloat(declareAmount);
+    if (!amount || amount <= 0) return;
+
+    setDeclareSending(true);
+    try {
+      await addDoc(collection(db, "payment_declarations"), {
+        paymentId: declaringPayment.id,
+        familyId: user.uid,
+        familyName: declaringPayment.familyName,
+        familyEmail: user.email || "",
+        montant: amount,
+        mode: declareMode,
+        note: declareNote,
+        chequeRef: declareChequeRef,
+        dateEncaissement: declareCashDate,
+        activityTitle: paymentTitle(declaringPayment),
+        status: "pending_confirmation",
+        createdAt: serverTimestamp(),
+      });
+
+      authFetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: process.env.NEXT_PUBLIC_OWNER_EMAIL || "nicolasrichard16@hotmail.com",
+          subject: `Déclaration paiement — ${declaringPayment.familyName}`,
+          context: "espace_cavalier_declaration",
+          familyId: declaringPayment.familyId,
+          paymentId: declaringPayment.id,
+          html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px"><p><strong>${declaringPayment.familyName}</strong> déclare un paiement de <strong>${amount.toFixed(2)}€</strong> en ${declareMode === "cheque" ? "chèque" : "espèces"}.</p><p>${paymentTitle(declaringPayment)}</p></div>`,
+        }),
+      }).catch(() => {});
+
+      setDeclareSuccess(true);
+    } catch (error) {
+      console.error(error);
+      toast("Impossible d'envoyer la déclaration.", "error");
+    }
+    setDeclareSending(false);
+  };
+
+  const renderPayment = (payment: Payment, due = false) => {
+    const date = paymentDate(payment);
+    const remaining = remainingAmount(payment);
+    const isSepa = payment.paymentMode === "prelevement_sepa";
+
+    return (
+      <Card key={payment.id} padding="md" className={due ? "!border-orange-200" : ""}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="font-body text-sm font-bold text-blue-800">{paymentTitle(payment)}</div>
+            <div className="font-body text-xs text-gray-500 mt-1">
+              {date.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+              {payment.paymentMode && ` · ${modeLabels[payment.paymentMode] || payment.paymentMode}`}
+            </div>
+            {due && (payment.paidAmount || 0) > 0 && (
+              <div className="font-body text-xs text-gray-600 mt-2">
+                Déjà réglé : <span className="font-semibold text-green-600">{(payment.paidAmount || 0).toFixed(2)}€</span>
+              </div>
+            )}
+          </div>
+
+          <div className="text-right flex-shrink-0">
+            <div className={`font-display text-xl font-bold ${due ? "text-orange-600" : payment.status === "cancelled" ? "text-gray-400" : "text-green-600"}`}>
+              {due ? `${remaining.toFixed(2)}€` : `${(payment.totalTTC || 0).toFixed(2)}€`}
+            </div>
+            <div className="font-body text-xs text-gray-500">{due ? "reste à régler" : payment.status === "cancelled" ? "annulé" : "réglé"}</div>
+          </div>
+        </div>
+
+        {due && (
+          <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-gray-100">
+            {isSepa ? (
+              <button type="button" onClick={() => setShowSepa(true)} className="flex-1 min-w-[150px] py-2.5 rounded-xl font-body text-sm font-bold text-blue-700 bg-blue-50 border-none cursor-pointer">
+                Voir l'échéancier SEPA
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled={payingOnline === payment.id}
+                  onClick={() => startOnlinePayment(payment)}
+                  className="flex-1 min-w-[110px] flex items-center justify-center gap-2 py-2.5 rounded-xl font-body text-sm font-bold text-white bg-blue-500 border-none cursor-pointer disabled:opacity-50"
+                >
+                  {payingOnline === payment.id ? <Loader2 size={15} className="animate-spin" /> : <CreditCard size={15} />}
+                  Payer par CB
+                </button>
+                <button
+                  type="button"
+                  disabled={applyingGift === payment.id}
+                  onClick={() => applyGiftCode(payment)}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-emerald-700 bg-emerald-50 border-none cursor-pointer disabled:opacity-50"
+                >
+                  {applyingGift === payment.id ? <Loader2 size={14} className="animate-spin" /> : <Gift size={14} />}
+                  Bon cadeau
+                </button>
+                <button type="button" onClick={() => openDeclaration(payment)} className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-gray-600 bg-gray-100 border-none cursor-pointer">
+                  Déclarer un règlement
+                </button>
+              </>
+            )}
+            <button type="button" onClick={() => downloadReceipt(payment)} className="w-10 h-10 rounded-xl bg-gray-50 text-gray-600 border-none cursor-pointer flex items-center justify-center" title="Télécharger la facture">
+              <Download size={16} />
+            </button>
+          </div>
+        )}
+
+        {!due && (
+          <div className="flex justify-end mt-3 pt-3 border-t border-gray-100">
+            <button type="button" onClick={() => downloadReceipt(payment)} className="inline-flex items-center gap-1.5 font-body text-xs font-semibold text-blue-500 bg-blue-50 px-3 py-2 rounded-lg border-none cursor-pointer">
+              <Download size={13} /> Télécharger la facture
+            </button>
+          </div>
+        )}
+      </Card>
+    );
+  };
+
+  if (loading) {
+    return <div className="text-center py-20"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div>;
+  }
 
   return (
-    <div>
-      <h1 className="font-display text-2xl font-bold text-blue-800 mb-2">Mes factures & paiements</h1>
-      <p className="font-body text-sm text-gray-600 mb-6">Retrouvez l&apos;historique de tous vos paiements et réservations.</p>
-
-      {/* Tabs */}
-      <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
-        {([["factures", "Paiements", Receipt], ["reservations", "Réservations", CreditCard]] as const).map(([id, label, Icon]) => (
-          <button key={id} onClick={() => setTab(id as any)}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all whitespace-nowrap
-              ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
-            <Icon size={16} /> {label}
-            {id === "factures" && payments.length > 0 && <span className="bg-white/20 text-xs px-1.5 py-0.5 rounded-full">{payments.length}</span>}
-          </button>
-        ))}
-        {/* Onglet SEPA : visible uniquement si la famille a au moins un mandat actif */}
-        {sepaMandats.some((m: any) => m.status === "active") && (() => {
-          const pendingCount = sepaEcheances.filter((e: any) => e.status === "pending").length;
-          return (
-            <button onClick={() => setTab("sepa")}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all whitespace-nowrap
-                ${tab === "sepa" ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
-              🏦 Prélèvements SEPA
-              {pendingCount > 0 && <span className={`${tab === "sepa" ? "bg-white/20" : "bg-blue-100"} text-xs px-1.5 py-0.5 rounded-full`}>{pendingCount}</span>}
-            </button>
-          );
-        })()}
+    <div className="pb-8">
+      <div className="mb-6">
+        <h1 className="font-display text-2xl font-bold text-blue-800 mb-1">Mes paiements</h1>
+        <p className="font-body text-sm text-gray-600">Ce qu'il reste à régler, vos avoirs et vos factures.</p>
       </div>
 
-      {loading ? (
-        <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div>
-      ) : (
-        <>
-          {/* ─── Paiements ─── */}
-          {tab === "factures" && (
+      {totalDue > 0 ? (
+        <Card padding="md" className="mb-5 !bg-gradient-to-br !from-orange-50 !to-amber-50 !border-orange-200">
+          <div className="flex items-start justify-between gap-4">
             <div>
-              {/* Mon compte — résumé financier */}
-              {(() => {
-                const activePayments = payments.filter(p => p.status !== "cancelled");
-                const totalFacture = activePayments.reduce((s, p) => s + (p.totalTTC || 0), 0);
-                const totalPaye = activePayments.reduce((s, p) => s + (p.paidAmount || 0), 0);
-                const resteDu = totalFacture - totalPaye;
-                const totalAvoir = clientAvoirs.filter((a: any) => a.status === "actif").reduce((s: number, a: any) => s + (a.remainingAmount || 0), 0);
-                return (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                    <Card padding="sm" className="text-center">
-                      <div className="font-body text-xl font-bold text-blue-500">{totalFacture.toFixed(2)}€</div>
-                      <div className="font-body text-xs text-gray-600 uppercase">Total facturé</div>
-                    </Card>
-                    <Card padding="sm" className="text-center bg-green-50">
-                      <div className="font-body text-xl font-bold text-green-600">{totalPaye.toFixed(2)}€</div>
-                      <div className="font-body text-xs text-gray-600 uppercase">Payé</div>
-                    </Card>
-                    <Card padding="sm" className={`text-center ${resteDu > 0 ? "bg-red-50" : "bg-green-50"}`}>
-                      <div className={`font-body text-xl font-bold ${resteDu > 0 ? "text-red-500" : "text-green-600"}`}>{resteDu.toFixed(2)}€</div>
-                      <div className="font-body text-xs text-gray-600 uppercase">Reste dû</div>
-                    </Card>
-                    {totalAvoir > 0 && (
-                      <Card padding="sm" className="text-center bg-purple-50">
-                        <div className="font-body text-xl font-bold text-purple-600">{totalAvoir.toFixed(2)}€</div>
-                        <div className="font-body text-xs text-purple-500 uppercase">Avoir</div>
-                      </Card>
+              <div className="font-body text-xs uppercase tracking-wider font-bold text-orange-600">Reste à régler</div>
+              <div className="font-display text-3xl font-bold text-orange-700 mt-1">{totalDue.toFixed(2)}€</div>
+              <div className="font-body text-xs text-orange-700 mt-1">
+                {duePayments.length} paiement{duePayments.length > 1 ? "s" : ""} concerné{duePayments.length > 1 ? "s" : ""}
+              </div>
+            </div>
+            <div className="w-12 h-12 rounded-2xl bg-white/70 flex items-center justify-center"><CreditCard size={23} className="text-orange-600" /></div>
+          </div>
+        </Card>
+      ) : (
+        <Card padding="sm" className="mb-5 !bg-green-50 !border-green-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center"><CheckCircle2 size={20} className="text-green-600" /></div>
+            <div>
+              <div className="font-body text-sm font-bold text-green-800">Tout est à jour</div>
+              <div className="font-body text-xs text-green-700">Aucun règlement n'est attendu pour le moment.</div>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {totalCredit > 0 && (
+        <Card padding="sm" className="mb-6 !bg-gold-50 !border-gold-200">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center"><Wallet size={19} className="text-gold-600" /></div>
+              <div>
+                <div className="font-body text-sm font-bold text-blue-800">Avoir disponible</div>
+                <div className="font-body text-xs text-gray-600">Utilisable sur une prochaine réservation</div>
+              </div>
+            </div>
+            <div className="font-display text-xl font-bold text-gold-600">{totalCredit.toFixed(2)}€</div>
+          </div>
+        </Card>
+      )}
+
+      {duePayments.length > 0 && (
+        <section className="mb-7">
+          <h2 className="font-display text-lg font-bold text-blue-800 mb-3">À régler</h2>
+          <div className="flex flex-col gap-3">{duePayments.map((payment) => renderPayment(payment, true))}</div>
+        </section>
+      )}
+
+      {(activeCards.length > 0 || fidelitySettings?.enabled) && (
+        <section className="mb-7">
+          <h2 className="font-display text-lg font-bold text-blue-800 mb-3">Mes avantages</h2>
+          <Card padding="sm">
+            {activeCards.length > 0 && (
+              <>
+                <button type="button" onClick={() => setShowCards((value) => !value)} className="w-full flex items-center justify-between gap-3 bg-transparent border-none p-2 cursor-pointer text-left">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gold-50 flex items-center justify-center"><Ticket size={19} className="text-gold-600" /></div>
+                    <div>
+                      <div className="font-body text-sm font-bold text-blue-800">Cartes de séances</div>
+                      <div className="font-body text-xs text-gray-600">{activeCards.reduce((sum, card) => sum + (card.remainingSessions || 0), 0)} séance(s) restante(s)</div>
+                    </div>
+                  </div>
+                  <ChevronDown size={18} className={`text-gray-400 transition-transform ${showCards ? "rotate-180" : ""}`} />
+                </button>
+
+                {showCards && (
+                  <div className="mt-2 pt-3 border-t border-gray-100 flex flex-col gap-3">
+                    {activeCards.map((card) => {
+                      const open = openCardId === card.id;
+                      const percentage = card.totalSessions > 0 ? (card.remainingSessions / card.totalSessions) * 100 : 0;
+                      return (
+                        <div key={card.id} className="rounded-xl bg-gold-50/50 p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <div className="font-body text-sm font-bold text-blue-800">Carte {card.totalSessions} séances · {card.activityType === "balade" ? "Balades" : "Cours"}</div>
+                              <div className="font-body text-xs text-gray-600 mt-0.5">{card.familiale ? "Carte familiale" : card.childName}</div>
+                            </div>
+                            <Badge color={card.remainingSessions > 2 ? "green" : "orange"}>{card.remainingSessions}/{card.totalSessions}</Badge>
+                          </div>
+                          <div className="h-2 rounded-full bg-white overflow-hidden mt-3"><div className="h-full rounded-full bg-gold-400" style={{ width: `${percentage}%` }} /></div>
+                          {(card.history || []).length > 0 && (
+                            <>
+                              <button type="button" onClick={() => setOpenCardId(open ? null : card.id)} className="font-body text-xs font-semibold text-blue-500 bg-transparent border-none cursor-pointer mt-2 px-0">
+                                {open ? "Masquer l'historique" : "Voir l'historique"}
+                              </button>
+                              {open && (
+                                <div className="flex flex-col gap-1 mt-2">
+                                  {[...(card.history || [])].reverse().slice(0, 10).map((entry: any, index: number) => (
+                                    <div key={index} className="flex items-center justify-between bg-white rounded-lg px-2.5 py-1.5">
+                                      <div className="font-body text-xs text-gray-700">{entry.activityTitle || "Séance"} · {entry.date ? new Date(entry.date).toLocaleDateString("fr-FR") : ""}</div>
+                                      <div className={`font-body text-xs font-bold ${entry.credit ? "text-green-600" : "text-gold-600"}`}>{entry.credit ? "+1" : "✓"}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+
+            {fidelitySettings?.enabled && (
+              <div className={activeCards.length > 0 ? "mt-2 pt-2 border-t border-gray-100" : ""}>
+                <button type="button" onClick={() => setShowFidelity((value) => !value)} className="w-full flex items-center justify-between gap-3 bg-transparent border-none p-2 cursor-pointer text-left">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-yellow-50 flex items-center justify-center"><Sparkles size={19} className="text-yellow-600" /></div>
+                    <div>
+                      <div className="font-body text-sm font-bold text-blue-800">Fidélité</div>
+                      <div className="font-body text-xs text-gray-600">{fidelity?.points || 0} points · {(((fidelity?.points || 0) / (fidelitySettings.taux || 50))).toFixed(2)}€</div>
+                    </div>
+                  </div>
+                  <ChevronDown size={18} className={`text-gray-400 transition-transform ${showFidelity ? "rotate-180" : ""}`} />
+                </button>
+
+                {showFidelity && (
+                  <div className="mt-2 pt-3 border-t border-gray-100">
+                    {(fidelity?.points || 0) >= (fidelitySettings.minPoints || 500) ? (
+                      <button type="button" disabled={convertingPoints} onClick={convertPoints} className="w-full py-2.5 rounded-xl font-body text-sm font-bold text-white bg-yellow-500 border-none cursor-pointer disabled:opacity-50">
+                        {convertingPoints ? "Conversion en cours..." : "Convertir mes points en avoir"}
+                      </button>
+                    ) : (
+                      <>
+                        <div className="flex justify-between font-body text-xs text-gray-600 mb-2">
+                          <span>Encore {(fidelitySettings.minPoints || 500) - (fidelity?.points || 0)} points avant conversion</span>
+                          <span>{Math.round(((fidelity?.points || 0) / (fidelitySettings.minPoints || 500)) * 100)}%</span>
+                        </div>
+                        <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden"><div className="h-full rounded-full bg-yellow-400" style={{ width: `${Math.min(100, ((fidelity?.points || 0) / (fidelitySettings.minPoints || 500)) * 100)}%` }} /></div>
+                      </>
                     )}
                   </div>
+                )}
+              </div>
+            )}
+          </Card>
+        </section>
+      )}
+
+      {(activeMandate || sepaSchedules.length > 0) && (
+        <section className="mb-7">
+          <button type="button" onClick={() => setShowSepa((value) => !value)} className="w-full flex items-center justify-between gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3 cursor-pointer text-left">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><Landmark size={19} className="text-blue-600" /></div>
+              <div>
+                <div className="font-body text-sm font-bold text-blue-800">Prélèvements SEPA</div>
+                <div className="font-body text-xs text-gray-600">{upcomingSepa.length > 0 ? `${upcomingSepa.length} échéance(s) à venir` : "Mandat et historique"}</div>
+              </div>
+            </div>
+            <ChevronDown size={18} className={`text-gray-400 transition-transform ${showSepa ? "rotate-180" : ""}`} />
+          </button>
+
+          {showSepa && (
+            <div className="flex flex-col gap-3 mt-3">
+              {activeMandate && (() => {
+                const iban = (activeMandate.iban || "").replace(/\s/g, "");
+                const masked = iban.length > 8 ? `${iban.slice(0, 4)} •••• •••• •••• ${iban.slice(-4)}` : iban;
+                return (
+                  <Card padding="md">
+                    <div className="font-body text-sm font-bold text-blue-800">Mandat actif</div>
+                    <div className="font-body text-xs text-gray-600 mt-2">Titulaire : {activeMandate.titulaire}</div>
+                    <div className="font-body text-xs text-gray-600">IBAN : <span className="font-mono">{masked}</span></div>
+                  </Card>
                 );
               })()}
 
-              {sortedPayments.length === 0 ? (
-                <Card padding="lg" className="text-center">
-                  <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><Receipt size={28} className="text-blue-300" /></div>
-                  <p className="font-body text-sm text-gray-500">Aucun paiement enregistré.</p>
-                </Card>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  {sortedPayments.map(p => {
-                    const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
-                    return (
-                      <Card key={p.id} padding="md">
-                        <div className="flex items-center justify-between flex-wrap gap-3">
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-blue-50 flex flex-col items-center justify-center">
-                              <div className="font-body text-xs font-bold text-blue-500">{d.toLocaleDateString("fr-FR", { month: "short" })}</div>
-                              <div className="font-body text-lg font-bold text-blue-800">{d.getDate()}</div>
-                            </div>
-                            <div>
-                              <div className="font-body text-sm font-semibold text-blue-800">
-                                {(p.items || []).map(i => i.activityTitle).join(", ") || "Paiement"}
-                              </div>
-                              <div className="font-body text-xs text-gray-600">
-                                {d.toLocaleDateString("fr-FR")} · {modeLabels[p.paymentMode] || p.paymentMode}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <div className="text-right">
-                              <span className="font-body text-lg font-bold text-blue-500">{(p.totalTTC || 0).toFixed(2)}€</span>
-                              {/* Détail payé / reste dû — uniquement quand ce n'est pas soldé */}
-                              {p.status !== "paid" && (p.paidAmount || 0) > 0 && (p.totalTTC || 0) > (p.paidAmount || 0) && (
-                                <div className="font-body text-[11px] leading-tight">
-                                  <span className="text-green-600">Payé {(p.paidAmount || 0).toFixed(2)}€</span>
-                                  <span className="text-gray-400"> · </span>
-                                  <span className="text-red-500 font-semibold">Reste {((p.totalTTC || 0) - (p.paidAmount || 0)).toFixed(2)}€</span>
-                                </div>
-                              )}
-                              {p.status !== "paid" && (p.paidAmount || 0) === 0 && p.paymentMode !== "prelevement_sepa" && (
-                                <div className="font-body text-[11px] leading-tight text-red-500 font-semibold">
-                                  Reste {(p.totalTTC || 0).toFixed(2)}€
-                                </div>
-                              )}
-                            </div>
-                            {p.paymentMode === "prelevement_sepa" && p.status !== "paid" ? (
-                              <Badge color="blue">🏦 Prélèvement SEPA programmé</Badge>
-                            ) : (
-                              <Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "pending_confirmation" ? "orange" : "gray"}>
-                                {p.status === "paid" ? "Payé" : p.status === "partial" ? "Partiel" : p.status === "pending_confirmation" ? "Déclaré" : "En attente"}
-                              </Badge>
-                            )}
-                            {p.status === "pending_confirmation" && (
-                              <span className="flex items-center gap-1 font-body text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded-lg">
-                                ⏳ En attente de confirmation par le centre
-                              </span>
-                            )}
-                            {p.paymentMode === "prelevement_sepa" && p.status !== "paid" && (
-                              <button
-                                onClick={() => setTab("sepa")}
-                                className="flex items-center gap-1.5 font-body text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border-none cursor-pointer">
-                                Voir l'échéancier →
-                              </button>
-                            )}
-                            {p.paymentMode !== "prelevement_sepa" && (p.status === "pending" || p.status === "partial") && (
-                              <>
-                                <button
-                                  disabled={payingOnline === p.id}
-                                  onClick={async () => {
-                                    setPayingOnline(p.id!);
-                                    try {
-                                      const restant = (p.totalTTC || 0) - (p.paidAmount || 0);
-                                      const res = await authFetch("/api/cawl/checkout", {
-                                        method: "POST",
-                                        headers: { "Content-Type": "application/json" },
-                                        body: JSON.stringify({
-                                          familyId: user?.uid,
-                                          familyEmail: user?.email,
-                                          familyName: p.familyName,
-                                          paymentId: p.id,
-                                          items: [{
-                                            name: (p.items || []).map((i: any) => i.activityTitle).join(", ") || "Prestation",
-                                            priceInCents: Math.round(restant * 100),
-                                            quantity: 1,
-                                          }],
-                                        }),
-                                      });
-                                      const data = await res.json();
-                                      if (data.url) window.location.href = data.url;
-                                    } catch (e) { console.error(e); }
-                                    setPayingOnline(null);
-                                  }}
-                                  className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
-                                  {payingOnline === p.id ? <Loader2 size={12} className="animate-spin" /> : <CreditCard size={12} />}
-                                  CB
-                                </button>
-                                <button
-                                  disabled={applyingBon === p.id}
-                                  onClick={async () => {
-                                    const code = (prompt("Entrez le code de votre bon cadeau (ex. BON-XXXX) :") || "").trim().toUpperCase();
-                                    if (!code) return;
-                                    setApplyingBon(p.id!);
-                                    try {
-                                      const res = await authFetch("/api/bon-cadeau/appliquer", {
-                                        method: "POST",
-                                        headers: { "Content-Type": "application/json" },
-                                        body: JSON.stringify({ code, paymentId: p.id }),
-                                      });
-                                      const data = await res.json();
-                                      if (!res.ok) { alert(data.error || "Bon non appliqué."); }
-                                      else {
-                                        alert(
-                                          data.facturePayee
-                                            ? `Bon appliqué : ${data.applique.toFixed(2)}€. Facture réglée !${data.soldeRestantBon > 0 ? ` (reste ${data.soldeRestantBon.toFixed(2)}€ sur votre bon)` : ""}`
-                                            : `Bon appliqué : ${data.applique.toFixed(2)}€. Reste à payer : ${data.resteAPayer.toFixed(2)}€.`
-                                        );
-                                        window.location.reload();
-                                      }
-                                    } catch { alert("Erreur. Réessayez."); }
-                                    setApplyingBon(null);
-                                  }}
-                                  className="flex items-center gap-1.5 font-body text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
-                                  {applyingBon === p.id ? <Loader2 size={12} className="animate-spin" /> : "🎁"} Bon cadeau
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setDeclaringPayment(p);
-                                    setDeclareMontant(((p.totalTTC || 0) - (p.paidAmount || 0)).toFixed(2));
-                                    setDeclareMode("cheque");
-                                    setDeclareNote("");
-                                    setDeclareChequeRef("");
-                                    setDeclareDateEncaissement("");
-                                    setDeclareSuccess(false);
-                                    setDeclareSuccess(false);
-                                  }}
-                                  className="flex items-center gap-1.5 font-body text-xs font-semibold text-slate-600 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg border-none cursor-pointer">
-                                  ✉️ Déclarer
-                                </button>
-                              </>
-                            )}
-                            <button onClick={async () => {
-                              const d2 = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
-                              const items = p.items || [];
-                              const totalHT = items.reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
-                              const totalTTC = p.totalTTC || 0;
-                              const totalTVA = totalTTC - totalHT;
-                              const invoiceNumber = (p as any).orderId || `F-${d2.getFullYear()}${String(d2.getMonth()+1).padStart(2,"0")}-${(p.id || "").slice(-4).toUpperCase()}`;
-                              const civilite = familyData?.civilite ? `${familyData.civilite} ` : "";
-                              const adresseLines = [familyData?.address, [familyData?.zipCode, familyData?.city].filter(Boolean).join(" ")].filter(Boolean).join("\n");
-                              try {
-                                await downloadInvoicePdf({
-                                    invoiceNumber,
-                                    date: d2.toLocaleDateString("fr-FR"),
-                                    familyName: `${civilite}${p.familyName}`,
-                                    familyEmail: "",
-                                    familyAddress: adresseLines,
-                                    items: items.map((i: any) => ({ ...i, childName: i.childName || "" })),
-                                    totalHT, totalTVA, totalTTC,
-                                    paidAmount: p.paidAmount || 0,
-                                    paymentMode: modeLabels[p.paymentMode] || p.paymentMode || "",
-                                    paymentDate: p.paidAmount > 0 ? d2.toLocaleDateString("fr-FR") : "",
-                                    paymentId: p.id,
-                                  });
-                              } catch (e) { console.error(e); }
-                            }}
-                              className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-600 hover:text-blue-500 hover:bg-blue-50 cursor-pointer border-none"
-                              title="Télécharger le reçu">
-                              <Download size={14} />
-                            </button>
-                          </div>
-                        </div>
-                        {/* Detail items */}
-                        {(p.items || []).length > 1 && (
-                          <div className="mt-3 pt-3 border-t border-blue-500/8">
-                            {(p.items || []).map((item, i) => (
-                              <div key={i} className="flex justify-between font-body text-xs text-gray-500 py-1">
-                                <span>{item.activityTitle}</span>
-                                <span>{item.priceTTC?.toFixed(2)}€</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </Card>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ─── Réservations ─── */}
-          {tab === "reservations" && (
-            <div>
-              {reservations.length === 0 ? (
-                <Card padding="lg" className="text-center">
-                  <span className="text-4xl block mb-3">📋</span>
-                  <p className="font-body text-sm text-gray-500 mb-3">Aucune réservation.</p>
-                  <a href="/espace-cavalier/reserver" className="font-body text-sm font-semibold text-blue-500 no-underline">Réserver une activité →</a>
-                </Card>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  {/* Stages regroupés */}
-                  {stageReservationGroups.map((group, gi) => {
-                    const first = group[0];
-                    const sorted = [...group].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-                    const firstDate = sorted[0]?.date ? new Date(sorted[0].date) : null;
-                    const lastDate = sorted[sorted.length - 1]?.date ? new Date(sorted[sorted.length - 1].date) : null;
-                    return (
-                      <Card key={`stage-${gi}`} padding="md">
-                        <div className="flex items-start justify-between flex-wrap gap-3">
-                          <div className="flex items-start gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-green-50 flex flex-col items-center justify-center flex-shrink-0">
-                              <div className="font-body text-xs font-bold text-green-600">Stage</div>
-                              <div className="font-body text-base font-bold text-green-800">{sorted.length}j</div>
-                            </div>
-                            <div>
-                              <div className="font-body text-sm font-semibold text-blue-800">{first.activityTitle}</div>
-                              <div className="font-body text-xs text-gray-600 mt-0.5">
-                                🧒 {first.childName}
-                              </div>
-                              {(() => {
-                                // Vérifier si tous les horaires sont identiques
-                                const horaires = [...new Set(sorted.map(r => `${r.startTime}–${r.endTime}`))];
-                                const allSame = horaires.length === 1;
-                                if (allSame && firstDate && lastDate) {
-                                  return (
-                                    <div className="font-body text-xs text-green-700 mt-1">
-                                      du {firstDate.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })} au {lastDate.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })} · {horaires[0]}
-                                    </div>
-                                  );
-                                }
-                                return null;
-                              })()}
-                              <div className="flex flex-wrap gap-1.5 mt-2">
-                                {sorted.map((r, ri) => {
-                                  const d = r.date ? new Date(r.date) : null;
-                                  return (
-                                    <div key={ri} className="font-body text-xs bg-green-50 text-green-700 px-2 py-1 rounded-lg">
-                                      {d ? d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" }) : "—"}
-                                      <span className="text-green-500 ml-1">{r.startTime}–{r.endTime}</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge color={first.status === "confirmed" ? "green" : first.status === "cancelled" ? "red" : "orange"}>
-                              {first.status === "confirmed" ? "Confirmé" : first.status === "cancelled" ? "Annulé" : "En attente"}
-                            </Badge>
-                          </div>
-                        </div>
-                      </Card>
-                    );
-                  })}
-                  {/* Réservations individuelles (cours, balades, etc.) */}
-                  {soloReservations.map(r => (
-                    <Card key={r.id} padding="md">
-                      <div className="flex items-center justify-between flex-wrap gap-3">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-xl bg-blue-50 flex flex-col items-center justify-center">
-                            <div className="font-body text-xs font-bold text-blue-500">
-                              {r.date ? new Date(r.date).toLocaleDateString("fr-FR", { weekday: "short" }) : ""}
-                            </div>
-                            <div className="font-body text-lg font-bold text-blue-800">
-                              {r.date ? new Date(r.date).getDate() : "—"}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="font-body text-sm font-semibold text-blue-800">{r.activityTitle}</div>
-                            <div className="font-body text-xs text-gray-600">
-                              🧒 {r.childName} · {r.startTime}–{r.endTime} · {r.date ? new Date(r.date).toLocaleDateString("fr-FR") : ""}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          {r.priceTTC > 0 && <span className="font-body text-base font-bold text-blue-500">{r.priceTTC?.toFixed(2)}€</span>}
-                          <Badge color={r.status === "confirmed" ? "green" : r.status === "cancelled" ? "red" : "orange"}>
-                            {r.status === "confirmed" ? "Confirmée" : r.status === "cancelled" ? "Annulée" : "En attente"}
-                          </Badge>
-                          {r.source === "admin" && <Badge color="gray">Inscrit par le centre</Badge>}
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ─── Cartes ─── */}
-          {tab === "cartes" && (
-            <div>
-              {cards.length === 0 ? (
-                <Card padding="lg" className="text-center">
-                  <span className="text-4xl block mb-3">🎟️</span>
-                  <p className="font-body text-sm text-gray-500">Aucune carte de séances. Renseignez-vous au secrétariat !</p>
-                </Card>
-              ) : (
-                <div className="flex flex-col gap-4">
-                  {cards.map(card => {
-                    const pct = card.totalSessions > 0 ? (card.remainingSessions / card.totalSessions) * 100 : 0;
-                    const expired = (card as any).dateFin && new Date((card as any).dateFin) < new Date();
-                    const isOpen = openCardId === card.id;
-                    const seancesUtilisees = (card.history || []).filter((h: any) => !h.credit && h.presence !== "absent");
-                    return (
-                      <Card key={card.id} padding="md">
-                        {/* En-tête */}
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
-                              style={{ background: (card as any).familiale ? "linear-gradient(135deg,#FFF8E8,#FAECC0)" : "#FFF8E8" }}>
-                              {(card as any).familiale ? "👨‍👩‍👧" : "🎟️"}
-                            </div>
-                            <div>
-                              <div className="font-body text-base font-semibold text-blue-800">
-                                Carte {card.totalSessions} séances · {(card as any).activityType === "balade" ? "Balades" : "Cours"}
-                              </div>
-                              {(card as any).familiale ? (
-                                <div className="font-body text-xs font-semibold mt-0.5" style={{ color: "#F0A010" }}>
-                                  👨‍👩‍👧 Carte familiale — valable pour tous vos cavaliers
-                                </div>
-                              ) : (
-                                <div className="font-body text-xs text-gray-600">🧒 {card.childName}</div>
-                              )}
-                              {(card as any).dateDebut && (card as any).dateFin && (
-                                <div className="font-body text-xs text-gray-600 mt-0.5">
-                                  {new Date((card as any).dateDebut).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}
-                                  {" → "}
-                                  {new Date((card as any).dateFin).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}
-                                  {expired && <span className="text-red-400 ml-1">· Expirée</span>}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <Badge color={expired || card.status === "used" ? "gray" : card.remainingSessions > 2 ? "green" : "orange"}>
-                            {card.remainingSessions}/{card.totalSessions}
-                          </Badge>
-                        </div>
-
-                        {/* Barre de progression */}
-                        <div className="mb-3">
-                          <div className="h-3 rounded-full bg-gray-100 overflow-hidden">
-                            <div className="h-3 rounded-full bg-gradient-to-r from-gold-400 to-gold-300 transition-all" style={{ width: `${pct}%` }} />
-                          </div>
-                          <div className="flex justify-between mt-1">
-                            <span className="font-body text-xs text-gray-600">{card.usedSessions} utilisée{card.usedSessions > 1 ? "s" : ""}</span>
-                            <span className="font-body text-xs font-semibold text-gold-500">{card.remainingSessions} restante{card.remainingSessions > 1 ? "s" : ""}</span>
-                          </div>
-                        </div>
-
-                        {/* Historique déroulant */}
-                        {(card.history || []).length > 0 && (
-                          <div className="pt-2 border-t border-gray-100">
-                            <button
-                              onClick={() => setOpenCardId(isOpen ? null : card.id)}
-                              className="w-full flex items-center justify-between font-body text-xs text-gray-600 bg-transparent border-none cursor-pointer py-1 hover:text-blue-500">
-                              <span>Historique ({seancesUtilisees.length} séance{seancesUtilisees.length > 1 ? "s" : ""})</span>
-                              <span>{isOpen ? "▲ Masquer" : "▼ Voir le détail"}</span>
-                            </button>
-                            {isOpen && (
-                              <div className="flex flex-col gap-1.5 mt-2">
-                                {[...(card.history as any[])].reverse().map((h: any, i: number) => (
-                                  <div key={i} className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-body ${h.credit ? "bg-green-50" : h.presence === "absent" ? "bg-red-50 opacity-60" : "bg-sand"}`}>
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${h.credit ? "bg-green-400" : h.presence === "absent" ? "bg-red-400" : "bg-gold-400"}`} />
-                                      <div className="min-w-0">
-                                        <div className="text-blue-800 font-semibold truncate">{h.activityTitle || "Séance"}</div>
-                                        <div className="text-gray-600 text-xs">
-                                          {h.date ? new Date(h.date).toLocaleDateString("fr-FR", { weekday:"short", day:"numeric", month:"short" }) : ""}
-                                          {h.horseName ? ` · ${h.horseName}` : ""}
-                                          {h.credit ? " · Recrédit" : ""}
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <span className={`font-semibold flex-shrink-0 ml-2 ${h.credit ? "text-green-500" : h.presence === "absent" ? "text-red-400" : "text-gold-500"}`}>
-                                      {h.credit ? "+1" : h.presence === "absent" ? "Absent" : "Vérifié"}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </Card>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-          {/* ─── Fidélité ─── */}
-          {tab === "fidelite" && fideliteSettings?.enabled && (
-            <div className="flex flex-col gap-4">
-              {/* Solde points */}
-              <Card padding="md" className="bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-200">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-2xl bg-yellow-400 flex items-center justify-center text-3xl flex-shrink-0">🏆</div>
-                  <div className="flex-1">
-                    <div className="font-body text-xs text-yellow-600 uppercase font-semibold tracking-wider mb-1">Solde de points</div>
-                    <div className="font-display text-4xl font-bold text-yellow-700">{fidelite?.points || 0}</div>
-                    <div className="font-body text-xs text-yellow-600 mt-0.5">
-                      = {((fidelite?.points || 0) / fideliteSettings.taux).toFixed(2)}€ de réduction disponible
-                    </div>
-                  </div>
-                </div>
-              </Card>
-
-              {/* Convertir les points */}
-              {(fidelite?.points || 0) >= fideliteSettings.minPoints ? (
+              {upcomingSepa.length > 0 && (
                 <Card padding="md">
-                  <div className="font-body text-sm font-semibold text-blue-800 mb-2">Utiliser mes points</div>
-                  <div className="font-body text-xs text-gray-500 mb-4">
-                    Vous avez <strong>{fidelite.points} points</strong> soit <strong>{(fidelite.points / fideliteSettings.taux).toFixed(2)}€</strong> de réduction à utiliser sur votre prochaine facture.
-                  </div>
-                  <button
-                    disabled={convertingPoints}
-                    onClick={async () => {
-                      if (!user) return;
-                      if (!confirm(`Convertir ${fidelite.points} points en ${(fidelite.points / fideliteSettings.taux).toFixed(2)}€ d'avoir ?\n\nUn avoir sera ajouté à votre compte.`)) return;
-                      setConvertingPoints(true);
-                      try {
-                        const montantAvoir = Math.floor(fidelite.points / fideliteSettings.taux * 100) / 100;
-                        const pointsUtilises = Math.floor(montantAvoir * fideliteSettings.taux);
-                        const expiry = new Date();
-                        expiry.setFullYear(expiry.getFullYear() + 1);
-                        // Créer l'avoir
-                        await addDoc(collection(db, "avoirs"), {
-                          familyId: user.uid,
-                          familyName: fidelite.familyName || "",
-                          type: "avoir",
-                          amount: montantAvoir,
-                          usedAmount: 0,
-                          remainingAmount: montantAvoir,
-                          reason: `Conversion points fidélité (${pointsUtilises} pts)`,
-                          reference: `FIDELITE-${Date.now().toString(36).toUpperCase()}`,
-                          sourceType: "fidelite",
-                          status: "actif",
-                          expiryDate: expiry,
-                          usageHistory: [],
-                          createdAt: serverTimestamp(),
-                        });
-                        // Déduire les points
-                        const newPoints = (fidelite.points || 0) - pointsUtilises;
-                        await updateDoc(doc(db, "fidelite", user.uid), {
-                          points: newPoints,
-                          history: [...(fidelite.history || []), {
-                            date: new Date().toISOString(),
-                            points: -pointsUtilises,
-                            type: "conversion",
-                            label: `Conversion en avoir (${montantAvoir.toFixed(2)}€)`,
-                          }],
-                          updatedAt: serverTimestamp(),
-                        });
-                        setFidelite({ ...fidelite, points: newPoints });
-                        toast(`${montantAvoir.toFixed(2)}€ d'avoir créé ! Il apparaît dans vos paiements.`, "success");
-                      } catch (e) { console.error(e); toast("Erreur lors de la conversion.", "error"); }
-                      setConvertingPoints(false);
-                    }}
-                    className="w-full py-3 rounded-xl font-body text-sm font-bold text-white bg-yellow-500 border-none cursor-pointer hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed">
-                    {convertingPoints ? "Conversion en cours..." : `Convertir en avoir — ${(fidelite.points / fideliteSettings.taux).toFixed(2)}€`}
-                  </button>
-                </Card>
-              ) : (
-                <Card padding="md" className="text-center">
-                  <div className="font-body text-sm text-gray-500 mb-1">
-                    Encore <strong className="text-blue-800">{fideliteSettings.minPoints - (fidelite?.points || 0)} points</strong> avant de pouvoir utiliser vos points
-                  </div>
-                  <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden mt-3">
-                    <div className="h-full rounded-full bg-yellow-400 transition-all"
-                      style={{ width: `${Math.min(100, ((fidelite?.points || 0) / fideliteSettings.minPoints) * 100)}%` }} />
-                  </div>
-                  <div className="flex justify-between font-body text-xs text-gray-600 mt-1">
-                    <span>{fidelite?.points || 0} pts</span>
-                    <span>{fideliteSettings.minPoints} pts requis</span>
-                  </div>
-                </Card>
-              )}
-
-              {/* Historique des points */}
-              {(fidelite?.history || []).length > 0 && (
-                <Card padding="md">
-                  <div className="font-body text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">Historique des points</div>
+                  <div className="font-body text-sm font-bold text-blue-800 mb-3">Échéances à venir</div>
                   <div className="flex flex-col gap-2">
-                    {[...(fidelite.history || [])].reverse().slice(0, 20).map((h: any, i: number) => (
-                      <div key={i} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
+                    {upcomingSepa.map((schedule: any) => (
+                      <div key={schedule.id} className="flex items-center justify-between gap-3 bg-blue-50 rounded-xl px-3 py-2.5">
                         <div>
-                          <div className="font-body text-xs font-semibold text-blue-800">{h.label}</div>
-                          <div className="font-body text-xs text-gray-600">
-                            {h.date ? new Date(h.date).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" }) : ""}
-                            {h.expiry && h.type === "gain" ? ` · expire le ${new Date(h.expiry).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}` : ""}
-                          </div>
+                          <div className="font-body text-sm font-semibold text-blue-800">{schedule.description || "Échéance"}</div>
+                          <div className="font-body text-xs text-gray-600">Le {schedule.dateEcheance ? new Date(schedule.dateEcheance).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) : "—"}</div>
                         </div>
-                        <span className={`font-body text-sm font-bold ${h.points > 0 ? "text-yellow-500" : "text-gray-600"}`}>
-                          {h.points > 0 ? "+" : ""}{h.points} pts
-                        </span>
+                        <div className="font-body text-base font-bold text-blue-800">{(schedule.montant || 0).toFixed(2)}€</div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+              {pastSepa.length > 0 && (
+                <Card padding="md">
+                  <div className="font-body text-sm font-bold text-blue-800 mb-3">Historique SEPA</div>
+                  <div className="flex flex-col gap-2">
+                    {pastSepa.slice(0, 12).map((schedule: any) => (
+                      <div key={schedule.id} className="flex items-center justify-between gap-3 py-2 border-b border-gray-50 last:border-0">
+                        <div>
+                          <div className="font-body text-xs font-semibold text-gray-700">{schedule.description || "Échéance"}</div>
+                          <div className="font-body text-xs text-gray-500">{schedule.dateEcheance ? new Date(schedule.dateEcheance).toLocaleDateString("fr-FR") : "—"} · {schedule.status}</div>
+                        </div>
+                        <div className="font-body text-sm font-semibold text-gray-700">{(schedule.montant || 0).toFixed(2)}€</div>
                       </div>
                     ))}
                   </div>
@@ -788,270 +706,84 @@ export default function FacturesPage() {
               )}
             </div>
           )}
-
-          {/* ─── SEPA : mandat + échéancier ─── */}
-          {tab === "sepa" && (
-            <div className="flex flex-col gap-4">
-              {/* Bandeau mandat actif */}
-              {(() => {
-                const mandatActif = sepaMandats.find((m: any) => m.status === "active");
-                if (!mandatActif) {
-                  return (
-                    <Card padding="md">
-                      <p className="font-body text-sm text-gray-600">Aucun mandat SEPA actif pour votre famille.</p>
-                    </Card>
-                  );
-                }
-                // Mask iban (FR76 XXXX XXXX XXXX XXXX 1234) pour la securite
-                const iban = (mandatActif.iban || "").replace(/\s/g, "");
-                const ibanMasked = iban.length > 8
-                  ? `${iban.substring(0, 4)} •••• •••• •••• ${iban.substring(iban.length - 4)}`
-                  : iban;
-                return (
-                  <Card padding="md">
-                    <div className="flex items-start gap-3">
-                      <div className="text-2xl">🏦</div>
-                      <div className="flex-1">
-                        <div className="font-display text-base font-bold text-blue-800">Mandat SEPA actif</div>
-                        <div className="font-body text-xs text-gray-600 mt-1">
-                          Titulaire : <span className="font-semibold">{mandatActif.titulaire}</span>
-                        </div>
-                        <div className="font-body text-xs text-gray-600">
-                          IBAN : <span className="font-mono">{ibanMasked}</span>
-                        </div>
-                        <div className="font-body text-xs text-gray-600">
-                          Référence : <span className="font-mono">{mandatActif.mandatId}</span>
-                          {mandatActif.dateSignature && ` · Signé le ${new Date(mandatActif.dateSignature).toLocaleDateString("fr-FR")}`}
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })()}
-
-              {/* Liste des échéances à venir + historique */}
-              {(() => {
-                const toEcheanceDate = (e: any) => e.dateEcheance || "";
-                const aVenir = sepaEcheances
-                  .filter((e: any) => e.status === "pending")
-                  .sort((a: any, b: any) => toEcheanceDate(a).localeCompare(toEcheanceDate(b)));
-                const passees = sepaEcheances
-                  .filter((e: any) => e.status !== "pending")
-                  .sort((a: any, b: any) => toEcheanceDate(b).localeCompare(toEcheanceDate(a)));
-                const totalAVenir = aVenir.reduce((s: number, e: any) => s + (e.montant || 0), 0);
-
-                if (sepaEcheances.length === 0) {
-                  return (
-                    <Card padding="md">
-                      <p className="font-body text-sm text-gray-600">Aucun prélèvement programmé actuellement.</p>
-                      <p className="font-body text-xs text-gray-500 mt-1">Lorsqu&apos;un échéancier sera mis en place, vous le verrez ici.</p>
-                    </Card>
-                  );
-                }
-
-                return (
-                  <>
-                    {aVenir.length > 0 && (
-                      <Card padding="md">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="font-body text-xs font-semibold text-gray-600 uppercase tracking-wider">Prélèvements à venir</div>
-                          <div className="font-body text-sm font-bold text-blue-800">{totalAVenir.toFixed(2)}€ au total</div>
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          {aVenir.map((e: any) => {
-                            const date = e.dateEcheance ? new Date(e.dateEcheance) : null;
-                            const dateLabel = date ? date.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) : "—";
-                            return (
-                              <div key={e.id} className="flex items-center justify-between py-2 px-3 bg-blue-50 rounded-lg">
-                                <div>
-                                  <div className="font-body text-sm font-semibold text-blue-800">{e.description || "Échéance"}</div>
-                                  <div className="font-body text-xs text-gray-600">Prélevé le {dateLabel}</div>
-                                </div>
-                                <div className="font-body text-base font-bold text-blue-800">{(e.montant || 0).toFixed(2)}€</div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div className="font-body text-[11px] text-gray-500 mt-3">
-                          💡 Ces montants seront prélevés automatiquement sur votre compte bancaire aux dates indiquées. Vous n&apos;avez rien à faire.
-                        </div>
-                      </Card>
-                    )}
-
-                    {passees.length > 0 && (
-                      <Card padding="md">
-                        <div className="font-body text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">Historique</div>
-                        <div className="flex flex-col gap-1">
-                          {passees.slice(0, 12).map((e: any) => {
-                            const date = e.dateEcheance ? new Date(e.dateEcheance) : null;
-                            const dateLabel = date ? date.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : "—";
-                            const statusLabel = e.status === "preleve" ? "✅ Prélevé" : e.status === "rejete" ? "❌ Rejeté" : e.status === "remis" ? "🏦 Remis en banque" : e.status;
-                            return (
-                              <div key={e.id} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
-                                <div>
-                                  <div className="font-body text-xs font-semibold text-gray-700">{e.description || "Échéance"}</div>
-                                  <div className="font-body text-xs text-gray-500">{dateLabel} · {statusLabel}</div>
-                                </div>
-                                <div className="font-body text-sm font-semibold text-gray-700">{(e.montant || 0).toFixed(2)}€</div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </Card>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-          )}
-        </>
+        </section>
       )}
 
-      {/* ── Modal déclaration paiement chèque/espèces ── */}
+      <section>
+        <button type="button" onClick={() => setShowHistory((value) => !value)} className="w-full flex items-center justify-between gap-3 bg-transparent border-none py-2 cursor-pointer text-left">
+          <div className="flex items-center gap-2">
+            <Receipt size={17} className="text-gray-400" />
+            <span className="font-body text-sm font-bold text-gray-700">Historique des factures</span>
+            <span className="font-body text-xs text-gray-400">{settledPayments.length}</span>
+          </div>
+          <ChevronDown size={18} className={`text-gray-400 transition-transform ${showHistory ? "rotate-180" : ""}`} />
+        </button>
+
+        {showHistory && (
+          <div className="flex flex-col gap-3 mt-3">
+            {settledPayments.length === 0 ? (
+              <Card padding="md"><div className="font-body text-sm text-gray-500 text-center">Aucune facture archivée.</div></Card>
+            ) : settledPayments.map((payment) => renderPayment(payment))}
+          </div>
+        )}
+      </section>
+
       {declaringPayment && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
-          onClick={() => !declareSending && setDeclaringPayment(null)}>
-          <div className="bg-white rounded-2xl w-full sm:max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4" onClick={() => !declareSending && setDeclaringPayment(null)}>
+          <div className="bg-white rounded-2xl w-full sm:max-w-sm shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="p-5 border-b border-gray-100">
-              <h2 className="font-display text-lg font-bold text-blue-800">Déclarer un paiement</h2>
-              <p className="font-body text-xs text-slate-500 mt-1">
-                {(declaringPayment.items || []).map((i: any) => i.activityTitle).join(", ")}
-              </p>
+              <h2 className="font-display text-lg font-bold text-blue-800">Déclarer un règlement</h2>
+              <p className="font-body text-xs text-gray-500 mt-1">{paymentTitle(declaringPayment)}</p>
             </div>
-            <div className="p-5 flex flex-col gap-4">
+
+            <div className="p-5">
               {declareSuccess ? (
-                <div className="text-center py-4">
+                <div className="text-center py-5">
                   <div className="text-4xl mb-3">✅</div>
-                  <p className="font-body text-base font-semibold text-green-700">Déclaration envoyée !</p>
-                  <p className="font-body text-xs text-slate-500 mt-1">
-                    Le centre équestre va confirmer réception de votre {declareMode === "cheque" ? "chèque" : "règlement en espèces"}.
-                  </p>
-                  <button onClick={() => setDeclaringPayment(null)}
-                    className="mt-4 font-body text-sm text-blue-500 bg-transparent border-none cursor-pointer underline">
-                    Fermer
-                  </button>
+                  <div className="font-body text-base font-bold text-green-700">Déclaration envoyée</div>
+                  <p className="font-body text-xs text-gray-500 mt-1">Le centre confirmera la réception du règlement.</p>
+                  <button type="button" onClick={() => setDeclaringPayment(null)} className="mt-4 font-body text-sm font-semibold text-blue-500 bg-transparent border-none cursor-pointer">Fermer</button>
                 </div>
               ) : (
-                <>
-                  {/* Mode */}
+                <div className="flex flex-col gap-4">
                   <div>
-                    <label className="font-body text-xs font-semibold text-slate-600 block mb-2">Mode de paiement</label>
-                    <div className="flex gap-2">
+                    <label className="font-body text-xs font-semibold text-gray-600 block mb-2">Mode de paiement</label>
+                    <div className="grid grid-cols-2 gap-2">
                       {([["cheque", "📝 Chèque"], ["especes", "💵 Espèces"]] as const).map(([mode, label]) => (
-                        <button key={mode} onClick={() => setDeclareMode(mode)}
-                          className={`flex-1 py-2.5 rounded-xl font-body text-sm font-semibold border cursor-pointer transition-all ${declareMode === mode ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-slate-500"}`}>
-                          {label}
-                        </button>
+                        <button key={mode} type="button" onClick={() => setDeclareMode(mode)} className={`py-2.5 rounded-xl font-body text-sm font-semibold border cursor-pointer ${declareMode === mode ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-600"}`}>{label}</button>
                       ))}
                     </div>
                   </div>
 
-                  {/* Montant */}
                   <div>
-                    <label className="font-body text-xs font-semibold text-slate-600 block mb-2">Montant (€)</label>
-                    <input
-                      type="number" step="0.01" min="0"
-                      value={declareMontant}
-                      onChange={e => setDeclareMontant(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-base text-blue-800 font-bold focus:border-blue-500 focus:outline-none"
-                    />
+                    <label className="font-body text-xs font-semibold text-gray-600 block mb-2">Montant (€)</label>
+                    <input type="number" min="0" step="0.01" value={declareAmount} onChange={(event) => setDeclareAmount(event.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-base font-bold text-blue-800 focus:outline-none focus:border-blue-500" />
                   </div>
 
-                  {/* Référence chèque (si chèque) */}
                   {declareMode === "cheque" && (
                     <div>
-                      <label className="font-body text-xs font-semibold text-slate-600 block mb-2">N° de chèque <span className="text-slate-400 font-normal">(optionnel)</span></label>
-                      <input
-                        type="text"
-                        value={declareChequeRef}
-                        onChange={e => setDeclareChequeRef(e.target.value)}
-                        placeholder="Ex: 1234567"
-                        className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:border-blue-500 focus:outline-none"
-                      />
+                      <label className="font-body text-xs font-semibold text-gray-600 block mb-2">N° de chèque <span className="font-normal text-gray-400">(facultatif)</span></label>
+                      <input value={declareChequeRef} onChange={(event) => setDeclareChequeRef(event.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-500" />
                     </div>
                   )}
 
-                  {/* Date d'encaissement prévue */}
                   <div>
-                    <label className="font-body text-xs font-semibold text-slate-600 block mb-2">Date d'encaissement prévue <span className="text-slate-400 font-normal">(optionnel)</span></label>
-                    <input
-                      type="date"
-                      value={declareDateEncaissement}
-                      onChange={e => setDeclareDateEncaissement(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:border-blue-500 focus:outline-none"
-                    />
+                    <label className="font-body text-xs font-semibold text-gray-600 block mb-2">Date d'encaissement prévue <span className="font-normal text-gray-400">(facultatif)</span></label>
+                    <input type="date" value={declareCashDate} onChange={(event) => setDeclareCashDate(event.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-500" />
                   </div>
 
-                  {/* Note optionnelle */}
                   <div>
-                    <label className="font-body text-xs font-semibold text-slate-600 block mb-2">Note <span className="text-slate-400 font-normal">(optionnel)</span></label>
-                    <input
-                      type="text"
-                      value={declareNote}
-                      onChange={e => setDeclareNote(e.target.value)}
-                      placeholder={declareMode === "cheque" ? "Ex: remis en main propre" : "Ex: remis en main propre"}
-                      className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:border-blue-500 focus:outline-none"
-                    />
+                    <label className="font-body text-xs font-semibold text-gray-600 block mb-2">Note <span className="font-normal text-gray-400">(facultatif)</span></label>
+                    <input value={declareNote} onChange={(event) => setDeclareNote(event.target.value)} placeholder="Ex. remis au secrétariat" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-500" />
                   </div>
 
                   <div className="flex gap-2 pt-1">
-                    <button onClick={() => setDeclaringPayment(null)}
-                      className="px-5 py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
-                      Annuler
-                    </button>
-                    <button
-                      disabled={declareSending || !declareMontant || parseFloat(declareMontant) <= 0}
-                      onClick={async () => {
-                        setDeclareSending(true);
-                        try {
-                          const montant = parseFloat(declareMontant);
-                          // Créer une notification dans Firestore
-                          await addDoc(collection(db, "payment_declarations"), {
-                            paymentId: declaringPayment.id,
-                            familyId: user?.uid,
-                            familyName: declaringPayment.familyName,
-                            familyEmail: user?.email || "",
-                            montant,
-                            mode: declareMode,
-                            note: declareNote || "",
-                            chequeRef: declareChequeRef || "",
-                            dateEncaissement: declareDateEncaissement || "",
-                            activityTitle: (declaringPayment.items || []).map((i: any) => i.activityTitle).join(", "),
-                            status: "pending_confirmation", // admin doit confirmer
-                            createdAt: serverTimestamp(),
-                          });
-                          // Notifier l'admin par email
-                          authFetch("/api/send-email", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              to: process.env.NEXT_PUBLIC_OWNER_EMAIL || "nicolasrichard16@hotmail.com",
-                              subject: `💰 Déclaration paiement — ${declaringPayment.familyName}`,
-                              context: "espace_cavalier_declaration",
-                              familyId: declaringPayment.familyId,
-                              paymentId: declaringPayment.id,
-                              html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-                                <p><strong>${declaringPayment.familyName}</strong> déclare un paiement :</p>
-                                <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
-                                  <p style="margin:0;font-weight:600;color:#166534;">💰 ${montant.toFixed(2)}€ en ${declareMode === "cheque" ? "chèque" : "espèces"}</p>
-                                  <p style="margin:8px 0 0;color:#555;font-size:13px;">📋 ${(declaringPayment.items || []).map((i: any) => i.activityTitle).join(", ")}</p>
-                                  ${declareChequeRef ? `<p style="margin:4px 0 0;color:#555;font-size:13px;">🔢 Chèque n° ${declareChequeRef}</p>` : ""}
-                                  ${declareDateEncaissement ? `<p style="margin:4px 0 0;color:#555;font-size:13px;">📅 Encaissement prévu le ${new Date(declareDateEncaissement).toLocaleDateString("fr-FR")}</p>` : ""}
-                                  ${declareNote ? `<p style="margin:4px 0 0;color:#555;font-size:13px;">📝 ${declareNote}</p>` : ""}
-                                </div>
-                                <p style="font-size:13px;color:#555;">Confirmez la réception dans l'admin → Paiements.</p>
-                              </div>`,
-                            }),
-                          }).catch(() => {});
-                          setDeclareSuccess(true);
-                        } catch (e) { console.error(e); toast("Erreur. Réessayez.", "error"); }
-                        setDeclareSending(false);
-                      }}
-                      className={`flex-1 py-2.5 rounded-xl font-body text-sm font-semibold border-none cursor-pointer flex items-center justify-center gap-2 ${declareSending || !declareMontant ? "bg-gray-200 text-slate-600" : "bg-blue-500 text-white hover:bg-blue-600"}`}>
-                      {declareSending ? <Loader2 size={14} className="animate-spin" /> : "Envoyer la déclaration"}
+                    <button type="button" onClick={() => setDeclaringPayment(null)} className="px-5 py-2.5 rounded-xl font-body text-sm text-gray-600 bg-gray-100 border-none cursor-pointer">Annuler</button>
+                    <button type="button" disabled={declareSending || !declareAmount || parseFloat(declareAmount) <= 0} onClick={sendDeclaration} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-body text-sm font-bold text-white bg-blue-500 border-none cursor-pointer disabled:opacity-50">
+                      {declareSending ? <Loader2 size={15} className="animate-spin" /> : "Envoyer"}
                     </button>
                   </div>
-                </>
+                </div>
               )}
             </div>
           </div>
