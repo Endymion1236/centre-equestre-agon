@@ -1,23 +1,32 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { collection, getDocs, orderBy, query } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { useAgentContext } from "@/hooks/useAgentContext";
+import { AlertTriangle, Filter, Loader2, Search, UserCheck, UserPlus, Users, X } from "lucide-react";
 import { Card } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
-import { Search, Users, UserCheck, AlertTriangle, UserPlus, Loader2 } from "lucide-react";
+import { useAgentContext } from "@/hooks/useAgentContext";
+import { db } from "@/lib/firebase";
 import type { Family } from "@/types";
-import FamilyCard from "./components/FamilyCard";
 import CreateFamilyModal from "./components/CreateFamilyModal";
+import FamilyCard from "./components/FamilyCard";
+
+type ActionFilter = "" | "attestation" | "impayes" | "sans_seance";
+
+const SEGMENTS = [
+  { id: "", label: "Toutes" },
+  { id: "cavalier_annee", label: "À l’année" },
+  { id: "stage", label: "Stages" },
+  { id: "passage", label: "Passage" },
+  { id: "etablissement", label: "Établissements" },
+];
 
 export default function CavaliersPage() {
   const { setAgentContext } = useAgentContext("cavaliers");
-  useEffect(() => {
-    setAgentContext({ module_actif: "cavaliers", description: "familles, cavaliers, inscriptions" });
-  }, []);
+  const { toast } = useToast();
+  const searchParams = useSearchParams();
 
-  // ── Data ──────────────────────────────────────────────────────────────────
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const [allReservations, setAllReservations] = useState<any[]>([]);
   const [allPayments, setAllPayments] = useState<any[]>([]);
@@ -28,26 +37,23 @@ export default function CavaliersPage() {
   const [allFidelite, setAllFidelite] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // ── UI ────────────────────────────────────────────────────────────────────
-  const searchParams = useSearchParams();
   const [search, setSearch] = useState(searchParams.get("search") || "");
+  const [filterTag, setFilterTag] = useState("");
+  const [filterAction, setFilterAction] = useState<ActionFilter>("");
+  const [showCreateFamily, setShowCreateFamily] = useState(false);
+
   const tabParam = searchParams.get("tab");
-  // Depuis GlobalSearch : ?id=FAMxxx ouvre la famille, &child=CHILDyyy cible le cavalier
   const targetFamilyId = searchParams.get("id") || "";
   const targetChildId = searchParams.get("child") || "";
-  const [filterTag, setFilterTag] = useState<string>("");
-  // Filtres actionnables : pile de travail (rentrée, relances)
-  const [filterAction, setFilterAction] = useState<"" | "attestation" | "impayes" | "sans_seance">("");
-  const [showCreateFamily, setShowCreateFamily] = useState(false);
-  const { toast } = useToast();
+  const todayStr = new Date().toISOString().split("T")[0];
 
-  // ── Chargement ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    setAgentContext({ module_actif: "cavaliers", description: "familles, cavaliers, inscriptions" });
+  }, []);
+
   const fetchFamilies = async () => {
     try {
-      const [
-        famSnap, resSnap, paySnap, avoirsSnap, cartesSnap,
-        creneauxSnap, mandatsSnap, fideliteSnap,
-      ] = await Promise.all([
+      const [famSnap, resSnap, paySnap, avoirsSnap, cartesSnap, creneauxSnap, mandatsSnap, fideliteSnap] = await Promise.all([
         getDocs(collection(db, "families")),
         getDocs(collection(db, "reservations")),
         getDocs(collection(db, "payments")),
@@ -58,183 +64,220 @@ export default function CavaliersPage() {
         getDocs(collection(db, "fidelite")),
       ]);
 
-      setFamilies(famSnap.docs.map(d => ({ firestoreId: d.id, ...d.data() })).filter((f: any) => f.status !== "merged") as any);
-      setAllReservations(resSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setAllPayments(paySnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setAllAvoirs(avoirsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setAllCartes(cartesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setAllCreneaux(creneauxSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setAllMandats(mandatsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setAllFidelite(fideliteSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch (e) {
-      console.error(e);
+      setFamilies(famSnap.docs.map((item) => ({ firestoreId: item.id, ...item.data() })).filter((family: any) => family.status !== "merged") as any);
+      setAllReservations(resSnap.docs.map((item) => ({ id: item.id, ...item.data() })));
+      setAllPayments(paySnap.docs.map((item) => ({ id: item.id, ...item.data() })));
+      setAllAvoirs(avoirsSnap.docs.map((item) => ({ id: item.id, ...item.data() })));
+      setAllCartes(cartesSnap.docs.map((item) => ({ id: item.id, ...item.data() })));
+      setAllCreneaux(creneauxSnap.docs.map((item) => ({ id: item.id, ...item.data() })));
+      setAllMandats(mandatsSnap.docs.map((item) => ({ id: item.id, ...item.data() })));
+      setAllFidelite(fideliteSnap.docs.map((item) => ({ id: item.id, ...item.data() })));
+    } catch (error) {
+      console.error(error);
       toast("Erreur de chargement", "error");
     }
     setLoading(false);
   };
 
-  useEffect(() => { fetchFamilies(); }, []);
+  useEffect(() => {
+    fetchFamilies();
+  }, []);
 
-  // ── Prédicats des filtres actionnables ────────────────────────────────────
-  const todayStr = new Date().toISOString().split("T")[0];
-  // Famille avec au moins un cavalier sans attestation médicale
-  // Une fiche "Établissement" (collège, hôpital) n'a pas d'attestation à
-  // relancer (les enfants ont leur fiche perso) et est facturée à part.
-  const isEtablissement = (f: any) => (f.tags || []).includes("etablissement");
-  const famSansAttestation = (f: any) => !isEtablissement(f) && (f.children || []).some((c: any) => !c.sanitaryForm);
-  // Reste dû de la famille (même calcul que la fiche : payments non annulés)
-  const famImpayes = (f: any) => {
-    const fp = allPayments.filter((p: any) => p.familyId === f.firestoreId && p.status !== "cancelled");
-    return fp.reduce((s2: number, p: any) => s2 + (p.totalTTC || 0), 0) - fp.reduce((s2: number, p: any) => s2 + (p.paidAmount || 0), 0);
+  const isEtablissement = (family: any) => (family.tags || []).includes("etablissement");
+  const famSansAttestation = (family: any) => !isEtablissement(family) && (family.children || []).some((child: any) => !child.sanitaryForm);
+  const famImpayes = (family: any) => {
+    const payments = allPayments.filter((payment: any) => payment.familyId === family.firestoreId && payment.status !== "cancelled");
+    const total = payments.reduce((sum: number, payment: any) => sum + Number(payment.totalTTC || 0), 0);
+    const paid = payments.reduce((sum: number, payment: any) => sum + Number(payment.paidAmount || 0), 0);
+    return total - paid;
   };
-  // Famille avec cavaliers mais aucune séance à venir (réservation non annulée)
-  const famSansSeance = (f: any) =>
-    (f.children || []).length > 0 &&
-    !allReservations.some((r: any) => r.familyId === f.firestoreId && r.status !== "cancelled" && r.date >= todayStr);
+  const famSansSeance = (family: any) =>
+    (family.children || []).length > 0 &&
+    !allReservations.some((reservation: any) => reservation.familyId === family.firestoreId && reservation.status !== "cancelled" && reservation.date >= todayStr);
 
-  // ── Filtrage ──────────────────────────────────────────────────────────────
+  const allChildren = useMemo(() => families.flatMap((family) => family.children || []), [families]);
+  const actionCounts = useMemo(() => ({
+    attestation: families.filter(famSansAttestation).length,
+    impayes: families.filter((family) => famImpayes(family) > 0.009).length,
+    sans_seance: families.filter(famSansSeance).length,
+  }), [families, allPayments, allReservations]);
+
   const filtered = useMemo(() => {
-    // Si une famille est ciblée par l'URL (clic depuis la barre de recherche globale),
-    // on ne montre QUE cette famille pour éviter de noyer l'utilisateur dans la liste.
     if (targetFamilyId) {
-      const target = families.find(f => f.firestoreId === targetFamilyId);
+      const target = families.find((family) => family.firestoreId === targetFamilyId);
       return target ? [target] : [];
     }
-    let list = !search.trim() ? families : families.filter(f =>
-      f.parentName?.toLowerCase().includes(search.toLowerCase()) ||
-      (f as any).lastName?.toLowerCase().includes(search.toLowerCase()) ||
-      (f as any).firstName?.toLowerCase().includes(search.toLowerCase()) ||
-      f.parentEmail?.toLowerCase().includes(search.toLowerCase()) ||
-      (f.children || []).some((c: any) =>
-        `${c.firstName} ${c.lastName || ""}`.toLowerCase().includes(search.toLowerCase())
-      )
-    );
-    // Filtre par tag
-    if (filterTag) {
-      list = list.filter(f => (f as any).tags?.includes(filterTag));
-    }
-    // Filtres actionnables (pile de travail)
-    if (filterAction === "attestation") list = list.filter(f => famSansAttestation(f));
-    if (filterAction === "impayes") list = list.filter(f => famImpayes(f) > 0.009);
-    if (filterAction === "sans_seance") list = list.filter(f => famSansSeance(f));
-    // Tri alphabétique par nom de famille, puis prénom
-    return [...list].sort((a, b) => {
-      const lastA = ((a as any).lastName || a.parentName || "").toLowerCase();
-      const lastB = ((b as any).lastName || b.parentName || "").toLowerCase();
+
+    const queryText = search.trim().toLowerCase();
+    let list = queryText
+      ? families.filter((family) =>
+          family.parentName?.toLowerCase().includes(queryText) ||
+          (family as any).lastName?.toLowerCase().includes(queryText) ||
+          (family as any).firstName?.toLowerCase().includes(queryText) ||
+          family.parentEmail?.toLowerCase().includes(queryText) ||
+          (family.children || []).some((child: any) => `${child.firstName} ${child.lastName || ""}`.toLowerCase().includes(queryText))
+        )
+      : families;
+
+    if (filterTag) list = list.filter((family) => (family as any).tags?.includes(filterTag));
+    if (filterAction === "attestation") list = list.filter(famSansAttestation);
+    if (filterAction === "impayes") list = list.filter((family) => famImpayes(family) > 0.009);
+    if (filterAction === "sans_seance") list = list.filter(famSansSeance);
+
+    return [...list].sort((first, second) => {
+      const lastA = ((first as any).lastName || first.parentName || "").toLowerCase();
+      const lastB = ((second as any).lastName || second.parentName || "").toLowerCase();
       if (lastA !== lastB) return lastA.localeCompare(lastB, "fr");
-      const firstA = ((a as any).firstName || "").toLowerCase();
-      const firstB = ((b as any).firstName || "").toLowerCase();
-      return firstA.localeCompare(firstB, "fr");
+      return ((first as any).firstName || "").localeCompare((second as any).firstName || "", "fr");
     });
   }, [families, search, filterTag, filterAction, targetFamilyId, allPayments, allReservations]);
 
-  // ── Stats ─────────────────────────────────────────────────────────────────
-  const allChildren = families.flatMap(f => f.children || []);
-  const missingForms = allChildren.filter((c: any) => !c.sanitaryForm).length;
+  const hasActiveFilters = Boolean(search || filterTag || filterAction);
+
+  const clearFilters = () => {
+    setSearch("");
+    setFilterTag("");
+    setFilterAction("");
+  };
 
   return (
-    <div>
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="font-display text-2xl font-bold text-blue-800">Cavaliers & familles</h1>
-        <button onClick={() => setShowCreateFamily(true)}
-          className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600 transition-colors">
-          <UserPlus size={16}/> Nouvelle famille
+    <div className="pb-8">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+        <div>
+          <div className="font-body text-xs font-bold uppercase tracking-[0.16em] text-blue-500 mb-1">Clients</div>
+          <h1 className="font-display text-2xl md:text-3xl font-bold text-blue-800">Familles & cavaliers</h1>
+          <p className="font-body text-sm text-gray-500 mt-1">Retrouvez un dossier, traitez les alertes et gardez les profils à jour.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowCreateFamily(true)}
+          className="inline-flex items-center justify-center gap-2 font-body text-sm font-bold text-white bg-blue-600 px-5 py-3 rounded-xl border-none cursor-pointer hover:bg-blue-700 shadow-sm"
+        >
+          <UserPlus size={17} /> Nouvelle famille
         </button>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <Card padding="sm" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><Users size={20} className="text-blue-500"/></div>
-          <div><div className="font-body text-xl font-bold text-blue-500">{families.length}</div><div className="font-body text-xs text-slate-600">familles</div></div>
-        </Card>
-        <Card padding="sm" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center"><UserCheck size={20} className="text-green-600"/></div>
-          <div><div className="font-body text-xl font-bold text-green-600">{allChildren.length}</div><div className="font-body text-xs text-slate-600">cavaliers</div></div>
-        </Card>
-        <Card padding="sm" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center"><AlertTriangle size={20} className="text-orange-500"/></div>
-          <div><div className="font-body text-xl font-bold text-orange-500">{missingForms}</div><div className="font-body text-xs text-slate-600">fiches manquantes</div></div>
-        </Card>
-      </div>
-
-      {/* Recherche */}
-      <div className="relative mb-5">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
-        <input value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Rechercher : prénom + nom enfant, famille, email..."
-          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400 bg-white"/>
-        {search && <div className="font-body text-[10px] text-slate-600 mt-1 ml-1">{filtered.length} famille{filtered.length > 1 ? "s" : ""} trouvée{filtered.length > 1 ? "s" : ""}</div>}
-      </div>
-
-      {/* Filtres par type */}
-      <div className="flex flex-wrap gap-2 mb-5">
-        <button onClick={() => setFilterTag("")}
-          className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border cursor-pointer transition-all
-            ${!filterTag ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-500 border-gray-200 hover:border-gray-300"}`}>
-          Tous ({families.length})
-        </button>
-        {[
-          { id: "cavalier_annee", label: "Cavaliers année", emoji: "🏇", color: "text-green-700 bg-green-50 border-green-200" },
-          { id: "stage", label: "Stages", emoji: "🎯", color: "text-blue-700 bg-blue-50 border-blue-200" },
-          { id: "passage", label: "Passages", emoji: "👋", color: "text-orange-700 bg-orange-50 border-orange-200" },
-          { id: "etablissement", label: "Établissement", emoji: "🏫", color: "text-purple-700 bg-purple-50 border-purple-200" },
-        ].map(tag => {
-          const count = families.filter(f => (f as any).tags?.includes(tag.id)).length;
-          return (
-            <button key={tag.id} onClick={() => setFilterTag(filterTag === tag.id ? "" : tag.id)}
-              className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border cursor-pointer transition-all
-                ${filterTag === tag.id ? tag.color : "bg-white text-slate-400 border-gray-200 hover:border-gray-300"}`}>
-              {tag.emoji} {tag.label} ({count})
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Filtres actionnables — la pile de travail. Un clic = la liste se
-          réduit aux familles à traiter (rentrée : attestations, relances). */}
-      {(() => {
-        const nbAttestation = allChildren.filter((c: any) => !c.sanitaryForm).length;
-        const nbImpayes = families.filter(f => famImpayes(f) > 0.009).length;
-        const nbSansSeance = families.filter(f => famSansSeance(f)).length;
-        const pills: { id: typeof filterAction; label: string; count: number; active: string }[] = [
-          { id: "attestation", label: "⚠ Attestation manquante", count: nbAttestation, active: "text-orange-700 bg-orange-50 border-orange-300" },
-          { id: "impayes", label: "💳 Impayés", count: nbImpayes, active: "text-red-700 bg-red-50 border-red-300" },
-          { id: "sans_seance", label: "📅 Sans séance à venir", count: nbSansSeance, active: "text-blue-700 bg-blue-50 border-blue-300" },
-        ];
-        return (
-          <div className="flex flex-wrap items-center gap-2 mb-5 -mt-2">
-            <span className="font-body text-[10px] text-slate-400 uppercase tracking-wider font-semibold">À traiter :</span>
-            {pills.map(pl => (
-              <button key={pl.id} onClick={() => setFilterAction(filterAction === pl.id ? "" : pl.id)}
-                disabled={pl.count === 0}
-                className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border cursor-pointer transition-all disabled:opacity-40 disabled:cursor-default
-                  ${filterAction === pl.id ? pl.active : "bg-white text-slate-500 border-gray-200 hover:border-gray-300"}`}>
-                {pl.label} ({pl.count})
-              </button>
-            ))}
-            {filterAction && (
-              <button onClick={() => setFilterAction("")}
-                className="px-2 py-1.5 rounded-lg font-body text-xs text-slate-400 bg-transparent border-none cursor-pointer hover:text-slate-600">
-                ✕ Effacer
-              </button>
-            )}
+      <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-5">
+        <Card padding="sm" className="!rounded-2xl">
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex w-10 h-10 rounded-xl bg-blue-50 items-center justify-center"><Users size={19} className="text-blue-500" /></div>
+            <div>
+              <div className="font-display text-2xl font-bold text-blue-800">{families.length}</div>
+              <div className="font-body text-[11px] sm:text-xs text-gray-500">familles</div>
+            </div>
           </div>
-        );
-      })()}
+        </Card>
+        <Card padding="sm" className="!rounded-2xl">
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex w-10 h-10 rounded-xl bg-green-50 items-center justify-center"><UserCheck size={19} className="text-green-600" /></div>
+            <div>
+              <div className="font-display text-2xl font-bold text-blue-800">{allChildren.length}</div>
+              <div className="font-body text-[11px] sm:text-xs text-gray-500">cavaliers</div>
+            </div>
+          </div>
+        </Card>
+        <Card padding="sm" className="!rounded-2xl">
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex w-10 h-10 rounded-xl bg-orange-50 items-center justify-center"><AlertTriangle size={19} className="text-orange-500" /></div>
+            <div>
+              <div className="font-display text-2xl font-bold text-blue-800">{actionCounts.attestation + actionCounts.impayes}</div>
+              <div className="font-body text-[11px] sm:text-xs text-gray-500">à traiter</div>
+            </div>
+          </div>
+        </Card>
+      </div>
 
-      {/* Liste */}
+      <Card padding="md" className="mb-5 !rounded-2xl">
+        <div className="flex items-center gap-2 mb-3">
+          <AlertTriangle size={17} className="text-orange-500" />
+          <div className="font-display text-lg font-bold text-blue-800">À traiter</div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {[
+            { id: "attestation" as const, label: "Attestations manquantes", count: actionCounts.attestation, tone: "orange" },
+            { id: "impayes" as const, label: "Familles avec impayé", count: actionCounts.impayes, tone: "red" },
+            { id: "sans_seance" as const, label: "Sans séance à venir", count: actionCounts.sans_seance, tone: "blue" },
+          ].map((item) => {
+            const active = filterAction === item.id;
+            const classes = item.tone === "red"
+              ? active ? "bg-red-600 text-white border-red-600" : "bg-red-50 text-red-700 border-red-100"
+              : item.tone === "orange"
+                ? active ? "bg-orange-500 text-white border-orange-500" : "bg-orange-50 text-orange-700 border-orange-100"
+                : active ? "bg-blue-600 text-white border-blue-600" : "bg-blue-50 text-blue-700 border-blue-100";
+            return (
+              <button
+                type="button"
+                key={item.id}
+                onClick={() => setFilterAction(active ? "" : item.id)}
+                disabled={item.count === 0}
+                className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 font-body text-sm font-semibold cursor-pointer disabled:opacity-45 disabled:cursor-default ${classes}`}
+              >
+                <span>{item.label}</span>
+                <span className={`min-w-7 h-7 px-2 rounded-full flex items-center justify-center font-bold ${active ? "bg-white/20" : "bg-white"}`}>{item.count}</span>
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card padding="md" className="mb-5 !rounded-2xl">
+        <div className="flex items-center gap-2 mb-3">
+          <Filter size={16} className="text-blue-500" />
+          <div className="font-body text-sm font-bold text-blue-800">Rechercher et filtrer</div>
+        </div>
+
+        <div className="relative">
+          <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Nom du parent, cavalier, email…"
+            className="w-full pl-11 pr-11 py-3 rounded-xl border border-gray-200 bg-gray-50 font-body text-sm focus:outline-none focus:border-blue-400 focus:bg-white"
+          />
+          {search && (
+            <button type="button" onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg bg-white text-gray-400 border-none cursor-pointer flex items-center justify-center"><X size={14} /></button>
+          )}
+        </div>
+
+        <div className="flex gap-2 overflow-x-auto pb-1 mt-3">
+          {SEGMENTS.map((segment) => {
+            const count = segment.id ? families.filter((family) => (family as any).tags?.includes(segment.id)).length : families.length;
+            const active = filterTag === segment.id;
+            return (
+              <button
+                type="button"
+                key={segment.id || "all"}
+                onClick={() => setFilterTag(segment.id)}
+                className={`whitespace-nowrap rounded-xl border px-3 py-2 font-body text-xs font-bold cursor-pointer ${active ? "bg-blue-800 text-white border-blue-800" : "bg-white text-gray-600 border-gray-200"}`}
+              >
+                {segment.label} <span className={active ? "text-blue-100" : "text-gray-400"}>({count})</span>
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div>
+          <h2 className="font-display text-lg font-bold text-blue-800">Dossiers</h2>
+          <div className="font-body text-xs text-gray-500">{filtered.length} famille{filtered.length > 1 ? "s" : ""} affichée{filtered.length > 1 ? "s" : ""}</div>
+        </div>
+        {hasActiveFilters && (
+          <button type="button" onClick={clearFilters} className="inline-flex items-center gap-1.5 rounded-xl bg-gray-100 text-gray-600 px-3 py-2 font-body text-xs font-semibold border-none cursor-pointer"><X size={14} /> Effacer les filtres</button>
+        )}
+      </div>
+
       {loading ? (
-        <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>
+        <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div>
       ) : filtered.length === 0 ? (
-        <Card padding="lg" className="text-center">
-          <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><Users size={28} className="text-blue-300"/></div>
-          <p className="font-body text-sm text-slate-600">{search ? "Aucun résultat." : "Aucune famille inscrite. Cliquez sur \"Nouvelle famille\" pour commencer."}</p>
+        <Card padding="lg" className="text-center !rounded-2xl">
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><Users size={28} className="text-blue-300" /></div>
+          <div className="font-display text-lg font-bold text-blue-800">Aucun dossier trouvé</div>
+          <p className="font-body text-sm text-gray-500 mt-1">Modifiez les filtres ou créez une nouvelle famille.</p>
         </Card>
       ) : (
         <div className="flex flex-col gap-3">
-          {filtered.map(family => (
+          {filtered.map((family) => (
             <FamilyCard
               key={family.firestoreId}
               family={family}
@@ -255,10 +298,7 @@ export default function CavaliersPage() {
         </div>
       )}
 
-      {/* Modal création famille */}
-      {showCreateFamily && (
-        <CreateFamilyModal onClose={() => setShowCreateFamily(false)} onDone={fetchFamilies}/>
-      )}
+      {showCreateFamily && <CreateFamilyModal onClose={() => setShowCreateFamily(false)} onDone={fetchFamilies} />}
     </div>
   );
 }

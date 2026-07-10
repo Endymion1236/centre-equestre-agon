@@ -1,8 +1,8 @@
 "use client";
-import { ChevronLeft, ChevronRight, Loader2, Users, Trash2, Settings } from "lucide-react";
+
+import { ChevronLeft, ChevronRight, Loader2, Plus, Settings, Trash2, Users } from "lucide-react";
 import { fmtDate, fmtDateFR, fmtMonthFR, typeColors, compareCreneaux, itemMatchesCreneau, isForfaitChildPaye } from "./types";
 import type { Creneau } from "./types";
-import type { EditForm } from "./EditCreneauModal";
 
 interface Props {
   loading: boolean;
@@ -22,319 +22,418 @@ interface Props {
 
 const isStageType = (c: any) => c.activityType === "stage" || c.activityType === "stage_journee";
 
-// ── Badge stage compact ──────────────────────────────────────────────────────
-function StageBadge({ list, bg, border, dot, text, onGoToDay }: {
-  list: any[]; bg: string; border: string; dot: string; text: string; onGoToDay: () => void;
-}) {
+function fillTone(fill: number) {
+  if (fill >= 1) return { text: "text-red-600", bar: "bg-red-500", bg: "bg-red-50" };
+  if (fill >= 0.7) return { text: "text-orange-600", bar: "bg-orange-500", bg: "bg-orange-50" };
+  return { text: "text-emerald-700", bar: "bg-emerald-500", bg: "bg-emerald-50" };
+}
+
+function StageBadge({ list, onGoToDay }: { list: any[]; onGoToDay: () => void }) {
   if (list.length === 0) return null;
   const label = list.length === 1
-    ? `${list[0].startTime} ${list[0].activityTitle.slice(0, 10)}`
+    ? `${list[0].startTime} · ${list[0].activityTitle}`
     : `${list.length} stages`;
-  const horaires = [...new Set(list.map((c: any) => c.startTime))].join(", ");
+  const enrolled = list.reduce((total, slot) => total + (slot.enrolled?.length || slot.enrolledCount || 0), 0);
+
   return (
-    <button onClick={onGoToDay}
-      className={`w-full flex flex-col px-1.5 py-1 rounded-lg border font-body cursor-pointer text-left hover:opacity-80 ${bg} ${border}`}>
-      <div className={`flex items-center gap-1 text-[10px] font-semibold ${text}`}>
-        <span className={`w-3.5 h-3.5 rounded-full ${dot} text-white text-[8px] flex items-center justify-center flex-shrink-0`}>{list.length}</span>
-        <span className="truncate">{label}</span>
+    <button
+      type="button"
+      onClick={onGoToDay}
+      className="group w-full rounded-xl border border-emerald-100 bg-[linear-gradient(135deg,#ecfdf5_0%,#f7fff9_100%)] px-2.5 py-2 text-left shadow-[0_3px_12px_rgba(16,185,129,0.05)] transition-all hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-[0_8px_20px_rgba(16,185,129,0.1)]"
+    >
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1 font-body text-[9px] font-bold text-white">
+          {list.length}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-body text-[10px] font-bold leading-tight text-emerald-800">{label}</div>
+          <div className="mt-1 flex items-center justify-between gap-1 font-body text-[9px] text-emerald-600/75">
+            <span>Stage</span>
+            <span>{enrolled} inscrit{enrolled > 1 ? "s" : ""}</span>
+          </div>
+        </div>
       </div>
-      <div className={`text-[9px] pl-4 ${text} opacity-70`}>{horaires}</div>
     </button>
   );
 }
 
-// ── Dots de paiement pour un cavalier ───────────────────────────────────────
 function PaymentDot({ enrolled, payments, childId, childName, creneauId, activityTitle }: {
-  enrolled: any; payments: any[]; childId: string; childName: string; creneauId: string; activityTitle: string;
+  enrolled: any;
+  payments: any[];
+  childId: string;
+  childName: string;
+  creneauId: string;
+  activityTitle: string;
 }) {
   const isCard = enrolled.paymentSource === "card";
-  // paymentSource: 'celeris' = stage réglé hors application (encaissé dans Celeris).
-  // Traité comme réglé, exclu des impayés, point teal dédié.
   const isCeleris = enrolled.paymentSource === "celeris";
-  // paymentSource: 'forfait' = inscription couverte par un forfait annuel
-  // Distinction forfait payé vs en attente d'encaissement.
   const isForfait = enrolled.paymentSource === "forfait";
   const isForfaitPaid = isForfait && isForfaitChildPaye(payments, enrolled.familyId, childId);
   const isForfaitPending = isForfait && !isForfaitPaid;
-  const matchesThis = (i: any) => itemMatchesCreneau(i, enrolled, { id: creneauId, activityTitle });
-  const hasPaid = isCard || isCeleris || isForfaitPaid || payments.some((p: any) =>
-    p.familyId === enrolled.familyId && p.status === "paid" &&
-    (p.items || []).some(matchesThis)
+  const matchesThis = (item: any) => itemMatchesCreneau(item, enrolled, { id: creneauId, activityTitle });
+  const hasPaid = isCard || isCeleris || isForfaitPaid || payments.some((payment: any) =>
+    payment.familyId === enrolled.familyId && payment.status === "paid" && (payment.items || []).some(matchesThis)
   );
-  const hasPending = !hasPaid && !isCard && !isCeleris && (isForfaitPending || payments.some((p: any) =>
-    p.familyId === enrolled.familyId &&
-    (p.status === "pending" || p.status === "partial") &&
-    (p.items || []).some(matchesThis)
+  const hasPending = !hasPaid && !isCard && !isCeleris && (isForfaitPending || payments.some((payment: any) =>
+    payment.familyId === enrolled.familyId &&
+    (payment.status === "pending" || payment.status === "partial") &&
+    (payment.items || []).some(matchesThis)
   ));
+  const status = isCard ? "carte"
+    : isCeleris ? "réglé (Celeris)"
+    : isForfaitPaid ? "forfait"
+    : isForfaitPending ? "forfait à régler"
+    : hasPaid ? "réglé"
+    : hasPending ? "en attente"
+    : "non réglé";
+
   return (
     <span
-      title={`${childName} — ${isCard ? "carte" : isCeleris ? "réglé (Celeris)" : isForfaitPaid ? "forfait" : isForfaitPending ? "forfait à régler" : hasPaid ? "réglé" : hasPending ? "en attente" : "non réglé"}`}
-      className={`w-3 h-3 rounded-full flex-shrink-0 border ${
-        isCard ? "bg-blue-400 border-blue-500"
-        : isCeleris ? "bg-teal-400 border-teal-500"
-        : isForfaitPaid ? "bg-emerald-400 border-emerald-500"
-        : isForfaitPending ? "bg-amber-400 border-amber-500"
-        : hasPaid ? "bg-green-400 border-green-500"
-        : hasPending ? "bg-orange-300 border-orange-400"
-        : "bg-gray-200 border-gray-300"
+      title={`${childName} · ${status}`}
+      className={`h-2.5 w-2.5 flex-shrink-0 rounded-full border border-white ring-1 ${
+        isCard ? "bg-blue-500 ring-blue-200"
+          : isCeleris ? "bg-teal-500 ring-teal-200"
+          : isForfaitPaid ? "bg-emerald-500 ring-emerald-200"
+          : isForfaitPending ? "bg-amber-400 ring-amber-200"
+          : hasPaid ? "bg-green-500 ring-green-200"
+          : hasPending ? "bg-orange-400 ring-orange-200"
+          : "bg-slate-300 ring-slate-200"
       }`}
     />
   );
 }
 
-// ── Carte créneau seul ───────────────────────────────────────────────────────
 function CreneauCard({ c, payments, onSelect, onDelete, onEdit }: {
-  c: Creneau & { id: string }; payments: any[];
-  onSelect: () => void; onDelete: () => void; onEdit: () => void;
+  c: Creneau & { id: string };
+  payments: any[];
+  onSelect: () => void;
+  onDelete: () => void;
+  onEdit: () => void;
 }) {
-  const en = c.enrolled || [];
-  const fill = c.maxPlaces > 0 ? en.length / c.maxPlaces : 0;
-  const col = (c as any).color || typeColors[c.activityType] || "#666";
+  const enrolled = c.enrolled || [];
+  const fill = c.maxPlaces > 0 ? enrolled.length / c.maxPlaces : 0;
+  const tone = fillTone(fill);
+  const color = (c as any).color || typeColors[c.activityType] || "#64748b";
 
-  const unpaidCount = en.filter((e: any) => {
-    const isCard = e.paymentSource === "card";
-    const isCeleris = e.paymentSource === "celeris";
-    const isForfait = e.paymentSource === "forfait";
-    const isForfaitPaid = isForfait && isForfaitChildPaye(payments, e.familyId, e.childId);
+  const unpaidCount = enrolled.filter((person: any) => {
+    const isCard = person.paymentSource === "card";
+    const isCeleris = person.paymentSource === "celeris";
+    const isForfait = person.paymentSource === "forfait";
+    const isForfaitPaid = isForfait && isForfaitChildPaye(payments, person.familyId, person.childId);
     const isForfaitPending = isForfait && !isForfaitPaid;
-    const matchesThis = (i: any) => itemMatchesCreneau(i, e, c);
-    const hasPaid = isCard || isCeleris || isForfaitPaid || payments.some((p: any) =>
-      p.familyId === e.familyId && p.status === "paid" &&
-      (p.items || []).some(matchesThis)
+    const matchesThis = (item: any) => itemMatchesCreneau(item, person, c);
+    const hasPaid = isCard || isCeleris || isForfaitPaid || payments.some((payment: any) =>
+      payment.familyId === person.familyId && payment.status === "paid" && (payment.items || []).some(matchesThis)
     );
-    const hasPending = !hasPaid && !isCard && !isCeleris && (isForfaitPending || payments.some((p: any) =>
-      p.familyId === e.familyId &&
-      (p.status === "pending" || p.status === "partial") &&
-      (p.items || []).some(matchesThis)
+    const hasPending = !hasPaid && !isCard && !isCeleris && (isForfaitPending || payments.some((payment: any) =>
+      payment.familyId === person.familyId &&
+      (payment.status === "pending" || payment.status === "partial") &&
+      (payment.items || []).some(matchesThis)
     ));
-    // Compte comme impayé : pas payé ET pas pending non plus
-    // (un forfait pending compte aussi comme impayé ici car la commande
-    // n'a pas encore été encaissée - on ne met pas le drapeau rouge mais
-    // l'orange "en attente" via PaymentDot)
     return !hasPaid && !hasPending && !isCard && !isCeleris;
   }).length;
 
   return (
-    <div onClick={onSelect}
-      className="bg-white rounded-lg p-2 border border-blue-500/8 group relative hover:shadow-md cursor-pointer"
-      style={{ borderLeftWidth: 3, borderLeftColor: col }}>
-      <div className="font-body text-[11px] font-semibold" style={{ color: col }}>{c.startTime}–{c.endTime}</div>
-      <div className="font-body text-xs font-semibold text-blue-800 leading-tight mt-0.5">{c.activityTitle}</div>
-      <div className="font-body text-[10px] text-slate-600 mt-0.5">{c.monitor}</div>
-      <div className="flex items-center gap-1 mt-1">
-        <Users size={10} className="text-slate-600"/>
-        <span className={`font-body text-[10px] font-semibold ${fill >= 1 ? "text-red-500" : fill >= 0.7 ? "text-orange-500" : "text-green-600"}`}>
-          {en.length}/{c.maxPlaces}
-        </span>
-      </div>
-      {en.length > 0 && (
-        <div className="flex items-center gap-1 mt-1">
-          <div className="flex flex-wrap gap-0.5">
-            {en.slice(0, 6).map((e: any) => (
-              <PaymentDot key={e.childId} enrolled={e} payments={payments} childId={e.childId} childName={e.childName} creneauId={c.id} activityTitle={c.activityTitle} />
-            ))}
-            {en.length > 6 && <span className="font-body text-[9px] text-slate-600 ml-0.5">+{en.length - 6}</span>}
-          </div>
-          {unpaidCount > 0 && (
-            <span className="font-body text-[9px] font-semibold text-red-500 bg-red-50 px-1 py-0.5 rounded" title={`${unpaidCount} impayé${unpaidCount > 1 ? "s" : ""}`}>
-              ⚠️{unpaidCount}
-            </span>
-          )}
+    <div
+      onClick={onSelect}
+      className="group relative cursor-pointer overflow-hidden rounded-xl border border-slate-100 bg-white p-2.5 shadow-[0_4px_16px_rgba(12,26,46,0.045)] transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_10px_26px_rgba(12,26,46,0.1)]"
+    >
+      <div className="absolute inset-y-0 left-0 w-1" style={{ backgroundColor: color }} />
+      <div className="pl-1">
+        <div className="flex items-center justify-between gap-2 pr-8">
+          <div className="font-body text-[10px] font-bold" style={{ color }}>{c.startTime}–{c.endTime}</div>
+          <span className={`rounded-full px-1.5 py-0.5 font-body text-[8px] font-bold ${tone.bg} ${tone.text}`}>
+            {enrolled.length}/{c.maxPlaces}
+          </span>
         </div>
-      )}
-      <button onClick={e => { e.stopPropagation(); onDelete(); }}
-        className="absolute top-1 right-1 w-5 h-5 rounded bg-red-50 text-red-400 hover:bg-red-100 border-none cursor-pointer sm:opacity-0 sm:group-hover:opacity-100 flex items-center justify-center">
-        <Trash2 size={10}/>
-      </button>
-      <button onClick={e => { e.stopPropagation(); onEdit(); }}
-        className="absolute top-1 right-7 w-5 h-5 rounded bg-blue-50 text-blue-400 hover:bg-blue-100 border-none cursor-pointer sm:opacity-0 sm:group-hover:opacity-100 flex items-center justify-center">
-        <Settings size={10}/>
-      </button>
+        <div className="mt-1 font-body text-[11px] font-bold leading-tight text-blue-950">{c.activityTitle}</div>
+        <div className="mt-0.5 truncate font-body text-[9px] text-slate-400">{c.monitor || "Moniteur à définir"}</div>
+
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-slate-100">
+          <div className={`h-full rounded-full ${tone.bar}`} style={{ width: `${Math.min(fill * 100, 100)}%` }} />
+        </div>
+
+        {enrolled.length > 0 && (
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1">
+              {enrolled.slice(0, 7).map((person: any) => (
+                <PaymentDot
+                  key={person.childId}
+                  enrolled={person}
+                  payments={payments}
+                  childId={person.childId}
+                  childName={person.childName}
+                  creneauId={c.id}
+                  activityTitle={c.activityTitle}
+                />
+              ))}
+              {enrolled.length > 7 && <span className="font-body text-[8px] font-semibold text-slate-400">+{enrolled.length - 7}</span>}
+            </div>
+            {unpaidCount > 0 && (
+              <span className="rounded-full bg-red-50 px-1.5 py-0.5 font-body text-[8px] font-bold text-red-600" title={`${unpaidCount} impayé${unpaidCount > 1 ? "s" : ""}`}>
+                {unpaidCount} dû{unpaidCount > 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="absolute right-1.5 top-1.5 flex gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+        <button
+          type="button"
+          onClick={(event) => { event.stopPropagation(); onEdit(); }}
+          aria-label="Modifier le créneau"
+          className="flex h-6 w-6 items-center justify-center rounded-lg border border-blue-100 bg-blue-50 text-blue-500 hover:bg-blue-100"
+        >
+          <Settings size={11} />
+        </button>
+        <button
+          type="button"
+          onClick={(event) => { event.stopPropagation(); onDelete(); }}
+          aria-label="Supprimer le créneau"
+          className="flex h-6 w-6 items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-500 hover:bg-red-100"
+        >
+          <Trash2 size={11} />
+        </button>
+      </div>
     </div>
   );
 }
 
-// ── Carte créneau groupé (même horaire) ─────────────────────────────────────
-function CreneauCardCompact({ c, payments, onSelect, onDelete, onEdit }: {
-  c: Creneau & { id: string }; payments: any[];
-  onSelect: () => void; onDelete: () => void; onEdit: () => void;
+function CreneauCardCompact({ c, onSelect, onDelete, onEdit }: {
+  c: Creneau & { id: string };
+  payments: any[];
+  onSelect: () => void;
+  onDelete: () => void;
+  onEdit: () => void;
 }) {
-  const en = c.enrolled || [];
-  const fill = c.maxPlaces > 0 ? en.length / c.maxPlaces : 0;
-  const col = (c as any).color || typeColors[c.activityType] || "#666";
+  const enrolled = c.enrolled || [];
+  const fill = c.maxPlaces > 0 ? enrolled.length / c.maxPlaces : 0;
+  const tone = fillTone(fill);
+  const color = (c as any).color || typeColors[c.activityType] || "#64748b";
 
   return (
-    <div onClick={onSelect}
-      className="flex-1 min-w-0 bg-white rounded-lg p-1.5 border border-blue-500/8 group relative hover:shadow-md cursor-pointer"
-      style={{ borderLeftWidth: 3, borderLeftColor: col }}>
-      <div className="font-body text-[10px] font-semibold" style={{ color: col }}>{c.startTime}</div>
-      <div className="font-body text-[10px] font-semibold text-blue-800 leading-tight mt-0.5"
-        style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>{c.activityTitle}</div>
-      <div className="font-body text-[9px] text-slate-500 mt-0.5 truncate">{c.monitor}</div>
-      <div className={`font-body text-[9px] font-semibold mt-0.5 ${fill >= 1 ? "text-red-500" : fill >= 0.7 ? "text-orange-500" : "text-green-600"}`}>
-        {en.length}/{c.maxPlaces}
+    <div
+      onClick={onSelect}
+      className="group relative min-w-0 flex-1 cursor-pointer overflow-hidden rounded-xl border border-slate-100 bg-white p-2 shadow-[0_3px_12px_rgba(12,26,46,0.04)] transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+    >
+      <div className="absolute inset-y-0 left-0 w-0.5" style={{ backgroundColor: color }} />
+      <div className="pl-0.5 pr-4">
+        <div className="font-body text-[9px] font-bold" style={{ color }}>{c.startTime}</div>
+        <div className="mt-0.5 break-words font-body text-[9px] font-bold leading-tight text-blue-950">{c.activityTitle}</div>
+        <div className={`mt-1 font-body text-[8px] font-bold ${tone.text}`}>{enrolled.length}/{c.maxPlaces}</div>
       </div>
-      <button onClick={e => { e.stopPropagation(); onDelete(); }}
-        className="absolute top-0.5 right-0.5 w-4 h-4 rounded bg-red-50 text-red-400 border-none cursor-pointer sm:opacity-0 sm:group-hover:opacity-100 flex items-center justify-center">
-        <Trash2 size={8}/>
-      </button>
-      <button onClick={e => { e.stopPropagation(); onEdit(); }}
-        className="absolute top-0.5 right-5 w-4 h-4 rounded bg-blue-50 text-blue-400 border-none cursor-pointer sm:opacity-0 sm:group-hover:opacity-100 flex items-center justify-center">
-        <Settings size={8}/>
-      </button>
+      <div className="absolute right-1 top-1 flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
+        <button type="button" onClick={(event) => { event.stopPropagation(); onEdit(); }} aria-label="Modifier" className="flex h-4 w-4 items-center justify-center rounded bg-blue-50 text-blue-500"><Settings size={8} /></button>
+        <button type="button" onClick={(event) => { event.stopPropagation(); onDelete(); }} aria-label="Supprimer" className="flex h-4 w-4 items-center justify-center rounded bg-red-50 text-red-500"><Trash2 size={8} /></button>
+      </div>
     </div>
   );
 }
 
-// ── Composant principal ──────────────────────────────────────────────────────
-export default function WeekView({
-  loading, weekDates, creneaux, payments,
-  onPrev, onNext, onToday, onPickDate,
-  onSelectCreneau, onOpenDelete, onOpenEdit, onAddCreneau, onGoToDay,
-}: Props) {
-  const isToday = (d: Date) => fmtDate(d) === fmtDate(new Date());
+function WeekSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white p-2">
+      <div className="grid min-w-[760px] grid-cols-7 gap-2">
+        {Array.from({ length: 7 }).map((_, index) => (
+          <div key={index} className="animate-pulse space-y-2 rounded-xl bg-slate-50 p-2">
+            <div className="h-9 rounded-lg bg-slate-200" />
+            <div className="h-24 rounded-xl bg-slate-100" />
+            <div className="h-16 rounded-xl bg-slate-100" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-  const buildEditForm = (c: Creneau & { id: string }): EditForm => ({
-    activityTitle: c.activityTitle,
-    monitor: c.monitor || "",
-    startTime: c.startTime,
-    endTime: c.endTime,
-    maxPlaces: c.maxPlaces,
-    priceTTC: (c as any).priceTTC || 0,
-    color: (c as any).color || "",
-  });
+export default function WeekView({
+  loading,
+  weekDates,
+  creneaux,
+  payments,
+  onPrev,
+  onNext,
+  onToday,
+  onPickDate,
+  onSelectCreneau,
+  onOpenDelete,
+  onOpenEdit,
+  onAddCreneau,
+  onGoToDay,
+}: Props) {
+  const isToday = (date: Date) => fmtDate(date) === fmtDate(new Date());
 
   return (
     <>
-      {/* Navigation */}
-      <div className="flex items-center justify-between mb-5">
-        <button onClick={onPrev} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">
-          <ChevronLeft size={16}/>Préc.
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-3 py-3 shadow-[0_5px_22px_rgba(12,26,46,0.035)]">
+        <button
+          type="button"
+          onClick={onPrev}
+          className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 font-body text-xs font-semibold text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+        >
+          <ChevronLeft size={15} /> Précédente
         </button>
-        <div className="flex flex-col items-center gap-1">
-          <div className="font-display text-lg font-bold text-blue-800 capitalize">{fmtMonthFR(weekDates[0])}</div>
-          <div className="font-body text-xs text-slate-600">
-            Du {weekDates[0].toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} au {weekDates[6].toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+
+        <div className="order-first flex w-full flex-col items-center gap-1 sm:order-none sm:w-auto">
+          <div className="font-display text-lg font-bold capitalize text-blue-950">{fmtMonthFR(weekDates[0])}</div>
+          <div className="font-body text-[11px] text-slate-400">
+            {weekDates[0].toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} → {weekDates[6].toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
           </div>
-          <input type="date" title="Aller à cette date"
-            className="font-body text-xs px-2 py-1 rounded-lg border border-gray-200 bg-white cursor-pointer focus:border-blue-400 focus:outline-none text-slate-500"
-            onChange={e => {
-              if (!e.target.value) return;
-              const [py, pm, pd] = e.target.value.split("-").map(Number);
-              const picked = new Date(py, pm - 1, pd);
-              const today = new Date(); today.setHours(0, 0, 0, 0);
+          <input
+            type="date"
+            title="Aller à cette date"
+            aria-label="Aller à une date"
+            className="mt-0.5 border border-slate-200 bg-slate-50 px-2 py-1 font-body text-[10px] text-slate-500"
+            onChange={(event) => {
+              if (!event.target.value) return;
+              const [year, month, day] = event.target.value.split("-").map(Number);
+              const picked = new Date(year, month - 1, day);
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
               const pickedDow = (picked.getDay() + 6) % 7;
-              const pickedMon = new Date(picked); pickedMon.setDate(picked.getDate() - pickedDow);
+              const pickedMonday = new Date(picked);
+              pickedMonday.setDate(picked.getDate() - pickedDow);
               const todayDow = (today.getDay() + 6) % 7;
-              const todayMon = new Date(today); todayMon.setDate(today.getDate() - todayDow);
-              const diffWeeks = Math.round((pickedMon.getTime() - todayMon.getTime()) / (7 * 86400000));
-              onPickDate(diffWeeks);
-              e.target.value = "";
-            }}/>
+              const todayMonday = new Date(today);
+              todayMonday.setDate(today.getDate() - todayDow);
+              onPickDate(Math.round((pickedMonday.getTime() - todayMonday.getTime()) / (7 * 86400000)));
+              event.target.value = "";
+            }}
+          />
         </div>
+
         <div className="flex gap-2">
-          <button onClick={onToday} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button>
-          <button onClick={onNext} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">
-            Suiv.<ChevronRight size={16}/>
+          <button
+            type="button"
+            onClick={onToday}
+            className="rounded-xl border-none bg-blue-50 px-3 py-2 font-body text-xs font-bold text-blue-700 hover:bg-blue-100"
+          >
+            Aujourd’hui
+          </button>
+          <button
+            type="button"
+            onClick={onNext}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 font-body text-xs font-semibold text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+          >
+            Suivante <ChevronRight size={15} />
           </button>
         </div>
       </div>
 
-      {/* Grille */}
-      {loading
-        ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>
-        : (
-          <div className="overflow-x-auto -mx-4 px-4">
-            <div className="grid grid-cols-7 gap-1.5" style={{ minWidth: "700px" }}>
-              {/* Headers jours */}
-              {weekDates.map((d, i) => (
-                <div key={i}
-                  onClick={() => onGoToDay(d)}
-                  className={`text-center py-2 rounded-lg font-body text-xs font-semibold cursor-pointer hover:ring-2 hover:ring-blue-300 ${isToday(d) ? "bg-blue-500 text-white" : "bg-sand text-slate-600"}`}>
-                  {fmtDateFR(d)}
-                </div>
-              ))}
+      {loading ? (
+        <WeekSkeleton />
+      ) : (
+        <div className="-mx-3 overflow-x-auto px-3 pb-2">
+          <div className="grid min-w-[820px] grid-cols-7 gap-2 rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_8px_30px_rgba(12,26,46,0.035)]">
+            {weekDates.map((date, index) => (
+              <button
+                type="button"
+                key={index}
+                onClick={() => onGoToDay(date)}
+                className={`rounded-xl border px-2 py-2.5 text-center font-body transition-all ${
+                  isToday(date)
+                    ? "border-blue-600 bg-blue-600 text-white shadow-[0_6px_18px_rgba(32,80,160,0.2)]"
+                    : "border-transparent bg-slate-50 text-slate-600 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-700"
+                }`}
+              >
+                <div className="text-[10px] font-bold uppercase tracking-[0.08em]">{date.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "")}</div>
+                <div className="mt-0.5 font-display text-lg font-bold">{date.getDate()}</div>
+              </button>
+            ))}
 
-              {/* Colonnes jours */}
-              {weekDates.map((d, i) => {
-                const ds = fmtDate(d);
-                const allDc = creneaux.filter(c => c.date === ds).sort(compareCreneaux);
-                const dc = allDc.filter(c => !isStageType(c));
-                const stages = allDc.filter(c => isStageType(c));
+            {weekDates.map((date, index) => {
+              const dateString = fmtDate(date);
+              const allDaySlots = creneaux.filter((slot) => slot.date === dateString).sort(compareCreneaux);
+              const regularSlots = allDaySlots.filter((slot) => !isStageType(slot));
+              const stages = allDaySlots.filter((slot) => isStageType(slot));
+              const stagesByTime: Record<string, typeof stages> = {};
+              stages.forEach((slot) => {
+                if (!stagesByTime[slot.startTime]) stagesByTime[slot.startTime] = [];
+                stagesByTime[slot.startTime].push(slot);
+              });
 
-                // Grouper stages par startTime
-                const stagesByTime: Record<string, typeof stages> = {};
-                stages.forEach(c => {
-                  if (!stagesByTime[c.startTime]) stagesByTime[c.startTime] = [];
-                  stagesByTime[c.startTime].push(c);
-                });
+              const grouped: Array<{ key: string; items: typeof regularSlots; startTime: string }> = [];
+              regularSlots.forEach((slot) => {
+                const key = `${slot.startTime}-${slot.endTime}`;
+                const existing = grouped.find((group) => group.key === key);
+                if (existing) existing.items.push(slot);
+                else grouped.push({ key, items: [slot], startTime: slot.startTime });
+              });
 
-                // Grouper cours par horaire
-                const grouped: Array<{ key: string; items: typeof dc; startTime: string }> = [];
-                dc.forEach(c => {
-                  const key = `${c.startTime}-${c.endTime}`;
-                  const g = grouped.find(x => x.key === key);
-                  if (g) g.items.push(c); else grouped.push({ key, items: [c], startTime: c.startTime });
-                });
+              type RenderItem =
+                | { type: "stage"; startTime: string; list: typeof stages }
+                | { type: "cours"; startTime: string; group: typeof grouped[0] };
 
-                // Créer un flux unifié trié par startTime
-                type RenderItem = { type: "stage"; startTime: string; list: typeof stages } | { type: "cours"; startTime: string; group: typeof grouped[0] };
-                const renderItems: RenderItem[] = [
-                  ...Object.entries(stagesByTime).map(([st, list]) => ({ type: "stage" as const, startTime: st, list })),
-                  ...grouped.map(g => ({ type: "cours" as const, startTime: g.startTime, group: g })),
-                ];
-                renderItems.sort((a, b) => {
-                  const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + (m || 0); };
-                  const diff = toMin(a.startTime) - toMin(b.startTime);
-                  if (diff !== 0) return diff;
-                  // À horaire égal, cours avant stages
-                  return a.type === "cours" ? -1 : 1;
-                });
+              const renderItems: RenderItem[] = [
+                ...Object.entries(stagesByTime).map(([startTime, list]) => ({ type: "stage" as const, startTime, list })),
+                ...grouped.map((group) => ({ type: "cours" as const, startTime: group.startTime, group })),
+              ];
 
-                return (
-                  <div key={`c${i}`} className="min-h-[160px] flex flex-col gap-1" style={{ minWidth: "95px" }}>
-                    {renderItems.map((item, idx) => {
-                      if (item.type === "stage") {
-                        return <StageBadge key={`s-${idx}`} list={item.list} bg="bg-green-50" border="border-green-200" dot="bg-green-500" text="text-green-700" onGoToDay={() => onGoToDay(d)} />;
-                      }
-                      const g = item.group;
-                      if (g.items.length > 1) {
-                        return (
-                          <div key={g.key} className="flex gap-0.5">
-                            {g.items.map(c => (
-                              <CreneauCardCompact
-                                key={c.id} c={c} payments={payments}
-                                onSelect={() => onSelectCreneau(c)}
-                                onDelete={() => onOpenDelete(c)}
-                                onEdit={() => onOpenEdit(c)}
-                              />
-                            ))}
-                          </div>
-                        );
-                      }
-                      const c = g.items[0];
+              renderItems.sort((first, second) => {
+                const toMinutes = (time: string) => {
+                  const [hours, minutes] = time.split(":").map(Number);
+                  return hours * 60 + (minutes || 0);
+                };
+                const difference = toMinutes(first.startTime) - toMinutes(second.startTime);
+                if (difference !== 0) return difference;
+                return first.type === "cours" ? -1 : 1;
+              });
+
+              return (
+                <div
+                  key={`column-${index}`}
+                  className={`flex min-h-[230px] flex-col gap-1.5 rounded-xl p-1.5 ${isToday(date) ? "bg-blue-50/55 ring-1 ring-blue-100" : "bg-slate-50/55"}`}
+                  style={{ minWidth: "105px" }}
+                >
+                  {renderItems.map((item, itemIndex) => {
+                    if (item.type === "stage") {
+                      return <StageBadge key={`stage-${itemIndex}`} list={item.list} onGoToDay={() => onGoToDay(date)} />;
+                    }
+
+                    if (item.group.items.length > 1) {
                       return (
-                        <CreneauCard
-                          key={c.id} c={c} payments={payments}
-                          onSelect={() => onSelectCreneau(c)}
-                          onDelete={() => onOpenDelete(c)}
-                          onEdit={() => onOpenEdit(c)}
-                        />
+                        <div key={item.group.key} className="flex gap-1">
+                          {item.group.items.map((slot) => (
+                            <CreneauCardCompact
+                              key={slot.id}
+                              c={slot}
+                              payments={payments}
+                              onSelect={() => onSelectCreneau(slot)}
+                              onDelete={() => onOpenDelete(slot)}
+                              onEdit={() => onOpenEdit(slot)}
+                            />
+                          ))}
+                        </div>
                       );
-                    })}
+                    }
 
-                    {/* Bouton ajouter */}
-                    <button onClick={() => onAddCreneau(ds)}
-                      className="mt-auto py-2 rounded-lg border border-dashed border-gray-200 text-slate-400 hover:border-blue-300 hover:text-blue-400 bg-transparent cursor-pointer font-body text-lg">
-                      +
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+                    const slot = item.group.items[0];
+                    return (
+                      <CreneauCard
+                        key={slot.id}
+                        c={slot}
+                        payments={payments}
+                        onSelect={() => onSelectCreneau(slot)}
+                        onDelete={() => onOpenDelete(slot)}
+                        onEdit={() => onOpenEdit(slot)}
+                      />
+                    );
+                  })}
+
+                  <button
+                    type="button"
+                    onClick={() => onAddCreneau(dateString)}
+                    className="group/add mt-auto flex min-h-10 items-center justify-center gap-1 rounded-xl border border-dashed border-slate-200 bg-white/60 font-body text-[10px] font-semibold text-slate-400 transition-all hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
+                  >
+                    <Plus size={13} /> <span>Ajouter</span>
+                  </button>
+                </div>
+              );
+            })}
           </div>
-        )
-      }
+        </div>
+      )}
     </>
   );
 }
