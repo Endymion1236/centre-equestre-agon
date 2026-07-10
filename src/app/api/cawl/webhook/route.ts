@@ -203,11 +203,13 @@ export async function POST(req: NextRequest) {
           console.log(`✅ CAWL webhook payment confirmé: ${merchantRef} — ${paidAmount}€${isDeposit ? " (acompte)" : ""}`);
 
           // ── Attribution des points de fidélité ────────────────────────
-          // Non-bloquant : erreurs loggées mais n'interrompent pas le flow
+          // Non-bloquant : erreurs loggées mais n'interrompent pas le flow.
+          // Basé sur le montant RÉELLEMENT encaissé (paidAmount), pas sur le
+          // total dû — sinon un acompte donnerait les points du stage complet.
           await awardLoyaltyPointsServer({
             familyId: pData.familyId,
             familyName: pData.familyName,
-            montant: totalTTC,
+            montant: paidAmount,
             label: (pData.items || []).map((i: any) => i.activityTitle).join(", ") || "Paiement en ligne",
           });
 
