@@ -103,19 +103,45 @@ export async function POST(req: NextRequest) {
       }
 
       if (payRef && pData) {
-        // ── Acompte ou paiement total ? ──────────────────────────────────
-        // Le webhook n'a pas accès aux query params de l'URL de retour : on lit
-        // le marqueur stocké dans cawl_sessions au checkout. Fallback heuristique
-        // pour les sessions antérieures : montant CAWL < totalTTC ⇒ acompte.
+        // ── Acompte ou paiement total ? (autoritatif, PAS d'heuristique) ──
+        // On lit le marqueur isDeposit stocké dans cawl_sessions au checkout.
+        // L'ancienne heuristique "montant faible ⇒ acompte" était une faille
+        // (audit) : un paiement total volontairement minoré était confirmé
+        // comme un acompte. Supprimée.
         let isDeposit = false;
+        let sessionDepositPercent = 0;
         try {
           if (hostedCheckoutId) {
             const sessSnap = await adminDb.collection("cawl_sessions").doc(hostedCheckoutId).get();
-            if (sessSnap.exists) isDeposit = !!(sessSnap.data() as any)?.isDeposit;
+            if (sessSnap.exists) {
+              const s = sessSnap.data() as any;
+              isDeposit = !!s?.isDeposit;
+              sessionDepositPercent = s?.depositPercent || 0;
+            }
           }
         } catch (e) { console.warn("CAWL webhook: lecture cawl_sessions impossible:", e); }
-        if (!isDeposit && totalEuros > 0 && (pData.totalTTC || 0) > 0 && totalEuros < pData.totalTTC - 0.01) {
-          isDeposit = true; // heuristique : montant encaissé < total dû
+
+        // ── Sécurité : contrôle du montant réellement payé (audit P0 #1) ──
+        // Même logique que la route /status. Si CAWL renvoie un montant (>0) et
+        // qu'il est nettement inférieur à l'attendu, on NE confirme PAS.
+        const expectedAmount = isDeposit
+          ? (pData.acompteAmount || Math.round((pData.totalTTC || 0) * (sessionDepositPercent || 0) / 100 * 100) / 100)
+          : (pData.totalTTC || 0);
+        if (totalCents > 0 && expectedAmount > 0 && totalEuros < expectedAmount - 0.02) {
+          console.error(
+            `⚠️ CAWL webhook montant incohérent — payé ${totalEuros}€ < attendu ${expectedAmount}€ ` +
+            `(payment=${payRef.id}). Confirmation refusée.`
+          );
+          try {
+            await payRef.update({
+              amountMismatch: true,
+              amountPaidReported: totalEuros,
+              amountExpected: expectedAmount,
+              needsReview: true,
+              updatedAt: FieldValue.serverTimestamp(),
+            });
+          } catch { /* non bloquant */ }
+          return NextResponse.json({ received: true, rejected: "amount_mismatch" });
         }
 
         // ── Verrou anti-doublon ──────────────────────────────────────────
