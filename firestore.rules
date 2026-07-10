@@ -46,13 +46,11 @@ service cloud.firestore {
     match /creneaux/{docId} {
       allow read: if isAuth();
       allow create, delete: if isStaff();
-      // Le staff peut tout modifier. Un cavalier peut UNIQUEMENT modifier les
-      // champs `enrolled` et `enrolledCount` (pour s'inscrire/se désinscrire) —
-      // pas le prix, pas maxPlaces, pas la date, pas le moniteur, etc.
-      allow update: if isStaff()
-        || (isAuth()
-            && request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(['enrolled', 'enrolledCount']));
+      // Écriture réservée au staff. Les familles s'inscrivent via la route
+      // serveur /api/enroll (Admin SDK), qui valide enfant↔famille, la capacité
+      // (maxPlaces) et les doublons — audit P0 #3 + #7. Le navigateur ne réécrit
+      // plus jamais directement le tableau `enrolled`.
+      allow update: if isStaff();
     }
 
     // ── Notes pédagogiques de séance ──────────────────────────────────────
@@ -331,10 +329,13 @@ service cloud.firestore {
       allow read: if isStaff()
         || (isAuth() && resource.data.familyId == request.auth.uid)
         || (isAuth() && resource.data.get("sourceFamilyId", "") == request.auth.uid);
-      allow create: if isAuth();
-      allow update, delete: if isStaff()
-        || (isAuth() && resource.data.familyId == request.auth.uid)
-        || (isAuth() && resource.data.get("sourceFamilyId", "") == request.auth.uid);
+      // Une famille ne peut créer une réservation qu'À SON NOM (familyId == son uid).
+      // Empêche de fabriquer une réservation attribuée à une autre famille (audit P0 #3).
+      allow create: if isStaff()
+        || (isAuth() && request.resource.data.familyId == request.auth.uid);
+      // Modification/suppression réservées au staff : les familles n'annulent pas
+      // côté client, et la confirmation post-paiement passe par l'Admin SDK serveur.
+      allow update, delete: if isStaff();
     }
 
     // ── Email templates ───────────────────────────────────────────────────
