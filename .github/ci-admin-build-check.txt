@@ -1,2 +1,2 @@
 Temporary marker used to trigger the admin preview build check.
-Run: admin-cavalerie-v4
+Run: admin-communication-v5
