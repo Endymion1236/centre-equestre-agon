@@ -1,43 +1,57 @@
 "use client";
 
-import { useAuth } from "@/lib/auth-context";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  Award,
+  Calendar,
+  ChevronLeft,
+  ClipboardList,
+  ExternalLink,
+  Home,
+  Loader2,
+  LogOut,
+  MoreHorizontal,
+  Receipt,
+  Star,
+  TrendingUp,
+  Users,
+  X,
+} from "lucide-react";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import VoiceAssistant from "@/components/VoiceAssistant";
 import { ToastProvider } from "@/components/ui/Toast";
+import { useAuth } from "@/lib/auth-context";
+import { addDaysLocal, toLocalDateString } from "@/lib/date-local";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { toLocalDateString, addDaysLocal } from "@/lib/date-local";
-import {
-  Home,
-  Calendar,
-  ClipboardList,
-  Receipt,
-  Users,
-  Star,
-  MoreHorizontal,
-  ChevronLeft,
-  TrendingUp,
-  LogOut,
-  Loader2,
-  ExternalLink,
-  FlaskConical,
-  Award,
-} from "lucide-react";
 
-const navItems = [
-  { href: "/espace-cavalier/dashboard", icon: Home, label: "Tableau de bord" },
+type NavItem = {
+  href: string;
+  icon: any;
+  label: string;
+};
+
+const PRIMARY_NAV: NavItem[] = [
+  { href: "/espace-cavalier/dashboard", icon: Home, label: "Accueil" },
   { href: "/espace-cavalier/reserver", icon: Calendar, label: "Réserver" },
-  { href: "/espace-cavalier/reservations", icon: ClipboardList, label: "Mes réservations" },
-  { href: "/espace-cavalier/factures", icon: Receipt, label: "Mes factures" },
-  { href: "/espace-cavalier/profil", icon: Users, label: "Profil famille" },
-  { href: "/espace-cavalier/progression", icon: TrendingUp, label: "Progression" },
-  { href: "/espace-cavalier/badges", icon: Award, label: "Mes badges" },
-  { href: "/espace-cavalier/satisfaction", icon: Star, label: "Satisfaction" },
-  { href: "/espace-cavalier/test-protocol", icon: FlaskConical, label: "Tests" },
+  { href: "/espace-cavalier/reservations", icon: ClipboardList, label: "Mes activités" },
+  { href: "/espace-cavalier/factures", icon: Receipt, label: "Paiements" },
+  { href: "/espace-cavalier/profil", icon: Users, label: "Ma famille" },
 ];
+
+const FOLLOW_UP_NAV: NavItem[] = [
+  { href: "/espace-cavalier/progression", icon: TrendingUp, label: "Progression" },
+  { href: "/espace-cavalier/badges", icon: Award, label: "Badges" },
+];
+
+const HELP_NAV: NavItem[] = [
+  { href: "/espace-cavalier/satisfaction", icon: Star, label: "Donner mon avis" },
+];
+
+function isActivePath(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 function LoginScreen() {
   const { signInWithGoogle, signInWithFacebook, signInWithEmail, signUpWithEmail } = useAuth();
@@ -49,520 +63,318 @@ function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [magicSent, setMagicSent] = useState(false);
 
-  const handleLogin = async () => {
+  const reset = () => {
+    setEmail("");
+    setPassword("");
+    setDisplayName("");
     setError("");
-    if (!email || !password) { setError("Remplissez tous les champs."); return; }
+    setMagicSent(false);
+  };
+
+  const changeMode = (next: typeof mode) => {
+    reset();
+    setMode(next);
+  };
+
+  const login = async () => {
+    setError("");
+    if (!email || !password) {
+      setError("Remplissez tous les champs.");
+      return;
+    }
+
     setLoading(true);
     try {
       await signInWithEmail(email, password);
     } catch (err: any) {
-      if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
+      if (["auth/user-not-found", "auth/wrong-password", "auth/invalid-credential"].includes(err?.code)) {
         setError("Email ou mot de passe incorrect.");
       } else {
         setError("Erreur de connexion. Réessayez.");
       }
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   };
 
-  const handleRegister = async () => {
+  const register = async () => {
     setError("");
-    if (!displayName || !email || !password) { setError("Remplissez tous les champs."); return; }
-    if (password.length < 6) { setError("Le mot de passe doit faire au moins 6 caractères."); return; }
+    if (!displayName || !email || !password) {
+      setError("Remplissez tous les champs.");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Le mot de passe doit contenir au moins 6 caractères.");
+      return;
+    }
+
     setLoading(true);
     try {
       await signUpWithEmail(email, password, displayName);
     } catch (err: any) {
-      if (err.code === "auth/email-already-in-use") {
-        setError("Cet email est déjà utilisé. Essayez de vous connecter.");
-      } else if (err.code === "auth/weak-password") {
-        setError("Le mot de passe est trop faible (min. 6 caractères).");
-      } else if (err.code === "auth/invalid-email") {
-        setError("Adresse email invalide.");
-      } else {
-        setError("Erreur lors de la création du compte. Réessayez.");
-      }
-    } finally {
-      setLoading(false);
+      if (err?.code === "auth/email-already-in-use") setError("Cet email est déjà utilisé. Essayez de vous connecter.");
+      else if (err?.code === "auth/invalid-email") setError("Adresse email invalide.");
+      else setError("Impossible de créer le compte. Réessayez.");
     }
+    setLoading(false);
   };
 
-  const handleMagicLinkRequest = async () => {
+  const sendMagicLink = async () => {
     setError("");
     if (!email || !email.includes("@")) {
-      setError("Email invalide.");
+      setError("Adresse email invalide.");
       return;
     }
+
     setLoading(true);
     try {
-      const res = await fetch("/api/request-magic-link", {
+      const response = await fetch("/api/request-magic-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      // Reponse generique cote serveur : on affiche toujours la confirmation,
-      // que l'email existe ou non, pour ne pas servir d'oracle d'enumeration.
-      if (res.ok) {
+
+      if (response.ok) {
         setMagicSent(true);
       } else {
-        // En cas d'erreur explicite (400 = email malforme cote serveur), on affiche
-        const data = await res.json().catch(() => ({}));
-        setError(data.error || "Erreur. Reessaie dans quelques instants.");
+        const data = await response.json().catch(() => ({}));
+        setError(data.error || "Erreur. Réessayez dans quelques instants.");
       }
-    } catch (e: any) {
-      setError("Erreur reseau. Reessaie dans quelques instants.");
-    } finally {
-      setLoading(false);
+    } catch {
+      setError("Erreur réseau. Réessayez dans quelques instants.");
     }
+    setLoading(false);
   };
 
-  const resetForm = () => { setEmail(""); setPassword(""); setDisplayName(""); setError(""); setMagicSent(false); };
-
   return (
-    <div className="min-h-screen bg-cream flex items-center justify-center px-6">
-      <div className="max-w-md w-full">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-display font-bold text-xl mx-auto mb-4">
-            CE
-          </div>
-          <h1 className="font-display text-2xl font-bold text-blue-800 mb-2">
-            Espace cavalier
-          </h1>
-          <p className="font-body text-sm text-gray-500">
-            {mode === "register"
-              ? "Créez votre compte pour accéder à vos réservations et activités."
-              : "Connectez-vous pour réserver, gérer votre famille et suivre vos activités."}
+    <div className="min-h-screen bg-cream flex items-center justify-center px-5 py-8">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-7">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-display text-xl font-bold mx-auto mb-4">CE</div>
+          <h1 className="font-display text-2xl font-bold text-blue-800">Espace famille</h1>
+          <p className="font-body text-sm text-gray-600 mt-2">
+            {mode === "register" ? "Créez votre compte pour gérer les activités de vos cavaliers." : "Réservez, suivez les activités et retrouvez vos paiements au même endroit."}
           </p>
         </div>
 
-        <div className="card p-8">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 sm:p-8">
           {mode === "social" && (
             <div className="flex flex-col gap-3">
-              <button
-                onClick={signInWithGoogle}
-                className="w-full flex items-center justify-center gap-3 px-6 py-3.5 rounded-xl border border-gray-200 bg-white font-body text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all cursor-pointer"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                </svg>
+              <button type="button" onClick={signInWithGoogle} className="w-full flex items-center justify-center gap-3 px-5 py-3.5 rounded-xl border border-gray-200 bg-white font-body text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-50">
+                <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
                 Continuer avec Google
               </button>
-
-              <button
-                onClick={signInWithFacebook}
-                className="w-full flex items-center justify-center gap-3 px-6 py-3.5 rounded-xl bg-[#1877F2] font-body text-sm font-semibold text-white hover:bg-[#166FE5] transition-all cursor-pointer border-none"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
-                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                </svg>
+              <button type="button" onClick={signInWithFacebook} className="w-full flex items-center justify-center gap-3 px-5 py-3.5 rounded-xl bg-[#1877F2] font-body text-sm font-semibold text-white border-none cursor-pointer">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
                 Continuer avec Facebook
               </button>
 
-              {/* Séparateur */}
-              <div className="flex items-center gap-3 my-1">
-                <div className="flex-1 h-px bg-gray-200"></div>
-                <span className="font-body text-xs text-gray-400">ou</span>
-                <div className="flex-1 h-px bg-gray-200"></div>
+              <div className="flex items-center gap-3 my-1"><div className="flex-1 h-px bg-gray-200"/><span className="font-body text-xs text-gray-400">ou</span><div className="flex-1 h-px bg-gray-200"/></div>
+
+              <button type="button" onClick={() => changeMode("login")} className="w-full px-5 py-3.5 rounded-xl border border-gray-200 bg-white font-body text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-50">Continuer avec un email</button>
+              <button type="button" onClick={() => changeMode("magic")} className="w-full py-2 font-body text-xs text-blue-600 bg-transparent border-none cursor-pointer">Pas de mot de passe ? Recevoir un lien de connexion</button>
+              <button type="button" onClick={() => changeMode("register")} className="w-full py-2.5 font-body text-sm font-semibold text-gray-600 bg-gray-50 rounded-xl border-none cursor-pointer">Créer un compte</button>
+            </div>
+          )}
+
+          {(mode === "login" || mode === "register") && (
+            <div className="flex flex-col gap-3">
+              <div className="text-center mb-2">
+                <h2 className="font-display text-lg font-bold text-blue-800">{mode === "login" ? "Connexion" : "Créer mon compte"}</h2>
               </div>
-
-              <button
-                onClick={() => { setMode("login"); resetForm(); }}
-                className="w-full flex items-center justify-center gap-3 px-6 py-3.5 rounded-xl border border-gray-200 bg-white font-body text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all cursor-pointer"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="2" y="4" width="20" height="16" rx="2"/>
-                  <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
-                </svg>
-                Continuer avec un email
+              {mode === "register" && <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Nom et prénom" className="w-full px-4 py-3 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400"/>}
+              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Adresse email" className="w-full px-4 py-3 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400"/>
+              <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={(event) => event.key === "Enter" && (mode === "login" ? login() : register())} placeholder="Mot de passe" className="w-full px-4 py-3 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400"/>
+              {error && <p className="font-body text-xs text-red-600 text-center">{error}</p>}
+              <button type="button" disabled={loading} onClick={mode === "login" ? login : register} className="w-full px-5 py-3.5 rounded-xl bg-blue-600 font-body text-sm font-bold text-white border-none cursor-pointer disabled:opacity-50">
+                {loading ? "Chargement..." : mode === "login" ? "Se connecter" : "Créer mon compte"}
               </button>
-
-              {/* Mot de passe oublie / pas de mot de passe -> lien magique
-                  Solution recommandee pour les familles arrivees via lien
-                  d'activation initial (pas de mdp cree) : elles cliquent
-                  ici, saisissent leur email, recoivent un nouveau lien. */}
-              <button
-                onClick={() => { setMode("magic"); resetForm(); }}
-                className="w-full text-center font-body text-xs text-gray-500 hover:text-blue-600 cursor-pointer bg-transparent border-none mt-1 py-2"
-              >
-                🔑 Pas de mot de passe ? Recevoir un lien par email
-              </button>
+              {mode === "login" && <button type="button" onClick={() => changeMode("magic")} className="font-body text-xs text-blue-600 bg-transparent border-none cursor-pointer py-1">Recevoir un lien sans mot de passe</button>}
+              <button type="button" onClick={() => changeMode("social")} className="font-body text-xs text-gray-500 bg-transparent border-none cursor-pointer py-2">← Retour</button>
             </div>
           )}
 
           {mode === "magic" && (
             <div className="flex flex-col gap-3">
-              <h2 className="font-display text-lg font-bold text-blue-800 text-center mb-1">
-                Lien de connexion
-              </h2>
+              <h2 className="font-display text-lg font-bold text-blue-800 text-center">Lien de connexion</h2>
               {!magicSent ? (
                 <>
-                  <p className="font-body text-xs text-gray-500 text-center mb-2 leading-relaxed">
-                    Saisis ton email, on t'envoie un lien pour te connecter sans mot de passe.
-                  </p>
-                  <input
-                    type="email"
-                    placeholder="ton.email@exemple.fr"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && handleMagicLinkRequest()}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 font-body text-sm text-gray-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none"
-                    autoFocus
-                  />
-                  {error && <p className="font-body text-xs text-red-500 text-center">{error}</p>}
-                  <button
-                    onClick={handleMagicLinkRequest}
-                    disabled={loading}
-                    className="w-full px-6 py-3.5 rounded-xl bg-blue-600 font-body text-sm font-semibold text-white hover:bg-blue-700 transition-all cursor-pointer border-none disabled:opacity-50"
-                  >
-                    {loading ? "Envoi..." : "Recevoir mon lien"}
-                  </button>
+                  <p className="font-body text-sm text-gray-600 text-center">Saisissez votre email. Vous recevrez un lien pour vous connecter sans mot de passe.</p>
+                  <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} onKeyDown={(event) => event.key === "Enter" && sendMagicLink()} placeholder="votre.email@exemple.fr" className="w-full px-4 py-3 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400"/>
+                  {error && <p className="font-body text-xs text-red-600 text-center">{error}</p>}
+                  <button type="button" disabled={loading} onClick={sendMagicLink} className="w-full px-5 py-3.5 rounded-xl bg-blue-600 font-body text-sm font-bold text-white border-none cursor-pointer disabled:opacity-50">{loading ? "Envoi..." : "Recevoir mon lien"}</button>
                 </>
               ) : (
-                <div className="flex flex-col items-center gap-3 py-4">
-                  <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center text-3xl">
-                    ✓
-                  </div>
-                  <p className="font-body text-sm font-semibold text-gray-800 text-center">
-                    Email envoyé !
-                  </p>
-                  <p className="font-body text-xs text-gray-500 text-center leading-relaxed px-2">
-                    Si un compte existe avec cette adresse, tu vas recevoir un email
-                    dans quelques minutes avec un lien pour te connecter. Pense à
-                    vérifier tes spams.
-                  </p>
+                <div className="text-center py-4">
+                  <div className="w-14 h-14 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-2xl mx-auto mb-3">✓</div>
+                  <div className="font-body text-sm font-bold text-blue-800">Email envoyé</div>
+                  <p className="font-body text-xs text-gray-600 mt-2">Si un compte correspond à cette adresse, le lien arrivera dans quelques minutes. Pensez à vérifier les spams.</p>
                 </div>
               )}
-              <button
-                onClick={() => { setMode("social"); resetForm(); }}
-                className="font-body text-xs text-gray-400 hover:text-gray-600 cursor-pointer bg-transparent border-none mt-2"
-              >
-                ← Retour
-              </button>
+              <button type="button" onClick={() => changeMode("social")} className="font-body text-xs text-gray-500 bg-transparent border-none cursor-pointer py-2">← Retour</button>
             </div>
           )}
-
-
-          {mode === "login" && (
-            <div className="flex flex-col gap-3">
-              <h2 className="font-display text-lg font-bold text-blue-800 text-center mb-1">Connexion</h2>
-              <input
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 font-body text-sm text-gray-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none"
-                autoFocus
-              />
-              <input
-                type="password"
-                placeholder="Mot de passe"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleLogin()}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 font-body text-sm text-gray-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none"
-              />
-              {error && <p className="font-body text-xs text-red-500 text-center">{error}</p>}
-              <button
-                onClick={handleLogin}
-                disabled={loading}
-                className="w-full px-6 py-3.5 rounded-xl bg-blue-600 font-body text-sm font-semibold text-white hover:bg-blue-700 transition-all cursor-pointer border-none disabled:opacity-50"
-              >
-                {loading ? "Connexion..." : "Se connecter"}
-              </button>
-              <div className="text-center flex flex-col gap-1">
-                <button
-                  onClick={() => { setMode("magic"); resetForm(); }}
-                  className="font-body text-xs text-blue-500 hover:text-blue-700 cursor-pointer bg-transparent border-none"
-                >
-                  Mot de passe oublié ? Recevoir un lien par email
-                </button>
-                <button
-                  onClick={() => { setMode("register"); resetForm(); }}
-                  className="font-body text-xs text-blue-500 hover:text-blue-700 cursor-pointer bg-transparent border-none"
-                >
-                  Pas encore de compte ? Créer un compte
-                </button>
-              </div>
-              <button
-                onClick={() => { setMode("social"); resetForm(); }}
-                className="font-body text-xs text-gray-400 hover:text-gray-600 cursor-pointer bg-transparent border-none"
-              >
-                ← Retour
-              </button>
-            </div>
-          )}
-
-          {mode === "register" && (
-            <div className="flex flex-col gap-3">
-              <h2 className="font-display text-lg font-bold text-blue-800 text-center mb-1">Créer un compte</h2>
-              <input
-                type="text"
-                placeholder="Nom et prénom"
-                value={displayName}
-                onChange={e => setDisplayName(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 font-body text-sm text-gray-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none"
-                autoFocus
-              />
-              <input
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 font-body text-sm text-gray-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none"
-              />
-              <input
-                type="password"
-                placeholder="Mot de passe (min. 6 caractères)"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleRegister()}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 font-body text-sm text-gray-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none"
-              />
-              {error && <p className="font-body text-xs text-red-500 text-center">{error}</p>}
-              <button
-                onClick={handleRegister}
-                disabled={loading}
-                className="w-full px-6 py-3.5 rounded-xl bg-green-600 font-body text-sm font-semibold text-white hover:bg-green-700 transition-all cursor-pointer border-none disabled:opacity-50"
-              >
-                {loading ? "Création..." : "Créer mon compte"}
-              </button>
-              <div className="text-center">
-                <button
-                  onClick={() => { setMode("login"); resetForm(); }}
-                  className="font-body text-xs text-blue-500 hover:text-blue-700 cursor-pointer bg-transparent border-none"
-                >
-                  Déjà un compte ? Se connecter
-                </button>
-              </div>
-              <button
-                onClick={() => { setMode("social"); resetForm(); }}
-                className="font-body text-xs text-gray-400 hover:text-gray-600 cursor-pointer bg-transparent border-none"
-              >
-                ← Retour
-              </button>
-            </div>
-          )}
-
-          <div className="mt-6 pt-5 border-t border-blue-500/8 text-center">
-            <p className="font-body text-xs text-gray-600 leading-relaxed">
-              En vous connectant, vous acceptez nos{" "}
-              <a href="/cgv" target="_blank" rel="noopener noreferrer" className="text-blue-500 no-underline">CGV</a> et notre{" "}
-              <a href="/confidentialite" target="_blank" rel="noopener noreferrer" className="text-blue-500 no-underline">politique de confidentialité</a>.
-            </p>
-          </div>
         </div>
 
-        <div className="text-center mt-6">
-          <Link
-            href="/"
-            className="font-body text-sm text-gray-600 hover:text-blue-500 transition-colors no-underline"
-          >
-            ← Retour au site
-          </Link>
-        </div>
+        <p className="font-body text-xs text-gray-500 text-center mt-5 leading-relaxed">
+          En utilisant cet espace, vous acceptez les <Link href="/cgv" className="text-blue-600">conditions générales</Link> et la <Link href="/confidentialite" className="text-blue-600">politique de confidentialité</Link>.
+        </p>
       </div>
     </div>
   );
 }
 
-function CavalierSidebar() {
-  const { user, family, signOut } = useAuth();
-  const pathname = usePathname();
+function SidebarLink({ item, pathname }: { item: NavItem; pathname: string }) {
+  const Icon = item.icon;
+  const active = isActivePath(pathname, item.href);
 
   return (
-    <div className="w-[230px] flex-shrink-0 min-h-screen hidden md:flex flex-col"
-      style={{ background: "linear-gradient(180deg, #0C1A2E 0%, #122A5A 100%)" }}>
-
-      {/* Logo + nom centre */}
-      <div className="px-5 pt-6 pb-5 border-b border-white/10">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center font-display font-bold text-sm flex-shrink-0"
-            style={{ background: "linear-gradient(135deg, #F0A010, #F4B840)", color: "#0C1A2E" }}>
-            CE
-          </div>
-          <div>
-            <div className="font-display text-xs font-bold text-white leading-tight">Centre Équestre</div>
-            <div className="font-body text-xs text-white/50 leading-tight">Agon-Coutainville</div>
-          </div>
-        </div>
-        {/* Famille */}
-        <div className="bg-white/8 rounded-xl px-3 py-2.5">
-          <div className="font-body text-xs font-bold text-white truncate">
-            {family?.parentName || "Ma famille"}
-          </div>
-          <div className="font-body text-xs mt-0.5" style={{ color: "#F0A010" }}>
-            🐴 {family?.children?.length || 0} cavalier{(family?.children?.length || 0) > 1 ? "s" : ""}
-          </div>
-        </div>
-      </div>
-
-      {/* Nav items */}
-      <nav className="flex-1 px-3 py-4 flex flex-col gap-0.5">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const active = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-xl no-underline transition-all"
-              style={active ? {
-                background: "linear-gradient(135deg, rgba(240,160,16,0.2), rgba(244,184,64,0.1))",
-                borderLeft: "3px solid #F0A010",
-                paddingLeft: "9px",
-              } : {
-                color: "rgba(255,255,255,0.55)",
-              }}
-            >
-              <Icon size={17} color={active ? "#F0A010" : "rgba(255,255,255,0.55)"} />
-              <span className="font-body text-[13px]" style={{
-                color: active ? "#F4B840" : "rgba(255,255,255,0.55)",
-                fontWeight: active ? 600 : 400,
-              }}>
-                {item.label}
-              </span>
-            </Link>
-          );
-        })}
-      </nav>
-
-      {/* Bas : retour site + déconnexion */}
-      <div className="px-3 pb-5 border-t border-white/10 pt-4 flex flex-col gap-0.5">
-        <Link
-          href="/"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl no-underline transition-all"
-          style={{ color: "rgba(255,255,255,0.4)" }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color="rgba(255,255,255,0.8)"; (e.currentTarget as HTMLElement).style.background="rgba(255,255,255,0.06)"; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color="rgba(255,255,255,0.4)"; (e.currentTarget as HTMLElement).style.background="transparent"; }}
-        >
-          <ExternalLink size={17} />
-          <span className="font-body text-[13px]">Retour au site</span>
-        </Link>
-        <button
-          onClick={signOut}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl w-full bg-transparent border-none cursor-pointer transition-all text-left"
-          style={{ color: "rgba(255,100,100,0.6)" }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color="rgba(255,100,100,1)"; (e.currentTarget as HTMLElement).style.background="rgba(255,80,80,0.1)"; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color="rgba(255,100,100,0.6)"; (e.currentTarget as HTMLElement).style.background="transparent"; }}
-        >
-          <LogOut size={17} />
-          <span className="font-body text-[13px]">Déconnexion</span>
-        </button>
-      </div>
-    </div>
+    <Link
+      href={item.href}
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl no-underline transition-all border-l-[3px] ${
+        active ? "bg-white/10 border-gold-400 text-gold-300" : "border-transparent text-white/60 hover:text-white hover:bg-white/5"
+      }`}
+    >
+      <Icon size={18} />
+      <span className="font-body text-sm font-medium">{item.label}</span>
+    </Link>
   );
 }
 
-function EspaceCavalierLayoutInner({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+function CavalierSidebar({ pathname }: { pathname: string }) {
+  const { signOut } = useAuth();
+
+  return (
+    <aside className="hidden md:flex w-[240px] min-h-screen bg-blue-900 flex-col sticky top-0 self-start h-screen">
+      <div className="px-5 py-5 border-b border-white/10">
+        <Link href="/espace-cavalier/dashboard" className="flex items-center gap-3 no-underline">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gold-400 to-gold-500 text-blue-900 flex items-center justify-center font-display text-sm font-bold">CE</div>
+          <div>
+            <div className="font-display text-sm font-bold text-white">Centre Équestre</div>
+            <div className="font-body text-xs text-white/45">Espace famille</div>
+          </div>
+        </Link>
+      </div>
+
+      <nav className="flex-1 px-3 py-4 overflow-y-auto">
+        <div className="flex flex-col gap-1">
+          {PRIMARY_NAV.map((item) => <SidebarLink key={item.href} item={item} pathname={pathname} />)}
+        </div>
+
+        <div className="font-body text-[11px] font-bold uppercase tracking-wider text-white/30 px-3 mt-6 mb-2">Suivi des cavaliers</div>
+        <div className="flex flex-col gap-1">
+          {FOLLOW_UP_NAV.map((item) => <SidebarLink key={item.href} item={item} pathname={pathname} />)}
+        </div>
+
+        <div className="font-body text-[11px] font-bold uppercase tracking-wider text-white/30 px-3 mt-6 mb-2">Votre avis</div>
+        <div className="flex flex-col gap-1">
+          {HELP_NAV.map((item) => <SidebarLink key={item.href} item={item} pathname={pathname} />)}
+        </div>
+      </nav>
+
+      <div className="px-3 py-4 border-t border-white/10 flex flex-col gap-1">
+        <Link href="/" className="flex items-center gap-3 px-3 py-2.5 rounded-xl no-underline text-white/45 hover:text-white hover:bg-white/5">
+          <ExternalLink size={17} /> <span className="font-body text-sm">Retour au site</span>
+        </Link>
+        <button type="button" onClick={signOut} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-red-300/70 hover:text-red-200 hover:bg-red-500/10 bg-transparent border-none cursor-pointer">
+          <LogOut size={17} /> <span className="font-body text-sm">Déconnexion</span>
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+function EspaceCavalierLayoutInner({ children }: { children: React.ReactNode }) {
   const { user, loading, signOut, isAdmin, isMoniteur } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showVoice, setShowVoice] = useState(false);
-  // Bulle d'accueil de l'assistant, montrée une seule fois (1re visite).
   const [showAssistantHint, setShowAssistantHint] = useState(false);
+  const [voiceContext, setVoiceContext] = useState<Record<string, any>>({});
+
   useEffect(() => {
     try {
       if (!localStorage.getItem("ce_assistant_hint_seen")) setShowAssistantHint(true);
-    } catch { /* localStorage indisponible */ }
+    } catch {
+      // Le stockage local peut être indisponible en navigation privée.
+    }
   }, []);
-  const dismissAssistantHint = () => {
-    setShowAssistantHint(false);
-    try { localStorage.setItem("ce_assistant_hint_seen", "1"); } catch { /* ignore */ }
-  };
-  const [voiceContext, setVoiceContext] = useState<Record<string, any>>({});
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
-  // Charger le planning réel pour le chatbot famille
+  useEffect(() => {
+    setShowMoreMenu(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (user && isAdmin && !loading) router.replace("/admin/dashboard");
+    else if (user && isMoniteur && !loading) router.replace("/espace-moniteur/planning");
+  }, [user, isAdmin, isMoniteur, loading, router]);
+
   useEffect(() => {
     if (!showVoice) return;
+
     const loadContext = async () => {
       try {
         const now = new Date();
-        // Prochains 30 jours
-        const todayStr = toLocalDateString(now);
-        const in30Str = addDaysLocal(30, now);
-
-        const [creneauxSnap, activitiesSnap] = await Promise.all([
-          getDocs(query(
-            collection(db, "creneaux"),
-            where("date", ">=", todayStr),
-            where("date", "<=", in30Str),
-          )),
+        const today = toLocalDateString(now);
+        const inThirtyDays = addDaysLocal(30, now);
+        const [slotsSnapshot, activitiesSnapshot] = await Promise.all([
+          getDocs(query(collection(db, "creneaux"), where("date", ">=", today), where("date", "<=", inThirtyDays))),
           getDocs(collection(db, "activities")),
         ]);
 
-        const creneaux = creneauxSnap.docs.map(d => d.data())
-          .filter(c => c.status !== "closed")
-          .sort((a, b) => a.date.localeCompare(b.date));
+        const slots = slotsSnapshot.docs
+          .map((item) => item.data())
+          .filter((slot: any) => slot.status !== "closed")
+          .sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
 
-        // Tarifs depuis la collection activities (mis à jour en temps réel)
-        const activitiesTarifs: Record<string, string> = {};
-        activitiesSnap.docs.forEach(d => {
-          const a = d.data();
-          if (a.title && a.priceHT) {
-            const ttc = Math.round(a.priceHT * (1 + (a.tvaTaux || 5.5) / 100) * 100) / 100;
-            activitiesTarifs[a.title] = `${ttc}€${a.type === "cours" ? "/séance" : ""}`;
-          }
+        const prices: Record<string, string> = {};
+        activitiesSnapshot.docs.forEach((item) => {
+          const activity: any = item.data();
+          if (!activity.title || activity.priceHT === undefined) return;
+          const total = Math.round(activity.priceHT * (1 + (activity.tvaTaux || 5.5) / 100) * 100) / 100;
+          prices[activity.title] = `${total}€${activity.type === "cours" ? "/séance" : ""}`;
         });
 
-        // Grouper par type
-        const balades = creneaux.filter(c => c.activityType === "balade");
-        const cours   = creneaux.filter(c => c.activityType === "cours");
-        const stages  = creneaux.filter(c => c.activityType === "stage");
-        const ponyride= creneaux.filter(c => c.activityType === "ponyride");
-        const anniv   = creneaux.filter(c => c.activityType === "anniversaire");
-
-        const fmt = (c: any) => {
-          const d = new Date(c.date);
-          const dLabel = d.toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" });
-          const places = c.maxPlaces - (c.enrolled?.length || 0);
-          return `${dLabel} à ${c.startTime} — ${c.activityTitle} — ${places} place${places>1?"s":""} disponible${places>1?"s":""} [date_iso:${c.date}][type:${c.activityType}]`;
+        const formatSlot = (slot: any) => {
+          const date = new Date(`${slot.date}T12:00:00`);
+          const dateLabel = date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+          const available = Math.max(0, (slot.maxPlaces || 0) - (slot.enrolled?.length || 0));
+          return `${dateLabel} à ${slot.startTime} : ${slot.activityTitle}, ${available} place${available > 1 ? "s" : ""} disponible${available > 1 ? "s" : ""}.`;
         };
+
+        const byType = (type: string, limit: number) => slots.filter((slot: any) => slot.activityType === type).slice(0, limit).map(formatSlot);
 
         setVoiceContext({
           centre: "Centre Équestre d'Agon-Coutainville",
-          localisation: "Agon-Coutainville, Normandie (Manche)",
-          date_aujourdhui: now.toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long", year:"numeric" }),
-          prochaines_balades: balades.slice(0,8).map(fmt),
-          prochains_cours: cours.slice(0,8).map(fmt),
-          prochains_stages: stages.slice(0,5).map(fmt),
-          prochains_ponyrides: ponyride.slice(0,5).map(fmt),
-          prochains_anniversaires: anniv.slice(0,3).map(fmt),
-          total_balades_dispo: balades.filter(c => c.maxPlaces - (c.enrolled?.length||0) > 0).length,
-          total_cours_dispo: cours.filter(c => c.maxPlaces - (c.enrolled?.length||0) > 0).length,
-          tarifs: Object.keys(activitiesTarifs).length > 0
-            ? activitiesTarifs
-            : { note: "Consulter le centre pour les tarifs" },
+          date_aujourdhui: now.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
+          prochains_stages: byType("stage", 6),
+          prochaines_balades: byType("balade", 8),
+          prochains_cours: byType("cours", 8),
+          prochaines_activites_poney: byType("ponyride", 6),
+          tarifs: Object.keys(prices).length > 0 ? prices : { information: "Consultez le centre pour les tarifs." },
           infos_pratiques: {
-            inscription: "Via l'espace cavalier en ligne ou en contactant le centre",
+            inscription: "Via l'espace famille ou en contactant le centre.",
             equipement: "Casque obligatoire, fourni si besoin. Tenue adaptée recommandée.",
-            age_minimum_cours: "4 ans pour le pony ride, 6 ans pour les cours",
           },
         });
-      } catch(e) { console.error("voiceContext famille error", e); }
+      } catch (error) {
+        console.error("[assistant famille] contexte indisponible", error);
+      }
     };
+
     loadContext();
   }, [showVoice]);
 
-  // Redirection admin ou moniteur → back-office
-  useEffect(() => {
-    if (user && isAdmin && !loading) {
-      router.replace("/admin/dashboard");
-    } else if (user && isMoniteur && !loading) {
-      router.replace("/espace-moniteur/planning");
+  const dismissAssistantHint = () => {
+    setShowAssistantHint(false);
+    try {
+      localStorage.setItem("ce_assistant_hint_seen", "1");
+    } catch {
+      // Rien à faire.
     }
-  }, [user, isAdmin, isMoniteur, loading, router]);
+  };
 
-  // Loading state
-  if (loading) {
+  if (loading || (user && (isAdmin || isMoniteur))) {
     return (
       <div className="min-h-screen bg-cream flex items-center justify-center">
         <div className="text-center">
@@ -573,140 +385,74 @@ function EspaceCavalierLayoutInner({
     );
   }
 
-  // Admin ou moniteur → en cours de redirection
-  if (user && (isAdmin || isMoniteur)) {
-    return (
-      <div className="min-h-screen bg-cream flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-3" />
-          <p className="font-body text-sm text-gray-600">
-            {isAdmin ? "Redirection vers l'administration..." : "Redirection vers l'espace collaborateur..."}
-          </p>
-        </div>
-      </div>
-    );
-  }
+  if (!user) return <LoginScreen />;
 
-  // Not logged in → show login screen
-  if (!user) {
-    return <LoginScreen />;
-  }
+  const mobileNav: NavItem[] = PRIMARY_NAV.slice(0, 4);
+  const moreItems: NavItem[] = [PRIMARY_NAV[4], ...FOLLOW_UP_NAV, ...HELP_NAV];
+  const activeMore = moreItems.some((item) => isActivePath(pathname, item.href));
+  const currentPage = [...PRIMARY_NAV, ...FOLLOW_UP_NAV, ...HELP_NAV].find((item) => isActivePath(pathname, item.href));
 
-  // Mobile bottom nav items (les 5 plus importants)
-  const mobileNav = [
-    { href: "/espace-cavalier/dashboard", icon: Home, label: "Accueil" },
-    { href: "/espace-cavalier/reserver", icon: Calendar, label: "Réserver" },
-    { href: "/espace-cavalier/reservations", icon: ClipboardList, label: "Réservations" },
-    { href: "/espace-cavalier/factures", icon: Receipt, label: "Factures" },
-    { href: "/espace-cavalier/profil", icon: Users, label: "Profil" },
-  ];
-
-  // Menu "Plus" mobile — items accessibles via le drawer (état déclaré plus haut)
-  const moreItems = [
-    { href: "/espace-cavalier/progression", icon: TrendingUp, label: "Progression" },
-    { href: "/espace-cavalier/badges", icon: Award, label: "Mes badges" },
-    { href: "/espace-cavalier/satisfaction", icon: Star, label: "Satisfaction" },
-    { href: "/espace-cavalier/test-protocol", icon: FlaskConical, label: "Tests" },
-  ];
-
-  // Logged in → show dashboard layout
   return (
     <div className="min-h-screen bg-cream flex">
-      <CavalierSidebar />
-      <div className="flex-1 overflow-auto">
-        {/* Top bar */}
-        <div className="sticky top-0 z-50 bg-cream/95 backdrop-blur-xl border-b border-blue-500/8 px-4 md:px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+      <CavalierSidebar pathname={pathname} />
+
+      <div className="flex-1 min-w-0">
+        <header className="sticky top-0 z-40 bg-cream/95 backdrop-blur-xl border-b border-blue-500/10 px-4 md:px-7 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
             {pathname !== "/espace-cavalier/dashboard" && (
-              <Link href="/espace-cavalier/dashboard"
-                className="md:hidden flex items-center gap-1 font-body text-xs font-semibold text-blue-500 bg-blue-50 px-2.5 py-1.5 rounded-lg no-underline hover:bg-blue-100">
-                <ChevronLeft size={14}/> Accueil
+              <Link href="/espace-cavalier/dashboard" className="md:hidden w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center no-underline">
+                <ChevronLeft size={18} />
               </Link>
             )}
-            <Link href="/" className="no-underline hidden md:block">
-              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-display text-xs font-bold">
-                CE
-              </div>
-            </Link>
-            <span className="font-display text-sm font-bold text-blue-800 hidden md:inline">Centre Equestre</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link href="/" className="md:hidden font-body text-xs text-gray-600 no-underline flex items-center gap-1">
-              <ExternalLink size={14} /> Site
-            </Link>
-            <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center font-body text-xs font-bold text-blue-500">
-              {user.displayName?.split(" ").map(n => n[0]).join("").slice(0, 2) || "?"}
+            <div className="min-w-0">
+              <div className="font-display text-sm font-bold text-blue-800 truncate md:hidden">{currentPage?.label || "Espace famille"}</div>
+              <div className="hidden md:block font-display text-sm font-bold text-blue-800">Centre Équestre d’Agon-Coutainville</div>
             </div>
-            <button onClick={signOut}
-              className="md:hidden w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-red-400 border-none cursor-pointer hover:bg-red-100"
-              title="Déconnexion">
-              <LogOut size={14} />
-            </button>
           </div>
-        </div>
 
-        {/* Page content — padding bottom pour ne pas cacher sous la nav mobile */}
-        <div className="p-4 md:p-8 max-w-[900px] pb-24 md:pb-8">
-          {children}
-        </div>
+          <div className="flex items-center gap-2">
+            <Link href="/" className="md:hidden w-9 h-9 rounded-xl bg-white border border-gray-100 text-gray-500 flex items-center justify-center no-underline" aria-label="Retour au site"><ExternalLink size={16} /></Link>
+            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-body text-xs font-bold">
+              {user.displayName?.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "?"}
+            </div>
+            <button type="button" onClick={signOut} className="md:hidden w-9 h-9 rounded-xl bg-red-50 text-red-500 flex items-center justify-center border-none cursor-pointer" aria-label="Se déconnecter"><LogOut size={16} /></button>
+          </div>
+        </header>
+
+        <main className="p-4 md:p-8 max-w-[940px] pb-28 md:pb-10">{children}</main>
       </div>
 
-      {/* ─── Assistant vocal famille ─── */}
-      <div className="fixed bottom-20 left-4 z-[100] flex flex-col items-start gap-3 md:bottom-6">
+      <div className="fixed bottom-20 left-4 z-[70] flex flex-col items-start gap-3 md:bottom-6">
         {showVoice && (
           <div className="w-[calc(100vw-2rem)] sm:w-[380px]">
-            <VoiceAssistant
-              mode="famille"
-              voiceId="FvmvwvObRqIHojkEGh5N"
-              placeholder="Votre question..."
-              onClose={() => setShowVoice(false)}
-              context={voiceContext}
-            />
+            <VoiceAssistant mode="famille" voiceId="FvmvwvObRqIHojkEGh5N" placeholder="Votre question..." onClose={() => setShowVoice(false)} context={voiceContext} />
           </div>
         )}
+
         {showAssistantHint && !showVoice && (
-          <div className="relative w-[calc(100vw-2rem)] sm:w-[300px] bg-white rounded-2xl shadow-xl border border-gray-100 p-3.5 pr-8">
-            <button onClick={dismissAssistantHint}
-              className="absolute top-2 right-2 text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer p-0"
-              aria-label="Fermer">
-              <svg width="14" height="14" viewBox="0 0 20 20" fill="none"><path d="M4 4L16 16M16 4L4 16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>
-            </button>
-            <p className="font-body text-sm font-semibold text-blue-800 mb-0.5">Besoin d&apos;aide ? 💬</p>
-            <p className="font-body text-xs text-slate-600 leading-snug">
-              Demandez-moi les prochains stages, les horaires ou les places disponibles.
-            </p>
-            <button onClick={() => { dismissAssistantHint(); setShowVoice(true); }}
-              className="mt-2 font-body text-xs font-semibold text-green-700 bg-green-50 hover:bg-green-100 border-none rounded-lg px-2.5 py-1.5 cursor-pointer">
-              Essayer l&apos;assistant →
-            </button>
+          <div className="relative w-[calc(100vw-2rem)] sm:w-[310px] bg-white rounded-2xl shadow-xl border border-gray-100 p-4 pr-9">
+            <button type="button" onClick={dismissAssistantHint} className="absolute top-2.5 right-2.5 w-6 h-6 flex items-center justify-center text-gray-400 bg-transparent border-none cursor-pointer" aria-label="Fermer"><X size={15} /></button>
+            <div className="font-body text-sm font-bold text-blue-800">Besoin d’aide ? 💬</div>
+            <p className="font-body text-xs text-gray-600 leading-relaxed mt-1">Demandez les prochains stages, les horaires ou les places disponibles.</p>
+            <button type="button" onClick={() => { dismissAssistantHint(); setShowVoice(true); }} className="mt-3 px-3 py-2 rounded-lg font-body text-xs font-bold text-green-700 bg-green-50 border-none cursor-pointer">Essayer l’assistant</button>
           </div>
         )}
-        <button
-          onClick={() => { setShowVoice(!showVoice); if (showAssistantHint) dismissAssistantHint(); }}
-          className="w-14 h-14 rounded-full flex items-center justify-center text-white shadow-lg border-none cursor-pointer hover:scale-105 transition-transform"
-          style={{ background: "linear-gradient(135deg,#1a6b3c,#0C1A2E)" }}
-          title="Assistant IA">
-          {showVoice
-            ? <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 4L16 16M16 4L4 16" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>
-            : <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" fill="white" fillOpacity="0.25" stroke="white" strokeWidth="1.5" strokeLinejoin="round"/>
-                <path d="M10.5 10L9 13h6l-1.5-3" fill="white" fillOpacity="0.9"/>
-              </svg>
-          }
+
+        <button type="button" onClick={() => { setShowVoice((value) => !value); if (showAssistantHint) dismissAssistantHint(); }} className="w-14 h-14 rounded-full flex items-center justify-center text-white shadow-lg border-none cursor-pointer" style={{ background: "linear-gradient(135deg,#1a6b3c,#0C1A2E)" }} aria-label="Assistant IA">
+          {showVoice ? <X size={22} /> : <span className="text-xl">💬</span>}
         </button>
       </div>
 
-      {/* ─── Bottom Navigation Mobile ─── */}
-      {/* Drawer menu Plus */}
       {showMoreMenu && (
-        <div className="md:hidden fixed inset-0 z-[60]" onClick={() => setShowMoreMenu(false)}>
-          <div className="absolute bottom-16 right-2 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden" onClick={e => e.stopPropagation()}>
-            {moreItems.map(item => {
-              const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+        <div className="md:hidden fixed inset-0 z-[55] bg-black/20" onClick={() => setShowMoreMenu(false)}>
+          <div className="absolute bottom-[76px] left-3 right-3 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2" onClick={(event) => event.stopPropagation()}>
+            <div className="font-body text-xs font-bold uppercase tracking-wider text-gray-400 px-3 py-2">Plus</div>
+            {moreItems.map((item) => {
+              const Icon = item.icon;
+              const active = isActivePath(pathname, item.href);
               return (
-                <Link key={item.href} href={item.href} onClick={() => setShowMoreMenu(false)}
-                  className={`flex items-center gap-3 px-5 py-3.5 font-body text-sm border-b border-gray-50 last:border-0 no-underline ${isActive ? "text-blue-500 bg-blue-50 font-semibold" : "text-slate-700"}`}>
-                  <item.icon size={18} className={isActive ? "text-blue-500" : "text-slate-400"}/>
+                <Link key={item.href} href={item.href} onClick={() => setShowMoreMenu(false)} className={`flex items-center gap-3 px-3 py-3 rounded-xl no-underline font-body text-sm font-semibold ${active ? "bg-blue-50 text-blue-600" : "text-gray-700"}`}>
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${active ? "bg-blue-100" : "bg-gray-50"}`}><Icon size={18} /></div>
                   {item.label}
                 </Link>
               );
@@ -715,26 +461,23 @@ function EspaceCavalierLayoutInner({
         </div>
       )}
 
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 flex items-center justify-around px-2 py-2 safe-area-inset-bottom">
-        {mobileNav.map(item => {
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 px-1 pt-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom))] flex items-center justify-around">
+        {mobileNav.map((item) => {
           const Icon = item.icon;
-          const active = pathname === item.href || pathname?.startsWith(item.href + "/");
+          const active = isActivePath(pathname, item.href);
           return (
-            <Link key={item.href} href={item.href}
-              className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg no-underline transition-all min-w-[56px]
-                ${active ? "text-blue-500" : "text-gray-600"}`}>
-              <Icon size={20} strokeWidth={active ? 2 : 1.5} />
-              <span className={`font-body text-xs ${active ? "font-semibold" : "font-normal"}`}>{item.label}</span>
+            <Link key={item.href} href={item.href} className={`min-w-[58px] flex flex-col items-center gap-0.5 px-1 py-1.5 rounded-xl no-underline ${active ? "text-blue-600" : "text-gray-500"}`}>
+              <Icon size={20} strokeWidth={active ? 2.4 : 1.8} />
+              <span className={`font-body text-[11px] ${active ? "font-bold" : "font-medium"}`}>{item.label === "Mes activités" ? "Activités" : item.label}</span>
             </Link>
           );
         })}
-        {/* Bouton Plus */}
-        <button onClick={() => setShowMoreMenu(m => !m)}
-          className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg cursor-pointer border-none bg-transparent transition-colors ${showMoreMenu ? "text-blue-500" : "text-slate-400"}`}>
-          <MoreHorizontal size={22} className={showMoreMenu ? "text-blue-500" : "text-slate-400"}/>
-          <span className="font-body text-xs font-medium">Plus</span>
+
+        <button type="button" onClick={() => setShowMoreMenu((value) => !value)} className={`min-w-[58px] flex flex-col items-center gap-0.5 px-1 py-1.5 rounded-xl border-none bg-transparent cursor-pointer ${showMoreMenu || activeMore ? "text-blue-600" : "text-gray-500"}`}>
+          <MoreHorizontal size={21} strokeWidth={showMoreMenu || activeMore ? 2.4 : 1.8} />
+          <span className={`font-body text-[11px] ${showMoreMenu || activeMore ? "font-bold" : "font-medium"}`}>Plus</span>
         </button>
-      </div>
+      </nav>
     </div>
   );
 }
