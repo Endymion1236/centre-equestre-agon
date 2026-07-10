@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, createContext, useContext, useCallback } from "react";
+import { useState, createContext, useContext, useCallback } from "react";
 import { Check, AlertTriangle, X, Info } from "lucide-react";
 
 interface Toast {
@@ -16,37 +16,80 @@ const ToastContext = createContext<{
 
 export const useToast = () => useContext(ToastContext);
 
+const config = {
+  success: {
+    icon: Check,
+    title: "C’est fait",
+    iconClass: "bg-emerald-50 text-emerald-600 ring-emerald-100",
+    accentClass: "bg-emerald-500",
+  },
+  error: {
+    icon: AlertTriangle,
+    title: "Action impossible",
+    iconClass: "bg-red-50 text-red-600 ring-red-100",
+    accentClass: "bg-red-500",
+  },
+  warning: {
+    icon: AlertTriangle,
+    title: "À vérifier",
+    iconClass: "bg-orange-50 text-orange-600 ring-orange-100",
+    accentClass: "bg-orange-500",
+  },
+  info: {
+    icon: Info,
+    title: "Information",
+    iconClass: "bg-blue-50 text-blue-600 ring-blue-100",
+    accentClass: "bg-blue-500",
+  },
+};
+
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const addToast = useCallback((message: string, type: Toast["type"] = "success", duration = 4000) => {
-    const id = Date.now().toString();
-    setToasts(prev => [...prev, { id, message, type, duration }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), duration);
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setToasts((current) => [...current.slice(-3), { id, message, type, duration }]);
+    setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), duration);
   }, []);
 
-  const removeToast = (id: string) => setToasts(prev => prev.filter(t => t.id !== id));
-
-  const icons = { success: Check, error: AlertTriangle, warning: AlertTriangle, info: Info };
-  const colors = {
-    success: "bg-green-600",
-    error: "bg-red-500",
-    warning: "bg-orange-500",
-    info: "bg-blue-500",
-  };
+  const removeToast = (id: string) => setToasts((current) => current.filter((toast) => toast.id !== id));
 
   return (
     <ToastContext.Provider value={{ toast: addToast }}>
       {children}
-      {/* Toast container */}
-      <div className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
-        {toasts.map(t => {
-          const Icon = icons[t.type];
+      <div
+        className="pointer-events-none fixed inset-x-3 bottom-20 z-[9999] flex flex-col items-stretch gap-2.5 sm:inset-x-auto sm:bottom-5 sm:right-5 sm:w-[380px]"
+        aria-live="polite"
+        aria-atomic="false"
+      >
+        {toasts.map((toast) => {
+          const item = config[toast.type];
+          const Icon = item.icon;
           return (
-            <div key={t.id} data-testid={`toast-${t.type}`} className={`${colors[t.type]} text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 max-w-sm pointer-events-auto animate-slide-up`}>
-              <Icon size={18} className="flex-shrink-0" />
-              <span className="font-body text-sm flex-1">{t.message}</span>
-              <button onClick={() => removeToast(t.id)} className="text-white/60 hover:text-white bg-transparent border-none cursor-pointer p-0"><X size={14} /></button>
+            <div
+              key={toast.id}
+              data-testid={`toast-${toast.type}`}
+              role={toast.type === "error" ? "alert" : "status"}
+              className="pointer-events-auto relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white px-4 py-3.5 text-slate-700 shadow-[0_20px_55px_rgba(6,13,23,0.18)] animate-slide-up"
+            >
+              <div className={`absolute inset-y-0 left-0 w-1 ${item.accentClass}`} />
+              <div className="flex items-start gap-3 pl-1">
+                <div className={`mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ring-1 ${item.iconClass}`}>
+                  <Icon size={17} strokeWidth={2.4} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-body text-xs font-bold text-slate-900">{item.title}</div>
+                  <div className="mt-0.5 font-body text-sm leading-snug text-slate-600">{toast.message}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeToast(toast.id)}
+                  aria-label="Fermer la notification"
+                  className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border-none bg-slate-50 p-0 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                >
+                  <X size={14} />
+                </button>
+              </div>
             </div>
           );
         })}
