@@ -936,6 +936,7 @@ export default function SepaPage() {
                       </div>
                       <div className="w-28">
                         <input
+                          key={`ech-date-${ech.id}-${ech.dateEcheance}`}
                           type="date"
                           defaultValue={ech.dateEcheance}
                           onBlur={async (ev) => {
