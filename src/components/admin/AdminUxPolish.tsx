@@ -10,7 +10,9 @@
 export default function AdminUxPolish() {
   return (
     <style jsx global>{`
+      .admin-page-shell,
       [data-admin-page] {
+        width: 100%;
         min-width: 0;
       }
 
@@ -26,6 +28,10 @@ export default function AdminUxPolish() {
       [data-admin-page] h2,
       [data-admin-page] h3 {
         letter-spacing: -0.012em;
+      }
+
+      [data-admin-page] p {
+        text-wrap: pretty;
       }
 
       [data-admin-page] .card {
@@ -70,6 +76,10 @@ export default function AdminUxPolish() {
         outline-offset: 2px;
       }
 
+      [data-admin-page] button:disabled {
+        filter: saturate(0.75);
+      }
+
       [data-admin-page] table {
         width: 100%;
         border-collapse: separate;
@@ -103,20 +113,85 @@ export default function AdminUxPolish() {
       [data-admin-page] .hide-scrollbar {
         scrollbar-width: thin;
         scrollbar-color: rgba(32, 80, 160, 0.22) transparent;
+        scroll-snap-type: x proximity;
       }
 
-      [data-admin-page] .overflow-x-auto::-webkit-scrollbar {
+      [data-admin-page] .overflow-x-auto::-webkit-scrollbar,
+      [data-admin-page] .hide-scrollbar::-webkit-scrollbar {
         height: 6px;
       }
 
-      [data-admin-page] .overflow-x-auto::-webkit-scrollbar-thumb {
+      [data-admin-page] .overflow-x-auto::-webkit-scrollbar-thumb,
+      [data-admin-page] .hide-scrollbar::-webkit-scrollbar-thumb {
         background: rgba(32, 80, 160, 0.22);
         border-radius: 999px;
+      }
+
+      [data-admin-page] .overflow-x-auto > button,
+      [data-admin-page] .hide-scrollbar > button {
+        scroll-snap-align: start;
       }
 
       [data-admin-page] [class*="rounded-lg"] {
         transition-property: background-color, border-color, color, box-shadow, transform;
         transition-duration: 150ms;
+      }
+
+      /* Les gros modules historiques utilisent plusieurs barres d'onglets.
+         Cette finition les rend cohérentes sans toucher à leur logique métier. */
+      [data-admin-section="paiements"] .hide-scrollbar > button,
+      [data-admin-section="comptabilite"] .hide-scrollbar > button,
+      [data-admin-section="planning"] .hide-scrollbar > button,
+      [data-admin-section="statistiques"] .hide-scrollbar > button {
+        min-height: 40px;
+        border-radius: 12px !important;
+        padding-left: 0.85rem !important;
+        padding-right: 0.85rem !important;
+      }
+
+      [data-admin-section="planning"] .card,
+      [data-admin-section="montoir"] .card,
+      [data-admin-section="paiements"] .card,
+      [data-admin-section="comptabilite"] .card {
+        overflow: hidden;
+      }
+
+      [data-admin-section="montoir"] button,
+      [data-admin-section="planning"] button {
+        touch-action: manipulation;
+      }
+
+      [data-admin-section="pedagogie"] .card,
+      [data-admin-section="statistiques"] .card,
+      [data-admin-section="satisfaction"] .card {
+        background: rgba(255, 255, 255, 0.96);
+      }
+
+      [data-admin-page] .fixed.inset-0 > div[class*="max-w"] {
+        border-radius: 22px !important;
+        box-shadow: 0 28px 80px rgba(6, 13, 23, 0.24) !important;
+      }
+
+      /* Cavaliers et paiements sont déjà accessibles en permanence dans les
+         raccourcis principaux : on évite de les répéter dans le groupe Clients. */
+      [data-testid="admin-nav"] nav > div:last-child a[href="/admin/cavaliers"],
+      [data-testid="admin-nav"] nav > div:last-child a[href="/admin/paiements"],
+      .md\\:hidden section a[href="/admin/cavaliers"],
+      .md\\:hidden section a[href="/admin/paiements"] {
+        display: none !important;
+      }
+
+      /* Le plan de tests reste accessible par URL et depuis le manuel, mais ne
+         surcharge plus la navigation quotidienne. */
+      [data-testid="admin-nav"] a[href="/admin/tests"],
+      .md\\:hidden section a[href="/admin/tests"] {
+        display: none !important;
+      }
+
+      @media (max-width: 1023px) {
+        [data-admin-page] .fixed.inset-0 {
+          padding: 0.75rem !important;
+        }
       }
 
       @media (max-width: 767px) {
@@ -147,6 +222,22 @@ export default function AdminUxPolish() {
 
         [data-admin-page] table {
           font-size: 12px;
+        }
+
+        [data-admin-page] .fixed.inset-0 > div[class*="max-w"] {
+          width: 100% !important;
+          max-height: calc(100dvh - 1.5rem) !important;
+          border-radius: 20px !important;
+        }
+
+        [data-admin-section="paiements"] .hide-scrollbar,
+        [data-admin-section="comptabilite"] .hide-scrollbar,
+        [data-admin-section="planning"] .hide-scrollbar,
+        [data-admin-section="statistiques"] .hide-scrollbar {
+          margin-left: -0.25rem;
+          margin-right: -0.25rem;
+          padding-left: 0.25rem;
+          padding-right: 0.25rem;
         }
       }
 
