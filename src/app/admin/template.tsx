@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import AdminContextBar from "@/components/admin/AdminContextBar";
 import AdminUxPolish from "@/components/admin/AdminUxPolish";
 
 function getAdminSection(pathname: string) {
@@ -18,6 +19,7 @@ export default function AdminTemplate({ children }: { children: React.ReactNode 
       className="admin-page-shell"
     >
       <AdminUxPolish />
+      <AdminContextBar />
       {children}
     </div>
   );
