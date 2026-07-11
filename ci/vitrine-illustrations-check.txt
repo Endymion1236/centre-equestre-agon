@@ -1,0 +1,1 @@
+Validation automatique des illustrations de l’accueil.
