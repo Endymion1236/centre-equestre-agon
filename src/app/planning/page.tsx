@@ -6,6 +6,7 @@ import Link from "next/link";
 import { db } from "@/lib/firebase";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import IllustratedFeatureBand from "@/components/public/IllustratedFeatureBand";
 import { compareCreneaux } from "@/lib/creneau-sort";
 import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock, Filter, Sparkles, Users } from "lucide-react";
 
@@ -162,6 +163,22 @@ export default function PlanningPublic() {
               <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-sm"><div className="font-display text-2xl font-bold text-gold-300">{loading ? "…" : availablePlaces}</div><div className="mt-1 font-body text-xs text-white/45">places encore affichées</div></div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-sm"><div className="truncate font-display text-lg font-bold text-white">{loading ? "Chargement…" : nextAvailable?.activityTitle || "À venir"}</div><div className="mt-1 font-body text-xs text-white/45">{nextAvailable ? `${new Date(`${nextAvailable.date}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "short" })} · ${nextAvailable.startTime}` : "Consultez la semaine suivante"}</div></div>
             </div>
+          </div>
+        </section>
+
+        <section className="px-4 pt-8 sm:px-6 sm:pt-10">
+          <div className="mx-auto max-w-[1120px]">
+            <IllustratedFeatureBand
+              image="/images/vitrine/choices/balade-plage.webp"
+              alt="Une cavalière découvre le littoral à poney"
+              eyebrow="Choisir avant de réserver"
+              title="Un stage, un cours ou une balade ?"
+              text="Le planning montre les créneaux ouverts. Les fiches activités expliquent l’âge, le niveau et le contenu pour vous aider à choisir le bon groupe."
+              href="/activites"
+              cta="Comparer les activités"
+              tone="orange"
+              compact
+            />
           </div>
         </section>
 
