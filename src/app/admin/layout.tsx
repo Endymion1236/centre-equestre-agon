@@ -187,10 +187,10 @@ function NavLink({ item, pathname, nbImpayes, onClick, compact = false }: {
       className={`group flex items-center gap-3 rounded-xl no-underline transition-all ${compact ? "px-3 py-2.5" : "px-3 py-2.5"} ${
         active
           ? "bg-gold-400/20 text-gold-200 shadow-[inset_0_0_0_1px_rgba(240,160,16,0.24)]"
-          : "text-white/65 hover:text-white hover:bg-white/6"
+          : "text-white/85 hover:text-white hover:bg-white/10"
       }`}
     >
-      <Icon size={17} className={active ? "text-gold-300" : "text-white/50 group-hover:text-white/90"} />
+      <Icon size={17} className={active ? "text-gold-300" : "text-white/70 group-hover:text-white"} />
       <span className="font-body text-[13px] font-medium flex-1 truncate">{item.label}</span>
       {showBadge && (
         <span className="min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white font-body text-[10px] font-bold flex items-center justify-center">
@@ -273,11 +273,11 @@ function AdminSidebar({ nbImpayes }: { nbImpayes: number }) {
                   type="button"
                   onClick={() => toggleGroup(group.id)}
                   className={`w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 border-none cursor-pointer transition-all ${
-                    active ? "bg-white/8 text-gold-300" : "bg-transparent text-white/55 hover:text-white hover:bg-white/5"
+                    active ? "bg-white/8 text-gold-300" : "bg-transparent text-white/85 hover:text-white hover:bg-white/8"
                   }`}
                 >
                   <GroupIcon size={16} />
-                  <span className="font-body text-[12px] font-bold flex-1 text-left">{group.label}</span>
+                  <span className="font-body text-[13px] font-bold flex-1 text-left">{group.label}</span>
                   <ChevronDown size={14} className={`transition-transform ${open ? "rotate-0" : "-rotate-90"}`} />
                 </button>
                 {open && (
@@ -294,12 +294,12 @@ function AdminSidebar({ nbImpayes }: { nbImpayes: number }) {
       </nav>
 
       <div className="pt-3 mt-3 border-t border-white/10">
-        <Link href="/" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-white/55 hover:text-white hover:bg-white/5 no-underline">
+        <Link href="/" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-white/80 hover:text-white hover:bg-white/8 no-underline">
           <ExternalLink size={15} />
           <span className="font-body text-[12px]">Voir le site</span>
         </Link>
-        <div className="px-3 pt-2 font-body text-[10px] text-white/35 truncate" title={user?.email || ""}>{user?.email}</div>
-        <button type="button" onClick={signOut} className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-red-300/70 hover:text-red-200 hover:bg-red-500/10 bg-transparent border-none cursor-pointer">
+        <div className="px-3 pt-2 font-body text-[11px] text-white/55 truncate" title={user?.email || ""}>{user?.email}</div>
+        <button type="button" onClick={signOut} className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-red-300 hover:text-red-200 hover:bg-red-500/10 bg-transparent border-none cursor-pointer">
           <LogOut size={15} />
           <span className="font-body text-[12px]">Déconnexion</span>
         </button>
