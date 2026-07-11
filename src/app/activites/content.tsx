@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useVitrine } from "@/lib/use-vitrine";
-import { Badge } from "@/components/ui";
 import { EditableImage } from "@/components/ui/EditableImage";
 import {
   CATEGORY_LABELS,
@@ -12,7 +11,7 @@ import {
   type PublicActivity,
   type PublicActivityCategory,
 } from "@/lib/public-activities";
-import { ArrowRight, Check, Clock, Search, SlidersHorizontal, Sparkles, Star } from "lucide-react";
+import { ArrowRight, Check, Clock, Search, SlidersHorizontal, Sparkles } from "lucide-react";
 
 type DisplayActivity = PublicActivity & { image?: string };
 
@@ -34,43 +33,70 @@ const profileToCategory: Record<string, "all" | PublicActivityCategory> = {
   competition: "competitions",
 };
 
+const ILLUSTRATIONS = {
+  baby: "/images/vitrine/choices/baby-poney.webp",
+  stages: "/images/vitrine/choices/stages-enfants.webp",
+  progression: "/images/vitrine/choices/cavalier-regulier.webp",
+  plage: "/images/vitrine/choices/balade-plage.webp",
+  anniversaire: "/images/vitrine/choices/anniversaire-poney.webp",
+} as const;
+
 function textValue(value: unknown, fallback: string) {
   return typeof value === "string" && value.trim() ? value : fallback;
 }
 
+function illustrationFor(activity: DisplayActivity) {
+  if (activity.id === "baby" || activity.id.includes("ponyride")) return ILLUSTRATIONS.baby;
+  if (activity.id.includes("anniversaire")) return ILLUSTRATIONS.anniversaire;
+  if (activity.category === "balades") return ILLUSTRATIONS.plage;
+  if (activity.category === "cours" || activity.category === "competitions") return ILLUSTRATIONS.progression;
+  if (["or", "galop34"].includes(activity.id)) return ILLUSTRATIONS.progression;
+  return ILLUSTRATIONS.stages;
+}
+
 function ActivityCard({ activity }: { activity: DisplayActivity }) {
+  const fallbackImage = illustrationFor(activity);
+
   return (
-    <article id={activity.id} className="group scroll-mt-28 overflow-hidden rounded-[24px] border border-blue-500/[0.08] bg-white shadow-[0_10px_35px_rgba(12,26,46,0.04)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_22px_55px_rgba(12,26,46,0.1)]">
-      <div className="relative h-56 overflow-hidden sm:h-64">
+    <article id={activity.id} className="group scroll-mt-28 overflow-hidden rounded-[26px] border border-blue-500/[0.08] bg-white shadow-[0_12px_38px_rgba(12,26,46,0.05)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_24px_58px_rgba(12,26,46,0.11)]">
+      <div className="relative h-64 overflow-hidden sm:h-72">
         {activity.image ? (
-          <img src={activity.image} alt={activity.title} className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.035]" />
+          <img
+            src={activity.image}
+            alt={activity.title}
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.035]"
+          />
         ) : (
           <EditableImage
             imageKey={activity.imageKey}
-            mode="img"
+            mode="background"
             label={`Photo ${activity.title}`}
             alt={activity.title}
-            className="h-full w-full overflow-hidden"
-          >
-            <div className={`absolute inset-0 flex items-center justify-center bg-gradient-to-br ${activity.gradient}`}>
-              <Star size={68} className="text-white/22" strokeWidth={1} />
-            </div>
-          </EditableImage>
+            style={{ backgroundImage: `url('${fallbackImage}')`, backgroundPosition: "center" }}
+            className="h-full w-full overflow-hidden bg-cover transition-transform duration-700 group-hover:scale-[1.02]"
+          />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-950/5 to-transparent" />
-        <div className="absolute left-4 top-4 rounded-full border border-white/25 bg-slate-950/35 px-3 py-1.5 font-body text-[10px] font-bold uppercase tracking-[0.12em] text-white backdrop-blur-md">
+
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/78 via-slate-950/8 to-white/5" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-white/5" />
+
+        <div className="absolute left-4 top-4 rounded-full border border-white/25 bg-slate-950/42 px-3 py-1.5 font-body text-[10px] font-bold uppercase tracking-[0.12em] text-white backdrop-blur-md">
           {CATEGORY_LABELS[activity.category]}
         </div>
+
         {activity.price && (
-          <div className="absolute right-4 top-4 rounded-xl bg-white/95 px-3 py-2 font-body text-xs font-bold text-blue-800 shadow-lg backdrop-blur-md">
+          <div className="absolute right-4 top-12 rounded-xl bg-white/95 px-3 py-2 font-body text-xs font-bold text-blue-800 shadow-lg backdrop-blur-md">
             {activity.price}
           </div>
         )}
-        <div className="absolute inset-x-5 bottom-4">
-          <h2 className="font-display text-2xl font-bold leading-tight text-white [text-shadow:0_2px_20px_rgba(0,0,0,0.28)]">{activity.title}</h2>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <span className="rounded-full bg-white/14 px-2.5 py-1 font-body text-[10px] font-bold text-white backdrop-blur-md">{activity.ages}</span>
-            {activity.level && <span className="rounded-full bg-gold-400/90 px-2.5 py-1 font-body text-[10px] font-bold text-blue-950">{activity.level}</span>}
+
+        <div className="absolute inset-x-5 bottom-5">
+          <h2 className="font-display text-[28px] font-bold leading-tight text-white [text-shadow:0_2px_20px_rgba(0,0,0,0.3)]">{activity.title}</h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="rounded-full bg-white/15 px-3 py-1.5 font-body text-[10px] font-bold text-white backdrop-blur-md">{activity.ages}</span>
+            {activity.level && <span className="rounded-full bg-gold-400/92 px-3 py-1.5 font-body text-[10px] font-bold text-blue-950">{activity.level}</span>}
           </div>
         </div>
       </div>
