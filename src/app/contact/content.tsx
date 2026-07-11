@@ -2,6 +2,7 @@
 
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import IllustratedFeatureBand from "@/components/public/IllustratedFeatureBand";
 import { ContactForm } from "./form";
 import { useVitrine } from "@/lib/use-vitrine";
 import { SCHEDULE, SITE_CONFIG } from "@/lib/config";
@@ -90,6 +91,22 @@ export function ContactPageContent() {
             </div>
 
             <ContactForm />
+          </div>
+        </section>
+
+        <section className="px-5 pb-12 sm:px-6">
+          <div className="mx-auto max-w-[1120px]">
+            <IllustratedFeatureBand
+              image="/images/vitrine/choices/balade-plage.webp"
+              alt="Une cavalière se promène à poney sur la plage d'Agon-Coutainville"
+              eyebrow="Entre campagne et littoral"
+              title="Le centre est à quelques minutes des dunes et de la plage"
+              text="Profitez de votre venue pour découvrir Agon-Coutainville. Les activités extérieures sont organisées selon la météo, les marées et le niveau des cavaliers."
+              href="/planning"
+              cta="Voir les prochaines activités"
+              tone="orange"
+              compact
+            />
           </div>
         </section>
 
