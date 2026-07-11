@@ -1,109 +1,152 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Menu, X, Pencil } from "lucide-react";
-import { Button } from "@/components/ui";
+import { usePathname } from "next/navigation";
+import { ChevronDown, Gift, Menu, Pencil, UserRound, X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
-const navLinks = [
+const primaryLinks = [
   { href: "/activites", label: "Activités" },
   { href: "/planning", label: "Planning" },
-  { href: "/mini-ferme", label: "Mini-ferme" },
-  { href: "/equipe", label: "Équipe" },
-  { href: "/galerie", label: "Galerie" },
   { href: "/tarifs", label: "Tarifs" },
-  { href: "/offrir-un-bon", label: "Bon cadeau" },
-  { href: "/contact", label: "Contact" },
 ];
+
+const clubLinks = [
+  { href: "/equipe", label: "Équipe & poneys", description: "Les humains et la cavalerie" },
+  { href: "/mini-ferme", label: "Mini-ferme", description: "Les animaux du centre" },
+  { href: "/galerie", label: "Galerie", description: "La vie du club en images" },
+];
+
+function isActive(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const pathname = usePathname();
   const { isAdmin, signInWithGoogle, signOut } = useAuth();
 
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 50);
-    window.addEventListener("scroll", handleScroll);
+    const handleScroll = () => setScrolled(window.scrollY > 36);
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  return (
-    <nav className={`fixed top-0 left-0 right-0 z-[200] transition-all duration-400 ${
-      scrolled ? "bg-cream/95 backdrop-blur-xl border-b border-blue-500/8 py-2"
-               : "bg-blue-800/30 backdrop-blur-md border-b border-white/6 py-3"}`}>
-      <div className="max-w-[1180px] mx-auto px-6 flex items-center justify-between">
+  useEffect(() => setMobileOpen(false), [pathname]);
 
-        {/* Logo */}
-        <Link href="/accueil" className="flex items-center gap-3 no-underline">
-          <img src="/images/logo-ce-agon.png" alt="Centre Équestre Agon" className="w-11 h-11 rounded-xl object-contain" />
-          <div>
-            <div className={`font-display font-bold text-[15px] leading-tight transition-colors duration-400 ${scrolled ? "text-blue-800" : "text-white"}`}>
-              Centre Equestre
+  const light = scrolled || mobileOpen;
+  const linkClass = (active = false) => `relative rounded-lg px-1 py-2 font-body text-sm font-semibold no-underline transition-colors ${
+    light
+      ? active ? "text-blue-700" : "text-slate-600 hover:text-blue-700"
+      : active ? "text-white" : "text-white/78 hover:text-white"
+  }`;
+
+  return (
+    <nav className={`fixed inset-x-0 top-0 z-[200] transition-all duration-300 ${
+      light
+        ? "border-b border-blue-500/[0.07] bg-cream/95 py-2 shadow-[0_8px_30px_rgba(12,26,46,0.05)] backdrop-blur-xl"
+        : "border-b border-white/[0.06] bg-blue-950/20 py-3 backdrop-blur-md"
+    }`}>
+      <div className="mx-auto flex max-w-[1220px] items-center justify-between gap-5 px-5 sm:px-6">
+        <Link href="/accueil" className="flex min-w-0 items-center gap-3 no-underline">
+          <img src="/images/logo-ce-agon.png" alt="Centre Équestre d’Agon-Coutainville" className="h-11 w-11 flex-shrink-0 rounded-xl object-contain" />
+          <div className="min-w-0">
+            <div className={`truncate font-display text-[15px] font-bold leading-tight transition-colors ${light ? "text-blue-950" : "text-white"}`}>
+              Centre Équestre
             </div>
-            <div className={`font-body text-[11px] uppercase tracking-widest font-medium transition-colors duration-400 ${scrolled ? "text-gray-400" : "text-white/70"}`}>
+            <div className={`truncate font-body text-[10px] font-semibold uppercase tracking-[0.16em] transition-colors ${light ? "text-slate-400" : "text-white/58"}`}>
               Agon-Coutainville
             </div>
           </div>
         </Link>
 
-        {/* Desktop nav */}
-        <div className="hidden md:flex items-center gap-7">
-          {navLinks.map((link) => (
-            <Link key={link.href} href={link.href}
-              className={`font-body text-sm font-medium no-underline transition-colors duration-300 ${
-                scrolled ? "text-gray-500 hover:text-blue-500" : "text-white/80 hover:text-white"}`}>
+        <div className="hidden items-center gap-5 lg:flex">
+          {primaryLinks.map((link) => (
+            <Link key={link.href} href={link.href} className={linkClass(isActive(pathname, link.href))}>
               {link.label}
+              {isActive(pathname, link.href) && <span className="absolute inset-x-1 -bottom-0.5 h-0.5 rounded-full bg-gold-400" />}
             </Link>
           ))}
 
-          {/* Bouton admin — mode édition */}
+          <div className="group relative">
+            <button type="button" className={`${linkClass(clubLinks.some((link) => isActive(pathname, link.href)))} flex items-center gap-1 border-none bg-transparent cursor-pointer`}>
+              Le club <ChevronDown size={14} className="transition-transform group-hover:rotate-180" />
+            </button>
+            <div className="invisible absolute left-1/2 top-full w-[290px] -translate-x-1/2 translate-y-2 pt-3 opacity-0 transition-all duration-200 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100">
+              <div className="rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_22px_55px_rgba(12,26,46,0.16)]">
+                {clubLinks.map((link) => (
+                  <Link key={link.href} href={link.href} className="block rounded-xl px-4 py-3 no-underline transition-colors hover:bg-blue-50">
+                    <div className="font-body text-sm font-bold text-blue-950">{link.label}</div>
+                    <div className="mt-0.5 font-body text-xs text-slate-400">{link.description}</div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <Link href="/contact" className={linkClass(isActive(pathname, "/contact"))}>Contact</Link>
+
+          <Link href="/offrir-un-bon" className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 font-body text-xs font-bold no-underline transition-all hover:-translate-y-0.5 ${
+            light ? "border-gold-200 bg-gold-50 text-gold-700" : "border-white/15 bg-white/8 text-white"
+          }`}>
+            <Gift size={14} /> Offrir
+          </Link>
+
+          <Link href="/espace-cavalier/reserver" className="rounded-xl bg-gold-400 px-4 py-2.5 font-body text-sm font-bold text-blue-950 no-underline shadow-[0_8px_22px_rgba(240,160,16,0.22)] transition-all hover:-translate-y-0.5 hover:bg-gold-300">
+            Réserver
+          </Link>
+
           {isAdmin ? (
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 bg-gold-400/20 border border-gold-400/50 px-3 py-1.5 rounded-lg">
-                <Pencil size={11} className="text-gold-400" />
-                <span className="font-body text-xs font-semibold text-gold-400">Mode édition</span>
+              <div className="flex items-center gap-1.5 rounded-lg border border-gold-300/35 bg-gold-400/12 px-2.5 py-1.5">
+                <Pencil size={11} className="text-gold-500" />
+                <span className="font-body text-[10px] font-bold text-gold-600">Édition</span>
               </div>
-              <button onClick={signOut}
-                className="font-body text-xs text-gray-400 hover:text-red-400 bg-transparent border-none cursor-pointer transition-colors">
-                Quitter
-              </button>
+              <button onClick={signOut} className="border-none bg-transparent font-body text-[10px] text-slate-400 cursor-pointer hover:text-red-500">Quitter</button>
             </div>
           ) : (
-            /* Point discret — clic pour connexion admin */
-            <button onClick={signInWithGoogle}
-              className={`font-body text-lg bg-transparent border-none cursor-pointer transition-colors ${
-                scrolled ? "text-gray-200 hover:text-gray-400" : "text-white/20 hover:text-white/50"}`}
-              title="Connexion admin">
-              ·
+            <button onClick={signInWithGoogle} className={`border-none bg-transparent p-1 cursor-pointer transition-colors ${light ? "text-slate-300 hover:text-slate-500" : "text-white/18 hover:text-white/45"}`} title="Connexion admin" aria-label="Connexion admin">
+              <UserRound size={15} />
             </button>
           )}
-
-          <Link href="/espace-cavalier/reserver">
-            <Button variant="primary" size="sm">Réserver</Button>
-          </Link>
         </div>
 
-        {/* Mobile menu button */}
-        <button className={`md:hidden p-2 transition-colors ${scrolled ? "text-blue-800" : "text-white"}`}
-          onClick={() => setMobileOpen(!mobileOpen)}>
-          {mobileOpen ? <X size={24} /> : <Menu size={24} />}
+        <button type="button" className={`flex h-10 w-10 items-center justify-center rounded-xl border transition-colors lg:hidden ${
+          light ? "border-blue-100 bg-white text-blue-950" : "border-white/12 bg-white/8 text-white"
+        }`} onClick={() => setMobileOpen((open) => !open)} aria-expanded={mobileOpen} aria-label={mobileOpen ? "Fermer le menu" : "Ouvrir le menu"}>
+          {mobileOpen ? <X size={22} /> : <Menu size={22} />}
         </button>
       </div>
 
-      {/* Mobile menu */}
       {mobileOpen && (
-        <div className="md:hidden absolute top-full left-0 right-0 bg-white shadow-2xl p-6 flex flex-col gap-1">
-          {navLinks.map((link) => (
-            <Link key={link.href} href={link.href}
-              className="font-body text-base font-medium text-blue-800 no-underline py-3 border-b border-gray-100"
-              onClick={() => setMobileOpen(false)}>
-              {link.label}
-            </Link>
-          ))}
-          <Link href="/espace-cavalier/reserver" onClick={() => setMobileOpen(false)}>
-            <Button variant="primary" full className="mt-4">Réserver en ligne</Button>
-          </Link>
+        <div className="absolute inset-x-0 top-full max-h-[calc(100svh-68px)] overflow-y-auto border-t border-slate-100 bg-white px-5 pb-6 pt-4 shadow-[0_25px_55px_rgba(12,26,46,0.18)] lg:hidden">
+          <div className="mx-auto max-w-xl">
+            <div className="grid grid-cols-2 gap-2">
+              {primaryLinks.map((link) => (
+                <Link key={link.href} href={link.href} className={`rounded-xl px-4 py-3 font-body text-sm font-bold no-underline ${isActive(pathname, link.href) ? "bg-blue-50 text-blue-700" : "bg-slate-50 text-blue-950"}`}>
+                  {link.label}
+                </Link>
+              ))}
+              <Link href="/contact" className={`rounded-xl px-4 py-3 font-body text-sm font-bold no-underline ${isActive(pathname, "/contact") ? "bg-blue-50 text-blue-700" : "bg-slate-50 text-blue-950"}`}>Contact</Link>
+            </div>
+
+            <div className="my-5 border-t border-slate-100 pt-5">
+              <div className="mb-2 font-body text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Découvrir le club</div>
+              {clubLinks.map((link) => (
+                <Link key={link.href} href={link.href} className="flex items-center justify-between border-b border-slate-100 py-3 font-body text-sm font-semibold text-blue-950 no-underline last:border-b-0">
+                  {link.label}<span className="text-slate-300">→</span>
+                </Link>
+              ))}
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Link href="/offrir-un-bon" className="inline-flex items-center justify-center gap-2 rounded-xl border border-gold-200 bg-gold-50 px-5 py-3.5 font-body text-sm font-bold text-gold-700 no-underline"><Gift size={16} /> Offrir un bon</Link>
+              <Link href="/espace-cavalier/reserver" className="rounded-xl bg-blue-700 px-5 py-3.5 text-center font-body text-sm font-bold text-white no-underline shadow-lg">Réserver en ligne</Link>
+            </div>
+          </div>
         </div>
       )}
     </nav>
