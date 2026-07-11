@@ -1,0 +1,1 @@
+Validation du catalogue public et des pages détaillées d’activité.
