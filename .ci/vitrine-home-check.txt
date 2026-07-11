@@ -1,0 +1,1 @@
+Validation du lot accueil, navigation et footer de la vitrine.
