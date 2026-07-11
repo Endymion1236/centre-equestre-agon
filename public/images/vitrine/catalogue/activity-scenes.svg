@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <linearGradient id="skyGold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff4cf"/><stop offset="1" stop-color="#f7b24d"/></linearGradient>
+    <linearGradient id="skyBlue" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#dff2ff"/><stop offset="1" stop-color="#7ec8e8"/></linearGradient>
+    <linearGradient id="skyPink" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffe7ee"/><stop offset="1" stop-color="#f6a3bd"/></linearGradient>
+    <linearGradient id="skyGreen" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e9f7d8"/><stop offset="1" stop-color="#8ecb72"/></linearGradient>
+    <linearGradient id="sunset" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffdd9a"/><stop offset="0.55" stop-color="#f09b69"/><stop offset="1" stop-color="#576b9c"/></linearGradient>
+    <symbol id="pony" viewBox="0 0 220 150">
+      <ellipse cx="98" cy="82" rx="64" ry="34" fill="#9b5f38"/>
+      <path d="M143 67 Q174 40 188 52 L178 88 Q161 96 144 82Z" fill="#a86c40"/>
+      <path d="M173 50 l7-20 10 22M156 53 l-2-18 13 14" fill="#754327"/>
+      <circle cx="176" cy="61" r="3.8" fill="#15243c"/>
+      <path d="M34 75 Q8 55 16 39 Q30 55 49 60" fill="none" stroke="#754327" stroke-width="11" stroke-linecap="round"/>
+      <path d="M58 106 v34M92 110 v32M126 109 v33M154 101 v39" stroke="#754327" stroke-width="12" stroke-linecap="round"/>
+      <path d="M76 53 Q90 31 116 34 Q139 34 151 56" fill="#6d3a21" opacity=".9"/>
+      <path d="M154 70 Q167 61 184 69" fill="none" stroke="#f6d3ad" stroke-width="4"/>
+    </symbol>
+    <symbol id="rider" viewBox="0 0 110 130">
+      <circle cx="55" cy="25" r="15" fill="#f0c6a5"/>
+      <path d="M38 22 Q55 3 72 22 L69 29 H41Z" fill="#14294b"/>
+      <path d="M39 43 Q55 34 71 43 L76 88 H34Z" fill="#1e4e86"/>
+      <path d="M43 87 L30 124M67 87 L82 124" stroke="#26344b" stroke-width="9" stroke-linecap="round"/>
+      <path d="M39 55 L12 81M70 55 L96 77" stroke="#f0c6a5" stroke-width="7" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="cloud" viewBox="0 0 160 70"><path d="M25 56h104c15 0 24-8 24-20 0-13-10-22-23-22-5 0-9 1-13 4C110 7 99 2 87 2 68 2 53 14 49 31c-5-4-11-6-18-6-14 0-25 9-25 22 0 6 7 9 19 9Z" fill="#fff" opacity=".72"/></symbol>
+    <style>.line{fill:none;stroke:#fff;stroke-width:6;stroke-linecap:round;stroke-linejoin:round}.thin{fill:none;stroke:#18355f;stroke-width:5;stroke-linecap:round;stroke-linejoin:round}</style>
+  </defs>
+
+  <!-- 1 baby discovery -->
+  <g transform="translate(0 0)"><rect width="400" height="300" fill="url(#skyPink)"/><circle cx="335" cy="55" r="34" fill="#fff3b8"/><path d="M0 225 Q110 185 220 218 T400 210V300H0Z" fill="#77b66d"/><use href="#pony" x="155" y="104" width="210" height="145"/><circle cx="113" cy="128" r="19" fill="#f0c6a5"/><path d="M86 153 Q113 133 140 153 L148 222 H77Z" fill="#fff"/><path d="M134 168 Q165 159 187 143" class="thin"/><path d="M66 72 C83 51 107 58 113 78 C120 58 145 52 159 73 C160 98 134 112 113 128 C92 111 65 98 66 72Z" fill="#fff" opacity=".85"/></g>
+
+  <!-- 2 stage duo -->
+  <g transform="translate(400 0)"><rect width="400" height="300" fill="url(#skyGreen)"/><use href="#cloud" x="18" y="25" width="130" height="58"/><path d="M0 210 Q92 167 204 205 T400 188V300H0Z" fill="#5e9b57"/><path d="M0 239 H400" stroke="#f6e6c8" stroke-width="12"/><use href="#pony" x="28" y="113" width="190" height="130"/><use href="#rider" x="91" y="69" width="76" height="95"/><use href="#pony" x="194" y="111" width="185" height="128"/><use href="#rider" x="252" y="67" width="74" height="94"/><circle cx="190" cy="50" r="24" fill="#ffd36f"/></g>
+
+  <!-- 3 jump -->
+  <g transform="translate(800 0)"><rect width="400" height="300" fill="url(#skyBlue)"/><use href="#cloud" x="35" y="24" width="130" height="58"/><path d="M0 224 Q100 190 202 218 T400 202V300H0Z" fill="#73aa65"/><g transform="translate(108 82) rotate(-7 110 75)"><use href="#pony" width="220" height="150"/><use href="#rider" x="72" y="-35" width="82" height="102"/></g><path d="M58 206V274M338 206V274M58 224H338" stroke="#f8f8f2" stroke-width="12"/><path d="M76 224H320" stroke="#28599b" stroke-width="7" stroke-dasharray="28 18"/></g>
+
+  <!-- 4 sunset beach -->
+  <g transform="translate(1200 0)"><rect width="400" height="300" fill="url(#sunset)"/><circle cx="310" cy="77" r="39" fill="#ffe39b"/><path d="M0 185 Q70 168 141 184 T280 182 T400 177V300H0Z" fill="#5d95b7"/><path d="M0 214 Q90 197 184 216 T400 204" class="line" opacity=".72"/><path d="M0 252 Q83 232 168 250 T400 239" class="line" opacity=".55"/><use href="#pony" x="89" y="109" width="230" height="158"/><use href="#rider" x="166" y="62" width="86" height="108"/></g>
+
+  <!-- 5 birthday -->
+  <g transform="translate(0 300)"><rect width="400" height="300" fill="#fff3df"/><path d="M0 45 L400 45" stroke="#e49a3d" stroke-width="5"/><path d="M0 45 l42 42 42-42 42 42 42-42 42 42 42-42 42 42 42-42 42 42 42-42" fill="#f6b4c7" opacity=".9"/><path d="M0 225 Q88 194 192 222 T400 204V300H0Z" fill="#8fc576"/><use href="#pony" x="120" y="101" width="220" height="150"/><circle cx="92" cy="91" r="24" fill="#f17c8f"/><circle cx="58" cy="70" r="22" fill="#f2b544"/><circle cx="120" cy="61" r="20" fill="#6db7dd"/><path d="M92 115l32 92M58 92l56 112M120 80l12 119" stroke="#8f6f58" stroke-width="3"/><circle cx="67" cy="198" r="18" fill="#f0c6a5"/><path d="M43 218 Q67 201 91 218 L98 276H36Z" fill="#f7a9bd"/></g>
+
+  <!-- 6 pony games -->
+  <g transform="translate(400 300)"><rect width="400" height="300" fill="#fff0d5"/><path d="M0 222 Q110 186 220 219 T400 202V300H0Z" fill="#79ad65"/><use href="#pony" x="50" y="107" width="220" height="150"/><use href="#rider" x="122" y="63" width="82" height="104"/><rect x="305" y="106" width="16" height="145" rx="8" fill="#e86448"/><circle cx="313" cy="95" r="25" fill="#f2b544"/><rect x="265" y="225" width="93" height="30" rx="7" fill="#27558f"/><path d="M244 102 Q284 88 307 95" class="thin"/></g>
+
+  <!-- 7 dressage -->
+  <g transform="translate(800 300)"><rect width="400" height="300" fill="#e9f1ff"/><path d="M0 226 Q100 204 202 224 T400 207V300H0Z" fill="#9ac07a"/><path d="M22 239H378M46 214v62M354 214v62" stroke="#fff" stroke-width="8"/><use href="#pony" x="91" y="105" width="225" height="154"/><use href="#rider" x="166" y="57" width="84" height="106"/><circle cx="54" cy="72" r="25" fill="#fff"/><path d="M54 54v36M42 72h24" stroke="#315b91" stroke-width="5"/><circle cx="347" cy="67" r="25" fill="#fff"/><path d="M332 67h30" stroke="#315b91" stroke-width="5"/></g>
+
+  <!-- 8 beach lesson -->
+  <g transform="translate(1200 300)"><rect width="400" height="300" fill="url(#skyBlue)"/><circle cx="72" cy="56" r="28" fill="#ffd77b"/><path d="M0 190 Q80 170 160 190 T320 188 T400 183V300H0Z" fill="#7db6d2"/><path d="M0 227 Q96 209 191 228 T400 217" class="line" opacity=".6"/><use href="#pony" x="28" y="121" width="190" height="130"/><use href="#rider" x="92" y="81" width="70" height="89"/><use href="#pony" x="203" y="118" width="180" height="126"/><use href="#rider" x="258" y="79" width="69" height="88"/></g>
+
+  <!-- 9 competition -->
+  <g transform="translate(0 600)"><rect width="400" height="300" fill="#e8eef8"/><path d="M0 72 Q100 25 200 72 T400 72V152H0Z" fill="#aebad0"/><circle cx="49" cy="86" r="10" fill="#344966"/><circle cx="86" cy="72" r="10" fill="#344966"/><circle cx="124" cy="90" r="10" fill="#344966"/><circle cx="306" cy="76" r="10" fill="#344966"/><circle cx="345" cy="90" r="10" fill="#344966"/><path d="M0 220 Q100 198 202 220 T400 205V300H0Z" fill="#78a567"/><use href="#pony" x="72" y="101" width="240" height="164"/><use href="#rider" x="152" y="49" width="90" height="112"/><path d="M322 78 h42 v48 h-42z" fill="#f4c148"/><path d="M322 87 h-20 q0 30 20 30M364 87h20q0 30-20 30" class="thin"/><path d="M343 126v33M324 159h38" class="thin"/></g>
+
+  <!-- 10 voltige -->
+  <g transform="translate(400 600)"><rect width="400" height="300" fill="#f4e9ff"/><path d="M0 224 Q104 190 205 219 T400 202V300H0Z" fill="#8dbb75"/><use href="#pony" x="88" y="123" width="235" height="160"/><circle cx="198" cy="61" r="16" fill="#f0c6a5"/><path d="M185 76 Q198 68 211 76 L219 126H178Z" fill="#293d68"/><path d="M183 87 L127 50M212 87 L270 49" stroke="#f0c6a5" stroke-width="8" stroke-linecap="round"/><path d="M183 119 L138 156M213 119 L262 154" stroke="#293d68" stroke-width="9" stroke-linecap="round"/><circle cx="334" cy="64" r="22" fill="#fff" opacity=".75"/><path d="M334 45l6 14 15 1-12 10 4 15-13-8-13 8 4-15-12-10 15-1Z" fill="#f2b544"/></g>
+
+  <!-- 11 beach group -->
+  <g transform="translate(800 600)"><rect width="400" height="300" fill="url(#sunset)"/><circle cx="67" cy="67" r="34" fill="#ffe29b"/><path d="M0 190 Q78 173 160 190 T320 187 T400 182V300H0Z" fill="#6c9ebe"/><path d="M0 232 Q95 212 190 231 T400 220" class="line" opacity=".62"/><use href="#pony" x="20" y="129" width="145" height="102"/><use href="#rider" x="67" y="95" width="55" height="69"/><use href="#pony" x="126" y="113" width="175" height="120"/><use href="#rider" x="183" y="76" width="66" height="83"/><use href="#pony" x="265" y="129" width="135" height="94"/><use href="#rider" x="307" y="98" width="51" height="64"/></g>
+
+  <!-- 12 private trail -->
+  <g transform="translate(1200 600)"><rect width="400" height="300" fill="url(#skyGold)"/><use href="#cloud" x="26" y="28" width="128" height="56"/><path d="M0 190 Q80 129 165 180 T330 170 T400 154V300H0Z" fill="#729a60"/><path d="M0 234 Q116 191 220 239 T400 214V300H0Z" fill="#9cc87e"/><path d="M109 300 Q141 230 190 196 Q232 168 283 145" fill="none" stroke="#f1d39d" stroke-width="33" stroke-linecap="round"/><use href="#pony" x="148" y="112" width="210" height="144"/><use href="#rider" x="218" y="68" width="78" height="98"/><path d="M49 128v102M36 145h26M37 178h24" stroke="#6d5037" stroke-width="9"/><circle cx="49" cy="112" r="33" fill="#4f7f4b"/></g>
+</svg>
