@@ -1,0 +1,1 @@
+Validation du planning public, du formulaire de contact et de la page équipe.
