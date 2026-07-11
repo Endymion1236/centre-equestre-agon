@@ -1,120 +1,98 @@
 "use client";
-import { useVitrine } from "@/lib/use-vitrine";
-import { BadgeEuro } from "lucide-react";
-import { SectionHeader } from "@/components/ui";
 
-function PriceCard({ title, subtitle, price, unit, features, highlight }: {
-  title: string; subtitle?: string; price: string; unit?: string;
-  features?: string[]; highlight?: boolean;
-}) {
+import Link from "next/link";
+import { useVitrine } from "@/lib/use-vitrine";
+import { ArrowRight, CalendarDays, Check, CreditCard, Gift, Trophy, Waves } from "lucide-react";
+
+function StageCard({ title, subtitle, price, features, highlight = false }: { title: string; subtitle: string; price: string; features: string[]; highlight?: boolean }) {
   return (
-    <div className={`rounded-2xl p-6 flex flex-col gap-3 ${highlight ? "bg-blue-800 text-white shadow-xl scale-105" : "bg-white border border-blue-500/8"}`}>
-      <div className={`font-display text-lg font-bold ${highlight ? "text-white" : "text-blue-800"}`}>{title}</div>
-      {subtitle && <div className={`font-body text-xs ${highlight ? "text-white/60" : "text-gray-400"}`}>{subtitle}</div>}
-      <div className="flex items-end gap-1 mt-1">
-        <span className={`font-display text-3xl font-bold ${highlight ? "text-gold-300" : "text-blue-500"}`}>{price}</span>
-        {unit && <span className={`font-body text-sm mb-1 ${highlight ? "text-white/60" : "text-gray-400"}`}>{unit}</span>}
+    <article className={`relative flex h-full flex-col overflow-hidden rounded-[24px] border p-6 transition-all hover:-translate-y-1 ${highlight ? "border-blue-700 bg-[linear-gradient(145deg,#07111f,#12346b)] text-white shadow-[0_22px_55px_rgba(12,26,46,0.16)]" : "border-blue-500/[0.08] bg-white shadow-[0_12px_38px_rgba(12,26,46,0.04)]"}`}>
+      {highlight && <div className="absolute right-4 top-4 rounded-full bg-gold-400 px-3 py-1 font-body text-[9px] font-bold uppercase tracking-wide text-blue-950">Le plus choisi</div>}
+      <div className={`font-body text-[10px] font-bold uppercase tracking-[0.15em] ${highlight ? "text-gold-300" : "text-gold-600"}`}>{subtitle}</div>
+      <h3 className={`mt-3 font-display text-2xl font-bold ${highlight ? "text-white" : "text-blue-950"}`}>{title}</h3>
+      <div className="mt-5 flex items-end gap-2"><span className={`font-display text-4xl font-bold ${highlight ? "text-white" : "text-blue-700"}`}>{price}€</span><span className={`mb-1 font-body text-xs ${highlight ? "text-white/45" : "text-slate-400"}`}>/ semaine</span></div>
+      <div className="mt-6 flex-1 space-y-3">
+        {features.map((feature) => <div key={feature} className={`flex items-start gap-2.5 font-body text-sm leading-relaxed ${highlight ? "text-white/68" : "text-slate-500"}`}><span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full ${highlight ? "bg-white/10 text-gold-300" : "bg-emerald-50 text-emerald-600"}`}><Check size={11} strokeWidth={3} /></span>{feature}</div>)}
       </div>
-      {features && (
-        <ul className="flex flex-col gap-1.5 mt-2">
-          {features.map((f, i) => (
-            <li key={i} className={`font-body text-xs flex items-center gap-2 ${highlight ? "text-white/80" : "text-gray-500"}`}>
-              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${highlight ? "bg-gold-300" : "bg-blue-400"}`} />{f}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+      <Link href="/espace-cavalier/reserver" className={`mt-7 rounded-xl px-5 py-3.5 text-center font-body text-sm font-bold no-underline transition-transform hover:-translate-y-0.5 ${highlight ? "bg-gold-400 text-blue-950" : "bg-blue-700 text-white"}`}>Voir les places</Link>
+    </article>
   );
 }
 
 export function TarifsContent() {
   const { vitrine } = useVitrine();
-  const t = vitrine.tarifs;
-  const s = t.stages as any;
+  const tariffs = vitrine.tarifs;
+  const stages = tariffs.stages as { baby_poney: number | string; galop_bronze_argent: number | string; galop_or: number | string };
+  const annualCourses = ((tariffs as any).cours_annuels || []) as Array<{ label: string; level?: string; freq?: string; price: number | string }>;
 
   return (
     <>
-      {/* Stages */}
-      <section className="py-16 px-6 max-w-[1100px] mx-auto">
-        <SectionHeader tag="Stages vacances" title="Tarifs des stages"
-          subtitle="Du lundi au vendredi, 2h par jour. Tarifs identiques toutes périodes." />
-        <div className="flex flex-wrap gap-5 justify-center">
-          <PriceCard title="Baby Poney" subtitle="3 – 5 ans" price={`${s.baby_poney}€`} unit="/ semaine"
-            features={["10h de stage (2h/jour)", "Max 6 enfants", "Thèmes imaginaires", "Encadrement BPJEPS"]} />
-          <PriceCard title="Galop Bronze / Argent" subtitle="6 – 10 ans" price={`${s.galop_bronze_argent}€`} unit="/ semaine" highlight
-            features={["10h de stage (2h/jour)", "Semaines thématiques", "Soins aux poneys inclus", "Passage galops possible", "Goûter inclus"]} />
-          <PriceCard title="Galop d'Or / G3-4" subtitle="8+ ans" price={`${s.galop_or}€`} unit="/ semaine"
-            features={["10h de stage (2h/jour)", "Multi-disciplines", "CSO, dressage, cross", "Préparation galops FFE"]} />
+      <section className="bg-cream px-6 py-16 sm:py-20">
+        <div className="mx-auto max-w-[1120px]">
+          <div className="mb-10 text-center"><div className="font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">Stages vacances</div><h2 className="mt-3 font-display text-3xl font-bold text-blue-950 sm:text-4xl">Une semaine complète à poney</h2><p className="mx-auto mt-4 max-w-2xl font-body text-base leading-relaxed text-slate-500">Les groupes sont organisés par âge et niveau. La réservation affiche les dates et horaires réellement disponibles.</p></div>
+          <div className="grid gap-5 lg:grid-cols-3">
+            <StageCard title="Baby Poney" subtitle="3 – 5 ans" price={String(stages.baby_poney)} features={["10h de stage", "Petits groupes", "Thèmes imaginaires", "Mini-ferme et soins"]} />
+            <StageCard title="Galop Bronze / Argent" subtitle="6 – 10 ans" price={String(stages.galop_bronze_argent)} features={["10h de stage", "Semaines thématiques", "Jeux et progression", "Soins aux poneys", "Passage de galop possible"]} highlight />
+            <StageCard title="Galop d’Or / G3-4" subtitle="Cavaliers réguliers" price={String(stages.galop_or)} features={["10h de stage", "Multi-disciplines", "CSO, dressage, cross", "Objectifs techniques"]} />
+          </div>
         </div>
       </section>
 
-      {/* Balades */}
-      <section className="py-16 px-6">
-        <div className="max-w-[700px] mx-auto bg-sand rounded-3xl p-8 md:p-10">
-          <SectionHeader tag="Balades à la plage" title="Tarifs des promenades"
-            subtitle="Toutes nos balades durent 2h. Groupes par niveau." />
-          <div className="flex flex-col gap-3">
-            {t.balades.map((b, i) => (
-              <div key={i} className="flex items-center justify-between py-3 border-b border-blue-500/8 last:border-b-0">
-                <div>
-                  <div className="font-body text-sm font-semibold text-blue-800">{b.label}</div>
-                  <div className="font-body text-xs text-gray-400">{b.level} · {b.note}</div>
-                </div>
-                <div className="font-display text-xl font-bold text-blue-500">{b.price}€</div>
+      <section className="bg-white px-6 py-20">
+        <div className="mx-auto grid max-w-[1120px] gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
+          <div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><Waves size={23} /></div>
+            <div className="mt-5 font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">Balades à la plage</div>
+            <h2 className="mt-3 font-display text-3xl font-bold leading-tight text-blue-950">Deux heures entre dunes, estuaire et plage</h2>
+            <p className="mt-4 font-body text-sm leading-relaxed text-slate-500">Les groupes sont séparés selon le niveau. Les cavaliers confirmés peuvent accéder aux allures soutenues lorsque les conditions le permettent.</p>
+            <div className="mt-6 flex flex-wrap gap-3"><Link href="/activites/balade-soleil" className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3.5 font-body text-sm font-bold text-white no-underline">Découvrir les balades <ArrowRight size={15} /></Link><Link href="/offrir-un-bon" className="inline-flex items-center gap-2 rounded-xl border border-gold-200 bg-gold-50 px-5 py-3.5 font-body text-sm font-bold text-gold-700 no-underline"><Gift size={15} /> Offrir une balade</Link></div>
+          </div>
+          <div className="overflow-hidden rounded-[26px] border border-blue-500/[0.08] bg-cream shadow-[0_18px_50px_rgba(12,26,46,0.06)]">
+            {tariffs.balades.map((item, index) => (
+              <div key={`${item.label}-${index}`} className="flex items-center justify-between gap-5 border-b border-blue-500/[0.07] p-5 last:border-b-0 sm:p-6">
+                <div><div className="font-display text-lg font-bold text-blue-950">{item.label}</div><div className="mt-1 font-body text-xs leading-relaxed text-slate-400">{item.level}{item.note ? ` · ${item.note}` : ""}</div></div>
+                <div className="flex-shrink-0 font-display text-2xl font-bold text-blue-700">{item.price}€</div>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Cours à l'année */}
-      {(t as any).cours_annuels && (t as any).cours_annuels.length > 0 && (
-        <section className="py-16 px-6 max-w-[700px] mx-auto">
-          <SectionHeader tag="Cours à l'année" title="Forfaits annuels"
-            subtitle="Progressez toute l'année avec nos moniteurs diplômés." />
-          <div className="flex flex-col gap-3">
-            {(t as any).cours_annuels.map((c: any, i: number) => (
-              <div key={i} className="flex items-center justify-between py-3 border-b border-blue-500/8 last:border-b-0">
-                <div>
-                  <div className="font-body text-sm font-semibold text-blue-800">{c.label}</div>
-                  <div className="font-body text-xs text-gray-400">{c.level}{c.freq && ` · ${c.freq}`}</div>
+      {annualCourses.length > 0 && (
+        <section className="bg-sand px-6 py-20">
+          <div className="mx-auto max-w-[1000px]">
+            <div className="mb-9 text-center"><CalendarDays size={27} className="mx-auto text-blue-600" /><div className="mt-4 font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">Cours à l’année</div><h2 className="mt-3 font-display text-3xl font-bold text-blue-950">Des forfaits pour progresser dans la durée</h2></div>
+            <div className="grid gap-4 md:grid-cols-2">
+              {annualCourses.map((course, index) => (
+                <div key={`${course.label}-${index}`} className="flex items-center justify-between gap-5 rounded-[22px] border border-blue-500/[0.08] bg-white p-5 shadow-[0_10px_35px_rgba(12,26,46,0.035)]">
+                  <div><div className="font-display text-lg font-bold text-blue-950">{course.label}</div><div className="mt-1 font-body text-xs text-slate-400">{course.level}{course.freq ? ` · ${course.freq}` : ""}</div></div>
+                  <div className="flex-shrink-0 text-right"><div className="font-display text-2xl font-bold text-blue-700">{course.price}€</div><div className="font-body text-[10px] text-slate-400">forfait annuel</div></div>
                 </div>
-                <div className="font-display text-xl font-bold text-blue-500">{c.price}€</div>
-              </div>
+              ))}
+            </div>
+            <div className="mt-7 text-center"><Link href="/activites/cours-loisir" className="inline-flex items-center gap-2 font-body text-sm font-bold text-blue-700 no-underline">Comprendre les cours à l’année <ArrowRight size={15} /></Link></div>
+          </div>
+        </section>
+      )}
+
+      <section className="bg-white px-6 py-20">
+        <div className="mx-auto grid max-w-[1000px] gap-8 lg:grid-cols-[0.72fr_1.28fr] lg:items-start">
+          <div><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gold-50 text-gold-600"><Trophy size={23} /></div><div className="mt-5 font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">Challenges & concours</div><h2 className="mt-3 font-display text-3xl font-bold text-blue-950">Participer à la vie sportive du club</h2><p className="mt-4 font-body text-sm leading-relaxed text-slate-500">Les tarifs et niveaux sont précisés pour chaque épreuve. Les inscriptions apparaissent dans le planning et l’espace famille.</p></div>
+          <div className="divide-y divide-slate-100 rounded-[24px] border border-blue-500/[0.08] bg-cream px-5">
+            {tariffs.competitions.map((competition, index) => (
+              <div key={`${competition.label}-${index}`} className="flex items-center justify-between gap-5 py-5"><div><div className="font-body text-sm font-bold text-blue-950">{competition.label}</div><div className="mt-1 font-body text-xs text-slate-400">{competition.level} · {competition.freq}</div></div><div className="font-display text-xl font-bold text-blue-700">{competition.price}€</div></div>
             ))}
           </div>
-        </section>
-      )}
-
-      {/* Compétitions */}
-      <section className="py-16 px-6 max-w-[700px] mx-auto">
-        <SectionHeader tag="Compétitions internes" title="Challenges & concours" subtitle="" />
-        <div className="flex flex-col gap-3">
-          {t.competitions.map((c, i) => (
-            <div key={i} className="flex items-center justify-between py-3 border-b border-blue-500/8 last:border-b-0">
-              <div>
-                <div className="font-body text-sm font-semibold text-blue-800">{c.label}</div>
-                <div className="font-body text-xs text-gray-400">{c.level} · {c.freq}</div>
-              </div>
-              <div className="font-display text-xl font-bold text-blue-500">{c.price}€</div>
-            </div>
-          ))}
         </div>
-        {t.forfaits_note && <p className="font-body text-sm text-gray-400 mt-6 text-center italic">{t.forfaits_note}</p>}
+        {tariffs.forfaits_note && <p className="mx-auto mt-6 max-w-xl text-center font-body text-xs italic leading-relaxed text-slate-400">{tariffs.forfaits_note}</p>}
       </section>
 
-      {/* Note paiement */}
-      {t.paiement_note && (
-        <section className="py-8 px-6">
-          <div className="max-w-[600px] mx-auto text-center">
-            <div className="flex items-center justify-center gap-2 font-body text-sm text-blue-800">
-              <BadgeEuro size={18} className="text-blue-500" />
-              {t.paiement_note}
-            </div>
-          </div>
-        </section>
-      )}
+      <section className="bg-cream px-6 pb-24 pt-8">
+        <div className="mx-auto grid max-w-[1000px] overflow-hidden rounded-[28px] bg-[linear-gradient(135deg,#07111f,#12346b)] text-white shadow-[0_22px_65px_rgba(12,26,46,0.14)] md:grid-cols-[1fr_auto] md:items-center">
+          <div className="p-7 sm:p-9"><div className="flex items-center gap-2 font-body text-xs font-bold uppercase tracking-[0.15em] text-gold-300"><CreditCard size={15} /> Paiement</div><h2 className="mt-3 font-display text-2xl font-bold text-white">Réservez en ligne, puis suivez vos règlements dans l’espace famille</h2>{tariffs.paiement_note && <p className="mt-3 max-w-2xl font-body text-sm leading-relaxed text-white/55">{tariffs.paiement_note}</p>}</div>
+          <div className="flex flex-col gap-2 p-7 pt-0 md:p-9"><Link href="/espace-cavalier/reserver" className="rounded-xl bg-gold-400 px-6 py-3.5 text-center font-body text-sm font-bold text-blue-950 no-underline">Réserver maintenant</Link><Link href="/contact" className="rounded-xl border border-white/15 bg-white/[0.06] px-6 py-3.5 text-center font-body text-sm font-bold text-white no-underline">Une question ?</Link></div>
+        </div>
+      </section>
     </>
   );
 }
