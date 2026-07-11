@@ -85,14 +85,22 @@ export default function SatisfactionPage() {
   const [anneeResult, setAnneeResult] = useState("");
   const [anneeLinks, setAnneeLinks] = useState<Array<{ url: string; childName: string; stageLabel: string }>>([]);
 
-  const lancerCron = async (envoyer: boolean) => {
+  const lancerCron = async (opts: { envoyer?: boolean; force?: boolean; reel?: boolean } = {}) => {
     if (!user) return;
+    if (opts.reel && !confirm("Envoyer RÉELLEMENT le questionnaire à toutes les familles inscrites à ce(s) stage(s) ?\n\n(Nécessite que le mode email restreint soit désactivé pour que les familles le reçoivent.)")) return;
     setTestBusy(true); setTestResult("");
     try {
       const token = await user.getIdToken(true);
       const params = new URLSearchParams();
       if (testDate) params.set("date", testDate);
-      if (envoyer && user.email) { params.set("to", user.email); params.set("limit", "2"); } else params.set("dry", "1");
+      if (opts.force) params.set("force", "1");
+      if (opts.reel) {
+        // Envoi réel à toutes les familles : ni dry, ni to, ni limit.
+      } else if (opts.envoyer && user.email) {
+        params.set("to", user.email); params.set("limit", "2");
+      } else {
+        params.set("dry", "1");
+      }
       const res = await fetch(`/api/admin/satisfaction-stages?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       setTestResult(JSON.stringify(data, null, 2));
@@ -449,11 +457,18 @@ export default function SatisfactionPage() {
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <input type="date" value={testDate} onChange={e => setTestDate(e.target.value)} className="px-3 py-2 rounded-lg border border-slate-200 font-body text-sm bg-white" />
-              <button onClick={() => lancerCron(false)} disabled={testBusy}
+              <button onClick={() => lancerCron()} disabled={testBusy}
                 className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 font-body text-sm font-semibold disabled:opacity-50">Aperçu</button>
-              <button onClick={() => lancerCron(true)} disabled={testBusy}
+              <button onClick={() => lancerCron({ envoyer: true })} disabled={testBusy}
                 className="px-3 py-2 rounded-lg bg-emerald-600 text-white font-body text-sm font-semibold disabled:opacity-50">M'envoyer un test</button>
+              <button onClick={() => lancerCron({ force: true })} disabled={testBusy}
+                className="px-3 py-2 rounded-lg bg-white border border-amber-300 text-amber-700 font-body text-sm font-semibold disabled:opacity-50" title="Aperçu en ignorant les invitations déjà créées — montre TOUS les inscrits">Forcer l'aperçu</button>
+              <button onClick={() => lancerCron({ force: true, reel: true })} disabled={testBusy}
+                className="px-3 py-2 rounded-lg bg-amber-600 text-white font-body text-sm font-semibold disabled:opacity-50" title="Renvoie à toutes les familles, même déjà invitées">Forcer le renvoi</button>
             </div>
+            <p className="font-body text-xs text-slate-400 mt-2">
+              « Forcer l'aperçu » ignore les invitations déjà créées et montre le vrai nombre d'inscrits. « Forcer le renvoi » ré-envoie à toutes les familles (déjà invitées comprises) — sans créer de doublon. Nécessite le mode email désactivé pour une vraie livraison.
+            </p>
             {testLinks.length > 0 && (
               <div className="mt-3 bg-white border border-slate-200 rounded-lg p-3">
                 <div className="font-body text-xs font-semibold text-slate-600 mb-2">Liens créés — ouvre-les pour tester le formulaire :</div>

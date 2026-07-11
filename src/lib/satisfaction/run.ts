@@ -42,7 +42,7 @@ function emailHtml(childFirst: string, stageLabel: string, link: string) {
   </div>`;
 }
 
-export interface RunOptions { date?: string; dry?: boolean; toOverride?: string; limit?: number; }
+export interface RunOptions { date?: string; dry?: boolean; toOverride?: string; limit?: number; force?: boolean; }
 
 export async function runSatisfactionStages(opts: RunOptions = {}) {
   const dateFin = opts.date || parisDate(new Date(Date.now() - 86400000));
@@ -98,12 +98,15 @@ export async function runSatisfactionStages(opts: RunOptions = {}) {
 
     const exist = await adminDb.collection("satisfaction-invitations").where("stageKey", "==", stageKey).get();
     const dejaInvite = new Set(exist.docs.map(d => (d.data() as any).childId));
+    // childId -> id du doc invitation existant (pour renvoyer sans créer de doublon en mode force)
+    const dejaInviteMap = new Map<string, string>();
+    exist.docs.forEach(d => { const cid = (d.data() as any).childId; if (cid) dejaInviteMap.set(cid, d.id); });
 
     if (!dry && opts.limit && result.invitations >= opts.limit) break;
     const label = cleanLabel(g.title);
     const report = { stageLabel: label, dateFin, enfants: 0, envoyes: 0 };
     for (const [childId, info] of childMon) {
-      if (dejaInvite.has(childId)) continue;
+      if (dejaInvite.has(childId) && !opts.force) continue;
       if (!dry && opts.limit && result.invitations >= opts.limit) break;
       report.enfants++;
       const fam = childFam.get(childId);
@@ -120,10 +123,18 @@ export async function runSatisfactionStages(opts: RunOptions = {}) {
       };
       if (dry) { result.invitations++; continue; }
 
-      const ref = await adminDb.collection("satisfaction-invitations").add(invitation);
+      // En mode force : réutiliser l'invitation existante (même lien), sinon créer.
+      let token: string;
+      const existingId = dejaInviteMap.get(childId);
+      if (opts.force && existingId) {
+        token = existingId;
+      } else {
+        const ref = await adminDb.collection("satisfaction-invitations").add(invitation);
+        token = ref.id;
+        if (result.crees.length < 10) result.crees.push({ token, childName: invitation.childName, stageLabel: label });
+      }
       result.invitations++;
-      if (result.crees.length < 10) result.crees.push({ token: ref.id, childName: invitation.childName, stageLabel: label });
-      const link = `${APP_URL}/satisfaction/${ref.id}`;
+      const link = `${APP_URL}/satisfaction/${token}`;
       const dest = toOverride || email;
       if (!dest) { result.sansEmail++; continue; }
       if (!isRecipientAllowed(dest)) { console.log(blockedLog(dest, "satisfaction-stage")); result.bloques++; continue; }

@@ -20,6 +20,7 @@ async function handle(req: NextRequest) {
       dry: req.nextUrl.searchParams.get("dry") === "1",
       toOverride: req.nextUrl.searchParams.get("to") || undefined,
       limit: Number(req.nextUrl.searchParams.get("limit")) || undefined,
+      force: req.nextUrl.searchParams.get("force") === "1",
     });
     return NextResponse.json(result);
   } catch (e: any) {
