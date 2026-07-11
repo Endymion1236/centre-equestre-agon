@@ -39,40 +39,45 @@ const profileToCategory: Record<string, "all" | PublicActivityCategory> = {
 const VISUALS: Record<VisualTone, { shell: string; wash: string; accent: string; chip: string }> = {
   baby: {
     shell: "bg-pink-50 border-pink-100",
-    wash: "from-pink-50 via-pink-50/92 to-pink-50/15",
+    wash: "from-pink-50 via-pink-50/75 to-transparent",
     accent: "text-pink-700",
     chip: "bg-pink-600 text-white",
   },
   stage: {
     shell: "bg-amber-50 border-amber-100",
-    wash: "from-amber-50 via-amber-50/92 to-amber-50/15",
+    wash: "from-amber-50 via-amber-50/75 to-transparent",
     accent: "text-amber-700",
     chip: "bg-amber-600 text-white",
   },
   gold: {
     shell: "bg-yellow-50 border-yellow-100",
-    wash: "from-yellow-50 via-yellow-50/92 to-yellow-50/15",
+    wash: "from-yellow-50 via-yellow-50/75 to-transparent",
     accent: "text-yellow-700",
     chip: "bg-yellow-500 text-blue-950",
   },
   sport: {
     shell: "bg-blue-50 border-blue-100",
-    wash: "from-blue-50 via-blue-50/92 to-blue-50/15",
+    wash: "from-blue-50 via-blue-50/75 to-transparent",
     accent: "text-blue-700",
     chip: "bg-blue-700 text-white",
   },
   beach: {
     shell: "bg-orange-50 border-orange-100",
-    wash: "from-orange-50 via-orange-50/92 to-orange-50/15",
+    wash: "from-orange-50 via-orange-50/75 to-transparent",
     accent: "text-orange-700",
     chip: "bg-orange-600 text-white",
   },
   party: {
     shell: "bg-violet-50 border-violet-100",
-    wash: "from-violet-50 via-violet-50/92 to-violet-50/15",
+    wash: "from-violet-50 via-violet-50/75 to-transparent",
     accent: "text-violet-700",
     chip: "bg-violet-700 text-white",
   },
+};
+
+const CARD_TITLES: Record<string, string> = {
+  galop34: "Galop 3–4",
+  "randonnee-jeunes": "Randonnée jeunes",
 };
 
 function textValue(value: unknown, fallback: string) {
@@ -88,13 +93,18 @@ function visualToneFor(activity: DisplayActivity): VisualTone {
   return "stage";
 }
 
+function cardTitle(activity: DisplayActivity) {
+  return CARD_TITLES[activity.id] || activity.title;
+}
+
 function ActivityVisual({ activity }: { activity: DisplayActivity }) {
   const visual = VISUALS[visualToneFor(activity)];
   const catalogueVisual = getCatalogueVisual(activity.id);
+  const title = cardTitle(activity);
 
   if (activity.image) {
     return (
-      <div className="relative h-64 overflow-hidden sm:h-72">
+      <div className="relative h-56 overflow-hidden sm:h-72">
         <img
           src={activity.image}
           alt={activity.title}
@@ -103,15 +113,15 @@ function ActivityVisual({ activity }: { activity: DisplayActivity }) {
           className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.035]"
         />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/78 via-slate-950/8 to-white/5" />
-        <div className="absolute left-4 top-4 rounded-full border border-white/25 bg-slate-950/42 px-3 py-1.5 font-body text-[10px] font-bold uppercase tracking-[0.12em] text-white backdrop-blur-md">
+        <div className="absolute left-4 top-4 rounded-full border border-white/25 bg-slate-950/42 px-3 py-1.5 font-body text-[9px] font-bold uppercase tracking-[0.12em] text-white backdrop-blur-md sm:text-[10px]">
           {CATEGORY_LABELS[activity.category]}
         </div>
-        {activity.price && <div className="absolute right-4 top-12 rounded-xl bg-white/95 px-3 py-2 font-body text-xs font-bold text-blue-800 shadow-lg backdrop-blur-md">{activity.price}</div>}
-        <div className="absolute inset-x-5 bottom-5">
-          <h2 className="font-display text-[28px] font-bold leading-tight text-white [text-shadow:0_2px_20px_rgba(0,0,0,0.3)]">{activity.title}</h2>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <span className="rounded-full bg-white/15 px-3 py-1.5 font-body text-[10px] font-bold text-white backdrop-blur-md">{activity.ages}</span>
-            {activity.level && <span className="rounded-full bg-gold-400/92 px-3 py-1.5 font-body text-[10px] font-bold text-blue-950">{activity.level}</span>}
+        {activity.price && <div className="absolute right-4 top-12 rounded-xl bg-white/95 px-3 py-2 font-body text-[11px] font-bold text-blue-800 shadow-lg backdrop-blur-md sm:text-xs">{activity.price}</div>}
+        <div className="absolute inset-x-4 bottom-4 sm:inset-x-5 sm:bottom-5">
+          <h2 className="max-w-[88%] font-display text-[25px] font-bold leading-[1.02] text-white [text-shadow:0_2px_20px_rgba(0,0,0,0.3)] sm:text-[28px] sm:leading-tight">{title}</h2>
+          <div className="mt-2.5 flex flex-wrap gap-1.5 sm:mt-3 sm:gap-2">
+            <span className="rounded-full bg-white/15 px-2.5 py-1.5 font-body text-[9px] font-bold text-white backdrop-blur-md sm:px-3 sm:text-[10px]">{activity.ages}</span>
+            {activity.level && <span className="rounded-full bg-gold-400/92 px-2.5 py-1.5 font-body text-[9px] font-bold text-blue-950 sm:px-3 sm:text-[10px]">{activity.level}</span>}
           </div>
         </div>
       </div>
@@ -119,10 +129,10 @@ function ActivityVisual({ activity }: { activity: DisplayActivity }) {
   }
 
   return (
-    <div className={`relative min-h-[255px] overflow-hidden border-b ${visual.shell}`}>
+    <div className={`relative min-h-[220px] overflow-hidden border-b sm:min-h-[255px] ${visual.shell}`}>
       <div
         aria-hidden="true"
-        className="absolute bottom-0 right-0 top-0 w-[54%] bg-no-repeat opacity-92 transition-transform duration-700 group-hover:scale-[1.025] sm:w-[50%]"
+        className="absolute bottom-0 right-0 top-0 w-[52%] bg-no-repeat opacity-100 transition-transform duration-700 group-hover:scale-[1.025] sm:w-[50%]"
         style={{
           backgroundImage: `url('${catalogueVisual.image}')`,
           backgroundSize: catalogueVisual.backgroundSize || "cover",
@@ -135,19 +145,19 @@ function ActivityVisual({ activity }: { activity: DisplayActivity }) {
         label={`Photo ${activity.title}`}
         alt={activity.title}
         style={{ backgroundImage: "none", backgroundPosition: "center" }}
-        className="absolute bottom-0 right-0 top-0 w-[54%] overflow-hidden !bg-transparent sm:w-[50%]"
+        className="absolute bottom-0 right-0 top-0 w-[52%] overflow-hidden !bg-transparent sm:w-[50%]"
       />
       <div className={`pointer-events-none absolute inset-0 bg-gradient-to-r ${visual.wash}`} />
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-white/25 via-transparent to-white/5" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-white/15 via-transparent to-white/5" />
 
-      <div className="relative z-10 flex min-h-[255px] max-w-[67%] flex-col justify-end p-5 sm:p-6">
-        <div className={`font-body text-[10px] font-bold uppercase tracking-[0.15em] ${visual.accent}`}>{CATEGORY_LABELS[activity.category]}</div>
-        <h2 className="mt-3 font-display text-[28px] font-bold leading-tight text-blue-950">{activity.title}</h2>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <span className="rounded-full bg-white/72 px-3 py-1.5 font-body text-[10px] font-bold text-blue-950 shadow-sm backdrop-blur-sm">{activity.ages}</span>
-          {activity.level && <span className={`rounded-full px-3 py-1.5 font-body text-[10px] font-bold shadow-sm ${visual.chip}`}>{activity.level}</span>}
+      <div className="relative z-10 flex min-h-[220px] max-w-[76%] flex-col justify-end p-4 sm:min-h-[255px] sm:max-w-[67%] sm:p-6">
+        <div className={`font-body text-[9px] font-bold uppercase tracking-[0.14em] sm:text-[10px] sm:tracking-[0.15em] ${visual.accent}`}>{CATEGORY_LABELS[activity.category]}</div>
+        <h2 className="mt-2.5 font-display text-[25px] font-bold leading-[1.02] text-blue-950 sm:mt-3 sm:text-[28px] sm:leading-tight">{title}</h2>
+        <div className="mt-2.5 flex flex-wrap gap-1.5 sm:mt-3 sm:gap-2">
+          <span className="rounded-full bg-white/78 px-2.5 py-1.5 font-body text-[9px] font-bold text-blue-950 shadow-sm backdrop-blur-sm sm:px-3 sm:text-[10px]">{activity.ages}</span>
+          {activity.level && <span className={`rounded-full px-2.5 py-1.5 font-body text-[9px] font-bold shadow-sm sm:px-3 sm:text-[10px] ${visual.chip}`}>{activity.level}</span>}
         </div>
-        {activity.price && <div className="mt-5 w-fit rounded-xl bg-white/88 px-3 py-2 font-body text-xs font-bold text-blue-800 shadow-sm backdrop-blur-sm">{activity.price}</div>}
+        {activity.price && <div className="mt-4 w-fit rounded-xl bg-white/92 px-3 py-2 font-body text-[11px] font-bold text-blue-800 shadow-sm backdrop-blur-sm sm:mt-5 sm:text-xs">{activity.price}</div>}
       </div>
     </div>
   );
@@ -155,30 +165,30 @@ function ActivityVisual({ activity }: { activity: DisplayActivity }) {
 
 function ActivityCard({ activity }: { activity: DisplayActivity }) {
   return (
-    <article id={activity.id} className="group scroll-mt-28 overflow-hidden rounded-[26px] border border-blue-500/[0.08] bg-white shadow-[0_12px_38px_rgba(12,26,46,0.05)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_24px_58px_rgba(12,26,46,0.11)]">
+    <article id={activity.id} className="group scroll-mt-28 overflow-hidden rounded-[24px] border border-blue-500/[0.08] bg-white shadow-[0_10px_30px_rgba(12,26,46,0.05)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_24px_58px_rgba(12,26,46,0.11)] sm:rounded-[26px]">
       <ActivityVisual activity={activity} />
 
-      <div className="p-5 sm:p-6">
-        <div className="mb-4 flex items-start gap-2 font-body text-xs font-semibold text-slate-400">
+      <div className="p-4 sm:p-6">
+        <div className="mb-3 flex items-start gap-2 font-body text-[11px] font-semibold text-slate-400 sm:mb-4 sm:text-xs">
           <Clock size={15} className="mt-0.5 flex-shrink-0 text-blue-500" />
           <span>{activity.schedule}</span>
         </div>
-        <p className="font-body text-sm leading-relaxed text-slate-500">{activity.description}</p>
+        <p className="font-body text-[13px] leading-relaxed text-slate-500 sm:text-sm">{activity.description}</p>
 
-        <div className="mt-5 grid gap-2 sm:grid-cols-2">
+        <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 sm:mt-5 sm:gap-x-4">
           {activity.features.slice(0, 4).map((feature) => (
-            <div key={feature} className="flex items-start gap-2 font-body text-xs leading-relaxed text-slate-500">
+            <div key={feature} className="flex items-start gap-2 font-body text-[11px] leading-snug text-slate-500 sm:text-xs sm:leading-relaxed">
               <span className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600"><Check size={10} strokeWidth={3} /></span>
-              {feature}
+              <span>{feature}</span>
             </div>
           ))}
         </div>
 
-        <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-5">
-          <Link href={`/activites/${activity.id}`} className="group/link inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-3 font-body text-xs font-bold text-white no-underline shadow-[0_7px_20px_rgba(32,80,160,0.16)] transition-all hover:-translate-y-0.5 hover:bg-blue-600">
+        <div className="mt-5 flex items-center gap-2.5 border-t border-slate-100 pt-4 sm:mt-6 sm:gap-3 sm:pt-5">
+          <Link href={`/activites/${activity.id}`} className="group/link inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-700 px-3 py-3 font-body text-[11px] font-bold text-white no-underline shadow-[0_7px_20px_rgba(32,80,160,0.16)] transition-all hover:-translate-y-0.5 hover:bg-blue-600 sm:flex-none sm:px-4 sm:text-xs">
             Voir la fiche <ArrowRight size={14} className="transition-transform group-hover/link:translate-x-1" />
           </Link>
-          <Link href="/espace-cavalier/reserver" className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 font-body text-xs font-bold text-blue-700 no-underline transition-colors hover:border-blue-200 hover:bg-blue-100">
+          <Link href="/espace-cavalier/reserver" className="inline-flex min-h-11 flex-1 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 font-body text-[11px] font-bold text-blue-700 no-underline transition-colors hover:border-blue-200 hover:bg-blue-100 sm:flex-none sm:px-4 sm:text-xs">
             Réserver
           </Link>
         </div>
@@ -234,9 +244,9 @@ export function ActivitiesContent() {
   }, [activities, filter, search]);
 
   return (
-    <section className="bg-cream px-5 py-12 sm:px-6 sm:py-16">
+    <section className="bg-cream px-4 py-10 sm:px-6 sm:py-16">
       <div className="mx-auto max-w-[1180px]">
-        <div className="mb-8 rounded-[24px] border border-blue-500/[0.08] bg-white p-4 shadow-[0_12px_38px_rgba(12,26,46,0.045)] sm:p-5">
+        <div className="mb-6 rounded-[22px] border border-blue-500/[0.08] bg-white p-4 shadow-[0_12px_38px_rgba(12,26,46,0.045)] sm:mb-8 sm:rounded-[24px] sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><SlidersHorizontal size={20} /></div>
@@ -280,7 +290,7 @@ export function ActivitiesContent() {
         </div>
 
         {filtered.length > 0 ? (
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-5 sm:gap-6 lg:grid-cols-2">
             {filtered.map((activity) => <ActivityCard key={activity.id} activity={activity} />)}
           </div>
         ) : (
@@ -292,7 +302,7 @@ export function ActivitiesContent() {
           </div>
         )}
 
-        <div className="mt-10 grid gap-4 rounded-[24px] border border-blue-100 bg-blue-50 p-6 md:grid-cols-[1fr_auto] md:items-center">
+        <div className="mt-8 grid gap-4 rounded-[22px] border border-blue-100 bg-blue-50 p-5 sm:mt-10 sm:rounded-[24px] sm:p-6 md:grid-cols-[1fr_auto] md:items-center">
           <div>
             <div className="font-display text-lg font-bold text-blue-950">Plusieurs enfants ou plusieurs semaines ?</div>
             <p className="mt-1 font-body text-sm leading-relaxed text-slate-500">Les réductions multi-stages et famille sont appliquées automatiquement lorsqu’elles sont prévues dans l’offre.</p>
