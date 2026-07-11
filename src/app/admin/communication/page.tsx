@@ -32,6 +32,7 @@ export default function CommunicationPage() {
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAudience, setSelectedAudience] = useState("");
+  const [reinscritIds, setReinscritIds] = useState<Set<string>>(new Set());
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
@@ -40,11 +41,15 @@ export default function CommunicationPage() {
 
   const loadData = async () => {
     try {
-      const [famSnap, histSnap] = await Promise.all([
+      const [famSnap, histSnap, forfaitSnap] = await Promise.all([
         getDocs(collection(db, "families")),
         getDocs(collection(db, "communications")),
+        getDocs(collection(db, "forfaits")),
       ]);
       setFamilies(famSnap.docs.map((item) => ({ firestoreId: item.id, ...item.data() })) as any);
+      // Familles ayant (re)pris un forfait — le système de forfaits est propre à
+      // la saison 2026-2027, donc tout forfait = réinscription en cours.
+      setReinscritIds(new Set(forfaitSnap.docs.map((d) => (d.data() as any).familyId).filter(Boolean)));
       setHistory(
         histSnap.docs
           .map((item) => ({ id: item.id, ...item.data() }))
@@ -86,6 +91,12 @@ export default function CommunicationPage() {
       count: families.filter((family) => family.parentEmail && (family as any).tags?.includes("cavalier_annee")).length,
     },
     {
+      id: "non-reinscrits",
+      label: "Cavaliers non réinscrits",
+      description: "Cavaliers à l’année sans forfait 2026-2027 enregistré",
+      count: families.filter((family) => family.parentEmail && (family as any).tags?.includes("cavalier_annee") && !reinscritIds.has(family.firestoreId)).length,
+    },
+    {
       id: "tag-stage",
       label: "Familles stages",
       description: "Familles ayant le segment stage",
@@ -97,7 +108,7 @@ export default function CommunicationPage() {
       description: "Visiteurs et cavaliers occasionnels",
       count: families.filter((family) => family.parentEmail && (family as any).tags?.includes("passage")).length,
     },
-  ], [families]);
+  ], [families, reinscritIds]);
 
   const getRecipients = () => {
     if (selectedAudience === "all") return families.filter((family) => family.parentEmail);
@@ -106,6 +117,9 @@ export default function CommunicationPage() {
     }
     if (selectedAudience === "no-children") {
       return families.filter((family) => family.parentEmail && (family.children || []).length === 0);
+    }
+    if (selectedAudience === "non-reinscrits") {
+      return families.filter((family) => family.parentEmail && (family as any).tags?.includes("cavalier_annee") && !reinscritIds.has(family.firestoreId));
     }
     if (selectedAudience.startsWith("tag-")) {
       const tag = selectedAudience.replace("tag-", "");
@@ -346,6 +360,27 @@ export default function CommunicationPage() {
             </div>
 
             <div className="space-y-5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="font-body text-xs text-gray-500">Modèle prêt à l’emploi :</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSubject("[prenom_enfant] nous manque au club 🐴");
+                    setBody(
+                      "Bonjour,\n\n" +
+                      "En préparant la saison 2026-2027, on s'est aperçus que [prenom_enfant] ne s'était pas encore réinscrit(e) — et honnêtement, ça nous tenait à cœur de prendre de ses nouvelles.\n\n" +
+                      "Au club, chaque cavalier compte, et on n'a pas envie de laisser filer les choses sans comprendre. Est-ce une question d'horaires, de niveau ou de groupe, de budget, une baisse de motivation, ou simplement un changement dans votre organisation ? Il n'y a aucune mauvaise réponse — savoir pourquoi nous aide surtout à nous améliorer, et parfois à trouver une solution à laquelle vous n'auriez pas pensé.\n\n" +
+                      "Un petit mot en réponse suffit. Et pour faire au plus simple, on se permettra aussi de vous passer un coup de fil dans les prochains jours, juste pour échanger. Si vous préférez qu'on vous appelle à un moment précis (ou pas du tout), dites-le-nous, on s'adapte.\n\n" +
+                      "La porte reste grande ouverte : si [prenom_enfant] a envie de remonter en selle, on sera ravis de le/la retrouver.\n\n" +
+                      "À très vite,\nNicolas et toute l'équipe du Centre Équestre d'Agon-Coutainville"
+                    );
+                    if (!selectedAudience) setSelectedAudience("non-reinscrits");
+                  }}
+                  className="font-body text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg px-3 py-1.5 cursor-pointer"
+                >
+                  🐴 Relance « non-réinscrits »
+                </button>
+              </div>
               <div>
                 <label className="mb-1.5 block font-body text-xs font-bold text-blue-900">Objet de l’email</label>
                 <input
