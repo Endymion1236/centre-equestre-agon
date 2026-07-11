@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useVitrine } from "@/lib/use-vitrine";
 import { EditableImage } from "@/components/ui/EditableImage";
+import { getCatalogueVisual } from "@/lib/catalogue-visuals";
 import {
   CATEGORY_LABELS,
   PUBLIC_ACTIVITIES,
@@ -35,52 +36,38 @@ const profileToCategory: Record<string, "all" | PublicActivityCategory> = {
   competition: "competitions",
 };
 
-const ILLUSTRATIONS = {
-  baby: "/images/vitrine/choices/baby-poney.webp",
-  stages: "/images/vitrine/choices/stages-enfants.webp",
-  progression: "/images/vitrine/choices/cavalier-regulier.webp",
-  plage: "/images/vitrine/choices/balade-plage.webp",
-  anniversaire: "/images/vitrine/choices/anniversaire-poney.webp",
-} as const;
-
-const VISUALS: Record<VisualTone, { image: string; shell: string; wash: string; accent: string; chip: string }> = {
+const VISUALS: Record<VisualTone, { shell: string; wash: string; accent: string; chip: string }> = {
   baby: {
-    image: ILLUSTRATIONS.baby,
     shell: "bg-pink-50 border-pink-100",
     wash: "from-pink-50 via-pink-50/92 to-pink-50/15",
     accent: "text-pink-700",
     chip: "bg-pink-600 text-white",
   },
   stage: {
-    image: ILLUSTRATIONS.stages,
     shell: "bg-amber-50 border-amber-100",
     wash: "from-amber-50 via-amber-50/92 to-amber-50/15",
     accent: "text-amber-700",
     chip: "bg-amber-600 text-white",
   },
   gold: {
-    image: ILLUSTRATIONS.progression,
     shell: "bg-yellow-50 border-yellow-100",
     wash: "from-yellow-50 via-yellow-50/92 to-yellow-50/15",
     accent: "text-yellow-700",
     chip: "bg-yellow-500 text-blue-950",
   },
   sport: {
-    image: ILLUSTRATIONS.progression,
     shell: "bg-blue-50 border-blue-100",
     wash: "from-blue-50 via-blue-50/92 to-blue-50/15",
     accent: "text-blue-700",
     chip: "bg-blue-700 text-white",
   },
   beach: {
-    image: ILLUSTRATIONS.plage,
     shell: "bg-orange-50 border-orange-100",
     wash: "from-orange-50 via-orange-50/92 to-orange-50/15",
     accent: "text-orange-700",
     chip: "bg-orange-600 text-white",
   },
   party: {
-    image: ILLUSTRATIONS.anniversaire,
     shell: "bg-violet-50 border-violet-100",
     wash: "from-violet-50 via-violet-50/92 to-violet-50/15",
     accent: "text-violet-700",
@@ -103,6 +90,7 @@ function visualToneFor(activity: DisplayActivity): VisualTone {
 
 function ActivityVisual({ activity }: { activity: DisplayActivity }) {
   const visual = VISUALS[visualToneFor(activity)];
+  const catalogueVisual = getCatalogueVisual(activity.id);
 
   if (activity.image) {
     return (
@@ -132,13 +120,22 @@ function ActivityVisual({ activity }: { activity: DisplayActivity }) {
 
   return (
     <div className={`relative min-h-[255px] overflow-hidden border-b ${visual.shell}`}>
+      <div
+        aria-hidden="true"
+        className="absolute bottom-0 right-0 top-0 w-[54%] bg-no-repeat opacity-92 transition-transform duration-700 group-hover:scale-[1.025] sm:w-[50%]"
+        style={{
+          backgroundImage: `url('${catalogueVisual.image}')`,
+          backgroundSize: catalogueVisual.backgroundSize || "cover",
+          backgroundPosition: catalogueVisual.backgroundPosition || "center",
+        }}
+      />
       <EditableImage
         imageKey={activity.imageKey}
         mode="background"
         label={`Photo ${activity.title}`}
         alt={activity.title}
-        style={{ backgroundImage: `url('${visual.image}')`, backgroundPosition: "center" }}
-        className="absolute bottom-0 right-0 top-0 w-[54%] overflow-hidden bg-cover opacity-92 transition-transform duration-700 group-hover:scale-[1.025] sm:w-[50%]"
+        style={{ backgroundImage: "none", backgroundPosition: "center" }}
+        className="absolute bottom-0 right-0 top-0 w-[54%] overflow-hidden !bg-transparent sm:w-[50%]"
       />
       <div className={`pointer-events-none absolute inset-0 bg-gradient-to-r ${visual.wash}`} />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-white/25 via-transparent to-white/5" />
