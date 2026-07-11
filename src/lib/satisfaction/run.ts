@@ -283,3 +283,124 @@ export async function runSatisfactionAnnee(opts: RunAnneeOptions = {}) {
 
   return result;
 }
+
+// ── Template email : satisfaction PROMENADE ───────────────────────────────────
+function emailHtmlPromenade(childFirst: string, baladeLabel: string, link: string) {
+  return `
+  <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#1e293b">
+    <div style="background:#1e3a5f;color:#fff;padding:20px 24px;border-radius:12px 12px 0 0">
+      <div style="font-size:12px;opacity:.8;text-transform:uppercase;letter-spacing:.5px">Centre Équestre d'Agon-Coutainville</div>
+      <h1 style="margin:6px 0 0;font-size:20px">Votre avis nous intéresse</h1>
+    </div>
+    <div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:24px">
+      <p>Bonjour,</p>
+      <p>${childFirst ? `${childFirst} vient` : "Votre enfant vient"} de participer à la promenade <strong>${baladeLabel}</strong>.
+      Pour nous aider à progresser, pourriez-vous nous donner votre avis ? Cela prend moins d'une minute.</p>
+      <p style="text-align:center;margin:28px 0">
+        <a href="${link}" style="background:#1e3a5f;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:bold;display:inline-block">Donner mon avis</a>
+      </p>
+      <p style="font-size:12px;color:#64748b">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :<br>${link}</p>
+      <p style="margin-top:24px">Merci, et à très bientôt !<br>L'équipe du Centre Équestre d'Agon-Coutainville</p>
+    </div>
+  </div>`;
+}
+
+/**
+ * Questionnaire de satisfaction PROMENADE — envoyé le lendemain de chaque balade.
+ * Une balade = un créneau d'un seul jour (activityType "balade"). Même mécanique
+ * que les stages (dedup par stageKey, mode force, respect du mode restreint).
+ */
+export async function runSatisfactionPromenades(opts: RunOptions = {}) {
+  const dateFin = opts.date || parisDate(new Date(Date.now() - 86400000));
+  const dry = !!opts.dry;
+  const toOverride = (opts.toOverride || "").trim();
+
+  // Balades du jour dateFin
+  const snap = await adminDb.collection("creneaux").where("date", "==", dateFin).get();
+
+  // Index enfant -> famille (email)
+  const famSnap = await adminDb.collection("families").get();
+  const childFam = new Map<string, { email: string; familyName: string; familyId: string; childName: string }>();
+  for (const d of famSnap.docs) {
+    const f = d.data() as any;
+    for (const ch of (f.children || [])) {
+      childFam.set(ch.id, { email: f.parentEmail || f.email || "", familyName: f.parentName || "", familyId: d.id, childName: `${ch.firstName || ""} ${ch.lastName || ""}`.trim() });
+    }
+  }
+
+  const apiKey = process.env.RESEND_API_KEY || "";
+  const resend = apiKey ? new Resend(apiKey) : null;
+  const result: any = { dateFin, dry, promenades: [] as any[], invitations: 0, emails: 0, bloques: 0, sansEmail: 0, sansResend: 0, echecs: 0, erreurs: [] as string[], crees: [] as any[] };
+
+  const semaine = lundiDe(dateFin);
+
+  for (const d of snap.docs) {
+    const c = d.data() as any;
+    if ((c.activityType || "") !== "balade") continue;
+    const enrolled = Array.isArray(c.enrolled) ? c.enrolled : [];
+    if (enrolled.length === 0) continue;
+
+    const label = cleanLabel(c.activityTitle || c.title || "Promenade");
+    const stageKey = `balade_${d.id}`; // unique par créneau balade
+
+    const exist = await adminDb.collection("satisfaction-invitations").where("stageKey", "==", stageKey).get();
+    const dejaInvite = new Set(exist.docs.map(x => (x.data() as any).childId));
+    const dejaInviteMap = new Map<string, string>();
+    exist.docs.forEach(x => { const cid = (x.data() as any).childId; if (cid) dejaInviteMap.set(cid, x.id); });
+
+    const mons = c.monitor ? String(c.monitor).split(",").map((m: string) => m.trim()).filter(Boolean) : [];
+    const report = { stageLabel: label, dateFin, enfants: 0, envoyes: 0 };
+
+    for (const e of enrolled) {
+      const childId = e?.childId;
+      if (!childId) continue;
+      if (dejaInvite.has(childId) && !opts.force) continue;
+      if (!dry && opts.limit && result.invitations >= opts.limit) break;
+      report.enfants++;
+      const fam = childFam.get(childId);
+      const email = fam?.email || "";
+      const invitation = {
+        stageKey, stageLabel: label, semaine, dateFin,
+        type: "promenade",
+        childId, childName: e.childName || fam?.childName || "",
+        familyId: e.familyId || fam?.familyId || "",
+        familyName: e.familyName || fam?.familyName || "",
+        familyEmail: email,
+        moniteurs: mons,
+        repondu: false,
+        createdAt: new Date(),
+      };
+      if (dry) { result.invitations++; continue; }
+
+      let token: string;
+      const existingId = dejaInviteMap.get(childId);
+      if (opts.force && existingId) {
+        token = existingId;
+      } else {
+        const ref = await adminDb.collection("satisfaction-invitations").add(invitation);
+        token = ref.id;
+        if (result.crees.length < 10) result.crees.push({ token, childName: invitation.childName, stageLabel: label });
+      }
+      result.invitations++;
+      const link = `${APP_URL}/satisfaction/${token}`;
+      const dest = toOverride || email;
+      if (!dest) { result.sansEmail++; continue; }
+      if (!isRecipientAllowed(dest)) { console.log(blockedLog(dest, "satisfaction-promenade")); result.bloques++; continue; }
+      if (!resend) { result.sansResend++; continue; }
+
+      const childFirst = (invitation.childName || "").split(" ")[0];
+      const subject = `Votre avis sur la promenade${childFirst ? ` de ${childFirst}` : ""}`;
+      try {
+        await resend.emails.send({ from: FROM, to: dest, ...(BCC ? { bcc: BCC } : {}), subject, html: emailHtmlPromenade(childFirst, label, link) });
+        result.emails++; report.envoyes++;
+        await logEmail({ to: dest, subject, context: "cron_satisfaction_promenade", template: "satisfactionPromenade", status: "sent", familyId: invitation.familyId, sentBy: "system" }).catch(() => {});
+      } catch (err: any) {
+        result.echecs++;
+        result.erreurs.push(`${dest}: ${err?.message || err}`);
+        await logEmail({ to: dest, subject, context: "cron_satisfaction_promenade", status: "failed", error: String(err?.message || err), sentBy: "system" }).catch(() => {});
+      }
+    }
+    result.promenades.push(report);
+  }
+  return result;
+}

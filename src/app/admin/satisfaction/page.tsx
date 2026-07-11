@@ -85,14 +85,16 @@ export default function SatisfactionPage() {
   const [anneeResult, setAnneeResult] = useState("");
   const [anneeLinks, setAnneeLinks] = useState<Array<{ url: string; childName: string; stageLabel: string }>>([]);
 
-  const lancerCron = async (opts: { envoyer?: boolean; force?: boolean; reel?: boolean } = {}) => {
+  const lancerCron = async (opts: { envoyer?: boolean; force?: boolean; reel?: boolean; type?: "stage" | "promenade" } = {}) => {
     if (!user) return;
-    if (opts.reel && !confirm("Envoyer RÉELLEMENT le questionnaire à toutes les familles inscrites à ce(s) stage(s) ?\n\n(Nécessite que le mode email restreint soit désactivé pour que les familles le reçoivent.)")) return;
+    const quoi = opts.type === "promenade" ? "cette/ces promenade(s)" : "ce(s) stage(s)";
+    if (opts.reel && !confirm(`Envoyer RÉELLEMENT le questionnaire à toutes les familles inscrites à ${quoi} ?\n\n(Nécessite que le mode email restreint soit désactivé pour que les familles le reçoivent.)`)) return;
     setTestBusy(true); setTestResult("");
     try {
       const token = await user.getIdToken(true);
       const params = new URLSearchParams();
       if (testDate) params.set("date", testDate);
+      if (opts.type === "promenade") params.set("type", "promenade");
       if (opts.force) params.set("force", "1");
       if (opts.reel) {
         // Envoi réel à toutes les familles : ni dry, ni to, ni limit.
@@ -469,6 +471,24 @@ export default function SatisfactionPage() {
             <p className="font-body text-xs text-slate-400 mt-2">
               « Forcer l'aperçu » ignore les invitations déjà créées et montre le vrai nombre d'inscrits. « Forcer le renvoi » ré-envoie à toutes les familles (déjà invitées comprises) — sans créer de doublon. Nécessite le mode email désactivé pour une vraie livraison.
             </p>
+
+            {/* Promenades — même logique, questionnaire du lendemain de chaque balade */}
+            <div className="mt-4 pt-3 border-t border-slate-200">
+              <div className="font-body text-sm font-semibold text-slate-700 mb-1 flex items-center gap-1.5">🥾 Promenades (balades de la veille)</div>
+              <p className="font-body text-xs text-slate-500 mb-2">
+                Même mécanique, pour les <strong>balades</strong> terminées à la date choisie (ou hier). Utilise la même date ci-dessus.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button onClick={() => lancerCron({ type: "promenade" })} disabled={testBusy}
+                  className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 font-body text-sm font-semibold disabled:opacity-50">Aperçu balades</button>
+                <button onClick={() => lancerCron({ type: "promenade", envoyer: true })} disabled={testBusy}
+                  className="px-3 py-2 rounded-lg bg-emerald-600 text-white font-body text-sm font-semibold disabled:opacity-50">M'envoyer un test</button>
+                <button onClick={() => lancerCron({ type: "promenade", force: true })} disabled={testBusy}
+                  className="px-3 py-2 rounded-lg bg-white border border-amber-300 text-amber-700 font-body text-sm font-semibold disabled:opacity-50" title="Aperçu balades en ignorant les invitations déjà créées">Forcer l'aperçu</button>
+                <button onClick={() => lancerCron({ type: "promenade", force: true, reel: true })} disabled={testBusy}
+                  className="px-3 py-2 rounded-lg bg-amber-600 text-white font-body text-sm font-semibold disabled:opacity-50" title="Renvoie à toutes les familles des balades">Forcer le renvoi</button>
+              </div>
+            </div>
             {testLinks.length > 0 && (
               <div className="mt-3 bg-white border border-slate-200 rounded-lg p-3">
                 <div className="font-body text-xs font-semibold text-slate-600 mb-2">Liens créés — ouvre-les pour tester le formulaire :</div>

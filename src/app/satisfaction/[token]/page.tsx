@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Star, Loader2, CheckCircle2 } from "lucide-react";
 
-interface Invitation { stageLabel: string; childName: string; moniteurs: string[]; type?: "stage" | "annee"; saison?: number | null; repondu: boolean; }
+interface Invitation { stageLabel: string; childName: string; moniteurs: string[]; type?: "stage" | "annee" | "promenade"; saison?: number | null; repondu: boolean; }
 
 function StarRating({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   const [hover, setHover] = useState(0);
@@ -21,12 +21,16 @@ function StarRating({ value, onChange }: { value: number; onChange: (n: number) 
   );
 }
 
-const questionsFor = (annee: boolean) => [
-  { id: "globalNote", label: annee ? "Note globale de l'année" : "Note globale du stage" },
-  { id: "noteProgres", label: annee ? "Les progrès de votre enfant sur l'année" : "Les progrès de votre enfant" },
-  { id: "notePoneyNiveau", label: "L'adéquation poney / niveau" },
-  { id: "noteOrganisation", label: annee ? "L'organisation (accueil, planning, infos)" : "L'organisation (accueil, horaires, infos)" },
-] as const;
+const questionsFor = (kind?: string) => {
+  const annee = kind === "annee";
+  const prom = kind === "promenade";
+  return [
+    { id: "globalNote", label: prom ? "Note globale de la promenade" : annee ? "Note globale de l'année" : "Note globale du stage" },
+    { id: "noteProgres", label: annee ? "Les progrès de votre enfant sur l'année" : "Les progrès de votre enfant" },
+    { id: "notePoneyNiveau", label: "L'adéquation poney / niveau" },
+    { id: "noteOrganisation", label: annee ? "L'organisation (accueil, planning, infos)" : "L'organisation (accueil, horaires, infos)" },
+  ];
+};
 
 export default function SatisfactionPage() {
   const params = useParams();
@@ -112,14 +116,14 @@ export default function SatisfactionPage() {
       <div className="max-w-xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="bg-[#1e3a5f] text-white px-6 py-5">
           <div className="text-xs uppercase tracking-wide text-white/70">Centre Équestre d'Agon-Coutainville</div>
-          <h1 className="text-lg font-bold mt-1">{inv?.type === "annee" ? "Votre avis sur l'année" : "Votre avis sur le stage"}</h1>
+          <h1 className="text-lg font-bold mt-1">{inv?.type === "annee" ? "Votre avis sur l'année" : inv?.type === "promenade" ? "Votre avis sur la promenade" : "Votre avis sur le stage"}</h1>
           <p className="text-white/80 text-sm mt-1">
             {inv?.stageLabel}{inv?.childName ? ` · ${inv.childName}` : ""}
           </p>
         </div>
 
         <div className="p-6 flex flex-col gap-6">
-          {questionsFor(inv?.type === "annee").map(q => (
+          {questionsFor(inv?.type).map(q => (
             <div key={q.id} className="flex flex-col gap-1.5">
               <label className="text-sm font-semibold text-slate-700">{q.label}</label>
               <StarRating value={notes[q.id] || 0} onChange={n => setNote(q.id, n)} />
