@@ -33,6 +33,8 @@ export default function CommunicationPage() {
   const [loading, setLoading] = useState(true);
   const [selectedAudience, setSelectedAudience] = useState("");
   const [reinscritIds, setReinscritIds] = useState<Set<string>>(new Set());
+  const [manualSelection, setManualSelection] = useState<Set<string>>(new Set());
+  const [manualSearch, setManualSearch] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
@@ -108,7 +110,13 @@ export default function CommunicationPage() {
       description: "Visiteurs et cavaliers occasionnels",
       count: families.filter((family) => family.parentEmail && (family as any).tags?.includes("passage")).length,
     },
-  ], [families, reinscritIds]);
+    {
+      id: "manuelle",
+      label: "Sélection manuelle",
+      description: "Choisir les familles une par une",
+      count: manualSelection.size,
+    },
+  ], [families, reinscritIds, manualSelection]);
 
   const getRecipients = () => {
     if (selectedAudience === "all") return families.filter((family) => family.parentEmail);
@@ -120,6 +128,9 @@ export default function CommunicationPage() {
     }
     if (selectedAudience === "non-reinscrits") {
       return families.filter((family) => family.parentEmail && (family as any).tags?.includes("cavalier_annee") && !reinscritIds.has(family.firestoreId));
+    }
+    if (selectedAudience === "manuelle") {
+      return families.filter((family) => family.parentEmail && manualSelection.has(family.firestoreId));
     }
     if (selectedAudience.startsWith("tag-")) {
       const tag = selectedAudience.replace("tag-", "");
@@ -322,7 +333,7 @@ export default function CommunicationPage() {
                     type="button"
                     key={audience.id}
                     onClick={() => setSelectedAudience(audience.id)}
-                    disabled={audience.count === 0}
+                    disabled={audience.count === 0 && audience.id !== "manuelle"}
                     className={`flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-all disabled:cursor-default disabled:opacity-45 ${
                       active
                         ? "border-blue-300 bg-blue-50 shadow-[0_0_0_2px_rgba(32,80,160,0.08)]"
@@ -341,6 +352,65 @@ export default function CommunicationPage() {
                 );
               })}
             </div>
+
+            {selectedAudience === "manuelle" && (
+              <div className="mt-3 rounded-xl border border-gray-200 p-3">
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  <input
+                    value={manualSearch}
+                    onChange={(e) => setManualSearch(e.target.value)}
+                    placeholder="Rechercher une famille…"
+                    className="flex-1 min-w-40 border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 font-body text-sm focus:bg-white"
+                  />
+                  <button type="button"
+                    onClick={() => setManualSelection(new Set(families.filter((f) => f.parentEmail && (f as any).tags?.includes("cavalier_annee") && !reinscritIds.has(f.firestoreId)).map((f) => f.firestoreId)))}
+                    className="font-body text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg px-2.5 py-2 cursor-pointer whitespace-nowrap">
+                    Partir des non-réinscrits
+                  </button>
+                  {manualSelection.size > 0 && (
+                    <button type="button" onClick={() => setManualSelection(new Set())}
+                      className="font-body text-xs text-gray-500 hover:text-gray-700 bg-transparent border-none cursor-pointer">Tout décocher</button>
+                  )}
+                </div>
+                <div className="max-h-72 overflow-y-auto flex flex-col gap-0.5">
+                  {families
+                    .filter((f) => f.parentEmail)
+                    .filter((f) => {
+                      const q = manualSearch.trim().toLowerCase();
+                      if (!q) return true;
+                      return (f.parentName || "").toLowerCase().includes(q)
+                        || (f.parentEmail || "").toLowerCase().includes(q)
+                        || (f.children || []).some((c: any) => (c.firstName || "").toLowerCase().includes(q));
+                    })
+                    .sort((a, b) => (a.parentName || "").localeCompare(b.parentName || ""))
+                    .map((f) => {
+                      const checked = manualSelection.has(f.firestoreId);
+                      const nonReinscrit = (f as any).tags?.includes("cavalier_annee") && !reinscritIds.has(f.firestoreId);
+                      return (
+                        <label key={f.firestoreId} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer">
+                          <input type="checkbox" checked={checked}
+                            onChange={(e) => {
+                              setManualSelection((prev) => {
+                                const next = new Set(prev);
+                                if (e.target.checked) next.add(f.firestoreId); else next.delete(f.firestoreId);
+                                return next;
+                              });
+                            }}
+                            className="accent-blue-600 w-4 h-4" />
+                          <div className="min-w-0 flex-1">
+                            <div className="font-body text-sm text-gray-800 truncate">
+                              {f.parentName || "—"}
+                              {(f.children || []).length > 0 && <span className="text-gray-400"> · {(f.children || []).map((c: any) => c.firstName).filter(Boolean).join(", ")}</span>}
+                            </div>
+                            <div className="font-body text-[11px] text-gray-400 truncate">{f.parentEmail}</div>
+                          </div>
+                          {nonReinscrit && <span className="font-body text-[10px] font-semibold text-amber-700 bg-amber-50 rounded-full px-1.5 py-0.5 whitespace-nowrap">non réinscrit</span>}
+                        </label>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
 
             <div className={`mt-4 rounded-xl px-4 py-3 ${recipients.length > 0 ? "bg-green-50" : "bg-gray-50"}`}>
               <div className={`font-display text-2xl font-bold ${recipients.length > 0 ? "text-green-700" : "text-gray-400"}`}>{recipients.length}</div>
