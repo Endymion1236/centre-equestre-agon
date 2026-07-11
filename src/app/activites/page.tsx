@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowDown, CalendarDays, Phone, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowRight, CalendarDays, Phone, ShieldCheck, Sparkles } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { ActivitiesContent } from "./content";
@@ -11,12 +11,45 @@ export const metadata: Metadata = {
   alternates: { canonical: "/activites" },
 };
 
+const universes = [
+  {
+    eyebrow: "Dès 3 ans",
+    title: "Stages vacances",
+    text: "Baby Poney, Bronze, Argent, Or et semaines thématiques.",
+    href: "/activites?profil=enfant#baby",
+    image: "/images/vitrine/choices/stages-enfants.webp",
+    accent: "text-amber-700",
+    wash: "from-amber-50 via-amber-50/85 to-transparent",
+    border: "border-amber-100",
+  },
+  {
+    eyebrow: "Dès 12 ans",
+    title: "Balades sur la plage",
+    text: "Deux heures entre dunes, estuaire et bord de mer.",
+    href: "/activites?profil=balade#balade-soleil",
+    image: "/images/vitrine/choices/balade-plage.webp",
+    accent: "text-orange-700",
+    wash: "from-orange-50 via-orange-50/85 to-transparent",
+    border: "border-orange-100",
+  },
+  {
+    eyebrow: "Toute l’année",
+    title: "Cours & progression",
+    text: "Du loisir à la compétition, avec des groupes adaptés.",
+    href: "/activites?profil=cours#cours-loisir",
+    image: "/images/vitrine/choices/cavalier-regulier.webp",
+    accent: "text-blue-700",
+    wash: "from-blue-50 via-blue-50/85 to-transparent",
+    border: "border-blue-100",
+  },
+];
+
 export default function ActivitesPage() {
   return (
     <>
       <Navbar />
 
-      <section className="relative overflow-hidden bg-[linear-gradient(135deg,#07111f_0%,#12346b_58%,#2050a0_100%)] px-6 pb-24 pt-36 text-white sm:pb-28 sm:pt-40">
+      <section className="relative overflow-hidden bg-[linear-gradient(135deg,#07111f_0%,#12346b_58%,#2050a0_100%)] px-6 pb-28 pt-36 text-white sm:pb-32 sm:pt-40">
         <div className="pointer-events-none absolute -right-32 -top-48 h-[520px] w-[520px] rounded-full border border-white/[0.06] bg-white/[0.03]" />
         <div className="pointer-events-none absolute bottom-0 left-1/3 h-60 w-60 rounded-full bg-gold-400/10 blur-3xl" />
         <div className="relative mx-auto max-w-[1120px]">
@@ -50,7 +83,24 @@ export default function ActivitesPage() {
         </div>
       </section>
 
-      <div id="catalogue"><ActivitiesContent /></div>
+      <section className="relative z-10 -mt-12 px-5 sm:px-6">
+        <div className="mx-auto grid max-w-[1180px] gap-4 md:grid-cols-3">
+          {universes.map((universe) => (
+            <Link key={universe.title} href={universe.href} className={`group relative min-h-[275px] overflow-hidden rounded-[26px] border bg-white no-underline shadow-[0_18px_55px_rgba(12,26,46,0.1)] transition-all duration-500 hover:-translate-y-1.5 hover:shadow-[0_28px_65px_rgba(12,26,46,0.16)] ${universe.border}`}>
+              <img src={universe.image} alt="" aria-hidden="true" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.025]" />
+              <div className={`absolute inset-0 bg-gradient-to-r ${universe.wash}`} />
+              <div className="relative z-10 flex min-h-[275px] max-w-[68%] flex-col justify-end p-6">
+                <div className={`font-body text-[10px] font-bold uppercase tracking-[0.16em] ${universe.accent}`}>{universe.eyebrow}</div>
+                <h2 className="mt-2 font-display text-2xl font-bold leading-tight text-blue-950">{universe.title}</h2>
+                <p className="mt-3 font-body text-sm leading-relaxed text-slate-600">{universe.text}</p>
+                <div className="mt-5 inline-flex items-center gap-2 font-body text-xs font-bold text-blue-800">Explorer <ArrowRight size={14} className="transition-transform group-hover:translate-x-1" /></div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <div id="catalogue" className="scroll-mt-20"><ActivitiesContent /></div>
 
       <section className="bg-white px-6 py-20 text-center">
         <div className="mx-auto max-w-2xl">
