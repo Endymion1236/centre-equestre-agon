@@ -1,10 +1,10 @@
-import { Metadata } from "next";
+import type { Metadata } from "next";
 import { ContactPageContent } from "./content";
 
 export const metadata: Metadata = {
-  title: "Contact",
-  description:
-    "Contactez le Centre Équestre d'Agon-Coutainville. Adresse, téléphone, horaires d'ouverture et formulaire de contact.",
+  title: "Contact et itinéraire",
+  description: "Contactez le Centre Équestre d’Agon-Coutainville : adresse, téléphone, horaires, itinéraire et formulaire de renseignement.",
+  alternates: { canonical: "/contact" },
 };
 
 export default function ContactPage() {

@@ -1,516 +1,303 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useVitrine } from "@/lib/use-vitrine";
-import { Badge, Button, Card } from "@/components/ui";
 import { EditableImage } from "@/components/ui/EditableImage";
-import type { VitrineImageKey } from "@/hooks/useVitrineImages";
-import { ChevronDown, ChevronUp, Clock, Users, Calendar, Award, Star } from "lucide-react";
+import { getCatalogueVisual } from "@/lib/catalogue-visuals";
+import {
+  CATEGORY_LABELS,
+  PUBLIC_ACTIVITIES,
+  getVitrineActivityOverride,
+  type PublicActivity,
+  type PublicActivityCategory,
+} from "@/lib/public-activities";
+import { ArrowRight, Check, Clock, Search, SlidersHorizontal, Sparkles } from "lucide-react";
 
-interface Activity {
-  id: string;
-  category: string;
-  icon: string;
-  title: string;
-  ages: string;
-  schedule: string;
-  description: string;
-  features: string[];
-  gradient: string;
-  imageKey: VitrineImageKey;
-  price?: string;
-  level?: string;
+type DisplayActivity = PublicActivity & { image?: string };
+
+type VisualTone = "baby" | "stage" | "gold" | "sport" | "beach" | "party";
+
+const categories: Array<{ id: "all" | PublicActivityCategory; label: string }> = [
+  { id: "all", label: "Toutes" },
+  { id: "stages", label: "Stages vacances" },
+  { id: "balades", label: "Balades" },
+  { id: "cours", label: "Cours à l’année" },
+  { id: "competitions", label: "Compétitions" },
+  { id: "autres", label: "Autres" },
+];
+
+const profileToCategory: Record<string, "all" | PublicActivityCategory> = {
+  baby: "stages",
+  enfant: "stages",
+  confirme: "stages",
+  balade: "balades",
+  cours: "cours",
+  competition: "competitions",
+};
+
+const VISUALS: Record<VisualTone, { shell: string; wash: string; accent: string; chip: string }> = {
+  baby: {
+    shell: "bg-pink-50 border-pink-100",
+    wash: "from-pink-50 via-pink-50/92 to-pink-50/15",
+    accent: "text-pink-700",
+    chip: "bg-pink-600 text-white",
+  },
+  stage: {
+    shell: "bg-amber-50 border-amber-100",
+    wash: "from-amber-50 via-amber-50/92 to-amber-50/15",
+    accent: "text-amber-700",
+    chip: "bg-amber-600 text-white",
+  },
+  gold: {
+    shell: "bg-yellow-50 border-yellow-100",
+    wash: "from-yellow-50 via-yellow-50/92 to-yellow-50/15",
+    accent: "text-yellow-700",
+    chip: "bg-yellow-500 text-blue-950",
+  },
+  sport: {
+    shell: "bg-blue-50 border-blue-100",
+    wash: "from-blue-50 via-blue-50/92 to-blue-50/15",
+    accent: "text-blue-700",
+    chip: "bg-blue-700 text-white",
+  },
+  beach: {
+    shell: "bg-orange-50 border-orange-100",
+    wash: "from-orange-50 via-orange-50/92 to-orange-50/15",
+    accent: "text-orange-700",
+    chip: "bg-orange-600 text-white",
+  },
+  party: {
+    shell: "bg-violet-50 border-violet-100",
+    wash: "from-violet-50 via-violet-50/92 to-violet-50/15",
+    accent: "text-violet-700",
+    chip: "bg-violet-700 text-white",
+  },
+};
+
+function textValue(value: unknown, fallback: string) {
+  return typeof value === "string" && value.trim() ? value : fallback;
 }
 
-const activities: Activity[] = [
-  {
-    id: "baby",
-    category: "stages",
-    icon: "baby",
-    title: "Baby Poney",
-    ages: "3 – 5 ans",
-    schedule: "Lun–Ven · 10h–12h",
-    description:
-      "Une semaine magique pour les tout-petits ! Dans un univers imaginaire (pirates, fées, safari...), votre enfant découvre le poney en douceur. Maximum 6 enfants par groupe pour un encadrement optimal.",
-    features: [
-      "Approche ludique et sensorielle",
-      "Max 6 enfants par groupe",
-      "Thèmes variés chaque semaine",
-      "Encadrement par Emmeline (BPJEPS)",
-      "Découverte de la mini-ferme",
-    ],
-    gradient: "from-purple-500 to-purple-400",
-    imageKey: "activite-baby" as VitrineImageKey,
-    price: "175€ / semaine",
-  },
-  {
-    id: "bronze",
-    category: "stages",
-    icon: "award",
-    title: "Galop de Bronze",
-    ages: "6 – 8 ans",
-    schedule: "Lun–Ven · 10h–12h ou 14h–16h",
-    description:
-      "Semaines thématiques (Star Wars, Pokémon, Harry Potter...) mêlant jeux à poney, soins aux animaux et découverte de l'équitation. L'enfant développe sa confiance et son autonomie.",
-    features: [
-      "Semaines thématiques immersives",
-      "Jeux et parcours ludiques",
-      "Soins aux poneys",
-      "Découverte mini-ferme",
-      "Passage de galops possible",
-    ],
-    gradient: "from-amber-700 to-amber-600",
-    imageKey: "activite-bronze" as VitrineImageKey,
-    price: "175€ / semaine",
-  },
-  {
-    id: "argent",
-    category: "stages",
-    icon: "medal",
-    title: "Galop d'Argent",
-    ages: "8 – 10 ans",
-    schedule: "Lun–Ven · 10h–12h ou 14h–16h",
-    description:
-      "Place à l'autonomie ! Les cavaliers approfondissent leur technique, apprennent à seller et brider seuls, et découvrent les bases du travail en carrière.",
-    features: [
-      "Travail en autonomie",
-      "Technique aux 3 allures",
-      "Sellage et bridage",
-      "Initiation obstacles",
-      "Sorties extérieures",
-    ],
-    gradient: "from-gray-500 to-gray-400",
-    imageKey: "activite-argent" as VitrineImageKey,
-    price: "175€ / semaine",
-  },
-  {
-    id: "or",
-    category: "stages",
-    icon: "crown",
-    title: "Galop d'Or",
-    ages: "8+ ans (cavaliers de l'année ou Galop d'Argent validé)",
-    schedule: "Lun–Ven · 10h–12h ou 14h–16h",
-    description:
-      "Multi-disciplines : CSO, dressage, Pony Games, cross... Un vrai perfectionnement technique pour les cavaliers réguliers du club.",
-    features: [
-      "Multi-disciplines",
-      "CSO et dressage",
-      "Pony Games",
-      "Préparation galops FFE",
-      "Cross et extérieur",
-    ],
-    gradient: "from-gold-400 to-gold-500",
-    imageKey: "activite-or" as VitrineImageKey,
-    price: "175€ / semaine",
-  },
-  {
-    id: "galop34",
-    category: "stages",
-    icon: "star",
-    title: "Galop 3 – 4",
-    ages: "10+ ans",
-    schedule: "Lun–Ven · 10h–12h ou 14h–16h",
-    description:
-      "Stage intensif pour cavaliers confirmés. Travail technique poussé en CSO, dressage, cross. Objectif : préparer et valider les Galops 3 et 4 de la FFE.",
-    features: [
-      "Technique avancée",
-      "CSO jusqu'à 80cm",
-      "Dressage sur le plat",
-      "Préparation examens FFE",
-      "Vidéo et débriefing",
-    ],
-    gradient: "from-blue-500 to-blue-600",
-    imageKey: "activite-galop34" as VitrineImageKey,
-    price: "175€ / semaine",
-  },
-  {
-    id: "balade-soleil",
-    category: "balades",
-    icon: "compass",
-    title: "Balade coucher de soleil",
-    ages: "Dès 12 ans",
-    schedule: "2h · Avr–Oct · Sur réservation",
-    description:
-      "La star de nos balades ! 2 heures entre dunes, estuaire de la baie de Sienne et plage d'Agon au coucher du soleil. Groupes par niveau (débutants, débrouillés, confirmés avec galop sur la plage).",
-    features: [
-      "2h de promenade",
-      "3 niveaux de groupe",
-      "Dunes, estuaire et plage",
-      "Galop sur la plage (confirmés)",
-      "D'avril à octobre",
-    ],
-    gradient: "from-orange-500 to-orange-400",
-    imageKey: "activite-balade-soleil" as VitrineImageKey,
-    price: "57€",
-    level: "3 niveaux disponibles",
-  },
-  {
-    id: "balade-jour",
-    category: "balades",
-    icon: "sun",
-    title: "Promenade en journée",
-    ages: "Dès 12 ans",
-    schedule: "2h · Toute l'année · Sur réservation",
-    description:
-      "Profitez d'une balade de 2h dans un cadre naturel exceptionnel classé Natura 2000. Idéal pour un cadeau original ou une découverte de la région à cheval.",
-    features: [
-      "2h de balade",
-      "Cadre Natura 2000",
-      "Adapté aux débutants",
-      "Bon cadeau disponible",
-      "Toute l'année (selon météo)",
-    ],
-    gradient: "from-blue-400 to-blue-300",
-    imageKey: "activite-balade-jour" as VitrineImageKey,
-    price: "53€",
-  },
-  {
-    id: "balade-privee",
-    category: "balades",
-    icon: "heart",
-    title: "Promenade romantique privatisée",
-    ages: "Adultes",
-    schedule: "2h · Sur demande",
-    description:
-      "Un moment rien que pour vous ! Promenade privatisée pour 2, accompagnée par un guide personnel. Parfait pour un anniversaire, une demande spéciale ou simplement se faire plaisir.",
-    features: [
-      "100% privatisée pour 2",
-      "Guide personnel dédié",
-      "Parcours personnalisé",
-      "Idéal cadeau couple",
-    ],
-    gradient: "from-pink-500 to-pink-400",
-    imageKey: "activite-balade-privee" as VitrineImageKey,
-    price: "250€",
-  },
-  {
-    id: "randonnee-jeunes",
-    category: "balades",
-    icon: "map",
-    title: "Randonnée jeunes 12–16 ans",
-    ages: "12 – 16 ans",
-    schedule: "Journée · Sur réservation",
-    description:
-      "Une aventure d'une journée complète pour les jeunes cavaliers. Randonnée à travers la campagne normande, pique-nique et galops sur la plage.",
-    features: [
-      "Journée complète",
-      "Niveau intermédiaire requis",
-      "Pique-nique inclus",
-      "Campagne et plage",
-    ],
-    gradient: "from-green-500 to-green-400",
-    imageKey: "activite-randonnee-jeunes" as VitrineImageKey,
-    price: "Sur demande",
-  },
-  {
-    id: "cours-loisir",
-    category: "cours",
-    icon: "calendar",
-    title: "Forfait Loisir",
-    ages: "Tous âges, tous niveaux",
-    schedule: "1 cours/semaine · Toute l'année",
-    description:
-      "Un cours par semaine toute l'année scolaire. Progressez à votre rythme dans une ambiance conviviale. Paiement en 1x, 3x ou 10x sans frais.",
-    features: [
-      "1h de cours hebdomadaire",
-      "Groupes par niveau et âge",
-      "Accès libre au club",
-      "Paiement en 1x, 3x ou 10x",
-      "Passage galops FFE",
-    ],
-    gradient: "from-blue-500 to-blue-400",
-    imageKey: "activite-cours-loisir" as VitrineImageKey,
-    price: "Tarif annuel",
-  },
-  {
-    id: "cours-compet",
-    category: "cours",
-    icon: "trophy",
-    title: "Forfait Compétition",
-    ages: "Cavaliers motivés",
-    schedule: "2 cours/semaine · Toute l'année",
-    description:
-      "Pour les cavaliers qui veulent se dépasser. 2 cours par semaine, entraînement compétition CSO et Pony Games, accès aux concours du club.",
-    features: [
-      "2 cours hebdomadaires",
-      "Entraînement compétition",
-      "CSO + Pony Games",
-      "Accès concours du club",
-      "Licence FFE facilitée",
-    ],
-    gradient: "from-gold-400 to-gold-500",
-    imageKey: "activite-cours-compet" as VitrineImageKey,
-    price: "Tarif annuel",
-  },
-  {
-    id: "cso",
-    category: "competitions",
-    icon: "medal",
-    title: "Concours CSO interne",
-    ages: "Galop 3+",
-    schedule: "Mensuel",
-    description:
-      "Concours de saut d'obstacles organisés au club. Parcours adaptés du Club 4 au Club 1. Ambiance conviviale et formatrice.",
-    features: [
-      "Parcours Club 4 à Club 1",
-      "Juges officiels",
-      "Remise de prix",
-      "Ouvert aux extérieurs",
-    ],
-    gradient: "from-blue-600 to-blue-500",
-    imageKey: "activite-cso" as VitrineImageKey,
-    price: "25€",
-  },
-  {
-    id: "ponygames",
-    category: "competitions",
-    icon: "flag",
-    title: "Pony Games",
-    ages: "Tous niveaux",
-    schedule: "Mensuel",
-    description:
-      "Notre spécialité ! Compétitions de Pony Games par équipes. Du débutant au niveau national. Préparation aux championnats de France à Lamotte-Beuvron.",
-    features: [
-      "Par équipes de 5",
-      "Tous niveaux",
-      "Préparation Lamotte-Beuvron",
-      "Ambiance garantie",
-    ],
-    gradient: "from-green-500 to-green-400",
-    imageKey: "activite-ponygames" as VitrineImageKey,
-    price: "15€",
-  },
-  {
-    id: "equifun",
-    category: "competitions",
-    icon: "party",
-    title: "Challenge Équifun",
-    ages: "Tous niveaux",
-    schedule: "Trimestriel",
-    description:
-      "Parcours ludiques mêlant maniabilité, adresse et vitesse. Accessible à tous, y compris les débutants. Le fun avant tout !",
-    features: [
-      "Parcours ludiques",
-      "Accessible débutants",
-      "Système de points FFE",
-      "Podium et récompenses",
-    ],
-    gradient: "from-purple-500 to-purple-400",
-    imageKey: "activite-equifun" as VitrineImageKey,
-    price: "20€",
-  },
-  {
-    id: "anniversaire",
-    category: "autres",
-    icon: "party",
-    title: "Anniversaire au club",
-    ages: "Dès 4 ans",
-    schedule: "Demi-journée · Sur demande",
-    description:
-      "Une fête d'anniversaire unique ! Activités avec les poneys, jeux, découverte de la mini-ferme et goûter. Votre enfant et ses amis vivent une aventure inoubliable.",
-    features: [
-      "Activités poneys",
-      "Jeux en groupe",
-      "Visite mini-ferme",
-      "Goûter inclus",
-      "Personnalisable (thème, nombre...)",
-    ],
-    gradient: "from-red-400 to-orange-400",
-    imageKey: "activite-anniversaire" as VitrineImageKey,
-    price: "Sur demande",
-  },
-  {
-    id: "ponyride",
-    category: "autres",
-    icon: "heart",
-    title: "Pony rides",
-    ages: "Jusqu'à 7 ans",
-    schedule: "Sur place · Aux heures d'ouverture",
-    description:
-      "Pour les tout-petits ! Une balade autour du club sur nos poneys les plus doux. Pas besoin de réserver, venez directement.",
-    features: [
-      "Sans réservation",
-      "Tour du club accompagné",
-      "Poneys sélectionnés",
-      "Accessible dès 2 ans",
-    ],
-    gradient: "from-green-600 to-green-500",
-    imageKey: "activite-ponyride" as VitrineImageKey,
-    price: "Tarif sur place",
-  },
-];
+function visualToneFor(activity: DisplayActivity): VisualTone {
+  if (activity.id === "baby" || activity.id.includes("ponyride")) return "baby";
+  if (activity.id.includes("anniversaire")) return "party";
+  if (activity.category === "balades") return "beach";
+  if (activity.id === "or") return "gold";
+  if (activity.category === "cours" || activity.category === "competitions" || activity.id === "galop34") return "sport";
+  return "stage";
+}
 
-const categories = [
-  { id: "all", label: "Toutes", count: activities.length },
-  { id: "stages", label: "Stages vacances", count: activities.filter((a) => a.category === "stages").length },
-  { id: "balades", label: "Balades", count: activities.filter((a) => a.category === "balades").length },
-  { id: "cours", label: "Cours réguliers", count: activities.filter((a) => a.category === "cours").length },
-  { id: "competitions", label: "Compétitions", count: activities.filter((a) => a.category === "competitions").length },
-  { id: "autres", label: "Autres", count: activities.filter((a) => a.category === "autres").length },
-];
+function ActivityVisual({ activity }: { activity: DisplayActivity }) {
+  const visual = VISUALS[visualToneFor(activity)];
+  const catalogueVisual = getCatalogueVisual(activity.id);
 
-function ActivityCard({ activity }: { activity: Activity }) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <div className="card overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/8 hover:-translate-y-1">
-      <div className="flex flex-col md:flex-row overflow-hidden">
-        {/* Visual */}
-        <EditableImage
-          imageKey={activity.imageKey}
-          mode="img"
-          label={`Photo ${activity.title}`}
+  if (activity.image) {
+    return (
+      <div className="relative h-64 overflow-hidden sm:h-72">
+        <img
+          src={activity.image}
           alt={activity.title}
-          className={`w-full md:w-48 h-44 md:h-auto flex-shrink-0 overflow-hidden`}
-        >
-          {/* Fallback gradient si pas encore de photo */}
-          <div className={`absolute inset-0 bg-gradient-to-br ${activity.gradient} flex items-center justify-center`}>
-            <Star size={64} className="text-white/25" strokeWidth={1} />
-          </div>
-        </EditableImage>
-
-        {/* Content */}
-        <div className="flex-1 p-5 md:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
-            <div>
-              <h3 className="font-display text-xl font-bold text-blue-800 mb-1.5">
-                {activity.title}
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                <Badge color="blue">{activity.ages}</Badge>
-                {activity.level && <Badge color="purple">{activity.level}</Badge>}
-              </div>
-            </div>
-            {activity.price && (
-              <div className="font-body text-lg font-bold text-blue-500">
-                {activity.price}
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-wrap gap-4 mb-3 font-body text-sm text-gray-400">
-            <span className="flex items-center gap-1.5">
-              <Clock size={14} />
-              {activity.schedule}
-            </span>
-          </div>
-
-          <p className="font-body text-sm text-gray-500 leading-relaxed mb-4">
-            {activity.description}
-          </p>
-
-          {/* Expandable features */}
-          {expanded && (
-            <div className="mb-4 pt-4 border-t border-blue-500/8">
-              <div className="font-body text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
-                Ce qui est inclus
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {activity.features.map((f, i) => (
-                  <span
-                    key={i}
-                    className="font-body text-sm text-gray-500 bg-sand px-3 py-1.5 rounded-lg"
-                  >
-                    ✓ {f}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-center gap-4">
-            <a href="/espace-cavalier/reserver" className="no-underline">
-              <Button variant="primary" size="sm">
-                Réserver
-              </Button>
-            </a>
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="font-body text-sm font-medium text-blue-500 flex items-center gap-1 hover:text-blue-400 transition-colors bg-transparent border-none cursor-pointer"
-            >
-              {expanded ? (
-                <>
-                  Moins de détails <ChevronUp size={16} />
-                </>
-              ) : (
-                <>
-                  Plus de détails <ChevronDown size={16} />
-                </>
-              )}
-            </button>
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.035]"
+        />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/78 via-slate-950/8 to-white/5" />
+        <div className="absolute left-4 top-4 rounded-full border border-white/25 bg-slate-950/42 px-3 py-1.5 font-body text-[10px] font-bold uppercase tracking-[0.12em] text-white backdrop-blur-md">
+          {CATEGORY_LABELS[activity.category]}
+        </div>
+        {activity.price && <div className="absolute right-4 top-12 rounded-xl bg-white/95 px-3 py-2 font-body text-xs font-bold text-blue-800 shadow-lg backdrop-blur-md">{activity.price}</div>}
+        <div className="absolute inset-x-5 bottom-5">
+          <h2 className="font-display text-[28px] font-bold leading-tight text-white [text-shadow:0_2px_20px_rgba(0,0,0,0.3)]">{activity.title}</h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="rounded-full bg-white/15 px-3 py-1.5 font-body text-[10px] font-bold text-white backdrop-blur-md">{activity.ages}</span>
+            {activity.level && <span className="rounded-full bg-gold-400/92 px-3 py-1.5 font-body text-[10px] font-bold text-blue-950">{activity.level}</span>}
           </div>
         </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`relative min-h-[255px] overflow-hidden border-b ${visual.shell}`}>
+      <div
+        aria-hidden="true"
+        className="absolute bottom-0 right-0 top-0 w-[54%] bg-no-repeat opacity-92 transition-transform duration-700 group-hover:scale-[1.025] sm:w-[50%]"
+        style={{
+          backgroundImage: `url('${catalogueVisual.image}')`,
+          backgroundSize: catalogueVisual.backgroundSize || "cover",
+          backgroundPosition: catalogueVisual.backgroundPosition || "center",
+        }}
+      />
+      <EditableImage
+        imageKey={activity.imageKey}
+        mode="background"
+        label={`Photo ${activity.title}`}
+        alt={activity.title}
+        style={{ backgroundImage: "none", backgroundPosition: "center" }}
+        className="absolute bottom-0 right-0 top-0 w-[54%] overflow-hidden !bg-transparent sm:w-[50%]"
+      />
+      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-r ${visual.wash}`} />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-white/25 via-transparent to-white/5" />
+
+      <div className="relative z-10 flex min-h-[255px] max-w-[67%] flex-col justify-end p-5 sm:p-6">
+        <div className={`font-body text-[10px] font-bold uppercase tracking-[0.15em] ${visual.accent}`}>{CATEGORY_LABELS[activity.category]}</div>
+        <h2 className="mt-3 font-display text-[28px] font-bold leading-tight text-blue-950">{activity.title}</h2>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <span className="rounded-full bg-white/72 px-3 py-1.5 font-body text-[10px] font-bold text-blue-950 shadow-sm backdrop-blur-sm">{activity.ages}</span>
+          {activity.level && <span className={`rounded-full px-3 py-1.5 font-body text-[10px] font-bold shadow-sm ${visual.chip}`}>{activity.level}</span>}
+        </div>
+        {activity.price && <div className="mt-5 w-fit rounded-xl bg-white/88 px-3 py-2 font-body text-xs font-bold text-blue-800 shadow-sm backdrop-blur-sm">{activity.price}</div>}
       </div>
     </div>
   );
 }
 
+function ActivityCard({ activity }: { activity: DisplayActivity }) {
+  return (
+    <article id={activity.id} className="group scroll-mt-28 overflow-hidden rounded-[26px] border border-blue-500/[0.08] bg-white shadow-[0_12px_38px_rgba(12,26,46,0.05)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_24px_58px_rgba(12,26,46,0.11)]">
+      <ActivityVisual activity={activity} />
+
+      <div className="p-5 sm:p-6">
+        <div className="mb-4 flex items-start gap-2 font-body text-xs font-semibold text-slate-400">
+          <Clock size={15} className="mt-0.5 flex-shrink-0 text-blue-500" />
+          <span>{activity.schedule}</span>
+        </div>
+        <p className="font-body text-sm leading-relaxed text-slate-500">{activity.description}</p>
+
+        <div className="mt-5 grid gap-2 sm:grid-cols-2">
+          {activity.features.slice(0, 4).map((feature) => (
+            <div key={feature} className="flex items-start gap-2 font-body text-xs leading-relaxed text-slate-500">
+              <span className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600"><Check size={10} strokeWidth={3} /></span>
+              {feature}
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-5">
+          <Link href={`/activites/${activity.id}`} className="group/link inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-3 font-body text-xs font-bold text-white no-underline shadow-[0_7px_20px_rgba(32,80,160,0.16)] transition-all hover:-translate-y-0.5 hover:bg-blue-600">
+            Voir la fiche <ArrowRight size={14} className="transition-transform group-hover/link:translate-x-1" />
+          </Link>
+          <Link href="/espace-cavalier/reserver" className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 font-body text-xs font-bold text-blue-700 no-underline transition-colors hover:border-blue-200 hover:bg-blue-100">
+            Réserver
+          </Link>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 export function ActivitiesContent() {
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState<"all" | PublicActivityCategory>("all");
+  const [search, setSearch] = useState("");
   const { vitrine } = useVitrine();
 
-  // Override les données statiques avec les valeurs Firebase si disponibles
-  const v = vitrine.activites as any;
-  const dynamicActivities = activities.map(a => {
-    const key = a.id === "baby" ? "baby_poney" : a.id === "bronze" ? "galop_bronze" : a.id === "argent" ? "galop_argent" : a.id === "or" ? "galop_or" : a.id === "balade" ? "balade" : a.id === "cours" ? "cours" : null;
-    if (!key || !v[key]) return a;
-    return { ...a, title: v[key].title || a.title, ages: v[key].ages || a.ages, schedule: v[key].schedule || a.schedule, description: v[key].description || a.description, price: v[key].price || a.price, image: v[key].image || (a as any).image || "" };
-  });
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const profile = params.get("profil") || "";
+    if (profileToCategory[profile]) setFilter(profileToCategory[profile]);
 
-  const filtered = filter === "all" ? dynamicActivities : dynamicActivities.filter((a) => a.category === filter);
+    if (window.location.hash) {
+      window.setTimeout(() => {
+        document.querySelector(window.location.hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 180);
+    }
+  }, []);
+
+  const activities = useMemo<DisplayActivity[]>(() => {
+    const source = (vitrine.activites || {}) as Record<string, unknown>;
+    return PUBLIC_ACTIVITIES.map((activity) => {
+      const override = getVitrineActivityOverride(activity, source);
+      if (!override) return activity;
+      return {
+        ...activity,
+        title: textValue(override.title, activity.title),
+        ages: textValue(override.ages, activity.ages),
+        schedule: textValue(override.schedule, activity.schedule),
+        description: textValue(override.description, activity.description),
+        price: textValue(override.price, activity.price || "") || undefined,
+        image: textValue(override.image, "") || undefined,
+      };
+    });
+  }, [vitrine.activites]);
+
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLocaleLowerCase("fr");
+    return activities.filter((activity) => {
+      const categoryMatches = filter === "all" || activity.category === filter;
+      if (!categoryMatches) return false;
+      if (!needle) return true;
+      return [activity.title, activity.ages, activity.description, activity.level, ...activity.features]
+        .filter(Boolean)
+        .some((value) => String(value).toLocaleLowerCase("fr").includes(needle));
+    });
+  }, [activities, filter, search]);
 
   return (
-    <section className="py-12 px-6 max-w-[900px] mx-auto">
-      {/* Filter tabs */}
-      <div className="flex flex-wrap gap-2 justify-center mb-10">
-        {categories.map((cat) => (
-          <button
-            key={cat.id}
-            onClick={() => setFilter(cat.id)}
-            className={`
-              font-body text-sm font-medium px-5 py-2.5 rounded-full border transition-all cursor-pointer
-              ${
-                filter === cat.id
-                  ? "bg-blue-500 text-white border-blue-500"
-                  : "bg-white text-gray-500 border-gray-200 hover:border-blue-200"
-              }
-            `}
-          >
-            {cat.label}{" "}
-            <span className="opacity-50 text-xs ml-1">{cat.count}</span>
-          </button>
-        ))}
-      </div>
+    <section className="bg-cream px-5 py-12 sm:px-6 sm:py-16">
+      <div className="mx-auto max-w-[1180px]">
+        <div className="mb-8 rounded-[24px] border border-blue-500/[0.08] bg-white p-4 shadow-[0_12px_38px_rgba(12,26,46,0.045)] sm:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><SlidersHorizontal size={20} /></div>
+              <div>
+                <div className="font-display text-lg font-bold text-blue-950">Affinez selon votre envie</div>
+                <div className="font-body text-xs text-slate-400">{filtered.length} activité{filtered.length > 1 ? "s" : ""} affichée{filtered.length > 1 ? "s" : ""}</div>
+              </div>
+            </div>
 
-      {/* Activity cards */}
-      <div className="flex flex-col gap-5">
-        {filtered.map((activity) => (
-          <ActivityCard key={activity.id} activity={activity} />
-        ))}
-      </div>
+            <div className="relative w-full lg:max-w-[320px]">
+              <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Âge, balade, débutant, CSO…"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 font-body text-sm text-blue-950 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-300 focus:bg-white"
+              />
+            </div>
+          </div>
 
-      {/* Dégressivité info */}
-      <div className="mt-10 p-6 bg-blue-50 rounded-2xl border border-blue-500/8">
-        <h3 className="font-display text-lg font-bold text-blue-800 mb-3">
-          💡 Tarifs dégressifs
-        </h3>
-        <div className="font-body text-sm text-gray-500 leading-relaxed space-y-2">
-          <p>
-            <strong className="text-blue-800">Multi-stages :</strong> Réduction
-            dès le 2ème stage consécutif pour le même enfant.
-          </p>
-          <p>
-            <strong className="text-blue-800">Famille :</strong> Réduction à
-            partir du 2ème enfant inscrit la même semaine.
-          </p>
-          <p>
-            <strong className="text-blue-800">Cumul possible :</strong> Les
-            deux réductions sont cumulables !
-          </p>
-          <p className="text-gray-400 italic">
-            Les réductions sont appliquées automatiquement lors de la
-            réservation en ligne.
-          </p>
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {categories.map((category) => {
+              const count = category.id === "all" ? activities.length : activities.filter((activity) => activity.category === category.id).length;
+              const active = filter === category.id;
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => setFilter(category.id)}
+                  className={`flex flex-shrink-0 items-center gap-2 rounded-full border px-4 py-2.5 font-body text-xs font-bold transition-all ${
+                    active
+                      ? "border-blue-700 bg-blue-700 text-white shadow-[0_6px_18px_rgba(32,80,160,0.16)]"
+                      : "border-slate-200 bg-white text-slate-500 hover:border-blue-200 hover:text-blue-700"
+                  }`}
+                >
+                  {category.label}<span className={`text-[10px] ${active ? "text-white/55" : "text-slate-300"}`}>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {filtered.length > 0 ? (
+          <div className="grid gap-6 lg:grid-cols-2">
+            {filtered.map((activity) => <ActivityCard key={activity.id} activity={activity} />)}
+          </div>
+        ) : (
+          <div className="rounded-[24px] border border-dashed border-blue-200 bg-white px-6 py-16 text-center">
+            <Sparkles size={28} className="mx-auto text-blue-300" />
+            <h2 className="mt-4 font-display text-xl font-bold text-blue-950">Aucune activité ne correspond</h2>
+            <p className="mt-2 font-body text-sm text-slate-500">Essayez un autre mot ou revenez à toutes les activités.</p>
+            <button type="button" onClick={() => { setFilter("all"); setSearch(""); }} className="mt-5 rounded-xl border-none bg-blue-700 px-5 py-3 font-body text-xs font-bold text-white">Tout afficher</button>
+          </div>
+        )}
+
+        <div className="mt-10 grid gap-4 rounded-[24px] border border-blue-100 bg-blue-50 p-6 md:grid-cols-[1fr_auto] md:items-center">
+          <div>
+            <div className="font-display text-lg font-bold text-blue-950">Plusieurs enfants ou plusieurs semaines ?</div>
+            <p className="mt-1 font-body text-sm leading-relaxed text-slate-500">Les réductions multi-stages et famille sont appliquées automatiquement lorsqu’elles sont prévues dans l’offre.</p>
+          </div>
+          <Link href="/tarifs" className="inline-flex items-center gap-2 font-body text-sm font-bold text-blue-700 no-underline">Voir tous les tarifs <ArrowRight size={15} /></Link>
         </div>
       </div>
     </section>
