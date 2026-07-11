@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useVitrine } from "@/lib/use-vitrine";
-import { ArrowRight, CalendarDays, Check, CreditCard, Gift, Trophy, Waves } from "lucide-react";
+import IllustratedFeatureBand from "@/components/public/IllustratedFeatureBand";
+import { ArrowRight, Check, CreditCard, Gift, Trophy } from "lucide-react";
 
 function StageCard({ title, subtitle, price, features, highlight = false }: { title: string; subtitle: string; price: string; features: string[]; highlight?: boolean }) {
   return (
@@ -39,38 +40,66 @@ export function TarifsContent() {
       </section>
 
       <section className="bg-white px-6 py-20">
-        <div className="mx-auto grid max-w-[1120px] gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
-          <div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><Waves size={23} /></div>
-            <div className="mt-5 font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">Balades à la plage</div>
-            <h2 className="mt-3 font-display text-3xl font-bold leading-tight text-blue-950">Deux heures entre dunes, estuaire et plage</h2>
-            <p className="mt-4 font-body text-sm leading-relaxed text-slate-500">Les groupes sont séparés selon le niveau. Les cavaliers confirmés peuvent accéder aux allures soutenues lorsque les conditions le permettent.</p>
-            <div className="mt-6 flex flex-wrap gap-3"><Link href="/activites/balade-soleil" className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3.5 font-body text-sm font-bold text-white no-underline">Découvrir les balades <ArrowRight size={15} /></Link><Link href="/offrir-un-bon" className="inline-flex items-center gap-2 rounded-xl border border-gold-200 bg-gold-50 px-5 py-3.5 font-body text-sm font-bold text-gold-700 no-underline"><Gift size={15} /> Offrir une balade</Link></div>
-          </div>
-          <div className="overflow-hidden rounded-[26px] border border-blue-500/[0.08] bg-cream shadow-[0_18px_50px_rgba(12,26,46,0.06)]">
-            {tariffs.balades.map((item, index) => (
-              <div key={`${item.label}-${index}`} className="flex items-center justify-between gap-5 border-b border-blue-500/[0.07] p-5 last:border-b-0 sm:p-6">
-                <div><div className="font-display text-lg font-bold text-blue-950">{item.label}</div><div className="mt-1 font-body text-xs leading-relaxed text-slate-400">{item.level}{item.note ? ` · ${item.note}` : ""}</div></div>
-                <div className="flex-shrink-0 font-display text-2xl font-bold text-blue-700">{item.price}€</div>
-              </div>
-            ))}
+        <div className="mx-auto grid max-w-[1120px] gap-7 lg:grid-cols-[1fr_1fr] lg:items-stretch">
+          <IllustratedFeatureBand
+            image="/images/vitrine/choices/balade-plage.webp"
+            alt="Une balade à poney sur la plage d'Agon-Coutainville"
+            eyebrow="Balades à la plage"
+            title="Deux heures entre dunes, estuaire et bord de mer"
+            text="Les groupes sont séparés selon le niveau. Débutants, cavaliers débrouillés et confirmés profitent chacun d’un rythme adapté."
+            href="/activites/balade-soleil"
+            cta="Découvrir les balades"
+            tone="orange"
+            compact
+          />
+
+          <div className="flex flex-col overflow-hidden rounded-[28px] border border-blue-500/[0.08] bg-cream shadow-[0_18px_50px_rgba(12,26,46,0.06)]">
+            <div className="border-b border-blue-500/[0.07] p-5 sm:p-6">
+              <div className="font-body text-xs font-bold uppercase tracking-[0.16em] text-gold-500">Tarifs des promenades</div>
+              <p className="mt-2 font-body text-sm leading-relaxed text-slate-500">Toutes les formules durent deux heures. Les disponibilités dépendent de la saison et de la météo.</p>
+            </div>
+            <div className="flex-1 divide-y divide-blue-500/[0.07]">
+              {tariffs.balades.map((item, index) => (
+                <div key={`${item.label}-${index}`} className="flex items-center justify-between gap-5 p-5 sm:p-6">
+                  <div><div className="font-display text-lg font-bold text-blue-950">{item.label}</div><div className="mt-1 font-body text-xs leading-relaxed text-slate-400">{item.level}{item.note ? ` · ${item.note}` : ""}</div></div>
+                  <div className="flex-shrink-0 font-display text-2xl font-bold text-blue-700">{item.price}€</div>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-3 border-t border-blue-500/[0.07] p-5 sm:p-6">
+              <Link href="/espace-cavalier/reserver" className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3.5 font-body text-sm font-bold text-white no-underline">Voir les places <ArrowRight size={15} /></Link>
+              <Link href="/offrir-un-bon" className="inline-flex items-center gap-2 rounded-xl border border-gold-200 bg-gold-50 px-5 py-3.5 font-body text-sm font-bold text-gold-700 no-underline"><Gift size={15} /> Offrir une balade</Link>
+            </div>
           </div>
         </div>
       </section>
 
       {annualCourses.length > 0 && (
         <section className="bg-sand px-6 py-20">
-          <div className="mx-auto max-w-[1000px]">
-            <div className="mb-9 text-center"><CalendarDays size={27} className="mx-auto text-blue-600" /><div className="mt-4 font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">Cours à l’année</div><h2 className="mt-3 font-display text-3xl font-bold text-blue-950">Des forfaits pour progresser dans la durée</h2></div>
-            <div className="grid gap-4 md:grid-cols-2">
-              {annualCourses.map((course, index) => (
-                <div key={`${course.label}-${index}`} className="flex items-center justify-between gap-5 rounded-[22px] border border-blue-500/[0.08] bg-white p-5 shadow-[0_10px_35px_rgba(12,26,46,0.035)]">
-                  <div><div className="font-display text-lg font-bold text-blue-950">{course.label}</div><div className="mt-1 font-body text-xs text-slate-400">{course.level}{course.freq ? ` · ${course.freq}` : ""}</div></div>
-                  <div className="flex-shrink-0 text-right"><div className="font-display text-2xl font-bold text-blue-700">{course.price}€</div><div className="font-body text-[10px] text-slate-400">forfait annuel</div></div>
-                </div>
-              ))}
+          <div className="mx-auto grid max-w-[1120px] gap-7 lg:grid-cols-[0.92fr_1.08fr] lg:items-stretch">
+            <IllustratedFeatureBand
+              image="/images/vitrine/choices/cavalier-regulier.webp"
+              alt="Une cavalière progresse à l'obstacle avec son poney"
+              eyebrow="Cours à l’année"
+              title="Progresser dans la durée"
+              text="Les forfaits annuels permettent de suivre un groupe régulier, de construire des repères et d’avancer vers des objectifs adaptés."
+              href="/activites/cours-loisir"
+              cta="Comprendre les cours"
+              tone="blue"
+              compact
+            />
+
+            <div className="rounded-[28px] border border-blue-500/[0.08] bg-white p-5 shadow-[0_18px_50px_rgba(12,26,46,0.05)] sm:p-6">
+              <div className="mb-5"><div className="font-body text-xs font-bold uppercase tracking-[0.16em] text-gold-500">Forfaits annuels</div><h2 className="mt-2 font-display text-2xl font-bold text-blue-950">Choisissez la fréquence qui convient</h2></div>
+              <div className="grid gap-3">
+                {annualCourses.map((course, index) => (
+                  <div key={`${course.label}-${index}`} className="flex items-center justify-between gap-5 rounded-[20px] border border-blue-500/[0.07] bg-cream p-5">
+                    <div><div className="font-display text-lg font-bold text-blue-950">{course.label}</div><div className="mt-1 font-body text-xs text-slate-400">{course.level}{course.freq ? ` · ${course.freq}` : ""}</div></div>
+                    <div className="flex-shrink-0 text-right"><div className="font-display text-2xl font-bold text-blue-700">{course.price}€</div><div className="font-body text-[10px] text-slate-400">forfait annuel</div></div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="mt-7 text-center"><Link href="/activites/cours-loisir" className="inline-flex items-center gap-2 font-body text-sm font-bold text-blue-700 no-underline">Comprendre les cours à l’année <ArrowRight size={15} /></Link></div>
           </div>
         </section>
       )}
