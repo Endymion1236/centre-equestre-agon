@@ -4,7 +4,7 @@ export type CatalogueVisual = {
   backgroundPosition?: string;
 };
 
-const SPRITE = "/images/vitrine/catalogue/activity-scenes.webp";
+const SPRITE = "/images/vitrine/catalogue/activity-scenes.svg";
 const sprite = (column: 0 | 1 | 2 | 3, row: 0 | 1 | 2): CatalogueVisual => ({
   image: SPRITE,
   backgroundSize: "400% 300%",
