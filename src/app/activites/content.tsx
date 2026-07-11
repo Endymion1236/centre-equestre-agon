@@ -15,6 +15,8 @@ import { ArrowRight, Check, Clock, Search, SlidersHorizontal, Sparkles } from "l
 
 type DisplayActivity = PublicActivity & { image?: string };
 
+type VisualTone = "baby" | "stage" | "gold" | "sport" | "beach" | "party";
+
 const categories: Array<{ id: "all" | PublicActivityCategory; label: string }> = [
   { id: "all", label: "Toutes" },
   { id: "stages", label: "Stages vacances" },
@@ -41,57 +43,82 @@ const ILLUSTRATIONS = {
   anniversaire: "/images/vitrine/choices/anniversaire-poney.webp",
 } as const;
 
+const VISUALS: Record<VisualTone, { image: string; shell: string; wash: string; accent: string; chip: string }> = {
+  baby: {
+    image: ILLUSTRATIONS.baby,
+    shell: "bg-pink-50 border-pink-100",
+    wash: "from-pink-50 via-pink-50/92 to-pink-50/15",
+    accent: "text-pink-700",
+    chip: "bg-pink-600 text-white",
+  },
+  stage: {
+    image: ILLUSTRATIONS.stages,
+    shell: "bg-amber-50 border-amber-100",
+    wash: "from-amber-50 via-amber-50/92 to-amber-50/15",
+    accent: "text-amber-700",
+    chip: "bg-amber-600 text-white",
+  },
+  gold: {
+    image: ILLUSTRATIONS.progression,
+    shell: "bg-yellow-50 border-yellow-100",
+    wash: "from-yellow-50 via-yellow-50/92 to-yellow-50/15",
+    accent: "text-yellow-700",
+    chip: "bg-yellow-500 text-blue-950",
+  },
+  sport: {
+    image: ILLUSTRATIONS.progression,
+    shell: "bg-blue-50 border-blue-100",
+    wash: "from-blue-50 via-blue-50/92 to-blue-50/15",
+    accent: "text-blue-700",
+    chip: "bg-blue-700 text-white",
+  },
+  beach: {
+    image: ILLUSTRATIONS.plage,
+    shell: "bg-orange-50 border-orange-100",
+    wash: "from-orange-50 via-orange-50/92 to-orange-50/15",
+    accent: "text-orange-700",
+    chip: "bg-orange-600 text-white",
+  },
+  party: {
+    image: ILLUSTRATIONS.anniversaire,
+    shell: "bg-violet-50 border-violet-100",
+    wash: "from-violet-50 via-violet-50/92 to-violet-50/15",
+    accent: "text-violet-700",
+    chip: "bg-violet-700 text-white",
+  },
+};
+
 function textValue(value: unknown, fallback: string) {
   return typeof value === "string" && value.trim() ? value : fallback;
 }
 
-function illustrationFor(activity: DisplayActivity) {
-  if (activity.id === "baby" || activity.id.includes("ponyride")) return ILLUSTRATIONS.baby;
-  if (activity.id.includes("anniversaire")) return ILLUSTRATIONS.anniversaire;
-  if (activity.category === "balades") return ILLUSTRATIONS.plage;
-  if (activity.category === "cours" || activity.category === "competitions") return ILLUSTRATIONS.progression;
-  if (["or", "galop34"].includes(activity.id)) return ILLUSTRATIONS.progression;
-  return ILLUSTRATIONS.stages;
+function visualToneFor(activity: DisplayActivity): VisualTone {
+  if (activity.id === "baby" || activity.id.includes("ponyride")) return "baby";
+  if (activity.id.includes("anniversaire")) return "party";
+  if (activity.category === "balades") return "beach";
+  if (activity.id === "or") return "gold";
+  if (activity.category === "cours" || activity.category === "competitions" || activity.id === "galop34") return "sport";
+  return "stage";
 }
 
-function ActivityCard({ activity }: { activity: DisplayActivity }) {
-  const fallbackImage = illustrationFor(activity);
+function ActivityVisual({ activity }: { activity: DisplayActivity }) {
+  const visual = VISUALS[visualToneFor(activity)];
 
-  return (
-    <article id={activity.id} className="group scroll-mt-28 overflow-hidden rounded-[26px] border border-blue-500/[0.08] bg-white shadow-[0_12px_38px_rgba(12,26,46,0.05)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_24px_58px_rgba(12,26,46,0.11)]">
+  if (activity.image) {
+    return (
       <div className="relative h-64 overflow-hidden sm:h-72">
-        {activity.image ? (
-          <img
-            src={activity.image}
-            alt={activity.title}
-            loading="lazy"
-            decoding="async"
-            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.035]"
-          />
-        ) : (
-          <EditableImage
-            imageKey={activity.imageKey}
-            mode="background"
-            label={`Photo ${activity.title}`}
-            alt={activity.title}
-            style={{ backgroundImage: `url('${fallbackImage}')`, backgroundPosition: "center" }}
-            className="h-full w-full overflow-hidden bg-cover transition-transform duration-700 group-hover:scale-[1.02]"
-          />
-        )}
-
+        <img
+          src={activity.image}
+          alt={activity.title}
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.035]"
+        />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/78 via-slate-950/8 to-white/5" />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-white/5" />
-
         <div className="absolute left-4 top-4 rounded-full border border-white/25 bg-slate-950/42 px-3 py-1.5 font-body text-[10px] font-bold uppercase tracking-[0.12em] text-white backdrop-blur-md">
           {CATEGORY_LABELS[activity.category]}
         </div>
-
-        {activity.price && (
-          <div className="absolute right-4 top-12 rounded-xl bg-white/95 px-3 py-2 font-body text-xs font-bold text-blue-800 shadow-lg backdrop-blur-md">
-            {activity.price}
-          </div>
-        )}
-
+        {activity.price && <div className="absolute right-4 top-12 rounded-xl bg-white/95 px-3 py-2 font-body text-xs font-bold text-blue-800 shadow-lg backdrop-blur-md">{activity.price}</div>}
         <div className="absolute inset-x-5 bottom-5">
           <h2 className="font-display text-[28px] font-bold leading-tight text-white [text-shadow:0_2px_20px_rgba(0,0,0,0.3)]">{activity.title}</h2>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -100,6 +127,39 @@ function ActivityCard({ activity }: { activity: DisplayActivity }) {
           </div>
         </div>
       </div>
+    );
+  }
+
+  return (
+    <div className={`relative min-h-[255px] overflow-hidden border-b ${visual.shell}`}>
+      <EditableImage
+        imageKey={activity.imageKey}
+        mode="background"
+        label={`Photo ${activity.title}`}
+        alt={activity.title}
+        style={{ backgroundImage: `url('${visual.image}')`, backgroundPosition: "center" }}
+        className="absolute bottom-0 right-0 top-0 w-[54%] overflow-hidden bg-cover opacity-92 transition-transform duration-700 group-hover:scale-[1.025] sm:w-[50%]"
+      />
+      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-r ${visual.wash}`} />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-white/25 via-transparent to-white/5" />
+
+      <div className="relative z-10 flex min-h-[255px] max-w-[67%] flex-col justify-end p-5 sm:p-6">
+        <div className={`font-body text-[10px] font-bold uppercase tracking-[0.15em] ${visual.accent}`}>{CATEGORY_LABELS[activity.category]}</div>
+        <h2 className="mt-3 font-display text-[28px] font-bold leading-tight text-blue-950">{activity.title}</h2>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <span className="rounded-full bg-white/72 px-3 py-1.5 font-body text-[10px] font-bold text-blue-950 shadow-sm backdrop-blur-sm">{activity.ages}</span>
+          {activity.level && <span className={`rounded-full px-3 py-1.5 font-body text-[10px] font-bold shadow-sm ${visual.chip}`}>{activity.level}</span>}
+        </div>
+        {activity.price && <div className="mt-5 w-fit rounded-xl bg-white/88 px-3 py-2 font-body text-xs font-bold text-blue-800 shadow-sm backdrop-blur-sm">{activity.price}</div>}
+      </div>
+    </div>
+  );
+}
+
+function ActivityCard({ activity }: { activity: DisplayActivity }) {
+  return (
+    <article id={activity.id} className="group scroll-mt-28 overflow-hidden rounded-[26px] border border-blue-500/[0.08] bg-white shadow-[0_12px_38px_rgba(12,26,46,0.05)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_24px_58px_rgba(12,26,46,0.11)]">
+      <ActivityVisual activity={activity} />
 
       <div className="p-5 sm:p-6">
         <div className="mb-4 flex items-start gap-2 font-body text-xs font-semibold text-slate-400">
