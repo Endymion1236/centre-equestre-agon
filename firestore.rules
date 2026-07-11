@@ -389,6 +389,13 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // ── Journal des emails envoyés (historique centralisé) ─────────────────
+    // Écrit uniquement côté serveur (Admin SDK) ; l'admin peut le consulter.
+    match /emailsSent/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // (Doublon 'fidelite' retiré — défini une seule fois plus haut)
 
     // ── Modèles de planning (reprises/horaires) ───────────────────────────
