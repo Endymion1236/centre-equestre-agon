@@ -3,6 +3,7 @@ import { cawlSdk, CAWL_PSPID } from "@/lib/cawl";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { verifyAuth } from "@/lib/api-auth";
+import { auditPaymentPricing, logPricingAudit } from "@/lib/server-pricing";
 
 export async function POST(req: NextRequest) {
   // 🔒 Auth obligatoire
@@ -59,6 +60,25 @@ export async function POST(req: NextRequest) {
 
     // Référence unique marchand
     const merchantRef = `CE-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+    // ── 🔍 Vérification serveur des prix — SHADOW MODE ───────────────────
+    // Recharge le tarif source des créneaux et borne le montant. Journalise
+    // tout écart dans `pricing_audit`. N'IMPOSE RIEN : totalCents inchangé.
+    // (functions non-bloquantes : ne lèvent jamais, ne modifient pas le flux)
+    if (paymentId) {
+      const audit = await auditPaymentPricing({
+        paymentId,
+        chargeTTC: totalCents / 100,
+        isDeposit: !!isDeposit,
+      });
+      if (audit) {
+        await logPricingAudit(audit, {
+          route: "cawl/checkout",
+          familyId: familyId || null,
+          merchantRef,
+        });
+      }
+    }
 
     const origin = req.nextUrl.origin;
 
