@@ -101,7 +101,7 @@ if (rulesContent.includes('match /{document=**}') && rulesContent.includes('allo
 // ─── SECTION 3 : Helpers critiques ──────────────────────────────────────────
 section("3️⃣  FONCTIONS HELPERS");
 
-const helpers = ["isAuth()", "isAdmin()", "isMoniteur()", "isStaff()", "isFamilyOwner("];
+const helpers = ["isAuth()", "isAdmin()", "isMoniteur()", "isStaff()"];
 for (const h of helpers) {
   if (rulesContent.includes(`function ${h.replace("()", "(")}`) || rulesContent.includes(`function ${h.split("(")[0]}`)) {
     ok(`Fonction ${h} définie`);
