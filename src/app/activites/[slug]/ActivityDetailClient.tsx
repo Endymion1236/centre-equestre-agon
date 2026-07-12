@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useVitrine } from "@/lib/use-vitrine";
 import { EditableImage } from "@/components/ui/EditableImage";
+import { getCatalogueVisual } from "@/lib/catalogue-visuals";
 import {
   CATEGORY_LABELS,
   PUBLIC_ACTIVITIES,
+  getVitrineActivityImage,
   getVitrineActivityOverride,
   type PublicActivity,
 } from "@/lib/public-activities";
@@ -25,8 +27,9 @@ export default function ActivityDetailClient({ activity }: { activity: PublicAct
     schedule: textValue(override?.schedule, activity.schedule),
     description: textValue(override?.description, activity.description),
     price: textValue(override?.price, activity.price || "") || undefined,
-    image: textValue(override?.image, "") || undefined,
+    image: getVitrineActivityImage(override),
   };
+  const catalogueVisual = getCatalogueVisual(activity.id);
 
   const related = PUBLIC_ACTIVITIES
     .filter((item) => item.category === activity.category && item.id !== activity.id)
@@ -73,9 +76,17 @@ export default function ActivityDetailClient({ activity }: { activity: PublicAct
             {display.image ? (
               <img src={display.image} alt={display.title} className="absolute inset-0 h-full w-full object-cover" />
             ) : (
-              <EditableImage imageKey={display.imageKey} mode="img" label={`Photo ${display.title}`} alt={display.title} className="absolute inset-0 h-full w-full overflow-hidden">
-                <div className={`absolute inset-0 bg-gradient-to-br ${display.gradient}`} />
-              </EditableImage>
+              <EditableImage
+                imageKey={display.imageKey}
+                mode="background"
+                label={`Photo ${display.title}`}
+                className="absolute inset-0 h-full w-full overflow-hidden"
+                style={{
+                  backgroundImage: `url('${catalogueVisual.image}')`,
+                  backgroundPosition: catalogueVisual.backgroundPosition,
+                  backgroundSize: catalogueVisual.backgroundSize,
+                }}
+              />
             )}
             <div className="absolute inset-0 bg-gradient-to-r from-blue-950 via-blue-950/10 to-transparent lg:block" />
             <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-blue-950/55 to-transparent lg:hidden" />
