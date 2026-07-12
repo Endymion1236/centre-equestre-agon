@@ -16,6 +16,7 @@ const ALLOWED_KEYS = [
   "galerie-miniferme",
   "galerie-club",
   "activite-baby",
+  "activite-baby-v2",
   "activite-bronze",
   "activite-argent",
   "activite-or",

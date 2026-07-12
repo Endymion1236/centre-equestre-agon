@@ -8,6 +8,7 @@ import { getCatalogueVisual } from "@/lib/catalogue-visuals";
 import {
   CATEGORY_LABELS,
   PUBLIC_ACTIVITIES,
+  getVitrineActivityImage,
   getVitrineActivityOverride,
   type PublicActivity,
   type PublicActivityCategory,
@@ -226,7 +227,7 @@ export function ActivitiesContent() {
         schedule: textValue(override.schedule, activity.schedule),
         description: textValue(override.description, activity.description),
         price: textValue(override.price, activity.price || "") || undefined,
-        image: textValue(override.image, "") || undefined,
+        image: getVitrineActivityImage(override),
       };
     });
   }, [vitrine.activites]);

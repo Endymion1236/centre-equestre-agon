@@ -16,6 +16,7 @@ export type VitrineImageKey =
   | "galerie-miniferme"
   | "galerie-club"
   | "activite-baby"
+  | "activite-baby-v2"
   | "activite-bronze"
   | "activite-argent"
   | "activite-or"
@@ -45,6 +46,7 @@ export const VITRINE_DEFAULTS: Record<VitrineImageKey, string> = {
   "galerie-miniferme":         "",
   "galerie-club":              "",
   "activite-baby":             "",
+  "activite-baby-v2":          "",
   "activite-bronze":           "",
   "activite-argent":           "",
   "activite-or":               "",
