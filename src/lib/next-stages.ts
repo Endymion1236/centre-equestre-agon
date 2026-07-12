@@ -194,7 +194,9 @@ export function getNextStagesGrouped(
     if (c.date < g.startDate) g.startDate = c.date;
     if (c.date > g.endDate) g.endDate = c.date;
     g.totalPlaces += c.maxPlaces || 0;
-    g.enrolledCount += (c.enrolled || []).length;
+    g.enrolledCount += typeof c.enrolledCount === "number"
+      ? c.enrolledCount
+      : (c.enrolled || []).length;
   }
 
   const earliestDate = uniqueDates[0];
