@@ -3,9 +3,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui";
 import { Baby, Award, Medal, Crown, GraduationCap, type LucideIcon } from "lucide-react";
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import { toParisDateString } from "@/lib/date-local";
+import { addCalendarDays } from "@/lib/public-planning";
 import { getNextStagesGrouped, formatDateRange, type NextStagesResult } from "@/lib/next-stages";
 
 // Mapping heuristique d'un titre de stage vers une icône / couleur.
@@ -28,13 +27,12 @@ export function NextStagesBanner() {
     (async () => {
       try {
         const todayStr = toParisDateString();
-        // On charge les créneaux avec date >= aujourd'hui pour limiter le volume.
-        // (Le helper filtre ensuite par activityType + status.)
-        const snap = await getDocs(
-          query(collection(db, "creneaux"), where("date", ">=", todayStr))
-        );
+        const end = addCalendarDays(todayStr, 180);
+        const response = await fetch(`/api/public/planning?start=${todayStr}&end=${end}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(`Planning public indisponible (${response.status})`);
+        const payload = await response.json();
         if (cancelled) return;
-        const creneaux = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const creneaux = Array.isArray(payload.slots) ? payload.slots : [];
         const result = getNextStagesGrouped(creneaux, todayStr);
         setData(result);
       } catch (e) {
