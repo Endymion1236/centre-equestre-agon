@@ -1,30 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { db } from "@/lib/firebase";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import IllustratedFeatureBand from "@/components/public/IllustratedFeatureBand";
 import { compareCreneaux } from "@/lib/creneau-sort";
+import { addCalendarDays, calendarDaysBetween, comparePublicPlanningSlots, type PublicPlanningSlot } from "@/lib/public-planning";
 import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock, Filter, Sparkles, Users } from "lucide-react";
 
-interface Creneau {
-  id: string;
-  activityTitle: string;
-  activityType: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  monitor: string;
-  maxPlaces: number;
-  enrolled: unknown[];
-  priceTTC?: number;
-  priceHT?: number;
-  tvaTaux?: number;
-  status?: string;
-}
+type Creneau = PublicPlanningSlot;
 
 const TYPE_LABELS: Record<string, { label: string; color: string; bg: string; border: string }> = {
   cours: { label: "Cours", color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
@@ -38,6 +23,14 @@ const TYPE_LABELS: Record<string, { label: string; color: string; bg: string; bo
 
 function localDateString(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function isUpcomingSlot(slot: Creneau, now = new Date()) {
+  const today = localDateString(now);
+  if (slot.date !== today) return slot.date > today;
+  if (!slot.endTime) return true;
+  const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  return slot.endTime >= currentTime;
 }
 
 function getMonday(date: Date) {
@@ -79,8 +72,11 @@ function PlanningSkeleton() {
 export default function PlanningPublic() {
   const [slots, setSlots] = useState<Creneau[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [weekOffset, setWeekOffset] = useState(0);
   const [filter, setFilter] = useState("all");
+  const didSelectInitialWeek = useRef(false);
 
   const monday = useMemo(() => {
     const date = getMonday(new Date());
@@ -96,29 +92,48 @@ export default function PlanningPublic() {
 
   useEffect(() => {
     let cancelled = false;
+    let changingWeek = false;
     const load = async () => {
       setLoading(true);
+      setLoadError(false);
       try {
-        const snapshot = await getDocs(query(
-          collection(db, "creneaux"),
-          where("date", ">=", localDateString(days[0])),
-          where("date", "<=", localDateString(days[6])),
-        ));
-        const data = snapshot.docs
-          .map((document) => ({ id: document.id, ...document.data() } as Creneau))
-          .filter((slot) => slot.status !== "closed" && slot.status !== "cancelled")
-          .sort(compareCreneaux);
+        const start = localDateString(days[0]);
+        const end = localDateString(days[6]);
+        const shouldFindNextWeek = weekOffset === 0 && !didSelectInitialWeek.current;
+        const queryEnd = shouldFindNextWeek ? addCalendarDays(end, 35) : end;
+        const response = await fetch(`/api/public/planning?start=${start}&end=${queryEnd}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(`Planning public indisponible (${response.status})`);
+        const payload = await response.json();
+        const allSlots = (Array.isArray(payload.slots) ? payload.slots : []) as Creneau[];
+        if (shouldFindNextWeek) {
+          didSelectInitialWeek.current = true;
+          const hasUpcomingThisWeek = allSlots.some((slot) => slot.date <= end && isUpcomingSlot(slot));
+          const nextSlot = allSlots.find((slot) => slot.date > end);
+          if (!hasUpcomingThisWeek && nextSlot) {
+            const nextOffset = Math.floor(calendarDaysBetween(start, nextSlot.date) / 7);
+            if (nextOffset > 0 && !cancelled) {
+              changingWeek = true;
+              setWeekOffset(nextOffset);
+              return;
+            }
+          }
+        }
+        const data = allSlots.filter((slot) => slot.date >= start && slot.date <= end);
+        data.sort(comparePublicPlanningSlots);
         if (!cancelled) setSlots(data);
       } catch (error) {
         console.error("Erreur de chargement du planning public :", error);
-        if (!cancelled) setSlots([]);
+        if (!cancelled) {
+          setSlots([]);
+          setLoadError(true);
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && !changingWeek) setLoading(false);
       }
     };
     load();
     return () => { cancelled = true; };
-  }, [days]);
+  }, [days, reloadKey, weekOffset]);
 
   const types = useMemo(() => Array.from(new Set(slots.map((slot) => slot.activityType === "stage_journee" ? "stage" : slot.activityType))), [slots]);
 
@@ -136,9 +151,9 @@ export default function PlanningPublic() {
   }, [days, filtered]);
 
   const today = localDateString(new Date());
-  const upcoming = slots.filter((slot) => slot.date >= today);
-  const availablePlaces = upcoming.reduce((total, slot) => total + Math.max(0, Number(slot.maxPlaces || 0) - (slot.enrolled?.length || 0)), 0);
-  const nextAvailable = upcoming.find((slot) => Number(slot.maxPlaces || 0) === 0 || (slot.enrolled?.length || 0) < Number(slot.maxPlaces || 0));
+  const upcoming = slots.filter((slot) => isUpcomingSlot(slot));
+  const availablePlaces = upcoming.reduce((total, slot) => total + Math.max(0, Number(slot.maxPlaces || 0) - slot.enrolledCount), 0);
+  const nextAvailable = upcoming.find((slot) => Number(slot.maxPlaces || 0) === 0 || slot.enrolledCount < Number(slot.maxPlaces || 0));
   const displayedDays = days.filter((day) => (byDay[localDateString(day)] || []).length > 0 || localDateString(day) === today);
   const weekLabel = `${days[0].toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} au ${days[6].toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`;
 
@@ -159,9 +174,9 @@ export default function PlanningPublic() {
             </div>
 
             <div className="mt-10 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-sm"><div className="font-display text-2xl font-bold text-white">{loading ? "…" : upcoming.length}</div><div className="mt-1 font-body text-xs text-white/45">créneaux cette semaine</div></div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-sm"><div className="font-display text-2xl font-bold text-gold-300">{loading ? "…" : availablePlaces}</div><div className="mt-1 font-body text-xs text-white/45">places encore affichées</div></div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-sm"><div className="truncate font-display text-lg font-bold text-white">{loading ? "Chargement…" : nextAvailable?.activityTitle || "À venir"}</div><div className="mt-1 font-body text-xs text-white/45">{nextAvailable ? `${new Date(`${nextAvailable.date}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "short" })} · ${nextAvailable.startTime}` : "Consultez la semaine suivante"}</div></div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-sm"><div className="font-display text-2xl font-bold text-white">{loading ? "…" : loadError ? "—" : upcoming.length}</div><div className="mt-1 font-body text-xs text-white/45">{weekOffset === 0 ? "créneaux cette semaine" : "créneaux affichés"}</div></div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-sm"><div className="font-display text-2xl font-bold text-gold-300">{loading ? "…" : loadError ? "—" : availablePlaces}</div><div className="mt-1 font-body text-xs text-white/45">places encore affichées</div></div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-sm"><div className="truncate font-display text-lg font-bold text-white">{loading ? "Chargement…" : loadError ? "Indisponible" : nextAvailable?.activityTitle || "À venir"}</div><div className="mt-1 font-body text-xs text-white/45">{nextAvailable ? `${new Date(`${nextAvailable.date}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "short" })} · ${nextAvailable.startTime}` : loadError ? "Réessayez dans un instant" : "Consultez la semaine suivante"}</div></div>
             </div>
           </div>
         </section>
@@ -186,9 +201,9 @@ export default function PlanningPublic() {
           <div className="mx-auto max-w-[1120px]">
             <div className="mb-6 rounded-[22px] border border-blue-500/[0.08] bg-white p-4 shadow-[0_10px_35px_rgba(12,26,46,0.04)] sm:p-5">
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <button type="button" onClick={() => setWeekOffset((value) => value - 1)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 font-body text-xs font-bold text-slate-600 hover:border-blue-200 hover:text-blue-700"><ChevronLeft size={16} /> Semaine précédente</button>
-                <div className="text-center"><div className="font-display text-xl font-bold capitalize text-blue-950">{weekLabel}</div>{weekOffset !== 0 && <button type="button" onClick={() => setWeekOffset(0)} className="mt-1 border-none bg-transparent font-body text-xs font-bold text-blue-600">Revenir à cette semaine</button>}</div>
-                <button type="button" onClick={() => setWeekOffset((value) => value + 1)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 font-body text-xs font-bold text-slate-600 hover:border-blue-200 hover:text-blue-700">Semaine suivante <ChevronRight size={16} /></button>
+                <button type="button" onClick={() => { didSelectInitialWeek.current = true; setWeekOffset((value) => value - 1); }} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 font-body text-xs font-bold text-slate-600 hover:border-blue-200 hover:text-blue-700"><ChevronLeft size={16} /> Semaine précédente</button>
+                <div className="text-center"><div className="font-display text-xl font-bold capitalize text-blue-950">{weekLabel}</div>{weekOffset !== 0 && <button type="button" onClick={() => { didSelectInitialWeek.current = true; setWeekOffset(0); }} className="mt-1 border-none bg-transparent font-body text-xs font-bold text-blue-600">Revenir à cette semaine</button>}</div>
+                <button type="button" onClick={() => { didSelectInitialWeek.current = true; setWeekOffset((value) => value + 1); }} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 font-body text-xs font-bold text-slate-600 hover:border-blue-200 hover:text-blue-700">Semaine suivante <ChevronRight size={16} /></button>
               </div>
 
               <div className="mt-5 flex items-center gap-2 overflow-x-auto border-t border-slate-100 pt-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -202,7 +217,9 @@ export default function PlanningPublic() {
               </div>
             </div>
 
-            {loading ? <PlanningSkeleton /> : displayedDays.length > 0 ? (
+            {loading ? <PlanningSkeleton /> : loadError ? (
+              <div className="rounded-[24px] border border-dashed border-orange-200 bg-white px-6 py-16 text-center"><CalendarDays size={30} className="mx-auto text-orange-300" /><h2 className="mt-4 font-display text-xl font-bold text-blue-950">Le planning n’a pas pu être chargé</h2><p className="mt-2 font-body text-sm text-slate-500">Les créneaux existent toujours. La connexion au planning est momentanément indisponible.</p><button type="button" onClick={() => setReloadKey((value) => value + 1)} className="mt-5 rounded-xl border-none bg-blue-700 px-5 py-3 font-body text-xs font-bold text-white">Réessayer</button></div>
+            ) : displayedDays.length > 0 ? (
               <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
                 {displayedDays.map((day) => {
                   const key = localDateString(day);
@@ -221,7 +238,7 @@ export default function PlanningPublic() {
                           <div className="px-4 py-10 text-center"><Sparkles size={22} className="mx-auto text-blue-200" /><div className="mt-3 font-body text-xs text-slate-400">Aucun créneau publié aujourd’hui</div></div>
                         ) : daySlots.map((slot) => {
                           const info = TYPE_LABELS[slot.activityType] || TYPE_LABELS.cours;
-                          const enrolled = slot.enrolled?.length || 0;
+                          const enrolled = slot.enrolledCount;
                           const capacity = Number(slot.maxPlaces || 0);
                           const places = capacity > 0 ? Math.max(0, capacity - enrolled) : null;
                           const full = places === 0;
