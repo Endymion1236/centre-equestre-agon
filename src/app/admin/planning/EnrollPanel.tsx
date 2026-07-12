@@ -221,6 +221,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [planUrl, setPlanUrl] = useState<string | null>((creneau as any).planSeanceUrl || null);
   const [planType, setPlanType] = useState<string | null>((creneau as any).planSeanceType || null);
   const planInputRef = useRef<HTMLInputElement>(null);
+  const inscritsRef = useRef<HTMLDivElement>(null);
+  const hasScrolledToInscrits = useRef(false);
 
   // ── Notes pédagogiques de la séance (historique) ─────────────────────
   // Chaque note enregistre le texte + un snapshot du plan de séance courant
@@ -414,6 +416,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   }, [isStage, creneau.date, creneau.activityTitle]);
 
   const enrolled = creneau.enrolled || []; const enrolledIds = enrolled.map((e: any) => e.childId);
+
+  // Sur mobile, arriver directement sur la liste des inscrits (une seule fois).
+  useEffect(() => {
+    if (hasScrolledToInscrits.current) return;
+    if (typeof window === "undefined" || window.innerWidth >= 768) return;
+    if (!inscritsRef.current) return;
+    hasScrolledToInscrits.current = true;
+    setTimeout(() => inscritsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+  }, [enrolled]);
   const spots = creneau.maxPlaces - enrolled.length; const color = typeColors[creneau.activityType] || "#666";
   const priceTTC = (creneau as any).priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux || 5.5) / 100);
   // Prix affiché dans l'en-tête : pour les stages, utiliser le tarif configuré si dispo
@@ -2163,7 +2174,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             </button>
           </div>
         )}
-        <div className="p-5">
+        <div ref={inscritsRef} className="p-5">
           {justEnrolled && <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg font-body text-sm text-green-700"><Check size={16} className="inline mr-1" /> {justEnrolled} inscrit(e) !</div>}
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-body text-sm font-semibold text-blue-800"><Users size={16} className="inline mr-1"/>Inscrits ({enrolled.length})</h3>
