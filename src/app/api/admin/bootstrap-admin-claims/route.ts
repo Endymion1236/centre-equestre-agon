@@ -29,7 +29,15 @@ const ADMIN_EMAILS = [
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
+  // Sécurité : cette route pose des custom claims, elle doit être protégée.
+  // On exige le CRON_SECRET en query (comme les autres routes de maintenance),
+  // sinon n'importe quel appel avec un simple en-tête "Bearer x" la déclenchait.
+  const secret = process.env.CRON_SECRET;
+  if (!secret || req.nextUrl.searchParams.get("secret") !== secret) {
+    return NextResponse.json({ error: "Non autorisé" }, { status: 403 });
+  }
+
   const results: Array<{ email: string; status: string; uid?: string; alreadyHadClaim?: boolean }> = [];
 
   for (const email of ADMIN_EMAILS) {

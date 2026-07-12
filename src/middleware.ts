@@ -31,6 +31,7 @@ import { NextRequest, NextResponse } from "next/server";
 // la main si le paramètre `secret` est présent (la valeur est ensuite
 // validée par la route elle-même contre process.env.CRON_SECRET).
 const ADMIN_MAINTENANCE_ROUTES = [
+  "/api/admin/bootstrap-admin-claims",
   "/api/admin/fix-pending-reservations",
   "/api/admin/migrate-paiements-collection",
   "/api/admin/delete-family",
