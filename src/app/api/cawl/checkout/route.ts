@@ -52,6 +52,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Montant invalide" }, { status: 400 });
     }
 
+    // ── OBSERVATION prix serveur (chantier « serveur maître des prix ») ──
+    // On recalcule le total plein du panier côté serveur depuis le document
+    // paiement (créneaux rechargés) et on JOURNALISE tout écart avec le total
+    // client. Aucune décision n'est prise ici (pas d'enforcement) : zéro risque
+    // de surfacturer tant qu'on n'a pas validé sur preprod.
+    if (paymentId) {
+      try {
+        const { computePaymentFullTotalServer } = await import("@/lib/pricing-server");
+        const paySnap = await adminDb.collection("payments").doc(paymentId).get();
+        if (paySnap.exists) {
+          const pData = paySnap.data() as any;
+          const r = await computePaymentFullTotalServer({ familyId: pData.familyId, items: pData.items });
+          const ecart = Math.round((r.clientTotal - r.serverTotal) * 100) / 100;
+          if (Math.abs(ecart) > 0.02) {
+            console.warn(
+              `[PRICING-SHADOW] écart paiement=${paymentId} : client=${r.clientTotal}€ serveur=${r.serverTotal}€ ` +
+              `(écart=${ecart}€, items non reprisés=${r.missing}) — ${JSON.stringify(r.perItem)}`
+            );
+          } else {
+            console.log(`[PRICING-SHADOW] OK paiement=${paymentId} : ${r.serverTotal}€ (client=${r.clientTotal}€, missing=${r.missing})`);
+          }
+        }
+      } catch (e) {
+        console.error("[PRICING-SHADOW] erreur (non bloquant):", e);
+      }
+    }
+
     // Description pour la page de paiement
     const description = items.map((item: any) => {
       return isDeposit ? `Acompte ${depositPercent}% — ${item.name}` : item.name;
