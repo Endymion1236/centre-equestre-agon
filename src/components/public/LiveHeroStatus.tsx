@@ -1,20 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs, limit, orderBy, query, where } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { addCalendarDays, type PublicPlanningSlot } from "@/lib/public-planning";
 import { CalendarDays } from "lucide-react";
 
-interface PublicSlot {
-  id: string;
-  activityTitle?: string;
-  activityType?: string;
-  date?: string;
-  startTime?: string;
-  maxPlaces?: number;
-  enrolled?: unknown[];
-  status?: string;
-}
+type PublicSlot = PublicPlanningSlot;
 
 function localDateString(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -39,22 +29,15 @@ export default function LiveHeroStatus() {
 
     const load = async () => {
       try {
-        const snapshot = await getDocs(
-          query(
-            collection(db, "creneaux"),
-            where("date", ">=", localDateString()),
-            orderBy("date", "asc"),
-            limit(30),
-          ),
-        );
-
-        const next = snapshot.docs
-          .map((document) => ({ id: document.id, ...document.data() } as PublicSlot))
-          .filter((item) => item.status !== "closed" && item.status !== "cancelled")
+        const start = localDateString();
+        const end = addCalendarDays(start, 180);
+        const response = await fetch(`/api/public/planning?start=${start}&end=${end}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(`Planning public indisponible (${response.status})`);
+        const payload = await response.json();
+        const next = ((Array.isArray(payload.slots) ? payload.slots : []) as PublicSlot[])
           .find((item) => {
             const capacity = Number(item.maxPlaces || 0);
-            const enrolled = Array.isArray(item.enrolled) ? item.enrolled.length : 0;
-            return capacity === 0 || enrolled < capacity;
+            return capacity === 0 || item.enrolledCount < capacity;
           });
 
         if (!cancelled) setSlot(next || null);
