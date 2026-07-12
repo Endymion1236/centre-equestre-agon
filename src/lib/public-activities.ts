@@ -42,7 +42,7 @@ export const PUBLIC_ACTIVITIES: PublicActivity[] = [
     features: ["Approche ludique et sensorielle", "Petits groupes", "Thèmes variés chaque semaine", "Découverte de la mini-ferme", "Soins et premiers gestes autour du poney"],
     practical: ["Tenue longue et chaussures fermées", "Casque fourni par le centre", "Prévoir une gourde", "Accueil quelques minutes avant le début"],
     gradient: "from-purple-500 to-pink-400",
-    imageKey: "activite-baby",
+    imageKey: "activite-baby-v2",
     price: "175€ / semaine",
     level: "Aucune expérience nécessaire",
     vitrineKeys: ["baby_poney", "baby"],
@@ -311,4 +311,12 @@ export function getVitrineActivityOverride(activity: PublicActivity, vitrineActi
     if (candidate && typeof candidate === "object") return candidate as Record<string, unknown>;
   }
   return null;
+}
+
+const REMOVED_TEST_IMAGES = ["baby_poney_1779800873646_pepita_web.jpg"];
+
+export function getVitrineActivityImage(override: Record<string, unknown> | null | undefined) {
+  const image = typeof override?.image === "string" ? override.image.trim() : "";
+  if (!image || REMOVED_TEST_IMAGES.some((testImage) => image.includes(testImage))) return undefined;
+  return image;
 }
