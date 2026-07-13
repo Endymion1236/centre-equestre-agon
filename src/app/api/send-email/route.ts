@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { verifyAuth } from "@/lib/api-auth";
 import { logEmail } from "@/lib/email-log";
-import { isRecipientAllowed, isEmailRestricted, blockedLog } from "@/lib/email-guard";
+import { isRecipientAllowed, isEmailRestricted, blockedLog, refreshEmailMode } from "@/lib/email-guard";
 import { adminDb } from "@/lib/firebase-admin";
 
 // Emails du personnel (moniteurs / salariés) : TOUJOURS autorisés, même en mode
@@ -103,6 +103,7 @@ export async function POST(request: NextRequest) {
     // 🔒 Garde-fou phase de préparation : en mode restreint, on ne garde que
     //    les destinataires autorisés (admins / compte test / EMAIL_ALLOWLIST)
     //    ET le personnel (moniteurs/salariés), toujours autorisé automatiquement.
+    await refreshEmailMode();
     const staffSet = isEmailRestricted() ? await staffEmails() : new Set<string>();
     const low = (e: string) => (e || "").trim().toLowerCase();
     const estAutorise = (e: string) => isRecipientAllowed(e) || staffSet.has(low(e));

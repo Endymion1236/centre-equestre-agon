@@ -7,7 +7,7 @@ import { confirmReservationsForPayment } from "@/lib/reservations";
 import { createForfaitsForPayment } from "@/lib/forfaits-server";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import { logEmail } from "@/lib/email-log";
-import { isRecipientAllowed } from "@/lib/email-guard";
+import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 import crypto from "crypto";
 
@@ -313,6 +313,7 @@ export async function GET(req: NextRequest) {
       // ── Email confirmation ───────────────────────────────────────────────
       const parentEmail = pData.familyEmail || "";
       const resendKey = process.env.RESEND_API_KEY;
+      await refreshEmailMode();
       if (parentEmail && resendKey && isRecipientAllowed(parentEmail)) {
         try {
           const items = pData.items || [];

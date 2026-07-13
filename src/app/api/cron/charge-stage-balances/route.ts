@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { logEmail } from "@/lib/email-log";
-import { isRecipientAllowed } from "@/lib/email-guard";
+import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { generateCAWLQR, generateSEPAQR } from "@/lib/payment-qr";
 import { addDaysParis } from "@/lib/date-local";
 import { chargeWithToken, logMitAttempt } from "@/lib/cawl-mit";
@@ -126,6 +126,7 @@ export async function GET(req: NextRequest) {
             });
 
             // Email de confirmation "solde prélevé"
+            await refreshEmailMode();
             if (resendKey && isRecipientAllowed(familyEmail)) {
               const subject = `✅ Solde stage prélevé — ${solde.toFixed(2)}€`;
               const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">

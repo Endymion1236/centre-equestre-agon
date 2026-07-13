@@ -19,8 +19,30 @@ const TEST_EMAILS = ["laserbayagon@gmail.com"];
 
 const norm = (e: string) => (e || "").trim().toLowerCase();
 
-/** Le mode restreint est actif tant que EMAIL_RESTRICTED_MODE n'est pas "off". */
+// ── Override Firestore (interrupteur admin, effet immédiat sans redéploiement) ──
+// settings/email.restricted (boolean) prend le pas sur EMAIL_RESTRICTED_MODE.
+// Le cache mémoire ne persiste pas en serverless : chaque route appelle
+// `await refreshEmailMode()` en tête pour lire la valeur à jour dans la requête.
+let cached: { restricted: boolean | null; at: number } | null = null;
+const CACHE_MS = 20_000;
+
+export async function refreshEmailMode(): Promise<void> {
+  if (cached && Date.now() - cached.at < CACHE_MS) return;
+  let restricted: boolean | null = null;
+  try {
+    const { adminDb } = await import("@/lib/firebase-admin");
+    const snap = await adminDb.collection("settings").doc("email").get();
+    const d = snap.exists ? (snap.data() as any) : null;
+    if (d && typeof d.restricted === "boolean") restricted = d.restricted;
+  } catch {
+    restricted = null; // erreur → fallback sur la variable d'env
+  }
+  cached = { restricted, at: Date.now() };
+}
+
+/** Le mode restreint est actif si le flag Firestore le dit, sinon selon EMAIL_RESTRICTED_MODE. */
 export function isEmailRestricted(): boolean {
+  if (cached && cached.restricted !== null) return cached.restricted;
   return norm(process.env.EMAIL_RESTRICTED_MODE || "on") !== "off";
 }
 

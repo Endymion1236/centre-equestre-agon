@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/api-auth";
 import { Resend } from "resend";
-import { isRecipientAllowed, blockedLog } from "@/lib/email-guard";
+import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
 import { logEmail } from "@/lib/email-log";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
     const { to, subject, body, familyId, childName } = await req.json().catch(() => ({}));
     if (!to || !subject || !body) return NextResponse.json({ error: "to, subject et body requis" }, { status: 400 });
 
+    await refreshEmailMode();
     if (!isRecipientAllowed(to)) {
       console.log(blockedLog(to, "reinscription-relance"));
       return NextResponse.json({ blocked: true, message: "Envoi bloqué (mode restreint : seuls les admins reçoivent)." });
