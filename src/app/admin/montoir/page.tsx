@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, type ChangeEvent } from "react";
 import { collection, getDocs, getDoc, updateDoc, addDoc, doc, query, where, serverTimestamp, runTransaction, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { validateChildrenUpdate } from "@/lib/utils";
@@ -22,7 +22,7 @@ import PoneyChargeView from "./PoneyChargeView";
 import ThemeSuggestion from "./ThemeSuggestion";
 import QuickAddRider from "./QuickAddRider";
 import SeanceNotes from "./SeanceNotes";
-import { Loader2, ChevronLeft, ChevronRight, XCircle, AlertCircle, Printer, ClipboardList, Mic, MicOff, Sparkles, TrendingUp, AlertTriangle, Trash2, X,
+import { Loader2, ChevronLeft, ChevronRight, XCircle, AlertCircle, Printer, ClipboardList, Mic, MicOff, Sparkles, TrendingUp, AlertTriangle, Trash2, X, CalendarDays,
 } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 
@@ -56,6 +56,16 @@ export default function MontoirPage() {
   // et renvoie la VEILLE entre 00h et 02h du matin l'été (Paris = UTC+2). C'est ce
   // décalage qui affichait le montoir du 6 alors qu'on était le 7 au petit matin.
   const dateStr = `${currentDay.getFullYear()}-${String(currentDay.getMonth() + 1).padStart(2, "0")}-${String(currentDay.getDate()).padStart(2, "0")}`;
+
+  // Saut direct vers une date choisie (sélecteur natif) : on recalcule
+  // l'offset en jours par rapport à aujourd'hui, comme pour l'arrivée ?date=.
+  const handleDatePick = (e: ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const off = Math.round((new Date(v + "T00:00:00").getTime() - today.getTime()) / 86400000);
+    if (!isNaN(off)) setDayOffset(off);
+  };
 
   const fetchData = async () => {
     try {
@@ -882,7 +892,16 @@ export default function MontoirPage() {
           centrée) et les boutons Veille / Auj. / Lendemain se partagent la
           ligne du dessous — plus de débordement horizontal. */}
       <div className="flex flex-wrap items-center justify-between gap-y-3 mb-6">
-        <div className="w-full sm:w-auto sm:order-2 text-center"><div className="font-display text-lg font-bold text-blue-800 capitalize">{currentDay.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div><div className="font-body text-xs text-slate-600">{creneaux.length} reprise{creneaux.length>1?"s":""} · {totalE} inscrits · {totalP} présents</div></div>
+        <div className="w-full sm:w-auto sm:order-2 text-center relative">
+          <input
+            type="date"
+            value={dateStr}
+            onChange={handleDatePick}
+            aria-label="Choisir une date"
+            title="Choisir une date"
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer print:hidden"
+          />
+          <div className="font-display text-lg font-bold text-blue-800 capitalize flex items-center justify-center gap-1.5">{currentDay.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}<CalendarDays size={15} className="text-blue-400 print:hidden" /></div><div className="font-body text-xs text-slate-600">{creneaux.length} reprise{creneaux.length>1?"s":""} · {totalE} inscrits · {totalP} présents</div></div>
         <button onClick={()=>setDayOffset(d=>d-1)} className="sm:order-1 flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16} /> Veille</button>
         <div className="sm:order-3 flex gap-2"><button onClick={()=>setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-3 sm:px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setDayOffset(d=>d+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain <ChevronRight size={16} /></button></div>
       </div>
@@ -936,6 +955,16 @@ export default function MontoirPage() {
               <div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}{(c as any).themeStage && <span className="ml-2 font-body text-xs font-normal text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">🎭 {(c as any).themeStage}</span>}</div><div className="font-body text-xs" style={{color:"#334155"}}>{c.monitor} · {en.length}/{c.maxPlaces}</div></div>
             </div>
             <div className="flex items-center gap-2 flex-wrap print:hidden">
+              {/* Navigation jour intégrée à la reprise : passer veille/lendemain
+                  sans remonter en haut de page. */}
+              <div className="flex items-center gap-0.5 mr-1" title="Changer de jour">
+                <button onClick={()=>setDayOffset(d=>d-1)} aria-label="Jour précédent"
+                  className="p-1.5 rounded-md text-slate-500 bg-gray-100 hover:bg-gray-200 border-none cursor-pointer"><ChevronLeft size={14}/></button>
+                {dayOffset !== 0 && <button onClick={()=>setDayOffset(0)}
+                  className="px-2 py-1 rounded-md text-[11px] font-semibold text-blue-600 bg-blue-50 border-none cursor-pointer">auj.</button>}
+                <button onClick={()=>setDayOffset(d=>d+1)} aria-label="Jour suivant"
+                  className="p-1.5 rounded-md text-slate-500 bg-gray-100 hover:bg-gray-200 border-none cursor-pointer"><ChevronRight size={14}/></button>
+              </div>
               <Badge color={closed?"gray":pres===en.length&&en.length>0?"green":"orange"}>{closed?"Clôturée":`${pres}/${en.length} présents`}</Badge>
               {closed && (
                 <button onClick={()=>reopenCreneau(c.id, c.activityTitle)}
