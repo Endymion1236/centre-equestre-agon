@@ -21,7 +21,6 @@ import {
   Waves,
 } from "lucide-react";
 import ActusBanner from "@/components/ActusBanner";
-import { ActivityCards } from "./ActivityCards";
 import { NextStagesBanner } from "./NextStagesBanner";
 
 const strengths = [
@@ -128,21 +127,6 @@ export default function HomePage() {
             })}
           </div>
         </div>
-      </section>
-
-      <section className="mx-auto max-w-[1180px] px-6 py-20 sm:py-24">
-        <div className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <SectionHeader
-            tag="Nos activités"
-            title="Une aventure pour chaque cavalier"
-            subtitle="Du baby poney aux galops sur la plage, choisissez selon l’âge, le niveau et l’envie."
-            className="!mb-0 !text-left"
-          />
-          <Link href="/activites" className="group inline-flex flex-shrink-0 items-center gap-2 font-body text-sm font-bold text-blue-600 no-underline">
-            Voir toutes les activités <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
-          </Link>
-        </div>
-        <ActivityCards />
       </section>
 
       <NextStagesBanner />
