@@ -11,9 +11,13 @@ export default function AdminUxPolish() {
   return (
     <style jsx global>{`
       @keyframes admin-page-in {
-        from { opacity: 0; transform: translateY(5px); }
-        to { opacity: 1; transform: translateY(0); }
+        from { opacity: 0; }
+        to { opacity: 1; }
       }
+      /* NB : surtout PAS de transform ici. Un transform résiduel sur
+         .admin-page-shell (via animation-fill-mode) créerait un bloc de
+         référence et casserait le position:fixed de TOUTES les modales admin
+         (elles se centraient sur la page entière → apparaissaient loin en bas). */
 
       @keyframes admin-soft-pulse {
         0%, 100% { box-shadow: 0 0 0 0 rgba(240, 160, 16, 0); }
