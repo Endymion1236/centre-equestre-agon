@@ -28,6 +28,7 @@ import {
   Loader2,
   LogOut,
   Mail,
+  Inbox,
   Menu,
   MessageCircle,
   MessageSquare,
@@ -128,6 +129,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Communication",
     icon: Mail,
     items: [
+      { href: "/admin/boite", icon: Inbox, label: "Boîte email (IA)" },
       { href: "/admin/communication", icon: Mail, label: "Campagnes" },
       { href: "/admin/whatsapp", icon: MessageCircle, label: "WhatsApp" },
       { href: "/admin/email-templates", icon: LayoutTemplate, label: "Modèles d’email" },
