@@ -166,10 +166,22 @@ function ActivityVisual({ activity }: { activity: DisplayActivity }) {
 
 function ActivityCard({ activity }: { activity: DisplayActivity }) {
   return (
-    <article id={activity.id} className="group scroll-mt-28 overflow-hidden rounded-[24px] border border-blue-500/[0.08] bg-white shadow-[0_10px_30px_rgba(12,26,46,0.05)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_24px_58px_rgba(12,26,46,0.11)] sm:rounded-[26px]">
+    <article
+      id={activity.id}
+      className={`group scroll-mt-28 overflow-hidden rounded-[24px] border bg-white transition-all duration-300 hover:-translate-y-1 sm:rounded-[26px] ${
+        activity.signature
+          ? "border-gold-300/80 shadow-[0_16px_42px_rgba(240,160,16,0.14)] ring-1 ring-gold-200/70 hover:shadow-[0_26px_62px_rgba(240,160,16,0.2)]"
+          : "border-blue-500/[0.08] shadow-[0_10px_30px_rgba(12,26,46,0.05)] hover:shadow-[0_24px_58px_rgba(12,26,46,0.11)]"
+      }`}
+    >
       <ActivityVisual activity={activity} />
 
       <div className="p-4 sm:p-6">
+        {activity.signature && (
+          <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-gold-100 px-3 py-1.5 font-body text-[10px] font-bold uppercase tracking-[0.12em] text-gold-800 sm:mb-4">
+            <Sparkles size={12} /> Expérience phare du centre
+          </div>
+        )}
         <div className="mb-3 flex items-start gap-2 font-body text-[11px] font-semibold text-slate-400 sm:mb-4 sm:text-xs">
           <Clock size={15} className="mt-0.5 flex-shrink-0 text-blue-500" />
           <span>{activity.schedule}</span>
