@@ -19,6 +19,7 @@ import {
   Trophy,
   Users,
   Waves,
+  Warehouse,
 } from "lucide-react";
 import ActusBanner from "@/components/ActusBanner";
 import { NextStagesBanner } from "./NextStagesBanner";
@@ -125,6 +126,24 @@ export default function HomePage() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-white px-6 py-20 sm:py-24">
+        <div className="mx-auto grid max-w-[1120px] gap-8 overflow-hidden rounded-[30px] border border-blue-500/[0.07] bg-[linear-gradient(135deg,#f7f3eb_0%,#ffffff_55%,#edf4ff_100%)] p-7 shadow-[0_20px_60px_rgba(12,26,46,0.06)] sm:p-10 lg:grid-cols-[1fr_0.95fr] lg:items-center">
+          <div>
+            <div className="font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">Les installations</div>
+            <h2 className="mt-3 font-display text-3xl font-bold leading-tight text-blue-950 sm:text-4xl">Trois manèges, une grande carrière et un club-house chaleureux</h2>
+            <p className="mt-5 max-w-xl font-body text-sm leading-relaxed text-slate-500">Des espaces pensés pour monter toute l’année, du matériel pédagogique adapté et une cavalerie qui vit majoritairement en extérieur.</p>
+            <Link href="/installations" className="group mt-7 inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3.5 font-body text-sm font-bold text-white no-underline shadow-lg transition-transform hover:-translate-y-0.5">
+              Découvrir le centre <ArrowRight size={15} className="transition-transform group-hover:translate-x-1" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2 rounded-2xl bg-blue-950 p-5 text-white"><Warehouse size={22} className="text-gold-300" /><div className="mt-5 font-display text-3xl font-bold">3 manèges</div><div className="mt-1 font-body text-xs text-white/48">dont un circulaire pour le Baby Poney</div></div>
+            <div className="rounded-2xl bg-blue-50 p-5"><div className="font-display text-2xl font-bold text-blue-950">80 × 45 m</div><div className="mt-2 font-body text-xs leading-relaxed text-slate-500">carrière en sable de Fontainebleau</div></div>
+            <div className="rounded-2xl bg-emerald-50 p-5"><Heart size={21} className="text-emerald-600" /><div className="mt-5 font-display text-lg font-bold text-emerald-950">Vie extérieure</div><div className="mt-1 font-body text-xs text-emerald-800/60">au plus près des besoins naturels</div></div>
           </div>
         </div>
       </section>
