@@ -27,12 +27,13 @@ function daysToNextBirthday(birthDate: any): number | null {
   return Math.round((next.getTime() - today.getTime()) / 86400000);
 }
 
-export default function FamilyDetailTabs({ family, children, allReservations, allPayments, allAvoirs, allCartes, allMandats, allFidelite, allCreneaux = [], fetchFamilies, onEditChild, onDeleteChild, onEditSanitary, onEditGalop, onInscribe, onBilanPdf }: {
+export default function FamilyDetailTabs({ family, children, allReservations, allPayments, allAvoirs, allCartes, allMandats, allFidelite, allCreneaux = [], fetchFamilies, onEditChild, onDeleteChild, onMoveChild, onEditSanitary, onEditGalop, onInscribe, onBilanPdf }: {
   family: any; children: any[]; allReservations: any[]; allPayments: any[];
   allAvoirs: any[]; allCartes: any[]; allMandats: any[]; allFidelite: any[]; allCreneaux?: any[];
   fetchFamilies: () => void;
   onEditChild?: (child: any) => void;
   onDeleteChild?: (childId: string, childName: string) => void;
+  onMoveChild?: (child: any) => void;
   onEditSanitary?: (child: any) => void;
   onEditGalop?: (childId: string) => void;
   onInscribe?: (childId: string, childName: string) => void;
@@ -384,6 +385,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                 <div className="absolute right-0 top-9 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[170px]">
                   {onEditChild && <button onClick={() => { setActionMenuOpen(null); onEditChild(child); }} className="w-full text-left font-body text-xs text-slate-700 px-3 py-2 bg-transparent border-none cursor-pointer hover:bg-gray-50">✏️ Modifier la fiche</button>}
                   {onEditGalop && <button onClick={() => { setActionMenuOpen(null); onEditGalop(child.id); }} className="w-full text-left font-body text-xs text-slate-700 px-3 py-2 bg-transparent border-none cursor-pointer hover:bg-gray-50">🎖 Changer le niveau</button>}
+                  {onMoveChild && <button onClick={() => { setActionMenuOpen(null); onMoveChild(child); }} className="w-full text-left font-body text-xs text-slate-700 px-3 py-2 bg-transparent border-none cursor-pointer hover:bg-gray-50 border-t border-gray-100">🔀 Déplacer vers une autre famille</button>}
                   {onDeleteChild && <button onClick={() => { setActionMenuOpen(null); onDeleteChild(child.id, child.firstName); }} className="w-full text-left font-body text-xs text-red-500 px-3 py-2 bg-transparent border-none cursor-pointer hover:bg-red-50 border-t border-gray-100">🗑 Supprimer le cavalier</button>}
                 </div>
               )}

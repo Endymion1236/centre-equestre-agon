@@ -16,6 +16,7 @@ import MergeFamilyModal from "./MergeFamilyModal";
 import LastUpdated from "@/components/admin/LastUpdated";
 import { authFetch } from "@/lib/auth-fetch";
 import LinkChildrenModal from "./LinkChildrenModal";
+import MoveChildModal from "./MoveChildModal";
 import EmailModal from "./EmailModal";
 
 const galopLevels = ["—", "Poney Bronze", "Poney Argent", "Poney Or", "Bronze", "Argent", "Or", "G1", "G2", "G3", "G4", "G5", "G6", "G7"];
@@ -71,6 +72,7 @@ export default function FamilyCard({
   const [showLinkChildren, setShowLinkChildren] = useState(false);
   const [emailModal, setEmailModal] = useState(false);
   const [showEnroll, setShowEnroll] = useState<{ childId: string; childName: string } | null>(null);
+  const [movingChild, setMovingChild] = useState<any | null>(null);
   const [showProgression, setShowProgression] = useState<string | null>(() => {
     // Priorité 1: par childId exact
     if (hasTargetChild) return initialProgressionChildId!;
@@ -553,6 +555,7 @@ export default function FamilyCard({
               fetchFamilies={onRefresh}
               onEditChild={(child) => startEditChild(child)}
               onDeleteChild={(childId, childName) => handleDeleteChild(childId, childName)}
+              onMoveChild={(child) => setMovingChild(child)}
               onEditSanitary={(child) => startEditSanitary(child)}
               onEditGalop={(childId) => setEditingGalop(childId)}
               onInscribe={(childId, childName) => { setShowEnroll({ childId, childName }); loadCreneaux(); }}
@@ -690,6 +693,16 @@ export default function FamilyCard({
       )}
       {showEnroll && (
         <EnrollModal childId={showEnroll.childId} childName={showEnroll.childName} familyId={fid} familyName={family.parentName} creneaux={creneauxLoaded} onClose={() => setShowEnroll(null)} onDone={onRefresh}/>
+      )}
+      {movingChild && (
+        <MoveChildModal
+          child={movingChild}
+          fromFamilyId={fid}
+          fromFamilyName={family.parentName}
+          families={families}
+          onClose={() => setMovingChild(null)}
+          onDone={onRefresh}
+        />
       )}
     </>
   );

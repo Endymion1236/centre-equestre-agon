@@ -417,10 +417,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
   const enrolled = creneau.enrolled || []; const enrolledIds = enrolled.map((e: any) => e.childId);
 
-  // Sur mobile, arriver directement sur la liste des inscrits (une seule fois).
+  // À l'ouverture, arriver directement sur la liste des inscrits (une seule
+  // fois), sur mobile ET desktop — évite de scroller sous le plan et les notes.
   useEffect(() => {
     if (hasScrolledToInscrits.current) return;
-    if (typeof window === "undefined" || window.innerWidth >= 768) return;
+    if (typeof window === "undefined") return;
     if (!inscritsRef.current) return;
     hasScrolledToInscrits.current = true;
     setTimeout(() => inscritsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
