@@ -1,5 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 interface Actu {
   id: string;
@@ -15,26 +17,25 @@ export default function ActusBanner() {
   const [actus, setActus] = useState<Actu[]>([]);
 
   useEffect(() => {
-    const controller = new AbortController();
+    const unsubscribe = onSnapshot(
+      doc(db, "settings", "actus"),
+      (snapshot) => {
+        const data = snapshot.data();
+        const rawItems = Array.isArray(data?.items) ? data.items as Actu[] : [];
+        const visibleItems = rawItems
+          .filter((item) => item.active === true && typeof item.title === "string" && item.title.trim())
+          .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+          .slice(0, 3);
 
-    fetch("/api/public/actus", {
-      cache: "no-store",
-      signal: controller.signal,
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error(`Actualités indisponibles (${response.status})`);
-        return response.json();
-      })
-      .then((data: { items?: Actu[] }) => {
-        setActus(Array.isArray(data.items) ? data.items : []);
-      })
-      .catch((error) => {
-        if (error instanceof Error && error.name !== "AbortError") {
-          console.error("Impossible de charger les actualités :", error);
-        }
-      });
+        setActus(visibleItems);
+      },
+      (error) => {
+        console.error("Impossible de charger les actualités :", error);
+        setActus([]);
+      },
+    );
 
-    return () => controller.abort();
+    return unsubscribe;
   }, []);
 
   if (actus.length === 0) return null;
