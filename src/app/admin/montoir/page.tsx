@@ -33,6 +33,12 @@ export default function MontoirPage() {
   const { toast } = useToast();
   const { setAgentContext } = useAgentContext("montoir");
   const [dayOffset, setDayOffset] = useState(0);
+  // Re-scroll : après un changement de jour déclenché DEPUIS une reprise, on
+  // mémorise sa signature (titre + heure) pour revenir sur la reprise
+  // équivalente du nouveau jour au lieu de remonter en haut.
+  const pendingScrollSig = useRef<string | null>(null);
+  const sigRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const repriseSig = (c: any) => `${(c.activityTitle || "").trim()}__${c.startTime || ""}`;
   const [creneaux, setCreneaux] = useState<Creneau[]>([]);
   const [equides, setEquides] = useState<any[]>([]);
   const [seuilPoney, setSeuilPoney] = useState({ orange: 3, rouge: 4, heures: 4 });
@@ -140,6 +146,20 @@ export default function MontoirPage() {
     setLoading(false);
   };
   useEffect(() => { setLoading(true); fetchData(); }, [dayOffset]);
+
+  // Après chargement d'un nouveau jour, si le changement venait d'une reprise,
+  // re-scroller sur la reprise équivalente (même titre + heure).
+  useEffect(() => {
+    if (loading) return;
+    const sig = pendingScrollSig.current;
+    if (!sig) return;
+    pendingScrollSig.current = null;
+    const t = setTimeout(() => {
+      const el = sigRefs.current[sig];
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+    return () => clearTimeout(t);
+  }, [loading, creneaux]);
 
   // Si on arrive avec ?date=YYYY-MM-DD (depuis le planning), se caler sur ce jour.
   useEffect(() => {
@@ -947,8 +967,9 @@ export default function MontoirPage() {
         </div>
       )}
       {creneaux.length === 0 ? <Card padding="lg" className="text-center"><div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><ClipboardList size={28} className="text-blue-300" /></div><p className="font-body text-sm text-slate-600">Aucune reprise ce jour.</p></Card> :
-      <div className="flex flex-col gap-6">{creneaux.map(c => { const en = c.enrolled||[]; const col = (c as any).color || typeColors[c.activityType]||"#666"; const closed = c.status==="closed"; const pres = en.filter((e:any)=>e.presence!=="absent" && e.presence!=="absent_nonjustified").length; return (
-        <Card key={c.id} padding="md" className={closed ? "border-gray-200 bg-gray-50/50" : ""}>
+      <div className="flex flex-col gap-6">{creneaux.map(c => { const en = c.enrolled||[]; const col = (c as any).color || typeColors[c.activityType]||"#666"; const closed = c.status==="closed"; const pres = en.filter((e:any)=>e.presence!=="absent" && e.presence!=="absent_nonjustified").length; const _sig = repriseSig(c); return (
+        <div key={c.id} ref={(el) => { sigRefs.current[_sig] = el; }} className="scroll-mt-4">
+        <Card padding="md" className={closed ? "border-gray-200 bg-gray-50/50" : ""}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-blue-500/8">
             <div className="flex items-center gap-4">
               <div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px]" style={{color:"#475569"}}>{c.endTime}</div></div>
@@ -958,11 +979,11 @@ export default function MontoirPage() {
               {/* Navigation jour intégrée à la reprise : passer veille/lendemain
                   sans remonter en haut de page. */}
               <div className="flex items-center gap-0.5 mr-1" title="Changer de jour">
-                <button onClick={()=>setDayOffset(d=>d-1)} aria-label="Jour précédent"
+                <button onClick={()=>{ pendingScrollSig.current = _sig; setDayOffset(d=>d-1); }} aria-label="Jour précédent"
                   className="p-1.5 rounded-md text-slate-500 bg-gray-100 hover:bg-gray-200 border-none cursor-pointer"><ChevronLeft size={14}/></button>
-                {dayOffset !== 0 && <button onClick={()=>setDayOffset(0)}
+                {dayOffset !== 0 && <button onClick={()=>{ pendingScrollSig.current = _sig; setDayOffset(0); }}
                   className="px-2 py-1 rounded-md text-[11px] font-semibold text-blue-600 bg-blue-50 border-none cursor-pointer">auj.</button>}
-                <button onClick={()=>setDayOffset(d=>d+1)} aria-label="Jour suivant"
+                <button onClick={()=>{ pendingScrollSig.current = _sig; setDayOffset(d=>d+1); }} aria-label="Jour suivant"
                   className="p-1.5 rounded-md text-slate-500 bg-gray-100 hover:bg-gray-200 border-none cursor-pointer"><ChevronRight size={14}/></button>
               </div>
               <Badge color={closed?"gray":pres===en.length&&en.length>0?"green":"orange"}>{closed?"Clôturée":`${pres}/${en.length} présents`}</Badge>
@@ -1156,7 +1177,7 @@ export default function MontoirPage() {
               </div>
             ))}
           </div>}
-        </Card>); })}</div>}
+        </Card></div>); })}</div>}
       </>}
 
       {/* ── Modal : circonstances d'une chute ─────────────────────────────── */}
