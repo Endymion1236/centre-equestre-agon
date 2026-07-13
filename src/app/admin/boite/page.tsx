@@ -1,7 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { authFetch } from "@/lib/auth-fetch";
-import { Loader2, Mail, Sparkles, Calendar, Copy, Check } from "lucide-react";
+import { Loader2, Mail, Sparkles, Calendar, Copy, Check, Inbox, RefreshCw } from "lucide-react";
 
 const CLASSIF: Record<string, { label: string; cls: string }> = {
   inscription: { label: "Demande d'inscription", cls: "bg-green-50 text-green-700" },
@@ -19,6 +19,62 @@ export default function BoiteAssistantPage() {
   const [err, setErr] = useState("");
   const [draft, setDraft] = useState("");
   const [copied, setCopied] = useState(false);
+
+  // ── Gmail ──
+  const [gmail, setGmail] = useState<{
+    loading: boolean;
+    configured: boolean;
+    connected: boolean;
+    messages: any[];
+    error: string;
+  }>({ loading: true, configured: false, connected: false, messages: [], error: "" });
+  const [connecting, setConnecting] = useState(false);
+
+  const loadGmail = async () => {
+    setGmail((g) => ({ ...g, loading: true, error: "" }));
+    try {
+      const r = await authFetch("/api/admin/gmail/messages");
+      const d = await r.json();
+      setGmail({
+        loading: false,
+        configured: !!d.configured,
+        connected: !!d.connected,
+        messages: Array.isArray(d.messages) ? d.messages : [],
+        error: d.error || "",
+      });
+    } catch {
+      setGmail((g) => ({ ...g, loading: false, error: "Erreur réseau" }));
+    }
+  };
+
+  useEffect(() => {
+    loadGmail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const connectGmail = async () => {
+    setConnecting(true);
+    try {
+      const r = await authFetch("/api/auth/gmail");
+      const d = await r.json();
+      if (d.url) window.location.href = d.url;
+      else {
+        setGmail((g) => ({ ...g, error: d.error || "Impossible de démarrer la connexion" }));
+        setConnecting(false);
+      }
+    } catch {
+      setConnecting(false);
+    }
+  };
+
+  const pickMessage = (m: any) => {
+    setFrom(m.from || "");
+    setSubject(m.subject || "");
+    setBody(m.body || m.snippet || "");
+    setRes(null);
+    setErr("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const analyser = async () => {
     if (!body.trim() && !subject.trim()) return;
@@ -62,6 +118,71 @@ export default function BoiteAssistantPage() {
           réellement disponibles. Rien n'est envoyé ni inscrit — tu gardes la main. (Le branchement Gmail remplira
           le mail automatiquement une fois configuré.)
         </p>
+      </div>
+
+      {/* ── Panneau Gmail ── */}
+      <div className="mb-6 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 font-body text-sm font-semibold text-slate-700">
+            <Inbox size={16} className="text-blue-500" /> Gmail — ceagon50@gmail.com
+          </div>
+          {gmail.connected && (
+            <button
+              onClick={loadGmail}
+              disabled={gmail.loading}
+              className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-body text-[11px] font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50"
+            >
+              <RefreshCw size={12} className={gmail.loading ? "animate-spin" : ""} /> Actualiser
+            </button>
+          )}
+        </div>
+
+        {gmail.loading && (
+          <div className="flex items-center gap-2 font-body text-xs text-slate-400">
+            <Loader2 size={14} className="animate-spin" /> Chargement…
+          </div>
+        )}
+
+        {!gmail.loading && !gmail.configured && (
+          <p className="font-body text-xs text-amber-600">
+            Connexion Gmail non configurée : ajoute d'abord les variables <code>GMAIL_OAUTH_CLIENT_ID</code> et{" "}
+            <code>GMAIL_OAUTH_CLIENT_SECRET</code> dans Vercel. En attendant, tu peux coller un mail à la main ci-dessous.
+          </p>
+        )}
+
+        {!gmail.loading && gmail.configured && !gmail.connected && (
+          <button
+            onClick={connectGmail}
+            disabled={connecting}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-body text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {connecting ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />} Connecter Gmail
+          </button>
+        )}
+
+        {!gmail.loading && gmail.connected && (
+          <div>
+            {gmail.error && <p className="mb-2 font-body text-xs text-red-500">{gmail.error}</p>}
+            {gmail.messages.length === 0 && !gmail.error && (
+              <p className="font-body text-xs text-slate-400">Aucun mail récent.</p>
+            )}
+            <div className="max-h-72 space-y-1 overflow-y-auto">
+              {gmail.messages.map((m: any) => (
+                <button
+                  key={m.id}
+                  onClick={() => pickMessage(m)}
+                  className="w-full rounded-lg border border-transparent px-3 py-2 text-left transition-colors hover:border-blue-100 hover:bg-blue-50/50"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate font-body text-xs font-semibold text-slate-700">{m.from}</span>
+                  </div>
+                  <div className="truncate font-body text-sm text-slate-800">{m.subject || "(sans objet)"}</div>
+                  <div className="truncate font-body text-[11px] text-slate-400">{m.snippet}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
