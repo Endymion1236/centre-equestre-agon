@@ -99,6 +99,12 @@ export default function EditCreneauModal({
   const enrolledCount = ((creneau as any).enrolled || []).length;
   const titleChanged = (form.activityTitle || "").trim() !== (creneau.activityTitle || "").trim();
   const isStage = creneau.activityType === "stage" || creneau.activityType === "stage_journee";
+  // Verrou de scroll du fond tant que la modale est ouverte (comme la lightbox).
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
       <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>

@@ -426,6 +426,12 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     hasScrolledToInscrits.current = true;
     setTimeout(() => inscritsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
   }, [enrolled]);
+
+  // Verrou de scroll du fond tant que le panneau est ouvert.
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
   const spots = creneau.maxPlaces - enrolled.length; const color = typeColors[creneau.activityType] || "#666";
   const priceTTC = (creneau as any).priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux || 5.5) / 100);
   // Prix affiché dans l'en-tête : pour les stages, utiliser le tarif configuré si dispo
