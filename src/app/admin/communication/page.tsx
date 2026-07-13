@@ -19,6 +19,7 @@ import { Badge, Card } from "@/components/ui";
 import type { Family } from "@/types";
 import { authFetch } from "@/lib/auth-fetch";
 import { db } from "@/lib/firebase";
+import EmailRestrictedToggle from "@/components/admin/EmailRestrictedToggle";
 
 type CommunicationTab = "newsletter" | "historique";
 
@@ -233,6 +234,10 @@ export default function CommunicationPage() {
         <p className="mt-1 max-w-2xl font-body text-sm text-gray-500">
           Choisissez précisément les familles, personnalisez le message et gardez une trace de chaque envoi.
         </p>
+      </div>
+
+      <div className="mb-6">
+        <EmailRestrictedToggle />
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">

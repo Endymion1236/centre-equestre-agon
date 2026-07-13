@@ -3,7 +3,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { verifyAuth } from "@/lib/api-auth";
 import { logEmail } from "@/lib/email-log";
-import { isRecipientAllowed, blockedLog } from "@/lib/email-guard";
+import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
 import { generateCAWLQR, generateSEPAQR } from "@/lib/payment-qr";
 
 export const dynamic = "force-dynamic";
@@ -149,6 +149,7 @@ export async function POST(req: NextRequest) {
     const resendKey = process.env.RESEND_API_KEY;
     const subject = `Lien de paiement — ${amount.toFixed(2)}€ — Centre Équestre`;
     const sentByUid = (auth as any)?.uid || "admin";
+    await refreshEmailMode();
     if (resendKey && !isRecipientAllowed(recipientEmail)) {
       // 🔒 Garde-fou phase de préparation : on ne pousse pas le lien à la famille.
       console.warn(blockedLog(recipientEmail, "payment_link"));

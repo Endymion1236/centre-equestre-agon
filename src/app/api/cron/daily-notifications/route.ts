@@ -5,7 +5,7 @@ import { loadTemplate } from "@/lib/email-template-loader";
 import { compareCreneaux } from "@/lib/creneau-sort";
 import { logEmail } from "@/lib/email-log";
 import { addDaysParis } from "@/lib/date-local";
-import { isRecipientAllowed, blockedLog } from "@/lib/email-guard";
+import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -155,6 +155,7 @@ export async function GET(req: NextRequest) {
           </div>`;
 
           for (const email of emails) {
+            await refreshEmailMode();
             if (!isRecipientAllowed(email)) {
               results.monitorRecap.blocked++;
               console.log(blockedLog(email, "cron_monitor_recap"));

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { Resend } from "resend";
 import { sendPushBatch } from "@/lib/push";
-import { isRecipientAllowed } from "@/lib/email-guard";
+import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -93,6 +93,7 @@ export async function GET(req: NextRequest) {
     </div>`;
 
     const resendKey = process.env.RESEND_API_KEY;
+    await refreshEmailMode();
     const to = ADMIN_EMAILS.filter((e) => isRecipientAllowed(e));
     if (resendKey && to.length > 0) {
       try {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { logEmail } from "@/lib/email-log";
-import { isRecipientAllowed, blockedLog } from "@/lib/email-guard";
+import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
 import { addDaysParis } from "@/lib/date-local";
 
 export const dynamic = "force-dynamic";
@@ -103,6 +103,7 @@ export async function GET(req: NextRequest) {
 
     for (const [email, { parentName, items }] of recipients) {
       // 🔒 Garde-fou phase de préparation : ne pas envoyer aux familles non autorisées.
+      await refreshEmailMode();
       if (!isRecipientAllowed(email)) { console.warn(blockedLog(email, "rappel_j1")); continue; }
       const childrenStr = [...new Set(items.map(i => i.childName))].filter(Boolean).join(", ");
       const subject = items.length === 1
