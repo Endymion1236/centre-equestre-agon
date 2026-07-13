@@ -12,6 +12,14 @@ const galopLevels = ["—", "Poney Bronze", "Poney Argent", "Poney Or", "Bronze"
 const inputStyle = "w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400";
 const labelStyle = "font-body text-[10px] font-semibold text-slate-600 uppercase block mb-1";
 
+// Fléchage famille (mêmes ids que les segments de filtre et FAMILY_TAGS).
+// 'etablissement' est ajouté automatiquement pour les asso/collectivités.
+const FLECHAGE_OPTIONS = [
+  { id: "cavalier_annee", label: "À l’année", emoji: "🏇" },
+  { id: "stage", label: "Stages", emoji: "🎯" },
+  { id: "passage", label: "Passage", emoji: "👋" },
+] as const;
+
 type AccountType = "particulier" | "asso" | "collectivite";
 
 interface Props {
@@ -49,6 +57,8 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
     raisonSociale: "", structureParente: "", siret: "", referent: "",
   });
   const [newChildren, setNewChildren] = useState([{ firstName: "", lastName: "", birthDate: "", galopLevel: "—" }]);
+  const [tags, setTags] = useState<string[]>([]);
+  const toggleTag = (id: string) => setTags(t => t.includes(id) ? t.filter(x => x !== id) : [...t, id]);
 
   const handleCreate = async () => {
     const isValid = newFamily.accountType === "particulier"
@@ -89,6 +99,9 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
         zipCode: newFamily.zipCode.trim(),
         city: newFamily.city.trim(),
         accountType: newFamily.accountType,
+        tags: newFamily.accountType !== "particulier"
+          ? Array.from(new Set([...tags, "etablissement"]))
+          : tags,
         ...(newFamily.accountType !== "particulier" && {
           raisonSociale: newFamily.raisonSociale.trim(),
           structureParente: newFamily.structureParente.trim(),
@@ -249,6 +262,25 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Fléchage */}
+          <div>
+            <div className="font-body text-xs font-semibold text-blue-500 uppercase tracking-wider mb-2">Fléchage <span className="text-slate-400 font-normal normal-case">(optionnel)</span></div>
+            <div className="flex flex-wrap gap-2">
+              {FLECHAGE_OPTIONS.map(opt => {
+                const on = tags.includes(opt.id);
+                return (
+                  <button key={opt.id} type="button" onClick={() => toggleTag(opt.id)}
+                    className={`font-body text-xs px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${on ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200 hover:border-blue-300"}`}>
+                    {opt.emoji} {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+            {newFamily.accountType !== "particulier" && (
+              <p className="font-body text-[11px] text-slate-400 mt-1.5">🏫 « Établissement » sera ajouté automatiquement (compte {newFamily.accountType === "asso" ? "association" : "collectivité"}).</p>
+            )}
           </div>
 
           {/* Cavaliers */}
