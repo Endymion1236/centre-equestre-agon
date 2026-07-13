@@ -53,7 +53,21 @@ const strengths = [
 
 export default function HomePage() {
   return (
-    <>
+    <div style={{ ["--nav-top" as string]: "2.75rem" } as React.CSSProperties}>
+      {/* Bandeau transition — fixé tout en haut, la Navbar se décale dessous */}
+      <Link href="/espace-cavalier" className="fixed inset-x-0 top-0 z-[210] block no-underline group">
+        <div className="flex h-11 items-center justify-center gap-2 bg-gradient-to-r from-blue-900 via-blue-800 to-blue-900 px-3 sm:gap-3">
+          <span className="hidden items-center gap-1.5 whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 font-body text-[10px] font-bold uppercase tracking-wider text-gold-300 sm:inline-flex">✨ Rentrée 2026</span>
+          <span className="truncate text-center font-body text-[11px] text-white/90 sm:text-sm">
+            <span className="sm:hidden">Nouveau site en septembre — consultez déjà votre espace</span>
+            <span className="hidden sm:inline">Les nouvelles fonctionnalités seront actives <strong className="text-white">en septembre</strong>. Vous pouvez déjà consulter votre espace client.</span>
+          </span>
+          <span className="inline-flex items-center gap-1 whitespace-nowrap font-body text-[11px] font-bold text-gold-300 transition-all group-hover:gap-1.5 sm:text-sm">
+            <span className="hidden sm:inline">Accéder à mon espace</span><span className="sm:hidden">Mon espace</span> <ArrowRight size={14} />
+          </span>
+        </div>
+      </Link>
+
       <Navbar />
 
       <HeroEditable>
@@ -101,21 +115,6 @@ export default function HomePage() {
           </div>
         </div>
       </HeroEditable>
-
-      {/* Bandeau transition — nouveau site en vigueur en septembre */}
-      <Link href="/espace-cavalier" className="block no-underline group">
-        <div className="bg-gradient-to-r from-blue-800 via-blue-700 to-blue-800 px-4 py-3 sm:py-3.5">
-          <div className="mx-auto flex max-w-[1100px] flex-col items-center justify-center gap-x-4 gap-y-1.5 text-center sm:flex-row">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 font-body text-[11px] font-bold uppercase tracking-wider text-gold-300 whitespace-nowrap">✨ Nouveau site · Rentrée 2026</span>
-            <span className="font-body text-xs text-white/90 sm:text-sm">
-              Les nouvelles fonctionnalités (réservation, paiement, espace famille) seront actives <strong className="text-white">en septembre</strong>. Vous pouvez d’ores et déjà consulter votre espace client.
-            </span>
-            <span className="inline-flex items-center gap-1 whitespace-nowrap font-body text-xs font-bold text-gold-300 transition-all group-hover:gap-2 sm:text-sm">
-              Accéder à mon espace <ArrowRight size={15} />
-            </span>
-          </div>
-        </div>
-      </Link>
 
       <HomeActivityFinder />
 
@@ -283,6 +282,6 @@ export default function HomePage() {
       </section>
 
       <Footer />
-    </>
+    </div>
   );
 }
