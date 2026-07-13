@@ -25,7 +25,7 @@ const universes = [
   {
     eyebrow: "Dès 12 ans",
     title: "Balades sur la plage",
-    text: "Deux heures entre dunes, estuaire et bord de mer.",
+    text: "En journée ou au coucher du soleil — l’expérience phare du centre.",
     href: "/activites?profil=balade#balade-soleil",
     image: "/images/vitrine/choices/balade-plage.webp",
     accent: "text-orange-700",
