@@ -1,7 +1,5 @@
 "use client";
 import { useState, useEffect } from "react";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 
 interface Actu {
   id: string;
@@ -17,18 +15,26 @@ export default function ActusBanner() {
   const [actus, setActus] = useState<Actu[]>([]);
 
   useEffect(() => {
-    getDoc(doc(db, "settings", "actus")).then(snap => {
-      if (snap.exists()) {
-        const data = snap.data() as any;
-        if (data.items) {
-          // Filtrer les actives et trier par date décroissante
-          const items = (data.items as Actu[])
-            .filter(a => a.active && a.title)
-            .sort((a, b) => b.date.localeCompare(a.date));
-          setActus(items);
+    const controller = new AbortController();
+
+    fetch("/api/public/actus", {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(`Actualités indisponibles (${response.status})`);
+        return response.json();
+      })
+      .then((data: { items?: Actu[] }) => {
+        setActus(Array.isArray(data.items) ? data.items : []);
+      })
+      .catch((error) => {
+        if (error instanceof Error && error.name !== "AbortError") {
+          console.error("Impossible de charger les actualités :", error);
         }
-      }
-    });
+      });
+
+    return () => controller.abort();
   }, []);
 
   if (actus.length === 0) return null;
