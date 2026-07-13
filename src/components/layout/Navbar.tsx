@@ -13,6 +13,7 @@ const primaryLinks = [
 ];
 
 const clubLinks = [
+  { href: "/installations", label: "Installations", description: "Les espaces, le matériel et le bien-être" },
   { href: "/equipe", label: "Équipe & poneys", description: "Les humains et la cavalerie" },
   { href: "/mini-ferme", label: "Mini-ferme", description: "Les animaux du centre" },
   { href: "/galerie", label: "Galerie", description: "La vie du club en images" },
