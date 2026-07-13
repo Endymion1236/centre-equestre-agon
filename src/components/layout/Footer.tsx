@@ -10,6 +10,7 @@ const discoverLinks = [
 ];
 
 const clubLinks = [
+  { href: "/installations", label: "Installations & bien-être" },
   { href: "/equipe", label: "Équipe & poneys" },
   { href: "/mini-ferme", label: "Mini-ferme" },
   { href: "/galerie", label: "Galerie" },
