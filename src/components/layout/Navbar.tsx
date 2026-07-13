@@ -45,7 +45,9 @@ export function Navbar() {
   }`;
 
   return (
-    <nav className={`fixed inset-x-0 top-0 z-[200] transition-all duration-300 ${
+    <nav
+      style={{ top: "var(--nav-top, 0px)" }}
+      className={`fixed inset-x-0 z-[200] transition-all duration-300 ${
       light
         ? "border-b border-blue-500/[0.07] bg-cream/95 py-2 shadow-[0_8px_30px_rgba(12,26,46,0.05)] backdrop-blur-xl"
         : "border-b border-white/[0.06] bg-blue-950/20 py-3 backdrop-blur-md"
