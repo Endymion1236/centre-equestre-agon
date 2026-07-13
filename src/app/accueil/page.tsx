@@ -102,6 +102,21 @@ export default function HomePage() {
         </div>
       </HeroEditable>
 
+      {/* Bandeau transition — nouveau site en vigueur en septembre */}
+      <Link href="/espace-cavalier" className="block no-underline group">
+        <div className="bg-gradient-to-r from-blue-800 via-blue-700 to-blue-800 px-4 py-3 sm:py-3.5">
+          <div className="mx-auto flex max-w-[1100px] flex-col items-center justify-center gap-x-4 gap-y-1.5 text-center sm:flex-row">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 font-body text-[11px] font-bold uppercase tracking-wider text-gold-300 whitespace-nowrap">✨ Nouveau site · Rentrée 2026</span>
+            <span className="font-body text-xs text-white/90 sm:text-sm">
+              Les nouvelles fonctionnalités (réservation, paiement, espace famille) seront actives <strong className="text-white">en septembre</strong>. Vous pouvez d’ores et déjà consulter votre espace client.
+            </span>
+            <span className="inline-flex items-center gap-1 whitespace-nowrap font-body text-xs font-bold text-gold-300 transition-all group-hover:gap-2 sm:text-sm">
+              Accéder à mon espace <ArrowRight size={15} />
+            </span>
+          </div>
+        </div>
+      </Link>
+
       <HomeActivityFinder />
 
       <ActusBanner />
