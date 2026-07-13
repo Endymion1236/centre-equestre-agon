@@ -146,7 +146,15 @@ export async function auditPaymentPricing(opts: {
 
       const claimedFinal = Math.round(Number(it.priceTTC || 0) * 100) / 100;
       const claimedBase = Math.round(Number(it.originalPriceTTC || it.priceTTC || 0) * 100) / 100;
-      const floor = isStage && prixPlancherStage > 0 ? prixPlancherStage : 0;
+
+      // Mode jour = réservation partielle : la base annoncée est < tarif semaine.
+      // Le plancher est un minimum SEMAINE — il ne s'applique JAMAIS au mode jour
+      // (cohérent avec addStageToCart : mode jour = prix jour brut, aucun plancher).
+      const isDayMode = isStage && refWeek !== null && claimedBase < refWeek - EPSILON;
+      const dayPrice =
+        cr && typeof cr.priceTTCDay === "number" && cr.priceTTCDay > 0 ? cr.priceTTCDay : null;
+      const nbDaysItem = Array.isArray(it.creneauIds) ? it.creneauIds.length : 1;
+      const floor = isStage && !isDayMode && prixPlancherStage > 0 ? prixPlancherStage : 0;
 
       const issues: string[] = [];
 
@@ -156,9 +164,25 @@ export async function auditPaymentPricing(opts: {
         // pour ne pas fausser les totaux, mais on marque l'anomalie.
         minLegit += floor > 0 ? floor : claimedFinal;
         maxLegit += claimedBase;
+      } else if (isStage && isDayMode) {
+        stageChildren.add(it.childId);
+        // MODE JOUR (partiel) : borne haute = tarif semaine ; borne basse =
+        // prix jour × nb jours (si prix jour défini). Aucun plancher semaine.
+        const dayMin = dayPrice !== null ? Math.round(dayPrice * nbDaysItem * 100) / 100 : 0;
+        if (claimedBase > refWeek + EPSILON) {
+          issues.push(`base jour ${claimedBase}€ > tarif semaine ${refWeek}€`);
+        }
+        if (claimedFinal > claimedBase + EPSILON) {
+          issues.push(`prix payé ${claimedFinal}€ > base jour ${claimedBase}€`);
+        }
+        if (dayPrice !== null && claimedFinal < dayMin - EPSILON) {
+          issues.push(`prix payé ${claimedFinal}€ < prix jour minimum ${dayMin}€`);
+        }
+        minLegit += dayMin;
+        maxLegit += refWeek;
       } else if (isStage) {
         stageChildren.add(it.childId);
-        // borne haute : tarif semaine ; borne basse : plancher
+        // MODE SEMAINE : borne haute = tarif semaine ; borne basse = plancher.
         if (claimedFinal > refWeek + EPSILON) {
           issues.push(`prix payé ${claimedFinal}€ > tarif semaine ${refWeek}€`);
         }

@@ -1148,14 +1148,23 @@ export default function ReserverPage() {
                               {(isJourMode ? selectedDays.length > 0 : true) && selectedChildren.map((childId, idx) => {
                                 const child = children.find((c: any) => c.id === childId);
                                 const rang = existingStageCount + idx;
-                                const remiseSemaine = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
-                                const remiseInitiale = isJourMode ? Math.round(remiseSemaine / joursUniques.length * selectedDays.length * 100) / 100 : remiseSemaine;
-                                let prixFinal = Math.max(0, Math.round((prixEffectif - remiseInitiale) * 100) / 100);
-                                let remise = remiseInitiale;
-                                // Plancher (coherent avec addStageToCart)
-                                if (prixPlancherStage > 0 && prixFinal < prixPlancherStage) {
-                                  prixFinal = prixPlancherStage;
-                                  remise = Math.max(0, Math.round((prixEffectif - prixPlancherStage) * 100) / 100);
+                                // Mode JOUR : prix jour brut, AUCUNE remise, AUCUN plancher.
+                                // Mode SEMAINE : remise dégressive + plancher.
+                                // (strictement aligné sur addStageToCart pour éviter tout
+                                //  écart entre l'affichage du récap et le prix réel du panier)
+                                let prixFinal: number;
+                                let remise: number;
+                                if (isJourMode) {
+                                  remise = 0;
+                                  prixFinal = Math.max(0, Math.round(prixEffectif * 100) / 100);
+                                } else {
+                                  const remiseSemaine = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
+                                  remise = remiseSemaine;
+                                  prixFinal = Math.max(0, Math.round((prixEffectif - remiseSemaine) * 100) / 100);
+                                  if (prixPlancherStage > 0 && prixFinal < prixPlancherStage) {
+                                    prixFinal = prixPlancherStage;
+                                    remise = Math.max(0, Math.round((prixEffectif - prixPlancherStage) * 100) / 100);
+                                  }
                                 }
                                 return (
                                   <div key={childId} className="flex justify-between font-body text-sm py-1">
