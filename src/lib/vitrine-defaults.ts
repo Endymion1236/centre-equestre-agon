@@ -41,6 +41,22 @@ export const vitrineDefaults = {
       description: "2h entre dunes, estuaire et plage. Découverte du littoral normand à cheval, au coucher du soleil c'est magique.",
       image: "",
     },
+    balade_jour: {
+      title: "Promenade sur la plage en journée",
+      ages: "Dès 12 ans",
+      schedule: "2h · départ en journée · selon calendrier et météo",
+      price: "53€",
+      description: "Une promenade en pleine journée pour découvrir le littoral d'Agon-Coutainville, entre chemins, dunes, estuaire et plage.",
+      image: "",
+    },
+    balade_soleil: {
+      title: "Balade au coucher du soleil",
+      ages: "Dès 12 ans",
+      schedule: "2h · départ en fin de journée · d'avril à octobre",
+      price: "57€",
+      description: "Notre expérience phare : deux heures à cheval entre dunes, estuaire et plage, dans la lumière dorée du coucher de soleil.",
+      image: "",
+    },
     cours: {
       title: "Cours réguliers",
       schedule: "Toute l'année · Planning hebdomadaire",

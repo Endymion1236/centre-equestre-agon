@@ -20,6 +20,7 @@ export interface PublicActivity {
   bookingLabel?: string;
   vitrineKeys: string[];
   featured?: boolean;
+  signature?: boolean;
 }
 
 export const CATEGORY_LABELS: Record<PublicActivityCategory, string> = {
@@ -117,37 +118,38 @@ export const PUBLIC_ACTIVITIES: PublicActivity[] = [
   {
     id: "balade-soleil",
     category: "balades",
-    title: "Balade coucher de soleil",
+    title: "Balade au coucher du soleil",
     ages: "Dès 12 ans",
-    schedule: "2h · d’avril à octobre · sur réservation",
-    description: "Deux heures entre dunes, estuaire et plage d’Agon, avec des groupes séparés selon le niveau.",
-    intro: "La lumière descend sur la côte, les dunes s’ouvrent et la plage devient un immense terrain d’évasion. Les groupes débutants, débrouillés et confirmés suivent un rythme adapté à leur aisance.",
-    features: ["Deux heures de promenade", "Groupes par niveau", "Dunes, estuaire et plage", "Galop sur la plage pour les confirmés", "Casque fourni"],
+    schedule: "2h · départ en fin de journée · d’avril à octobre",
+    description: "Notre expérience phare : deux heures à cheval entre dunes, estuaire et plage, dans la lumière dorée du coucher de soleil.",
+    intro: "C’est la sortie emblématique du centre. La lumière descend sur la côte, les dunes s’ouvrent et la plage devient un immense terrain d’évasion. Débutants, débrouillés et confirmés partent dans des groupes distincts pour profiter du moment à leur rythme.",
+    features: ["L’expérience signature du centre", "Départ dans la lumière du soir", "Groupes séparés par niveau", "Dunes, estuaire et plage", "Galop sur la plage pour les confirmés"],
     practical: ["Âge minimum 12 ans", "Poids maximum 85 kg", "Pantalon long et chaussures fermées", "Niveau déclaré avec honnêteté pour la sécurité"],
     gradient: "from-orange-600 to-amber-400",
     imageKey: "activite-balade-soleil",
     price: "57€",
     level: "Débutant, débrouillé ou confirmé",
     bookingLabel: "Voir les balades disponibles",
-    vitrineKeys: ["balade_soleil", "balade_coucher_soleil", "balade"],
+    vitrineKeys: ["balade_soleil", "balade_coucher_soleil"],
     featured: true,
+    signature: true,
   },
   {
     id: "balade-jour",
     category: "balades",
-    title: "Promenade en journée",
+    title: "Promenade sur la plage en journée",
     ages: "Dès 12 ans",
-    schedule: "2h · selon calendrier et météo",
-    description: "Une découverte à cheval du littoral d’Agon-Coutainville, entre chemins, dunes et plage.",
-    intro: "Une formule idéale pour découvrir la région autrement. Le parcours et le rythme sont adaptés au niveau du groupe et aux conditions du jour.",
-    features: ["Deux heures de balade", "Cadre naturel remarquable", "Groupes par niveau", "Bon cadeau disponible", "Casque fourni"],
+    schedule: "2h · départ en journée · selon calendrier et météo",
+    description: "Une promenade en pleine journée pour découvrir le littoral d’Agon-Coutainville, entre chemins, dunes, estuaire et plage.",
+    intro: "Cette formule privilégie la découverte du paysage et le plaisir d’une sortie en bord de mer. Le parcours et le rythme sont adaptés au niveau du groupe ainsi qu’aux conditions de la journée.",
+    features: ["Départ en journée", "Deux heures de promenade", "Découverte du littoral", "Groupes par niveau", "Bon cadeau disponible"],
     practical: ["Âge minimum 12 ans", "Poids maximum 85 kg", "Pantalon long et chaussures fermées", "Maintien selon les conditions météo"],
     gradient: "from-sky-500 to-blue-300",
     imageKey: "activite-balade-jour",
     price: "53€",
     level: "Tous niveaux selon les créneaux",
     bookingLabel: "Réserver une promenade",
-    vitrineKeys: ["balade_jour", "promenade_jour", "balade"],
+    vitrineKeys: ["balade_jour", "promenade_jour"],
   },
   {
     id: "balade-privee",
