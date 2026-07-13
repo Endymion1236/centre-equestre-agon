@@ -54,6 +54,7 @@ export interface PricingAuditItemFinding {
 export interface PricingAuditResult {
   paymentId: string;
   ok: boolean; // true = aucune anomalie détectée
+  reliable: boolean; // true = toutes les bornes ont pu être calculées (créneaux trouvés)
   isDeposit: boolean;
   claimedTotalTTC: number; // totalTTC du doc payment
   claimedChargeTTC: number; // ce que le checkout s'apprête à facturer maintenant
@@ -316,10 +317,15 @@ export async function auditPaymentPricing(opts: {
     }
 
     const ok = globalIssues.length === 0 && findings.every((f) => f.issues.length === 0);
+    // Fiable = tous les créneaux source ont pu être chargés (bornes calculables).
+    // Sans ça, on n'imposera JAMAIS de blocage (fail-open) pour ne pas refuser
+    // un paiement légitime sur une donnée manquante.
+    const reliable = findings.length > 0 && findings.every((f) => f.refWeekTTC !== null);
 
     return {
       paymentId,
       ok,
+      reliable,
       isDeposit,
       claimedTotalTTC: claimedTotal,
       claimedChargeTTC: Math.round(chargeTTC * 100) / 100,
@@ -342,7 +348,14 @@ export async function auditPaymentPricing(opts: {
  */
 export async function logPricingAudit(
   result: PricingAuditResult,
-  context: { route: string; familyId?: string | null; merchantRef?: string | null }
+  context: {
+    route: string;
+    familyId?: string | null;
+    merchantRef?: string | null;
+    enforceMode?: boolean;
+    blocked?: boolean;
+    blockReason?: string | null;
+  }
 ): Promise<void> {
   try {
     await adminDb.collection("pricing_audit").add({
@@ -350,9 +363,17 @@ export async function logPricingAudit(
       route: context.route,
       familyId: context.familyId ?? null,
       merchantRef: context.merchantRef ?? null,
+      enforceMode: context.enforceMode ?? false,
+      blocked: context.blocked ?? false,
+      blockReason: context.blockReason ?? null,
       createdAt: new Date(),
     });
-    if (!result.ok) {
+    if (context.blocked) {
+      console.warn(
+        `[server-pricing] 🛑 PAIEMENT BLOQUÉ payment=${result.paymentId} ` +
+          `charge=${result.claimedChargeTTC}€ raison=${context.blockReason}`
+      );
+    } else if (!result.ok) {
       console.warn(
         `[server-pricing] ⚠️ ÉCART DÉTECTÉ payment=${result.paymentId} ` +
           `charge=${result.claimedChargeTTC}€ bornes=[${result.minLegitTotalTTC};${result.maxLegitTotalTTC}] ` +
@@ -366,4 +387,35 @@ export async function logPricingAudit(
   } catch (e) {
     console.error("[server-pricing] logPricingAudit a échoué:", e);
   }
+}
+
+/**
+ * Décide si le paiement doit être BLOQUÉ. Ne bloque QUE le sous-paiement sous
+ * la borne basse autoritaire (acompte attendu si acompte, minimum sinon), et
+ * UNIQUEMENT si l'audit est fiable (toutes les bornes calculées). Sinon
+ * fail-open : on laisse passer et on logue, jamais de blocage à l'aveugle.
+ */
+export function evaluatePaymentEnforcement(result: PricingAuditResult): {
+  block: boolean;
+  reason: string | null;
+  floorTTC: number;
+} {
+  const floorTTC = result.isDeposit
+    ? result.expectedDepositTTC ?? result.minLegitTotalTTC
+    : result.minLegitTotalTTC;
+
+  if (!result.reliable) {
+    return { block: false, reason: "audit non fiable (créneau source manquant)", floorTTC };
+  }
+  const EPS = 0.02;
+  if (result.claimedChargeTTC < floorTTC - EPS) {
+    return {
+      block: true,
+      reason: result.isDeposit
+        ? `acompte ${result.claimedChargeTTC}€ < minimum ${floorTTC}€`
+        : `montant ${result.claimedChargeTTC}€ < minimum autoritaire ${floorTTC}€`,
+      floorTTC,
+    };
+  }
+  return { block: false, reason: null, floorTTC };
 }
