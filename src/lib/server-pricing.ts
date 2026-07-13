@@ -79,6 +79,31 @@ function weekPriceFromCreneau(cr: any): number | null {
   return null;
 }
 
+// Lundi (YYYY-MM-DD) de la semaine contenant `dateStr`. Parse en UTC midi pour
+// être déterministe côté serveur Vercel (process UTC) et éviter les décalages.
+function mondayOf(dateStr: string): string {
+  const d = new Date(dateStr + "T12:00:00Z");
+  const dow = d.getUTCDay(); // 0=dim .. 6=sam
+  d.setUTCDate(d.getUTCDate() - ((dow + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+function addDaysStr(dateStr: string, days: number): string {
+  const d = new Date(dateStr + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// Réplique locale de sameStage (admin/planning/types.ts) — pure, pas d'import
+// cross-module pour rester autonome côté serveur.
+function sameStageServer(a: any, b: any): boolean {
+  if (!a || !b) return false;
+  if (a.stageGroupId && b.stageGroupId) return a.stageGroupId === b.stageGroupId;
+  if (a.activityId && b.activityId)
+    return a.activityId === b.activityId && a.activityTitle === b.activityTitle;
+  return a.activityTitle === b.activityTitle && a.startTime === b.startTime;
+}
+
 // ─── Vérification principale ────────────────────────────────────────
 
 /**
@@ -136,7 +161,46 @@ export async function auditPaymentPricing(opts: {
     let maxLegit = 0;
     const stageChildren = new Set<string>();
 
-    items.forEach((it, index) => {
+    // Compte le nombre TOTAL de jours d'un stage (dénominateur du prorata quand
+    // priceTTCDay n'est pas renseigné). Réplique le regroupement famille :
+    // même stage (sameStage) dans la même semaine. Mis en cache par stage.
+    const stageDayCountCache = new Map<string, number>();
+    async function getStageDayCount(cr: any): Promise<number> {
+      if (!cr || !cr.date) return 1;
+      const monday = mondayOf(cr.date);
+      const key = cr.stageGroupId
+        ? `g:${cr.stageGroupId}:${monday}`
+        : `a:${cr.activityId || cr.activityTitle}:${cr.startTime}:${monday}`;
+      const cached = stageDayCountCache.get(key);
+      if (cached !== undefined) return cached;
+      try {
+        const snap = await adminDb
+          .collection("creneaux")
+          .where("date", ">=", monday)
+          .where("date", "<=", addDaysStr(monday, 6))
+          .get();
+        const dates = new Set<string>();
+        snap.forEach((d) => {
+          const c = d.data() as any;
+          if (
+            (c.activityType === "stage" || c.activityType === "stage_journee") &&
+            sameStageServer(c, cr) &&
+            c.date
+          ) {
+            dates.add(c.date);
+          }
+        });
+        const n = Math.max(1, dates.size);
+        stageDayCountCache.set(key, n);
+        return n;
+      } catch {
+        return 1;
+      }
+    }
+
+    // Boucle async : le prorata jour peut nécessiter une lecture Firestore.
+    for (let index = 0; index < items.length; index++) {
+      const it = items[index];
       const activityType: string = it.activityType || "cours";
       const isStage = STAGE_TYPES.includes(activityType);
       const creneauRef: string | null =
@@ -167,15 +231,21 @@ export async function auditPaymentPricing(opts: {
       } else if (isStage && isDayMode) {
         stageChildren.add(it.childId);
         // MODE JOUR (partiel) : borne haute = tarif semaine ; borne basse =
-        // prix jour × nb jours (si prix jour défini). Aucun plancher semaine.
-        const dayMin = dayPrice !== null ? Math.round(dayPrice * nbDaysItem * 100) / 100 : 0;
+        // prix jour × nb jours. Si priceTTCDay absent → prorata = tarif semaine
+        // ÷ nb TOTAL de jours du stage (identique au panier famille). Pas de plancher.
+        let effDayPrice = dayPrice;
+        if (effDayPrice === null && refWeek !== null) {
+          const totalDays = await getStageDayCount(cr);
+          effDayPrice = Math.round((refWeek / totalDays) * 100) / 100;
+        }
+        const dayMin = effDayPrice !== null ? Math.round(effDayPrice * nbDaysItem * 100) / 100 : 0;
         if (claimedBase > refWeek + EPSILON) {
           issues.push(`base jour ${claimedBase}€ > tarif semaine ${refWeek}€`);
         }
         if (claimedFinal > claimedBase + EPSILON) {
           issues.push(`prix payé ${claimedFinal}€ > base jour ${claimedBase}€`);
         }
-        if (dayPrice !== null && claimedFinal < dayMin - EPSILON) {
+        if (effDayPrice !== null && claimedFinal < dayMin - EPSILON) {
           issues.push(`prix payé ${claimedFinal}€ < prix jour minimum ${dayMin}€`);
         }
         minLegit += dayMin;
@@ -215,7 +285,7 @@ export async function auditPaymentPricing(opts: {
         floor,
         issues,
       });
-    });
+    }
 
     minLegit = Math.round(minLegit * 100) / 100;
     maxLegit = Math.round(maxLegit * 100) / 100;
