@@ -32,10 +32,10 @@ export async function GET(req: NextRequest) {
   const modules = [
     // Rappels J-1 : depuis le soir, on cible bien demain (target par défaut)
     { name: "rappels-j1", path: "/api/cron/rappels-j1" },
-    // Daily notifs : depuis le soir, on veut viser le jour suivant
+    // Daily notifs : depuis le soir, on veut viser le jour suivant.
+    // Inclut DÉJÀ le récap moniteur (push + email) → pas de daily-monitor-recap
+    // séparé, qui envoyait un email moniteur identique (doublon supprimé).
     { name: "daily-notifications", path: "/api/cron/daily-notifications?target=tomorrow" },
-    // Récap moniteur : depuis le soir, on envoie le planning de demain
-    { name: "daily-monitor-recap", path: "/api/cron/daily-monitor-recap?target=tomorrow" },
     // Solde stage J-7 : calcule J-7 depuis la date des stages, pas depuis aujourd'hui → pas de décalage
     { name: "charge-stage-balances", path: "/api/cron/charge-stage-balances" },
   ];
