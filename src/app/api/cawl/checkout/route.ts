@@ -3,7 +3,7 @@ import { cawlSdk, CAWL_PSPID } from "@/lib/cawl";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { verifyAuth } from "@/lib/api-auth";
-import { auditPaymentPricing, logPricingAudit } from "@/lib/server-pricing";
+import { auditPaymentPricing, logPricingAudit, evaluatePaymentEnforcement } from "@/lib/server-pricing";
 
 export async function POST(req: NextRequest) {
   // 🔒 Auth obligatoire
@@ -88,10 +88,14 @@ export async function POST(req: NextRequest) {
     // Référence unique marchand
     const merchantRef = `CE-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
-    // ── 🔍 Vérification serveur des prix — SHADOW MODE ───────────────────
+    // ── 🔍 Vérification serveur des prix ─────────────────────────────────
     // Recharge le tarif source des créneaux et borne le montant. Journalise
-    // tout écart dans `pricing_audit`. N'IMPOSE RIEN : totalCents inchangé.
-    // (functions non-bloquantes : ne lèvent jamais, ne modifient pas le flux)
+    // tout dans `pricing_audit`. Comportement selon CAWL_PRICING_ENFORCE :
+    //   - absent/false → SHADOW : observe, ne bloque rien (totalCents inchangé)
+    //   - "true"       → ENFORCE : refuse le paiement si sous-paiement sous la
+    //                    borne basse autoritaire (uniquement si audit fiable)
+    // (functions non-bloquantes : ne lèvent jamais)
+    const ENFORCE = process.env.CAWL_PRICING_ENFORCE === "true";
     if (paymentId) {
       const audit = await auditPaymentPricing({
         paymentId,
@@ -99,11 +103,26 @@ export async function POST(req: NextRequest) {
         isDeposit: !!isDeposit,
       });
       if (audit) {
+        const decision = evaluatePaymentEnforcement(audit);
+        const willBlock = ENFORCE && decision.block;
         await logPricingAudit(audit, {
           route: "cawl/checkout",
           familyId: familyId || null,
           merchantRef,
+          enforceMode: ENFORCE,
+          blocked: willBlock,
+          blockReason: willBlock ? decision.reason : null,
         });
+        if (willBlock) {
+          return NextResponse.json(
+            {
+              error:
+                "Le montant demandé est inférieur au tarif dû. Recharge ta page et recommence ; si le problème persiste, contacte le club.",
+              code: "PRICING_MISMATCH",
+            },
+            { status: 400 }
+          );
+        }
       }
     }
 
