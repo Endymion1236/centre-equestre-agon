@@ -186,7 +186,8 @@ export default function ContenuPage() {
             { key: "galop_bronze", emoji: "🥉", label: "Galop de Bronze" },
             { key: "galop_argent", emoji: "🥈", label: "Galop d'Argent" },
             { key: "galop_or", emoji: "🥇", label: "Galop d'Or" },
-            { key: "balade", emoji: "🌅", label: "Balades à la plage" },
+            { key: "balade_jour", emoji: "☀️", label: "Promenade en journée" },
+            { key: "balade_soleil", emoji: "🌅", label: "Balade au coucher du soleil" },
             { key: "cours", emoji: "📅", label: "Cours réguliers" },
             { key: "anniversaires", emoji: "🎉", label: "Anniversaires" },
           ].map(({ key, emoji, label: lbl }) => {
