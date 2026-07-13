@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { Megaphone } from "lucide-react";
 
 interface Actu {
   id: string;
@@ -45,28 +46,41 @@ export default function ActusBanner() {
     return date.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
   };
 
+  // Récent = à venir ou publié il y a moins de 21 jours → pastille "Nouveau".
+  const isRecent = (d: string) => {
+    const t = new Date(d + "T12:00:00").getTime();
+    return !isNaN(t) && t >= Date.now() - 21 * 86400000;
+  };
+
   return (
-    <section className="py-12 px-6 bg-gradient-to-b from-cream to-white">
+    <section className="py-14 px-6 bg-gradient-to-b from-gold-50/40 via-cream to-white">
       <div className="max-w-[1000px] mx-auto">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gold-400/30 to-transparent" />
-          <span className="font-body text-xs font-semibold text-gold-500 uppercase tracking-[0.2em]">Actualités & événements</span>
-          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gold-400/30 to-transparent" />
+        <div className="text-center mb-8">
+          <span className="inline-flex items-center gap-1.5 font-body text-[11px] font-bold uppercase tracking-[0.18em] text-gold-600 bg-gold-100/70 px-3 py-1 rounded-full">
+            <Megaphone size={13} /> À la une
+          </span>
+          <h2 className="mt-3 font-display text-2xl sm:text-3xl font-bold text-blue-800">Actualités &amp; événements</h2>
+          <div className="mx-auto mt-3 h-1 w-16 rounded-full bg-gradient-to-r from-gold-400 to-gold-500" />
         </div>
 
         <div className={`grid gap-4 ${actus.length === 1 ? "grid-cols-1 max-w-[600px] mx-auto" : actus.length === 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"}`}>
           {actus.slice(0, 3).map((actu) => (
             <div key={actu.id}
-              className="group relative bg-white rounded-2xl border border-blue-500/8 overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300">
+              className="group relative bg-white rounded-2xl border border-blue-100 shadow-sm overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300">
               {/* Accent top bar */}
-              <div className={`h-1 ${actu.type === "event" ? "bg-gradient-to-r from-gold-400 to-gold-500" : "bg-gradient-to-r from-blue-400 to-blue-500"}`} />
+              <div className={`h-1.5 ${actu.type === "event" ? "bg-gradient-to-r from-gold-400 to-gold-500" : "bg-gradient-to-r from-blue-400 to-blue-500"}`} />
 
               <div className="p-6">
                 {/* Type + date */}
                 <div className="flex items-center justify-between mb-3">
-                  <span className={`font-body text-[10px] font-semibold uppercase tracking-wider ${actu.type === "event" ? "text-gold-500" : "text-blue-500"}`}>
-                    {actu.type === "event" ? "Événement" : "Actualité"}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`font-body text-[10px] font-semibold uppercase tracking-wider ${actu.type === "event" ? "text-gold-500" : "text-blue-500"}`}>
+                      {actu.type === "event" ? "Événement" : "Actualité"}
+                    </span>
+                    {isRecent(actu.date) && (
+                      <span className="font-body text-[9px] font-bold uppercase tracking-wide text-white bg-gradient-to-r from-gold-400 to-gold-500 px-1.5 py-0.5 rounded-full">Nouveau</span>
+                    )}
+                  </div>
                   <span className="font-body text-[10px] text-slate-400">
                     {formatDate(actu.date)}
                   </span>
