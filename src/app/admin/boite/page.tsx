@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { authFetch } from "@/lib/auth-fetch";
-import { Loader2, Mail, Sparkles, Calendar, Copy, Check, Inbox, RefreshCw } from "lucide-react";
+import { Loader2, Mail, Sparkles, Calendar, Copy, Check, Inbox, RefreshCw, Send } from "lucide-react";
 
 const CLASSIF: Record<string, { label: string; cls: string }> = {
   inscription: { label: "Demande d'inscription", cls: "bg-green-50 text-green-700" },
@@ -29,6 +29,34 @@ export default function BoiteAssistantPage() {
     error: string;
   }>({ loading: true, configured: false, connected: false, messages: [], error: "" });
   const [connecting, setConnecting] = useState(false);
+  const [replyMeta, setReplyMeta] = useState<{ threadId: string; messageId: string }>({ threadId: "", messageId: "" });
+  const [sending, setSending] = useState(false);
+  const [sendMsg, setSendMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const sendReply = async () => {
+    if (!from.trim() || !draft.trim() || sending) return;
+    if (!confirm(`Envoyer cette réponse à ${from} ?`)) return;
+    setSending(true);
+    setSendMsg(null);
+    try {
+      const r = await authFetch("/api/admin/gmail/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: from,
+          subject,
+          body: draft,
+          threadId: replyMeta.threadId || undefined,
+          inReplyTo: replyMeta.messageId || undefined,
+        }),
+      });
+      const d = await r.json();
+      setSendMsg(r.ok ? { ok: true, text: "Réponse envoyée ✓" } : { ok: false, text: d.error || "Échec de l'envoi" });
+    } catch {
+      setSendMsg({ ok: false, text: "Erreur réseau" });
+    }
+    setSending(false);
+  };
 
   const loadGmail = async () => {
     setGmail((g) => ({ ...g, loading: true, error: "" }));
@@ -71,8 +99,10 @@ export default function BoiteAssistantPage() {
     setFrom(m.from || "");
     setSubject(m.subject || "");
     setBody(m.body || m.snippet || "");
+    setReplyMeta({ threadId: m.threadId || "", messageId: m.messageId || "" });
     setRes(null);
     setErr("");
+    setSendMsg(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -288,12 +318,23 @@ export default function BoiteAssistantPage() {
                   <div className="font-body text-[11px] font-bold uppercase tracking-wide text-slate-400">
                     Brouillon de réponse
                   </div>
-                  <button
-                    onClick={copyDraft}
-                    className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-body text-[11px] font-semibold text-slate-600 hover:bg-slate-200"
-                  >
-                    {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? "Copié" : "Copier"}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {gmail.connected && (
+                      <button
+                        onClick={sendReply}
+                        disabled={sending || !from.trim() || !draft.trim()}
+                        className="inline-flex items-center gap-1 rounded-md bg-green-600 px-2.5 py-1 font-body text-[11px] font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+                      >
+                        {sending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Envoyer
+                      </button>
+                    )}
+                    <button
+                      onClick={copyDraft}
+                      className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-body text-[11px] font-semibold text-slate-600 hover:bg-slate-200"
+                    >
+                      {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? "Copié" : "Copier"}
+                    </button>
+                  </div>
                 </div>
                 <textarea
                   value={draft}
@@ -301,8 +342,15 @@ export default function BoiteAssistantPage() {
                   rows={10}
                   className="w-full resize-y rounded-lg border border-gray-200 px-3 py-2 font-body text-sm focus:border-blue-400 focus:outline-none"
                 />
+                {sendMsg && (
+                  <p className={`mt-1.5 font-body text-xs font-semibold ${sendMsg.ok ? "text-green-600" : "text-red-500"}`}>
+                    {sendMsg.text}
+                  </p>
+                )}
                 <p className="mt-1.5 font-body text-[11px] text-slate-400">
-                  Relis, ajuste, puis envoie toi-même depuis Gmail. Aucune action automatique.
+                  {gmail.connected
+                    ? "« Envoyer » répond directement dans le fil Gmail (à ton clic). Sinon, copie et envoie depuis Gmail."
+                    : "Relis, ajuste, puis envoie toi-même depuis Gmail. Aucune action automatique."}
                 </p>
               </div>
             </div>

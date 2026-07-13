@@ -7,7 +7,7 @@ import { adminDb } from "@/lib/firebase-admin";
 //   (admin SDK, jamais exposé au client).
 // ═══════════════════════════════════════════════════════════════════
 
-const SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+const SCOPE = "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send";
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me";
@@ -146,6 +146,8 @@ function extractBody(payload: any): string {
 
 export interface GmailMessage {
   id: string;
+  threadId: string;
+  messageId: string; // header Message-ID (pour In-Reply-To)
   from: string;
   subject: string;
   date: string;
@@ -178,6 +180,8 @@ export async function gmailListRecent(max = 12): Promise<GmailMessage[]> {
       const from = emailMatch ? emailMatch[1] : fromRaw;
       messages.push({
         id,
+        threadId: m.threadId || "",
+        messageId: headerVal(headers, "Message-ID"),
         from,
         subject: headerVal(headers, "Subject"),
         date: headerVal(headers, "Date"),
@@ -189,4 +193,51 @@ export async function gmailListRecent(max = 12): Promise<GmailMessage[]> {
     }
   }
   return messages;
+}
+
+// Encodage RFC2047 (accents dans l'objet).
+function rfc2047(s: string): string {
+  return `=?UTF-8?B?${Buffer.from(s || "", "utf8").toString("base64")}?=`;
+}
+function wrap76(b64: string): string {
+  return (b64.match(/.{1,76}/g) || []).join("\r\n");
+}
+
+/**
+ * Envoie une réponse depuis la boîte connectée (ceagon50@gmail.com).
+ * Toujours déclenché par un clic humain — jamais automatique.
+ */
+export async function gmailSend(opts: {
+  to: string;
+  subject: string;
+  body: string;
+  threadId?: string;
+  inReplyTo?: string; // header Message-ID d'origine (pour rester dans le fil)
+}): Promise<void> {
+  const token = await getAccessToken();
+  const headers = [
+    `To: ${opts.to}`,
+    `Subject: ${rfc2047(opts.subject)}`,
+    "MIME-Version: 1.0",
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+  ];
+  if (opts.inReplyTo) {
+    headers.push(`In-Reply-To: ${opts.inReplyTo}`);
+    headers.push(`References: ${opts.inReplyTo}`);
+  }
+  const bodyB64 = wrap76(Buffer.from(opts.body || "", "utf8").toString("base64"));
+  const mime = headers.join("\r\n") + "\r\n\r\n" + bodyB64;
+  const raw = Buffer.from(mime, "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+
+  const res = await fetch(`${GMAIL_API}/messages/send`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(opts.threadId ? { raw, threadId: opts.threadId } : { raw }),
+  });
+  if (!res.ok) throw new Error(`gmail send ${res.status}: ${await res.text()}`);
 }
