@@ -85,13 +85,22 @@ export async function POST(req: NextRequest) {
     }
 
     const today = todayParis();
+    // Horizon de lecture borné (≈ 9 semaines) : couvre l'été/les demandes
+    // courantes SANS lire tout un planning programmé loin (coût des lectures).
+    // Au-delà, l'assistant invite la famille à préciser sa demande.
+    const horizon = (() => {
+      const d = new Date(today + "T12:00:00Z");
+      d.setUTCDate(d.getUTCDate() + 63);
+      return d.toISOString().slice(0, 10);
+    })();
 
-    // ── 1. Créneaux à venir réellement disponibles ────────────────────
+    // ── 1. Créneaux à venir réellement disponibles (fenêtre bornée) ───
     const creSnap = await adminDb
       .collection("creneaux")
       .where("date", ">=", today)
+      .where("date", "<=", horizon)
       .orderBy("date", "asc")
-      .limit(2500)
+      .limit(1500)
       .get();
 
     const available: any[] = [];
@@ -240,6 +249,7 @@ Format JSON attendu:
     const we = prochainWeekend(today);
     const userContent = `DATE DU JOUR : ${labelFr(today)} (${today}).
 CE WEEK-END = samedi ${we.samedi} et dimanche ${we.dimanche}.
+PLANNING CONSULTABLE ICI : du ${today} au ${horizon} (les activités fournies ci-dessous couvrent cette période). Pour une demande portant sur une date APRÈS ${horizon}, ne dis pas "rien de disponible" : indique que le planning en ligne va jusqu'au ${horizon} et invite poliment la famille à préciser/reformuler pour ces dates, que tu vérifieras.
 IMPORTANT : n'essaie JAMAIS de recalculer un jour de semaine toi-même. Chaque activité fournie contient déjà son champ "jour" (le vrai jour de la semaine) — utilise-le tel quel.
 
 MAIL REÇU
