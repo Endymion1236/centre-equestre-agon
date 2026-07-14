@@ -207,14 +207,16 @@ export default function BoiteAssistantPage() {
   };
 
   // ── Inscription 1-clic (étape 2) : le serveur re-vérifie tout ──
+  // Un stage semaine = tous ses creneauIds (inscription tout-ou-rien côté serveur).
   const enrollSuggestion = async (s: any, i: number) => {
-    if (!s?.creneauId || !s?.childId || !res?.familyId) return;
+    const ids: string[] = Array.isArray(s?.creneauIds) && s.creneauIds.length > 0 ? s.creneauIds : s?.creneauId ? [s.creneauId] : [];
+    if (ids.length === 0 || !s?.childId || !res?.familyId) return;
     setEnrollState((prev) => ({ ...prev, [i]: { busy: true } }));
     try {
       const r = await authFetch("/api/admin/inbox-enroll", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ creneauId: s.creneauId, childId: s.childId, familyId: res.familyId }),
+        body: JSON.stringify({ creneauIds: ids, childId: s.childId, familyId: res.familyId }),
       });
       const d = await r.json();
       if (!r.ok) {
@@ -427,9 +429,20 @@ export default function BoiteAssistantPage() {
                           )}
                         </div>
                         <div className="mt-1 font-body text-xs text-slate-500">
-                          {[s.date, s.horaire, typeof s.prixTTC === "number" ? `${s.prixTTC} €` : null]
+                          {[
+                            s.periode || s.date,
+                            s.horaire,
+                            typeof s.prixTTC === "number"
+                              ? s.prixMode === "semaine"
+                                ? `${s.prixTTC} € la semaine (${s.nbJours} jour${s.nbJours > 1 ? "s" : ""})`
+                                : `${s.prixTTC} €`
+                              : null,
+                          ]
                             .filter(Boolean)
                             .join(" · ")}
+                          {s.prixMode === "semaine" && typeof s.prixJour === "number" && (
+                            <span className="text-slate-400"> · journée possible : {s.prixJour} €/jour</span>
+                          )}
                         </div>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           {s.childName && (
@@ -449,11 +462,12 @@ export default function BoiteAssistantPage() {
                         </div>
                         {s.pourquoi && <div className="mt-1 font-body text-[11px] italic text-slate-400">{s.pourquoi}</div>}
                         {/* Étape 2 — inscription 1-clic (uniquement si actionnable + enfant identifié) */}
-                        {s.actionable && s.childId && res.familyId && (
+                        {s.actionable && s.childId && res.familyId && (Array.isArray(s.creneauIds) ? s.creneauIds.length > 0 : !!s.creneauId) && (
                           <div className="mt-2">
                             {enrollState[i]?.done ? (
                               <span className="inline-flex items-center gap-1 rounded-md bg-green-600 px-2.5 py-1 font-body text-[11px] font-semibold text-white">
                                 <Check size={12} /> Inscrit{s.childName ? ` · ${s.childName}` : ""}
+                                {s.prixMode === "semaine" && s.nbJours > 1 ? ` · ${s.nbJours} jours` : ""}
                               </span>
                             ) : (
                               <button
@@ -462,7 +476,9 @@ export default function BoiteAssistantPage() {
                                 className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 font-body text-[11px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                               >
                                 {enrollState[i]?.busy ? <Loader2 size={12} className="animate-spin" /> : <UserPlus size={12} />}
-                                {enrollState[i]?.busy ? "Inscription…" : `Inscrire${s.childName ? ` ${s.childName}` : ""}`}
+                                {enrollState[i]?.busy
+                                  ? "Inscription…"
+                                  : `Inscrire${s.childName ? ` ${s.childName}` : ""}${s.prixMode === "semaine" && s.nbJours > 1 ? ` · semaine complète (${s.nbJours} j)` : ""}`}
                               </button>
                             )}
                             {enrollState[i]?.error && (
