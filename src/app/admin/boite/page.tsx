@@ -192,7 +192,7 @@ export default function BoiteAssistantPage() {
       const r = await authFetch("/api/admin/inbox-assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from, subject, body }),
+        body: JSON.stringify({ from, subject, body, threadId: replyMeta.threadId || undefined }),
       });
       const d = await r.json();
       if (!r.ok) {
