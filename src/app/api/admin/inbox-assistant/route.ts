@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
       .collection("creneaux")
       .where("date", ">=", today)
       .orderBy("date", "asc")
-      .limit(400)
+      .limit(2500)
       .get();
 
     const available: any[] = [];
@@ -159,8 +159,17 @@ export async function POST(req: NextRequest) {
         });
       }
     });
-    // On borne la liste transmise à l'IA (évite un prompt géant).
-    const activitesDispo = available.slice(0, 60);
+    // On borne la liste transmise à l'IA (évite un prompt géant) MAIS on garantit
+    // la couverture de tout l'été : on inclut TOUS les stages (le produit que les
+    // familles réservent, peu nombreux), puis on complète avec un échantillon des
+    // autres activités réparti sur les dates (pas seulement les plus proches).
+    const isStageType = (t: string) => t === "stage" || t === "stage_journee";
+    const stagesDispo = available.filter((a) => isStageType(a.type));
+    const autresDispo = available.filter((a) => !isStageType(a.type));
+    // Échantillon d'"autres" réparti : 1 sur N pour couvrir toute la période.
+    const stepAutres = Math.max(1, Math.ceil(autresDispo.length / 50));
+    const autresEchantillon = autresDispo.filter((_, i) => i % stepAutres === 0).slice(0, 50);
+    const activitesDispo = [...stagesDispo.slice(0, 120), ...autresEchantillon];
 
     // ── 2. Contexte famille si l'expéditeur est connu ─────────────────
     let familleContexte: any = null;
