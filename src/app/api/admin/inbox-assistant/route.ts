@@ -141,6 +141,8 @@ Règles:
 - Pour CHAQUE suggestion, tu DOIS reprendre le "creneauId" exact de l'activité choisie dans la liste (copie-le tel quel, ne l'invente jamais).
 - Si la demande vise un enfant précis de la famille connue, ajoute son "childId" (repris depuis le contexte famille). Sinon laisse childId à null.
 - Si une activité, choisis-la en fonction de la demande et, si connu, de l'âge/galop de l'enfant (souvent indiqués dans le titre, ex "Stage 3/4 ans", "galop d'argent 8/10 ans").
+- Pour le niveau/galop : base-toi sur le contexte famille, mais reste PRUDENT — formule "d'après nos informations, <enfant> est <galop>" et invite à confirmer le niveau. N'affirme jamais catégoriquement "correspond parfaitement à son niveau" (la fiche peut être à jour ou non).
+- Interprète les dates RELATIVES par rapport à la DATE DU JOUR fournie : "cette semaine" = la semaine (lundi→dimanche) qui contient la date du jour ; "la semaine prochaine" = la suivante ; "demain" = jour+1. Ne propose "cette semaine" que des créneaux réellement dans cette semaine-là ; sinon précise honnêtement la vraie date (ex "la semaine du 20 juillet").
 - Si rien ne correspond ou si le mail n'est pas une demande de prestation, laisse "suggestions" vide.
 - Le brouillon est une PROPOSITION que le gérant relira et enverra lui-même. Ne promets jamais une inscription faite.
 
@@ -152,7 +154,9 @@ Format JSON attendu:
   "suggestions": [ { "creneauId": "...", "childId": "..." | null, "pourquoi": "raison courte" } ]
 }`;
 
-    const userContent = `MAIL REÇU
+    const userContent = `DATE DU JOUR : ${today} (utilise-la pour interpréter "cette semaine", "demain", etc.)
+
+MAIL REÇU
 De: ${from || "(inconnu)"}
 Objet: ${subject || "(sans objet)"}
 Corps:
