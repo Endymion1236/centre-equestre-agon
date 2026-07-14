@@ -7,7 +7,8 @@ import { adminDb } from "@/lib/firebase-admin";
 //   (admin SDK, jamais exposé au client).
 // ═══════════════════════════════════════════════════════════════════
 
-const SCOPE = "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send";
+const SCOPE =
+  "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify";
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me";
@@ -240,4 +241,14 @@ export async function gmailSend(opts: {
     body: JSON.stringify(opts.threadId ? { raw, threadId: opts.threadId } : { raw }),
   });
   if (!res.ok) throw new Error(`gmail send ${res.status}: ${await res.text()}`);
+}
+
+/** Met un message à la corbeille (nécessite le scope gmail.modify). */
+export async function gmailTrash(id: string): Promise<void> {
+  const token = await getAccessToken();
+  const res = await fetch(`${GMAIL_API}/messages/${id}/trash`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`gmail trash ${res.status}: ${await res.text()}`);
 }
