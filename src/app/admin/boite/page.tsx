@@ -157,13 +157,23 @@ export default function BoiteAssistantPage() {
             <Inbox size={16} className="text-blue-500" /> Gmail — ceagon50@gmail.com
           </div>
           {gmail.connected && (
-            <button
-              onClick={loadGmail}
-              disabled={gmail.loading}
-              className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-body text-[11px] font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50"
-            >
-              <RefreshCw size={12} className={gmail.loading ? "animate-spin" : ""} /> Actualiser
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={connectGmail}
+                disabled={connecting}
+                title="Redemander l'autorisation Google (nécessaire pour activer l'envoi)"
+                className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 font-body text-[11px] font-semibold text-blue-600 hover:bg-blue-100 disabled:opacity-50"
+              >
+                {connecting ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />} Reconnecter
+              </button>
+              <button
+                onClick={loadGmail}
+                disabled={gmail.loading}
+                className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-body text-[11px] font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50"
+              >
+                <RefreshCw size={12} className={gmail.loading ? "animate-spin" : ""} /> Actualiser
+              </button>
+            </div>
           )}
         </div>
 
