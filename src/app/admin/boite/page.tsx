@@ -10,6 +10,15 @@ const CLASSIF: Record<string, { label: string; cls: string }> = {
   autre: { label: "Autre", cls: "bg-slate-100 text-slate-600" },
 };
 
+// Décode les entités HTML (d&#39;Agon → d'Agon) pour un affichage propre.
+function decodeHtml(s: string): string {
+  if (!s) return "";
+  if (typeof document === "undefined") return s;
+  const el = document.createElement("textarea");
+  el.innerHTML = s;
+  return el.value;
+}
+
 export default function BoiteAssistantPage() {
   const [from, setFrom] = useState("");
   const [subject, setSubject] = useState("");
@@ -96,9 +105,9 @@ export default function BoiteAssistantPage() {
   };
 
   const pickMessage = (m: any) => {
-    setFrom(m.from || "");
-    setSubject(m.subject || "");
-    setBody(m.body || m.snippet || "");
+    setFrom(decodeHtml(m.from || ""));
+    setSubject(decodeHtml(m.subject || ""));
+    setBody(decodeHtml(m.body || m.snippet || ""));
     setReplyMeta({ threadId: m.threadId || "", messageId: m.messageId || "" });
     setRes(null);
     setErr("");
@@ -144,20 +153,19 @@ export default function BoiteAssistantPage() {
         <div className="mb-1 font-body text-xs font-bold uppercase tracking-[0.16em] text-blue-500">Assistant email</div>
         <h1 className="font-display text-2xl font-bold text-blue-800 md:text-3xl">Boîte de réception</h1>
         <p className="mt-1 max-w-2xl font-body text-sm text-gray-500">
-          Colle un mail reçu : l'assistant le classe, le résume, propose un brouillon de réponse et les prestations
-          réellement disponibles. Rien n'est envoyé ni inscrit — tu gardes la main. (Le branchement Gmail remplira
-          le mail automatiquement une fois configuré.)
+          Choisis un mail dans la liste Gmail ci-dessous : l'assistant le classe, le résume, propose un brouillon de
+          réponse et les prestations réellement disponibles. Rien n'est envoyé sans ton clic sur « Envoyer ».
         </p>
       </div>
 
       {/* ── Panneau Gmail ── */}
       <div className="mb-6 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 font-body text-sm font-semibold text-slate-700">
-            <Inbox size={16} className="text-blue-500" /> Gmail — ceagon50@gmail.com
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2 font-body text-sm font-semibold text-slate-700">
+            <Inbox size={16} className="flex-shrink-0 text-blue-500" /> <span className="truncate">Gmail — ceagon50@gmail.com</span>
           </div>
           {gmail.connected && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-shrink-0 items-center gap-2">
               <button
                 onClick={connectGmail}
                 disabled={connecting}
@@ -214,10 +222,10 @@ export default function BoiteAssistantPage() {
                   className="w-full rounded-lg border border-transparent px-3 py-2 text-left transition-colors hover:border-blue-100 hover:bg-blue-50/50"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-body text-xs font-semibold text-slate-700">{m.from}</span>
+                    <span className="truncate font-body text-xs font-semibold text-slate-700">{decodeHtml(m.from)}</span>
                   </div>
-                  <div className="truncate font-body text-sm text-slate-800">{m.subject || "(sans objet)"}</div>
-                  <div className="truncate font-body text-[11px] text-slate-400">{m.snippet}</div>
+                  <div className="truncate font-body text-sm text-slate-800">{decodeHtml(m.subject) || "(sans objet)"}</div>
+                  <div className="truncate font-body text-[11px] text-slate-400">{decodeHtml(m.snippet)}</div>
                 </button>
               ))}
             </div>
