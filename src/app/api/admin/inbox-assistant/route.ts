@@ -60,6 +60,59 @@ function prochainWeekend(today: string): { samedi: string; dimanche: string } {
   return { samedi: sat.toISOString().slice(0, 10), dimanche: sun.toISOString().slice(0, 10) };
 }
 
+function addDaysStr(dateStr: string, n: number): string {
+  const d = new Date(dateStr + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+function daysBetween(a: string, b: string): number {
+  return Math.round(
+    (new Date(b + "T12:00:00Z").getTime() - new Date(a + "T12:00:00Z").getTime()) / 86400000
+  );
+}
+const isDate = (s: any) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
+
+// Passe légère (Haiku) : extrait la fenêtre de dates demandée dans le mail, pour
+// ne charger QUE les créneaux utiles (coût des lectures). Dégrade en fenêtre
+// proche par défaut si échec ou demande vague.
+async function extractPeriode(
+  from: string,
+  subject: string,
+  body: string,
+  today: string
+): Promise<{ start: string; end: string; borne: boolean }> {
+  const defStart = today;
+  const defEnd = addDaysStr(today, 63);
+  const we = prochainWeekend(today);
+  try {
+    const sys = `Tu extrais la fenêtre de dates demandée dans un mail. Date du jour : ${today}. Ce week-end = ${we.samedi} au ${we.dimanche}.
+Réponds UNIQUEMENT en JSON : {"dateStart":"YYYY-MM-DD"|null,"dateEnd":"YYYY-MM-DD"|null}
+Règles : "cette semaine" = lundi→dimanche de la semaine du jour ; "ce week-end" = ${we.samedi} et ${we.dimanche} ; "demain" = jour+1 ; "en juillet 2027" = 2027-07-01 à 2027-07-31 ; "la semaine du 20 juillet" = ce lundi-là au dimanche ; "cet été" = juin→août de l'année concernée. Si AUCUNE période n'est mentionnée, mets les deux à null.`;
+    const msg = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 80,
+      system: sys,
+      messages: [{ role: "user", content: `${subject || ""}\n${(body || "").slice(0, 1500)}` }],
+    });
+    const raw = msg.content.map((b: any) => (b.type === "text" ? b.text : "")).join("").trim();
+    const j = JSON.parse(raw.replace(/^```json\s*/i, "").replace(/```$/i, "").trim());
+    let start = isDate(j.dateStart) ? j.dateStart : null;
+    let end = isDate(j.dateEnd) ? j.dateEnd : null;
+
+    if (!start && !end) return { start: defStart, end: defEnd, borne: false };
+    if (start && !end) end = addDaysStr(start, 62);
+    if (!start && end) start = today;
+    // On ne lit pas le passé.
+    if (start! < today) start = today;
+    if (end! < start!) end = addDaysStr(start!, 62);
+    // Cap de sécurité : jamais plus de ~100 jours lus d'un coup.
+    if (daysBetween(start!, end!) > 100) end = addDaysStr(start!, 100);
+    return { start: start!, end: end!, borne: true };
+  } catch {
+    return { start: defStart, end: defEnd, borne: false };
+  }
+}
+
 function ageFrom(birth: any): number | null {
   if (!birth) return null;
   let d: Date | null = null;
@@ -85,20 +138,14 @@ export async function POST(req: NextRequest) {
     }
 
     const today = todayParis();
-    // Horizon de lecture borné (≈ 9 semaines) : couvre l'été/les demandes
-    // courantes SANS lire tout un planning programmé loin (coût des lectures).
-    // Au-delà, l'assistant invite la famille à préciser sa demande.
-    const horizon = (() => {
-      const d = new Date(today + "T12:00:00Z");
-      d.setUTCDate(d.getUTCDate() + 63);
-      return d.toISOString().slice(0, 10);
-    })();
+    // Passe légère : on détecte la période demandée pour ne lire que l'utile.
+    const periode = await extractPeriode(from || "", subject || "", body || "", today);
 
-    // ── 1. Créneaux à venir réellement disponibles (fenêtre bornée) ───
+    // ── 1. Créneaux disponibles SUR LA PÉRIODE DEMANDÉE (lecture ciblée) ───
     const creSnap = await adminDb
       .collection("creneaux")
-      .where("date", ">=", today)
-      .where("date", "<=", horizon)
+      .where("date", ">=", periode.start)
+      .where("date", "<=", periode.end)
       .orderBy("date", "asc")
       .limit(1500)
       .get();
@@ -321,7 +368,7 @@ Format JSON attendu:
     const we = prochainWeekend(today);
     const userContent = `DATE DU JOUR : ${labelFr(today)} (${today}).
 CE WEEK-END = samedi ${we.samedi} et dimanche ${we.dimanche}.
-PLANNING CONSULTABLE ICI : du ${today} au ${horizon} (les activités fournies ci-dessous couvrent cette période). Pour une demande portant sur une date APRÈS ${horizon}, ne dis pas "rien de disponible" : indique que le planning en ligne va jusqu'au ${horizon} et invite poliment la famille à préciser/reformuler pour ces dates, que tu vérifieras.
+ACTIVITÉS FOURNIES CI-DESSOUS : elles couvrent la période du ${periode.start} au ${periode.end} (extraite de la demande). Si la famille évoque une AUTRE période que celle-ci, invite-la poliment à préciser ses dates, que tu vérifieras — ne dis pas "rien de disponible".
 IMPORTANT : n'essaie JAMAIS de recalculer un jour de semaine toi-même. Chaque activité fournie contient déjà son champ "jour" (le vrai jour de la semaine) — utilise-le tel quel.
 
 MAIL REÇU
