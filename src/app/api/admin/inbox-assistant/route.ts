@@ -28,6 +28,38 @@ function todayParis(): string {
   return parts; // en-CA → "YYYY-MM-DD"
 }
 
+// Jour de semaine + date en toutes lettres (ex "mardi 14 juillet 2026").
+function labelFr(dateStr: string): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr + "T12:00:00Z");
+  if (isNaN(d.getTime())) return dateStr;
+  return new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "UTC",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(d);
+}
+// Nom du jour seul (ex "samedi").
+function jourFr(dateStr: string): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr + "T12:00:00Z");
+  if (isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("fr-FR", { timeZone: "UTC", weekday: "long" }).format(d);
+}
+// Samedi et dimanche du week-end à venir (à partir de today).
+function prochainWeekend(today: string): { samedi: string; dimanche: string } {
+  const d = new Date(today + "T12:00:00Z");
+  const dow = d.getUTCDay(); // 0=dim .. 6=sam
+  const toSat = (6 - dow + 7) % 7; // 0 si aujourd'hui samedi
+  const sat = new Date(d);
+  sat.setUTCDate(d.getUTCDate() + toSat);
+  const sun = new Date(sat);
+  sun.setUTCDate(sat.getUTCDate() + 1);
+  return { samedi: sat.toISOString().slice(0, 10), dimanche: sun.toISOString().slice(0, 10) };
+}
+
 function ageFrom(birth: any): number | null {
   if (!birth) return null;
   let d: Date | null = null;
@@ -75,14 +107,19 @@ export async function POST(req: NextRequest) {
           ? Math.round(c.priceHT * (1 + (c.tvaTaux ?? 5.5) / 100) * 100) / 100
           : null;
       if (spots > 0) {
+        const isStage = (c.activityType || "") === "stage" || (c.activityType || "") === "stage_journee";
+        const demiJourneeOuverte = isStage && !!c.allowDayBooking;
         available.push({
           creneauId: doc.id,
           titre: c.activityTitle || "",
           type: c.activityType || "cours",
           date: c.date,
+          jour: jourFr(c.date),
           horaire: [c.startTime, c.endTime].filter(Boolean).join("-"),
           places: spots,
           prixTTC,
+          demiJourneeOuverte,
+          prixJour: demiJourneeOuverte && typeof c.priceTTCDay === "number" && c.priceTTCDay > 0 ? c.priceTTCDay : null,
           moniteur: c.monitor || "",
         });
         creneauMap.set(doc.id, {
@@ -143,7 +180,8 @@ Règles:
 - Si une activité, choisis-la en fonction de la demande et, si connu, de l'âge/galop de l'enfant (souvent indiqués dans le titre, ex "Stage 3/4 ans", "galop d'argent 8/10 ans").
 - Pour le niveau/galop : base-toi sur le contexte famille, mais reste PRUDENT — formule "d'après nos informations, <enfant> est <galop>" et invite à confirmer le niveau. N'affirme jamais catégoriquement "correspond parfaitement à son niveau" (la fiche peut être à jour ou non).
 - Équivalence des niveaux (galops "poney" ↔ numérotés, MÊME progression, à respecter strictement) : Galop de Bronze = débutant/initiation ; Galop d'Argent = Galop 1 ; Galop d'Or = Galop 2 ; puis Galop 3, 4, 5, 6, 7 (numérotés). Choisis un stage du MÊME niveau que l'enfant (ex : enfant Galop d'Or = Galop 2 → stage "Galop d'or" ou "Galop 2" ; enfant Galop d'Argent = Galop 1 → stage "Galop d'argent" ou "Galop 1" ; débutant → stage "Bronze"/initiation). JAMAIS un niveau inférieur ni supérieur au sien. Si aucun stage du bon niveau n'est disponible, dis-le honnêtement et propose de confirmer, plutôt que de rétrograder.
-- Interprète les dates RELATIVES par rapport à la DATE DU JOUR fournie : "cette semaine" = la semaine (lundi→dimanche) qui contient la date du jour ; "la semaine prochaine" = la suivante ; "demain" = jour+1. Ne propose "cette semaine" que des créneaux réellement dans cette semaine-là ; sinon précise honnêtement la vraie date (ex "la semaine du 20 juillet").
+- Dates : le vrai jour de chaque activité est dans son champ "jour" — NE LE RECALCULE JAMAIS, reprends-le tel quel. "ce week-end" = le samedi et dimanche fournis (CE WEEK-END) ; "cette semaine" = la semaine (lundi→dimanche) contenant la date du jour ; "demain" = jour+1. Ne propose comme "ce week-end" que des activités dont la date correspond au samedi/dimanche fournis ; sinon précise honnêtement la vraie date.
+- Demi-journées : certains stages sont ouverts à la journée (champ "demiJourneeOuverte"=true, avec éventuellement "prixJour"). Si la famille cherche une formule plus courte, tu peux mentionner que ce stage est aussi accessible à la journée. Ne le fais que si demiJourneeOuverte=true.
 - Si rien ne correspond ou si le mail n'est pas une demande de prestation, laisse "suggestions" vide.
 - Le brouillon est une PROPOSITION que le gérant relira et enverra lui-même. Ne promets jamais une inscription faite.
 
@@ -155,7 +193,10 @@ Format JSON attendu:
   "suggestions": [ { "creneauId": "...", "childId": "..." | null, "pourquoi": "raison courte" } ]
 }`;
 
-    const userContent = `DATE DU JOUR : ${today} (utilise-la pour interpréter "cette semaine", "demain", etc.)
+    const we = prochainWeekend(today);
+    const userContent = `DATE DU JOUR : ${labelFr(today)} (${today}).
+CE WEEK-END = samedi ${we.samedi} et dimanche ${we.dimanche}.
+IMPORTANT : n'essaie JAMAIS de recalculer un jour de semaine toi-même. Chaque activité fournie contient déjà son champ "jour" (le vrai jour de la semaine) — utilise-le tel quel.
 
 MAIL REÇU
 De: ${from || "(inconnu)"}
