@@ -391,12 +391,12 @@ export default function BoiteAssistantPage() {
                   </div>
                   <div className="space-y-2">
                     {res.suggestions.map((s: any, i: number) => (
-                      <div key={i} className="rounded-lg border border-gray-100 bg-slate-50/60 p-3">
+                      <div key={i} className={`rounded-lg border p-3 ${s.actionable ? "border-green-100 bg-green-50/40" : "border-gray-100 bg-slate-50/60"}`}>
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-1.5 font-body text-sm font-semibold text-slate-800">
-                            <Calendar size={13} className="text-blue-400" /> {s.titre}
+                            <Calendar size={13} className="text-blue-400" /> {s.titre || "(créneau)"}
                           </div>
-                          {typeof s.places === "number" && (
+                          {typeof s.places === "number" && s.places > 0 && (
                             <span className="whitespace-nowrap font-body text-[11px] font-semibold text-green-600">
                               {s.places} place{s.places > 1 ? "s" : ""}
                             </span>
@@ -406,6 +406,22 @@ export default function BoiteAssistantPage() {
                           {[s.date, s.horaire, typeof s.prixTTC === "number" ? `${s.prixTTC} €` : null]
                             .filter(Boolean)
                             .join(" · ")}
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          {s.childName && (
+                            <span className="rounded-full bg-blue-50 px-2 py-0.5 font-body text-[10px] font-semibold text-blue-600">
+                              pour {s.childName}
+                            </span>
+                          )}
+                          {s.actionable ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 font-body text-[10px] font-semibold text-green-700">
+                              <Check size={10} /> Vérifié · place dispo
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-amber-50 px-2 py-0.5 font-body text-[10px] font-semibold text-amber-600">
+                              {s.note || "non disponible"}
+                            </span>
+                          )}
                         </div>
                         {s.pourquoi && <div className="mt-1 font-body text-[11px] italic text-slate-400">{s.pourquoi}</div>}
                       </div>

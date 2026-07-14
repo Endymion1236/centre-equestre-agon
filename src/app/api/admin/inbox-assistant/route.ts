@@ -63,23 +63,35 @@ export async function POST(req: NextRequest) {
       .get();
 
     const available: any[] = [];
+    const creneauMap = new Map<string, any>(); // id → données serveur autoritaires
     creSnap.forEach((doc) => {
       const c = doc.data() as any;
-      const spots = (c.maxPlaces || 0) - (Array.isArray(c.enrolled) ? c.enrolled.length : 0);
+      const enrolledCount = Array.isArray(c.enrolled) ? c.enrolled.length : 0;
+      const spots = (c.maxPlaces || 0) - enrolledCount;
+      const prixTTC =
+        typeof c.priceTTC === "number"
+          ? c.priceTTC
+          : typeof c.priceHT === "number"
+          ? Math.round(c.priceHT * (1 + (c.tvaTaux ?? 5.5) / 100) * 100) / 100
+          : null;
       if (spots > 0) {
         available.push({
+          creneauId: doc.id,
           titre: c.activityTitle || "",
           type: c.activityType || "cours",
           date: c.date,
           horaire: [c.startTime, c.endTime].filter(Boolean).join("-"),
           places: spots,
-          prixTTC:
-            typeof c.priceTTC === "number"
-              ? c.priceTTC
-              : typeof c.priceHT === "number"
-              ? Math.round(c.priceHT * (1 + (c.tvaTaux ?? 5.5) / 100) * 100) / 100
-              : null,
+          prixTTC,
           moniteur: c.monitor || "",
+        });
+        creneauMap.set(doc.id, {
+          titre: c.activityTitle || "",
+          type: c.activityType || "cours",
+          date: c.date,
+          horaire: [c.startTime, c.endTime].filter(Boolean).join("-"),
+          spots,
+          prixTTC,
         });
       }
     });
@@ -88,6 +100,8 @@ export async function POST(req: NextRequest) {
 
     // ── 2. Contexte famille si l'expéditeur est connu ─────────────────
     let familleContexte: any = null;
+    let familyId: string | null = null;
+    const childrenMap = new Map<string, string>(); // childId → prénom (validation)
     const fromEmail = (from || "").trim().toLowerCase();
     if (fromEmail) {
       try {
@@ -97,10 +111,15 @@ export async function POST(req: NextRequest) {
           .limit(1)
           .get();
         if (!famSnap.empty) {
+          familyId = famSnap.docs[0].id;
           const f = famSnap.docs[0].data() as any;
+          (f.children || []).forEach((ch: any) => {
+            if (ch.id) childrenMap.set(ch.id, ch.firstName || "");
+          });
           familleContexte = {
             parent: f.parentName || "",
             enfants: (f.children || []).map((ch: any) => ({
+              childId: ch.id || null,
               prenom: ch.firstName || "",
               age: ageFrom(ch.birthDate),
               galop: ch.galopLevel && ch.galopLevel !== "—" ? ch.galopLevel : null,
@@ -119,7 +138,9 @@ Tu aides le gérant à traiter ses mails. Tu réponds UNIQUEMENT en JSON valide,
 Règles:
 - Ton chaleureux, professionnel, tutoiement évité avec les familles (vouvoiement), signé "Le Centre Équestre d'Agon-Coutainville".
 - Tu ne proposes QUE des prestations présentes dans la liste "activitesDispo" fournie (places réelles). Jamais d'invention de date, de tarif ou de place.
-- Si tu proposes une activité, choisis-la en fonction de la demande et, si connu, de l'âge/galop de l'enfant (souvent indiqués dans le titre, ex "Stage 3/4 ans", "galop d'argent 8/10 ans").
+- Pour CHAQUE suggestion, tu DOIS reprendre le "creneauId" exact de l'activité choisie dans la liste (copie-le tel quel, ne l'invente jamais).
+- Si la demande vise un enfant précis de la famille connue, ajoute son "childId" (repris depuis le contexte famille). Sinon laisse childId à null.
+- Si une activité, choisis-la en fonction de la demande et, si connu, de l'âge/galop de l'enfant (souvent indiqués dans le titre, ex "Stage 3/4 ans", "galop d'argent 8/10 ans").
 - Si rien ne correspond ou si le mail n'est pas une demande de prestation, laisse "suggestions" vide.
 - Le brouillon est une PROPOSITION que le gérant relira et enverra lui-même. Ne promets jamais une inscription faite.
 
@@ -128,7 +149,7 @@ Format JSON attendu:
   "classification": "info" | "inscription" | "administratif" | "autre",
   "resume": "1-2 phrases",
   "brouillon": "corps du mail de réponse en français",
-  "suggestions": [ { "titre": "...", "date": "YYYY-MM-DD", "horaire": "...", "places": N, "prixTTC": N, "pourquoi": "raison courte" } ]
+  "suggestions": [ { "creneauId": "...", "childId": "..." | null, "pourquoi": "raison courte" } ]
 }`;
 
     const userContent = `MAIL REÇU
@@ -166,13 +187,41 @@ ${JSON.stringify(activitesDispo)}`;
       );
     }
 
+    // ── Re-validation SERVEUR des suggestions (le client/IA ne décide rien) ──
+    // Pour chaque suggestion : le créneau doit exister et avoir encore de la
+    // place ; l'enfant (si fourni) doit appartenir à la famille ; le prix est
+    // repris de la source. `actionable` = prêt pour une future inscription.
+    const rawSuggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 3) : [];
+    const suggestions = rawSuggestions.map((s: any) => {
+      const cr = s.creneauId ? creneauMap.get(s.creneauId) : null;
+      const childId = s.childId && childrenMap.has(s.childId) ? s.childId : null;
+      const childName = childId ? childrenMap.get(childId) || null : null;
+      const placeOk = !!cr && cr.spots > 0;
+      return {
+        creneauId: cr ? s.creneauId : null,
+        titre: cr ? cr.titre : "",
+        type: cr ? cr.type : null,
+        date: cr ? cr.date : null,
+        horaire: cr ? cr.horaire : null,
+        places: cr ? cr.spots : 0,
+        prixTTC: cr ? cr.prixTTC : null, // prix AUTORITAIRE (source créneau)
+        childId,
+        childName,
+        pourquoi: s.pourquoi || "",
+        actionable: placeOk, // créneau réel + place dispo
+        note: !cr ? "créneau introuvable/plus dispo" : !placeOk ? "complet" : null,
+      };
+    });
+
     return NextResponse.json({
       ok: true,
       classification: parsed.classification || "autre",
       resume: parsed.resume || "",
       brouillon: parsed.brouillon || "",
-      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 3) : [],
+      suggestions,
       familleConnue: !!familleContexte,
+      familyId,
+      enfants: familleContexte ? familleContexte.enfants : [],
       nbActivitesDispo: activitesDispo.length,
     });
   } catch (e: any) {
