@@ -38,6 +38,9 @@ export default function BoiteAssistantPage() {
   const [creatingFam, setCreatingFam] = useState(false);
   const [famMsg, setFamMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [chosenChild, setChosenChild] = useState<Record<number, string>>({});
+  // Ajouts MANUELS de prestations par l'admin (depuis res.catalogue)
+  const [manual, setManual] = useState<any[]>([]);
+  const [pickerValue, setPickerValue] = useState("");
 
   // ── Gmail ──
   const [gmail, setGmail] = useState<{
@@ -204,6 +207,8 @@ export default function BoiteAssistantPage() {
         setNewFam(null);
         setFamMsg(null);
         setChosenChild({});
+        setManual([]);
+        setPickerValue("");
         // Expéditeur inconnu + demande de prestation → fiche pré-remplie à relire
         if (!d.familleConnue && d.nouvelleFamille) {
           const nf = d.nouvelleFamille;
@@ -278,7 +283,12 @@ export default function BoiteAssistantPage() {
   const enrollSuggestion = async (s: any, i: number) => {
     const ids: string[] = Array.isArray(s?.creneauIds) && s.creneauIds.length > 0 ? s.creneauIds : s?.creneauId ? [s.creneauId] : [];
     const effFamilyId = res?.familyId || newFam?.familyId || "";
-    const effChildId = s?.childId || (newFam ? chosenChild[i] || newFam.children[0]?.id || "" : "");
+    const famChildren: { id: string; firstName: string }[] = newFam
+      ? newFam.children
+      : (Array.isArray(res?.enfants) ? res.enfants : [])
+          .filter((e: any) => e.childId)
+          .map((e: any) => ({ id: e.childId, firstName: e.prenom || "" }));
+    const effChildId = s?.childId || chosenChild[i] || famChildren[0]?.id || "";
     if (ids.length === 0 || !effChildId || !effFamilyId) return;
     setEnrollState((prev) => ({ ...prev, [i]: { busy: true } }));
     try {
@@ -605,13 +615,13 @@ export default function BoiteAssistantPage() {
                 </div>
               )}
 
-              {Array.isArray(res.suggestions) && res.suggestions.length > 0 && (
+              {((Array.isArray(res.suggestions) && res.suggestions.length > 0) || manual.length > 0 || (Array.isArray(res.catalogue) && res.catalogue.length > 0)) && (
                 <div>
                   <div className="mb-1.5 font-body text-[11px] font-bold uppercase tracking-wide text-slate-400">
                     Prestations disponibles proposées
                   </div>
                   <div className="space-y-2">
-                    {res.suggestions.map((s: any, i: number) => (
+                    {[...(res.suggestions || []), ...manual].map((s: any, i: number) => (
                       <div key={i} className={`rounded-lg border p-3 ${s.actionable ? "border-green-100 bg-green-50/40" : "border-gray-100 bg-slate-50/60"}`}>
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-1.5 font-body text-sm font-semibold text-slate-800">
@@ -647,6 +657,30 @@ export default function BoiteAssistantPage() {
                               pour {s.childName}
                             </span>
                           )}
+                          {s.manual && (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 font-body text-[10px] font-semibold text-slate-500">
+                              ajout manuel
+                            </span>
+                          )}
+                          {s.manual && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const prixLbl =
+                                  typeof s.prixTTC === "number"
+                                    ? s.prixMode === "semaine"
+                                      ? `${s.prixTTC} € la semaine (${s.nbJours} jours)`
+                                      : `${s.prixTTC} €`
+                                    : "";
+                                const ligne = `\n• ${s.titre} — ${s.periode || s.date}${s.horaire ? `, ${s.horaire}` : ""}${prixLbl ? ` (${prixLbl})` : ""}`;
+                                setDraft((prev) => (prev ? `${prev}${ligne}` : ligne.trim()));
+                              }}
+                              className="rounded-full bg-blue-50 px-2 py-0.5 font-body text-[10px] font-semibold text-blue-600 hover:bg-blue-100"
+                              title="Ajouter cette prestation à la fin du brouillon de réponse"
+                            >
+                              → brouillon
+                            </button>
+                          )}
                           {s.actionable ? (
                             s.childId ? (
                               <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 font-body text-[10px] font-semibold text-green-700">
@@ -668,19 +702,26 @@ export default function BoiteAssistantPage() {
                         {(() => {
                           const hasIds = Array.isArray(s.creneauIds) ? s.creneauIds.length > 0 : !!s.creneauId;
                           const effFamilyId = res.familyId || newFam?.familyId || "";
-                          const effChildId = s.childId || (newFam ? chosenChild[i] || newFam.children[0]?.id || "" : "");
-                          const effChildName = s.childName || (newFam ? newFam.children.find((c) => c.id === effChildId)?.firstName || "" : "");
+                          // Enfants sélectionnables : nouvelle famille créée OU famille connue (res.enfants)
+                          const famChildren: { id: string; firstName: string }[] = newFam
+                            ? newFam.children
+                            : (Array.isArray(res.enfants) ? res.enfants : [])
+                                .filter((e: any) => e.childId)
+                                .map((e: any) => ({ id: e.childId, firstName: e.prenom || "" }));
+                          const effChildId = s.childId || chosenChild[i] || famChildren[0]?.id || "";
+                          const effChildName =
+                            s.childName || famChildren.find((c) => c.id === effChildId)?.firstName || "";
                           if (!s.actionable || !hasIds || !effFamilyId || !effChildId) return null;
                           return (
                           <div className="mt-2 flex flex-wrap items-center gap-2">
-                            {/* Sélecteur d'enfant (nouvelle famille, plusieurs enfants) */}
-                            {!s.childId && newFam && newFam.children.length > 1 && !enrollState[i]?.done && (
+                            {/* Sélecteur d'enfant (suggestion sans enfant ciblé, plusieurs enfants) */}
+                            {!s.childId && famChildren.length > 1 && !enrollState[i]?.done && (
                               <select
-                                value={chosenChild[i] || newFam.children[0]?.id || ""}
+                                value={chosenChild[i] || famChildren[0]?.id || ""}
                                 onChange={(e) => setChosenChild((prev) => ({ ...prev, [i]: e.target.value }))}
                                 className="rounded-md border border-blue-200 bg-white px-2 py-1 font-body text-[11px]"
                               >
-                                {newFam.children.map((c) => (
+                                {famChildren.map((c) => (
                                   <option key={c.id} value={c.id}>{c.firstName}</option>
                                 ))}
                               </select>
@@ -725,6 +766,37 @@ export default function BoiteAssistantPage() {
                       </div>
                     ))}
                   </div>
+                  {/* Ajout MANUEL d'une prestation du catalogue (l'admin complète l'IA) */}
+                  {Array.isArray(res.catalogue) && res.catalogue.length > 0 && (
+                    <div className="mt-2">
+                      <select
+                        value={pickerValue}
+                        onChange={(e) => {
+                          const key = e.target.value;
+                          if (!key) return;
+                          const entry = res.catalogue.find((c: any) => (c.groupId || c.creneauId) === key);
+                          const dejaPresent = [...(res.suggestions || []), ...manual].some(
+                            (s: any) => (s.groupId || s.creneauId) === key
+                          );
+                          if (entry && !dejaPresent) setManual((prev) => [...prev, entry]);
+                          setPickerValue("");
+                        }}
+                        className="w-full rounded-md border border-dashed border-slate-300 bg-white px-2.5 py-1.5 font-body text-xs text-slate-600"
+                      >
+                        <option value="">+ Ajouter une prestation disponible…</option>
+                        {res.catalogue
+                          .filter((c: any) => ![...(res.suggestions || []), ...manual].some((s: any) => (s.groupId || s.creneauId) === (c.groupId || c.creneauId)))
+                          .map((c: any) => (
+                            <option key={c.groupId || c.creneauId} value={c.groupId || c.creneauId}>
+                              {c.titre} — {c.periode || c.date}
+                              {c.horaire ? ` · ${c.horaire}` : ""}
+                              {typeof c.prixTTC === "number" ? ` · ${c.prixTTC} €${c.prixMode === "semaine" ? ` (${c.nbJours}j)` : ""}` : ""}
+                              {c.places > 0 ? ` · ${c.places} pl.` : " · complet"}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
               )}
 
