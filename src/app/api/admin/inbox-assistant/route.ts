@@ -290,6 +290,7 @@ Règles:
 - ÉLIGIBILITÉ : chaque activité peut porter des critères "ageMin", "ageMax", "galopRequired" et un texte libre "conditionsAcces". Respecte-les STRICTEMENT. Applique ce qui est VÉRIFIABLE d'après le contexte famille (âge, galop) : ne propose une activité que si l'enfant satisfait l'âge [ageMin, ageMax] et le galop requis (table d'équivalence). Pour les conditions du texte "conditionsAcces" qui ne sont PAS vérifiables dans nos données (ex : "maîtrise du trot enlevé", "maîtrise des 3 allures", "évaluation préalable en carrière"), ne les affirme jamais comme acquises : mentionne-les comme "à confirmer avec la famille". Si "conditionsAcces" mentionne une clause de non-remboursement ou une évaluation préalable, rappelle-la dans ta réponse. Dans le doute, demande à confirmer plutôt que de proposer à tort.
 - Demi-journées : certains stages sont ouverts à la journée (champ "demiJourneeOuverte"=true, avec éventuellement "prixJour"). Si la famille cherche une formule plus courte, tu peux mentionner que ce stage est aussi accessible à la journée. Ne le fais que si demiJourneeOuverte=true.
 - Si rien ne correspond ou si le mail n'est pas une demande de prestation, laisse "suggestions" vide.
+- NOUVELLE FAMILLE : si l'expéditeur est INCONNU de la base ET que le mail est une demande d'inscription/prestation, remplis "nouvelleFamille" pour pré-remplir la fiche : parentName = nom du parent tel que signé ou déduit du mail (sinon null), enfants = ceux mentionnés dans le mail avec UNIQUEMENT les infos réellement présentes (prénom obligatoire ; nom, âge, galop seulement s'ils sont écrits — n'invente JAMAIS un âge ou un niveau). Sinon laisse "nouvelleFamille" à null.
 - Le brouillon est une PROPOSITION que le gérant relira et enverra lui-même. Ne promets jamais une inscription faite.
 
 Format JSON attendu:
@@ -297,7 +298,8 @@ Format JSON attendu:
   "classification": "info" | "inscription" | "administratif" | "autre",
   "resume": "1-2 phrases",
   "brouillon": "corps du mail de réponse en français",
-  "suggestions": [ { "groupId": "..." | null, "creneauId": "..." | null, "childId": "..." | null, "pourquoi": "raison courte" } ]
+  "suggestions": [ { "groupId": "..." | null, "creneauId": "..." | null, "childId": "..." | null, "pourquoi": "raison courte" } ],
+  "nouvelleFamille": null | { "parentName": "..." | null, "enfants": [ { "prenom": "...", "nom": "..." | null, "age": 9 | null, "galop": "..." | null } ] }
 }`;
 
     const we = prochainWeekend(today);
@@ -426,6 +428,9 @@ ${JSON.stringify(activitesDispo)}`;
       familleConnue: !!familleContexte,
       familyId,
       enfants: familleContexte ? familleContexte.enfants : [],
+      // Pré-remplissage fiche nouvelle famille (expéditeur inconnu uniquement).
+      // C'est une PROPOSITION que l'admin relit et corrige avant création.
+      nouvelleFamille: !familleContexte && parsed.nouvelleFamille ? parsed.nouvelleFamille : null,
       nbActivitesDispo: activitesDispo.length,
     });
   } catch (e: any) {

@@ -30,6 +30,14 @@ export default function BoiteAssistantPage() {
   const [copied, setCopied] = useState(false);
   // Suivi de l'inscription 1-clic par suggestion (index → état)
   const [enrollState, setEnrollState] = useState<Record<number, { busy?: boolean; done?: boolean; error?: string; orderMsg?: string; orderWarn?: string }>>({});
+  // Étape 4 — nouvelle famille (expéditeur inconnu) : fiche pré-remplie par
+  // l'IA, RELUE par l'admin, créée au clic. Puis les inscriptions se font
+  // sur cette famille fraîchement créée.
+  const [famForm, setFamForm] = useState<{ parentName: string; parentEmail: string; parentPhone: string; flechage: string; children: { firstName: string; lastName: string; birthDate: string; galopLevel: string; ageHint: number | null }[] } | null>(null);
+  const [newFam, setNewFam] = useState<{ familyId: string; familyName: string; children: { id: string; firstName: string }[] } | null>(null);
+  const [creatingFam, setCreatingFam] = useState(false);
+  const [famMsg, setFamMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [chosenChild, setChosenChild] = useState<Record<number, string>>({});
 
   // ── Gmail ──
   const [gmail, setGmail] = useState<{
@@ -193,6 +201,28 @@ export default function BoiteAssistantPage() {
         setRes(d);
         setDraft(d.brouillon || "");
         setEnrollState({});
+        setNewFam(null);
+        setFamMsg(null);
+        setChosenChild({});
+        // Expéditeur inconnu + demande de prestation → fiche pré-remplie à relire
+        if (!d.familleConnue && d.nouvelleFamille) {
+          const nf = d.nouvelleFamille;
+          setFamForm({
+            parentName: nf.parentName || "",
+            parentEmail: from.trim(),
+            parentPhone: "",
+            flechage: "stage",
+            children: (Array.isArray(nf.enfants) ? nf.enfants : []).slice(0, 8).map((e: any) => ({
+              firstName: e?.prenom || "",
+              lastName: e?.nom || "",
+              birthDate: "",
+              galopLevel: e?.galop || "",
+              ageHint: typeof e?.age === "number" ? e.age : null,
+            })),
+          });
+        } else {
+          setFamForm(null);
+        }
       }
     } catch {
       setErr("Erreur réseau");
@@ -206,17 +236,56 @@ export default function BoiteAssistantPage() {
     setTimeout(() => setCopied(false), 1500);
   };
 
+  // ── Création de la nouvelle famille (étape 4) — jamais automatique ──
+  const createFamily = async () => {
+    if (!famForm) return;
+    setCreatingFam(true);
+    setFamMsg(null);
+    try {
+      const r = await authFetch("/api/admin/inbox-create-family", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          parentName: famForm.parentName,
+          parentEmail: famForm.parentEmail,
+          parentPhone: famForm.parentPhone,
+          flechage: famForm.flechage,
+          children: famForm.children
+            .filter((c) => c.firstName.trim())
+            .map((c) => ({ firstName: c.firstName, lastName: c.lastName, birthDate: c.birthDate, galopLevel: c.galopLevel })),
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        if (d.status === "exists") {
+          setFamMsg({ ok: false, text: `Une famille existe déjà avec cet email (${d.familyName || d.familyId}) — corrige l'email ou relance l'analyse.` });
+        } else {
+          setFamMsg({ ok: false, text: d.error || "Échec de la création" });
+        }
+      } else {
+        setNewFam({ familyId: d.familyId, familyName: d.familyName, children: d.children || [] });
+        setFamMsg({ ok: true, text: `Famille "${d.familyName}" créée (${(d.children || []).length} enfant(s)). Tu peux maintenant inscrire.` });
+      }
+    } catch {
+      setFamMsg({ ok: false, text: "Erreur réseau" });
+    }
+    setCreatingFam(false);
+  };
+
   // ── Inscription 1-clic (étape 2) : le serveur re-vérifie tout ──
   // Un stage semaine = tous ses creneauIds (inscription tout-ou-rien côté serveur).
+  // Famille : celle du mail (connue) OU la nouvelle famille créée à l'instant.
   const enrollSuggestion = async (s: any, i: number) => {
     const ids: string[] = Array.isArray(s?.creneauIds) && s.creneauIds.length > 0 ? s.creneauIds : s?.creneauId ? [s.creneauId] : [];
-    if (ids.length === 0 || !s?.childId || !res?.familyId) return;
+    const effFamilyId = res?.familyId || newFam?.familyId || "";
+    const effChildId = s?.childId || (newFam ? chosenChild[i] || newFam.children[0]?.id || "" : "");
+    if (ids.length === 0 || !effChildId || !effFamilyId) return;
     setEnrollState((prev) => ({ ...prev, [i]: { busy: true } }));
     try {
       const r = await authFetch("/api/admin/inbox-enroll", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ creneauIds: ids, childId: s.childId, familyId: res.familyId }),
+        body: JSON.stringify({ creneauIds: ids, childId: effChildId, familyId: effFamilyId }),
       });
       const d = await r.json();
       if (!r.ok) {
@@ -417,6 +486,125 @@ export default function BoiteAssistantPage() {
                 </div>
               )}
 
+              {/* ── Étape 4 : nouvelle famille détectée (expéditeur inconnu) ── */}
+              {famForm && (
+                <div className="rounded-lg border border-violet-200 bg-violet-50/40 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="font-body text-[11px] font-bold uppercase tracking-wide text-violet-500">
+                      Nouvelle famille détectée — fiche pré-remplie, à relire avant création
+                    </div>
+                    {newFam && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 font-body text-[10px] font-semibold text-green-700">
+                        <Check size={10} /> Créée
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <input
+                      value={famForm.parentName}
+                      onChange={(e) => setFamForm({ ...famForm, parentName: e.target.value })}
+                      placeholder="Nom du parent"
+                      disabled={!!newFam}
+                      className="rounded-md border border-violet-200 bg-white px-2.5 py-1.5 font-body text-xs disabled:opacity-60"
+                    />
+                    <input
+                      value={famForm.parentEmail}
+                      onChange={(e) => setFamForm({ ...famForm, parentEmail: e.target.value })}
+                      placeholder="Email"
+                      disabled={!!newFam}
+                      className="rounded-md border border-violet-200 bg-white px-2.5 py-1.5 font-body text-xs disabled:opacity-60"
+                    />
+                    <input
+                      value={famForm.parentPhone}
+                      onChange={(e) => setFamForm({ ...famForm, parentPhone: e.target.value })}
+                      placeholder="Téléphone (optionnel)"
+                      disabled={!!newFam}
+                      className="rounded-md border border-violet-200 bg-white px-2.5 py-1.5 font-body text-xs disabled:opacity-60"
+                    />
+                  </div>
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <span className="font-body text-[10px] font-semibold uppercase text-violet-400">Fléchage :</span>
+                    {[
+                      { id: "cavalier_annee", label: "À l'année" },
+                      { id: "stage", label: "Stages" },
+                      { id: "passage", label: "Passage" },
+                    ].map((o) => (
+                      <button
+                        key={o.id}
+                        type="button"
+                        disabled={!!newFam}
+                        onClick={() => setFamForm({ ...famForm, flechage: o.id })}
+                        className={`rounded-full px-2.5 py-0.5 font-body text-[10px] font-semibold disabled:opacity-60 ${
+                          famForm.flechage === o.id ? "bg-violet-600 text-white" : "bg-white text-violet-600 border border-violet-200"
+                        }`}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-2 space-y-1.5">
+                    {famForm.children.map((c, ci) => (
+                      <div key={ci} className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                        <input
+                          value={c.firstName}
+                          onChange={(e) => setFamForm({ ...famForm, children: famForm.children.map((x, xi) => (xi === ci ? { ...x, firstName: e.target.value } : x)) })}
+                          placeholder="Prénom enfant"
+                          disabled={!!newFam}
+                          className="rounded-md border border-violet-200 bg-white px-2.5 py-1.5 font-body text-xs disabled:opacity-60"
+                        />
+                        <input
+                          value={c.lastName}
+                          onChange={(e) => setFamForm({ ...famForm, children: famForm.children.map((x, xi) => (xi === ci ? { ...x, lastName: e.target.value } : x)) })}
+                          placeholder="Nom"
+                          disabled={!!newFam}
+                          className="rounded-md border border-violet-200 bg-white px-2.5 py-1.5 font-body text-xs disabled:opacity-60"
+                        />
+                        <input
+                          type="date"
+                          value={c.birthDate}
+                          onChange={(e) => setFamForm({ ...famForm, children: famForm.children.map((x, xi) => (xi === ci ? { ...x, birthDate: e.target.value } : x)) })}
+                          disabled={!!newFam}
+                          title={c.ageHint !== null ? `Âge indiqué dans le mail : ${c.ageHint} ans` : "Date de naissance"}
+                          className="rounded-md border border-violet-200 bg-white px-2.5 py-1.5 font-body text-xs disabled:opacity-60"
+                        />
+                        <input
+                          value={c.galopLevel}
+                          onChange={(e) => setFamForm({ ...famForm, children: famForm.children.map((x, xi) => (xi === ci ? { ...x, galopLevel: e.target.value } : x)) })}
+                          placeholder={c.ageHint !== null ? `Galop (${c.ageHint} ans indiqué)` : "Galop (optionnel)"}
+                          disabled={!!newFam}
+                          className="rounded-md border border-violet-200 bg-white px-2.5 py-1.5 font-body text-xs disabled:opacity-60"
+                        />
+                      </div>
+                    ))}
+                    {!newFam && (
+                      <button
+                        type="button"
+                        onClick={() => setFamForm({ ...famForm, children: [...famForm.children, { firstName: "", lastName: "", birthDate: "", galopLevel: "", ageHint: null }] })}
+                        className="font-body text-[11px] font-semibold text-violet-500 hover:text-violet-700"
+                      >
+                        + Ajouter un enfant
+                      </button>
+                    )}
+                  </div>
+                  {!newFam && (
+                    <div className="mt-2.5">
+                      <button
+                        onClick={createFamily}
+                        disabled={creatingFam || !famForm.parentEmail.trim() || !famForm.children.some((c) => c.firstName.trim())}
+                        className="inline-flex items-center gap-1 rounded-md bg-violet-600 px-3 py-1.5 font-body text-[11px] font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+                      >
+                        {creatingFam ? <Loader2 size={12} className="animate-spin" /> : <UserPlus size={12} />}
+                        {creatingFam ? "Création…" : "Créer la famille"}
+                      </button>
+                      <span className="ml-2 font-body text-[10px] text-slate-400">Aucun email envoyé à la famille.</span>
+                    </div>
+                  )}
+                  {famMsg && (
+                    <div className={`mt-1.5 font-body text-[11px] font-semibold ${famMsg.ok ? "text-green-600" : "text-red-600"}`}>{famMsg.text}</div>
+                  )}
+                </div>
+              )}
+
               {Array.isArray(res.suggestions) && res.suggestions.length > 0 && (
                 <div>
                   <div className="mb-1.5 font-body text-[11px] font-bold uppercase tracking-wide text-slate-400">
@@ -468,12 +656,30 @@ export default function BoiteAssistantPage() {
                           )}
                         </div>
                         {s.pourquoi && <div className="mt-1 font-body text-[11px] italic text-slate-400">{s.pourquoi}</div>}
-                        {/* Étape 2 — inscription 1-clic (uniquement si actionnable + enfant identifié) */}
-                        {s.actionable && s.childId && res.familyId && (Array.isArray(s.creneauIds) ? s.creneauIds.length > 0 : !!s.creneauId) && (
-                          <div className="mt-2">
+                        {/* Étape 2 — inscription 1-clic (famille connue OU nouvelle famille créée) */}
+                        {(() => {
+                          const hasIds = Array.isArray(s.creneauIds) ? s.creneauIds.length > 0 : !!s.creneauId;
+                          const effFamilyId = res.familyId || newFam?.familyId || "";
+                          const effChildId = s.childId || (newFam ? chosenChild[i] || newFam.children[0]?.id || "" : "");
+                          const effChildName = s.childName || (newFam ? newFam.children.find((c) => c.id === effChildId)?.firstName || "" : "");
+                          if (!s.actionable || !hasIds || !effFamilyId || !effChildId) return null;
+                          return (
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            {/* Sélecteur d'enfant (nouvelle famille, plusieurs enfants) */}
+                            {!s.childId && newFam && newFam.children.length > 1 && !enrollState[i]?.done && (
+                              <select
+                                value={chosenChild[i] || newFam.children[0]?.id || ""}
+                                onChange={(e) => setChosenChild((prev) => ({ ...prev, [i]: e.target.value }))}
+                                className="rounded-md border border-blue-200 bg-white px-2 py-1 font-body text-[11px]"
+                              >
+                                {newFam.children.map((c) => (
+                                  <option key={c.id} value={c.id}>{c.firstName}</option>
+                                ))}
+                              </select>
+                            )}
                             {enrollState[i]?.done ? (
                               <span className="inline-flex items-center gap-1 rounded-md bg-green-600 px-2.5 py-1 font-body text-[11px] font-semibold text-white">
-                                <Check size={12} /> Inscrit{s.childName ? ` · ${s.childName}` : ""}
+                                <Check size={12} /> Inscrit{effChildName ? ` · ${effChildName}` : ""}
                                 {s.prixMode === "semaine" && s.nbJours > 1 ? ` · ${s.nbJours} jours` : ""}
                               </span>
                             ) : (
@@ -485,7 +691,7 @@ export default function BoiteAssistantPage() {
                                 {enrollState[i]?.busy ? <Loader2 size={12} className="animate-spin" /> : <UserPlus size={12} />}
                                 {enrollState[i]?.busy
                                   ? "Inscription…"
-                                  : `Inscrire${s.childName ? ` ${s.childName}` : ""}${s.prixMode === "semaine" && s.nbJours > 1 ? ` · semaine complète (${s.nbJours} j)` : ""}`}
+                                  : `Inscrire${effChildName ? ` ${effChildName}` : ""}${s.prixMode === "semaine" && s.nbJours > 1 ? ` · semaine complète (${s.nbJours} j)` : ""}`}
                               </button>
                             )}
                             {enrollState[i]?.error && (
@@ -500,7 +706,8 @@ export default function BoiteAssistantPage() {
                               </span>
                             )}
                           </div>
-                        )}
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>
