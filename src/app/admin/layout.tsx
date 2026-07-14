@@ -7,6 +7,8 @@ import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
   BarChart3,
+  Bell,
+  BellOff,
   BookMarked,
   BookOpen,
   Building2,
@@ -55,6 +57,7 @@ import VoiceAssistant from "@/components/VoiceAssistant";
 import { ToastProvider } from "@/components/ui/Toast";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 type NavItem = {
   href: string;
@@ -327,13 +330,14 @@ function AccessDenied({ signedIn, email }: { signedIn: boolean; email?: string |
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, isAdmin, isMoniteur, signOut } = useAuth();
+  const { user, loading, isAdmin, isMoniteur, userRole, signOut } = useAuth();
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const [showVoice, setShowVoice] = useState(false);
   const [voiceContext, setVoiceContext] = useState<Record<string, any>>({});
   const [moduleContext, setModuleContext] = useState<Record<string, any>>({});
   const [nbImpayes, setNbImpayes] = useState(0);
+  const pushNotifications = usePushNotifications(user?.uid || null, { role: userRole, email: user?.email });
 
   const visibleMobile = filterForRole(MOBILE_PRIMARY, isMoniteur, isAdmin);
   const visibleGroups = NAV_GROUPS
@@ -457,6 +461,43 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </header>
 
           <main className="w-full max-w-[1440px] px-3 py-4 md:px-7 lg:px-9 md:py-8 pb-28 md:pb-10">
+            {pushNotifications.permission !== "granted" && (
+              <div className={`mb-5 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${
+                pushNotifications.permission === "denied"
+                  ? "border-orange-200 bg-orange-50"
+                  : "border-blue-200 bg-blue-50"
+              }`}>
+                <div className="flex items-start gap-3">
+                  <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${
+                    pushNotifications.permission === "denied" ? "bg-orange-100 text-orange-600" : "bg-white text-blue-600"
+                  }`}>
+                    {pushNotifications.permission === "denied" ? <BellOff size={19} /> : <Bell size={19} />}
+                  </div>
+                  <div>
+                    <div className="font-body text-sm font-bold text-blue-950">
+                      {pushNotifications.permission === "denied" ? "Notifications bloquées sur cet appareil" : "Recevoir les changements de planning"}
+                    </div>
+                    <p className="mt-1 font-body text-xs leading-relaxed text-slate-500">
+                      {pushNotifications.permission === "denied"
+                        ? "Autorisez les notifications dans les réglages du navigateur pour être prévenu sur ce téléphone."
+                        : "Activez-les sur votre téléphone pour recevoir les créations, modifications et suppressions de créneaux."}
+                    </p>
+                    {pushNotifications.error && <p className="mt-1 font-body text-xs text-red-600">{pushNotifications.error}</p>}
+                  </div>
+                </div>
+                {pushNotifications.permission === "default" && (
+                  <button
+                    type="button"
+                    onClick={pushNotifications.requestPermission}
+                    disabled={pushNotifications.loading}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border-none bg-blue-700 px-4 py-2.5 font-body text-xs font-bold text-white shadow-sm disabled:opacity-50"
+                  >
+                    {pushNotifications.loading ? <Loader2 size={15} className="animate-spin" /> : <Bell size={15} />}
+                    Activer les notifications
+                  </button>
+                )}
+              </div>
+            )}
             {children}
           </main>
         </div>
