@@ -157,6 +157,13 @@ export async function POST(req: NextRequest) {
           moniteur: c.monitor || "",
           // Clé de regroupement semaine (même logique que la page réservation famille)
           stageKey: (c.stageGroupId || c.activityId || "") + "",
+          // Prix admin par nombre de jours (prioritaires en mode jours)
+          pricePerCount: {
+            1: typeof c.price1day === "number" && c.price1day > 0 ? c.price1day : null,
+            2: typeof c.price2days === "number" && c.price2days > 0 ? c.price2days : null,
+            3: typeof c.price3days === "number" && c.price3days > 0 ? c.price3days : null,
+            4: typeof c.price4days === "number" && c.price4days > 0 ? c.price4days : null,
+          } as Record<number, number | null>,
         });
         creneauMap.set(doc.id, {
           titre: c.activityTitle || "",
@@ -213,6 +220,8 @@ export async function POST(req: NextRequest) {
           jours.length > 1
             ? `du ${jourFr(first.date)} ${labelFr(first.date).replace(/^\S+\s/, "")} au ${jourFr(last.date)} ${labelFr(last.date).replace(/^\S+\s/, "")}`
             : labelFr(first.date),
+        // Jours détaillés : permet à l'IA de proposer un sous-ensemble (mode jours)
+        joursDates: jours.map((j) => ({ date: j.date, jour: j.jour })),
         horaire: first.horaire,
         places,
         prixSemaineTTC: first.prixTTC, // prix TTC du créneau = prix de la SEMAINE COMPLÈTE
@@ -225,7 +234,12 @@ export async function POST(req: NextRequest) {
         moniteur: first.moniteur,
       };
       stagesDispo.push(groupe);
-      stageGroupMap.set(key, { ...groupe, creneauIds: jours.map((j) => j.creneauId) });
+      stageGroupMap.set(key, {
+        ...groupe,
+        creneauIds: jours.map((j) => j.creneauId),
+        joursDetail: jours.map((j) => ({ creneauId: j.creneauId, date: j.date, jour: j.jour })),
+        pricePerCount: first.pricePerCount || {},
+      });
     });
     stagesDispo.sort((x, y) => (x.dateDebut < y.dateDebut ? -1 : 1));
     // Échantillon d'"autres" réparti : 1 sur N pour couvrir toute la période.
@@ -280,7 +294,8 @@ Tu aides le gérant à traiter ses mails. Tu réponds UNIQUEMENT en JSON valide,
 Règles:
 - Ton chaleureux, professionnel, tutoiement évité avec les familles (vouvoiement), signé "Le Centre Équestre d'Agon-Coutainville".
 - Tu ne proposes QUE des prestations présentes dans la liste "activitesDispo" fournie (places réelles). Jamais d'invention de date, de tarif ou de place.
-- LES STAGES SONT DES SEMAINES : chaque stage fourni est un GROUPE couvrant "nbJours" jours ("periode" = du premier au dernier jour). Son "prixSemaineTTC" est le prix de la SEMAINE COMPLÈTE (les nbJours jours), PAS un prix par jour. Dans le brouillon, écris toujours le prix sans ambiguïté : "175 € la semaine complète (5 jours)". Si "demiJourneeOuverte"=true, précise qu'une formule à la journée existe (avec "prixJour" si fourni, sinon "tarif journée sur demande"). Ne propose JAMAIS deux fois la même semaine de stage.
+- LES STAGES SONT DES SEMAINES : chaque stage fourni est un GROUPE couvrant "nbJours" jours ("periode" = du premier au dernier jour, détail dans "joursDates"). Son "prixSemaineTTC" est le prix de la SEMAINE COMPLÈTE (les nbJours jours), PAS un prix par jour. Dans le brouillon, écris toujours le prix sans ambiguïté : "175 € la semaine complète (5 jours)". Si "demiJourneeOuverte"=true, précise qu'une formule à la journée existe (avec "prixJour" si fourni, sinon "tarif journée sur demande"). Ne propose JAMAIS deux fois la même semaine de stage.
+- DEMANDE "À PARTIR DU <date>" (ou toute contrainte de dates) : une semaine de stage qui COMMENCE AVANT la date demandée ne doit JAMAIS être proposée en semaine complète (la famille raterait des jours déjà passés pour elle). Deux cas : (a) si "demiJourneeOuverte"=true, propose-la en MODE JOURS avec uniquement les jours ≥ la date demandée — mets "mode":"jours" et "jours":[dates choisies parmi joursDates] dans la suggestion, et dans le brouillon annonce clairement "possible à la journée : jeudi 30 et vendredi 31 (X €/jour)" ; (b) sinon, ne la propose pas et passe à la semaine suivante qui commence à ou après la date demandée (mode "semaine"). Pour une semaine complète compatible avec les dates, mets "mode":"semaine" et laisse "jours" à null.
 - Pour CHAQUE suggestion : si c'est un STAGE, reprends son "groupId" exact (copie-le tel quel) et laisse creneauId à null ; si c'est une autre activité (cours, promenade…), reprends son "creneauId" exact et laisse groupId à null. N'invente jamais un identifiant.
 - Si la demande vise un enfant précis de la famille connue, ajoute son "childId" (repris depuis le contexte famille). Sinon laisse childId à null.
 - Si une activité, choisis-la en fonction de la demande et, si connu, de l'âge/galop de l'enfant (souvent indiqués dans le titre, ex "Stage 3/4 ans", "galop d'argent 8/10 ans").
@@ -298,7 +313,7 @@ Format JSON attendu:
   "classification": "info" | "inscription" | "administratif" | "autre",
   "resume": "1-2 phrases",
   "brouillon": "corps du mail de réponse en français",
-  "suggestions": [ { "groupId": "..." | null, "creneauId": "..." | null, "childId": "..." | null, "pourquoi": "raison courte" } ],
+  "suggestions": [ { "groupId": "..." | null, "creneauId": "..." | null, "mode": "semaine" | "jours" | null, "jours": ["YYYY-MM-DD", ...] | null, "childId": "..." | null, "pourquoi": "raison courte" } ],
   "nouvelleFamille": null | { "parentName": "..." | null, "enfants": [ { "prenom": "...", "nom": "..." | null, "age": 9 | null, "galop": "..." | null } ] }
 }`;
 
@@ -362,11 +377,59 @@ ${JSON.stringify(activitesDispo)}`;
         return { ok: true, note: null };
       };
 
-      // ── Cas STAGE SEMAINE (groupId) : tous les jours du groupe, prix semaine ──
+      // ── Cas STAGE SEMAINE (groupId) : semaine entière OU sous-ensemble de jours ──
       if (s.groupId && stageGroupMap.has(s.groupId)) {
         const g = stageGroupMap.get(s.groupId)!;
-        const placeOk = g.places > 0;
         const { ok: ageOk, note: ageNote } = checkAge(g.ageMin, g.ageMax);
+
+        // Mode JOURS : sous-ensemble demandé par l'IA, VALIDÉ contre les vrais
+        // jours du groupe (dates inconnues ignorées). Autorisé seulement si le
+        // stage est ouvert à la journée.
+        const askedDays: string[] = Array.isArray(s.jours) ? s.jours.filter((d: any) => typeof d === "string") : [];
+        const joursChoisis = g.joursDetail.filter((j: any) => askedDays.includes(j.date));
+        const modeJours =
+          s.mode === "jours" && g.demiJourneeOuverte && joursChoisis.length > 0 && joursChoisis.length < g.nbJours;
+
+        if (modeJours) {
+          // Prix AUTORITAIRE mode jours : price{n}days (admin) > prixJour × n > prorata semaine.
+          const n = joursChoisis.length;
+          const pc = g.pricePerCount?.[n];
+          const prixJours =
+            typeof pc === "number" && pc > 0
+              ? pc
+              : typeof g.prixJour === "number" && g.prixJour > 0
+              ? Math.round(g.prixJour * n * 100) / 100
+              : typeof g.prixSemaineTTC === "number"
+              ? Math.round((g.prixSemaineTTC / g.nbJours) * n * 100) / 100
+              : null;
+          const placeOk = joursChoisis.length > 0; // places par jour déjà > 0 (groupe construit sur spots > 0)
+          const actionable = placeOk && ageOk;
+          return {
+            groupId: s.groupId,
+            creneauId: null,
+            creneauIds: joursChoisis.map((j: any) => j.creneauId),
+            titre: g.titre,
+            type: g.type,
+            date: joursChoisis[0].date,
+            dateFin: joursChoisis[joursChoisis.length - 1].date,
+            periode: joursChoisis.map((j: any) => `${j.jour} ${j.date.slice(8, 10)}`).join(" + "),
+            nbJours: n,
+            nbJoursSemaine: g.nbJours,
+            horaire: g.horaire,
+            places: g.places,
+            prixTTC: prixJours, // prix AUTORITAIRE des jours choisis
+            prixMode: "jours",
+            prixJour: g.prixJour,
+            childId,
+            childName,
+            pourquoi: s.pourquoi || "",
+            actionable,
+            note: !ageOk ? ageNote : null,
+          };
+        }
+
+        // Mode SEMAINE (défaut)
+        const placeOk = g.places > 0;
         const actionable = placeOk && ageOk;
         return {
           groupId: s.groupId,
@@ -378,6 +441,7 @@ ${JSON.stringify(activitesDispo)}`;
           dateFin: g.dateFin,
           periode: g.periode,
           nbJours: g.nbJours,
+          nbJoursSemaine: g.nbJours,
           horaire: g.horaire,
           places: g.places,
           prixTTC: g.prixSemaineTTC, // prix AUTORITAIRE de la SEMAINE

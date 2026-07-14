@@ -85,7 +85,10 @@ export async function POST(req: NextRequest) {
     //    d'écrire quoi que ce soit : si un seul jour est complet → rien n'est
     //    inscrit (pas d'inscription partielle qu'il faudrait facturer à tort).
     const refs = creneauIds.map((cid) => adminDb.collection("creneaux").doc(cid));
-    const joursData: { date: string; startTime: string; endTime: string; titre: string; type: string; prixTTC: number | null }[] = [];
+    const joursData: {
+      date: string; startTime: string; endTime: string; titre: string; type: string; prixTTC: number | null;
+      stageGroupId: string; activityId: string; priceTTCDay: number | null; pricePerCount: Record<number, number | null>;
+    }[] = [];
     const outcome = await adminDb.runTransaction(async (tx) => {
       joursData.length = 0; // la transaction peut être rejouée par Firestore
       const snaps = await Promise.all(refs.map((r) => tx.get(r)));
@@ -109,6 +112,15 @@ export async function POST(req: NextRequest) {
               : typeof cr.priceHT === "number"
               ? Math.round(cr.priceHT * (1 + (cr.tvaTaux ?? 5.5) / 100) * 100) / 100
               : null,
+          stageGroupId: (cr.stageGroupId || "") + "",
+          activityId: (cr.activityId || "") + "",
+          priceTTCDay: typeof cr.priceTTCDay === "number" && cr.priceTTCDay > 0 ? cr.priceTTCDay : null,
+          pricePerCount: {
+            1: typeof cr.price1day === "number" && cr.price1day > 0 ? cr.price1day : null,
+            2: typeof cr.price2days === "number" && cr.price2days > 0 ? cr.price2days : null,
+            3: typeof cr.price3days === "number" && cr.price3days > 0 ? cr.price3days : null,
+            4: typeof cr.price4days === "number" && cr.price4days > 0 ? cr.price4days : null,
+          },
         });
         const list: any[] = Array.isArray(cr.enrolled) ? cr.enrolled : [];
         if (list.some((e: any) => e.childId === childId)) continue; // déjà inscrit ce jour → ok
@@ -166,14 +178,63 @@ export async function POST(req: NextRequest) {
       const first = jours[0];
       const isStage = jours.some((j) => j.type === "stage" || j.type === "stage_journee");
       const stageKey = `${first.titre}_${first.date}`;
-      // Prix AUTORITAIRE : stage semaine → prix TTC du créneau (= prix semaine) ;
-      // activité simple → prix TTC du créneau. Pas de remise automatique ici
-      // (les remises multi-enfants restent à la main de l'admin dans Paiements).
-      const priceTTC = first.prixTTC ?? 0;
+
+      // ── Prix AUTORITAIRE. Pour un stage : détecter si on inscrit la semaine
+      //    complète ou un SOUS-ENSEMBLE de jours. Nombre total de jours du
+      //    stage = créneaux du même lot (stageGroupId, fallback activityId+titre)
+      //    dans la même semaine. Si jours inscrits < total → tarif jours :
+      //    price{n}days (admin) > priceTTCDay × n > prorata semaine.
+      let priceTTC = first.prixTTC ?? 0;
+      let nbJoursSemaine = jours.length;
+      if (isStage) {
+        try {
+          const monday = (() => {
+            const d = new Date(first.date + "T12:00:00Z");
+            d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+            return d.toISOString().slice(0, 10);
+          })();
+          const sunday = (() => {
+            const d = new Date(monday + "T12:00:00Z");
+            d.setUTCDate(d.getUTCDate() + 6);
+            return d.toISOString().slice(0, 10);
+          })();
+          let groupSnap;
+          if (first.stageGroupId) {
+            groupSnap = await adminDb.collection("creneaux").where("stageGroupId", "==", first.stageGroupId).get();
+          } else if (first.activityId) {
+            groupSnap = await adminDb.collection("creneaux").where("activityId", "==", first.activityId).get();
+          }
+          if (groupSnap) {
+            const weekDates = new Set<string>();
+            groupSnap.forEach((d) => {
+              const c = d.data() as any;
+              if (c.date >= monday && c.date <= sunday && (c.activityTitle || "") === first.titre) weekDates.add(c.date);
+            });
+            if (weekDates.size > 0) nbJoursSemaine = Math.max(weekDates.size, jours.length);
+          }
+        } catch {
+          /* fallback : nbJoursSemaine = jours inscrits (prix semaine) */
+        }
+        if (jours.length < nbJoursSemaine) {
+          const n = jours.length;
+          const pc = first.pricePerCount?.[n];
+          priceTTC =
+            typeof pc === "number" && pc > 0
+              ? pc
+              : first.priceTTCDay
+              ? Math.round(first.priceTTCDay * n * 100) / 100
+              : first.prixTTC
+              ? Math.round((first.prixTTC / nbJoursSemaine) * n * 100) / 100
+              : 0;
+        }
+      }
+      const modeJours = isStage && jours.length < nbJoursSemaine;
       const scheduleDesc = formatStageSchedule(jours.map((j) => ({ date: j.date, startTime: j.startTime, endTime: j.endTime })));
 
       const item = {
-        activityTitle: isStage ? `${first.titre} (${jours.length}j) — ${childName}` : `${first.titre} — ${childName}`,
+        activityTitle: isStage
+          ? `${first.titre} (${jours.length}j${modeJours ? `/${nbJoursSemaine}` : ""}) — ${childName}`
+          : `${first.titre} — ${childName}`,
         childId,
         childName,
         stageKey,
