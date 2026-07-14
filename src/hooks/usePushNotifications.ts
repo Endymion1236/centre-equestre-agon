@@ -20,7 +20,9 @@ async function ensureServiceWorker(): Promise<ServiceWorkerRegistration | null> 
   }
 }
 
-async function registerToken(familyId: string): Promise<string | null> {
+type PushIdentity = { role?: "admin" | "moniteur" | "cavalier"; email?: string | null };
+
+async function registerToken(familyId: string, identity?: PushIdentity): Promise<string | null> {
   if (!VAPID_KEY) return null;
   const swReg = await ensureServiceWorker();
   if (!swReg) return null;
@@ -38,6 +40,8 @@ async function registerToken(familyId: string): Promise<string | null> {
       platform: /Android/.test(navigator.userAgent) ? "android"
         : /iPhone|iPad|iPod/.test(navigator.userAgent) ? "ios"
         : "desktop",
+      role: identity?.role || "cavalier",
+      email: identity?.email || "",
       updatedAt: serverTimestamp(),
     }, { merge: true });
     console.log("Push: token enregistré ✅");
@@ -48,7 +52,7 @@ async function registerToken(familyId: string): Promise<string | null> {
   }
 }
 
-export function usePushNotifications(familyId: string | null) {
+export function usePushNotifications(familyId: string | null, identity?: PushIdentity) {
   const [permission, setPermission] = useState<NotificationPermission>("default");
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -66,13 +70,18 @@ export function usePushNotifications(familyId: string | null) {
         if (!snap.exists() || !snap.data()?.token) {
           // Token manquant → le ré-enregistrer silencieusement
           console.log("Push: token manquant, ré-enregistrement auto...");
-          registerToken(familyId).then(t => { if (t) setToken(t); });
+          registerToken(familyId, identity).then(t => { if (t) setToken(t); });
         } else {
           setToken(snap.data()!.token);
+          setDoc(doc(db, "push_tokens", familyId), {
+            role: identity?.role || "cavalier",
+            email: identity?.email || "",
+            updatedAt: serverTimestamp(),
+          }, { merge: true }).catch(() => {});
         }
       }).catch(() => {});
     }
-  }, [familyId]);
+  }, [familyId, identity?.role, identity?.email]);
 
   const requestPermission = async () => {
     if (!familyId) return;
@@ -82,7 +91,7 @@ export function usePushNotifications(familyId: string | null) {
       const perm = await Notification.requestPermission();
       setPermission(perm);
       if (perm !== "granted") { setError("Permission refusée"); return; }
-      const t = await registerToken(familyId);
+      const t = await registerToken(familyId, identity);
       if (t) { setToken(t); }
       else { setError("Impossible d'obtenir le token FCM"); }
     } catch (e: any) {

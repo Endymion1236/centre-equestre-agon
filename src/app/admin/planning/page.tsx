@@ -52,6 +52,33 @@ const calcAge = (birthDate: any): string => {
   return `${age} ans`;
 };
 
+
+type PlanningChangeNotification = {
+  action: "created" | "updated" | "deleted" | "duplicated";
+  activityTitle?: string;
+  date?: string;
+  startTime?: string;
+  endTime?: string;
+  previousStartTime?: string;
+  previousEndTime?: string;
+  monitor?: string;
+  count?: number;
+};
+
+async function notifyPlanningChange(payload: PlanningChangeNotification) {
+  try {
+    const response = await authFetch("/api/planning/notify-staff", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) console.warn("Notification planning refusée :", response.status);
+  } catch (error) {
+    // La modification du planning reste validée même si le push est indisponible.
+    console.warn("Notification planning non envoyée :", error);
+  }
+}
+
 export default function PlanningPage() {
   const { toast } = useToast();
   const { setAgentContext } = useAgentContext("planning");
@@ -261,6 +288,7 @@ export default function PlanningPage() {
       existingCreneaux = snap.docs.map(d => d.data());
     }
     let created = 0, skipped = 0;
+    let firstCreated: Partial<Creneau> | null = null;
     for (const c of nc) {
       const isDuplicate = existingCreneaux.some(ex =>
         ex.date === c.date && ex.startTime === c.startTime && ex.activityTitle === c.activityTitle
@@ -271,10 +299,22 @@ export default function PlanningPage() {
       const creneauData: any = { ...c, createdAt: serverTimestamp() };
       if (actColor && !creneauData.color) creneauData.color = actColor;
       await addDoc(collection(db, "creneaux"), creneauData);
+      if (!firstCreated) firstCreated = c;
       created++;
     }
     setShowSimple(false); setShowGenerator(false);
     toast(`${created} créneau${created > 1 ? "x" : ""} créé${created > 1 ? "s" : ""}${skipped > 0 ? ` (${skipped} doublon${skipped > 1 ? "s" : ""})` : ""}`, "success");
+    if (created > 0 && firstCreated) {
+      await notifyPlanningChange({
+        action: "created",
+        activityTitle: firstCreated.activityTitle,
+        date: firstCreated.date,
+        startTime: firstCreated.startTime,
+        endTime: firstCreated.endTime,
+        monitor: firstCreated.monitor,
+        count: created,
+      });
+    }
     fetchData();
   };
   const [deleteCreneau, setDeleteCreneau] = useState<(Creneau & { id: string }) | null>(null);
@@ -387,6 +427,7 @@ export default function PlanningPage() {
     if (!deleteCreneau) return;
     setDeleteDeleting(true);
     try {
+      let deletedCount = 0;
       if (mode === "week") {
         // Supprimer tous les créneaux du même stage (plage large pour couvrir
         // les stages à cheval sur deux semaines — cohérent avec le décompte).
@@ -401,6 +442,7 @@ export default function PlanningPage() {
         // Filtre sameStage (stageGroupId prioritaire) : ne supprime QUE ce stage
         const weekTargets = snap.docs.filter(d => sameStage(d.data(), deleteCreneau));
         for (const t of weekTargets) await deleteDoc(doc(db, "creneaux", t.id));
+        deletedCount = weekTargets.length;
         toast(`🗑️ Stage supprimé (${weekTargets.length} créneaux)`, "success");
       } else if (mode === "similar") {
         const dow = new Date(deleteCreneau.date).getDay();
@@ -418,6 +460,7 @@ export default function PlanningPage() {
             && data.date >= dStart && data.date <= dEnd;
         });
         for (const t of targets) await deleteDoc(doc(db, "creneaux", t.id));
+        deletedCount = targets.length;
         toast(`🗑️ ${targets.length} créneaux supprimés`, "success");
       } else if (mode === "serie") {
         // Suppression d'une série d'occurrences proches (non-stage)
@@ -434,17 +477,37 @@ export default function PlanningPage() {
           return data.date >= fmtDate(from3) && data.date <= fmtDate(to3);
         });
         for (const t of targets) await deleteDoc(doc(db, "creneaux", t.id));
+        deletedCount = targets.length;
         toast(`🗑️ ${targets.length} créneaux supprimés`, "success");
       } else {
         await deleteDoc(doc(db, "creneaux", deleteCreneau.id));
+        deletedCount = 1;
         toast("🗑️ Créneau supprimé", "success");
       }
+      await notifyPlanningChange({
+        action: "deleted",
+        activityTitle: deleteCreneau.activityTitle,
+        date: deleteCreneau.date,
+        startTime: deleteCreneau.startTime,
+        endTime: deleteCreneau.endTime,
+        monitor: deleteCreneau.monitor,
+        count: deletedCount,
+      });
       setDeleteCreneau(null);
       fetchData();
     } catch (e) { console.error(e); }
     setDeleteDeleting(false);
   };
-  const handleDuplicateWeek = async () => { if (creneaux.length===0) return; setDuplicating(true); const { count, skipped } = await duplicateWeekCreneaux(creneaux, dupWeeks); setDuplicating(false);setShowDuplicate(false);toast(`${count} créneau${count>1?"x":""} créé${count>1?"s":""}${skipped > 0 ? ` (${skipped} doublon${skipped>1?"s":""})` : ""}`, "success");fetchData(); };
+  const handleDuplicateWeek = async () => {
+    if (creneaux.length === 0) return;
+    setDuplicating(true);
+    const { count, skipped } = await duplicateWeekCreneaux(creneaux, dupWeeks);
+    setDuplicating(false);
+    setShowDuplicate(false);
+    toast(`${count} créneau${count > 1 ? "x" : ""} créé${count > 1 ? "s" : ""}${skipped > 0 ? ` (${skipped} doublon${skipped > 1 ? "s" : ""})` : ""}`, "success");
+    if (count > 0) await notifyPlanningChange({ action: "duplicated", count });
+    fetchData();
+  };
 
 
   // Prévenir les familles inscrites qu'un créneau change (activité et/ou horaire).
@@ -541,6 +604,7 @@ export default function PlanningPage() {
       if (editForm.color) update.color = editForm.color;
 
       const isStageType = editCreneau.activityType === "stage" || editCreneau.activityType === "stage_journee";
+      let updatedCount = 1;
       if (isStageType) {
         // ── Appliquer aux jours SÉLECTIONNÉS du stage ──
         // L'admin choisit les jours dans la modale ; par défaut = le jour cliqué.
@@ -548,6 +612,7 @@ export default function PlanningPage() {
         for (const id of dayIds) {
           await updateDoc(doc(db, "creneaux", id), update);
         }
+        updatedCount = dayIds.length;
         toast(`✅ Stage mis à jour (${dayIds.length} jour${dayIds.length > 1 ? "s" : ""})`, "success");
       } else if (editApplyAll && !isStageType) {
         // Cours récurrents UNIQUEMENT (jamais les stages : eux passent par la
@@ -568,11 +633,23 @@ export default function PlanningPage() {
         for (const t of targets) {
           await updateDoc(doc(db, "creneaux", t.id), update);
         }
+        updatedCount = targets.length;
         toast(`✅ ${targets.length} créneaux mis à jour`, "success");
       } else {
         await updateDoc(doc(db, "creneaux", editCreneau.id), update);
         toast("✅ Créneau mis à jour", "success");
       }
+      await notifyPlanningChange({
+        action: "updated",
+        activityTitle: editForm.activityTitle,
+        date: editCreneau.date,
+        startTime: editForm.startTime,
+        endTime: editForm.endTime,
+        previousStartTime: editCreneau.startTime,
+        previousEndTime: editCreneau.endTime,
+        monitor: editForm.monitor,
+        count: updatedCount,
+      });
       setEditCreneau(null);
       await fetchData();
     } catch (e) { console.error(e); toast("Erreur", "error"); }
@@ -611,6 +688,17 @@ export default function PlanningPage() {
     setDuplicateCreneau(null);
     setEditCreneau(null);
     toast(`✅ ${created} copie${created > 1 ? "s" : ""} créée${created > 1 ? "s" : ""}${skipped > 0 ? ` · ${skipped} doublon${skipped > 1 ? "s" : ""} ignoré${skipped > 1 ? "s" : ""}` : ""}`, "success");
+    if (created > 0) {
+      await notifyPlanningChange({
+        action: "duplicated",
+        activityTitle: src.activityTitle,
+        date: dates[0],
+        startTime: src.startTime,
+        endTime: src.endTime,
+        monitor: src.monitor,
+        count: created,
+      });
+    }
     await fetchData();
   };
 
