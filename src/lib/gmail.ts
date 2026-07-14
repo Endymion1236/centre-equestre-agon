@@ -197,6 +197,31 @@ export async function gmailListRecent(max = 12): Promise<GmailMessage[]> {
 }
 
 // Encodage RFC2047 (accents dans l'objet).
+/**
+ * Lit un FIL complet (thread Gmail) dans l'ordre chronologique.
+ * Sert à donner le contexte de la conversation à l'assistant boîte :
+ * quand une famille re-répond avec les infos demandées, l'analyse voit
+ * la demande initiale ET les réponses déjà envoyées.
+ */
+export async function gmailGetThread(
+  threadId: string
+): Promise<{ from: string; date: string; body: string }[]> {
+  const token = await getAccessToken();
+  const res = await fetch(`${GMAIL_API}/threads/${encodeURIComponent(threadId)}?format=full`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`gmail thread ${res.status}`);
+  const data = await res.json();
+  const msgs = (data.messages || []).map((m: any) => ({
+    from: headerVal(m.payload?.headers, "From"),
+    date: headerVal(m.payload?.headers, "Date"),
+    body: extractBody(m.payload),
+    internalDate: Number(m.internalDate || 0),
+  }));
+  msgs.sort((a: any, b: any) => a.internalDate - b.internalDate);
+  return msgs.map(({ from, date, body }: any) => ({ from, date, body }));
+}
+
 function rfc2047(s: string): string {
   return `=?UTF-8?B?${Buffer.from(s || "", "utf8").toString("base64")}?=`;
 }

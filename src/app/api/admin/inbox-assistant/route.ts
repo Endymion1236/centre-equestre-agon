@@ -132,7 +132,29 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const { from, subject, body } = await req.json();
+    const { from, subject, body, threadId } = await req.json();
+
+    // ── Contexte du FIL : si le mail vient de Gmail (threadId), on charge
+    //    l'historique complet de la conversation. Indispensable quand la
+    //    famille re-répond avec les infos demandées (âge d'un enfant, choix
+    //    de dates…) : l'analyse voit la demande initiale ET nos réponses.
+    let historiqueFil: { from: string; date: string; body: string }[] = [];
+    if (typeof threadId === "string" && threadId.trim()) {
+      try {
+        const { gmailIsConnected, gmailGetThread } = await import("@/lib/gmail");
+        if (await gmailIsConnected()) {
+          const fil = await gmailGetThread(threadId.trim());
+          // Tous les messages SAUF le dernier (= celui analysé), bornés.
+          historiqueFil = fil.slice(0, -1).slice(-6).map((m) => ({
+            from: m.from,
+            date: m.date,
+            body: (m.body || "").slice(0, 1200),
+          }));
+        }
+      } catch (e) {
+        console.warn("[inbox-assistant] fil Gmail illisible:", (e as any)?.message);
+      }
+    }
     if (!body && !subject) {
       return NextResponse.json({ error: "Mail vide (subject/body requis)" }, { status: 400 });
     }
@@ -371,13 +393,16 @@ CE WEEK-END = samedi ${we.samedi} et dimanche ${we.dimanche}.
 ACTIVITÉS FOURNIES CI-DESSOUS : elles couvrent la période du ${periode.start} au ${periode.end} (extraite de la demande). Si la famille évoque une AUTRE période que celle-ci, invite-la poliment à préciser ses dates, que tu vérifieras — ne dis pas "rien de disponible".
 IMPORTANT : n'essaie JAMAIS de recalculer un jour de semaine toi-même. Chaque activité fournie contient déjà son champ "jour" (le vrai jour de la semaine) — utilise-le tel quel.
 
-MAIL REÇU
+MAIL REÇU (LE PLUS RÉCENT — c'est à CELUI-CI que tu réponds)
 De: ${from || "(inconnu)"}
 Objet: ${subject || "(sans objet)"}
 Corps:
 ${(body || "").slice(0, 4000)}
 
-CONTEXTE FAMILLE (si expéditeur connu):
+${historiqueFil.length > 0 ? `HISTORIQUE DU FIL (du plus ancien au plus récent — contexte de la conversation : demande initiale de la famille et réponses déjà envoyées par le centre. Combine ces informations avec le mail reçu : si la famille répond à une question qu'on lui a posée, rattache sa réponse à la demande d'origine, ne repars pas de zéro, et ne repose pas une question déjà répondue) :
+${JSON.stringify(historiqueFil)}
+
+` : ""}CONTEXTE FAMILLE (si expéditeur connu):
 ${familleContexte ? JSON.stringify(familleContexte) : "expéditeur inconnu de la base"}
 
 ACTIVITÉS RÉELLEMENT DISPONIBLES (à venir, places > 0):
