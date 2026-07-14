@@ -34,7 +34,7 @@ const DEFAULT_SUBCATEGORIES: Record<string, string[]> = {
 
 const defaultActivity: Partial<Activity> & { priceTTC?: number } = {
   type: "cours", title: "", description: "",
-  ageMin: 3, ageMax: null, galopRequired: null,
+  ageMin: 3, ageMax: null, galopRequired: null, conditionsAcces: "",
   priceHT: 0, tvaTaux: 5.5, maxPlaces: 8,
   schedule: "", seasonPeriod: "", active: true, articles: [], priceTTC: 0,
 };
@@ -261,6 +261,16 @@ function ActivityForm({ initial, subcatOptions, onSave, onCancel }: {
             <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Places max</label>
             <input type="number" value={form.maxPlaces || 8} onChange={e => update("maxPlaces", parseInt(e.target.value))} className={inp} />
           </div>
+        </div>
+
+        {/* Conditions d'accès — lues par l'assistant email */}
+        <div>
+          <label className="font-body text-xs font-semibold text-blue-800 block mb-1">
+            Conditions d'accès <span className="font-normal text-slate-400">(niveau, âge, prérequis — utilisé par l'assistant email)</span>
+          </label>
+          <textarea value={form.conditionsAcces || ""} onChange={e => update("conditionsAcces", e.target.value)} rows={2}
+            className={`${inp} resize-y`}
+            placeholder="Ex : Galop 2 mini et 10 ans si maîtrise du trot enlevé, ou sans galop mais trot enlevé maîtrisé. Non remboursable si niveau insuffisant." />
         </div>
 
         {/* Prix + TVA */}
