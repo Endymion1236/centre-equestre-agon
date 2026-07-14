@@ -589,6 +589,36 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
       {/* ── Divers ── */}
       {tab === "divers" && (
         <div className="flex flex-col gap-4">
+          {/* Consentement offres par email (RGPD — enfants mineurs, consentement parental traçable) */}
+          <div className="px-3 py-2.5 bg-white rounded-lg border border-gray-100">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="font-body text-sm font-semibold text-blue-950">Offres par email (last-minute, actualités)</div>
+                <div className="font-body text-[11px] text-slate-500">
+                  {family.consentementMarketing
+                    ? `Consentement donné${family.consentementMarketingDate?.seconds ? ` le ${new Date(family.consentementMarketingDate.seconds * 1000).toLocaleDateString("fr-FR")}` : ""}${family.consentementMarketingSource ? ` (${family.consentementMarketingSource})` : ""}`
+                    : "Pas de consentement — la famille ne recevra aucune offre ciblée."}
+                </div>
+              </div>
+              <button
+                onClick={async () => {
+                  const next = !family.consentementMarketing;
+                  if (next && !confirm("Confirmer que cette famille a donné son accord (oral, mail…) pour recevoir des offres par email ?")) return;
+                  await updateDoc(doc(db, "families", fid), {
+                    consentementMarketing: next,
+                    consentementMarketingDate: serverTimestamp(),
+                    consentementMarketingSource: next ? "admin" : "retrait admin",
+                  });
+                  fetchFamilies();
+                }}
+                className={`shrink-0 rounded-full px-3 py-1 font-body text-[11px] font-bold border-none cursor-pointer ${
+                  family.consentementMarketing ? "bg-green-600 text-white" : "bg-slate-200 text-slate-600"
+                }`}
+              >
+                {family.consentementMarketing ? "Activé ✓" : "Désactivé"}
+              </button>
+            </div>
+          </div>
           {(family.linkedChildren || []).length > 0 && (
             <div>
               <div className="font-body text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1"><UserPlus size={10} /> Cavaliers liés</div>
