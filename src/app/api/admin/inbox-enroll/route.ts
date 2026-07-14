@@ -19,8 +19,10 @@ import { verifyAuth } from "@/lib/api-auth";
 //     (le lien de paiement / la déclaration d'encaissement, c'est l'étape 3).
 //     Mutation réversible : l'admin peut retirer l'entrée du créneau.
 //
-// Body    : { creneauId: string, childId: string, familyId: string }
-// Réponse : { ok: true, status: "enrolled" | "already" }
+// Body    : { creneauIds: string[], childId: string, familyId: string }
+//           (rétro-compat : creneauId string unique accepté)
+//           Un stage semaine = TOUS ses creneauIds → inscription tout-ou-rien.
+// Réponse : { ok: true, status: "enrolled" | "already", enrolledCount }
 //           ou { error, status: "full" | "missing" | "notOwned" | "badRequest" }
 // ═══════════════════════════════════════════════════════════════════
 
@@ -30,13 +32,23 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const creneauId = typeof body?.creneauId === "string" ? body.creneauId.trim() : "";
+    const creneauIds: string[] = Array.isArray(body?.creneauIds)
+      ? body.creneauIds.filter((x: any) => typeof x === "string" && x.trim()).map((x: string) => x.trim())
+      : typeof body?.creneauId === "string" && body.creneauId.trim()
+      ? [body.creneauId.trim()]
+      : [];
     const childId = typeof body?.childId === "string" ? body.childId.trim() : "";
     const familyId = typeof body?.familyId === "string" ? body.familyId.trim() : "";
 
-    if (!creneauId || !childId || !familyId) {
+    if (creneauIds.length === 0 || !childId || !familyId) {
       return NextResponse.json(
-        { error: "Paramètres manquants (creneauId, childId, familyId requis).", status: "badRequest" },
+        { error: "Paramètres manquants (creneauIds, childId, familyId requis).", status: "badRequest" },
+        { status: 400 }
+      );
+    }
+    if (creneauIds.length > 10) {
+      return NextResponse.json(
+        { error: "Trop de créneaux en une fois (max 10).", status: "badRequest" },
         { status: 400 }
       );
     }
@@ -58,43 +70,70 @@ export async function POST(req: NextRequest) {
     const childName = `${child.firstName || ""} ${child.lastName || ""}`.trim() || child.firstName || "";
     const familyName = family.parentName || "";
 
-    // ── 2. Transaction : capacité relue au dernier moment, pas de doublon ──
-    const creneauRef = adminDb.collection("creneaux").doc(creneauId);
+    // ── 2. Transaction TOUT-OU-RIEN sur l'ensemble des créneaux (semaine de
+    //    stage = tous les jours, ou un créneau simple). On vérifie TOUT avant
+    //    d'écrire quoi que ce soit : si un seul jour est complet → rien n'est
+    //    inscrit (pas d'inscription partielle qu'il faudrait facturer à tort).
+    const refs = creneauIds.map((cid) => adminDb.collection("creneaux").doc(cid));
     const outcome = await adminDb.runTransaction(async (tx) => {
-      const snap = await tx.get(creneauRef);
-      if (!snap.exists) return { status: "missing" as const };
-      const cr = snap.data() as any;
-      const list: any[] = Array.isArray(cr.enrolled) ? cr.enrolled : [];
+      const snaps = await Promise.all(refs.map((r) => tx.get(r)));
 
-      // Déjà inscrit → idempotent, rien à faire.
-      if (list.some((e: any) => e.childId === childId)) return { status: "already" as const };
+      // Phase 1 — vérifications (aucune écriture)
+      let toWrite = 0;
+      for (let i = 0; i < snaps.length; i++) {
+        const snap = snaps[i];
+        if (!snap.exists) return { status: "missing" as const, cid: creneauIds[i] };
+        const cr = snap.data() as any;
+        const list: any[] = Array.isArray(cr.enrolled) ? cr.enrolled : [];
+        if (list.some((e: any) => e.childId === childId)) continue; // déjà inscrit ce jour → ok
+        const maxP = typeof cr.maxPlaces === "number" ? cr.maxPlaces : Number.POSITIVE_INFINITY;
+        if (list.length >= maxP) return { status: "full" as const, cid: creneauIds[i] };
+        toWrite++;
+      }
+      if (toWrite === 0) return { status: "already" as const, count: 0 };
 
-      const maxP = typeof cr.maxPlaces === "number" ? cr.maxPlaces : Number.POSITIVE_INFINITY;
-      if (list.length >= maxP) return { status: "full" as const };
-
-      const entry = {
-        childId,
-        childName,
-        familyId,
-        familyName,
-        enrolledAt: new Date().toISOString(),
-        presence: null,
-        // Traçabilité : inscription issue de l'assistant boîte, non encore réglée.
-        source: "boite-ia",
-        enrolledBy: auth.email || auth.uid || "",
-      };
-      tx.update(creneauRef, { enrolled: [...list, entry], enrolledCount: list.length + 1 });
-      return { status: "enrolled" as const };
+      // Phase 2 — écritures (tout est validé)
+      const nowIso = new Date().toISOString();
+      for (let i = 0; i < snaps.length; i++) {
+        const cr = snaps[i].data() as any;
+        const list: any[] = Array.isArray(cr.enrolled) ? cr.enrolled : [];
+        if (list.some((e: any) => e.childId === childId)) continue;
+        const entry = {
+          childId,
+          childName,
+          familyId,
+          familyName,
+          enrolledAt: nowIso,
+          presence: null,
+          // Traçabilité : inscription issue de l'assistant boîte, non encore réglée.
+          source: "boite-ia",
+          enrolledBy: auth.email || auth.uid || "",
+        };
+        tx.update(refs[i], { enrolled: [...list, entry], enrolledCount: list.length + 1 });
+      }
+      return { status: "enrolled" as const, count: toWrite };
     });
 
     if (outcome.status === "missing") {
-      return NextResponse.json({ error: "Créneau introuvable ou supprimé.", status: "missing" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Un des créneaux est introuvable ou supprimé.", status: "missing", cid: outcome.cid },
+        { status: 404 }
+      );
     }
     if (outcome.status === "full") {
-      return NextResponse.json({ error: "Créneau complet.", status: "full" }, { status: 409 });
+      return NextResponse.json(
+        { error: creneauIds.length > 1 ? "Un jour de la semaine est complet — rien n'a été inscrit." : "Créneau complet.", status: "full", cid: outcome.cid },
+        { status: 409 }
+      );
     }
     // "enrolled" ou "already" → succès
-    return NextResponse.json({ ok: true, status: outcome.status, childName, creneauId });
+    return NextResponse.json({
+      ok: true,
+      status: outcome.status,
+      childName,
+      creneauIds,
+      enrolledCount: outcome.count ?? 0,
+    });
   } catch (e: any) {
     console.error("[inbox-enroll]", e);
     return NextResponse.json({ error: e?.message || "Erreur serveur", status: "error" }, { status: 500 });

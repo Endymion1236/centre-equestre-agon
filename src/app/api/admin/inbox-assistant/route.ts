@@ -155,6 +155,8 @@ export async function POST(req: NextRequest) {
           galopRequired: elig.galopRequired ?? null,
           conditionsAcces: elig.conditionsAcces ?? null,
           moniteur: c.monitor || "",
+          // Clé de regroupement semaine (même logique que la page réservation famille)
+          stageKey: (c.stageGroupId || c.activityId || "") + "",
         });
         creneauMap.set(doc.id, {
           titre: c.activityTitle || "",
@@ -173,8 +175,59 @@ export async function POST(req: NextRequest) {
     // familles réservent, peu nombreux), puis on complète avec un échantillon des
     // autres activités réparti sur les dates (pas seulement les plus proches).
     const isStageType = (t: string) => t === "stage" || t === "stage_journee";
-    const stagesDispo = available.filter((a) => isStageType(a.type));
+    const stagesJours = available.filter((a) => isStageType(a.type));
     const autresDispo = available.filter((a) => !isStageType(a.type));
+
+    // ── Regroupement des stages en SEMAINES (même clé que la page réservation :
+    //    stageGroupId (lot de création) + lundi de la semaine). Un "stage" pour
+    //    une famille = la semaine entière ; le prix TTC du créneau est le prix
+    //    SEMAINE. On propose donc des GROUPES, jamais des jours isolés.
+    const mondayOf = (dateStr: string) => {
+      const d = new Date(dateStr + "T12:00:00Z");
+      d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+      return d.toISOString().slice(0, 10);
+    };
+    const groupMapTmp = new Map<string, any[]>();
+    stagesJours.forEach((a) => {
+      const key = `${a.stageKey}_${mondayOf(a.date)}`;
+      if (!groupMapTmp.has(key)) groupMapTmp.set(key, []);
+      groupMapTmp.get(key)!.push(a);
+    });
+    const stageGroupMap = new Map<string, any>(); // groupId → groupe autoritaire
+    const stagesDispo: any[] = [];
+    groupMapTmp.forEach((jours, key) => {
+      jours.sort((x, y) => (x.date < y.date ? -1 : 1));
+      const first = jours[0];
+      const last = jours[jours.length - 1];
+      // Places du groupe = minimum des places restantes sur les jours (il faut
+      // une place chaque jour pour inscrire la semaine).
+      const places = Math.min(...jours.map((j) => j.places));
+      const groupe = {
+        groupId: key,
+        titre: first.titre,
+        type: first.type,
+        nbJours: jours.length,
+        dateDebut: first.date,
+        dateFin: last.date,
+        periode:
+          jours.length > 1
+            ? `du ${jourFr(first.date)} ${labelFr(first.date).replace(/^\S+\s/, "")} au ${jourFr(last.date)} ${labelFr(last.date).replace(/^\S+\s/, "")}`
+            : labelFr(first.date),
+        horaire: first.horaire,
+        places,
+        prixSemaineTTC: first.prixTTC, // prix TTC du créneau = prix de la SEMAINE COMPLÈTE
+        demiJourneeOuverte: jours.some((j) => j.demiJourneeOuverte),
+        prixJour: jours.find((j) => j.prixJour)?.prixJour ?? null,
+        ageMin: first.ageMin,
+        ageMax: first.ageMax,
+        galopRequired: first.galopRequired,
+        conditionsAcces: first.conditionsAcces,
+        moniteur: first.moniteur,
+      };
+      stagesDispo.push(groupe);
+      stageGroupMap.set(key, { ...groupe, creneauIds: jours.map((j) => j.creneauId) });
+    });
+    stagesDispo.sort((x, y) => (x.dateDebut < y.dateDebut ? -1 : 1));
     // Échantillon d'"autres" réparti : 1 sur N pour couvrir toute la période.
     const stepAutres = Math.max(1, Math.ceil(autresDispo.length / 50));
     const autresEchantillon = autresDispo.filter((_, i) => i % stepAutres === 0).slice(0, 50);
@@ -227,7 +280,8 @@ Tu aides le gérant à traiter ses mails. Tu réponds UNIQUEMENT en JSON valide,
 Règles:
 - Ton chaleureux, professionnel, tutoiement évité avec les familles (vouvoiement), signé "Le Centre Équestre d'Agon-Coutainville".
 - Tu ne proposes QUE des prestations présentes dans la liste "activitesDispo" fournie (places réelles). Jamais d'invention de date, de tarif ou de place.
-- Pour CHAQUE suggestion, tu DOIS reprendre le "creneauId" exact de l'activité choisie dans la liste (copie-le tel quel, ne l'invente jamais).
+- LES STAGES SONT DES SEMAINES : chaque stage fourni est un GROUPE couvrant "nbJours" jours ("periode" = du premier au dernier jour). Son "prixSemaineTTC" est le prix de la SEMAINE COMPLÈTE (les nbJours jours), PAS un prix par jour. Dans le brouillon, écris toujours le prix sans ambiguïté : "175 € la semaine complète (5 jours)". Si "demiJourneeOuverte"=true, précise qu'une formule à la journée existe (avec "prixJour" si fourni, sinon "tarif journée sur demande"). Ne propose JAMAIS deux fois la même semaine de stage.
+- Pour CHAQUE suggestion : si c'est un STAGE, reprends son "groupId" exact (copie-le tel quel) et laisse creneauId à null ; si c'est une autre activité (cours, promenade…), reprends son "creneauId" exact et laisse groupId à null. N'invente jamais un identifiant.
 - Si la demande vise un enfant précis de la famille connue, ajoute son "childId" (repris depuis le contexte famille). Sinon laisse childId à null.
 - Si une activité, choisis-la en fonction de la demande et, si connu, de l'âge/galop de l'enfant (souvent indiqués dans le titre, ex "Stage 3/4 ans", "galop d'argent 8/10 ans").
 - Pour le niveau/galop : base-toi sur le contexte famille, mais reste PRUDENT — formule "d'après nos informations, <enfant> est <galop>" et invite à confirmer le niveau. N'affirme jamais catégoriquement "correspond parfaitement à son niveau" (la fiche peut être à jour ou non).
@@ -243,7 +297,7 @@ Format JSON attendu:
   "classification": "info" | "inscription" | "administratif" | "autre",
   "resume": "1-2 phrases",
   "brouillon": "corps du mail de réponse en français",
-  "suggestions": [ { "creneauId": "...", "childId": "..." | null, "pourquoi": "raison courte" } ]
+  "suggestions": [ { "groupId": "..." | null, "creneauId": "..." | null, "childId": "..." | null, "pourquoi": "raison courte" } ]
 }`;
 
     const we = prochainWeekend(today);
@@ -293,41 +347,73 @@ ${JSON.stringify(activitesDispo)}`;
     // repris de la source. `actionable` = prêt pour une future inscription.
     const rawSuggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 3) : [];
     const suggestions = rawSuggestions.map((s: any) => {
-      const cr = s.creneauId ? creneauMap.get(s.creneauId) : null;
       const childId = s.childId && childrenMap.has(s.childId) ? s.childId : null;
       const childName = childId ? childrenMap.get(childId) || null : null;
-      const placeOk = !!cr && cr.spots > 0;
 
-      // Contrôle d'âge serveur (si un enfant est ciblé et le créneau a un âge min/max).
-      let ageOk = true;
-      let ageNote: string | null = null;
-      if (cr && childId) {
+      // Contrôle d'âge serveur (mutualisé groupe/créneau).
+      const checkAge = (ageMin: any, ageMax: any): { ok: boolean; note: string | null } => {
+        if (!childId) return { ok: true, note: null };
         const age = childElig.get(childId)?.age ?? null;
-        if (age !== null) {
-          if (typeof cr.ageMin === "number" && age < cr.ageMin) {
-            ageOk = false;
-            ageNote = `réservé dès ${cr.ageMin} ans`;
-          } else if (typeof cr.ageMax === "number" && age > cr.ageMax) {
-            ageOk = false;
-            ageNote = `réservé jusqu'à ${cr.ageMax} ans`;
-          }
-        }
+        if (age === null) return { ok: true, note: null };
+        if (typeof ageMin === "number" && age < ageMin) return { ok: false, note: `réservé dès ${ageMin} ans` };
+        if (typeof ageMax === "number" && age > ageMax) return { ok: false, note: `réservé jusqu'à ${ageMax} ans` };
+        return { ok: true, note: null };
+      };
+
+      // ── Cas STAGE SEMAINE (groupId) : tous les jours du groupe, prix semaine ──
+      if (s.groupId && stageGroupMap.has(s.groupId)) {
+        const g = stageGroupMap.get(s.groupId)!;
+        const placeOk = g.places > 0;
+        const { ok: ageOk, note: ageNote } = checkAge(g.ageMin, g.ageMax);
+        const actionable = placeOk && ageOk;
+        return {
+          groupId: s.groupId,
+          creneauId: null,
+          creneauIds: g.creneauIds, // TOUS les jours de la semaine (inscription entière)
+          titre: g.titre,
+          type: g.type,
+          date: g.dateDebut,
+          dateFin: g.dateFin,
+          periode: g.periode,
+          nbJours: g.nbJours,
+          horaire: g.horaire,
+          places: g.places,
+          prixTTC: g.prixSemaineTTC, // prix AUTORITAIRE de la SEMAINE
+          prixMode: "semaine",
+          prixJour: g.prixJour,
+          childId,
+          childName,
+          pourquoi: s.pourquoi || "",
+          actionable,
+          note: !placeOk ? "complet" : !ageOk ? ageNote : null,
+        };
       }
 
+      // ── Cas activité simple (creneauId) : comportement existant ──
+      const cr = s.creneauId ? creneauMap.get(s.creneauId) : null;
+      const placeOk = !!cr && cr.spots > 0;
+      const { ok: ageOk, note: ageNote } = cr ? checkAge(cr.ageMin, cr.ageMax) : { ok: true, note: null };
       const actionable = placeOk && ageOk;
       return {
+        groupId: null,
         creneauId: cr ? s.creneauId : null,
+        creneauIds: cr ? [s.creneauId] : [],
         titre: cr ? cr.titre : "",
         type: cr ? cr.type : null,
         date: cr ? cr.date : null,
+        dateFin: null,
+        periode: null,
+        nbJours: 1,
         horaire: cr ? cr.horaire : null,
         places: cr ? cr.spots : 0,
         prixTTC: cr ? cr.prixTTC : null, // prix AUTORITAIRE (source créneau)
+        prixMode: "unitaire",
+        prixJour: null,
         childId,
         childName,
         pourquoi: s.pourquoi || "",
         actionable,
-        note: !cr ? "créneau introuvable/plus dispo" : !placeOk ? "complet" : !ageOk ? ageNote : null,
+        note: !cr ? "créneau/stage introuvable ou plus dispo" : !placeOk ? "complet" : !ageOk ? ageNote : null,
       };
     });
 
