@@ -630,6 +630,8 @@ export default function BoiteAssistantPage() {
                             typeof s.prixTTC === "number"
                               ? s.prixMode === "semaine"
                                 ? `${s.prixTTC} € la semaine (${s.nbJours} jour${s.nbJours > 1 ? "s" : ""})`
+                                : s.prixMode === "jours"
+                                ? `${s.prixTTC} € les ${s.nbJours} jour${s.nbJours > 1 ? "s" : ""} (sur ${s.nbJoursSemaine} du stage)`
                                 : `${s.prixTTC} €`
                               : null,
                           ]
@@ -691,7 +693,13 @@ export default function BoiteAssistantPage() {
                                 {enrollState[i]?.busy ? <Loader2 size={12} className="animate-spin" /> : <UserPlus size={12} />}
                                 {enrollState[i]?.busy
                                   ? "Inscription…"
-                                  : `Inscrire${effChildName ? ` ${effChildName}` : ""}${s.prixMode === "semaine" && s.nbJours > 1 ? ` · semaine complète (${s.nbJours} j)` : ""}`}
+                                  : `Inscrire${effChildName ? ` ${effChildName}` : ""}${
+                                      s.prixMode === "semaine" && s.nbJours > 1
+                                        ? ` · semaine complète (${s.nbJours} j)`
+                                        : s.prixMode === "jours"
+                                        ? ` · ${s.nbJours} jour${s.nbJours > 1 ? "s" : ""} seulement`
+                                        : ""
+                                    }`}
                               </button>
                             )}
                             {enrollState[i]?.error && (
