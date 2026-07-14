@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { authFetch } from "@/lib/auth-fetch";
-import { Loader2, Mail, Sparkles, Calendar, Copy, Check, Inbox, RefreshCw, Send, Trash2, Forward } from "lucide-react";
+import { Loader2, Mail, Sparkles, Calendar, Copy, Check, Inbox, RefreshCw, Send, Trash2, Forward, UserPlus } from "lucide-react";
 
 const CLASSIF: Record<string, { label: string; cls: string }> = {
   inscription: { label: "Demande d'inscription", cls: "bg-green-50 text-green-700" },
@@ -28,6 +28,8 @@ export default function BoiteAssistantPage() {
   const [err, setErr] = useState("");
   const [draft, setDraft] = useState("");
   const [copied, setCopied] = useState(false);
+  // Suivi de l'inscription 1-clic par suggestion (index → état)
+  const [enrollState, setEnrollState] = useState<Record<number, { busy?: boolean; done?: boolean; error?: string }>>({});
 
   // ── Gmail ──
   const [gmail, setGmail] = useState<{
@@ -190,6 +192,7 @@ export default function BoiteAssistantPage() {
       } else {
         setRes(d);
         setDraft(d.brouillon || "");
+        setEnrollState({});
       }
     } catch {
       setErr("Erreur réseau");
@@ -201,6 +204,27 @@ export default function BoiteAssistantPage() {
     navigator.clipboard.writeText(draft);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  };
+
+  // ── Inscription 1-clic (étape 2) : le serveur re-vérifie tout ──
+  const enrollSuggestion = async (s: any, i: number) => {
+    if (!s?.creneauId || !s?.childId || !res?.familyId) return;
+    setEnrollState((prev) => ({ ...prev, [i]: { busy: true } }));
+    try {
+      const r = await authFetch("/api/admin/inbox-enroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ creneauId: s.creneauId, childId: s.childId, familyId: res.familyId }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setEnrollState((prev) => ({ ...prev, [i]: { error: d.error || "Échec de l'inscription" } }));
+      } else {
+        setEnrollState((prev) => ({ ...prev, [i]: { done: true } }));
+      }
+    } catch {
+      setEnrollState((prev) => ({ ...prev, [i]: { error: "Erreur réseau" } }));
+    }
   };
 
   const c = res ? CLASSIF[res.classification] || CLASSIF.autre : null;
@@ -424,6 +448,31 @@ export default function BoiteAssistantPage() {
                           )}
                         </div>
                         {s.pourquoi && <div className="mt-1 font-body text-[11px] italic text-slate-400">{s.pourquoi}</div>}
+                        {/* Étape 2 — inscription 1-clic (uniquement si actionnable + enfant identifié) */}
+                        {s.actionable && s.childId && res.familyId && (
+                          <div className="mt-2">
+                            {enrollState[i]?.done ? (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-green-600 px-2.5 py-1 font-body text-[11px] font-semibold text-white">
+                                <Check size={12} /> Inscrit{s.childName ? ` · ${s.childName}` : ""}
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => enrollSuggestion(s, i)}
+                                disabled={enrollState[i]?.busy}
+                                className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 font-body text-[11px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                              >
+                                {enrollState[i]?.busy ? <Loader2 size={12} className="animate-spin" /> : <UserPlus size={12} />}
+                                {enrollState[i]?.busy ? "Inscription…" : `Inscrire${s.childName ? ` ${s.childName}` : ""}`}
+                              </button>
+                            )}
+                            {enrollState[i]?.error && (
+                              <span className="ml-2 font-body text-[11px] font-semibold text-red-600">{enrollState[i]?.error}</span>
+                            )}
+                            {enrollState[i]?.done && (
+                              <span className="ml-2 font-body text-[11px] text-slate-400">Paiement à traiter séparément (étape suivante).</span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
