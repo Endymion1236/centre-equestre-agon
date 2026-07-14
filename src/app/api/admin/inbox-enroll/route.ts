@@ -282,6 +282,7 @@ export async function POST(req: NextRequest) {
             updatedAt: FieldValue.serverTimestamp(),
           });
           orderInfo = { orderId: existing.orderId || openOrder.id, totalTTC: mergedTotal, merged: true };
+          console.log(`[inbox-enroll] commande FUSIONNÉE ${orderInfo.orderId} — total ${mergedTotal} € (famille ${familyId}, enfant ${childName})`);
         } else {
           const famEmail = (family.parentEmail || "").trim();
           const showAcompte = isStage && priceTTC > ACOMPTE_PAR_ENFANT;
@@ -306,6 +307,7 @@ export async function POST(req: NextRequest) {
             date: FieldValue.serverTimestamp(),
           });
           orderInfo = { orderId, totalTTC: priceTTC, merged: false };
+          console.log(`[inbox-enroll] commande CRÉÉE ${orderId} — ${priceTTC} € (famille ${familyId}, enfant ${childName}, ${jours.length} jour(s)${modeJours ? ` sur ${nbJoursSemaine}` : ""})`);
         }
       } catch (e) {
         // L'inscription est faite ; la commande a échoué → on le DIT à l'admin

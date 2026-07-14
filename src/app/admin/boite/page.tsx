@@ -648,9 +648,15 @@ export default function BoiteAssistantPage() {
                             </span>
                           )}
                           {s.actionable ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 font-body text-[10px] font-semibold text-green-700">
-                              <Check size={10} /> Vérifié · place dispo
-                            </span>
+                            s.childId ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 font-body text-[10px] font-semibold text-green-700">
+                                <Check size={10} /> Vérifié · place dispo
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 font-body text-[10px] font-semibold text-sky-600">
+                                <Check size={10} /> Place dispo · éligibilité à confirmer
+                              </span>
+                            )
                           ) : (
                             <span className="rounded-full bg-amber-50 px-2 py-0.5 font-body text-[10px] font-semibold text-amber-600">
                               {s.note || "non disponible"}
