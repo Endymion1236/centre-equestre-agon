@@ -96,6 +96,25 @@ export async function POST(req: NextRequest) {
 
     const available: any[] = [];
     const creneauMap = new Map<string, any>(); // id → données serveur autoritaires
+
+    // Critères d'éligibilité par activité (ageMin/ageMax/galopRequired), saisis
+    // dans /admin/activites. Reliés au créneau par le titre d'activité.
+    const eligByTitle = new Map<string, any>();
+    try {
+      const actSnap = await adminDb.collection("activities").get();
+      actSnap.forEach((d) => {
+        const a = d.data() as any;
+        if (a.title) {
+          eligByTitle.set(String(a.title).trim().toLowerCase(), {
+            ageMin: typeof a.ageMin === "number" ? a.ageMin : null,
+            ageMax: typeof a.ageMax === "number" ? a.ageMax : null,
+            galopRequired: a.galopRequired || null,
+          });
+        }
+      });
+    } catch {
+      /* pas d'activités → pas de critères */
+    }
     creSnap.forEach((doc) => {
       const c = doc.data() as any;
       const enrolledCount = Array.isArray(c.enrolled) ? c.enrolled.length : 0;
@@ -109,6 +128,7 @@ export async function POST(req: NextRequest) {
       if (spots > 0) {
         const isStage = (c.activityType || "") === "stage" || (c.activityType || "") === "stage_journee";
         const demiJourneeOuverte = isStage && !!c.allowDayBooking;
+        const elig = eligByTitle.get(String(c.activityTitle || "").trim().toLowerCase()) || {};
         available.push({
           creneauId: doc.id,
           titre: c.activityTitle || "",
@@ -120,6 +140,9 @@ export async function POST(req: NextRequest) {
           prixTTC,
           demiJourneeOuverte,
           prixJour: demiJourneeOuverte && typeof c.priceTTCDay === "number" && c.priceTTCDay > 0 ? c.priceTTCDay : null,
+          ageMin: elig.ageMin ?? null,
+          ageMax: elig.ageMax ?? null,
+          galopRequired: elig.galopRequired ?? null,
           moniteur: c.monitor || "",
         });
         creneauMap.set(doc.id, {
@@ -129,6 +152,8 @@ export async function POST(req: NextRequest) {
           horaire: [c.startTime, c.endTime].filter(Boolean).join("-"),
           spots,
           prixTTC,
+          ageMin: elig.ageMin ?? null,
+          ageMax: elig.ageMax ?? null,
         });
       }
     });
@@ -139,6 +164,7 @@ export async function POST(req: NextRequest) {
     let familleContexte: any = null;
     let familyId: string | null = null;
     const childrenMap = new Map<string, string>(); // childId → prénom (validation)
+    const childElig = new Map<string, { age: number | null; galop: string | null }>();
     const fromEmail = (from || "").trim().toLowerCase();
     if (fromEmail) {
       try {
@@ -151,7 +177,13 @@ export async function POST(req: NextRequest) {
           familyId = famSnap.docs[0].id;
           const f = famSnap.docs[0].data() as any;
           (f.children || []).forEach((ch: any) => {
-            if (ch.id) childrenMap.set(ch.id, ch.firstName || "");
+            if (ch.id) {
+              childrenMap.set(ch.id, ch.firstName || "");
+              childElig.set(ch.id, {
+                age: ageFrom(ch.birthDate),
+                galop: ch.galopLevel && ch.galopLevel !== "—" ? ch.galopLevel : null,
+              });
+            }
           });
           familleContexte = {
             parent: f.parentName || "",
@@ -181,11 +213,7 @@ Règles:
 - Pour le niveau/galop : base-toi sur le contexte famille, mais reste PRUDENT — formule "d'après nos informations, <enfant> est <galop>" et invite à confirmer le niveau. N'affirme jamais catégoriquement "correspond parfaitement à son niveau" (la fiche peut être à jour ou non).
 - Équivalence des niveaux (galops "poney" ↔ numérotés, MÊME progression, à respecter strictement) : Galop de Bronze = débutant/initiation ; Galop d'Argent = Galop 1 ; Galop d'Or = Galop 2 ; puis Galop 3, 4, 5, 6, 7 (numérotés). Choisis un stage du MÊME niveau que l'enfant (ex : enfant Galop d'Or = Galop 2 → stage "Galop d'or" ou "Galop 2" ; enfant Galop d'Argent = Galop 1 → stage "Galop d'argent" ou "Galop 1" ; débutant → stage "Bronze"/initiation). JAMAIS un niveau inférieur ni supérieur au sien. Si aucun stage du bon niveau n'est disponible, dis-le honnêtement et propose de confirmer, plutôt que de rétrograder.
 - Dates : le vrai jour de chaque activité est dans son champ "jour" — NE LE RECALCULE JAMAIS, reprends-le tel quel. "ce week-end" = le samedi et dimanche fournis (CE WEEK-END) ; "cette semaine" = la semaine (lundi→dimanche) contenant la date du jour ; "demain" = jour+1. Ne propose comme "ce week-end" que des activités dont la date correspond au samedi/dimanche fournis ; sinon précise honnêtement la vraie date.
-- ÉLIGIBILITÉ des promenades/sorties extérieures (vérifie l'âge ET le galop de l'enfant AVANT de proposer, d'après le contexte famille) :
-  • Promenade "confirmée" → réservée aux Galop 3 ou 4 ET 12 ans minimum.
-  • Promenade/sortie "débutant" ou "débrouillé" → 12 ans minimum.
-  • "Rando jeunes" → adaptée aux plus jeunes (pas de minimum d'âge élevé).
-  Ne propose JAMAIS une activité dont l'enfant ne remplit pas les conditions (âge OU niveau). Exemple : enfant de 9 ans, Galop 2 → NON éligible aux promenades confirmées (âge + niveau) NI aux promenades débutant/débrouillé (âge) → ne les propose pas du tout. Dans le doute sur une condition, demande à la famille plutôt que de proposer une activité potentiellement non autorisée.
+- ÉLIGIBILITÉ : chaque activité peut porter des critères "ageMin", "ageMax" et "galopRequired". Respecte-les STRICTEMENT — ne propose une activité à un enfant que si : son âge est dans [ageMin, ageMax] (bornes incluses ; null = pas de limite) ET son galop correspond au moins à "galopRequired" (utilise la table d'équivalence des galops ci-dessus). Ne propose JAMAIS une activité hors critères. Si les critères ne sont pas renseignés (null), fie-toi au titre (ex "Promenade confirmée" = plutôt niveau confirmé/12 ans+) et, dans le doute, demande à confirmer plutôt que de proposer à tort.
 - Demi-journées : certains stages sont ouverts à la journée (champ "demiJourneeOuverte"=true, avec éventuellement "prixJour"). Si la famille cherche une formule plus courte, tu peux mentionner que ce stage est aussi accessible à la journée. Ne le fais que si demiJourneeOuverte=true.
 - Si rien ne correspond ou si le mail n'est pas une demande de prestation, laisse "suggestions" vide.
 - Le brouillon est une PROPOSITION que le gérant relira et enverra lui-même. Ne promets jamais une inscription faite.
@@ -248,6 +276,24 @@ ${JSON.stringify(activitesDispo)}`;
       const childId = s.childId && childrenMap.has(s.childId) ? s.childId : null;
       const childName = childId ? childrenMap.get(childId) || null : null;
       const placeOk = !!cr && cr.spots > 0;
+
+      // Contrôle d'âge serveur (si un enfant est ciblé et le créneau a un âge min/max).
+      let ageOk = true;
+      let ageNote: string | null = null;
+      if (cr && childId) {
+        const age = childElig.get(childId)?.age ?? null;
+        if (age !== null) {
+          if (typeof cr.ageMin === "number" && age < cr.ageMin) {
+            ageOk = false;
+            ageNote = `réservé dès ${cr.ageMin} ans`;
+          } else if (typeof cr.ageMax === "number" && age > cr.ageMax) {
+            ageOk = false;
+            ageNote = `réservé jusqu'à ${cr.ageMax} ans`;
+          }
+        }
+      }
+
+      const actionable = placeOk && ageOk;
       return {
         creneauId: cr ? s.creneauId : null,
         titre: cr ? cr.titre : "",
@@ -259,8 +305,8 @@ ${JSON.stringify(activitesDispo)}`;
         childId,
         childName,
         pourquoi: s.pourquoi || "",
-        actionable: placeOk, // créneau réel + place dispo
-        note: !cr ? "créneau introuvable/plus dispo" : !placeOk ? "complet" : null,
+        actionable,
+        note: !cr ? "créneau introuvable/plus dispo" : !placeOk ? "complet" : !ageOk ? ageNote : null,
       };
     });
 
