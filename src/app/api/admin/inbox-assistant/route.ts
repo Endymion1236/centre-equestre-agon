@@ -522,6 +522,57 @@ ${JSON.stringify(activitesDispo)}`;
       // Pré-remplissage fiche nouvelle famille (expéditeur inconnu uniquement).
       // C'est une PROPOSITION que l'admin relit et corrige avant création.
       nouvelleFamille: !familleContexte && parsed.nouvelleFamille ? parsed.nouvelleFamille : null,
+      // Catalogue COMPLET des prestations disponibles (mêmes données
+      // autoritaires que les suggestions) pour l'ajout MANUEL par l'admin :
+      // stages en semaines + autres activités, sans enfant ciblé.
+      catalogue: [
+        ...Array.from(stageGroupMap.values()).map((g: any) => ({
+          groupId: g.groupId,
+          creneauId: null,
+          creneauIds: g.creneauIds,
+          titre: g.titre,
+          type: g.type,
+          date: g.dateDebut,
+          dateFin: g.dateFin,
+          periode: g.periode,
+          nbJours: g.nbJours,
+          nbJoursSemaine: g.nbJours,
+          horaire: g.horaire,
+          places: g.places,
+          prixTTC: g.prixSemaineTTC,
+          prixMode: "semaine",
+          prixJour: g.prixJour,
+          childId: null,
+          childName: null,
+          pourquoi: "",
+          actionable: g.places > 0,
+          note: g.places > 0 ? null : "complet",
+          manual: true,
+        })),
+        ...autresDispo.slice(0, 40).map((a: any) => ({
+          groupId: null,
+          creneauId: a.creneauId,
+          creneauIds: [a.creneauId],
+          titre: a.titre,
+          type: a.type,
+          date: a.date,
+          dateFin: null,
+          periode: `${a.jour} ${a.date}`,
+          nbJours: 1,
+          nbJoursSemaine: 1,
+          horaire: a.horaire,
+          places: a.places,
+          prixTTC: a.prixTTC,
+          prixMode: "unitaire",
+          prixJour: null,
+          childId: null,
+          childName: null,
+          pourquoi: "",
+          actionable: a.places > 0,
+          note: a.places > 0 ? null : "complet",
+          manual: true,
+        })),
+      ].sort((x: any, y: any) => (x.date < y.date ? -1 : 1)),
       nbActivitesDispo: activitesDispo.length,
     });
   } catch (e: any) {
