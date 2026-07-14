@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { authFetch } from "@/lib/auth-fetch";
-import { Loader2, Mail, Sparkles, Calendar, Copy, Check, Inbox, RefreshCw, Send } from "lucide-react";
+import { Loader2, Mail, Sparkles, Calendar, Copy, Check, Inbox, RefreshCw, Send, Trash2, Forward } from "lucide-react";
 
 const CLASSIF: Record<string, { label: string; cls: string }> = {
   inscription: { label: "Demande d'inscription", cls: "bg-green-50 text-green-700" },
@@ -39,6 +39,62 @@ export default function BoiteAssistantPage() {
   }>({ loading: true, configured: false, connected: false, messages: [], error: "" });
   const [connecting, setConnecting] = useState(false);
   const [replyMeta, setReplyMeta] = useState<{ threadId: string; messageId: string }>({ threadId: "", messageId: "" });
+  const [selectedId, setSelectedId] = useState<string>("");
+  const [mailboxBusy, setMailboxBusy] = useState<"" | "trash" | "forward">("");
+  const [mailboxMsg, setMailboxMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const deleteMail = async () => {
+    if (!selectedId || mailboxBusy) return;
+    if (!confirm("Mettre ce mail à la corbeille Gmail ?")) return;
+    setMailboxBusy("trash");
+    setMailboxMsg(null);
+    try {
+      const r = await authFetch("/api/admin/gmail/trash", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: selectedId }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        setGmail((g) => ({ ...g, messages: g.messages.filter((m: any) => m.id !== selectedId) }));
+        setFrom("");
+        setSubject("");
+        setBody("");
+        setSelectedId("");
+        setRes(null);
+        setMailboxMsg({ ok: true, text: "Mail mis à la corbeille ✓" });
+      } else {
+        setMailboxMsg({ ok: false, text: d.error || "Échec de la suppression" });
+      }
+    } catch {
+      setMailboxMsg({ ok: false, text: "Erreur réseau" });
+    }
+    setMailboxBusy("");
+  };
+
+  const forwardMail = async () => {
+    if (mailboxBusy) return;
+    const dest = window.prompt("Transférer ce mail à quelle adresse ?");
+    if (!dest || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dest.trim())) {
+      if (dest !== null) setMailboxMsg({ ok: false, text: "Adresse invalide" });
+      return;
+    }
+    setMailboxBusy("forward");
+    setMailboxMsg(null);
+    try {
+      const fwdBody = `---------- Message transféré ----------\nDe : ${from}\nObjet : ${subject}\n\n${body}`;
+      const r = await authFetch("/api/admin/gmail/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: dest.trim(), subject: `Fwd: ${subject}`, body: fwdBody }),
+      });
+      const d = await r.json();
+      setMailboxMsg(r.ok ? { ok: true, text: `Transféré à ${dest.trim()} ✓` } : { ok: false, text: d.error || "Échec du transfert" });
+    } catch {
+      setMailboxMsg({ ok: false, text: "Erreur réseau" });
+    }
+    setMailboxBusy("");
+  };
   const [sending, setSending] = useState(false);
   const [sendMsg, setSendMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -109,6 +165,8 @@ export default function BoiteAssistantPage() {
     setSubject(decodeHtml(m.subject || ""));
     setBody(decodeHtml(m.body || m.snippet || ""));
     setReplyMeta({ threadId: m.threadId || "", messageId: m.messageId || "" });
+    setSelectedId(m.id || "");
+    setMailboxMsg(null);
     setRes(null);
     setErr("");
     setSendMsg(null);
@@ -236,9 +294,34 @@ export default function BoiteAssistantPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Entrée */}
         <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-          <div className="mb-3 flex items-center gap-2 font-body text-sm font-semibold text-slate-700">
-            <Mail size={16} className="text-blue-500" /> Mail reçu
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 font-body text-sm font-semibold text-slate-700">
+              <Mail size={16} className="text-blue-500" /> Mail reçu
+            </div>
+            {selectedId && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={forwardMail}
+                  disabled={!!mailboxBusy}
+                  className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-body text-[11px] font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50"
+                >
+                  {mailboxBusy === "forward" ? <Loader2 size={12} className="animate-spin" /> : <Forward size={12} />} Transférer
+                </button>
+                <button
+                  onClick={deleteMail}
+                  disabled={!!mailboxBusy}
+                  className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-1 font-body text-[11px] font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50"
+                >
+                  {mailboxBusy === "trash" ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Supprimer
+                </button>
+              </div>
+            )}
           </div>
+          {mailboxMsg && (
+            <p className={`mb-2 font-body text-xs font-semibold ${mailboxMsg.ok ? "text-green-600" : "text-red-500"}`}>
+              {mailboxMsg.text}
+            </p>
+          )}
           <input
             value={from}
             onChange={(e) => setFrom(e.target.value)}
