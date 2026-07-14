@@ -296,6 +296,7 @@ Règles:
 - Tu ne proposes QUE des prestations présentes dans la liste "activitesDispo" fournie (places réelles). Jamais d'invention de date, de tarif ou de place.
 - LES STAGES SONT DES SEMAINES : chaque stage fourni est un GROUPE couvrant "nbJours" jours ("periode" = du premier au dernier jour, détail dans "joursDates"). Son "prixSemaineTTC" est le prix de la SEMAINE COMPLÈTE (les nbJours jours), PAS un prix par jour. Dans le brouillon, écris toujours le prix sans ambiguïté : "175 € la semaine complète (5 jours)". Si "demiJourneeOuverte"=true, précise qu'une formule à la journée existe (avec "prixJour" si fourni, sinon "tarif journée sur demande"). Ne propose JAMAIS deux fois la même semaine de stage.
 - DEMANDE "À PARTIR DU <date>" (ou toute contrainte de dates) : une semaine de stage qui COMMENCE AVANT la date demandée ne doit JAMAIS être proposée en semaine complète (la famille raterait des jours déjà passés pour elle). Deux cas : (a) si "demiJourneeOuverte"=true, propose-la en MODE JOURS avec uniquement les jours ≥ la date demandée — mets "mode":"jours" et "jours":[dates choisies parmi joursDates] dans la suggestion, et dans le brouillon annonce clairement "possible à la journée : jeudi 30 et vendredi 31 (X €/jour)" ; (b) sinon, ne la propose pas et passe à la semaine suivante qui commence à ou après la date demandée (mode "semaine"). Pour une semaine complète compatible avec les dates, mets "mode":"semaine" et laisse "jours" à null.
+- ÉVENTAIL : propose jusqu'à 5 suggestions couvrant les options pertinentes, pas une seule piste. Pour une demande de stage "à partir du <date>" : la semaine entamée en mode jours (si ouverte à la journée) ET la ou les semaines complètes suivantes du bon niveau. Si la famille évoque aussi promenades/randos ou reste ouverte ("stage ou promenade"), ajoute la ou les alternatives éligibles (promenade, rando) qui correspondent. Ne gonfle pas artificiellement : uniquement des options réellement pertinentes et éligibles.
 - Pour CHAQUE suggestion : si c'est un STAGE, reprends son "groupId" exact (copie-le tel quel) et laisse creneauId à null ; si c'est une autre activité (cours, promenade…), reprends son "creneauId" exact et laisse groupId à null. N'invente jamais un identifiant.
 - Si la demande vise un enfant précis de la famille connue, ajoute son "childId" (repris depuis le contexte famille). Sinon laisse childId à null.
 - Si une activité, choisis-la en fonction de la demande et, si connu, de l'âge/galop de l'enfant (souvent indiqués dans le titre, ex "Stage 3/4 ans", "galop d'argent 8/10 ans").
@@ -337,7 +338,7 @@ ${JSON.stringify(activitesDispo)}`;
 
     const message = await client.messages.create({
       model: "claude-sonnet-4-5",
-      max_tokens: 1500,
+      max_tokens: 2000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     });
@@ -362,7 +363,7 @@ ${JSON.stringify(activitesDispo)}`;
     // Pour chaque suggestion : le créneau doit exister et avoir encore de la
     // place ; l'enfant (si fourni) doit appartenir à la famille ; le prix est
     // repris de la source. `actionable` = prêt pour une future inscription.
-    const rawSuggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 3) : [];
+    const rawSuggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 5) : [];
     const suggestions = rawSuggestions.map((s: any) => {
       const childId = s.childId && childrenMap.has(s.childId) ? s.childId : null;
       const childName = childId ? childrenMap.get(childId) || null : null;
