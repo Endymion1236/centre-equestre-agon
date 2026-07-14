@@ -29,7 +29,7 @@ export default function BoiteAssistantPage() {
   const [draft, setDraft] = useState("");
   const [copied, setCopied] = useState(false);
   // Suivi de l'inscription 1-clic par suggestion (index → état)
-  const [enrollState, setEnrollState] = useState<Record<number, { busy?: boolean; done?: boolean; error?: string }>>({});
+  const [enrollState, setEnrollState] = useState<Record<number, { busy?: boolean; done?: boolean; error?: string; orderMsg?: string; orderWarn?: string }>>({});
 
   // ── Gmail ──
   const [gmail, setGmail] = useState<{
@@ -222,7 +222,14 @@ export default function BoiteAssistantPage() {
       if (!r.ok) {
         setEnrollState((prev) => ({ ...prev, [i]: { error: d.error || "Échec de l'inscription" } }));
       } else {
-        setEnrollState((prev) => ({ ...prev, [i]: { done: true } }));
+        const orderMsg = d.order
+          ? d.order.merged
+            ? `Ajouté à la commande ${d.order.orderId} — total ${d.order.totalTTC} €`
+            : `Commande ${d.order.orderId} créée — ${d.order.totalTTC} €`
+          : d.status === "already"
+          ? "Déjà inscrit — commande inchangée"
+          : "";
+        setEnrollState((prev) => ({ ...prev, [i]: { done: true, orderMsg, orderWarn: d.orderError || "" } }));
       }
     } catch {
       setEnrollState((prev) => ({ ...prev, [i]: { error: "Erreur réseau" } }));
@@ -484,8 +491,13 @@ export default function BoiteAssistantPage() {
                             {enrollState[i]?.error && (
                               <span className="ml-2 font-body text-[11px] font-semibold text-red-600">{enrollState[i]?.error}</span>
                             )}
-                            {enrollState[i]?.done && (
-                              <span className="ml-2 font-body text-[11px] text-slate-400">Paiement à traiter séparément (étape suivante).</span>
+                            {enrollState[i]?.done && enrollState[i]?.orderWarn && (
+                              <span className="ml-2 font-body text-[11px] font-semibold text-amber-600">{enrollState[i]?.orderWarn}</span>
+                            )}
+                            {enrollState[i]?.done && !enrollState[i]?.orderWarn && enrollState[i]?.orderMsg && (
+                              <span className="ml-2 font-body text-[11px] text-slate-500">
+                                {enrollState[i]?.orderMsg} · à régler dans Paiements (aucun lien envoyé)
+                              </span>
                             )}
                           </div>
                         )}
