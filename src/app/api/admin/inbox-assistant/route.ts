@@ -109,6 +109,7 @@ export async function POST(req: NextRequest) {
             ageMin: typeof a.ageMin === "number" ? a.ageMin : null,
             ageMax: typeof a.ageMax === "number" ? a.ageMax : null,
             galopRequired: a.galopRequired || null,
+            conditionsAcces: a.conditionsAcces || null,
           });
         }
       });
@@ -143,6 +144,7 @@ export async function POST(req: NextRequest) {
           ageMin: elig.ageMin ?? null,
           ageMax: elig.ageMax ?? null,
           galopRequired: elig.galopRequired ?? null,
+          conditionsAcces: elig.conditionsAcces ?? null,
           moniteur: c.monitor || "",
         });
         creneauMap.set(doc.id, {
@@ -213,7 +215,7 @@ Règles:
 - Pour le niveau/galop : base-toi sur le contexte famille, mais reste PRUDENT — formule "d'après nos informations, <enfant> est <galop>" et invite à confirmer le niveau. N'affirme jamais catégoriquement "correspond parfaitement à son niveau" (la fiche peut être à jour ou non).
 - Équivalence des niveaux (galops "poney" ↔ numérotés, MÊME progression, à respecter strictement) : Galop de Bronze = débutant/initiation ; Galop d'Argent = Galop 1 ; Galop d'Or = Galop 2 ; puis Galop 3, 4, 5, 6, 7 (numérotés). Choisis un stage du MÊME niveau que l'enfant (ex : enfant Galop d'Or = Galop 2 → stage "Galop d'or" ou "Galop 2" ; enfant Galop d'Argent = Galop 1 → stage "Galop d'argent" ou "Galop 1" ; débutant → stage "Bronze"/initiation). JAMAIS un niveau inférieur ni supérieur au sien. Si aucun stage du bon niveau n'est disponible, dis-le honnêtement et propose de confirmer, plutôt que de rétrograder.
 - Dates : le vrai jour de chaque activité est dans son champ "jour" — NE LE RECALCULE JAMAIS, reprends-le tel quel. "ce week-end" = le samedi et dimanche fournis (CE WEEK-END) ; "cette semaine" = la semaine (lundi→dimanche) contenant la date du jour ; "demain" = jour+1. Ne propose comme "ce week-end" que des activités dont la date correspond au samedi/dimanche fournis ; sinon précise honnêtement la vraie date.
-- ÉLIGIBILITÉ : chaque activité peut porter des critères "ageMin", "ageMax" et "galopRequired". Respecte-les STRICTEMENT — ne propose une activité à un enfant que si : son âge est dans [ageMin, ageMax] (bornes incluses ; null = pas de limite) ET son galop correspond au moins à "galopRequired" (utilise la table d'équivalence des galops ci-dessus). Ne propose JAMAIS une activité hors critères. Si les critères ne sont pas renseignés (null), fie-toi au titre (ex "Promenade confirmée" = plutôt niveau confirmé/12 ans+) et, dans le doute, demande à confirmer plutôt que de proposer à tort.
+- ÉLIGIBILITÉ : chaque activité peut porter des critères "ageMin", "ageMax", "galopRequired" et un texte libre "conditionsAcces". Respecte-les STRICTEMENT. Applique ce qui est VÉRIFIABLE d'après le contexte famille (âge, galop) : ne propose une activité que si l'enfant satisfait l'âge [ageMin, ageMax] et le galop requis (table d'équivalence). Pour les conditions du texte "conditionsAcces" qui ne sont PAS vérifiables dans nos données (ex : "maîtrise du trot enlevé", "maîtrise des 3 allures", "évaluation préalable en carrière"), ne les affirme jamais comme acquises : mentionne-les comme "à confirmer avec la famille". Si "conditionsAcces" mentionne une clause de non-remboursement ou une évaluation préalable, rappelle-la dans ta réponse. Dans le doute, demande à confirmer plutôt que de proposer à tort.
 - Demi-journées : certains stages sont ouverts à la journée (champ "demiJourneeOuverte"=true, avec éventuellement "prixJour"). Si la famille cherche une formule plus courte, tu peux mentionner que ce stage est aussi accessible à la journée. Ne le fais que si demiJourneeOuverte=true.
 - Si rien ne correspond ou si le mail n'est pas une demande de prestation, laisse "suggestions" vide.
 - Le brouillon est une PROPOSITION que le gérant relira et enverra lui-même. Ne promets jamais une inscription faite.

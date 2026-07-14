@@ -60,6 +60,7 @@ export interface Activity {
   ageMin: number;
   ageMax: number | null;
   galopRequired: string | null;
+  conditionsAcces?: string | null;
   priceHT: number;
   priceTTC: number; // Prix annoncé au client (TTC)
   tvaTaux: number; // 5.5 pour 5.5%
