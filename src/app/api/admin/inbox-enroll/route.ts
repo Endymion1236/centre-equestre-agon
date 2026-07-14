@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
+import { formatStageSchedule } from "@/lib/format-stage";
+import { generateOrderId } from "@/lib/utils";
 
 // ═══════════════════════════════════════════════════════════════════
 // POST /api/admin/inbox-enroll  (admin uniquement)
@@ -18,6 +21,13 @@ import { verifyAuth } from "@/lib/api-auth";
 //   - AUCUNE écriture financière ici. L'inscription est découplée du paiement
 //     (le lien de paiement / la déclaration d'encaissement, c'est l'étape 3).
 //     Mutation réversible : l'admin peut retirer l'entrée du créneau.
+//
+//   - Après inscription réussie, crée la COMMANDE (doc `payments` en statut
+//     "pending" — la proforma) selon la même logique que l'inscription admin :
+//     panier unique (fusion dans la commande pending la plus récente de la
+//     famille, hors échéanciers), prix AUTORITAIRE repris des créneaux,
+//     acompte/solde renseignés pour les stages (30 €/enfant). AUCUN lien de
+//     paiement envoyé — c'est une commande à régler, visible dans Paiements.
 //
 // Body    : { creneauIds: string[], childId: string, familyId: string }
 //           (rétro-compat : creneauId string unique accepté)
@@ -75,7 +85,9 @@ export async function POST(req: NextRequest) {
     //    d'écrire quoi que ce soit : si un seul jour est complet → rien n'est
     //    inscrit (pas d'inscription partielle qu'il faudrait facturer à tort).
     const refs = creneauIds.map((cid) => adminDb.collection("creneaux").doc(cid));
+    const joursData: { date: string; startTime: string; endTime: string; titre: string; type: string; prixTTC: number | null }[] = [];
     const outcome = await adminDb.runTransaction(async (tx) => {
+      joursData.length = 0; // la transaction peut être rejouée par Firestore
       const snaps = await Promise.all(refs.map((r) => tx.get(r)));
 
       // Phase 1 — vérifications (aucune écriture)
@@ -84,6 +96,20 @@ export async function POST(req: NextRequest) {
         const snap = snaps[i];
         if (!snap.exists) return { status: "missing" as const, cid: creneauIds[i] };
         const cr = snap.data() as any;
+        // Données autoritaires pour la commande (prix = source créneau)
+        joursData.push({
+          date: cr.date || "",
+          startTime: cr.startTime || "",
+          endTime: cr.endTime || "",
+          titre: cr.activityTitle || "",
+          type: cr.activityType || "cours",
+          prixTTC:
+            typeof cr.priceTTC === "number"
+              ? cr.priceTTC
+              : typeof cr.priceHT === "number"
+              ? Math.round(cr.priceHT * (1 + (cr.tvaTaux ?? 5.5) / 100) * 100) / 100
+              : null,
+        });
         const list: any[] = Array.isArray(cr.enrolled) ? cr.enrolled : [];
         if (list.some((e: any) => e.childId === childId)) continue; // déjà inscrit ce jour → ok
         const maxP = typeof cr.maxPlaces === "number" ? cr.maxPlaces : Number.POSITIVE_INFINITY;
@@ -94,11 +120,14 @@ export async function POST(req: NextRequest) {
 
       // Phase 2 — écritures (tout est validé)
       const nowIso = new Date().toISOString();
+      const isStage0 = joursData.some((j) => j.type === "stage" || j.type === "stage_journee");
+      const firstDate0 = [...joursData].sort((a, b) => a.date.localeCompare(b.date))[0]?.date || "";
+      const stageKey0 = isStage0 ? `${joursData[0]?.titre || ""}_${firstDate0}` : null;
       for (let i = 0; i < snaps.length; i++) {
         const cr = snaps[i].data() as any;
         const list: any[] = Array.isArray(cr.enrolled) ? cr.enrolled : [];
         if (list.some((e: any) => e.childId === childId)) continue;
-        const entry = {
+        const entry: any = {
           childId,
           childName,
           familyId,
@@ -109,6 +138,7 @@ export async function POST(req: NextRequest) {
           source: "boite-ia",
           enrolledBy: auth.email || auth.uid || "",
         };
+        if (stageKey0) entry.stageKey = stageKey0; // matching paiement précis (comme EnrollPanel)
         tx.update(refs[i], { enrolled: [...list, entry], enrolledCount: list.length + 1 });
       }
       return { status: "enrolled" as const, count: toWrite };
@@ -126,6 +156,111 @@ export async function POST(req: NextRequest) {
         { status: 409 }
       );
     }
+    // ── 3. COMMANDE PROFORMA (uniquement si on vient réellement d'inscrire —
+    //    pas sur un "already", pour ne pas dupliquer au double-clic).
+    //    Même logique que l'inscription admin : panier unique par famille.
+    //    AUCUN lien de paiement envoyé ici.
+    let orderInfo: { orderId: string; totalTTC: number; merged: boolean } | null = null;
+    if (outcome.status === "enrolled") {
+      const jours = [...joursData].sort((a, b) => a.date.localeCompare(b.date));
+      const first = jours[0];
+      const isStage = jours.some((j) => j.type === "stage" || j.type === "stage_journee");
+      const stageKey = `${first.titre}_${first.date}`;
+      // Prix AUTORITAIRE : stage semaine → prix TTC du créneau (= prix semaine) ;
+      // activité simple → prix TTC du créneau. Pas de remise automatique ici
+      // (les remises multi-enfants restent à la main de l'admin dans Paiements).
+      const priceTTC = first.prixTTC ?? 0;
+      const scheduleDesc = formatStageSchedule(jours.map((j) => ({ date: j.date, startTime: j.startTime, endTime: j.endTime })));
+
+      const item = {
+        activityTitle: isStage ? `${first.titre} (${jours.length}j) — ${childName}` : `${first.titre} — ${childName}`,
+        childId,
+        childName,
+        stageKey,
+        activityType: first.type,
+        stageSchedule: scheduleDesc,
+        stageDates: jours.map((j) => ({ date: j.date, startTime: j.startTime, endTime: j.endTime })),
+        priceHT: Math.round((priceTTC / 1.055) * 100) / 100,
+        tva: 5.5,
+        priceTTC,
+      };
+
+      try {
+        // Panier unique : fusionner dans la commande pending la plus récente
+        // de la famille (hors échéanciers), sinon créer.
+        const pendSnap = await adminDb
+          .collection("payments")
+          .where("familyId", "==", familyId)
+          .where("status", "==", "pending")
+          .get();
+        const pendingDocs = pendSnap.docs
+          .filter((d) => !((d.data() as any).echeancesTotal > 1))
+          .sort((a, b) => ((b.data() as any).date?.seconds || 0) - ((a.data() as any).date?.seconds || 0));
+        const openOrder = pendingDocs.length > 0 ? pendingDocs[0] : null;
+
+        const ACOMPTE_PAR_ENFANT = 30;
+        if (openOrder) {
+          const existing = openOrder.data() as any;
+          // Ne pas dupliquer l'item si exactement le même (enfant + stageKey) existe déjà.
+          const items: any[] = Array.isArray(existing.items) ? existing.items : [];
+          const dup = items.some((i: any) => i.childId === childId && i.stageKey === stageKey);
+          const mergedItems = dup ? items : [...items, item];
+          const mergedTotal = Math.round(mergedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0) * 100) / 100;
+          const nbStageItems = mergedItems.filter((i: any) => i.activityType === "stage" || i.activityType === "stage_journee").length;
+          await openOrder.ref.update({
+            items: mergedItems,
+            totalTTC: mergedTotal,
+            stageDate: existing.stageDate || first.date,
+            stageTitle: existing.stageTitle || first.titre,
+            ...(nbStageItems > 0 && mergedTotal > ACOMPTE_PAR_ENFANT * nbStageItems
+              ? {
+                  acompteAmount: ACOMPTE_PAR_ENFANT * nbStageItems,
+                  soldeAmount: Math.round((mergedTotal - ACOMPTE_PAR_ENFANT * nbStageItems) * 100) / 100,
+                }
+              : {}),
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+          orderInfo = { orderId: existing.orderId || openOrder.id, totalTTC: mergedTotal, merged: true };
+        } else {
+          const famEmail = (family.parentEmail || "").trim();
+          const showAcompte = isStage && priceTTC > ACOMPTE_PAR_ENFANT;
+          const orderId = generateOrderId();
+          await adminDb.collection("payments").add({
+            orderId,
+            familyId,
+            familyName,
+            familyEmail: famEmail,
+            items: [item],
+            totalTTC: priceTTC,
+            paymentMode: "",
+            paymentRef: "",
+            status: "pending",
+            paidAmount: 0,
+            stageDate: first.date,
+            stageTitle: first.titre,
+            ...(showAcompte
+              ? { acompteAmount: ACOMPTE_PAR_ENFANT, soldeAmount: Math.round((priceTTC - ACOMPTE_PAR_ENFANT) * 100) / 100 }
+              : {}),
+            source: "boite-ia",
+            date: FieldValue.serverTimestamp(),
+          });
+          orderInfo = { orderId, totalTTC: priceTTC, merged: false };
+        }
+      } catch (e) {
+        // L'inscription est faite ; la commande a échoué → on le DIT à l'admin
+        // (pas d'échec silencieux) pour qu'il crée la commande à la main.
+        console.error("[inbox-enroll] commande proforma échouée:", e);
+        return NextResponse.json({
+          ok: true,
+          status: outcome.status,
+          childName,
+          creneauIds,
+          enrolledCount: outcome.count ?? 0,
+          orderError: "Inscription faite, mais la commande n'a pas pu être créée — à créer manuellement dans Paiements.",
+        });
+      }
+    }
+
     // "enrolled" ou "already" → succès
     return NextResponse.json({
       ok: true,
@@ -133,6 +268,7 @@ export async function POST(req: NextRequest) {
       childName,
       creneauIds,
       enrolledCount: outcome.count ?? 0,
+      order: orderInfo,
     });
   } catch (e: any) {
     console.error("[inbox-enroll]", e);
