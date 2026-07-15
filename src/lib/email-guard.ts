@@ -42,7 +42,13 @@ export async function refreshEmailMode(): Promise<void> {
 
 /** Le mode restreint est actif si le flag Firestore le dit, sinon selon EMAIL_RESTRICTED_MODE. */
 export function isEmailRestricted(): boolean {
-  if (cached && cached.restricted !== null) return cached.restricted;
+  // FAIL-SAFE : si refreshEmailMode() n'a jamais tourné dans cette invocation
+  // (route/lib qui a oublié de l'appeler), on est RESTREINT, quelle que soit
+  // la variable d'env. Une route ne peut JAMAIS écrire aux familles sans
+  // avoir explicitement lu le mode à jour. (Incident du 15/07/2026 : la lib
+  // satisfaction n'appelait pas refreshEmailMode et retombait sur l'env.)
+  if (!cached) return true;
+  if (cached.restricted !== null) return cached.restricted;
   return norm(process.env.EMAIL_RESTRICTED_MODE || "on") !== "off";
 }
 

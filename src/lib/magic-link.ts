@@ -16,7 +16,7 @@
 import { Resend } from "resend";
 import { adminAuth, adminDb } from "./firebase-admin";
 import { logEmail } from "./email-log";
-import { isRecipientAllowed, blockedLog } from "./email-guard";
+import { isRecipientAllowed, blockedLog, refreshEmailMode } from "./email-guard";
 import { createActivationToken } from "./activation-token";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
@@ -51,6 +51,7 @@ export interface SendMagicLinkResult {
  * Cree le user Firebase Auth si absent (sans mot de passe).
  */
 export async function sendMagicLink(opts: SendMagicLinkOptions): Promise<SendMagicLinkResult> {
+  await refreshEmailMode(); // mode restreint Firestore — OBLIGATOIRE avant tout envoi
   const emailNormalized = (opts.email || "").trim().toLowerCase();
 
   if (!emailNormalized || !emailNormalized.includes("@")) {

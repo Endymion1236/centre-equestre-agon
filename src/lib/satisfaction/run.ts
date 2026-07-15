@@ -5,7 +5,7 @@
  */
 import { adminDb } from "@/lib/firebase-admin";
 import { Resend } from "resend";
-import { isRecipientAllowed, blockedLog } from "@/lib/email-guard";
+import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
 import { logEmail } from "@/lib/email-log";
 
 const FROM = process.env.RESEND_FROM_EMAIL || process.env.RESEND_FROM || "onboarding@resend.dev";
@@ -45,6 +45,7 @@ function emailHtml(childFirst: string, stageLabel: string, link: string) {
 export interface RunOptions { date?: string; dry?: boolean; toOverride?: string; limit?: number; force?: boolean; }
 
 export async function runSatisfactionStages(opts: RunOptions = {}) {
+  await refreshEmailMode(); // mode restreint Firestore — OBLIGATOIRE avant tout envoi
   const dateFin = opts.date || parisDate(new Date(Date.now() - 86400000));
   const dry = !!opts.dry;
   const toOverride = (opts.toOverride || "").trim();
@@ -187,6 +188,7 @@ export interface RunAnneeOptions { saison?: number; dry?: boolean; toOverride?: 
  * stageKey `annee_${N}`. Resend optionnel.
  */
 export async function runSatisfactionAnnee(opts: RunAnneeOptions = {}) {
+  await refreshEmailMode(); // mode restreint Firestore — OBLIGATOIRE avant tout envoi
   const now = new Date();
   const moisParis = Number(new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", month: "numeric" }).format(now));
   const anneeParis = Number(new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", year: "numeric" }).format(now));
@@ -311,6 +313,7 @@ function emailHtmlPromenade(childFirst: string, baladeLabel: string, link: strin
  * que les stages (dedup par stageKey, mode force, respect du mode restreint).
  */
 export async function runSatisfactionPromenades(opts: RunOptions = {}) {
+  await refreshEmailMode(); // mode restreint Firestore — OBLIGATOIRE avant tout envoi
   const dateFin = opts.date || parisDate(new Date(Date.now() - 86400000));
   const dry = !!opts.dry;
   const toOverride = (opts.toOverride || "").trim();
