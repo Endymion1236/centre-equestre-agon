@@ -185,7 +185,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
   // ── Création famille inline ──
   const [showNewFamily, setShowNewFamily] = useState(false);
-  const [newFam, setNewFam] = useState({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
+  const [newFam, setNewFam] = useState({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "", civilite: "" as "" | "M." | "Mme", tags: [] as string[] });
   const [newChildren, setNewChildren] = useState([{ firstName: "", lastName: "", birthDate: "", galopLevel: "—" }]);
   const [localFamilies, setLocalFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const allFamilies = useMemo(() => [...families, ...localFamilies], [families, localFamilies]);
@@ -2365,6 +2365,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   <button onClick={() => setShowNewFamily(false)} className="text-green-400 hover:text-green-600 bg-transparent border-none cursor-pointer"><X size={14} /></button>
                 </div>
                 <div className="p-4 space-y-2.5">
+                  <div className="flex gap-2">
+                    {(["M.", "Mme"] as const).map((c) => (
+                      <button key={c} type="button" onClick={() => setNewFam({ ...newFam, civilite: newFam.civilite === c ? "" : c })}
+                        className={`font-body text-xs px-4 py-2 rounded-lg border cursor-pointer ${newFam.civilite === c ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200 hover:border-green-300"}`}>
+                        {c}
+                      </button>
+                    ))}
+                  </div>
                   <input value={newFam.parentName} onChange={e => setNewFam({...newFam, parentName: e.target.value})}
                     placeholder="Nom du parent *" className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
                   <div className="flex gap-2">
@@ -2380,6 +2388,25 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       placeholder="Code postal" className="w-28 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
                     <input value={newFam.city} onChange={e => setNewFam({...newFam, city: e.target.value})}
                       placeholder="Ville" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+                  </div>
+                  <div>
+                    <div className="font-body text-[10px] text-slate-400 uppercase mb-1.5">Fléchage</div>
+                    <div className="flex gap-1.5">
+                      {[
+                        { id: "cavalier_annee", label: "🏇 À l'année" },
+                        { id: "stage", label: "🎯 Stages" },
+                        { id: "passage", label: "👋 Passage" },
+                      ].map((opt) => {
+                        const on = newFam.tags.includes(opt.id);
+                        return (
+                          <button key={opt.id} type="button"
+                            onClick={() => setNewFam({ ...newFam, tags: on ? newFam.tags.filter((t) => t !== opt.id) : [...newFam.tags, opt.id] })}
+                            className={`font-body text-xs px-3 py-1.5 rounded-full border cursor-pointer ${on ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200 hover:border-green-300"}`}>
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                   <div className="border-t border-gray-100 pt-2.5">
                     <div className="font-body text-[10px] text-slate-400 uppercase mb-1.5">Cavaliers</div>
@@ -2435,6 +2462,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         sanitaryForm: null,
                       }));
                       const famRef = await addDoc(collection(db, "families"), {
+                        civilite: newFam.civilite || null,
                         parentName: newFam.parentName.trim(),
                         parentEmail: newFam.parentEmail.trim(),
                         parentPhone: newFam.parentPhone.trim(),
@@ -2442,6 +2470,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         zipCode: newFam.zipCode.trim(),
                         city: newFam.city.trim(),
                         accountType: "particulier",
+                        tags: newFam.tags,
                         authProvider: "admin",
                         authUid: "",
                         children,
@@ -2478,7 +2507,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       setSearch(newFam.parentName.trim());
                       const noms = children.map(c => c.firstName).join(", ");
                       panelToast(`✅ Famille ${newFam.parentName} créée (${noms}) — sélectionnez le mode d'inscription`, "success");
-                      setNewFam({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "" });
+                      setNewFam({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "", civilite: "", tags: [] });
                       setNewChildren([{ firstName: "", lastName: "", birthDate: "", galopLevel: "—" }]);
                     } catch (e: any) {
                       panelToast("Erreur : " + e.message, "error");
