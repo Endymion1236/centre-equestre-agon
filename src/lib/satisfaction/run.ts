@@ -50,9 +50,13 @@ export async function runSatisfactionStages(opts: RunOptions = {}) {
   const dry = !!opts.dry;
   const toOverride = (opts.toOverride || "").trim();
 
-  // Créneaux de la fenêtre [dateFin-6j … dateFin]
+  // Créneaux de la fenêtre [dateFin-6j … dateFin+6j] : on regarde AUSSI
+  // APRÈS dateFin pour savoir si le stage CONTINUE. (Incident 15/07 : la
+  // fenêtre s'arrêtait à dateFin, donc un stage lun→ven paraissait
+  // "terminé" dès le mardi — ses jours suivants étaient hors fenêtre.)
   const start = addDays(dateFin, -6);
-  const snap = await adminDb.collection("creneaux").where("date", ">=", start).where("date", "<=", dateFin).get();
+  const end = addDays(dateFin, 6);
+  const snap = await adminDb.collection("creneaux").where("date", ">=", start).where("date", "<=", end).get();
 
   type Jour = { date: string; monitor: string; enrolled: any[] };
   const groups = new Map<string, { title: string; jours: Jour[] }>();
@@ -61,7 +65,9 @@ export async function runSatisfactionStages(opts: RunOptions = {}) {
     const type = c.activityType || "";
     if (type !== "stage" && type !== "stage_journee") continue;
     const title = (c.activityTitle || c.title || "").trim();
-    const key = `${norm(title)}__${type}`;
+    // Groupement par titre + SEMAINE : "Stage galop d'or" revient chaque
+    // semaine, sans la semaine les éditions successives fusionneraient.
+    const key = `${norm(title)}__${type}__${lundiDe(c.date || dateFin)}`;
     if (!groups.has(key)) groups.set(key, { title, jours: [] });
     groups.get(key)!.jours.push({ date: c.date || "", monitor: c.monitor || "", enrolled: Array.isArray(c.enrolled) ? c.enrolled : [] });
   }
@@ -83,6 +89,7 @@ export async function runSatisfactionStages(opts: RunOptions = {}) {
   for (const g of groups.values()) {
     const dates = [...new Set(g.jours.map(j => j.date).filter(Boolean))].sort();
     if (dates.length < 2) continue;                  // stages MULTIJOURS uniquement
+    if (dates.some(d => d > dateFin)) continue;      // stage ENCORE EN COURS → pas de questionnaire
     if (dates[dates.length - 1] !== dateFin) continue; // terminés à dateFin
 
     const semaine = lundiDe(dateFin);
