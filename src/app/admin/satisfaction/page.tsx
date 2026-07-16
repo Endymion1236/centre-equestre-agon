@@ -64,7 +64,7 @@ export default function SatisfactionPage() {
   const [loading, setLoading] = useState(true);
   const [filterActivite, setFilterActivite] = useState<string>("");
   const [filterNote, setFilterNote] = useState<number>(0);
-  const [view, setView] = useState<"global" | "enseignant">("global");
+  const [view, setView] = useState<"global" | "enseignant" | "avis">("global");
   const [filterPeriode, setFilterPeriode] = useState<string>("");
   const [expandedEns, setExpandedEns] = useState<string | null>(null);
   // Générateur de lien de test
@@ -325,6 +325,10 @@ export default function SatisfactionPage() {
           className={`px-4 py-2 rounded-xl font-body text-sm font-semibold inline-flex items-center gap-1.5 ${view === "enseignant" ? "bg-[#1e3a5f] text-white" : "bg-white text-slate-600 border border-slate-200"}`}>
           <Users size={15} /> Par enseignant
         </button>
+        <button onClick={() => setView("avis")}
+          className={`px-4 py-2 rounded-xl font-body text-sm font-semibold inline-flex items-center gap-1.5 ${view === "avis" ? "bg-[#1e3a5f] text-white" : "bg-white text-slate-600 border border-slate-200"}`}>
+          <MessageSquare size={15} /> Avis détaillés ({avis.length})
+        </button>
       </div>
 
       {loading ? (
@@ -552,7 +556,7 @@ export default function SatisfactionPage() {
         <div className="text-center py-12 font-body text-slate-500">
           Aucun avis pour le moment.
         </div>
-      ) : (
+      ) : view === "global" ? (
         <>
           {/* Stats globales */}
           {stats && (
@@ -605,7 +609,9 @@ export default function SatisfactionPage() {
               </div>
             </div>
           )}
-
+        </>
+      ) : view === "avis" ? (
+        <>
           {/* Filtres */}
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <Filter size={14} className="text-slate-400" />
@@ -645,7 +651,8 @@ export default function SatisfactionPage() {
                     <div>
                       <div className="font-body font-semibold text-slate-900">{a.familyName || "Famille"}</div>
                       <div className="font-body text-xs text-slate-400">
-                        {a.activityTitle || "Général"}
+                        {a.stageLabel || a.activityTitle || "Général"}
+                        {a.source === "annee" && " · bilan de saison"}
                         {date && ` · ${date.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`}
                       </div>
                     </div>
@@ -674,6 +681,15 @@ export default function SatisfactionPage() {
                       Recommande le club : <span className={a.recommande ? "text-emerald-600 font-semibold" : "text-rose-600 font-semibold"}>{a.recommande ? "Oui" : "Non"}</span>
                     </div>
                   )}
+                  {Array.isArray(a.moniteurs) && a.moniteurs.length > 0 && (
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+                      {a.moniteurs.map((m, mi) => (
+                        <span key={mi} className="font-body text-[11px] text-slate-500">
+                          {m.nom} : <span className="text-amber-500">{"★".repeat(m.note)}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -684,7 +700,7 @@ export default function SatisfactionPage() {
             )}
           </div>
         </>
-      )}
+      ) : null}
     </div>
   );
 }
