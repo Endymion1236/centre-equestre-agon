@@ -11,6 +11,7 @@ import { useEffect, useState, useMemo, Fragment } from "react";
 import { collection, getDocs, query, orderBy, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
+import { authFetch } from "@/lib/auth-fetch";
 import { Star, MessageSquare, TrendingUp, Filter, Users, Link2, Copy, ChevronDown, ChevronRight } from "lucide-react";
 import { bilanParEnseignant, type AvisStage } from "@/lib/satisfaction/types";
 
@@ -32,6 +33,8 @@ const ASPECTS_ANNEE = [
 interface Avis {
   id: string;
   familyName?: string;
+  familyId?: string;
+  childName?: string;
   activityTitle?: string;
   globalNote: number;
   aspects?: Record<string, number>;
@@ -42,6 +45,9 @@ interface Avis {
   stageLabel?: string;
   moniteurs?: Array<{ nom: string; note: number }>;
   recommande?: boolean;
+  // Réponse envoyée depuis la page admin :
+  reponse?: string;
+  reponseAt?: any;
 }
 
 function Stars({ n, size = 14 }: { n: number; size?: number }) {
@@ -67,6 +73,55 @@ export default function SatisfactionPage() {
   const [view, setView] = useState<"global" | "enseignant" | "avis">("global");
   const [filterPeriode, setFilterPeriode] = useState<string>("");
   const [expandedEns, setExpandedEns] = useState<string | null>(null);
+  // Réponse aux avis (onglet Avis détaillés)
+  const [replyOpen, setReplyOpen] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [replyBusy, setReplyBusy] = useState<"ia" | "send" | null>(null);
+  const [replyMsg, setReplyMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // ── Répondre à un avis : brouillon IA (aucun envoi) puis envoi relu ──
+  const redigerIA = async (avisId: string) => {
+    setReplyBusy("ia");
+    setReplyMsg(null);
+    try {
+      const r = await authFetch("/api/admin/satisfaction-reponse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "rediger", avisId }),
+      });
+      const d = await r.json();
+      if (!r.ok) setReplyMsg({ ok: false, text: d.error || "Échec de la rédaction" });
+      else setReplyText(d.brouillon || "");
+    } catch {
+      setReplyMsg({ ok: false, text: "Erreur réseau" });
+    }
+    setReplyBusy(null);
+  };
+
+  const envoyerReponse = async (avisId: string) => {
+    if (!replyText.trim() || replyBusy) return;
+    if (!confirm("Envoyer cette réponse à la famille par email ?")) return;
+    setReplyBusy("send");
+    setReplyMsg(null);
+    try {
+      const r = await authFetch("/api/admin/satisfaction-reponse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "envoyer", avisId, message: replyText }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setReplyMsg({ ok: false, text: d.error || "Échec de l'envoi" });
+      } else {
+        setAvis((prev) => prev.map((a) => (a.id === avisId ? { ...a, reponse: replyText, reponseAt: { seconds: Date.now() / 1000 } } : a)));
+        setReplyOpen(null);
+        setReplyText("");
+      }
+    } catch {
+      setReplyMsg({ ok: false, text: "Erreur réseau" });
+    }
+    setReplyBusy(null);
+  };
   // Générateur de lien de test
   const [genStage, setGenStage] = useState("");
   const [genChild, setGenChild] = useState("");
@@ -690,6 +745,50 @@ export default function SatisfactionPage() {
                       ))}
                     </div>
                   )}
+                  {/* ── Réponse à la famille ── */}
+                  {a.reponse ? (
+                    <div className="mt-2 rounded-lg bg-emerald-50 border border-emerald-100 p-3">
+                      <div className="font-body text-[11px] font-semibold text-emerald-700 mb-1">
+                        ✓ Réponse envoyée{a.reponseAt?.seconds ? ` le ${new Date(a.reponseAt.seconds * 1000).toLocaleDateString("fr-FR")}` : ""}
+                      </div>
+                      <p className="font-body text-xs text-slate-600 whitespace-pre-wrap">{a.reponse}</p>
+                    </div>
+                  ) : a.familyId ? (
+                    replyOpen === a.id ? (
+                      <div className="mt-2 rounded-lg bg-slate-50 border border-slate-200 p-3">
+                        <textarea
+                          value={replyText}
+                          onChange={(e) => setReplyText(e.target.value)}
+                          rows={6}
+                          placeholder={`Réponse à ${a.familyName || "la famille"}… (ou clique ✨ pour un brouillon IA)`}
+                          className="w-full resize-y rounded-lg border border-slate-200 px-3 py-2 font-body text-sm bg-white focus:outline-none focus:border-blue-400"
+                        />
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <button onClick={() => redigerIA(a.id)} disabled={replyBusy !== null}
+                            className="px-3 py-1.5 rounded-lg bg-violet-100 text-violet-700 font-body text-xs font-semibold border-none cursor-pointer hover:bg-violet-200 disabled:opacity-50">
+                            {replyBusy === "ia" ? "Rédaction…" : "✨ Rédiger avec l'IA"}
+                          </button>
+                          <button onClick={() => envoyerReponse(a.id)} disabled={replyBusy !== null || !replyText.trim()}
+                            className="px-3 py-1.5 rounded-lg bg-blue-600 text-white font-body text-xs font-bold border-none cursor-pointer hover:bg-blue-700 disabled:opacity-50">
+                            {replyBusy === "send" ? "Envoi…" : "Envoyer à la famille"}
+                          </button>
+                          <button onClick={() => { setReplyOpen(null); setReplyText(""); setReplyMsg(null); }}
+                            className="font-body text-xs text-slate-400 bg-transparent border-none cursor-pointer hover:underline">
+                            Annuler
+                          </button>
+                          {replyMsg && (
+                            <span className={`font-body text-xs font-semibold ${replyMsg.ok ? "text-green-600" : "text-red-500"}`}>{replyMsg.text}</span>
+                          )}
+                        </div>
+                        <p className="mt-1 font-body text-[10px] text-slate-400">Le brouillon IA est une proposition : relis et modifie avant d'envoyer. L'email part au parent, en texte, avec copie de suivi.</p>
+                      </div>
+                    ) : (
+                      <button onClick={() => { setReplyOpen(a.id); setReplyText(""); setReplyMsg(null); }}
+                        className="mt-2 px-3 py-1.5 rounded-lg bg-white text-blue-600 font-body text-xs font-semibold border border-blue-200 cursor-pointer hover:bg-blue-50">
+                        Répondre
+                      </button>
+                    )
+                  ) : null}
                 </div>
               );
             })}
