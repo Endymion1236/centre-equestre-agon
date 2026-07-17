@@ -43,6 +43,19 @@ export async function POST(req: NextRequest) {
     // 2. Générer le lien CAWL
     const origin = req.nextUrl.origin;
     const authHeader = req.headers.get("authorization") || "";
+    // Si ce lien correspond à l'ACOMPTE de la commande (montant ≈ acompteAmount,
+    // rien encore payé), on le déclare comme acompte au checkout : CAWL
+    // TOKENISE alors la carte (Card-On-File), indispensable au prélèvement
+    // automatique du solde à J-7 (MIT/delayedCharge). Le montant reste `amount`.
+    const acompteAttendu = typeof payData.acompteAmount === "number" ? payData.acompteAmount : 0;
+    const estLienAcompte =
+      acompteAttendu > 0 &&
+      (payData.paidAmount || 0) < 0.01 &&
+      Math.abs(amount - acompteAttendu) < 0.02 &&
+      (payData.totalTTC || 0) > amount;
+    const depositPercentLien = estLienAcompte
+      ? Math.min(99, Math.max(1, Math.round((amount / (payData.totalTTC || amount)) * 100)))
+      : 0;
     const cawlRes = await fetch(`${origin}/api/cawl/checkout`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": authHeader },
@@ -52,6 +65,7 @@ export async function POST(req: NextRequest) {
           priceTTC: 0, // on utilise totalTTC direct
         })),
         totalTTC: amount,
+        ...(depositPercentLien > 0 ? { depositPercent: depositPercentLien } : {}),
         familyId: familyId || payData.familyId,
         familyEmail: recipientEmail,
         familyName: familyName || payData.familyName,
