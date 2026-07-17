@@ -77,6 +77,7 @@ export async function GET(req: NextRequest) {
   const ref = req.nextUrl.searchParams.get("ref") || "";
   const paymentId = req.nextUrl.searchParams.get("paymentId") || "";
   let sessionPaymentId = "";
+  let sessionAmountEuros: number | null = null;
   const familyId = req.nextUrl.searchParams.get("familyId") || "";
   const depositStr = req.nextUrl.searchParams.get("deposit") || "0";
   const depositPercent = parseInt(depositStr) || 0;
@@ -107,6 +108,13 @@ export async function GET(req: NextRequest) {
     const sessionData = sessionSnap.data() as any;
     const storedReturnMac = sessionData?.returnMac || "";
     sessionPaymentId = sessionData?.paymentId || "";
+    // Montant DEMANDÉ à la création du checkout (écrit côté serveur) —
+    // référentiel du contrôle de cohérence : un lien de paiement partiel
+    // (ex. acompte 30€ envoyé par l'admin) attend 30€, pas le total.
+    sessionAmountEuros =
+      typeof sessionData?.totalCents === "number" && sessionData.totalCents > 0
+        ? Math.round(sessionData.totalCents) / 100
+        : null;
 
     // Comparaison en temps constant pour éviter les timing attacks
     // (Node: timingSafeEqual nécessite des Buffers de même longueur)
@@ -182,21 +190,25 @@ export async function GET(req: NextRequest) {
 
     if (payRef && pData && pData.status !== "paid") {
       const totalTTC = pData.totalTTC || 0;
-      // Utiliser acompteAmount stocké (montant exact) plutôt que recalculer depuis le %
-      const paidAmount = isDeposit
-        ? (pData.acompteAmount || Math.round(totalTTC * depositPercent / 100 * 100) / 100)
-        : totalEuros || totalTTC;
+      // Montant réellement encaissé sur CE checkout : montant CAWL si fourni,
+      // sinon montant demandé à la session, sinon fallback historique.
+      const montantPaye =
+        totalEuros ||
+        sessionAmountEuros ||
+        (isDeposit
+          ? (pData.acompteAmount || Math.round(totalTTC * depositPercent / 100 * 100) / 100)
+          : totalTTC);
+      const paidAmount = montantPaye; // encaissement de CE paiement (journal NF525)
 
       // ── Sécurité : contrôle du montant réellement payé ────────────────
-      // Compare le montant renvoyé par CAWL au montant attendu (stocké sur le
-      // paiement). Si CAWL fournit un montant (>0) et qu'il est nettement
-      // inférieur à l'attendu, on refuse de confirmer (tentative de
-      // manipulation du montant côté navigateur — cf. audit P0 #1) et on
-      // marque le paiement pour revue manuelle. On ne bloque JAMAIS quand
-      // CAWL ne renvoie pas de montant, pour ne pas casser les flux légitimes.
-      const expectedAmount = isDeposit
-        ? (pData.acompteAmount || Math.round(totalTTC * depositPercent / 100 * 100) / 100)
-        : totalTTC;
+      // Référentiel = montant DEMANDÉ à la création de la session (serveur),
+      // qui gère nativement les liens de paiement PARTIELS (acompte 30€ sur
+      // une commande de 175€). Fallback : acompte attendu ou total.
+      const expectedAmount =
+        sessionAmountEuros ??
+        (isDeposit
+          ? (pData.acompteAmount || Math.round(totalTTC * depositPercent / 100 * 100) / 100)
+          : totalTTC);
       if (totalCents > 0 && expectedAmount > 0 && totalEuros < expectedAmount - 0.02) {
         console.error(
           `⚠️ CAWL montant incohérent — payé ${totalEuros}€ < attendu ${expectedAmount}€ ` +
@@ -258,9 +270,15 @@ export async function GET(req: NextRequest) {
       // Id CAWL du paiement initial (acompte) — référence pour le delayedCharge du solde.
       const cofInitialPaymentId = paymentOutput?.id || paymentOutput?.paymentOutput?.references?.paymentReference || "";
 
+      // ── Cumul : paidAmount s'ADDITIONNE (acompte puis solde, ou liens
+      //    partiels successifs). Statut "paid" uniquement quand le total est
+      //    atteint — un paiement partiel quelconque reste "partial".
+      const newPaidTotal = Math.round(((pData.paidAmount || 0) + montantPaye) * 100) / 100;
+      const isFullyPaid = totalTTC > 0 && newPaidTotal >= totalTTC - 0.02;
+
       await payRef.update({
-        status: isDeposit ? "partial" : "paid",
-        paidAmount,
+        status: isFullyPaid ? "paid" : "partial",
+        paidAmount: newPaidTotal,
         paymentMode: "cb_online",
         cawlHostedCheckoutId: hostedCheckoutId,
         paymentRef: `CAWL-${hostedCheckoutId}`,
@@ -276,12 +294,12 @@ export async function GET(req: NextRequest) {
         familyName: pData.familyName || "",
         montant: paidAmount,
         mode: "cb_online",
-        modeLabel: isDeposit ? `CB en ligne CAWL (acompte ${depositPercent}%)` : "CB en ligne (CAWL)",
+        modeLabel: !isFullyPaid ? `CB en ligne CAWL (paiement partiel ${montantPaye.toFixed(2)}€)` : "CB en ligne (CAWL)",
         ref: `CAWL-${hostedCheckoutId}`,
         activityTitle: (pData.items || []).map((i: any) => i.activityTitle).join(", "),
       });
 
-      console.log(`✅ Payment ${payRef.id} mis à jour: ${isDeposit ? "partial" : "paid"} — ${paidAmount}€`);
+      console.log(`✅ Payment ${payRef.id} mis à jour: ${isFullyPaid ? "paid" : "partial"} — +${montantPaye}€ (cumul ${newPaidTotal}€/${totalTTC}€)`);
 
       // ── Attribution des points de fidélité ────────────────────────
       // Attribuer sur le montant effectivement encaissé (acompte OU solde)
@@ -302,8 +320,8 @@ export async function GET(req: NextRequest) {
       });
 
       // Les forfaits annuels (inscription CB), eux, ne sont créés QUE sur un
-      // paiement complet — un acompte ne déclenche pas leur création.
-      if (!isDeposit) {
+      // paiement COMPLET — un acompte ou paiement partiel ne les crée pas.
+      if (isFullyPaid) {
         await createForfaitsForPayment({
           paymentId: payRef.id,
           forfaitPayloads: pData.forfaitPayloads || [],
