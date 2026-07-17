@@ -42,8 +42,11 @@ export async function GET(req: NextRequest) {
   };
 
   try {
-    // Date J+7
-    const j7Str = addDaysParis(7);
+    // Date J+7 — surchargée par ?date=YYYY-MM-DD pour les TESTS (preprod) :
+    // traite les paiements des stages démarrant à cette date, sans attendre.
+    const dateParam = req.nextUrl.searchParams.get("date");
+    const j7Str = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : addDaysParis(7);
+    if (dateParam) console.log(`⚠️ [charge-stage-balances] MODE TEST : date forcée à ${j7Str}`);
     const [j7y, j7m, j7d] = j7Str.split("-").map(Number);
     const j7 = new Date(j7y, j7m - 1, j7d, 12, 0, 0);
     const j7Label = j7.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
