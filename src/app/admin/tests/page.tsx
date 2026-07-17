@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { db } from "@/lib/firebase";
+import { authFetch } from "@/lib/auth-fetch";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { CheckCircle2, XCircle, AlertCircle, Clock, RotateCcw, Download, Filter, Trash2 } from "lucide-react";
 
@@ -1139,6 +1140,8 @@ export default function TestsPage() {
 
   return (
     <div className="p-4 max-w-5xl mx-auto">
+      {/* ── Déclencheurs de test (outils manuels) ── */}
+      <ChargeBalancesTester />
       {/* ── Header ── */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-1">
@@ -1335,6 +1338,56 @@ export default function TestsPage() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Déclencheur manuel : prélèvement des soldes de stages (test MIT).
+// Relaie côté serveur vers le cron avec le CRON_SECRET (jamais exposé).
+// ═══════════════════════════════════════════════════════════════════
+function ChargeBalancesTester() {
+  const [date, setDate] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [out, setOut] = useState<string>("");
+
+  const run = async () => {
+    if (!date || busy) return;
+    if (!confirm(`Déclencher le traitement des soldes pour les stages démarrant le ${date} ?\n\nSi CAWL_MIT_ENABLED=true et qu'un acompte tokenisé existe, le solde sera RÉELLEMENT prélevé (preprod = carte de test).`)) return;
+    setBusy(true);
+    setOut("");
+    try {
+      const r = await authFetch("/api/admin/test-charge-balances", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date }),
+      });
+      const d = await r.json();
+      setOut(JSON.stringify(d, null, 2));
+    } catch {
+      setOut("Erreur réseau");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50/50 p-4">
+      <div className="font-body text-sm font-bold text-amber-800 mb-1">🧪 Test — prélèvement des soldes de stages (J-7)</div>
+      <p className="font-body text-[11px] text-amber-700 mb-2">
+        Déclenche à la demande le traitement normalement lancé à J-7 : prélèvement MIT du solde sur les acomptes
+        tokenisés (ou envoi du lien si MIT désactivé / pas de token). Indique la date de <strong>début du stage</strong>.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+          className="rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 font-body text-sm" />
+        <button onClick={run} disabled={busy || !date}
+          className="rounded-lg bg-amber-600 px-3.5 py-1.5 font-body text-xs font-bold text-white border-none cursor-pointer hover:bg-amber-700 disabled:opacity-50">
+          {busy ? "Traitement…" : "Prélever les soldes de cette date"}
+        </button>
+      </div>
+      {out && (
+        <pre className="mt-2 max-h-56 overflow-auto rounded-lg bg-white border border-amber-100 p-2.5 font-mono text-[11px] text-slate-700 whitespace-pre-wrap">{out}</pre>
+      )}
     </div>
   );
 }
