@@ -1838,38 +1838,60 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     w.document.close();
   };
 
+  // Envoie la fiche de progression (bilan + commentaire ⭐) d'UN enfant à SA famille.
+  // Retourne true si envoyé. Réutilisé par l'envoi groupé et le bouton individuel.
+  const sendProgressionTo = async (e: any): Promise<boolean> => {
+    const fam = families.find((f: any) => f.firestoreId === e.familyId);
+    const email = fam?.parentEmail;
+    if (!email) return false;
+    try {
+      // Récupérer le HTML de la fiche progression
+      const pdfRes = await authFetch(`/api/progression-pdf?childId=${e.childId}&familyId=${e.familyId}&childName=${encodeURIComponent(e.childName)}`);
+      if (!pdfRes.ok) return false;
+      const progressionHtml = await pdfRes.text();
+      // Retirer les éléments no-print (barre d'impression)
+      const cleanHtml = progressionHtml.replace(/<div class="no-print"[\s\S]*?<\/div>\s*<div class="no-print"[\s\S]*?<\/div>/g, "");
+      const r = await authFetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: email,
+          subject: `Bilan de progression — ${e.childName} — ${creneau.activityTitle}`,
+          html: cleanHtml,
+          context: "admin_bilan_progression",
+          template: "bilanProgression",
+          familyId: e.familyId,
+          creneauId: creneau.id,
+        }),
+      });
+      return r.ok;
+    } catch {
+      return false;
+    }
+  };
+
   const handleEmailProgressions = async () => {
     if (enrolled.length === 0) return;
     setProgressionSending(true);
     let sent = 0;
     for (const e of enrolled) {
-      const fam = families.find((f: any) => f.firestoreId === e.familyId);
-      const email = fam?.parentEmail;
-      if (!email) continue;
-      try {
-        // Récupérer le HTML de la fiche progression
-        const pdfRes = await authFetch(`/api/progression-pdf?childId=${e.childId}&familyId=${e.familyId}&childName=${encodeURIComponent(e.childName)}`);
-        const progressionHtml = await pdfRes.text();
-        // Retirer les éléments no-print (barre d'impression)
-        const cleanHtml = progressionHtml.replace(/<div class="no-print"[\s\S]*?<\/div>\s*<div class="no-print"[\s\S]*?<\/div>/g, "");
-        await authFetch("/api/send-email", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            to: email,
-            subject: `Bilan de progression — ${e.childName} — ${creneau.activityTitle}`,
-            html: cleanHtml,
-            context: "admin_bilan_progression",
-            template: "bilanProgression",
-            familyId: e.familyId,
-            creneauId: creneau.id,
-          }),
-        });
-        sent++;
-      } catch {}
+      if (await sendProgressionTo(e)) sent++;
     }
     panelToast(`Fiches envoyées à ${sent} famille${sent > 1 ? "s" : ""}`, "success");
     setProgressionSending(false);
+  };
+
+  // Envoi INDIVIDUEL de la fiche d'un enfant (bouton ✉️ sur sa ligne).
+  const [sendingFicheFor, setSendingFicheFor] = useState<string | null>(null);
+  const handleSendOneFiche = async (e: any) => {
+    if (sendingFicheFor) return;
+    setSendingFicheFor(e.childId);
+    const ok = await sendProgressionTo(e);
+    panelToast(
+      ok ? `Fiche de ${e.childName} envoyée à la famille` : `Échec d'envoi pour ${e.childName} (email manquant ou bloqué)`,
+      ok ? "success" : "error"
+    );
+    setSendingFicheFor(null);
   };
 
   return (
@@ -2308,6 +2330,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     title={`Progression de ${e.childName}`}>
                     <span>📊</span>
                   </a>
+                  <button onClick={() => handleSendOneFiche(e)} disabled={sendingFicheFor !== null}
+                    className="flex items-center gap-1 font-body text-xs text-green-500 hover:text-green-700 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-green-50 flex-shrink-0 disabled:opacity-40"
+                    title={`Envoyer la fiche d'évaluation de ${e.childName} par email à la famille`}>
+                    {sendingFicheFor === e.childId ? <Loader2 size={12} className="animate-spin" /> : <span>✉️</span>}
+                  </button>
                   <button onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId}
                     className="flex items-center gap-1 font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-red-50 flex-shrink-0">
                     {unenrolling===e.childId ? <Loader2 size={12} className="animate-spin"/> : <Trash2 size={12}/>}
