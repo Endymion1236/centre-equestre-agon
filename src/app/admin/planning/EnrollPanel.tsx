@@ -1840,14 +1840,16 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
   // Envoie la fiche de progression (bilan + commentaire ⭐) d'UN enfant à SA famille.
   // Retourne true si envoyé. Réutilisé par l'envoi groupé et le bouton individuel.
-  const sendProgressionTo = async (e: any): Promise<boolean> => {
-    const fam = families.find((f: any) => f.firestoreId === e.familyId);
+  const sendProgressionTo = async (e: any): Promise<{ ok: boolean; reason?: string }> => {
+    const fam = allFamilies.find((f: any) => f.firestoreId === e.familyId);
+    if (!fam) return { ok: false, reason: "famille introuvable (inscription orpheline ?)" };
     const email = fam?.parentEmail;
-    if (!email) return false;
+    if (!email) return { ok: false, reason: "email parent manquant sur la fiche famille" };
     try {
       // Récupérer le HTML de la fiche progression
       const pdfRes = await authFetch(`/api/progression-pdf?childId=${e.childId}&familyId=${e.familyId}&childName=${encodeURIComponent(e.childName)}`);
-      if (!pdfRes.ok) return false;
+      if (pdfRes.status === 404) return { ok: false, reason: "aucune progression enregistrée — ouvre 📊 et crée le bilan d'abord" };
+      if (!pdfRes.ok) return { ok: false, reason: `fiche indisponible (HTTP ${pdfRes.status})` };
       const progressionHtml = await pdfRes.text();
       // Retirer les éléments no-print (barre d'impression)
       const cleanHtml = progressionHtml.replace(/<div class="no-print"[\s\S]*?<\/div>\s*<div class="no-print"[\s\S]*?<\/div>/g, "");
@@ -1864,9 +1866,13 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           creneauId: creneau.id,
         }),
       });
-      return r.ok;
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        return { ok: false, reason: d?.error || `envoi refusé (HTTP ${r.status})` };
+      }
+      return { ok: true };
     } catch {
-      return false;
+      return { ok: false, reason: "erreur réseau" };
     }
   };
 
@@ -1875,7 +1881,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     setProgressionSending(true);
     let sent = 0;
     for (const e of enrolled) {
-      if (await sendProgressionTo(e)) sent++;
+      if ((await sendProgressionTo(e)).ok) sent++;
     }
     panelToast(`Fiches envoyées à ${sent} famille${sent > 1 ? "s" : ""}`, "success");
     setProgressionSending(false);
@@ -1886,10 +1892,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const handleSendOneFiche = async (e: any) => {
     if (sendingFicheFor) return;
     setSendingFicheFor(e.childId);
-    const ok = await sendProgressionTo(e);
+    const res = await sendProgressionTo(e);
     panelToast(
-      ok ? `Fiche de ${e.childName} envoyée à la famille` : `Échec d'envoi pour ${e.childName} (email manquant ou bloqué)`,
-      ok ? "success" : "error"
+      res.ok ? `Fiche de ${e.childName} envoyée à la famille` : `${e.childName} : ${res.reason || "échec d'envoi"}`,
+      res.ok ? "success" : "error"
     );
     setSendingFicheFor(null);
   };
