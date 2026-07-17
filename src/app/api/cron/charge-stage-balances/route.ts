@@ -190,7 +190,11 @@ export async function GET(req: NextRequest) {
             }
             await adminDb.collection("payments").doc(payDoc.id).update({ soldeReminderSentAt: FieldValue.serverTimestamp() });
             results.errors++;
-            results.details.push(`💳❌ ${familyName}: prélèvement échoué (${mit.error || "?"}) → email d'échec envoyé`);
+            results.details.push(
+              resendKey && isRecipientAllowed(familyEmail)
+                ? `💳❌ ${familyName}: prélèvement échoué (${mit.error || "?"}) → email d'échec envoyé`
+                : `💳❌ ${familyName}: prélèvement échoué (${mit.error || "?"}) → email BLOQUÉ (mode restreint)`
+            );
             console.warn(`  💳❌ Prélèvement échoué → ${familyEmail}: ${mit.error}`);
             continue;
           }
@@ -279,15 +283,23 @@ export async function GET(req: NextRequest) {
             const errText = await resendRes.text().catch(() => "");
             await logEmail({ to: familyEmail, subject, context: "cron_stage_solde", template: "stageSoldeJ7", status: "failed", error: `HTTP ${resendRes.status}: ${errText}`.slice(0, 500), sentBy: "system", paymentId: payDoc.id });
           }
+
+          // Marquer le rappel comme envoyé — UNIQUEMENT si l'email est
+          // réellement parti : sinon la famille ne serait jamais relancée
+          // une fois le mode restreint levé.
+          await adminDb.collection("payments").doc(payDoc.id).update({
+            soldeReminderSentAt: FieldValue.serverTimestamp(),
+          });
+
+          results.emailsSent++;
+          results.details.push(`✅ ${familyName} → ${familyEmail} (${solde.toFixed(2)}€)`);
+        } else {
+          // Reporting HONNÊTE : bloqué par le mode restreint ≠ envoyé.
+          // (Incident de frayeur 17/07 : le rapport affichait '✅ envoyé'
+          // pour des emails en réalité bloqués par le guard.)
+          results.skipped++;
+          results.details.push(`🔒 ${familyName} → ${familyEmail} BLOQUÉ (mode restreint) — rien envoyé, sera relancé à la levée`);
         }
-
-        // Marquer le rappel comme envoyé
-        await adminDb.collection("payments").doc(payDoc.id).update({
-          soldeReminderSentAt: FieldValue.serverTimestamp(),
-        });
-
-        results.emailsSent++;
-        results.details.push(`✅ ${familyName} → ${familyEmail} (${solde.toFixed(2)}€)`);
         console.log(`  ✅ Solde J-7 → ${familyEmail} (${solde.toFixed(2)}€)`);
       } catch (e: any) {
         results.errors++;
