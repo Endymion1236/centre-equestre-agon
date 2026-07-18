@@ -343,7 +343,26 @@ export async function GET(req: NextRequest) {
       }
 
       // ── Email confirmation ───────────────────────────────────────────────
-      const parentEmail = pData.familyEmail || "";
+      // L'adresse stockée sur la commande peut être absente (commandes créées
+      // par certains flux : inscription annuelle, import…). Dans ce cas on la
+      // RÉSOUT depuis la fiche famille — sinon la confirmation ne partait pas,
+      // silencieusement.
+      let parentEmail = pData.familyEmail || "";
+      if (!parentEmail) {
+        const fid = familyId || pData.familyId;
+        if (fid) {
+          try {
+            const famSnap = await adminDb.collection("families").doc(fid).get();
+            if (famSnap.exists) parentEmail = ((famSnap.data() as any).parentEmail || "").trim();
+            if (parentEmail) console.log(`CAWL status: email résolu depuis la famille ${fid} → ${parentEmail}`);
+          } catch (e) {
+            console.error("CAWL status: résolution email famille échouée:", e);
+          }
+        }
+      }
+      if (!parentEmail) {
+        console.warn(`⚠️ CAWL status: aucune adresse email pour le paiement ${payRef.id} — confirmation non envoyée`);
+      }
       const resendKey = process.env.RESEND_API_KEY;
       await refreshEmailMode();
       if (parentEmail && resendKey && isRecipientAllowed(parentEmail)) {
