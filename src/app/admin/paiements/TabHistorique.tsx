@@ -218,7 +218,7 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
           ) : (
             <Card className="!p-0 overflow-hidden">
               <div className="overflow-x-auto">
-              <div className="min-w-[700px]">
+              <div className="min-w-[780px]">
               <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
                 <span className="w-20">Date</span>
                 <span className="w-20">N° Facture</span>
@@ -227,7 +227,7 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                 <span className="w-20 text-right">Montant</span>
                 <span className="w-20 text-center">Mode</span>
                 <span className="w-16 text-center">Statut</span>
-                <span className="w-16 text-center">PDF</span>
+                <span className="w-32 text-center">PDF / Factur-X</span>
                 <span className="w-16 text-center">Copier</span>
                 <span className="w-16 text-center">Modifier</span>
                 <span className="w-16 text-center"></span>
@@ -318,11 +318,11 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                     <span className={`w-20 text-right font-body text-sm font-bold ${p.status === "cancelled" ? "text-red-500 line-through" : "text-blue-500"}`}>{displayTTC.toFixed(2)}€</span>
                     <span className="w-20 text-center"><Badge color={p.status === "cancelled" ? "red" : "blue"}>{(p.paymentMode as string) === "mixte" && (p as any).paymentModes ? (p as any).paymentModes.map((m: string) => paymentModes.find(pm => pm.id === m)?.label?.replace("(CAWL)", "").trim() || m).join(" + ") : mode?.label || p.paymentMode}</Badge></span>
                     <span className="w-16 text-center"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "cancelled" ? "red" : p.status === "sepa_scheduled" ? "blue" : p.status === "draft" ? "blue" : "gray"}>{p.status === "paid" ? "Réglé" : p.status === "partial" ? "Partiel" : p.status === "cancelled" ? "Annulé" : p.status === "sepa_scheduled" ? "SEPA" : p.status === "draft" ? "Brouillon" : "À régler"}</Badge></span>
-                    <span className="w-16 text-center">
+                    <span className="w-32 text-center">
                       {p.status === "cancelled" && printAllAvoirs ? (
                         <button onClick={printAllAvoirs} title={`Télécharger ${linkedAvoirs.length} avoir(s) PDF`} className="font-body text-xs text-red-500 bg-red-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-red-100 flex items-center gap-0.5 justify-center"><Receipt size={12} />{linkedAvoirs.length > 1 ? <span className="text-[9px]">×{linkedAvoirs.length}</span> : null}</button>
                       ) : (
-                        <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                        <span className="inline-flex items-center justify-center gap-1 whitespace-nowrap">
                           <button onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button>
                           {(p as any).invoiceNumber && (
                             <>
