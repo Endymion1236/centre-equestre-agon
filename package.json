@@ -45,6 +45,7 @@
     "next": "^15.0.0",
     "onlinepayments-sdk-nodejs": "^7.4.0",
     "openai": "^6.33.0",
+    "pdf-lib": "^1.17.1",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
