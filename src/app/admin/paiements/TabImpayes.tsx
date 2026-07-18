@@ -6,6 +6,7 @@ import { safeNumber, generateOrderId } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Search, X, AlertTriangle, Receipt, Check, ChevronDown, Plus, Trash2, FileText, Calendar } from "lucide-react";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
+import { downloadFacturX } from "@/lib/download-facturx";
 import { emailTemplates } from "@/lib/email-templates";
 import { paymentModes } from "./types";
 import { NoteField } from "./NoteField";
@@ -430,6 +431,11 @@ export function TabImpayes({
                             const adresseLines = [fam?.address, [fam?.zipCode, fam?.city].filter(Boolean).join(" ")].filter(Boolean).join("\n");
                             await downloadInvoicePdf({ invoiceNumber, date: invDate.toLocaleDateString("fr-FR"), familyName: `${civilite}${p.familyName}`, familyEmail: fam?.parentEmail || "", familyAddress: adresseLines, items, totalHT, totalTVA: totalTTC - totalHT, totalTTC, paidAmount: p.paidAmount || 0, paymentMode: p.paymentMode ? (paymentModes.find(m => m.id === p.paymentMode)?.label || p.paymentMode) : "", paymentDate: p.paidAmount > 0 ? invDate.toLocaleDateString("fr-FR") : "", paymentId: p.id });
                           }} className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1"><Receipt size={10}/> {(p as any).invoiceNumber ? "Facture" : "Proforma"}</button>
+                          {(p as any).invoiceNumber && (
+                            <button onClick={() => downloadFacturX(p.id!, (p as any).invoiceNumber)}
+                              title="Télécharger le XML Factur-X (EN 16931) — réforme facturation électronique"
+                              className="font-body text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-indigo-100">F-X</button>
+                          )}
                           {!(p as any).invoiceNumber && (
                             <button onClick={async () => {
                               if (!confirm(`Convertir cette proforma en facture définitive pour ${p.familyName} ?\n\nUne fois convertie, la facture aura un numéro séquentiel et ne pourra plus être supprimée.`)) return;
