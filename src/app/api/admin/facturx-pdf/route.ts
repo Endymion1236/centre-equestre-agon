@@ -98,6 +98,10 @@ export async function GET(req: NextRequest) {
         })),
         totalTTC,
         paidAmount: 0,
+        // Cadre de facturation FR (BT-23) : prestations de SERVICES →
+        // S2 si la facture est déjà intégralement réglée au dépôt, S1 sinon.
+        // Choix par défaut à faire confirmer par le cabinet comptable / la PA.
+        businessProcess: p.status === "paid" ? "S2" : "S1",
         dueDate: p.stageDate || null,
       },
       club
