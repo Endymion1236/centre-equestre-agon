@@ -123,8 +123,21 @@ export async function GET(req: NextRequest) {
             // Statut mis à jour par logMitAttempt (paidAmount incrémenté). On
             // passe le paiement à "paid" si le solde est couvert.
             const newPaid = (p.paidAmount || 0) + solde;
+            const estSolde = newPaid >= (p.totalTTC || 0);
+            // Vente intégralement réglée → FACTURE définitive (numérotation
+            // séquentielle) — sinon le paiement resterait une proforma PF-….
+            let invNum: string | null = null;
+            if (estSolde && !p.invoiceNumber) {
+              try {
+                const { attribuerNumeroFacture } = await import("@/lib/invoice-number");
+                invNum = (await attribuerNumeroFacture({ paymentId: payDoc.id, attributedBy: "system:cron-mit" })).invoiceNumber;
+              } catch (e) {
+                console.error("cron MIT: attribution numéro facture échouée (non-bloquant):", e);
+              }
+            }
             await adminDb.collection("payments").doc(payDoc.id).update({
-              status: newPaid >= (p.totalTTC || 0) ? "paid" : "partial",
+              status: estSolde ? "paid" : "partial",
+              ...(invNum ? { invoiceNumber: invNum, invoiceDate: FieldValue.serverTimestamp() } : {}),
               soldeReminderSentAt: FieldValue.serverTimestamp(),
             });
 
