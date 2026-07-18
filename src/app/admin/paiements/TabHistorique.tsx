@@ -7,6 +7,7 @@ import { Card, Badge } from "@/components/ui";
 import { Loader2, ChevronDown, Receipt, Trash2, Search, X, Check, Copy, Pencil } from "lucide-react";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
 import { downloadAvoirPdf } from "@/lib/download-avoir";
+import { downloadFacturX } from "@/lib/download-facturx";
 import { paymentModes } from "./types";
 import { NoteField } from "./NoteField";
 
@@ -321,7 +322,17 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                       {p.status === "cancelled" && printAllAvoirs ? (
                         <button onClick={printAllAvoirs} title={`Télécharger ${linkedAvoirs.length} avoir(s) PDF`} className="font-body text-xs text-red-500 bg-red-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-red-100 flex items-center gap-0.5 justify-center"><Receipt size={12} />{linkedAvoirs.length > 1 ? <span className="text-[9px]">×{linkedAvoirs.length}</span> : null}</button>
                       ) : (
-                        <button onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button>
+                        <span className="inline-flex items-center gap-1">
+                          <button onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button>
+                          {(p as any).invoiceNumber && (
+                            <button
+                              onClick={() => downloadFacturX(p.id!, (p as any).invoiceNumber)}
+                              title="Télécharger le XML Factur-X (EN 16931) — réforme facturation électronique"
+                              className="font-body text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-1 rounded cursor-pointer border-none hover:bg-indigo-100">
+                              F-X
+                            </button>
+                          )}
+                        </span>
                       )}
                     </span>
                     <span className="w-16 text-center"><button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} title="Dupliquer cette commande" className="font-body text-xs text-purple-500 bg-purple-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-purple-100"><Copy size={12} /></button></span>
