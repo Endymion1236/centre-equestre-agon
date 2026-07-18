@@ -152,6 +152,7 @@ export function buildFacturXXml(inv: FacturXInput, club: ClubInfo): string {
   <rsm:SupplyChainTradeTransaction>${lineXml}
     <ram:ApplicableHeaderTradeAgreement>
       <ram:SellerTradeParty>
+        <ram:GlobalID schemeID="0009">${esc(siret)}</ram:GlobalID><!-- SIRET (schéma EAS 0009) -->
         <ram:Name>${esc(club.legalName || club.nom)}</ram:Name><!-- BT-27 -->
         <ram:SpecifiedLegalOrganization>
           <ram:ID schemeID="0002">${esc(siren)}</ram:ID><!-- BT-30 SIREN -->
@@ -162,16 +163,27 @@ export function buildFacturXXml(inv: FacturXInput, club: ClubInfo): string {
           <ram:CityName>${esc(vAddr.ville)}</ram:CityName>
           <ram:CountryID>FR</ram:CountryID><!-- BT-40 -->
         </ram:PostalTradeAddress>
+        <ram:URIUniversalCommunication>
+          <ram:URIID schemeID="0009">${esc(siret)}</ram:URIID><!-- BT-34 adresse électronique de routage (SIRET) -->
+        </ram:URIUniversalCommunication>
         <ram:SpecifiedTaxRegistration>
-          <ram:ID schemeID="VA">${esc(club.tvaIntra)}</ram:ID><!-- BT-31 TVA intracom -->
+          <ram:ID schemeID="VA">${esc((club.tvaIntra || "").replace(/\s/g, ""))}</ram:ID><!-- BT-31 TVA intracom -->
         </ram:SpecifiedTaxRegistration>
       </ram:SellerTradeParty>
       <ram:BuyerTradeParty>
+        ${inv.buyer.siren ? `<ram:GlobalID schemeID="0002">${esc(inv.buyer.siren)}</ram:GlobalID>` : ""}
         <ram:Name>${esc(inv.buyer.name)}</ram:Name><!-- BT-44 -->
         ${inv.buyer.siren ? `<ram:SpecifiedLegalOrganization><ram:ID schemeID="0002">${esc(inv.buyer.siren)}</ram:ID></ram:SpecifiedLegalOrganization><!-- BT-47 -->` : ""}
         ${
           bAddr
             ? `<ram:PostalTradeAddress><ram:PostcodeCode>${esc(bAddr.cp)}</ram:PostcodeCode><ram:LineOne>${esc(bAddr.ligne)}</ram:LineOne><ram:CityName>${esc(bAddr.ville)}</ram:CityName><ram:CountryID>FR</ram:CountryID></ram:PostalTradeAddress>`
+            : ""
+        }
+        ${
+          inv.buyer.siren
+            ? `<ram:URIUniversalCommunication><ram:URIID schemeID="0002">${esc(inv.buyer.siren)}</ram:URIID></ram:URIUniversalCommunication><!-- BT-49 routage acheteur (SIREN) -->`
+            : inv.buyer.email
+            ? `<ram:URIUniversalCommunication><ram:URIID schemeID="EM">${esc(inv.buyer.email)}</ram:URIID></ram:URIUniversalCommunication><!-- BT-49 routage acheteur (email, schéma EM) -->`
             : ""
         }
       </ram:BuyerTradeParty>
