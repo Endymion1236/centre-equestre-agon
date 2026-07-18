@@ -166,9 +166,13 @@ export function buildFacturXXml(inv: FacturXInput, club: ClubInfo): string {
         <ram:URIUniversalCommunication>
           <ram:URIID schemeID="0009">${esc(siret)}</ram:URIID><!-- BT-34 adresse électronique de routage (SIRET) -->
         </ram:URIUniversalCommunication>
-        <ram:SpecifiedTaxRegistration>
+        ${
+          (club.tvaIntra || "").trim()
+            ? `<ram:SpecifiedTaxRegistration>
           <ram:ID schemeID="VA">${esc((club.tvaIntra || "").replace(/\s/g, ""))}</ram:ID><!-- BT-31 TVA intracom -->
-        </ram:SpecifiedTaxRegistration>
+        </ram:SpecifiedTaxRegistration>`
+            : ""
+        }
       </ram:SellerTradeParty>
       <ram:BuyerTradeParty>
         ${inv.buyer.siren ? `<ram:GlobalID schemeID="0002">${esc(inv.buyer.siren)}</ram:GlobalID>` : ""}
