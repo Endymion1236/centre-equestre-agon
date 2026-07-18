@@ -7,7 +7,7 @@ import { Card, Badge } from "@/components/ui";
 import { Loader2, ChevronDown, Receipt, Trash2, Search, X, Check, Copy, Pencil } from "lucide-react";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
 import { downloadAvoirPdf } from "@/lib/download-avoir";
-import { downloadFacturX } from "@/lib/download-facturx";
+import { downloadFacturX, downloadFacturXPdf } from "@/lib/download-facturx";
 import { paymentModes } from "./types";
 import { NoteField } from "./NoteField";
 
@@ -325,12 +325,20 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                         <span className="inline-flex items-center gap-1">
                           <button onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button>
                           {(p as any).invoiceNumber && (
-                            <button
-                              onClick={() => downloadFacturX(p.id!, (p as any).invoiceNumber)}
-                              title="Télécharger le XML Factur-X (EN 16931) — réforme facturation électronique"
-                              className="font-body text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-1 rounded cursor-pointer border-none hover:bg-indigo-100">
-                              F-X
-                            </button>
+                            <>
+                              <button
+                                onClick={() => downloadFacturX(p.id!, (p as any).invoiceNumber)}
+                                title="Télécharger le XML Factur-X (EN 16931) — réforme facturation électronique"
+                                className="font-body text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-1 rounded cursor-pointer border-none hover:bg-indigo-100">
+                                F-X
+                              </button>
+                              <button
+                                onClick={() => downloadFacturXPdf(p.id!, (p as any).invoiceNumber)}
+                                title="Télécharger le PDF Factur-X hybride (facture PDF + XML embarqué)"
+                                className="font-body text-[9px] font-bold text-white bg-indigo-500 px-1.5 py-1 rounded cursor-pointer border-none hover:bg-indigo-600">
+                                PDF F-X
+                              </button>
+                            </>
                           )}
                         </span>
                       )}

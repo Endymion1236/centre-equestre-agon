@@ -20,3 +20,22 @@ export async function downloadFacturX(paymentId: string, invoiceNumber: string):
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+/** Variante PDF hybride : la facture PDF avec le XML Factur-X embarqué. */
+export async function downloadFacturXPdf(paymentId: string, invoiceNumber: string): Promise<void> {
+  const r = await authFetch(`/api/admin/facturx-pdf?paymentId=${encodeURIComponent(paymentId)}`);
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    alert(d?.error || "Impossible de générer le PDF Factur-X.");
+    return;
+  }
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `FACTURX_${String(invoiceNumber).replace(/[^\w.-]/g, "_")}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

@@ -86,7 +86,7 @@ export default function FamilyCard({
   });
   // ── Édition famille ────────────────────────────────────────────────────────
   const [editingFamily, setEditingFamily] = useState(false);
-  const [editForm, setEditForm] = useState({ civilite: "", parentName: "", lastName: "", firstName: "", parentEmail: "", parentPhone: "", parentPhone2: "", address: "", zipCode: "", city: "" });
+  const [editForm, setEditForm] = useState({ civilite: "", parentName: "", lastName: "", firstName: "", parentEmail: "", parentPhone: "", parentPhone2: "", address: "", zipCode: "", city: "", siren: "" });
   const [editTags, setEditTags] = useState<string[]>([]);
 
   const startEditFamily = () => {
@@ -99,6 +99,7 @@ export default function FamilyCard({
       parentEmail: family.parentEmail || "",
       parentPhone: family.parentPhone || "", parentPhone2: (family as any).parentPhone2 || "", address: family.address || "",
       zipCode: family.zipCode || "", city: family.city || "",
+      siren: String((family as any).siren || ""),
     });
     setEditTags(family.tags || []);
   };
@@ -141,6 +142,7 @@ export default function FamilyCard({
           lastName: lastName || null,
           firstName: firstName || null,
           parentPhone: editForm.parentPhone.trim(), parentPhone2: editForm.parentPhone2.trim(), address: editForm.address.trim(),
+          siren: editForm.siren.replace(/\s/g, "") || null,
           zipCode: editForm.zipCode.trim(), city: editForm.city.trim(),
           tags: editTags,
           updatedAt: serverTimestamp(),
@@ -155,6 +157,7 @@ export default function FamilyCard({
           firstName: firstName || null,
           parentEmail: newEmail,
           parentPhone: editForm.parentPhone.trim(), parentPhone2: editForm.parentPhone2.trim(), address: editForm.address.trim(),
+          siren: editForm.siren.replace(/\s/g, "") || null,
           zipCode: editForm.zipCode.trim(), city: editForm.city.trim(),
           tags: editTags,
           updatedAt: serverTimestamp(),
@@ -453,6 +456,11 @@ export default function FamilyCard({
                     <label className={labelStyle}>Ville</label>
                     <input value={editForm.city} onChange={e => setEditForm(f => ({ ...f, city: e.target.value }))} className={inputStyle}/>
                   </div>
+                </div>
+                <div className="mb-3">
+                  <label className={labelStyle}>SIREN (clients pros / collectivités — requis sur les factures électroniques B2B)</label>
+                  <input value={editForm.siren} onChange={e => setEditForm(f => ({ ...f, siren: e.target.value }))}
+                    placeholder="9 chiffres — laisser vide pour un particulier" maxLength={11} className={inputStyle}/>
                 </div>
                 {/* Tags client */}
                 <div className="mb-3">
