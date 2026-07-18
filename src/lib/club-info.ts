@@ -41,7 +41,15 @@ export async function getClubInfo(): Promise<ClubInfo> {
   try {
     const snap = await adminDb.collection("settings").doc("centre").get();
     if (snap.exists) {
-      cache = { ...DEFAULTS, ...snap.data() } as ClubInfo;
+      // Fusion en ignorant les valeurs VIDES du doc : un champ effacé dans
+      // les réglages ne doit pas écraser le défaut (ex : tvaIntra vide →
+      // TVA absente des factures Factur-X, rejet BR-CO-09).
+      const data = snap.data() as any;
+      const merged: any = { ...DEFAULTS };
+      for (const [k, v] of Object.entries(data || {})) {
+        if (typeof v === "string" ? v.trim() !== "" : v !== null && v !== undefined) merged[k] = v;
+      }
+      cache = merged as ClubInfo;
       cacheTs = Date.now();
       return cache;
     }
