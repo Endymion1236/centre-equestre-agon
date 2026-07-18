@@ -67,7 +67,11 @@ export async function GET(req: NextRequest) {
           priceTTC: i.priceTTC || 0,
         })),
         totalTTC: p.totalTTC || 0,
-        paidAmount: 0, // facture pleine : les règlements figurent au dossier, la facture porte le dû total
+        paidAmount: 0,
+        // Cadre de facturation FR (BT-23) : prestations de SERVICES →
+        // S2 si la facture est déjà intégralement réglée au dépôt, S1 sinon.
+        // Choix par défaut à faire confirmer par le cabinet comptable / la PA.
+        businessProcess: p.status === "paid" ? "S2" : "S1", // facture pleine : les règlements figurent au dossier, la facture porte le dû total
         dueDate: p.stageDate || null,
       },
       club

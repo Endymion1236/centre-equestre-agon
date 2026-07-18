@@ -51,6 +51,9 @@ export interface FacturXInput {
   totalTTC: number;
   paidAmount: number; // acomptes déjà réglés (BT-113)
   dueDate?: any; // BT-9 (échéance — début du stage par ex.)
+  /** BT-23 cadre de facturation France (XP Z12-012, BR-FR-08).
+   *  Prestations du centre = Services → "S1" (à régler) / "S2" (déjà payée). */
+  businessProcess?: string;
 }
 
 export function buildFacturXXml(inv: FacturXInput, club: ClubInfo): string {
@@ -140,6 +143,7 @@ export function buildFacturXXml(inv: FacturXInput, club: ClubInfo): string {
   xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100"
   xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100">
   <rsm:ExchangedDocumentContext>
+    ${inv.businessProcess ? `<ram:BusinessProcessSpecifiedDocumentContextParameter><ram:ID>${esc(inv.businessProcess)}</ram:ID></ram:BusinessProcessSpecifiedDocumentContextParameter><!-- BT-23 cadre de facturation FR -->` : ""}
     <ram:GuidelineSpecifiedDocumentContextParameter>
       <ram:ID>urn:cen.eu:en16931:2017</ram:ID><!-- profil EN 16931 -->
     </ram:GuidelineSpecifiedDocumentContextParameter>
