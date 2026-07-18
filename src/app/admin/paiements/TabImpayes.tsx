@@ -434,11 +434,11 @@ export function TabImpayes({
                           {(p as any).invoiceNumber && (
                             <>
                               <button onClick={() => downloadFacturX(p.id!, (p as any).invoiceNumber)}
-                                title="Télécharger le XML Factur-X (EN 16931) — réforme facturation électronique"
-                                className="font-body text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-indigo-100">F-X</button>
+                                title="XML Factur-X (EN 16931) — réforme facturation électronique"
+                                className="font-body text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-indigo-100 whitespace-nowrap leading-none">XML</button>
                               <button onClick={() => downloadFacturXPdf(p.id!, (p as any).invoiceNumber)}
-                                title="Télécharger le PDF Factur-X hybride (facture PDF + XML embarqué)"
-                                className="font-body text-[10px] font-bold text-white bg-indigo-500 px-2 py-1 rounded border-none cursor-pointer hover:bg-indigo-600">PDF F-X</button>
+                                title="PDF Factur-X hybride (facture PDF + XML embarqué)"
+                                className="font-body text-[10px] font-bold text-white bg-indigo-500 px-2 py-1 rounded border-none cursor-pointer hover:bg-indigo-600 whitespace-nowrap leading-none">F-X</button>
                             </>
                           )}
                           {!(p as any).invoiceNumber && (
