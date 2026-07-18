@@ -276,9 +276,23 @@ export async function GET(req: NextRequest) {
       const newPaidTotal = Math.round(((pData.paidAmount || 0) + montantPaye) * 100) / 100;
       const isFullyPaid = totalTTC > 0 && newPaidTotal >= totalTTC - 0.02;
 
+      // Une vente intégralement réglée doit avoir sa FACTURE : numérotation
+      // séquentielle attribuée ici aussi (le flux UI le fait déjà — sans ça,
+      // les paiements soldés en ligne restaient des proformas PF-…).
+      let newInvoiceNumber: string | null = null;
+      if (isFullyPaid && !pData.invoiceNumber) {
+        try {
+          const { attribuerNumeroFacture } = await import("@/lib/invoice-number");
+          newInvoiceNumber = (await attribuerNumeroFacture({ paymentId: payRef.id, attributedBy: "system:cawl-status" })).invoiceNumber;
+        } catch (e) {
+          console.error("CAWL status: attribution numéro facture échouée (non-bloquant):", e);
+        }
+      }
+
       await payRef.update({
         status: isFullyPaid ? "paid" : "partial",
         paidAmount: newPaidTotal,
+        ...(newInvoiceNumber ? { invoiceNumber: newInvoiceNumber, invoiceDate: FieldValue.serverTimestamp() } : {}),
         paymentMode: "cb_online",
         cawlHostedCheckoutId: hostedCheckoutId,
         paymentRef: `CAWL-${hostedCheckoutId}`,
