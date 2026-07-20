@@ -203,6 +203,8 @@ Tu aides le gérant à traiter ses mails. Tu réponds UNIQUEMENT en JSON valide,
 Règles:
 - Ton chaleureux, professionnel, tutoiement évité avec les familles (vouvoiement), signé "Le Centre Équestre d'Agon-Coutainville".
 - Tu ne proposes QUE des prestations présentes dans la liste "activitesDispo" fournie (places réelles). Jamais d'invention de date, de tarif ou de place.
+- STAGES COMPLETS : une activité avec "complet": true existe bel et bien mais n'a plus de place. Ne la mets JAMAIS dans "suggestions" (elle serait refusée). En revanche, tu dois l'ÉVOQUER dans le brouillon si elle correspond à la demande : dis clairement qu'elle est complète pour ces dates, puis propose la même prestation à une autre date si elle figure dans la liste avec des places. Exemple : "Le stage baby de la semaine du 27 juillet est malheureusement complet, mais il reste des places celle du 3 août."
+- INTERDICTION ABSOLUE de conclure qu'une tranche d'âge n'est pas servie à partir de la seule absence de créneau libre. Si aucune activité (complète ou non) ne correspond à l'âge demandé, écris que tu vérifies et que tu reviens vers la famille — n'affirme JAMAIS "nous n'avons rien pour cet âge" ni "nos stages commencent à X ans".
 - LES STAGES SONT DES SEMAINES : chaque stage fourni est un GROUPE couvrant "nbJours" jours ("periode" = du premier au dernier jour, détail dans "joursDates"). Son "prixSemaineTTC" est le prix de la SEMAINE COMPLÈTE (les nbJours jours), PAS un prix par jour. Dans le brouillon, écris toujours le prix sans ambiguïté : "175 € la semaine complète (5 jours)". Si "demiJourneeOuverte"=true, précise qu'une formule à la journée existe (avec "prixJour" si fourni, sinon "tarif journée sur demande"). Ne propose JAMAIS deux fois la même semaine de stage.
 - DEMANDE "À PARTIR DU <date>" (ou toute contrainte de dates) : une semaine de stage qui COMMENCE AVANT la date demandée ne doit JAMAIS être proposée en semaine complète (la famille raterait des jours déjà passés pour elle). Deux cas : (a) si "demiJourneeOuverte"=true, propose-la en MODE JOURS avec uniquement les jours ≥ la date demandée — mets "mode":"jours" et "jours":[dates choisies parmi joursDates] dans la suggestion, et dans le brouillon annonce clairement "possible à la journée : jeudi 30 et vendredi 31 (X €/jour)" ; (b) sinon, ne la propose pas et passe à la semaine suivante qui commence à ou après la date demandée (mode "semaine"). Pour une semaine complète compatible avec les dates, mets "mode":"semaine" et laisse "jours" à null.
 - ÉVENTAIL : propose jusqu'à 5 suggestions couvrant les options pertinentes, pas une seule piste. Pour une demande de stage "à partir du <date>" : la semaine entamée en mode jours (si ouverte à la journée) ET la ou les semaines complètes suivantes du bon niveau. Si la famille évoque aussi promenades/randos ou reste ouverte ("stage ou promenade"), ajoute la ou les alternatives éligibles (promenade, rando) qui correspondent. Ne gonfle pas artificiellement : uniquement des options réellement pertinentes et éligibles.
@@ -246,7 +248,7 @@ ${JSON.stringify(historiqueFil)}
 ` : ""}CONTEXTE FAMILLE (si expéditeur connu):
 ${familleContexte ? JSON.stringify(familleContexte) : "expéditeur inconnu de la base"}
 
-ACTIVITÉS RÉELLEMENT DISPONIBLES (à venir, places > 0):
+ACTIVITÉS (à venir). ATTENTION : certaines portent "complet": true — elles EXISTENT mais n'ont plus de place.
 ${JSON.stringify(activitesDispo)}`;
 
     const message = await client.messages.create({
@@ -316,7 +318,12 @@ ${JSON.stringify(activitesDispo)}`;
               : typeof g.prixSemaineTTC === "number"
               ? Math.round((g.prixSemaineTTC / g.nbJours) * n * 100) / 100
               : null;
-          const placeOk = joursChoisis.length > 0; // places par jour déjà > 0 (groupe construit sur spots > 0)
+          // Chaque jour retenu doit avoir une place. Le filtre "spots > 0" a été
+          // retiré de lib/dispo.ts (les créneaux complets sont désormais fournis
+          // à l'IA pour qu'elle puisse dire "complet"), donc on ne peut plus
+          // supposer qu'un jour présent est réservable.
+          const placeOk =
+            joursChoisis.length > 0 && joursChoisis.every((j: any) => !j.complet);
           const actionable = placeOk && ageOk;
           return {
             groupId: s.groupId,
