@@ -154,6 +154,54 @@ export interface GmailMessage {
   date: string;
   snippet: string;
   body: string;
+  /** Pièce jointe audio (message vocal du répondeur), si présente. */
+  audioAttachmentId?: string;
+  audioFilename?: string;
+}
+
+/**
+ * Cherche une pièce jointe audio dans le payload d'un message.
+ * Le payload est déjà chargé (format=full) : aucun appel réseau supplémentaire.
+ */
+function findAudioAttachment(
+  payload: any
+): { attachmentId: string; filename: string } | null {
+  const walk = (part: any): { attachmentId: string; filename: string } | null => {
+    if (!part) return null;
+    const mime = (part.mimeType || "").toLowerCase();
+    const name = part.filename || "";
+    const isAudio = mime.startsWith("audio/") || /\.(mp3|wav|m4a|ogg)$/i.test(name);
+    if (isAudio && part.body?.attachmentId) {
+      return { attachmentId: part.body.attachmentId, filename: name || "message.mp3" };
+    }
+    if (part.parts) {
+      for (const p of part.parts) {
+        const r = walk(p);
+        if (r) return r;
+      }
+    }
+    return null;
+  };
+  return walk(payload);
+}
+
+/**
+ * Télécharge une pièce jointe et renvoie ses octets.
+ * Gmail renvoie du base64url — d'où la conversion avant décodage.
+ */
+export async function gmailGetAttachment(
+  messageId: string,
+  attachmentId: string
+): Promise<Buffer> {
+  const token = await getAccessToken();
+  const res = await fetch(
+    `${GMAIL_API}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) throw new Error(`gmail attachment ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  if (!data?.data) throw new Error("Pièce jointe vide");
+  return Buffer.from(String(data.data).replace(/-/g, "+").replace(/_/g, "/"), "base64");
 }
 
 export async function gmailListRecent(max = 12): Promise<GmailMessage[]> {
@@ -179,6 +227,7 @@ export async function gmailListRecent(max = 12): Promise<GmailMessage[]> {
       // "Nom <email>" → on garde l'email si présent
       const emailMatch = fromRaw.match(/<([^>]+)>/);
       const from = emailMatch ? emailMatch[1] : fromRaw;
+      const audio = findAudioAttachment(m.payload);
       messages.push({
         id,
         threadId: m.threadId || "",
@@ -188,6 +237,8 @@ export async function gmailListRecent(max = 12): Promise<GmailMessage[]> {
         date: headerVal(headers, "Date"),
         snippet: m.snippet || "",
         body: extractBody(m.payload),
+        audioAttachmentId: audio?.attachmentId,
+        audioFilename: audio?.filename,
       });
     } catch {
       /* skip */
