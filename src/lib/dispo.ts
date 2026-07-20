@@ -250,13 +250,29 @@ export async function calculerDisponibilites(
         jours.length > 1
           ? `du ${jourFr(first.date)} ${labelFr(first.date).replace(/^\S+\s/, "")} au ${jourFr(last.date)} ${labelFr(last.date).replace(/^\S+\s/, "")}`
           : labelFr(first.date),
-      // Jours détaillés : permet à l'IA de proposer un sous-ensemble (mode jours)
-      joursDates: jours.map((j) => ({ date: j.date, jour: j.jour })),
+      // Jours détaillés AVEC dispo réelle par jour : sans ça, l'IA proposait
+      // une inscription à la journée sans savoir s'il restait une place ce
+      // jour-là (elle raisonnait sur les places SEMAINE = minimum sur 5 jours).
+      joursDates: jours.map((j) => ({
+        date: j.date,
+        jour: j.jour,
+        places: j.places,
+        complet: j.complet,
+      })),
+      // Jours EFFECTIVEMENT réservables à l'unité (place > 0 ET formule journée
+      // ouverte). Liste prête à l'emploi pour le prompt : s'il est vide, aucune
+      // journée n'est proposable même si "demiJourneeOuverte" est vrai.
+      joursReservablesJournee: jours
+        .filter((j) => !j.complet && j.demiJourneeOuverte)
+        .map((j) => `${j.jour} ${j.date}`),
       horaire: first.horaire,
       places,
       complet,
       prixSemaineTTC: first.prixTTC, // prix TTC du créneau = prix de la SEMAINE COMPLÈTE
-      demiJourneeOuverte: jours.some((j) => j.demiJourneeOuverte),
+      // Ouverte pour l'IA UNIQUEMENT s'il existe au moins un jour à la fois
+      // libre et en formule journée. Une semaine complète a demiJourneeOuverte
+      // = false même si l'option existe en théorie : aucune place nulle part.
+      demiJourneeOuverte: jours.some((j) => j.demiJourneeOuverte && !j.complet),
       prixJour: jours.find((j) => j.prixJour)?.prixJour ?? null,
       ageMin: first.ageMin,
       ageMax: first.ageMax,
