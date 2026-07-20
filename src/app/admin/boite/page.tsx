@@ -35,6 +35,8 @@ function estVocal(m: any): boolean {
 export default function BoiteAssistantPage() {
   const [vocal, setVocal] = useState<any>(null);
   const [vocalLoading, setVocalLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [from, setFrom] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -66,12 +68,70 @@ export default function BoiteAssistantPage() {
     error: string;
     /** Adresse REELLEMENT connectee (renvoyee par l'API, jamais devinee). */
     email?: string | null;
-  }>({ loading: true, configured: false, connected: false, messages: [], error: "", email: null });
+    /** Jeton de page suivante Gmail, null si fin de liste. */
+    nextPageToken?: string | null;
+  }>({ loading: true, configured: false, connected: false, messages: [], error: "", email: null, nextPageToken: null });
   const [connecting, setConnecting] = useState(false);
   const [replyMeta, setReplyMeta] = useState<{ threadId: string; messageId: string }>({ threadId: "", messageId: "" });
   const [selectedId, setSelectedId] = useState<string>("");
   const [mailboxBusy, setMailboxBusy] = useState<"" | "trash" | "forward">("");
   const [mailboxMsg, setMailboxMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const deleteSelected = async () => {
+    if (selectedIds.length === 0 || mailboxBusy) return;
+    const n = selectedIds.length;
+    if (!confirm(`Mettre ${n} mail${n > 1 ? "s" : ""} à la corbeille Gmail ?`)) return;
+    setMailboxBusy("trash");
+    setMailboxMsg(null);
+    try {
+      const r = await authFetch("/api/admin/gmail/trash", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+      const d = await r.json();
+      if (r.ok || (d.trashed && d.trashed.length)) {
+        const trashed: string[] = d.trashed || selectedIds;
+        setGmail((g) => ({ ...g, messages: g.messages.filter((m: any) => !trashed.includes(m.id)) }));
+        if (trashed.includes(selectedId)) {
+          setFrom(""); setSubject(""); setBody(""); setSelectedId(""); setRes(null);
+        }
+        setSelectedIds((prev) => prev.filter((x) => !trashed.includes(x)));
+        const nFailed = (d.failed || []).length;
+        setMailboxMsg({
+          ok: nFailed === 0,
+          text: nFailed === 0
+            ? `${trashed.length} mail${trashed.length > 1 ? "s" : ""} à la corbeille ✓`
+            : `${trashed.length} supprimé(s), ${nFailed} en échec`,
+        });
+      } else {
+        setMailboxMsg({ ok: false, text: d.error || "Échec de la suppression" });
+      }
+    } catch {
+      setMailboxMsg({ ok: false, text: "Erreur réseau" });
+    }
+    setMailboxBusy("");
+  };
+
+  const loadMore = async () => {
+    if (!gmail.nextPageToken || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const r = await authFetch(`/api/admin/gmail/messages?pageToken=${encodeURIComponent(gmail.nextPageToken)}`);
+      const d = await r.json();
+      if (r.ok && Array.isArray(d.messages)) {
+        setGmail((g) => {
+          // Dédoublonnage : une page peut chevaucher si la boîte a bougé.
+          const vus = new Set(g.messages.map((m: any) => m.id));
+          const nouveaux = d.messages.filter((m: any) => !vus.has(m.id));
+          return { ...g, messages: [...g.messages, ...nouveaux], nextPageToken: d.nextPageToken || null };
+        });
+      }
+    } catch {
+      /* silencieux : le bouton reste disponible pour réessayer */
+    }
+    setLoadingMore(false);
+  };
 
   const deleteMail = async () => {
     if (!selectedId || mailboxBusy) return;
@@ -164,6 +224,8 @@ export default function BoiteAssistantPage() {
         connected: !!d.connected,
         messages: Array.isArray(d.messages) ? d.messages : [],
         error: d.error || "",
+        email: d.email ?? null,
+        nextPageToken: d.nextPageToken ?? null,
       });
     } catch {
       setGmail((g) => ({ ...g, loading: false, error: "Erreur réseau" }));
@@ -432,28 +494,77 @@ export default function BoiteAssistantPage() {
             {gmail.messages.length === 0 && !gmail.error && (
               <p className="font-body text-xs text-slate-400">Aucun mail récent.</p>
             )}
+            {selectedIds.length > 0 && (
+              <div className="mb-2 flex items-center justify-between rounded-lg bg-red-50 px-3 py-2">
+                <span className="font-body text-xs font-semibold text-red-700">
+                  {selectedIds.length} sélectionné{selectedIds.length > 1 ? "s" : ""}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setSelectedIds([])}
+                    className="font-body text-[11px] text-slate-500 hover:text-slate-700"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={deleteSelected}
+                    disabled={mailboxBusy === "trash"}
+                    className="inline-flex items-center gap-1 rounded-md bg-red-600 px-2.5 py-1 font-body text-[11px] font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {mailboxBusy === "trash" ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                    Corbeille
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="max-h-72 space-y-1 overflow-y-auto">
               {gmail.messages.map((m: any) => (
-                <button
+                <div
                   key={m.id}
-                  onClick={() => pickMessage(m)}
-                  className="w-full rounded-lg border border-transparent px-3 py-2 text-left transition-colors hover:border-blue-100 hover:bg-blue-50/50"
+                  className={`flex items-start gap-2 rounded-lg border px-2 py-2 transition-colors ${
+                    selectedIds.includes(m.id)
+                      ? "border-red-200 bg-red-50/40"
+                      : "border-transparent hover:border-blue-100 hover:bg-blue-50/50"
+                  }`}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-body text-xs font-semibold text-slate-700">
-                      {estVocal(m) ? "Répondeur téléphonique" : decodeHtml(m.from)}
-                    </span>
-                    {estVocal(m) && (
-                      <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 font-body text-[10px] font-semibold text-amber-700">
-                        <Phone size={10} /> Vocal
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(m.id)}
+                    onChange={(e) => {
+                      setSelectedIds((prev) =>
+                        e.target.checked ? [...prev, m.id] : prev.filter((x) => x !== m.id)
+                      );
+                    }}
+                    className="mt-1 h-4 w-4 flex-shrink-0 cursor-pointer accent-red-600"
+                    aria-label="Sélectionner ce mail"
+                  />
+                  <button onClick={() => pickMessage(m)} className="min-w-0 flex-1 text-left">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate font-body text-xs font-semibold text-slate-700">
+                        {estVocal(m) ? "Répondeur téléphonique" : decodeHtml(m.from)}
                       </span>
-                    )}
-                  </div>
-                  <div className="truncate font-body text-sm text-slate-800">{decodeHtml(m.subject) || "(sans objet)"}</div>
-                  <div className="truncate font-body text-[11px] text-slate-400">{decodeHtml(m.snippet)}</div>
-                </button>
+                      {estVocal(m) && (
+                        <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 font-body text-[10px] font-semibold text-amber-700">
+                          <Phone size={10} /> Vocal
+                        </span>
+                      )}
+                    </div>
+                    <div className="truncate font-body text-sm text-slate-800">{decodeHtml(m.subject) || "(sans objet)"}</div>
+                    <div className="truncate font-body text-[11px] text-slate-400">{decodeHtml(m.snippet)}</div>
+                  </button>
+                </div>
               ))}
             </div>
+            {gmail.nextPageToken && (
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 py-2 font-body text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              >
+                {loadingMore ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                Charger plus de messages
+              </button>
+            )}
           </div>
         )}
       </div>

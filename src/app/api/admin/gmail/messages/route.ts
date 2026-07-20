@@ -18,9 +18,12 @@ export async function GET(req: NextRequest) {
 
   const compte = await gmailAccount();
 
+  // Pagination : le client renvoie le pageToken reçu au chargement précédent.
+  const pageToken = req.nextUrl.searchParams.get("pageToken") || undefined;
+
   try {
-    const messages = await gmailListRecent(12);
-    return NextResponse.json({ configured: true, connected: true, messages, ...compte });
+    const { messages, nextPageToken } = await gmailListRecent(25, pageToken);
+    return NextResponse.json({ configured: true, connected: true, messages, nextPageToken, ...compte });
   } catch (e: any) {
     // "Mail service not enabled" = compte Google sans boite Gmail : message
     // clair plutot qu'un code HTTP brut.
@@ -29,7 +32,7 @@ export async function GET(req: NextRequest) {
       ? "Ce compte Google n'a pas de boite Gmail. Clique sur Reconnecter et choisis un compte @gmail.com."
       : brut;
     return NextResponse.json(
-      { configured: true, connected: true, messages: [], ...compte, error },
+      { configured: true, connected: true, messages: [], nextPageToken: null, ...compte, error },
       { status: 200 }
     );
   }
