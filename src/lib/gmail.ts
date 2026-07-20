@@ -49,11 +49,37 @@ export async function gmailExchangeCode(code: string): Promise<void> {
   });
   if (!res.ok) throw new Error(`token exchange ${res.status}: ${await res.text()}`);
   const t = await res.json();
+
+  // Adresse REELLEMENT connectee : on ne se fie jamais a ce que l'admin croit
+  // avoir choisi dans le selecteur de compte Google. Un compte Google bati sur
+  // une adresse non-Gmail (ex. une adresse Orange) s'authentifie sans probleme
+  // mais n'a AUCUNE boite mail : l'API repond alors "Mail service not enabled".
+  // On le detecte ici, a la connexion, plutot que de stocker une liaison morte.
+  let email: string | null = null;
+  let mailError: string | null = null;
+  try {
+    const p = await fetch(`${GMAIL_API}/profile`, {
+      headers: { Authorization: `Bearer ${t.access_token}` },
+    });
+    if (p.ok) {
+      email = (await p.json())?.emailAddress || null;
+    } else {
+      const txt = await p.text();
+      mailError = /mail service not enabled/i.test(txt)
+        ? "Ce compte Google n'a pas de boite Gmail. Reconnecte-toi en choisissant un compte @gmail.com."
+        : `Profil Gmail illisible (${p.status})`;
+    }
+  } catch {
+    mailError = "Profil Gmail illisible";
+  }
+
   await adminDb
     .collection("settings")
     .doc("gmail_oauth")
     .set(
       {
+        email,
+        mailError,
         refreshToken: t.refresh_token || null,
         accessToken: t.access_token || null,
         expiresAt: Date.now() + (t.expires_in ? t.expires_in * 1000 : 0),
@@ -93,6 +119,17 @@ async function getAccessToken(): Promise<string> {
       { merge: true }
     );
   return accessToken;
+}
+
+/** Adresse reellement connectee + erreur eventuelle detectee a la connexion. */
+export async function gmailAccount(): Promise<{ email: string | null; mailError: string | null }> {
+  try {
+    const snap = await adminDb.collection("settings").doc("gmail_oauth").get();
+    const d = snap.exists ? (snap.data() as any) : null;
+    return { email: d?.email || null, mailError: d?.mailError || null };
+  } catch {
+    return { email: null, mailError: null };
+  }
 }
 
 export async function gmailIsConnected(): Promise<boolean> {
