@@ -210,7 +210,12 @@ export async function gmailListRecent(max = 12): Promise<GmailMessage[]> {
     `${GMAIL_API}/messages?maxResults=${max}&q=${encodeURIComponent("in:inbox -category:promotions -category:social")}`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
-  if (!listRes.ok) throw new Error(`gmail list ${listRes.status}`);
+  if (!listRes.ok) {
+    // Google explique TOUJOURS la cause dans le corps de la réponse
+    // (scope manquant, requête invalide, compte sans Gmail…). Sans ça,
+    // un "400" seul est indiagnosticable.
+    throw new Error(`gmail list ${listRes.status}: ${await listRes.text()}`);
+  }
   const list = await listRes.json();
   const ids: string[] = (list.messages || []).map((m: any) => m.id);
 
