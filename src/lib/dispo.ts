@@ -73,6 +73,19 @@ export async function calculerDisponibilites(
   opts: DispoOptions
 ): Promise<DispoResult> {
   const today = opts.today;
+
+  // Lundi / dimanche de la semaine contenant une date donnee.
+  const lundiDe = (dateStr: string) => {
+    const d = new Date(dateStr + "T12:00:00Z");
+    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+    return d.toISOString().slice(0, 10);
+  };
+  const dimancheDe = (dateStr: string) => {
+    const d = new Date(lundiDe(dateStr) + "T12:00:00Z");
+    d.setUTCDate(d.getUTCDate() + 6);
+    return d.toISOString().slice(0, 10);
+  };
+
   const debutLecture = opts.start || today;
   // Horizon de lecture borné (≈ 9 semaines) : couvre l'été/les demandes
   // courantes SANS lire tout un planning programmé loin (coût des lectures).
@@ -85,11 +98,25 @@ export async function calculerDisponibilites(
       return d.toISOString().slice(0, 10);
     })();
   
-  // ── 1. Créneaux à venir réellement disponibles (fenêtre bornée) ───
+  // ── 1. Créneaux disponibles sur la fenêtre ÉLARGIE AUX SEMAINES ENTIÈRES ──
+  //
+  // Un stage se réserve à la SEMAINE, mais la fenêtre demandée est exprimée
+  // en jours. Une demande "mardi 28 juillet" produisait une fenêtre d'un seul
+  // jour : le stage du lundi 27 au vendredi 31 n'était vu que par son mardi.
+  // Le groupe se construisait alors avec nbJours = 1 tout en portant le prix
+  // de la SEMAINE — d'où les réponses "175 € la journée complète", fausses et
+  // commercialement dangereuses. Pire, un stage ne tournant pas ce jour-là
+  // disparaissait entièrement.
+  //
+  // On lit donc toujours des semaines complètes (lundi → dimanche englobants),
+  // ce qui garantit que chaque groupe de stage est vu dans son intégralité.
+  // Surcoût borné : 6 jours de lecture au maximum de chaque côté.
+  const lectureDebut = lundiDe(debutLecture);
+  const lectureFin = dimancheDe(horizon);
   const creSnap = await adminDb
     .collection("creneaux")
-    .where("date", ">=", debutLecture)
-    .where("date", "<=", horizon)
+    .where("date", ">=", lectureDebut)
+    .where("date", "<=", lectureFin)
     .orderBy("date", "asc")
     .limit(1500)
     .get();
@@ -181,7 +208,9 @@ export async function calculerDisponibilites(
   // autres activités réparti sur les dates (pas seulement les plus proches).
   const isStageType = (t: string) => t === "stage" || t === "stage_journee";
   const stagesJours = available.filter((a) => isStageType(a.type));
-  const autresDispo = available.filter((a) => !isStageType(a.type));
+  // Les activités hors stage se réservent à l'unité : l'élargissement aux
+  // semaines entières a pu ramener des jours déjà passés, on les écarte.
+  const autresDispo = available.filter((a) => !isStageType(a.type) && a.date >= today);
   
   // ── Regroupement des stages en SEMAINES (même clé que la page réservation :
   //    stageGroupId (lot de création) + lundi de la semaine). Un "stage" pour
@@ -243,12 +272,17 @@ export async function calculerDisponibilites(
       pricePerCount: first.pricePerCount || {},
     });
   });
-  stagesDispo.sort((x, y) => (x.dateDebut < y.dateDebut ? -1 : 1));
+  // Une semaine de stage entièrement terminée n'est plus proposable. En
+  // revanche une semaine EN COURS est conservée : elle porte le bon nombre de
+  // jours et le vrai prix semaine, et le prompt sait proposer les jours
+  // restants quand la formule à la journée est ouverte.
+  const stagesAVenir = stagesDispo.filter((g) => g.dateFin >= today);
+  stagesAVenir.sort((x, y) => (x.dateDebut < y.dateDebut ? -1 : 1));
   // Échantillon d'"autres" réparti : 1 sur N pour couvrir toute la période.
   const autresAvecPlace = autresDispo.filter((a) => !a.complet);
   const stepAutres = Math.max(1, Math.ceil(autresAvecPlace.length / 50));
   const autresEchantillon = autresAvecPlace.filter((_, i) => i % stepAutres === 0).slice(0, 50);
-  const activitesDispo = [...stagesDispo.slice(0, 120), ...autresEchantillon];
+  const activitesDispo = [...stagesAVenir.slice(0, 120), ...autresEchantillon];
 
-  return { horizon, autresDispo, activitesDispo, stagesDispo, stageGroupMap, creneauMap };
+  return { horizon, autresDispo, activitesDispo, stagesDispo: stagesAVenir, stageGroupMap, creneauMap };
 }
