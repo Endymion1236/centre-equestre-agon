@@ -8,13 +8,19 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const { id } = await req.json();
-    if (!id) return NextResponse.json({ error: "id requis" }, { status: 400 });
+    const { id, ids } = await req.json();
+    // Suppression unitaire (`id`) ou par lot (`ids`) : même route.
+    const list: string[] = Array.isArray(ids) ? ids.filter(Boolean) : id ? [id] : [];
+    if (list.length === 0) return NextResponse.json({ error: "id(s) requis" }, { status: 400 });
     if (!(await gmailIsConnected())) {
       return NextResponse.json({ error: "Gmail non connecté" }, { status: 400 });
     }
-    await gmailTrash(id);
-    return NextResponse.json({ ok: true });
+    // Séquentiel volontaire : reste sous le quota Gmail et évite qu'un échec
+    // ponctuel n'emporte tout le lot. On remonte le détail par message.
+    const results = await Promise.allSettled(list.map((x) => gmailTrash(x)));
+    const trashed = list.filter((_, i) => results[i].status === "fulfilled");
+    const failed = list.filter((_, i) => results[i].status === "rejected");
+    return NextResponse.json({ ok: failed.length === 0, trashed, failed });
   } catch (e: any) {
     const msg = /403|insufficient|scope/i.test(e?.message || "")
       ? "Autorisation manquante — reconnecte Gmail pour activer la gestion des mails."

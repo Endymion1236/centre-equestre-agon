@@ -241,10 +241,33 @@ export async function gmailGetAttachment(
   return Buffer.from(String(data.data).replace(/-/g, "+").replace(/_/g, "/"), "base64");
 }
 
-export async function gmailListRecent(max = 12): Promise<GmailMessage[]> {
+/**
+ * Filtre de la boîte de traitement.
+ *
+ * On EXCLUT le bruit qui n'appelle jamais d'action de l'assistant :
+ *  - Promotions / Social (onglets Gmail) ;
+ *  - notifications leboncoin (messagerie de l'annonce, pas une demande client) ;
+ *  - récapitulatifs de planning (objet commençant par "📋 Planning"),
+ *    generés par le cron : du bruit s'ils atterrissent dans cette boîte.
+ *
+ * On GARDE : mails de familles, vocaux StandardFacile, tout le reste.
+ * Un critère trop large finirait par masquer un vrai message : on reste
+ * volontairement précis sur les expéditeurs plutôt que sur des mots-clés.
+ */
+const INBOX_QUERY = [
+  "in:inbox",
+  "-category:promotions",
+  "-category:social",
+  "-from:leboncoin.fr",
+  '-subject:"Planning"',
+].join(" ");
+
+export async function gmailListRecent(max = 25, pageToken?: string): Promise<{ messages: GmailMessage[]; nextPageToken: string | null }> {
   const token = await getAccessToken();
+  const params = new URLSearchParams({ maxResults: String(max), q: INBOX_QUERY });
+  if (pageToken) params.set("pageToken", pageToken);
   const listRes = await fetch(
-    `${GMAIL_API}/messages?maxResults=${max}&q=${encodeURIComponent("in:inbox -category:promotions -category:social")}`,
+    `${GMAIL_API}/messages?${params.toString()}`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
   if (!listRes.ok) {
@@ -255,6 +278,7 @@ export async function gmailListRecent(max = 12): Promise<GmailMessage[]> {
   }
   const list = await listRes.json();
   const ids: string[] = (list.messages || []).map((m: any) => m.id);
+  const nextPageToken: string | null = list.nextPageToken || null;
 
   const messages: GmailMessage[] = [];
   for (const id of ids) {
@@ -286,7 +310,7 @@ export async function gmailListRecent(max = 12): Promise<GmailMessage[]> {
       /* skip */
     }
   }
-  return messages;
+  return { messages, nextPageToken };
 }
 
 // Encodage RFC2047 (accents dans l'objet).
