@@ -126,7 +126,12 @@ export async function calculerDisponibilites(
         : typeof c.priceHT === "number"
         ? Math.round(c.priceHT * (1 + (c.tvaTaux ?? 5.5) / 100) * 100) / 100
         : null;
-    if (spots > 0) {
+    // On NE FILTRE PLUS sur spots > 0. Un stage complet retire de la liste
+    // devient invisible pour l'IA, qui invente alors une explication plausible
+    // et fausse ("nos stages commencent a 8 ans") au lieu de dire "complet".
+    // Il est conserve, marque, et la verification serveur refuse toujours de
+    // l'inscrire (places <= 0).
+    {
       const isStage = (c.activityType || "") === "stage" || (c.activityType || "") === "stage_journee";
       const demiJourneeOuverte = isStage && !!c.allowDayBooking;
       const elig = eligByTitle.get(String(c.activityTitle || "").trim().toLowerCase()) || {};
@@ -137,7 +142,8 @@ export async function calculerDisponibilites(
         date: c.date,
         jour: jourFr(c.date),
         horaire: [c.startTime, c.endTime].filter(Boolean).join("-"),
-        places: spots,
+        places: spots > 0 ? spots : 0,
+        complet: spots <= 0,
         prixTTC,
         demiJourneeOuverte,
         prixJour: demiJourneeOuverte && typeof c.priceTTCDay === "number" && c.priceTTCDay > 0 ? c.priceTTCDay : null,
@@ -161,7 +167,8 @@ export async function calculerDisponibilites(
         type: c.activityType || "cours",
         date: c.date,
         horaire: [c.startTime, c.endTime].filter(Boolean).join("-"),
-        spots,
+        spots: spots > 0 ? spots : 0,
+        complet: spots <= 0,
         prixTTC,
         ageMin: elig.ageMin ?? null,
         ageMax: elig.ageMax ?? null,
@@ -199,7 +206,10 @@ export async function calculerDisponibilites(
     const last = jours[jours.length - 1];
     // Places du groupe = minimum des places restantes sur les jours (il faut
     // une place chaque jour pour inscrire la semaine).
-    const places = Math.min(...jours.map((j) => j.places));
+    const places = Math.max(0, Math.min(...jours.map((j) => j.places)));
+    // Une semaine est complete des qu'UN de ses jours l'est : il faut une
+    // place chaque jour pour inscrire la semaine.
+    const complet = places <= 0;
     const groupe = {
       groupId: key,
       titre: first.titre,
@@ -215,6 +225,7 @@ export async function calculerDisponibilites(
       joursDates: jours.map((j) => ({ date: j.date, jour: j.jour })),
       horaire: first.horaire,
       places,
+      complet,
       prixSemaineTTC: first.prixTTC, // prix TTC du créneau = prix de la SEMAINE COMPLÈTE
       demiJourneeOuverte: jours.some((j) => j.demiJourneeOuverte),
       prixJour: jours.find((j) => j.prixJour)?.prixJour ?? null,
@@ -228,14 +239,15 @@ export async function calculerDisponibilites(
     stageGroupMap.set(key, {
       ...groupe,
       creneauIds: jours.map((j) => j.creneauId),
-      joursDetail: jours.map((j) => ({ creneauId: j.creneauId, date: j.date, jour: j.jour })),
+      joursDetail: jours.map((j) => ({ creneauId: j.creneauId, date: j.date, jour: j.jour, complet: j.complet })),
       pricePerCount: first.pricePerCount || {},
     });
   });
   stagesDispo.sort((x, y) => (x.dateDebut < y.dateDebut ? -1 : 1));
   // Échantillon d'"autres" réparti : 1 sur N pour couvrir toute la période.
-  const stepAutres = Math.max(1, Math.ceil(autresDispo.length / 50));
-  const autresEchantillon = autresDispo.filter((_, i) => i % stepAutres === 0).slice(0, 50);
+  const autresAvecPlace = autresDispo.filter((a) => !a.complet);
+  const stepAutres = Math.max(1, Math.ceil(autresAvecPlace.length / 50));
+  const autresEchantillon = autresAvecPlace.filter((_, i) => i % stepAutres === 0).slice(0, 50);
   const activitesDispo = [...stagesDispo.slice(0, 120), ...autresEchantillon];
 
   return { horizon, autresDispo, activitesDispo, stagesDispo, stageGroupMap, creneauMap };
