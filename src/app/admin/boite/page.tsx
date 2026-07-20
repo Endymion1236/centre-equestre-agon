@@ -64,7 +64,9 @@ export default function BoiteAssistantPage() {
     connected: boolean;
     messages: any[];
     error: string;
-  }>({ loading: true, configured: false, connected: false, messages: [], error: "" });
+    /** Adresse REELLEMENT connectee (renvoyee par l'API, jamais devinee). */
+    email?: string | null;
+  }>({ loading: true, configured: false, connected: false, messages: [], error: "", email: null });
   const [connecting, setConnecting] = useState(false);
   const [replyMeta, setReplyMeta] = useState<{ threadId: string; messageId: string }>({ threadId: "", messageId: "" });
   const [selectedId, setSelectedId] = useState<string>("");
@@ -378,7 +380,7 @@ export default function BoiteAssistantPage() {
       <div className="mb-6 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2 font-body text-sm font-semibold text-slate-700">
-            <Inbox size={16} className="flex-shrink-0 text-blue-500" /> <span className="truncate">Gmail — ceagon50@gmail.com</span>
+            <Inbox size={16} className="flex-shrink-0 text-blue-500" /> <span className="truncate">Gmail{gmail.email ? ` — ${gmail.email}` : gmail.connected ? " — compte inconnu" : ""}</span>
           </div>
           {gmail.connected && (
             <div className="flex flex-shrink-0 items-center gap-2">
