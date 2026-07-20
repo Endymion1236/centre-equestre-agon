@@ -54,7 +54,10 @@ export async function POST(req: NextRequest) {
       .map((c) => ({
         id: `child_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         firstName: String(c.firstName).trim(),
-        lastName: String(c.lastName || "").trim(),
+        // Le nom de famille du foyer s'applique par défaut à chaque enfant.
+        // Un nom explicitement fourni (famille recomposée, garde alternée)
+        // reste prioritaire.
+        lastName: String(c.lastName || "").trim() || lastName,
         birthDate:
           typeof c.birthDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(c.birthDate)
             ? new Date(c.birthDate + "T12:00:00Z")
