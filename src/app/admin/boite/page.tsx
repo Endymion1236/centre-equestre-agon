@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { authFetch } from "@/lib/auth-fetch";
-import { Loader2, Mail, Sparkles, Calendar, Copy, Check, Inbox, RefreshCw, Send, Trash2, Forward, UserPlus } from "lucide-react";
+import { Loader2, Mail, Sparkles, Calendar, Copy, Check, Inbox, RefreshCw, Send, Trash2, Forward, UserPlus, Phone } from "lucide-react";
 
 const CLASSIF: Record<string, { label: string; cls: string }> = {
   inscription: { label: "Demande d'inscription", cls: "bg-green-50 text-green-700" },
@@ -19,7 +19,22 @@ function decodeHtml(s: string): string {
   return el.value;
 }
 
+/**
+ * Un mail est un message du répondeur s'il vient de StandardFacile ET porte
+ * une pièce jointe audio. Les deux conditions : un mail de facturation
+ * StandardFacile ne doit pas déclencher de transcription.
+ */
+function estVocal(m: any): boolean {
+  const from = String(m?.from || "").toLowerCase();
+  return (
+    !!m?.audioAttachmentId &&
+    (from.includes("monstandardfacile.com") || from.includes("standardfacile.com"))
+  );
+}
+
 export default function BoiteAssistantPage() {
+  const [vocal, setVocal] = useState<any>(null);
+  const [vocalLoading, setVocalLoading] = useState(false);
   const [from, setFrom] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -173,7 +188,7 @@ export default function BoiteAssistantPage() {
     }
   };
 
-  const pickMessage = (m: any) => {
+  const pickMessage = async (m: any) => {
     setFrom(decodeHtml(m.from || ""));
     setSubject(decodeHtml(m.subject || ""));
     setBody(decodeHtml(m.body || m.snippet || ""));
@@ -183,7 +198,38 @@ export default function BoiteAssistantPage() {
     setRes(null);
     setErr("");
     setSendMsg(null);
+    setVocal(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
+
+    // Message du répondeur → on remplace le mail de notification par la
+    // TRANSCRIPTION du message vocal. Le reste de la page (analyse, brouillon,
+    // création de famille) fonctionne ensuite à l'identique.
+    if (estVocal(m)) {
+      setVocalLoading(true);
+      try {
+        const r = await authFetch("/api/admin/gmail/voicemail", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messageId: m.id,
+            attachmentId: m.audioAttachmentId,
+            subject: m.subject,
+          }),
+        });
+        const d = await r.json();
+        if (!r.ok) {
+          setErr(d.error || "Transcription impossible");
+        } else {
+          setFrom(d.from || "");
+          setSubject(d.subject || "");
+          setBody(d.body || "");
+          setVocal(d);
+        }
+      } catch {
+        setErr("Transcription impossible");
+      }
+      setVocalLoading(false);
+    }
   };
 
   const analyser = async () => {
@@ -392,7 +438,14 @@ export default function BoiteAssistantPage() {
                   className="w-full rounded-lg border border-transparent px-3 py-2 text-left transition-colors hover:border-blue-100 hover:bg-blue-50/50"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-body text-xs font-semibold text-slate-700">{decodeHtml(m.from)}</span>
+                    <span className="truncate font-body text-xs font-semibold text-slate-700">
+                      {estVocal(m) ? "Répondeur téléphonique" : decodeHtml(m.from)}
+                    </span>
+                    {estVocal(m) && (
+                      <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 font-body text-[10px] font-semibold text-amber-700">
+                        <Phone size={10} /> Vocal
+                      </span>
+                    )}
                   </div>
                   <div className="truncate font-body text-sm text-slate-800">{decodeHtml(m.subject) || "(sans objet)"}</div>
                   <div className="truncate font-body text-[11px] text-slate-400">{decodeHtml(m.snippet)}</div>
@@ -429,6 +482,34 @@ export default function BoiteAssistantPage() {
               </div>
             )}
           </div>
+          {vocalLoading && (
+            <div className="mb-3 flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 font-body text-xs font-semibold text-amber-700">
+              <Loader2 size={14} className="animate-spin" /> Transcription du message vocal…
+            </div>
+          )}
+          {vocal && !vocalLoading && (
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2 font-body text-xs font-semibold text-amber-800">
+                <Phone size={13} />
+                {vocal.numeroLisible || "Numéro masqué"}
+                <span className="font-normal text-amber-600">· {vocal.dureeSec}s</span>
+              </div>
+              <div className="mt-1 font-body text-[11px] text-amber-700">
+                {vocal.famille ? (
+                  <>
+                    Famille reconnue : <strong>{vocal.famille.parentName}</strong>
+                    {vocal.famille.children?.length > 0 && (
+                      <> — {vocal.famille.children.map((c: any) => c.firstName).join(", ")}</>
+                    )}
+                  </>
+                ) : vocal.vide ? (
+                  "Message vide."
+                ) : (
+                  "Numéro inconnu de la base — l'analyse proposera une création de famille."
+                )}
+              </div>
+            </div>
+          )}
           {mailboxMsg && (
             <p className={`mb-2 font-body text-xs font-semibold ${mailboxMsg.ok ? "text-green-600" : "text-red-500"}`}>
               {mailboxMsg.text}
