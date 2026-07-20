@@ -67,19 +67,25 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
     if (!isValid) return;
     setSaving(true);
     try {
+      // Nom du foyer : sert de valeur par defaut a chaque enfant dont le champ
+      // est reste vide. Un nom saisi explicitement (famille recomposee, garde
+      // alternee) reste toujours prioritaire. Meme regle que la route
+      // /api/admin/inbox-create-family, pour que les deux chemins de creation
+      // produisent des fiches identiques.
+      const nomFoyer = newFamily.lastName.trim().toUpperCase();
       const children = newChildren
         .filter(c => c.firstName.trim())
         .map(c => ({
           id: `child_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           firstName: c.firstName.trim(),
-          lastName: c.lastName.trim(),
+          lastName: c.lastName.trim() || nomFoyer,
           birthDate: c.birthDate ? new Date(c.birthDate) : null,
           galopLevel: c.galopLevel || "—",
           sanitaryForm: null,
         }));
 
       // Nom affiché : "DUPONT Marie" si séparé, sinon parentName brut
-      const lastName = newFamily.lastName.trim().toUpperCase();
+      const lastName = nomFoyer;
       const firstName = newFamily.firstName.trim();
       const computedName = newFamily.accountType === "particulier"
         ? (lastName && firstName ? `${lastName} ${firstName}` : lastName || firstName || newFamily.parentName.trim())
@@ -183,7 +189,20 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
                     <div>
                       <label className={labelStyle}>Nom de famille *</label>
                       <input className={inputStyle} value={newFamily.lastName}
-                        onChange={e => setNewFamily({ ...newFamily, lastName: e.target.value.toUpperCase() })} placeholder="Ex: DUPONT"/>
+                        onChange={e => {
+                          const nouveau = e.target.value.toUpperCase();
+                          const ancien = newFamily.lastName.trim().toUpperCase();
+                          setNewFamily({ ...newFamily, lastName: nouveau });
+                          // Report VISIBLE sur les enfants : on ne touche qu'aux
+                          // champs vides ou qui portaient encore l'ancien nom du
+                          // foyer. Un nom saisi a la main n'est jamais ecrase.
+                          setNewChildren(cs => cs.map(c => {
+                            const actuel = c.lastName.trim().toUpperCase();
+                            return actuel === "" || actuel === ancien
+                              ? { ...c, lastName: nouveau }
+                              : c;
+                          }));
+                        }} placeholder="Ex: DUPONT"/>
                     </div>
                     <div>
                       <label className={labelStyle}>Prénom</label>
@@ -301,7 +320,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
                     {i === 0 && <label className={labelStyle}>Nom de famille</label>}
                     <input className={inputStyle} value={child.lastName}
                       onChange={e => { const up = [...newChildren]; up[i].lastName = e.target.value; setNewChildren(up); }}
-                      placeholder="Nom"/>
+                      placeholder={newFamily.lastName.trim().toUpperCase() || "Nom"}/>
                   </div>
                   <div>
                     {i === 0 && <label className={labelStyle}>Date de naissance</label>}
@@ -324,7 +343,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
                 )}
               </div>
             ))}
-            <button onClick={() => setNewChildren([...newChildren, { firstName: "", lastName: "", birthDate: "", galopLevel: "—" }])}
+            <button onClick={() => setNewChildren([...newChildren, { firstName: "", lastName: newFamily.lastName.trim().toUpperCase(), birthDate: "", galopLevel: "—" }])}
               className="font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1 mt-2">
               <Plus size={14}/> Ajouter un cavalier
             </button>
