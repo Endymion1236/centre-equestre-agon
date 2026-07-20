@@ -44,6 +44,13 @@ export interface DispoOptions {
   today: string;
   /** Nombre de jours lus après `today`. Défaut 63 (≈ 9 semaines). */
   horizonJours?: number;
+  /**
+   * Fenêtre explicite, prioritaire sur `today`/`horizonJours`.
+   * Utilisée par l'assistant email, qui déduit la période demandée du mail
+   * (passe Haiku) pour ne lire que les créneaux utiles.
+   */
+  start?: string;
+  end?: string;
 }
 
 export interface DispoResult {
@@ -66,19 +73,22 @@ export async function calculerDisponibilites(
   opts: DispoOptions
 ): Promise<DispoResult> {
   const today = opts.today;
+  const debutLecture = opts.start || today;
   // Horizon de lecture borné (≈ 9 semaines) : couvre l'été/les demandes
   // courantes SANS lire tout un planning programmé loin (coût des lectures).
   // Au-delà, l'assistant invite la famille à préciser sa demande.
-  const horizon = (() => {
-    const d = new Date(today + "T12:00:00Z");
-    d.setUTCDate(d.getUTCDate() + (opts.horizonJours ?? 63));
-    return d.toISOString().slice(0, 10);
-  })();
+  const horizon =
+    opts.end ||
+    (() => {
+      const d = new Date(today + "T12:00:00Z");
+      d.setUTCDate(d.getUTCDate() + (opts.horizonJours ?? 63));
+      return d.toISOString().slice(0, 10);
+    })();
   
   // ── 1. Créneaux à venir réellement disponibles (fenêtre bornée) ───
   const creSnap = await adminDb
     .collection("creneaux")
-    .where("date", ">=", today)
+    .where("date", ">=", debutLecture)
     .where("date", "<=", horizon)
     .orderBy("date", "asc")
     .limit(1500)
