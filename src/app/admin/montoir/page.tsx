@@ -40,6 +40,9 @@ export default function MontoirPage() {
   const sigRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const repriseSig = (c: any) => `${(c.activityTitle || "").trim()}__${c.startTime || ""}`;
   const [creneaux, setCreneaux] = useState<Creneau[]>([]);
+  // Filtre d'impression par moniteur : chacun imprime l'appel de SES reprises.
+  // "" = tous (comportement actuel inchangé).
+  const [printMonitor, setPrintMonitor] = useState<string>("");
   const [equides, setEquides] = useState<any[]>([]);
   const [seuilPoney, setSeuilPoney] = useState({ orange: 3, rouge: 4, heures: 4 });
   const [indisponibilites, setIndisponibilites] = useState<any[]>([]);
@@ -878,6 +881,10 @@ export default function MontoirPage() {
   };
 
   const totalE = creneaux.reduce((s,c)=>s+(c.enrolled?.length||0),0);
+  // Moniteurs distincts ayant au moins une reprise ce jour (sélecteur d'impression).
+  const monitorsToday = Array.from(
+    new Set(creneaux.map(c => (c.monitor || "").trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b, "fr"));
   // Compte coherent avec la nouvelle logique "present par defaut" :
   // sont presents tous ceux qui n'ont PAS ete marques absent/non justifie.
   const totalP = creneaux.reduce((s,c)=>s+(c.enrolled||[]).filter(
@@ -905,7 +912,13 @@ export default function MontoirPage() {
             className="flex items-center gap-2 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 no-underline hover:bg-gray-50">
             ⚠️ Registre chutes
           </a>
-          <button onClick={()=>window.print()} className="flex items-center gap-2 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><Printer size={16} /> Imprimer</button>
+          {monitorsToday.length > 1 && (
+            <select value={printMonitor} onChange={(e) => setPrintMonitor(e.target.value)} title="Filtrer l'affichage et l'impression par moniteur" className="font-body text-sm text-slate-600 bg-white px-3 py-2 rounded-lg border border-gray-200 cursor-pointer">
+              <option value="">Tous les moniteurs</option>
+              {monitorsToday.map((m) => (<option key={m} value={m}>{m}</option>))}
+            </select>
+          )}
+          <button onClick={()=>window.print()} className="flex items-center gap-2 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><Printer size={16} /> Imprimer{printMonitor ? ` — ${printMonitor}` : ""}</button>
         </div>
       </div>
       {/* Navigation jour : sur mobile la date passe en premier (pleine largeur,
@@ -921,7 +934,7 @@ export default function MontoirPage() {
             title="Choisir une date"
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer print:hidden"
           />
-          <div className="font-display text-lg font-bold text-blue-800 capitalize flex items-center justify-center gap-1.5">{currentDay.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}<CalendarDays size={15} className="text-blue-400 print:hidden" /></div><div className="font-body text-xs text-slate-600">{creneaux.length} reprise{creneaux.length>1?"s":""} · {totalE} inscrits · {totalP} présents</div></div>
+          <div className="font-display text-lg font-bold text-blue-800 capitalize flex items-center justify-center gap-1.5">{currentDay.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}<CalendarDays size={15} className="text-blue-400 print:hidden" /></div>{printMonitor && <div className="hidden print:block font-body text-sm font-semibold text-blue-800 mt-0.5">Appel — {printMonitor}</div>}<div className="font-body text-xs text-slate-600">{creneaux.length} reprise{creneaux.length>1?"s":""} · {totalE} inscrits · {totalP} présents</div></div>
         <button onClick={()=>setDayOffset(d=>d-1)} className="sm:order-1 flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16} /> Veille</button>
         <div className="sm:order-3 flex gap-2"><button onClick={()=>setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-3 sm:px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setDayOffset(d=>d+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain <ChevronRight size={16} /></button></div>
       </div>
@@ -967,7 +980,7 @@ export default function MontoirPage() {
         </div>
       )}
       {creneaux.length === 0 ? <Card padding="lg" className="text-center"><div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><ClipboardList size={28} className="text-blue-300" /></div><p className="font-body text-sm text-slate-600">Aucune reprise ce jour.</p></Card> :
-      <div className="flex flex-col gap-6">{creneaux.map(c => { const en = c.enrolled||[]; const col = (c as any).color || typeColors[c.activityType]||"#666"; const closed = c.status==="closed"; const pres = en.filter((e:any)=>e.presence!=="absent" && e.presence!=="absent_nonjustified").length; const _sig = repriseSig(c); return (
+      <div className="flex flex-col gap-6">{creneaux.filter(c => !printMonitor || (c.monitor || "").trim() === printMonitor).map(c => { const en = c.enrolled||[]; const col = (c as any).color || typeColors[c.activityType]||"#666"; const closed = c.status==="closed"; const pres = en.filter((e:any)=>e.presence!=="absent" && e.presence!=="absent_nonjustified").length; const _sig = repriseSig(c); return (
         <div key={c.id} ref={(el) => { sigRefs.current[_sig] = el; }} className="scroll-mt-4">
         <Card padding="md" className={closed ? "border-gray-200 bg-gray-50/50" : ""}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-blue-500/8">
