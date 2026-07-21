@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useVitrine } from "@/lib/use-vitrine";
 import { EditableImage } from "@/components/ui/EditableImage";
 import { getCatalogueVisual } from "@/lib/catalogue-visuals";
@@ -214,18 +215,26 @@ export function ActivitiesContent() {
   const [filter, setFilter] = useState<"all" | PublicActivityCategory>("all");
   const [search, setSearch] = useState("");
   const { vitrine } = useVitrine();
+  const searchParams = useSearchParams();
 
+  // Réagit à CHAQUE changement de ?profil= (et du hash). Sans ça, cliquer une
+  // carte "Stages"/"Balades" alors qu'on est déjà sur /activites ne faisait
+  // rien : Next navigue côté client sans remonter le composant, donc un effet
+  // à dépendances vides ne se rejouait jamais. La page semblait figée.
+  const profile = searchParams.get("profil") || "";
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const profile = params.get("profil") || "";
-    if (profileToCategory[profile]) setFilter(profileToCategory[profile]);
+    if (profileToCategory[profile]) {
+      setFilter(profileToCategory[profile]);
+    } else if (profile === "") {
+      setFilter("all");
+    }
 
-    if (window.location.hash) {
+    if (typeof window !== "undefined" && window.location.hash) {
       window.setTimeout(() => {
         document.querySelector(window.location.hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 180);
     }
-  }, []);
+  }, [profile, searchParams]);
 
   const activities = useMemo<DisplayActivity[]>(() => {
     const source = (vitrine.activites || {}) as Record<string, unknown>;

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowRight, CalendarDays, Phone, ShieldCheck, Sparkles } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
@@ -100,7 +101,7 @@ export default function ActivitesPage() {
         </div>
       </section>
 
-      <div id="catalogue" className="scroll-mt-20"><ActivitiesContent /></div>
+      <div id="catalogue" className="scroll-mt-20"><Suspense fallback={null}><ActivitiesContent /></Suspense></div>
 
       <section className="bg-white px-6 py-20 text-center">
         <div className="mx-auto max-w-2xl">
