@@ -235,6 +235,7 @@ function AdminSidebar({ nbImpayes }: { nbImpayes: number }) {
   return (
     <aside
       data-testid="admin-nav"
+      data-print-hide
       className="hidden md:flex sticky top-0 h-screen w-[248px] flex-shrink-0 flex-col border-r border-white/5 px-3 py-3"
       style={{ background: "linear-gradient(180deg, #060D17 0%, #0C1A2E 48%, #122A5A 100%)" }}
     >
@@ -562,7 +563,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         )}
 
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-[60] bg-white border-t border-gray-200 px-1.5 py-2 flex items-center justify-around safe-area-inset-bottom">
+        <nav data-print-hide className="md:hidden fixed bottom-0 left-0 right-0 z-[60] bg-white border-t border-gray-200 px-1.5 py-2 flex items-center justify-around safe-area-inset-bottom">
           {visibleMobile.map((item) => {
             const Icon = item.icon;
             const active = isActive(pathname, item.href);

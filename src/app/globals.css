@@ -204,3 +204,15 @@ h1, h2, h3, h4 {
 @media (max-width: 540px) {
   .hide-on-mobile { display: none !important; }
 }
+
+/* ── Impression : ne garder que le contenu utile ────────────────────────
+   Les éléments de chrome de l'admin (bandeau spotlight, fil d'ariane,
+   menu latéral, barre de navigation mobile) portent data-print-hide et
+   disparaissent à l'impression. Utile pour TOUTES les pages admin, pas
+   seulement le montoir : une feuille imprimée ne doit montrer que son
+   contenu, jamais la navigation. */
+@media print {
+  [data-print-hide] { display: none !important; }
+  /* Le shell admin peut imposer des marges/fonds inutiles sur papier. */
+  .admin-page-shell { padding: 0 !important; margin: 0 !important; }
+}

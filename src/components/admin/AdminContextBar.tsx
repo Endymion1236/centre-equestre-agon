@@ -156,7 +156,7 @@ export default function AdminContextBar() {
   );
 
   return (
-    <div className="mb-5 rounded-2xl border border-blue-100/80 bg-white/85 px-3 py-2.5 shadow-[0_5px_24px_rgba(12,26,46,0.035)] backdrop-blur-sm">
+    <div data-print-hide className="mb-5 rounded-2xl border border-blue-100/80 bg-white/85 px-3 py-2.5 shadow-[0_5px_24px_rgba(12,26,46,0.035)] backdrop-blur-sm">
       <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
         <Link
           href="/admin/dashboard"

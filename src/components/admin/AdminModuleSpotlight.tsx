@@ -128,7 +128,7 @@ export default function AdminModuleSpotlight() {
   const Icon = config.icon;
 
   return (
-    <section className={`relative mb-5 overflow-hidden rounded-[24px] bg-gradient-to-br ${config.gradient} px-5 py-5 text-white shadow-[0_20px_55px_rgba(12,26,46,0.14)] sm:px-6 sm:py-6`}>
+    <section data-print-hide className={`relative mb-5 overflow-hidden rounded-[24px] bg-gradient-to-br ${config.gradient} px-5 py-5 text-white shadow-[0_20px_55px_rgba(12,26,46,0.14)] sm:px-6 sm:py-6`}>
       <div className="pointer-events-none absolute -right-16 -top-24 h-56 w-56 rounded-full border border-white/10 bg-white/[0.04]" />
       <div className="pointer-events-none absolute -bottom-20 right-20 h-40 w-40 rounded-full bg-white/[0.05] blur-xl" />
 
