@@ -136,6 +136,8 @@ export default function StatistiquesPage() {
   const [tab, setTab] = useState<"ca" | "finances" | "remplissage" | "moniteurs" | "cavaliers">("ca");
   const [loading, setLoading] = useState(true);
   const [year, setYear] = useState(new Date().getFullYear());
+  // Catégories dépliées dans "CA par catégorie" (détail par niveau/titre).
+  const [caExpanded, setCaExpanded] = useState<Record<string, boolean>>({});
 
   // Data
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -220,6 +222,30 @@ export default function StatistiquesPage() {
   }, [yearPayments]);
 
   const caTotal = caParMois.reduce((s, v) => s + v, 0);
+
+  // Détail par titre d'activité À L'INTÉRIEUR de chaque catégorie.
+  // Le niveau (débutant/débrouillé/confirmé, baby/bronze/argent/or…) est porté
+  // par le titre : "Stage galop d'argent 8/10 ans", "Promenade ... débrouillés".
+  // On regroupe donc par activityTitle sous chaque activityType, sans nouvelle
+  // donnée à créer. Clé = type ; valeur = liste triée { titre, montant }.
+  const caDetailParType = useMemo(() => {
+    const map: Record<string, Record<string, number>> = {};
+    yearPayments.forEach(p => {
+      (p.items || []).forEach(item => {
+        const type = item.activityType || "autre";
+        const titre = (item.activityTitle || "Sans intitulé").trim();
+        map[type] = map[type] || {};
+        map[type][titre] = (map[type][titre] || 0) + (item.priceTTC || 0);
+      });
+    });
+    const out: Record<string, { titre: string; montant: number }[]> = {};
+    for (const [type, titres] of Object.entries(map)) {
+      out[type] = Object.entries(titres)
+        .map(([titre, montant]) => ({ titre, montant }))
+        .sort((a, b) => b.montant - a.montant);
+    }
+    return out;
+  }, [yearPayments]);
   const caMoisActuel = caParMois[new Date().getMonth()] || 0;
   const caMoisPrecedent = caParMois[Math.max(0, new Date().getMonth() - 1)] || 0;
 
@@ -541,7 +567,7 @@ export default function StatistiquesPage() {
             </div>
           </Card>
 
-          {/* CA par activité */}
+          {/* CA par activité — chaque catégorie se déplie sur le détail par niveau */}
           <Card padding="md">
             <SectionTitle>CA par catégorie d&apos;activité</SectionTitle>
             {caParActivite.length === 0 ? (
@@ -551,21 +577,108 @@ export default function StatistiquesPage() {
                 {caParActivite.map(([type, amount]) => {
                   const pct = caTotal > 0 ? Math.round((amount / caTotal) * 100) : 0;
                   const color = activityTypeColors[type] || "#888";
+                  const detail = caDetailParType[type] || [];
+                  // Dépliable seulement s'il y a plus d'un intitulé sous la catégorie.
+                  const depliable = detail.length > 1;
+                  const ouvert = !!caExpanded[type];
                   return (
-                    <div key={type} className="flex items-center gap-3">
-                      <span className="font-body text-sm text-gray-600 min-w-[140px]">{activityTypeLabels[type] || type}</span>
-                      <div className="flex-1 h-6 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
-                      </div>
-                      <span className="font-body text-sm font-semibold text-blue-800 min-w-[80px] text-right">
-                        {Math.round(amount).toLocaleString("fr-FR")}€
-                      </span>
-                      <span className="font-body text-xs text-gray-400 min-w-[40px] text-right">{pct}%</span>
+                    <div key={type}>
+                      <button
+                        type="button"
+                        onClick={() => depliable && setCaExpanded(s => ({ ...s, [type]: !s[type] }))}
+                        className={`flex items-center gap-3 w-full text-left bg-transparent border-none p-0 ${depliable ? "cursor-pointer" : "cursor-default"}`}
+                      >
+                        <span className="font-body text-sm text-gray-600 min-w-[140px] flex items-center gap-1">
+                          {depliable && (
+                            <ChevronRight size={13} className={`text-gray-400 transition-transform ${ouvert ? "rotate-90" : ""}`} />
+                          )}
+                          {activityTypeLabels[type] || type}
+                        </span>
+                        <div className="flex-1 h-6 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
+                        </div>
+                        <span className="font-body text-sm font-semibold text-blue-800 min-w-[80px] text-right">
+                          {Math.round(amount).toLocaleString("fr-FR")}€
+                        </span>
+                        <span className="font-body text-xs text-gray-400 min-w-[40px] text-right">{pct}%</span>
+                      </button>
+                      {ouvert && depliable && (
+                        <div className="mt-2 mb-1 ml-4 pl-3 border-l-2 border-gray-100 flex flex-col gap-1.5">
+                          {detail.map(({ titre, montant }) => {
+                            const pctInterne = amount > 0 ? Math.round((montant / amount) * 100) : 0;
+                            return (
+                              <div key={titre} className="flex items-center gap-3">
+                                <span className="font-body text-xs text-gray-500 min-w-[132px] truncate" title={titre}>{titre}</span>
+                                <div className="flex-1 h-3 bg-gray-50 rounded-full overflow-hidden">
+                                  <div className="h-full rounded-full" style={{ width: `${pctInterne}%`, backgroundColor: color, opacity: 0.55 }} />
+                                </div>
+                                <span className="font-body text-xs font-medium text-gray-600 min-w-[80px] text-right">
+                                  {Math.round(montant).toLocaleString("fr-FR")}€
+                                </span>
+                                <span className="font-body text-[10px] text-gray-300 min-w-[40px] text-right">{pctInterne}%</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
             )}
+          </Card>
+
+          {/* Détail complet : toutes les activités à plat, triées par CA. */}
+          <Card padding="md">
+            <SectionTitle>Détail du CA par activité</SectionTitle>
+            {(() => {
+              const lignes = Object.entries(caDetailParType)
+                .flatMap(([type, arr]) => arr.map(d => ({ ...d, type })))
+                .sort((a, b) => b.montant - a.montant);
+              if (lignes.length === 0) {
+                return <p className="font-body text-sm text-gray-400 text-center py-6">Aucune donnée de paiement pour {year}.</p>;
+              }
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full font-body text-sm">
+                    <thead>
+                      <tr className="text-left text-gray-400 text-xs uppercase border-b border-gray-100">
+                        <th className="py-2 pr-3 font-semibold">Activité</th>
+                        <th className="py-2 px-3 font-semibold">Catégorie</th>
+                        <th className="py-2 pl-3 font-semibold text-right">CA TTC</th>
+                        <th className="py-2 pl-3 font-semibold text-right">Part</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lignes.map(({ titre, montant, type }) => {
+                        const pct = caTotal > 0 ? Math.round((montant / caTotal) * 100) : 0;
+                        const color = activityTypeColors[type] || "#888";
+                        return (
+                          <tr key={`${type}-${titre}`} className="border-b border-gray-50">
+                            <td className="py-2 pr-3 text-gray-700">{titre}</td>
+                            <td className="py-2 px-3">
+                              <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+                                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                                {activityTypeLabels[type] || type}
+                              </span>
+                            </td>
+                            <td className="py-2 pl-3 text-right font-semibold text-blue-800">{Math.round(montant).toLocaleString("fr-FR")}€</td>
+                            <td className="py-2 pl-3 text-right text-gray-400 text-xs">{pct}%</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-gray-100">
+                        <td className="py-2 pr-3 font-semibold text-gray-700" colSpan={2}>Total</td>
+                        <td className="py-2 pl-3 text-right font-bold text-blue-800">{Math.round(caTotal).toLocaleString("fr-FR")}€</td>
+                        <td className="py-2 pl-3 text-right text-gray-400 text-xs">100%</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              );
+            })()}
           </Card>
         </>
       )}
