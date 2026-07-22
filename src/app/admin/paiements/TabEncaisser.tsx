@@ -14,7 +14,7 @@ import {
 import { Card, Badge } from "@/components/ui";
 import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle, Copy, ChevronDown, Gift } from "lucide-react";
 import type { Family, Activity } from "@/types";
-import { BasketItem, PaymentMode, paymentModes } from "./types";
+import { BasketItem, PaymentMode, paymentModes, manualPaymentModes } from "./types";
 import { authFetch } from "@/lib/auth-fetch";
 
 interface TabEncaisserProps {
@@ -643,7 +643,7 @@ export function TabEncaisser({
               {/* Mode de paiement */}
               <div className="font-body text-xs font-semibold text-slate-600 mb-2">Mode de paiement</div>
               <div className="flex flex-wrap gap-1.5 mb-3">
-                {paymentModes.map(m => (
+                {manualPaymentModes.map(m => (
                   <button key={m.id} onClick={() => setPaymentMode(m.id)}
                     className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer transition-all ${
                       paymentMode === m.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"
@@ -865,7 +865,7 @@ export function TabEncaisser({
         <Card padding="md">
           <h3 className="font-body text-sm font-semibold text-blue-800 mb-3">3. Mode de paiement</h3>
           <div className="flex flex-wrap gap-2 mb-4">
-            {paymentModes.map((m) => (
+            {manualPaymentModes.map((m) => (
               <button key={m.id} onClick={() => setPaymentMode(m.id)}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border font-body text-xs font-medium cursor-pointer transition-all
                   ${paymentMode === m.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>

@@ -45,3 +45,18 @@ export const paymentModes: { id: PaymentMode; label: string }[] = [
   { id: "avoir", label: "Avoir" },
   { id: "prelevement_sepa", label: "Prélèvement SEPA" },
 ];
+
+/**
+ * Modes utilisables pour un encaissement SAISI À LA MAIN par l'admin.
+ *
+ * "cb_online" (CAWL) en est EXCLU : un encaissement CAWL ne peut exister que
+ * s'il correspond à une transaction réelle chez Worldline (webhook, retour
+ * status, ou lien de paiement). Le saisir à la main créait une écriture
+ * comptable fantôme — un paiement "réglé par CAWL" sans qu'aucun argent
+ * n'ait transité, et sans référence de transaction. `cb_online` reste dans
+ * `paymentModes` ci-dessus pour l'AFFICHAGE des vrais paiements CAWL passés.
+ *
+ * "cb_terminal" (TPE physique) reste, lui : la carte est bien passée sur
+ * place, l'admin ne fait que constater un encaissement réel hors CAWL.
+ */
+export const manualPaymentModes = paymentModes.filter((m) => m.id !== "cb_online");
