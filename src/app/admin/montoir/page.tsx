@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useRef, type ChangeEvent } from "react";
+import { FeuilleAppelImpression } from "./FeuilleAppelImpression";
 import { collection, getDocs, getDoc, updateDoc, addDoc, doc, query, where, serverTimestamp, runTransaction, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { validateChildrenUpdate } from "@/lib/utils";
@@ -893,6 +894,18 @@ export default function MontoirPage() {
 
   return (
     <div>
+      {/* Feuille d'appel dédiée à l'impression : rendue hors du flux écran,
+          visible uniquement au print. L'interface de travail ci-dessous est
+          masquée à l'impression (classe print:hidden sur son conteneur). */}
+      <FeuilleAppelImpression
+        dateLabel={currentDay.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+        monitorFilter={printMonitor}
+        creneaux={creneaux}
+        families={families}
+        calcAge={calcAge}
+        horseDisplay={displayFromHorseName}
+      />
+      <div className="print:hidden">
       {/* En-tête : flex-wrap pour que les boutons passent sous le titre sur
           mobile au lieu de provoquer un défilement horizontal de la page. */}
       <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
@@ -1409,6 +1422,7 @@ export default function MontoirPage() {
           onDone={(msg) => { setAddCreneau(null); toast(`✅ ${msg}`, "success"); fetchData(); }}
         />
       )}
+    </div>
     </div>
   );
 }
