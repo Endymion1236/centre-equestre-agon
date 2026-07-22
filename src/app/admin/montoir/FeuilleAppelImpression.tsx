@@ -47,14 +47,21 @@ export function FeuilleAppelImpression({
         return (
           <section
             key={c.id}
-            // Saut de page entre reprises : chaque cours = une feuille.
-            style={{ breakBefore: idx === 0 ? "auto" : "page" }}
+            // 2 reprises par feuille : saut de page toutes les 2 reprises
+            // (avant les indices pairs, sauf la première). `break-inside:avoid`
+            // empêche une reprise d'être coupée en deux entre deux pages.
+            style={{
+              breakBefore: idx > 0 && idx % 2 === 0 ? "page" : "auto",
+              breakInside: "avoid",
+              marginBottom: 18,
+              paddingBottom: idx % 2 === 0 ? 0 : 4,
+            }}
           >
             <header
               style={{
                 borderBottom: "2px solid #1e3a8a",
-                paddingBottom: 6,
-                marginBottom: 10,
+                paddingBottom: 4,
+                marginBottom: 7,
               }}
             >
               <div style={{ fontSize: 11, color: "#334155", textTransform: "uppercase", letterSpacing: 0.5 }}>
@@ -90,19 +97,19 @@ export function FeuilleAppelImpression({
                   const { age, famille } = infosCavalier(e);
                   return (
                     <tr key={e.childId || i} style={{ borderTop: "1px solid #e2e8f0" }}>
-                      <td style={{ padding: "6px 4px", color: "#94a3b8" }}>{i + 1}</td>
-                      <td style={{ padding: "6px 4px", fontWeight: 600, color: "#0f172a" }}>
+                      <td style={{ padding: "4px 4px", color: "#94a3b8" }}>{i + 1}</td>
+                      <td style={{ padding: "4px 4px", fontWeight: 600, color: "#0f172a" }}>
                         {e.childName || "—"}
                         {famille ? (
                           <span style={{ fontWeight: 400, color: "#64748b" }}> · {famille}</span>
                         ) : null}
                       </td>
-                      <td style={{ padding: "6px 4px", color: "#475569" }}>{age}</td>
-                      <td style={{ padding: "6px 4px", color: poney ? "#0f172a" : "#cbd5e1" }}>
+                      <td style={{ padding: "4px 4px", color: "#475569" }}>{age}</td>
+                      <td style={{ padding: "4px 4px", color: poney ? "#0f172a" : "#cbd5e1" }}>
                         {/* Poney affecté s'il l'est, sinon un trait à remplir à la main. */}
                         {poney || "____________"}
                       </td>
-                      <td style={{ padding: "6px 4px", textAlign: "center" }}>
+                      <td style={{ padding: "4px 4px", textAlign: "center" }}>
                         {/* Case VIDE : le moniteur coche à la main pendant l'appel. */}
                         <span
                           style={{
@@ -117,14 +124,14 @@ export function FeuilleAppelImpression({
                     </tr>
                   );
                 })}
-                {/* Quelques lignes vides pour les ajouts de dernière minute. */}
-                {[0, 1, 2].map((k) => (
+                {/* 2 lignes vides pour les ajouts de dernière minute. */}
+                {[0, 1].map((k) => (
                   <tr key={`empty-${k}`} style={{ borderTop: "1px solid #e2e8f0" }}>
-                    <td style={{ padding: "10px 4px", color: "#cbd5e1" }}>{enrolled.length + k + 1}</td>
-                    <td style={{ padding: "10px 4px" }} />
-                    <td style={{ padding: "10px 4px" }} />
-                    <td style={{ padding: "10px 4px", color: "#cbd5e1" }}>____________</td>
-                    <td style={{ padding: "10px 4px", textAlign: "center" }}>
+                    <td style={{ padding: "7px 4px", color: "#cbd5e1" }}>{enrolled.length + k + 1}</td>
+                    <td style={{ padding: "7px 4px" }} />
+                    <td style={{ padding: "7px 4px" }} />
+                    <td style={{ padding: "7px 4px", color: "#cbd5e1" }}>____________</td>
+                    <td style={{ padding: "7px 4px", textAlign: "center" }}>
                       <span
                         style={{
                           display: "inline-block",
