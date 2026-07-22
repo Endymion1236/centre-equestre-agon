@@ -365,6 +365,14 @@ export async function GET(req: NextRequest) {
       }
       const resendKey = process.env.RESEND_API_KEY;
       await refreshEmailMode();
+      // Diagnostic explicite : sans ces logs, un envoi qui n'a pas lieu est
+      // indétectable (aucune entrée emailsSent n'est créée si on n'entre pas
+      // dans le if). Incident du 22/07 : confirmation d'acompte jamais reçue.
+      if (parentEmail && !resendKey) {
+        console.error(`❌ CAWL status: RESEND_API_KEY absente en Production — confirmation NON envoyée à ${parentEmail} (paiement ${payRef.id})`);
+      } else if (parentEmail && resendKey && !isRecipientAllowed(parentEmail)) {
+        console.warn(`🔒 CAWL status: ${parentEmail} bloqué par le mode restreint — confirmation non envoyée (paiement ${payRef.id})`);
+      }
       if (parentEmail && resendKey && isRecipientAllowed(parentEmail)) {
         try {
           const items = pData.items || [];

@@ -627,30 +627,12 @@ export default function ReserverPage() {
       });
       const newPaymentId = paymentDocRef.id;
 
-      // 3. Email de confirmation au cavalier
-      if (family.parentEmail) {
-        const activitesList = cart.map(i => `• ${i.activityTitle} — ${i.childName}`).join("<br/>");
-        authFetch("/api/send-email", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            to: family.parentEmail,
-            subject: `✅ Inscription confirmée — Centre Équestre d'Agon-Coutainville`,
-            context: "espace_cavalier_reservation",
-            familyId,
-            html: `<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-              <h2 style="color:#2050A0;">Inscription confirmée !</h2>
-              <p>Bonjour <strong>${family.parentName}</strong>,</p>
-              <p>Votre inscription a bien été enregistrée :</p>
-              <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
-                ${activitesList}
-              </div>
-              <p>Montant : <strong>${cartTotal.toFixed(2)}€</strong></p>
-              <p>À bientôt au centre équestre !</p>
-            </div>`,
-          }),
-        }).catch(() => {});
-      }
+      // NB : plus d'email de confirmation envoyé depuis le client.
+      // La confirmation (unique) part du SERVEUR après le paiement — route
+      // /api/cawl/status ou /api/cawl/webhook, template confirmationStageAcompte.
+      // L'ancien appel client à /api/send-email (route adminOnly) renvoyait 403
+      // et exposait un envoi d'email HTML arbitraire depuis le navigateur.
+
       const hasStage = cart.some(i => i.isStage);
       const isDeposit = hasStage && depositMode === "deposit";
       const firstStageCreneau = hasStage ? creneaux.find(c => c.id === cart.find(i => i.isStage)?.creneauIds[0]) : null;
