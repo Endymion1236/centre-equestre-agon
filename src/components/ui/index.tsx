@@ -94,6 +94,8 @@ interface CardProps {
   className?: string;
   padding?: "none" | "sm" | "md" | "lg";
   onClick?: () => void;
+  /** Styles inline ponctuels (ex. liseré coloré porté par la donnée). */
+  style?: React.CSSProperties;
 }
 
 const paddingStyles = {
@@ -109,10 +111,12 @@ export function Card({
   className = "",
   padding = "md",
   onClick,
+  style,
 }: CardProps) {
   return (
     <div
       onClick={onClick}
+      style={style}
       className={`
         card ${paddingStyles[padding]}
         ${hover ? "card-hover cursor-pointer" : ""}

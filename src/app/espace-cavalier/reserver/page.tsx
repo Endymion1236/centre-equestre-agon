@@ -1045,7 +1045,19 @@ export default function ReserverPage() {
                           📅 {weekLabel}
                         </div>
                       )}
-                    <Card padding="md" className={isSelected ? "ring-2 ring-green-500" : ""}>
+                    {/* Liseré coloré = couleur de l'ACTIVITÉ (celle choisie dans
+                        l'admin, déjà utilisée dans le planning). La couleur
+                        encode le niveau du stage plutôt que de décorer : même
+                        repère visuel côté back-office et côté famille. */}
+                    <Card
+                      padding="md"
+                      className={isSelected ? "ring-2 ring-green-500" : ""}
+                      style={(() => {
+                        const col = (first as any).color
+                          || activities.find((a: any) => a.id === (first as any).activityId)?.color;
+                        return col ? { borderLeft: `4px solid ${col}` } : undefined;
+                      })()}
+                    >
                       <div className="flex justify-between items-start cursor-pointer" onClick={() => { setSelectedCreneau(isSelected ? null : first); setSelectedChildren([]); setStageBookingMode("semaine"); setSelectedDays([]); }}>
                         <div>
                           <div className="font-body text-base font-semibold text-blue-800">{first.activityTitle}</div>
