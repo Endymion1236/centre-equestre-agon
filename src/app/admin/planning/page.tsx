@@ -1650,13 +1650,24 @@ export default function PlanningPage() {
         const freshC = freshCSnap.data() as any;
         const placesLibres = (freshC.maxPlaces || 0) - (freshC.enrolledCount || (freshC.enrolled || []).length);
         if (placesLibres > 0) {
-          const waitSnap = await getDocs(query(
-            collection(db, "waitlist"),
-            where("creneauId", "==", cid),
-            where("status", "==", "waiting"),
-          ));
-          const waiting = waitSnap.docs
-            .map(d => ({ id: d.id, ...d.data() }))
+          // Entrées « cours » (creneauId) + entrées « stage » (creneauIds
+          // contient tous les jours de la semaine). Statut filtré en mémoire
+          // côté array-contains : évite un nouvel index composite.
+          const [waitById, waitByDays] = await Promise.all([
+            getDocs(query(
+              collection(db, "waitlist"),
+              where("creneauId", "==", cid),
+              where("status", "==", "waiting"),
+            )),
+            getDocs(query(collection(db, "waitlist"), where("creneauIds", "array-contains", cid))),
+          ]);
+          const waitMap = new Map<string, any>();
+          waitById.docs.forEach(d => waitMap.set(d.id, { id: d.id, ...d.data() }));
+          waitByDays.docs.forEach(d => {
+            const data = d.data() as any;
+            if (data.status === "waiting") waitMap.set(d.id, { id: d.id, ...data });
+          });
+          const waiting = [...waitMap.values()]
             .sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
           if (waiting.length > 0) {
             const first = waiting[0] as any;

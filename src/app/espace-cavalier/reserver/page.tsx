@@ -759,6 +759,61 @@ export default function ReserverPage() {
     setWaitlistLoading(null);
   };
 
+  // ── Liste d'attente STAGE : UNE seule entrée pour toute la semaine ──────
+  // Une famille veut la semaine, pas le mardi : on ne crée donc pas 5 entrées.
+  // `creneauId` reste le PREMIER jour pour rester compatible avec les écrans
+  // admin existants (qui interrogent waitlist par creneauId), et `creneauIds`
+  // porte tous les jours pour qu'une place libérée n'importe quel jour puisse
+  // retrouver l'entrée.
+  const addStageToWaitlist = async (stageCreneaux: Creneau[], childId: string) => {
+    if (!user || !family || stageCreneaux.length === 0) return;
+    const jours = [...stageCreneaux].sort((a, b) => a.date.localeCompare(b.date));
+    const first = jours[0];
+    const last = jours[jours.length - 1];
+    const childObj = children.find((c: any) => c.id === childId);
+    const childName = childObj?.lastName ? `${childObj.firstName} ${childObj.lastName}` : childObj?.firstName || "Cavalier";
+    setWaitlistLoading(first.id);
+    try {
+      // Doublon : même trio de champs que pour les cours, afin de réutiliser
+      // l'index composite existant (pas de nouvel index Firestore à déployer).
+      const existing = await getDocs(query(
+        collection(db, "waitlist"),
+        where("creneauId", "==", first.id),
+        where("childId", "==", childId),
+        where("familyId", "==", user.uid)
+      ));
+      if (!existing.empty) {
+        toast("Vous êtes déjà en liste d'attente pour ce stage.", "warning");
+        setWaitlistLoading(null); return;
+      }
+      await addDoc(collection(db, "waitlist"), {
+        isStage: true,
+        stageKey: `${first.activityTitle}_${first.date}`,
+        creneauId: first.id,
+        creneauIds: jours.map(c => c.id),
+        activityTitle: first.activityTitle,
+        activityType: first.activityType,
+        date: first.date,
+        dateFin: last.date,
+        nbJours: jours.length,
+        startTime: first.startTime,
+        endTime: first.endTime,
+        monitor: first.monitor,
+        familyId: user.uid,
+        familyName: family.parentName,
+        familyEmail: family.parentEmail || user.email || "",
+        childId,
+        childName,
+        status: "waiting",
+        position: existing.size + 1,
+        createdAt: serverTimestamp(),
+      });
+      setWaitlistSuccess(first.id);
+      setTimeout(() => setWaitlistSuccess(null), 4000);
+    } catch (e) { console.error(e); toast("Erreur. Réessayez.", "error"); }
+    setWaitlistLoading(null);
+  };
+
   // Pas connecté
   if (!user) return (
     <div className="text-center py-20">
@@ -1042,7 +1097,7 @@ export default function ReserverPage() {
                             })()}{joursUniques.length > 1 ? "s" : ""}
                           </div>
                           <div className="font-body text-xs text-gray-500">{first.startTime}–{first.endTime}</div>
-                          <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>{spots} place{spots > 1 ? "s" : ""}</Badge>
+                          <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>{spots > 0 ? `${spots} place${spots > 1 ? "s" : ""}` : "Complet"}</Badge>
                         </div>
                       </div>
 
@@ -1071,6 +1126,33 @@ export default function ReserverPage() {
                       })()}
 
                       {/* Sélection enfants pour ce stage */}
+                      {/* Stage complet — liste d'attente (UNE entrée pour la semaine) */}
+                      {isSelected && spots === 0 && (
+                        <div className="mt-4 pt-4 border-t border-orange-100">
+                          {waitlistSuccess === joursUniques[0]?.id ? (
+                            <div className="flex items-center gap-2 text-green-600 font-body text-xs">
+                              <Check size={14} /> Inscrit en liste d&apos;attente ! Vous serez notifié par email si une place se libère.
+                            </div>
+                          ) : (
+                            <>
+                              <div className="font-body text-xs text-orange-600 mb-2">
+                                🔔 Ce stage est complet. Inscrivez-vous en liste d&apos;attente pour la semaine :
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {children.filter((ch: any) => !(first.enrolled || []).some((e: any) => e.childId === ch.id)).map((ch: any) => (
+                                  <button key={ch.id}
+                                    onClick={(e) => { e.stopPropagation(); addStageToWaitlist(stageCreneaux, ch.id); }}
+                                    disabled={waitlistLoading === joursUniques[0]?.id}
+                                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-orange-200 bg-orange-50 font-body text-xs text-orange-700 cursor-pointer hover:bg-orange-100 disabled:opacity-50">
+                                    {waitlistLoading === joursUniques[0]?.id ? <Loader2 size={12} className="animate-spin" /> : "🔔"} {ch.firstName}
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+
                       {isSelected && spots > 0 && (() => {
                         // Jours REELLEMENT ouverts à la journée. L'option se règle
                         // créneau par créneau dans l'admin : un `some()` sur la
