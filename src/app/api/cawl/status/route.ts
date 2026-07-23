@@ -423,6 +423,25 @@ export async function GET(req: NextRequest) {
             prestations: lignesDetail || prestations,
           };
           const { subject, html } = await loadTemplate(templateKey, vars);
+          // Rappel des conditions d'annulation pour les stages. Ajouté ici
+          // plutôt que dans le gabarit : la clause doit apparaître même si
+          // le gabarit est réédité depuis l'admin. Ce n'est PAS ce qui rend
+          // la clause opposable (l'acceptation à la commande le fait), mais
+          // ça évite la mauvaise surprise et désamorce les litiges.
+          const estStage = items.some((i: any) => String(i.activityType || "").includes("stage"));
+          const htmlFinal = estStage
+            ? html +
+              `<div style="max-width:520px;margin:16px auto 0;padding:14px 16px;border:1px solid #fed7aa;background:#fff7ed;border-radius:10px;font-family:sans-serif;">
+                 <p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#9a3412;">Conditions d'annulation</p>
+                 <p style="margin:0;font-size:12px;line-height:1.6;color:#7c2d12;">
+                   Toute annulation à plus de <strong>3 semaines</strong> du début du stage donne lieu à un
+                   remboursement intégral. Passé ce délai, le stage n'est plus remboursable, sauf
+                   certificat médical ou cas de force majeure. L'acompte de 30&nbsp;€ est alors converti
+                   en <strong>avoir</strong>, utilisable sur toute prestation du centre jusqu'au
+                   30 juin de l'année suivante.
+                 </p>
+               </div>`
+            : html;
           fetch("https://api.resend.com/emails", {
             method: "POST",
             headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
@@ -430,7 +449,7 @@ export async function GET(req: NextRequest) {
               from: process.env.RESEND_FROM_EMAIL || "Centre Equestre <onboarding@resend.dev>",
               to: parentEmail,
               ...(process.env.RESEND_BCC_EMAIL ? { bcc: process.env.RESEND_BCC_EMAIL } : {}),
-              subject, html,
+              subject, html: htmlFinal,
             }),
           })
             .then(async (res) => {

@@ -46,6 +46,8 @@ export default function ReserverPage() {
   const [bookingCreneau, setBookingCreneau] = useState<Creneau | null>(null);
   // Mode paiement dans le panier
   const [cartPayMode, setCartPayMode] = useState<"cb" | "cheque" | "especes" | "virement" | "avoir">("cb");
+  // Acceptation des conditions d'annulation (stages uniquement).
+  const [cgvAccepted, setCgvAccepted] = useState(false);
   const [cartPaySuccess, setCartPaySuccess] = useState(false);
   const [success, setSuccess] = useState(false);
   const [waitlistSuccess, setWaitlistSuccess] = useState<string | null>(null); // creneauId confirmé
@@ -462,6 +464,9 @@ export default function ReserverPage() {
 
   const removeFromCart = (idx: number) => setCart(cart.filter((_, i) => i !== idx));
   const cartTotal = cart.reduce((s, i) => s + i.prixFinal, 0);
+  // Le panier contient-il un stage ? La clause d'annulation à 3 semaines ne
+  // concerne que les stages : inutile de la faire accepter pour une balade.
+  const cartHasStage = cart.some((i: any) => i.isStage === true);
   const cartTotalReductions = cart.reduce((s, i) => s + i.remiseEuros, 0);
   const ACOMPTE_PAR_ENFANT = 30;
   const nbEnfantsStage = cart.filter(i => i.isStage).length;
@@ -592,6 +597,12 @@ export default function ReserverPage() {
 
       // 2. Créer le paiement pending
       const paymentDocRef = await addDoc(collection(db, "payments"), {
+        // Preuve d'acceptation des conditions d'annulation, horodatée.
+        // Sans trace de l'acceptation AVANT paiement, la clause est
+        // difficilement opposable en cas de litige.
+        cgvAnnulationAcceptee: cartHasStage ? true : null,
+        cgvAnnulationAccepteeAt: cartHasStage ? new Date().toISOString() : null,
+        cgvVersion: cartHasStage ? "2026-07-stages-3semaines" : null,
         familyId: user.uid, familyName: family.parentName,
         familyEmail: family.parentEmail || user.email || "",
         items: cart.map(i => {
@@ -1530,11 +1541,33 @@ export default function ReserverPage() {
                     })()}
                   </div>
 
+                  {/* Conditions d'annulation — acceptation AVANT paiement.
+                      Une clause n'est opposable que si le client en a eu
+                      connaissance et l'a acceptée avant de contracter :
+                      l'email de confirmation arrive trop tard pour ça. */}
+                  {cartHasStage && (
+                    <label className="flex items-start gap-2.5 mb-3 p-3 rounded-xl bg-orange-50 border border-orange-200 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={cgvAccepted}
+                        onChange={(e) => setCgvAccepted(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 flex-shrink-0 cursor-pointer accent-orange-500"
+                      />
+                      <span className="font-body text-xs text-orange-900 leading-relaxed">
+                        J&apos;ai lu et j&apos;accepte les <a href="/cgv" target="_blank" rel="noopener noreferrer" className="font-semibold underline">conditions d&apos;annulation</a> :
+                        au-delà de <strong>3 semaines avant le début du stage</strong>, l&apos;annulation ne donne
+                        pas lieu à remboursement, sauf certificat médical ou force majeure.
+                        L&apos;acompte de 30&nbsp;€ est alors converti en <strong>avoir</strong>, valable
+                        jusqu&apos;au 30 juin de l&apos;année suivante.
+                      </span>
+                    </label>
+                  )}
+
                   {/* Bouton CB → CAWL */}
                   {cartPayMode === "cb" && (
                     <>
-                      <button onClick={handlePay} disabled={paying}
-                        className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying ? "bg-gray-200 text-gray-600" : depositMode === "deposit" ? "bg-orange-500 text-white hover:bg-orange-400" : "bg-green-600 text-white hover:bg-green-500"}`}>
+                      <button onClick={handlePay} disabled={paying || (cartHasStage && !cgvAccepted)}
+                        className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying || (cartHasStage && !cgvAccepted) ? "bg-gray-200 text-gray-600 cursor-not-allowed" : depositMode === "deposit" ? "bg-orange-500 text-white hover:bg-orange-400" : "bg-green-600 text-white hover:bg-green-500"}`}>
                         {paying ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
                         {paying ? "Paiement en cours..." : depositMode === "deposit" ? `Payer l'acompte ${acompteFixe.toFixed(2)}€` : `Payer ${cartTotal.toFixed(2)}€`}
                       </button>
