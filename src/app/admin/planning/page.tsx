@@ -1669,20 +1669,44 @@ export default function PlanningPage() {
           });
           const waiting = [...waitMap.values()]
             .sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
-          if (waiting.length > 0) {
-            const first = waiting[0] as any;
+
+          // ── Règle métier : une attente de STAGE ne se notifie que si la
+          // SEMAINE ENTIÈRE redevient disponible. Sur un stage ouvert à la
+          // journée, la libération d'un seul jour ne doit prévenir personne :
+          // ces cas sont traités manuellement. Prévenir une famille pour une
+          // place qu'elle ne peut pas prendre serait pire que se taire.
+          const eligibles: any[] = [];
+          for (const w of waiting) {
+            const jours: string[] = Array.isArray(w.creneauIds) ? w.creneauIds : [];
+            // Entrée « cours » (ou stage d'un seul jour) : comportement inchangé.
+            if (!w.isStage || jours.length <= 1) { eligibles.push(w); continue; }
+            const snaps = await Promise.all(jours.map(id => getDoc(doc(db, "creneaux", id))));
+            const semaineLibre = snaps.every(sn => {
+              if (!sn.exists()) return false;
+              const d = sn.data() as any;
+              return ((d.maxPlaces || 0) - (d.enrolledCount || (d.enrolled || []).length)) > 0;
+            });
+            if (semaineLibre) eligibles.push(w);
+          }
+
+          if (eligibles.length > 0) {
+            const first = eligibles[0] as any;
             // ── Réserver la place 24h pour cette famille (hold) ──
             // Pendant 24h, cette place n'est plus proposée aux autres familles
             // côté client. Le hold expire automatiquement (vérifié à la lecture)
             // ou disparaît dès que l'enfant concerné est inscrit.
             const holdUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-            await updateDoc(doc(db, "creneaux", cid), {
-              waitlistHold: {
-                familyId: first.familyId, childId: first.childId,
-                childName: first.childName, until: holdUntil,
-                waitlistEntryId: first.id,
-              },
-            });
+            const hold = {
+              familyId: first.familyId, childId: first.childId,
+              childName: first.childName, until: holdUntil,
+              waitlistEntryId: first.id,
+            };
+            // Stage : on réserve TOUS les jours de la semaine, sinon une autre
+            // famille pourrait prendre le mercredi pendant les 24h accordées.
+            const joursHold: string[] = first.isStage && Array.isArray(first.creneauIds) && first.creneauIds.length > 1
+              ? first.creneauIds
+              : [cid];
+            await Promise.all(joursHold.map(id => updateDoc(doc(db, "creneaux", id), { waitlistHold: hold })));
             authFetch("/api/send-email", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -1698,7 +1722,9 @@ export default function PlanningPage() {
                   <p>Une place s'est libérée pour <strong>${first.childName}</strong> dans :</p>
                   <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
                     <p style="margin:0;color:#166534;font-weight:600;">${c.activityTitle}</p>
-                    <p style="margin:8px 0 0;color:#555;font-size:13px;">📅 ${new Date(c.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} — ${c.startTime}–${c.endTime}</p>
+                    <p style="margin:8px 0 0;color:#555;font-size:13px;">📅 ${first.isStage && first.dateFin && first.dateFin !== first.date
+                      ? `du ${new Date(first.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} au ${new Date(first.dateFin).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })}${first.nbJours ? ` (${first.nbJours} jours)` : ""}`
+                      : new Date(c.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} — ${c.startTime}–${c.endTime}</p>
                   </div>
                   <p><strong>Cette place vous est réservée pendant 24h</strong> (jusqu'au ${new Date(holdUntil).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} à ${new Date(holdUntil).toLocaleTimeString("fr-FR", { hour:"2-digit", minute:"2-digit" })}). Connectez-vous à votre espace famille pour confirmer l'inscription. Passé ce délai, elle sera proposée aux autres familles.</p>
                   <p style="color:#666;font-size:12px;">À bientôt au centre équestre !</p>
@@ -1706,7 +1732,7 @@ export default function PlanningPage() {
               }),
             }).catch(() => {});
             await updateDoc(doc(db, "waitlist", first.id), { status: "notified", notifiedAt: new Date().toISOString(), holdUntil });
-            toast(`🔔 ${first.childName} (liste d'attente) notifié(e) — place réservée 24h`, "success");
+            toast(`🔔 ${first.childName} (liste d'attente) notifié(e) — ${first.isStage ? "semaine" : "place"} réservée 24h`, "success");
           }
         }
       }
