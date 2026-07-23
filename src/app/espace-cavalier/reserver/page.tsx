@@ -1072,7 +1072,13 @@ export default function ReserverPage() {
 
                       {/* Sélection enfants pour ce stage */}
                       {isSelected && spots > 0 && (() => {
-                        const allowDay = stageCreneaux.some((c: any) => c.allowDayBooking);
+                        // Jours REELLEMENT ouverts à la journée. L'option se règle
+                        // créneau par créneau dans l'admin : un `some()` sur la
+                        // semaine ouvrait le mode journée dès qu'UN jour l'autorisait,
+                        // et le sélecteur proposait ensuite les 5 jours — dont ceux
+                        // vendus uniquement à la semaine.
+                        const joursJournee = joursUniques.filter((c: any) => c.allowDayBooking);
+                        const allowDay = joursJournee.length > 0;
                         const prixJour = (first as any).priceTTCDay || (stageCreneaux.find((c: any) => (c as any).priceTTCDay) as any)?.priceTTCDay || Math.round(prix / joursUniques.length * 100) / 100;
                         return (
                         <div className="mt-4 pt-4 border-t border-green-200">
@@ -1096,9 +1102,16 @@ export default function ReserverPage() {
                           {/* Sélection des jours si mode jour */}
                           {allowDay && stageBookingMode === "jour" && (
                             <div className="mb-3">
-                              <div className="font-body text-xs font-semibold text-green-700 mb-2">Choisissez vos jours :</div>
+                              <div className="font-body text-xs font-semibold text-green-700 mb-2">
+                                Choisissez vos jours :
+                                {joursJournee.length < joursUniques.length && (
+                                  <span className="ml-1 font-normal text-gray-500">
+                                    (seuls certains jours sont proposés à l&apos;unité)
+                                  </span>
+                                )}
+                              </div>
                               <div className="flex flex-wrap gap-2">
-                                {joursUniques.map(c => {
+                                {joursJournee.map(c => {
                                   const dayLabel = new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
                                   const sel = selectedDays.includes(c.id);
                                   const daySpots = spotsLeft(c);
