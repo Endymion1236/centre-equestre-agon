@@ -1,15 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
-import { sendPushBatch } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
-
-const ADMIN_EMAILS = new Set([
-  "ceagon@orange.fr",
-  "ceagon50@gmail.com",
-  "emmelinelagy@gmail.com",
-]);
 
 type ChangeAction = "created" | "updated" | "deleted" | "duplicated";
 
@@ -72,34 +65,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Action invalide" }, { status: 400 });
     }
 
-    const tokenSnapshot = await adminDb.collection("push_tokens").get();
-    const recipients = await Promise.all(tokenSnapshot.docs.map(async (tokenDocument) => {
-      if (tokenDocument.id === auth.uid) return null;
-      const token = clean(tokenDocument.data().token, 4096);
-      if (!token) return null;
+    // ── MISE EN FILE (plus d'envoi immédiat) ──────────────────────────
+    // Chaque modification de créneau déclenchait un push instantané : en
+    // construisant un planning, les moniteurs recevaient des dizaines de
+    // notifications d'affilée. Les changements sont désormais empilés ici
+    // et regroupés en UN SEUL récapitulatif, envoyé par le cron push-digest
+    // à 13h30 et 18h (heure de Paris).
+    //
+    // Les destinataires sont résolus au moment de l'ENVOI, pas ici : les
+    // tokens peuvent changer entre-temps, et il faut connaître l'ensemble
+    // des auteurs de la période pour ne pas notifier quelqu'un de ses
+    // propres modifications.
+    await adminDb.collection("push_queue").add({
+      type: "planning",
+      action: payload.action,
+      authorUid: auth.uid,
+      activityTitle: clean(payload.activityTitle),
+      date: clean(payload.date, 10),
+      startTime: clean(payload.startTime, 5),
+      endTime: clean(payload.endTime, 5),
+      previousStartTime: clean(payload.previousStartTime, 5),
+      previousEndTime: clean(payload.previousEndTime, 5),
+      monitor: clean(payload.monitor),
+      count: Math.max(1, Math.min(Number(payload.count) || 1, 200)),
+      body: buildBody(payload),
+      createdAt: new Date(),
+      sentAt: null,
+    });
 
-      try {
-        const user = await adminAuth.getUser(tokenDocument.id);
-        const claims = user.customClaims || {};
-        const isStaff = claims.admin === true || claims.moniteur === true || ADMIN_EMAILS.has(user.email || "");
-        return isStaff ? token : null;
-      } catch {
-        return null;
-      }
-    }));
-
-    const tokens = [...new Set(recipients.filter((token): token is string => Boolean(token)))];
-    if (tokens.length === 0) {
-      return NextResponse.json({ sent: 0, failed: 0, message: "Aucun moniteur n’a encore activé les notifications" });
-    }
-
-    const date = clean(payload.date, 10);
-    const url = date ? `/admin/planning?date=${encodeURIComponent(date)}` : "/admin/planning";
-    const result = await sendPushBatch(tokens, "📅 Planning modifié", buildBody(payload), url);
-
-    return NextResponse.json({ ...result, recipients: tokens.length });
+    return NextResponse.json({ queued: true });
   } catch (error) {
     console.error("Notification changement planning :", error);
-    return NextResponse.json({ error: "Envoi impossible" }, { status: 500 });
+    return NextResponse.json({ error: "Mise en file impossible" }, { status: 500 });
   }
 }
