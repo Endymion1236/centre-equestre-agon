@@ -461,6 +461,69 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     if (cr.price4days) prices[4] = cr.price4days;
     return prices[nbJours] || priceTTC;
   }, [isStage, priceTTC, creneau, stageDaysCount]);
+  // ── Ajout MANUEL en liste d'attente (admin) ──────────────────────────
+  // Une famille appelle, le créneau est complet : on l'inscrit en attente
+  // sans qu'elle ait à passer par l'espace famille. Même structure de
+  // document que l'inscription côté client, pour que l'acceptation et la
+  // notification fonctionnent à l'identique.
+  const [waitAdding, setWaitAdding] = useState(false);
+  const addToWaitlistAdmin = async () => {
+    if (!selFam || !selChild || waitAdding) return;
+    const fam = allFamilies.find((f: any) => f.firestoreId === selFam);
+    const child: any = (fam?.children || []).find((c: any) => c.id === selChild);
+    if (!fam || !child) return;
+    const childName = child.lastName ? `${child.firstName} ${child.lastName}` : child.firstName;
+    const estStage = creneau.activityType === "stage" || creneau.activityType === "stage_journee";
+    const jours = estStage
+      ? allCreneaux
+          .filter((c: any) => sameStage(c, creneau) && (c.activityType === "stage" || c.activityType === "stage_journee"))
+          .sort((a: any, b: any) => a.date.localeCompare(b.date))
+      : [creneau];
+    const first: any = jours[0] || creneau;
+    const last: any = jours[jours.length - 1] || creneau;
+    setWaitAdding(true);
+    try {
+      const deja = await getDocs(query(
+        collection(db, "waitlist"),
+        where("creneauId", "==", first.id),
+        where("childId", "==", selChild),
+        where("familyId", "==", fam.firestoreId),
+      ));
+      if (!deja.empty) {
+        alert("Ce cavalier est déjà en liste d'attente pour ce créneau.");
+        setWaitAdding(false); return;
+      }
+      await addDoc(collection(db, "waitlist"), {
+        isStage: estStage && jours.length > 1,
+        stageKey: `${first.activityTitle}_${first.date}`,
+        creneauId: first.id,
+        creneauIds: jours.map((c: any) => c.id),
+        activityTitle: first.activityTitle,
+        activityType: first.activityType,
+        date: first.date,
+        dateFin: last.date,
+        nbJours: jours.length,
+        startTime: first.startTime,
+        endTime: first.endTime,
+        monitor: first.monitor || "",
+        familyId: fam.firestoreId,
+        familyName: fam.parentName || "",
+        familyEmail: fam.parentEmail || "",
+        childId: selChild,
+        childName,
+        status: "waiting",
+        addedByAdmin: true,
+        createdAt: serverTimestamp(),
+      });
+      setSelFam(""); setSelChild(""); setSearch("");
+      onRefresh?.();
+    } catch (e) {
+      console.error("Ajout liste d'attente :", e);
+      alert("Ajout impossible. Réessayez.");
+    }
+    setWaitAdding(false);
+  };
+
   const filteredFamilies = useMemo(() => { if (!search) return allFamilies; const terms = search.toLowerCase().trim().split(/\s+/); return allFamilies.filter(f => { const childText = (f.children || []).map((c: any) => `${c.firstName || ""} ${c.lastName || ""}`).join(" "); const searchable = `${f.parentName || ""} ${f.parentEmail || ""} ${childText}`.toLowerCase(); return terms.every(t => searchable.includes(t)); }); }, [allFamilies, search]);
 
   const acceptWaitlist = async (entry: any) => {
@@ -2389,6 +2452,48 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   </button>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* ── Créneau complet : ajout MANUEL en liste d'attente ────────── */}
+          {spots <= 0 && (creneau as any).status !== "closed" && (
+            <div className="mb-4 border-t border-blue-500/8 pt-4">
+              <h3 className="font-body text-sm font-semibold text-orange-700 mb-3">
+                🔔 Ajouter en liste d&apos;attente
+              </h3>
+              <div className="flex flex-col gap-3">
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input value={search} onChange={e => { setSearch(e.target.value); setSelFam(""); setSelChild(""); }}
+                    placeholder="Nom parent, prénom enfant, email..."
+                    className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-orange-400 focus:outline-none" />
+                </div>
+                <select value={selFam} onChange={e => { setSelFam(e.target.value); setSelChild(""); }}
+                  className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream">
+                  <option value="">Famille ({filteredFamilies.length})</option>
+                  {filteredFamilies.map(f => {
+                    const n = (f.children || []).map((c: any) => c.firstName).join(", ");
+                    return <option key={f.firestoreId} value={f.firestoreId}>{f.parentName} {n ? `(${n})` : ""}</option>;
+                  })}
+                </select>
+                {selFam && (
+                  <select value={selChild} onChange={e => setSelChild(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream">
+                    <option value="">Cavalier…</option>
+                    {(allFamilies.find((f: any) => f.firestoreId === selFam)?.children || []).map((c: any) => (
+                      <option key={c.id} value={c.id}>{c.firstName} {c.lastName || ""}</option>
+                    ))}
+                  </select>
+                )}
+                <button onClick={addToWaitlistAdmin} disabled={!selChild || waitAdding}
+                  className={`w-full py-2.5 rounded-lg font-body text-sm font-semibold border-none ${!selChild || waitAdding ? "bg-gray-100 text-slate-400 cursor-not-allowed" : "bg-orange-500 text-white cursor-pointer hover:bg-orange-600"}`}>
+                  {waitAdding ? <Loader2 size={14} className="animate-spin inline" /> : "🔔 Mettre en liste d'attente"}
+                </button>
+                <p className="font-body text-[11px] text-slate-500">
+                  La famille sera prévenue par email si une place se libère
+                  {(creneau.activityType === "stage" || creneau.activityType === "stage_journee") ? " sur la semaine complète" : ""}.
+                </p>
+              </div>
             </div>
           )}
 
