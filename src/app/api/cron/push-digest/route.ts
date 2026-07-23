@@ -26,10 +26,20 @@ const ADMIN_EMAILS = new Set([
   "emmelinelagy@gmail.com",
 ]);
 
-/** Créneaux d'envoi autorisés, heure de Paris. */
+/**
+ * Créneaux d'envoi, heure de Paris.
+ *
+ * On raisonne en HEURE ENTIÈRE, pas à la minute près : Vercel ne garantit le
+ * déclenchement qu'à l'heure près (un cron de 11h30 peut partir jusqu'à
+ * 12h30). Une fenêtre de ±20 min aurait silencieusement sauté l'envoi en cas
+ * de retard. On accepte donc l'heure du créneau ET la suivante.
+ *
+ * Un double déclenchement est sans conséquence : la file est vidée après
+ * chaque envoi, donc la seconde exécution ne trouve rien et n'envoie rien.
+ */
 const CRENEAUX = [
-  { h: 13, m: 30, label: "13h30" },
-  { h: 18, m: 0, label: "18h" },
+  { heures: [13, 14], label: "13h30" },
+  { heures: [18, 19], label: "18h" },
 ];
 
 /** Heure et minute courantes à Paris (le serveur Vercel tourne en UTC). */
@@ -54,8 +64,7 @@ export async function GET(request: NextRequest) {
   }
 
   const { h, m } = heureParis();
-  // Tolérance de 20 min : le déclenchement Vercel n'est pas à la seconde.
-  const creneau = CRENEAUX.find((c) => c.h === h && Math.abs(c.m - m) <= 20);
+  const creneau = CRENEAUX.find((c) => c.heures.includes(h));
   if (!creneau && !force) {
     return NextResponse.json({
       skipped: true,
