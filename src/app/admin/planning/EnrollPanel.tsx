@@ -461,6 +461,45 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     if (cr.price4days) prices[4] = cr.price4days;
     return prices[nbJours] || priceTTC;
   }, [isStage, priceTTC, creneau, stageDaysCount]);
+  // ── Place tenue pour une famille en liste d'attente ──────────────────
+  // Le hold pose par la notification "une place s'est liberee" reste sur le
+  // creneau tant que la famille n'a pas reserve. Si l'admin remplit la place
+  // entre-temps, le hold devient une trace fantome : l'espace famille ne
+  // l'affiche plus (la dispo reelle est verifiee), mais l'entree de liste
+  // d'attente reste bloquee en "notifiee" et ne sera jamais renotifiee.
+  // On expose donc une liberation EXPLICITE plutot qu'un nettoyage silencieux.
+  const [holdReleasing, setHoldReleasing] = useState(false);
+  const holdActif = (() => {
+    const h = (creneau as any).waitlistHold;
+    if (!h?.until) return null;
+    if (new Date(h.until).getTime() < Date.now()) return null;
+    if (enrolled.some((e: any) => e.childId === h.childId)) return null;
+    return h;
+  })();
+  const libererHold = async () => {
+    const h = holdActif;
+    if (!h || holdReleasing) return;
+    if (!confirm(`Libérer la place réservée à ${h.childName} ? Sa demande repassera en liste d'attente.`)) return;
+    setHoldReleasing(true);
+    try {
+      await updateDoc(doc(db, "creneaux", creneau.id!), { waitlistHold: deleteField() });
+      if (h.waitlistEntryId) {
+        // La famille garde sa place dans la file : on ne supprime pas
+        // l'entrée, on la remet simplement en attente.
+        await updateDoc(doc(db, "waitlist", h.waitlistEntryId), {
+          status: "waiting",
+          holdUntil: deleteField(),
+          releasedByAdminAt: new Date().toISOString(),
+        }).catch(() => {});
+      }
+      await onRefresh?.();
+    } catch (e) {
+      console.error("Libération hold :", e);
+      alert("Libération impossible. Réessayez.");
+    }
+    setHoldReleasing(false);
+  };
+
   // ── Ajout MANUEL en liste d'attente (admin) ──────────────────────────
   // Une famille appelle, le créneau est complet : on l'inscrit en attente
   // sans qu'elle ait à passer par l'espace famille. Même structure de
@@ -2427,6 +2466,26 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               </div>
             );
           })}</div>}
+
+          {/* ── Place tenue pour une famille notifiée ── */}
+          {holdActif && (
+            <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
+              <div className="font-body text-xs font-semibold text-amber-800">
+                🔒 Place réservée à {holdActif.childName}
+              </div>
+              <div className="mt-0.5 font-body text-[11px] text-amber-700">
+                Prévenue par email qu&apos;une place s&apos;est libérée, cette famille a jusqu&apos;au{" "}
+                {new Date(holdActif.until).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} à{" "}
+                {new Date(holdActif.until).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })} pour réserver.
+                Si vous inscrivez quelqu&apos;un d&apos;autre sur cette place, libérez d&apos;abord la réservation —
+                sinon sa demande resterait bloquée et elle ne serait plus jamais renotifiée.
+              </div>
+              <button onClick={libererHold} disabled={holdReleasing}
+                className="mt-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 font-body text-[11px] font-semibold text-amber-800 cursor-pointer hover:bg-amber-100 disabled:opacity-50">
+                {holdReleasing ? <Loader2 size={12} className="animate-spin inline" /> : "Libérer la réservation"}
+              </button>
+            </div>
+          )}
 
           {/* ── Liste d'attente ── */}
           {waitlist.length > 0 && (
