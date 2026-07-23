@@ -107,7 +107,7 @@ export default function AvoirsPage() {
     setSaving(true);
     const fam = families.find(f => f.firestoreId === selFamily);
     const amt = parseFloat(amount);
-    // "saison" = 30 juin de l'année suivante (règle CGV stages) ; sinon
+    // "saison" = fin de la saison en cours, 30 juin (règle CGV stages) ; sinon
     // durée glissante en mois, pour les cas particuliers.
     const expiry = expiryMonths === "saison"
       ? echeanceAvoir()
@@ -452,7 +452,7 @@ export default function AvoirsPage() {
             <div>
               <label className={labelStyle}>Validité</label>
               <select className={inputStyle} value={expiryMonths} onChange={e => setExpiryMonths(e.target.value)}>
-                <option value="saison">Jusqu'au 30 juin de l'année suivante</option>
+                <option value="saison">Fin de la saison en cours (30 juin)</option>
                 <option value="3">3 mois</option>
                 <option value="6">6 mois</option>
                 <option value="12">12 mois</option>

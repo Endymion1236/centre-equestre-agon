@@ -437,8 +437,8 @@ export async function GET(req: NextRequest) {
                    Toute annulation à plus de <strong>3 semaines</strong> du début du stage donne lieu à un
                    remboursement intégral. Passé ce délai, le stage n'est plus remboursable, sauf
                    certificat médical ou cas de force majeure. L'acompte de 30&nbsp;€ est alors converti
-                   en <strong>avoir</strong>, utilisable sur toute prestation du centre jusqu'au
-                   30 juin de l'année suivante.
+                   en <strong>avoir</strong>, utilisable sur toute prestation du centre jusqu'à la
+                   fin de la saison en cours (30 juin).
                  </p>
                </div>`
             : html;

@@ -1558,7 +1558,7 @@ export default function ReserverPage() {
                         au-delà de <strong>3 semaines avant le début du stage</strong>, l&apos;annulation ne donne
                         pas lieu à remboursement, sauf certificat médical ou force majeure.
                         L&apos;acompte de 30&nbsp;€ est alors converti en <strong>avoir</strong>, valable
-                        jusqu&apos;au 30 juin de l&apos;année suivante.
+                        jusqu&apos;à la fin de la saison en cours (30 juin).
                       </span>
                     </label>
                   )}

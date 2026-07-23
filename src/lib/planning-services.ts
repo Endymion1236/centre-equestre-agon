@@ -461,15 +461,22 @@ export async function computeTropPercu(paymentId: string, newTotal: number): Pro
  * Ainsi, après chaque création d'avoir, la famille n'a qu'UN avoir actif.
  */
 /**
- * Échéance d'un avoir : 30 juin de l'année suivante, à 23h59.
+ * Échéance d'un avoir : fin de la SAISON EN COURS, soit le 30 juin à 23h59.
  *
- * La saison équestre se termine fin juin : un avoir reste ainsi utilisable
- * sur toute la saison qui suit, quelle que soit la date d'annulation.
+ * La saison équestre court de septembre à fin juin. On rattache donc l'avoir
+ * à la saison dans laquelle il naît :
+ *   - créé de juillet à décembre → saison qui démarre, fin le 30 juin suivant
+ *     (ex. annulation d'un stage d'août 2026 → valable jusqu'au 30/06/2027) ;
+ *   - créé de janvier à juin → saison déjà entamée, fin le 30 juin de la
+ *     même année (ex. créé en février 2027 → valable jusqu'au 30/06/2027).
+ *
  * Remplace l'ancien « +1 an glissant », qui faisait expirer les avoirs en
  * plein milieu d'une saison.
  */
 export function echeanceAvoir(from: Date = new Date()): Date {
-  return new Date(from.getFullYear() + 1, 5, 30, 23, 59, 59); // mois 5 = juin
+  // getMonth() : 0 = janvier … 5 = juin, 6 = juillet.
+  const annee = from.getMonth() >= 6 ? from.getFullYear() + 1 : from.getFullYear();
+  return new Date(annee, 5, 30, 23, 59, 59);
 }
 
 export async function createAvoir(

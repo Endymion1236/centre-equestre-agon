@@ -52,7 +52,7 @@ export default function CGVPage() {
           <section className="mb-8">
             <h2 className="font-display text-lg font-bold text-blue-700 mb-3">5. Annulation et remboursement</h2>
             <div className="font-body text-sm text-gray-600 leading-relaxed space-y-2">
-              <p><strong>Stages :</strong> Annulation jusqu&apos;à 3 semaines avant le début du stage = remboursement intégral (hors frais bancaires). Passé ce délai, le stage n&apos;est plus remboursable, sauf présentation d&apos;un certificat médical ou cas de force majeure. L&apos;acompte de 30&nbsp;€ déjà versé est alors converti en <strong>avoir</strong>, valable sur toute prestation du centre jusqu&apos;au 30 juin de l&apos;année suivante.</p>
+              <p><strong>Stages :</strong> Annulation jusqu&apos;à 3 semaines avant le début du stage = remboursement intégral (hors frais bancaires). Passé ce délai, le stage n&apos;est plus remboursable, sauf présentation d&apos;un certificat médical ou cas de force majeure. L&apos;acompte de 30&nbsp;€ déjà versé est alors converti en <strong>avoir</strong>, valable sur toute prestation du centre jusqu&apos;à la <strong>fin de la saison en cours</strong> (30 juin).</p>
               <p><strong>Cours annuels (forfait) :</strong> Toute séance non effectuée sans prévenir 24h à l'avance est due. En cas de maladie du cavalier (certificat médical), un report peut être accordé.</p>
               <p><strong>Balades :</strong> Annulation jusqu'à 24h avant = remboursement intégral. En deçà, aucun remboursement sauf certificat médical.</p>
               <p><strong>Annulation par le centre</strong> (météo, force majeure) : report proposé ou remboursement intégral.</p>
