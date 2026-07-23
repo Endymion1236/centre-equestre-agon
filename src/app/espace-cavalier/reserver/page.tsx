@@ -1145,6 +1145,29 @@ export default function ReserverPage() {
                       })()}
 
                       {/* Sélection enfants pour ce stage */}
+                      {/* Place réservée POUR CETTE FAMILLE suite à la liste d'attente.
+                          Sans ce rappel, la famille notifiée par email arrive sur un
+                          stage qui semble simplement disponible : rien ne lui dit que
+                          la place lui est gardée, ni jusqu'à quand. */}
+                      {(() => {
+                        const hold = (first as any).waitlistHold;
+                        if (!holdActive(first) || hold?.familyId !== familyId) return null;
+                        const fin = new Date(hold.until);
+                        return (
+                          <div className="mt-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+                            <div className="font-body text-xs font-semibold text-green-800">
+                              🎉 Place réservée pour {hold.childName}
+                            </div>
+                            <div className="mt-0.5 font-body text-[11px] text-green-700">
+                              Confirmez votre inscription avant le{" "}
+                              {fin.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} à{" "}
+                              {fin.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}.
+                              Passé ce délai, la place sera proposée aux autres familles.
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       {/* Appel à l'action visible SANS déplier la carte : sinon
                           un "Complet" seul donne l'impression d'une impasse. */}
                       {!isSelected && spots === 0 && (
@@ -1339,6 +1362,23 @@ export default function ReserverPage() {
                       const isSelected = selectedCreneau?.id === c.id;
                       return (
                         <Card key={c.id} padding="sm" className={`cursor-pointer ${isSelected ? "ring-2 ring-blue-500" : ""} ${spots === 0 ? "opacity-80" : ""}`} onClick={() => { if (spots > 0) { setSelectedCreneau(isSelected ? null : c); setSelectedChildren([]); } else { setSelectedCreneau(isSelected ? null : c); } }}>
+                          {(() => {
+                            const hold = (c as any).waitlistHold;
+                            if (!holdActive(c) || hold?.familyId !== familyId) return null;
+                            const fin = new Date(hold.until);
+                            return (
+                              <div className="mb-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+                                <div className="font-body text-xs font-semibold text-green-800">
+                                  🎉 Place réservée pour {hold.childName}
+                                </div>
+                                <div className="mt-0.5 font-body text-[11px] text-green-700">
+                                  Confirmez avant le{" "}
+                                  {fin.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} à{" "}
+                                  {fin.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}.
+                                </div>
+                              </div>
+                            );
+                          })()}
                           <div className="flex justify-between items-center">
                             <div className="flex items-center gap-3">
                               <div className="w-1 h-10 rounded-full" style={{ backgroundColor: tl.color }} />
