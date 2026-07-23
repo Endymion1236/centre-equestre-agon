@@ -4,6 +4,7 @@ import { useAgentContext } from "@/hooks/useAgentContext";
 import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { echeanceAvoir } from "@/lib/planning-services";
 import { Card, Badge } from "@/components/ui";
 import { downloadAvoirPdf } from "@/lib/download-avoir";
 import { createEncaissement } from "@/lib/compta-encaissement";
@@ -55,7 +56,7 @@ export default function AvoirsPage() {
   const [avoirType, setAvoirType] = useState<AvoirType>("avoir");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
-  const [expiryMonths, setExpiryMonths] = useState("12");
+  const [expiryMonths, setExpiryMonths] = useState("saison");
   const [saving, setSaving] = useState(false);
 
   // Use avoir
@@ -106,8 +107,11 @@ export default function AvoirsPage() {
     setSaving(true);
     const fam = families.find(f => f.firestoreId === selFamily);
     const amt = parseFloat(amount);
-    const expiry = new Date();
-    expiry.setMonth(expiry.getMonth() + parseInt(expiryMonths));
+    // "saison" = 30 juin de l'année suivante (règle CGV stages) ; sinon
+    // durée glissante en mois, pour les cas particuliers.
+    const expiry = expiryMonths === "saison"
+      ? echeanceAvoir()
+      : (() => { const d = new Date(); d.setMonth(d.getMonth() + parseInt(expiryMonths)); return d; })();
     const ref = `${avoirType === "avoir" ? "AV" : "AVA"}-${Date.now().toString(36).toUpperCase()}`;
 
     try {
@@ -446,8 +450,9 @@ export default function AvoirsPage() {
               <input type="number" step="0.01" className={inputStyle} value={amount} onChange={e => setAmount(e.target.value)} placeholder="Ex: 57.00" />
             </div>
             <div>
-              <label className={labelStyle}>Validité (mois)</label>
+              <label className={labelStyle}>Validité</label>
               <select className={inputStyle} value={expiryMonths} onChange={e => setExpiryMonths(e.target.value)}>
+                <option value="saison">Jusqu'au 30 juin de l'année suivante</option>
                 <option value="3">3 mois</option>
                 <option value="6">6 mois</option>
                 <option value="12">12 mois</option>
