@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { collection, deleteDoc, doc, getDocs, query, where } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import {
   Bell,
   Calendar,
@@ -118,7 +118,33 @@ export default function ReservationsPage() {
             (entry.status === "waiting" || entry.status === "notified") && (!entry.date || entry.date >= today),
           )
           .sort((a: any, b: any) => (a.date || "").localeCompare(b.date || ""));
-        setWaitlistEntries(entries);
+        // Une entrée « notifiée » ne vaut PAS une place disponible : le
+        // créneau a pu être rempli entre-temps (inscription admin, autre
+        // famille). Sans cette vérification, on annonçait « Place
+        // disponible » et « Réserver cette place » sur un stage complet.
+        // Pour un stage, la semaine ENTIÈRE doit avoir de la place.
+        const aVerifier = entries.filter((e: any) => e.status === "notified");
+        const dispo = await Promise.all(aVerifier.map(async (e: any) => {
+          const ids: string[] = Array.isArray(e.creneauIds) && e.creneauIds.length
+            ? e.creneauIds
+            : e.creneauId ? [e.creneauId] : [];
+          if (ids.length === 0) return [e.id, false] as const;
+          try {
+            const snaps = await Promise.all(ids.map((id) => getDoc(doc(db, "creneaux", id))));
+            const libre = snaps.every((sn) => {
+              if (!sn.exists()) return false;
+              const d = sn.data() as any;
+              // La place tenue pour CETTE famille reste comptée comme libre.
+              const pris = (d.enrolled || []).length;
+              return (d.maxPlaces || 0) - pris > 0;
+            });
+            return [e.id, libre] as const;
+          } catch { return [e.id, false] as const; }
+        }));
+        const dispoMap = new Map(dispo);
+        setWaitlistEntries(entries.map((e: any) =>
+          e.status === "notified" ? { ...e, placeReellementLibre: dispoMap.get(e.id) === true } : e
+        ));
       } catch (error) {
         console.error("[reservations] waitlist:", error);
       }
@@ -171,7 +197,9 @@ export default function ReservationsPage() {
   const nextReservation = upcoming[0] || null;
   const laterReservations = upcoming.slice(1);
   const urgentWaitlist = waitlistEntries.filter((entry) =>
-    entry.status === "notified" && entry.holdUntil && new Date(entry.holdUntil).getTime() > Date.now(),
+    entry.status === "notified"
+    && entry.holdUntil && new Date(entry.holdUntil).getTime() > Date.now()
+    && entry.placeReellementLibre === true,
   );
   const quietWaitlist = waitlistEntries.filter((entry) => !urgentWaitlist.some((urgent) => urgent.id === entry.id));
 
