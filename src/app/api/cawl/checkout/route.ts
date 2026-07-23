@@ -136,14 +136,23 @@ export async function POST(req: NextRequest) {
         // le solde automatiquement plus tard (doc CAWL, Exemple B).
         ...(isDeposit ? { cardPaymentMethodSpecificInput: { tokenizationMode: "createWithConsent" } } : {}),
       },
-      // Acompte : transaction initiale "carte en réserve" initiée par le client
-      // (consentement). Indispensable pour réutiliser le token en MIT (solde).
-      ...(isDeposit ? {
-        cardPaymentMethodSpecificInput: {
+      cardPaymentMethodSpecificInput: {
+        // SALE = autorisation + CAPTURE immédiate. Sans ce paramètre, CAWL
+        // applique son défaut (autorisation seule) : les fonds sont bloqués
+        // sur la carte mais JAMAIS encaissés, et l'autorisation finit par
+        // expirer. C'est ce qui laissait toutes les transactions du checkout
+        // en statut « Autorisé » alors que le prélèvement MIT — qui, lui,
+        // envoie déjà SALE (cf. tokenize/finalize) — passait bien en
+        // « Paiement demandé ».
+        authorizationMode: "SALE",
+        // Acompte : transaction initiale "carte en réserve" initiée par le
+        // client (consentement). Indispensable pour réutiliser le token en
+        // MIT (solde).
+        ...(isDeposit ? {
           unscheduledCardOnFileRequestor: "cardholderInitiated",
           unscheduledCardOnFileSequenceIndicator: "first",
-        },
-      } : {}),
+        } : {}),
+      },
     };
 
     const response = await cawlSdk.hostedCheckout.createHostedCheckout(
