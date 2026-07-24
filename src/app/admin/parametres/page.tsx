@@ -217,7 +217,12 @@ export default function ParametresPage() {
       });
       const data = await res.json();
       if (!res.ok) { alert(data.error || "Erreur lors de la création du compte."); return; }
-      alert(`✅ Accès créé pour ${m.email}.\nLe moniteur peut se connecter via « Connexion par email ».`);
+      // Compte préexistant rattaché : le mot de passe saisi n'a PAS été
+      // appliqué, il faut le dire clairement sous peine de communiquer un
+      // mot de passe qui ne fonctionnera pas.
+      alert(data.adopted
+        ? `✅ Accès moniteur accordé à ${m.email}.\n\nUn compte existait déjà pour cette adresse : il a été rattaché.\n⚠️ Le mot de passe que vous venez de saisir n'a PAS été appliqué — la personne se connecte avec son mot de passe habituel (ou via « mot de passe oublié »).`
+        : `✅ Accès créé pour ${m.email}.\nLe moniteur peut se connecter via « Connexion par email ».`);
       await reloadAuthMoniteurs();
     } catch (e) { alert("Erreur réseau."); }
     finally { setAccountBusy(""); }
