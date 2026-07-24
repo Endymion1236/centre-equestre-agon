@@ -338,6 +338,35 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [voiceContext, setVoiceContext] = useState<Record<string, any>>({});
   const [moduleContext, setModuleContext] = useState<Record<string, any>>({});
   const [nbImpayes, setNbImpayes] = useState(0);
+  // Une modale plein écran (`fixed inset-0`) ouverte au-dessus du contenu se
+  // fait recouvrir en bas par la barre de navigation mobile (z-[60] > z-50),
+  // tronquant boutons et champs. On détecte ces overlays et on masque la
+  // barre tant qu'ils sont montés — correction globale, plutôt que modale
+  // par modale.
+  const [overlayOuvert, setOverlayOuvert] = useState(false);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const check = () => {
+      // Overlays plein écran = un enfant direct de <body> avec inset-0 + z >= 50.
+      const overlays = document.querySelectorAll('[class*="fixed"][class*="inset-0"]');
+      let found = false;
+      overlays.forEach((el) => {
+        const cl = el.className || "";
+        if (typeof cl === "string" && (cl.includes("z-50") || cl.includes("z-[2") || cl.includes("z-[1"))) {
+          const r = (el as HTMLElement).getBoundingClientRect();
+          if (r.height > window.innerHeight * 0.4) found = true;
+        }
+      });
+      setOverlayOuvert(found);
+    };
+    const obs = new MutationObserver(check);
+    // childList sur le body seul : les overlays sont montés/démontés comme
+    // enfants directs. Pas de subtree/attributes global, trop coûteux sur une
+    // page dynamique (le planning re-render beaucoup).
+    obs.observe(document.body, { childList: true });
+    check();
+    return () => obs.disconnect();
+  }, []);
   const pushNotifications = usePushNotifications(user?.uid || null, { role: userRole, email: user?.email });
 
   const visibleMobile = filterForRole(MOBILE_PRIMARY, isMoniteur, isAdmin);
@@ -563,7 +592,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         )}
 
-        <nav data-print-hide className="md:hidden fixed bottom-0 left-0 right-0 z-[60] bg-white border-t border-gray-200 px-1.5 py-2 flex items-center justify-around safe-area-inset-bottom">
+        <nav data-print-hide className={`md:hidden fixed bottom-0 left-0 right-0 z-[60] bg-white border-t border-gray-200 px-1.5 py-2 flex items-center justify-around safe-area-inset-bottom transition-transform duration-200 ${overlayOuvert ? "translate-y-full pointer-events-none" : ""}`}>
           {visibleMobile.map((item) => {
             const Icon = item.icon;
             const active = isActive(pathname, item.href);
