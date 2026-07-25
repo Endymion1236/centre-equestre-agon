@@ -53,6 +53,19 @@ export default function ReserverPage() {
   const [waitlistSuccess, setWaitlistSuccess] = useState<string | null>(null); // creneauId confirmé
   const [waitlistLoading, setWaitlistLoading] = useState<string | null>(null); // creneauId en cours
   const [familyAvoirs, setFamilyAvoirs] = useState<any[]>([]);
+  // Chargement des avoirs AU MONTAGE, pas seulement au clic sur « Panier ».
+  // Le panier s'ouvre depuis 3 endroits mais un seul chargeait les avoirs :
+  // selon le chemin emprunté, le bouton « Utiliser mon avoir » n'apparaissait
+  // jamais, alors que l'avoir existait bien dans la fiche client.
+  const rechargerAvoirs = async (uid: string) => {
+    try {
+      const snap = await getDocs(query(collection(db, "avoirs"), where("familyId", "==", uid)));
+      setFamilyAvoirs(
+        snap.docs.map(d => ({ id: d.id, ...d.data() }))
+          .filter((a: any) => a.status === "actif" && (a.remainingAmount || 0) > 0)
+      );
+    } catch { setFamilyAvoirs([]); }
+  };
   const [stageBookingMode, setStageBookingMode] = useState<"semaine" | "jour">("semaine");
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [expandedStageDetail, setExpandedStageDetail] = useState<string | null>(null); // key du stage dont le détail est ouvert
@@ -136,6 +149,12 @@ export default function ReserverPage() {
     };
     loadPlancher();
   }, []);
+
+  // Avoirs disponibles, chargés dès l'arrivée sur la page.
+  useEffect(() => {
+    if (user?.uid) rechargerAvoirs(user.uid);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid]);
 
   useEffect(() => {
     const load = async () => {
@@ -858,13 +877,8 @@ export default function ReserverPage() {
         </div>
         <button onClick={async () => {
           setShowCart(true); setCartPaySuccess(false); setCartPayMode("cb");
-          // Charger les avoirs de la famille
-          if (user?.uid) {
-            try {
-              const aSnap = await getDocs(query(collection(db, "avoirs"), where("familyId", "==", user.uid)));
-              setFamilyAvoirs(aSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((a: any) => a.status === "actif" && (a.remainingAmount || 0) > 0));
-            } catch { setFamilyAvoirs([]); }
-          }
+          // Rafraîchit au cas où un avoir aurait été créé depuis l'arrivée.
+          if (user?.uid) await rechargerAvoirs(user.uid);
         }} className="relative flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600">
           <ShoppingCart size={16} /> Panier
           {cart.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{cart.length}</span>}
