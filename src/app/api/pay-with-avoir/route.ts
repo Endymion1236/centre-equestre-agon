@@ -103,6 +103,21 @@ export async function POST(req: NextRequest) {
     const payRef = adminDb.collection("payments").doc();
 
     await adminDb.runTransaction(async (tx) => {
+      // ── PHASE 1 : LECTURES ────────────────────────────────────────────
+      // Firestore impose que TOUTES les lectures precedent TOUTES les
+      // ecritures dans une transaction. Les creneaux etaient lus au milieu
+      // des ecritures : « Firestore transactions require all reads to be
+      // executed before all writes ». On charge donc tout en amont.
+      const creneauxIds = [...new Set(
+        cart.flatMap((i) => (i.creneauIds || []) as string[]).filter(Boolean)
+      )];
+      const creneauxSnaps = new Map<string, any>();
+      for (const cid of creneauxIds) {
+        const snap = await tx.get(adminDb.collection("creneaux").doc(cid));
+        if (snap.exists) creneauxSnaps.set(cid, snap.data());
+      }
+
+      // ── PHASE 2 : ECRITURES ───────────────────────────────────────────
       // 1. Créer le document payment
       tx.set(payRef, {
         familyId: uid,
@@ -175,9 +190,8 @@ export async function POST(req: NextRequest) {
       for (const item of cart) {
         for (const cid of item.creneauIds || []) {
           const crRef = adminDb.collection("creneaux").doc(cid);
-          const crSnap = await tx.get(crRef);
-          if (!crSnap.exists) continue;
-          const crData = crSnap.data() as any;
+          const crData = creneauxSnaps.get(cid);
+          if (!crData) continue;
           const enrolled = crData.enrolled || [];
           if (enrolled.some((e: any) => e.childId === item.childId)) continue;
           // Sécurité (audit P0 #7) : ne pas dépasser la capacité du créneau.
@@ -197,10 +211,15 @@ export async function POST(req: NextRequest) {
             newEntry.sourceFamilyId = item.sourceFamilyId;
           }
 
+          const nouveauEnrolled = [...enrolled, newEntry];
           tx.update(crRef, {
-            enrolled: [...enrolled, newEntry],
-            enrolledCount: enrolled.length + 1,
+            enrolled: nouveauEnrolled,
+            enrolledCount: nouveauEnrolled.length,
           });
+          // Le cache doit refléter cette inscription : deux enfants de la même
+          // famille sur le même créneau partiraient sinon du même `enrolled`
+          // initial, et le second écraserait le premier.
+          creneauxSnaps.set(cid, { ...crData, enrolled: nouveauEnrolled });
         }
 
         // 5. Créer la réservation
@@ -210,9 +229,8 @@ export async function POST(req: NextRequest) {
         let startTime = "";
         let endTime = "";
         if (firstCid) {
-          const crSnap = await tx.get(adminDb.collection("creneaux").doc(firstCid));
-          if (crSnap.exists) {
-            const crData = crSnap.data() as any;
+          const crData = creneauxSnaps.get(firstCid);
+          if (crData) {
             date = crData.date || date;
             startTime = crData.startTime || "";
             endTime = crData.endTime || "";
