@@ -130,10 +130,13 @@ export default function AdminDashboard() {
   useEffect(() => {
     const loadDashboard = async () => {
       try {
+        // Les encaissements ne sont lus QUE pour un admin : masquer la carte
+        // ne suffit pas, il ne faut pas charger la donnée financière dans le
+        // navigateur d'un moniteur.
         const [familiesSnap, activitiesSnap, encaissementsSnap, creneauxSnap] = await Promise.all([
           getDocs(collection(db, "families")),
           getDocs(collection(db, "activities")),
-          getDocs(collection(db, "encaissements")),
+          isAdmin ? getDocs(collection(db, "encaissements")) : Promise.resolve(null),
           getDocs(collection(db, "creneaux")),
         ]);
 
@@ -142,7 +145,7 @@ export default function AdminDashboard() {
 
         const now = new Date();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const monthlyRevenue = encaissementsSnap.docs.reduce((total, document) => {
+        const monthlyRevenue = (encaissementsSnap?.docs || []).reduce((total, document) => {
           const payment: any = document.data();
           if (payment.mode === "avoir") return total;
           const amount = Number(payment.montant || 0);
@@ -283,7 +286,10 @@ export default function AdminDashboard() {
       <section className="mb-7">
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           {[
-            { icon: CreditCard, value: formatMoney(caMois), label: "Encaissé ce mois", detail: "encaissements validés", tint: COMMERCIAL },
+            // Le chiffre d'affaires est réservé aux ADMINS : les moniteurs
+            // partagent ce tableau de bord (interface unifiée) mais n'ont pas
+            // à voir les encaissements du centre.
+            ...(isAdmin ? [{ icon: CreditCard, value: formatMoney(caMois), label: "Encaissé ce mois", detail: "encaissements validés", tint: COMMERCIAL }] : []),
             { icon: Clock3, value: String(todaySlots.length), label: todaySlots.length > 1 ? "Reprises aujourd’hui" : "Reprise aujourd’hui", detail: `${todayStats.enrolled} cavaliers attendus`, tint: TERRAIN },
             { icon: TrendingUp, value: tauxRemplissage === null ? "…" : `${tauxRemplissage}%`, label: "Remplissage à 30 jours", detail: "sur les créneaux ouverts", tint: GESTION },
             { icon: Users, value: String(familyCount), label: "Familles actives", detail: "dans la base clients", tint: TERRAIN },

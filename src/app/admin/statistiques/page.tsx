@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, query, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { safeNumber } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
 import {
   Loader2,
@@ -133,6 +134,10 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 // COMPOSANT PRINCIPAL
 // ═══════════════════════════════════════════
 export default function StatistiquesPage() {
+  // Page RÉSERVÉE aux admins. Elle n'apparaît pas dans le menu des moniteurs,
+  // mais sans garde interne une URL tapée à la main donnait accès à tout le
+  // chiffre d'affaires. L'absence de lien n'est pas un contrôle d'accès.
+  const { isAdmin, loading: authLoading } = useAuth();
   const [tab, setTab] = useState<"ca" | "finances" | "remplissage" | "moniteurs" | "cavaliers">("ca");
   const [loading, setLoading] = useState(true);
   const [year, setYear] = useState(new Date().getFullYear());
@@ -475,7 +480,19 @@ export default function StatistiquesPage() {
     { id: "cavaliers" as const, label: "Cavaliers", icon: Users },
   ];
 
-  if (loading) {
+  // Accès refusé aux non-admins (URL tapée directement).
+  if (!authLoading && !isAdmin) {
+    return (
+      <Card padding="lg">
+        <p className="font-body text-sm font-semibold text-slate-700">Accès réservé</p>
+        <p className="mt-1 font-body text-xs text-slate-500">
+          Les statistiques financières du centre sont réservées à l&apos;administration.
+        </p>
+      </Card>
+    );
+  }
+
+  if (loading || authLoading) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
