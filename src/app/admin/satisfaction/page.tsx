@@ -8,7 +8,7 @@
 // moyenne par aspect, filtres par activite et par note, liste detaillee.
 
 import { useEffect, useState, useMemo, Fragment } from "react";
-import { collection, getDocs, query, orderBy, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, getDoc, doc, query, orderBy, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { authFetch } from "@/lib/auth-fetch";
@@ -143,7 +143,49 @@ export default function SatisfactionPage() {
   const lancerCron = async (opts: { envoyer?: boolean; force?: boolean; reel?: boolean; type?: "stage" | "promenade" } = {}) => {
     if (!user) return;
     const quoi = opts.type === "promenade" ? "cette/ces promenade(s)" : "ce(s) stage(s)";
-    if (opts.reel && !confirm(`Envoyer RÉELLEMENT le questionnaire à toutes les familles inscrites à ${quoi} ?\n\n(Nécessite que le mode email restreint soit désactivé pour que les familles le reçoivent.)`)) return;
+
+    // ── Envoi réel : confirmation FORTE ────────────────────────────────
+    // Un simple confirm() se valide par réflexe. Incident du 25/07 : 80
+    // questionnaires partis vers de vraies familles en pleine phase de test.
+    // On annonce donc le NOMBRE exact de destinataires (obtenu par une
+    // simulation préalable), l'état du garde-fou email, et on exige la
+    // saisie d'un mot de confirmation.
+    if (opts.reel) {
+      let nb = 0;
+      let restreint: boolean | null = null;
+      try {
+        const t0 = await user.getIdToken(true);
+        const p0 = new URLSearchParams({ dry: "1" });
+        if (testDate) p0.set("date", testDate);
+        if (opts.type === "promenade") p0.set("type", "promenade");
+        if (opts.force) p0.set("force", "1");
+        const r0 = await fetch(`/api/admin/satisfaction-stages?${p0.toString()}`, { headers: { Authorization: `Bearer ${t0}` } });
+        const d0 = await r0.json();
+        nb = Number(d0?.invitations || 0);
+      } catch { /* si la simulation échoue, on prévient sans chiffre */ }
+      try {
+        // Lecture directe du même document que le garde-fou serveur
+        // (lib/email-guard) : settings/email.restricted.
+        const snap = await getDoc(doc(db, "settings", "email"));
+        const v = snap.exists() ? (snap.data() as any)?.restricted : undefined;
+        if (typeof v === "boolean") restreint = v;
+      } catch { /* état inconnu → on le dit */ }
+
+      const etatGuard = restreint === true
+        ? "🔒 Mode restreint ACTIF : seules les adresses autorisées recevront l'email."
+        : restreint === false
+          ? "⚠️ Mode restreint DÉSACTIVÉ : les emails partiront VRAIMENT aux familles."
+          : "❔ État du mode restreint inconnu — vérifiez avant d'envoyer.";
+
+      const saisie = window.prompt(
+        `ENVOI RÉEL — ${quoi}\n\n` +
+        `${nb > 0 ? `${nb} destinataire(s)` : "Nombre de destinataires indéterminé"}\n` +
+        `${etatGuard}\n\n` +
+        `Cette action est IRRÉVERSIBLE : un email envoyé ne se rappelle pas.\n\n` +
+        `Tapez ENVOYER pour confirmer :`
+      );
+      if (saisie?.trim().toUpperCase() !== "ENVOYER") return;
+    }
     setTestBusy(true); setTestResult("");
     try {
       const token = await user.getIdToken(true);
