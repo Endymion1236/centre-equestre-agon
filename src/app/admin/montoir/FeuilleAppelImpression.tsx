@@ -28,12 +28,17 @@ export function FeuilleAppelImpression({
 }: FeuilleProps) {
   // L'âge n'est pas porté par l'inscription : on le résout depuis la fiche
   // famille, comme l'affichage écran. Nom de famille idem si absent de e.
-  const infosCavalier = (e: any): { age: string; famille: string } => {
+  const infosCavalier = (e: any): { age: string; famille: string; nom: string } => {
     const fam = families.find((f: any) => (f.children || []).some((c: any) => c.id === e.childId));
-    const child = (fam?.children || []).find((c: any) => c.id === e.childId);
+    const child: any = (fam?.children || []).find((c: any) => c.id === e.childId);
+    // `childName` est figé dans le créneau à l'inscription : on préfère le
+    // nom ACTUEL de la fiche, sinon une correction de nom ne se refléterait
+    // jamais sur la feuille d'appel imprimée.
+    const nomFiche = child ? `${child.firstName || ""} ${child.lastName || ""}`.trim() : "";
     return {
       age: calcAge(child?.birthDate),
       famille: e.familyName || fam?.parentName || "",
+      nom: nomFiche || e.childName || "—",
     };
   };
   const visibles = creneaux.filter(
@@ -94,12 +99,12 @@ export function FeuilleAppelImpression({
               <tbody>
                 {enrolled.map((e, i) => {
                   const poney = horseDisplay(e.horseName) || "";
-                  const { age, famille } = infosCavalier(e);
+                  const { age, famille, nom } = infosCavalier(e);
                   return (
                     <tr key={e.childId || i} style={{ borderTop: "1px solid #e2e8f0" }}>
                       <td style={{ padding: "4px 4px", color: "#94a3b8" }}>{i + 1}</td>
                       <td style={{ padding: "4px 4px", fontWeight: 600, color: "#0f172a" }}>
-                        {e.childName || "—"}
+                        {nom}
                         {famille ? (
                           <span style={{ fontWeight: 400, color: "#64748b" }}> · {famille}</span>
                         ) : null}

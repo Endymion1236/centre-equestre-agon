@@ -181,6 +181,18 @@ export default function MontoirPage() {
   // Nom affiché : surnom usuel si renseigné, sinon nom officiel
   const displayName = (eq: any): string => (eq?.surnom && eq.surnom.trim()) ? eq.surnom : (eq?.name || "");
   // Résout un horseName stocké (nom officiel) vers le nom à afficher (surnom > officiel)
+  // Nom AFFICHE d'un cavalier : `childName` est fige dans le creneau a
+  // l'inscription et ne suit pas un renommage ulterieur. On lit la fiche
+  // famille pour l'affichage (le registre des chutes, lui, conserve
+  // volontairement le nom du moment des faits).
+  const nomActuel = (e: any): string => {
+    const fam = families.find((f: any) => (f.firestoreId || f.id) === e.familyId);
+    const child: any = (fam?.children || []).find((c: any) => c.id === e.childId);
+    if (!child) return e.childName || "—";
+    const nom = `${child.firstName || ""} ${child.lastName || ""}`.trim();
+    return nom || e.childName || "—";
+  };
+
   const displayFromHorseName = (horseName: string): string => {
     if (!horseName) return "";
     const eq = equides.find(x => x.name === horseName);
@@ -1095,8 +1107,8 @@ export default function MontoirPage() {
                       {/* Nom cliquable → fiche famille (cavalier ciblé) */}
                       {famId ? (
                         <a href={`/admin/cavaliers?id=${famId}&child=${e.childId}`} title="Ouvrir la fiche client"
-                          className="truncate text-blue-800 no-underline hover:underline hover:text-blue-600">{e.childName}</a>
-                      ) : <span className="truncate">{e.childName}</span>}
+                          className="truncate text-blue-800 no-underline hover:underline hover:text-blue-600">{nomActuel(e)}</a>
+                      ) : <span className="truncate">{nomActuel(e)}</span>}
                       {/* Desktop : icône progression, sans quitter le montoir */}
                       {famId && (
                         <a href={`/admin/progression/${e.childId}?familyId=${famId}`} title="Voir la progression"

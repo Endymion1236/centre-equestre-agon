@@ -190,6 +190,19 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // champ (pas de nom/prenom separes comme dans /admin/cavaliers). On retient
   // le mot ECRIT EN MAJUSCULES s'il y en a un ("DUPONT Marie" -> DUPONT),
   // sinon le premier mot. Sert de valeur par defaut au nom des enfants.
+  // Nom AFFICHE d'un inscrit : le `childName` est copie dans le creneau au
+  // moment de l'inscription, donc il ne suit pas un renommage ulterieur
+  // (ex. une date de naissance saisie par erreur dans le champ nom, corrigee
+  // ensuite dans la fiche). On lit donc le nom ACTUEL de la fiche famille et
+  // on ne retombe sur la copie que si l'enfant n'y est plus.
+  const nomActuel = (e: any): string => {
+    const fam = families.find((f: any) => f.firestoreId === e.familyId);
+    const child: any = (fam?.children || []).find((c: any) => c.id === e.childId);
+    if (!child) return e.childName || "—";
+    const nom = `${child.firstName || ""} ${child.lastName || ""}`.trim();
+    return nom || e.childName || "—";
+  };
+
   const nomFoyerDeduit = (() => {
     const brut = (newFam.parentName || "").trim();
     if (!brut) return "";
@@ -2456,7 +2469,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     }
                     target="_blank" rel="noopener noreferrer"
                     className="font-body text-sm font-semibold text-blue-800 hover:text-blue-500 hover:underline no-underline cursor-pointer truncate" title="Ouvrir la fiche cavalier">
-                    {e.childName}
+                    {nomActuel(e)}
                   </a>
                   {age && <span className="font-body text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full flex-shrink-0">{age}</span>}
                   {galop && galop !== "—" && <span className="font-body text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full flex-shrink-0">{galop}</span>}
