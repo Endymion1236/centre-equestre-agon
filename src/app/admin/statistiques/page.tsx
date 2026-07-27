@@ -234,19 +234,33 @@ export default function StatistiquesPage() {
   // On regroupe donc par activityTitle sous chaque activityType, sans nouvelle
   // donnée à créer. Clé = type ; valeur = liste triée { titre, montant }.
   const caDetailParType = useMemo(() => {
-    const map: Record<string, Record<string, number>> = {};
+    const map: Record<string, Record<string, { montant: number; nb: number }>> = {};
     yearPayments.forEach(p => {
       (p.items || []).forEach(item => {
         const type = item.activityType || "autre";
-        const titre = (item.activityTitle || "Sans intitulé").trim();
+        // `activityTitle` est construit a l'inscription avec le nom du cavalier,
+        // le nombre de jours et l'eventuelle remise :
+        //   "Stage galop d'or (5j) — Marcus (-10€)"
+        // Sans nettoyage, le tableau listait UNE LIGNE PAR CAVALIER au lieu
+        // d'une ligne par activite. On retire tout ce qui suit le tiret cadratin
+        // ainsi que les suffixes techniques.
+        const titre = (item.activityTitle || "Sans intitulé")
+          .split(" — ")[0]              // retire "— Prénom Nom"
+          .replace(/\s*\(\d+\s*j\)\s*/i, " ")  // retire "(5j)"
+          .replace(/\s*\(-\d+(?:[.,]\d+)?\s*€\)\s*/g, " ") // retire "(-10€)"
+          .replace(/\s{2,}/g, " ")
+          .trim() || "Sans intitulé";
         map[type] = map[type] || {};
-        map[type][titre] = (map[type][titre] || 0) + (item.priceTTC || 0);
+        const acc = map[type][titre] || { montant: 0, nb: 0 };
+        acc.montant += item.priceTTC || 0;
+        acc.nb += 1;
+        map[type][titre] = acc;
       });
     });
-    const out: Record<string, { titre: string; montant: number }[]> = {};
+    const out: Record<string, { titre: string; montant: number; nb: number }[]> = {};
     for (const [type, titres] of Object.entries(map)) {
       out[type] = Object.entries(titres)
-        .map(([titre, montant]) => ({ titre, montant }))
+        .map(([titre, v]) => ({ titre, montant: v.montant, nb: v.nb }))
         .sort((a, b) => b.montant - a.montant);
     }
     return out;
@@ -621,11 +635,13 @@ export default function StatistiquesPage() {
                       </button>
                       {ouvert && depliable && (
                         <div className="mt-2 mb-1 ml-4 pl-3 border-l-2 border-gray-100 flex flex-col gap-1.5">
-                          {detail.map(({ titre, montant }) => {
+                          {detail.map(({ titre, montant, nb }) => {
                             const pctInterne = amount > 0 ? Math.round((montant / amount) * 100) : 0;
                             return (
                               <div key={titre} className="flex items-center gap-3">
-                                <span className="font-body text-xs text-gray-500 min-w-[132px] truncate" title={titre}>{titre}</span>
+                                <span className="font-body text-xs text-gray-500 min-w-[132px] truncate" title={titre}>
+                                  {titre}{nb > 1 && <span className="text-gray-400"> × {nb}</span>}
+                                </span>
                                 <div className="flex-1 h-3 bg-gray-50 rounded-full overflow-hidden">
                                   <div className="h-full rounded-full" style={{ width: `${pctInterne}%`, backgroundColor: color, opacity: 0.55 }} />
                                 </div>
@@ -667,12 +683,15 @@ export default function StatistiquesPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {lignes.map(({ titre, montant, type }) => {
+                      {lignes.map(({ titre, montant, type, nb }) => {
                         const pct = caTotal > 0 ? Math.round((montant / caTotal) * 100) : 0;
                         const color = activityTypeColors[type] || "#888";
                         return (
                           <tr key={`${type}-${titre}`} className="border-b border-gray-50">
-                            <td className="py-2 pr-3 text-gray-700">{titre}</td>
+                            <td className="py-2 pr-3 text-gray-700">
+                              {titre}
+                              {nb > 1 && <span className="ml-1.5 text-xs text-gray-400">× {nb}</span>}
+                            </td>
                             <td className="py-2 px-3">
                               <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
                                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
