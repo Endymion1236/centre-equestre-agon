@@ -189,20 +189,8 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
                     <div>
                       <label className={labelStyle}>Nom de famille *</label>
                       <input className={inputStyle} value={newFamily.lastName}
-                        onChange={e => {
-                          const nouveau = e.target.value.toUpperCase();
-                          const ancien = newFamily.lastName.trim().toUpperCase();
-                          setNewFamily({ ...newFamily, lastName: nouveau });
-                          // Report VISIBLE sur les enfants : on ne touche qu'aux
-                          // champs vides ou qui portaient encore l'ancien nom du
-                          // foyer. Un nom saisi a la main n'est jamais ecrase.
-                          setNewChildren(cs => cs.map(c => {
-                            const actuel = c.lastName.trim().toUpperCase();
-                            return actuel === "" || actuel === ancien
-                              ? { ...c, lastName: nouveau }
-                              : c;
-                          }));
-                        }} placeholder="Ex: DUPONT"/>
+                        onChange={e => setNewFamily({ ...newFamily, lastName: e.target.value.toUpperCase() })}
+                        placeholder="Ex: DUPONT"/>
                     </div>
                     <div>
                       <label className={labelStyle}>Prénom</label>
@@ -318,9 +306,14 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
                   </div>
                   <div>
                     {i === 0 && <label className={labelStyle}>Nom de famille</label>}
-                    <input className={inputStyle} value={child.lastName}
-                      onChange={e => { const up = [...newChildren]; up[i].lastName = e.target.value; setNewChildren(up); }}
-                      placeholder={newFamily.lastName.trim().toUpperCase() || "Nom"}/>
+                    <input className={inputStyle}
+                      value={child.lastName || newFamily.lastName.trim().toUpperCase()}
+                      onChange={e => {
+                        const up = [...newChildren];
+                        up[i].lastName = e.target.value;
+                        setNewChildren(up);
+                      }}
+                      placeholder="Nom"/>
                   </div>
                   <div>
                     {i === 0 && <label className={labelStyle}>Date de naissance</label>}
@@ -343,7 +336,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
                 )}
               </div>
             ))}
-            <button onClick={() => setNewChildren([...newChildren, { firstName: "", lastName: newFamily.lastName.trim().toUpperCase(), birthDate: "", galopLevel: "—" }])}
+            <button onClick={() => setNewChildren([...newChildren, { firstName: "", lastName: "", birthDate: "", galopLevel: "—" }])}
               className="font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1 mt-2">
               <Plus size={14}/> Ajouter un cavalier
             </button>
