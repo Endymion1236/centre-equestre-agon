@@ -214,7 +214,13 @@ export default function FamilyCard({
     const updated = (family.children || []).map((c: any) =>
       c.id === childId ? {
         ...c, firstName: editChildForm.firstName.trim(),
-        lastName: editChildForm.lastName?.trim() || c.lastName || "",
+        // ATTENTION : ne PAS retomber sur `c.lastName` quand le champ est vide.
+        // Une chaîne vide étant falsy, le `||` réécrivait l'ancienne valeur et
+        // rendait IMPOSSIBLE d'effacer un nom saisi par erreur. Le champ vidé
+        // vaut effacement ; le nom du foyer sert alors de défaut.
+        lastName: (editChildForm.lastName ?? "").trim()
+          || String((family as any).lastName || "").trim().toUpperCase()
+          || "",
         birthDate: editChildForm.birthDate ? new Date(editChildForm.birthDate) : c.birthDate,
         galopLevel: editChildForm.galopLevel,
         licenceNumber: editChildForm.licenceNumber?.trim() || "",

@@ -352,7 +352,7 @@ export default function ProfilPage() {
               firstName: childForm.firstName.trim(),
               // Même règle que la création côté admin : à défaut de nom saisi,
               // l'enfant porte celui du foyer.
-              lastName: childForm.lastName.trim() || String((family as any)?.lastName || "").trim().toUpperCase() || (child as any).lastName || "",
+              lastName: childForm.lastName.trim() || String((family as any)?.lastName || "").trim().toUpperCase() || "",
               birthDate: childForm.birthDate ? new Date(`${childForm.birthDate}T00:00:00`) : (child as any).birthDate,
             }
           : child,
