@@ -195,6 +195,29 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // (ex. une date de naissance saisie par erreur dans le champ nom, corrigee
   // ensuite dans la fiche). On lit donc le nom ACTUEL de la fiche famille et
   // on ne retombe sur la copie que si l'enfant n'y est plus.
+  // ── Surlignage manuel d'une inscription (usage interne) ───────────────
+  // Marqueur libre, porte par l'INSCRIPTION a un creneau precis (pas par le
+  // cavalier) : surligner Lola sur le stage de mardi ne marque pas ses
+  // autres cours. Un clic pose, un clic retire.
+  const [highlightBusy, setHighlightBusy] = useState<string>("");
+  const toggleHighlight = async (e: any) => {
+    if (!creneau.id || highlightBusy) return;
+    setHighlightBusy(e.childId);
+    try {
+      const snap = await getDoc(doc(db, "creneaux", creneau.id));
+      if (!snap.exists()) return;
+      const list = (snap.data() as any).enrolled || [];
+      const maj = list.map((x: any) =>
+        x.childId === e.childId ? { ...x, highlight: !x.highlight } : x
+      );
+      await updateDoc(doc(db, "creneaux", creneau.id), { enrolled: maj });
+      await onRefresh?.();
+    } catch (err) {
+      console.error("Surlignage :", err);
+    }
+    setHighlightBusy("");
+  };
+
   const nomActuel = (e: any): string => {
     const fam = families.find((f: any) => f.firestoreId === e.familyId);
     const child: any = (fam?.children || []).find((c: any) => c.id === e.childId);
@@ -2468,7 +2491,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         : `/admin/cavaliers?search=${encodeURIComponent(e.familyName || e.childName)}&showProgression=${e.childId}`
                     }
                     target="_blank" rel="noopener noreferrer"
-                    className="font-body text-sm font-semibold text-blue-800 hover:text-blue-500 hover:underline no-underline cursor-pointer truncate" title="Ouvrir la fiche cavalier">
+                    className={`font-body text-sm font-semibold hover:text-blue-500 hover:underline no-underline cursor-pointer truncate ${e.highlight ? "text-slate-900 px-1 rounded" : "text-blue-800"}`}
+                    style={e.highlight ? { backgroundColor: "#fef08a", boxShadow: "0 0 0 2px #fef08a" } : undefined}
+                    title="Ouvrir la fiche cavalier">
                     {nomActuel(e)}
                   </a>
                   {age && <span className="font-body text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full flex-shrink-0">{age}</span>}
@@ -2476,6 +2501,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   {statusLabel && <span className={`font-body text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 hidden sm:inline ${isForfaitPaid ? "text-emerald-700 bg-emerald-50" : isForfaitPending ? "text-amber-700 bg-amber-50" : hasPaid ? "text-green-700 bg-green-50" : "text-orange-600 bg-orange-50"}`}>{statusLabel}</span>}
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
+                  <button onClick={() => toggleHighlight(e)} disabled={highlightBusy === e.childId}
+                    title={e.highlight ? "Retirer le surlignage" : "Surligner"}
+                    className={`bg-transparent border-none cursor-pointer px-1 text-sm leading-none disabled:opacity-40 ${e.highlight ? "opacity-100" : "opacity-30 hover:opacity-70"}`}>
+                    🖍️
+                  </button>
                   <a
                     href={`/admin/progression/${e.childId}?familyId=${encodeURIComponent(e.familyId || "")}`}
                     target="_blank" rel="noopener noreferrer"
