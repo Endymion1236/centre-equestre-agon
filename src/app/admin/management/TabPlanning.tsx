@@ -89,7 +89,10 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   const [addForm, setAddForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30, joursSelectionnes: [] as JourSemaine[], enchainer: false, binomeIds: [] as string[] });
   // Édition d'une tâche existante : ouvre une modale de modification
   const [editingTache, setEditingTache] = useState<TachePlanifiee | null>(null);
-  const [editForm, setEditForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30, notes: "" });
+  const [editForm, setEditForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30, notes: "", salarieId: "" });
+  // Une "tache a 2 personnes" = 2 documents distincts (un salarieId chacun).
+  // Cette option repercute le changement d'horaire sur les jumelles.
+  const [editAppliquerTous, setEditAppliquerTous] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showApplyModele, setShowApplyModele] = useState(false);
   const [showSaveModele, setShowSaveModele] = useState(false);
@@ -278,6 +281,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     }
     setEditingTache(t);
     setEditForm({
+      salarieId: t.salarieId || "",
       tacheTypeId: t.tacheTypeId,
       heureDebut: t.heureDebut,
       dureeMinutes: t.dureeMinutes,
@@ -291,6 +295,10 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     if (!tt) { toast("Type de tâche introuvable", "error"); return; }
     setSaving(true);
     try {
+      // Reaffectation : le salarie peut changer sans supprimer/recreer.
+      const nouveauSal = editForm.salarieId || editingTache.salarieId;
+      const salObj = salaries.find(s => s.id === nouveauSal);
+
       await updateDoc(doc(db, "taches-planifiees", editingTache.id), {
         tacheTypeId: editForm.tacheTypeId,
         tacheLabel: tt.label,
@@ -298,8 +306,35 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
         heureDebut: editForm.heureDebut,
         dureeMinutes: editForm.dureeMinutes,
         notes: editForm.notes || null,
+        salarieId: nouveauSal,
+        salarieName: salObj?.nom || editingTache.salarieName || "",
         updatedAt: serverTimestamp(),
       });
+
+      // Tâches JUMELLES : même tâche, même jour, même horaire d'origine, mais
+      // affectée à quelqu'un d'autre. Une modification d'horaire doit les
+      // suivre, sinon les deux personnes ne sont plus synchronisées.
+      // La réaffectation, elle, ne concerne QUE la tâche ouverte.
+      if (editAppliquerTous) {
+        const jumelles = taches.filter((t: any) =>
+          t.id !== editingTache.id
+          && t.jour === editingTache.jour
+          && t.semaine === editingTache.semaine
+          && t.tacheTypeId === editingTache.tacheTypeId
+          && t.heureDebut === editingTache.heureDebut
+          && t.salarieId !== nouveauSal
+        );
+        await Promise.all(jumelles.map((t: any) =>
+          updateDoc(doc(db, "taches-planifiees", t.id), {
+            heureDebut: editForm.heureDebut,
+            dureeMinutes: editForm.dureeMinutes,
+            updatedAt: serverTimestamp(),
+          })
+        ));
+        if (jumelles.length > 0) {
+          toast(`Horaire répercuté sur ${jumelles.length} autre(s) personne(s)`, "success");
+        }
+      }
       setEditingTache(null);
       onRefresh();
       toast(`"${tt.label}" mise à jour`, "success");
@@ -2311,6 +2346,18 @@ Réponds de façon concise et pratique, en français.`,
               {editingTache.salarieName} · {JOURS_LABELS[editingTache.jour]}
             </p>
 
+            {/* Réaffectation : évite de supprimer/recréer la tâche */}
+            <label style={{fontFamily:"sans-serif", fontSize:11, fontWeight:600, color:"#475569", display:"block", marginBottom:4}}>
+              Assignée à
+            </label>
+            <select value={editForm.salarieId}
+              onChange={e => setEditForm({ ...editForm, salarieId: e.target.value })}
+              style={{width:"100%", padding:"8px 10px", borderRadius:8, border:"1px solid #e2e8f0", fontFamily:"sans-serif", fontSize:13, background:"white", marginBottom:12}}>
+              {salaries.map(sal => (
+                <option key={sal.id} value={sal.id}>{sal.nom}</option>
+              ))}
+            </select>
+
             {/* Sélecteur tâche type */}
             <label style={{fontFamily:"sans-serif", fontSize:11, fontWeight:600, color:"#475569", display:"block", marginBottom:4}}>
               Tâche
@@ -2389,6 +2436,27 @@ Réponds de façon concise et pratique, en français.`,
 
             {/* Boutons */}
             <div style={{display:"flex", gap:8}}>
+              {(() => {
+                // Nombre de personnes sur la MÊME tâche, même jour, même horaire.
+                const nbJumelles = taches.filter((t: any) =>
+                  t.id !== editingTache.id
+                  && t.jour === editingTache.jour
+                  && t.semaine === editingTache.semaine
+                  && t.tacheTypeId === editingTache.tacheTypeId
+                  && t.heureDebut === editingTache.heureDebut
+                ).length;
+                if (nbJumelles === 0) return null;
+                return (
+                  <label style={{display:"flex", alignItems:"flex-start", gap:8, marginBottom:12, padding:"8px 10px", background:"#eff6ff", border:"1px solid #bfdbfe", borderRadius:8, cursor:"pointer"}}>
+                    <input type="checkbox" checked={editAppliquerTous}
+                      onChange={e => setEditAppliquerTous(e.target.checked)}
+                      style={{marginTop:2, cursor:"pointer"}} />
+                    <span style={{fontFamily:"sans-serif", fontSize:11, color:"#1e40af", lineHeight:1.5}}>
+                      Appliquer le nouvel horaire aux <strong>{nbJumelles} autre(s) personne(s)</strong> sur cette même tâche.
+                    </span>
+                  </label>
+                );
+              })()}
               <button onClick={saveEditTache} disabled={saving || !editForm.tacheTypeId}
                 style={{flex:1, padding:"10px 16px", background:"#3b82f6", color:"white", border:"none", borderRadius:10, fontFamily:"sans-serif", fontSize:13, fontWeight:600, cursor:"pointer", opacity: (saving || !editForm.tacheTypeId) ? 0.5 : 1}}>
                 {saving ? "Enregistrement…" : "Enregistrer"}
