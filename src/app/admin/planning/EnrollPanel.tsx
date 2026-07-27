@@ -216,7 +216,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     return (mots[mots.length - 1] || "").toUpperCase();
   })();
 
-  const [newChildren, setNewChildren] = useState([{ firstName: "", lastName: "", birthDate: "", galopLevel: "—" }]);
+  const [newChildren, setNewChildren] = useState<any[]>([{ firstName: "", lastName: null as string | null, birthDate: "", galopLevel: "—" }]);
   const [localFamilies, setLocalFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const allFamilies = useMemo(() => [...families, ...localFamilies], [families, localFamilies]);
   const [creatingFamily, setCreatingFamily] = useState(false);
@@ -2657,7 +2657,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         <div className="flex gap-2 mb-2 items-center">
                           <input value={child.firstName} onChange={e => { const u = [...newChildren]; u[idx].firstName = e.target.value; setNewChildren(u); }}
                             placeholder="Prénom *" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
-                          <input value={child.lastName || nomFoyerDeduit} onChange={e => { const u = [...newChildren]; u[idx].lastName = e.target.value; setNewChildren(u); }}
+                          <input value={child.lastName ?? nomFoyerDeduit} onChange={e => { const u = [...newChildren]; u[idx].lastName = e.target.value; setNewChildren(u); }}
                             placeholder="Nom" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
                           {newChildren.length > 1 && (
                             <button onClick={() => setNewChildren(newChildren.filter((_, i) => i !== idx))}
@@ -2682,7 +2682,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         </div>
                       </div>
                     ))}
-                    <button onClick={() => setNewChildren([...newChildren, { firstName: "", lastName: "", birthDate: "", galopLevel: "—" }])}
+                    <button onClick={() => setNewChildren([...newChildren, { firstName: "", lastName: null, birthDate: "", galopLevel: "—" }])}
                       className="font-body text-xs text-green-600 bg-transparent border-none cursor-pointer hover:underline p-0">
                       + Ajouter un cavalier
                     </button>
@@ -2698,7 +2698,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       const children = validChildren.map(c => ({
                         id: `child_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
                         firstName: c.firstName.trim(),
-                        lastName: c.lastName.trim() || nomFoyerDeduit,
+                        lastName: (c.lastName ?? nomFoyerDeduit).trim(),
                         birthDate: c.birthDate ? new Date(c.birthDate) : null,
                         galopLevel: c.galopLevel || "—",
                         sanitaryForm: null,

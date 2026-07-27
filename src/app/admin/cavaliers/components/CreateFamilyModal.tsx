@@ -36,7 +36,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
       newFamily.lastName.trim() || newFamily.firstName.trim() ||
       newFamily.parentEmail.trim() || newFamily.parentPhone.trim() ||
       newFamily.raisonSociale.trim() ||
-      newChildren.some(c => c.firstName.trim() || c.lastName.trim())
+      newChildren.some(c => c.firstName.trim() || (c.lastName ?? "").trim())
     );
   };
 
@@ -56,7 +56,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
     accountType: "particulier" as AccountType,
     raisonSociale: "", structureParente: "", siret: "", referent: "",
   });
-  const [newChildren, setNewChildren] = useState([{ firstName: "", lastName: "", birthDate: "", galopLevel: "—" }]);
+  const [newChildren, setNewChildren] = useState<any[]>([{ firstName: "", lastName: null as string | null, birthDate: "", galopLevel: "—" }]);
   const [tags, setTags] = useState<string[]>([]);
   const toggleTag = (id: string) => setTags(t => t.includes(id) ? t.filter(x => x !== id) : [...t, id]);
 
@@ -78,7 +78,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
         .map(c => ({
           id: `child_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           firstName: c.firstName.trim(),
-          lastName: c.lastName.trim() || nomFoyer,
+          lastName: (c.lastName ?? nomFoyer).trim(),
           birthDate: c.birthDate ? new Date(c.birthDate) : null,
           galopLevel: c.galopLevel || "—",
           sanitaryForm: null,
@@ -307,7 +307,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
                   <div>
                     {i === 0 && <label className={labelStyle}>Nom de famille</label>}
                     <input className={inputStyle}
-                      value={child.lastName || newFamily.lastName.trim().toUpperCase()}
+                      value={child.lastName ?? newFamily.lastName.trim().toUpperCase()}
                       onChange={e => {
                         const up = [...newChildren];
                         up[i].lastName = e.target.value;
@@ -336,7 +336,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
                 )}
               </div>
             ))}
-            <button onClick={() => setNewChildren([...newChildren, { firstName: "", lastName: "", birthDate: "", galopLevel: "—" }])}
+            <button onClick={() => setNewChildren([...newChildren, { firstName: "", lastName: null, birthDate: "", galopLevel: "—" }])}
               className="font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1 mt-2">
               <Plus size={14}/> Ajouter un cavalier
             </button>
