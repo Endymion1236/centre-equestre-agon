@@ -186,6 +186,23 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // ── Création famille inline ──
   const [showNewFamily, setShowNewFamily] = useState(false);
   const [newFam, setNewFam] = useState({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "", civilite: "" as "" | "M." | "Mme", tags: [] as string[] });
+  // Nom de famille deduit de `parentName` : ce formulaire n'a qu'un seul
+  // champ (pas de nom/prenom separes comme dans /admin/cavaliers). On retient
+  // le mot ECRIT EN MAJUSCULES s'il y en a un ("DUPONT Marie" -> DUPONT),
+  // sinon le premier mot. Sert de valeur par defaut au nom des enfants.
+  const nomFoyerDeduit = (() => {
+    const brut = (newFam.parentName || "").trim();
+    if (!brut) return "";
+    const mots = brut.split(/\s+/).filter(Boolean);
+    const estMaj = (m: string) => m.length > 1 && m === m.toUpperCase() && /[A-ZÀ-Ý]/.test(m);
+    // Cas courant "LE MOAL Sophie" / "DUPONT Marie" : on prend TOUS les mots
+    // en majuscules consécutifs, pas seulement le premier (noms composés).
+    const majuscules = mots.filter(estMaj);
+    if (majuscules.length > 0) return majuscules.join(" ");
+    // Aucune majuscule ("Marie Dupont") : convention nom en dernier.
+    return (mots[mots.length - 1] || "").toUpperCase();
+  })();
+
   const [newChildren, setNewChildren] = useState([{ firstName: "", lastName: "", birthDate: "", galopLevel: "—" }]);
   const [localFamilies, setLocalFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const allFamilies = useMemo(() => [...families, ...localFamilies], [families, localFamilies]);
@@ -2627,7 +2644,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         <div className="flex gap-2 mb-2 items-center">
                           <input value={child.firstName} onChange={e => { const u = [...newChildren]; u[idx].firstName = e.target.value; setNewChildren(u); }}
                             placeholder="Prénom *" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
-                          <input value={child.lastName} onChange={e => { const u = [...newChildren]; u[idx].lastName = e.target.value; setNewChildren(u); }}
+                          <input value={child.lastName || nomFoyerDeduit} onChange={e => { const u = [...newChildren]; u[idx].lastName = e.target.value; setNewChildren(u); }}
                             placeholder="Nom" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
                           {newChildren.length > 1 && (
                             <button onClick={() => setNewChildren(newChildren.filter((_, i) => i !== idx))}
@@ -2668,7 +2685,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       const children = validChildren.map(c => ({
                         id: `child_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
                         firstName: c.firstName.trim(),
-                        lastName: c.lastName.trim(),
+                        lastName: c.lastName.trim() || nomFoyerDeduit,
                         birthDate: c.birthDate ? new Date(c.birthDate) : null,
                         galopLevel: c.galopLevel || "—",
                         sanitaryForm: null,
