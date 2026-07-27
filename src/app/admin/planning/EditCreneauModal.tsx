@@ -22,6 +22,7 @@ export interface EditForm {
   tvaTaux?: number;
   activityTitle: string;
   monitor: string;
+  date?: string;
   startTime: string;
   endTime: string;
   maxPlaces: number | string;
@@ -239,6 +240,25 @@ export default function EditCreneauModal({
                 </div>
               </div>
             )}
+          </div>
+          {/* Date : sans ce champ, une année mal saisie (ex. 1926) rendait le
+              créneau invisible partout ET impossible à corriger. */}
+          <div>
+            <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Date</label>
+            <input type="date" value={form.date ?? creneau.date}
+              onChange={e => onFormChange({...form, date: e.target.value})}
+              className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
+            {(() => {
+              const d = form.date ?? creneau.date;
+              const annee = Number((d || "").slice(0, 4));
+              const cette = new Date().getFullYear();
+              if (annee && (annee < cette - 1 || annee > cette + 3)) {
+                return <p className="mt-1 font-body text-xs font-semibold text-orange-600">
+                  ⚠️ Année {annee} — vérifiez la saisie.
+                </p>;
+              }
+              return null;
+            })()}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

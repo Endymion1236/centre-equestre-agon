@@ -202,6 +202,16 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
           <div className="flex-1">
             <label className="font-body text-[10px] text-slate-500 block mb-1">{multiDay ? "Date de début" : "Date"}</label>
             <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inp}/>
+            {/* Alerte sur une année aberrante : une faute de frappe (ex. 1926)
+                crée un créneau invisible partout, difficile à retrouver. */}
+            {(() => {
+              const annee = Number((date || "").slice(0, 4));
+              const cette = new Date().getFullYear();
+              if (annee && (annee < cette - 1 || annee > cette + 3)) {
+                return <p className="mt-1 font-body text-xs font-semibold text-orange-600">⚠️ Année {annee} — vérifiez la saisie.</p>;
+              }
+              return null;
+            })()}
           </div>
           <div className="w-24">
             <label className="font-body text-[10px] text-slate-500 block mb-1">Début{multiDay ? " (défaut)" : ""}</label>
