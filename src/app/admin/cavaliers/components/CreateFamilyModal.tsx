@@ -317,7 +317,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
                   </div>
                   <div>
                     {i === 0 && <label className={labelStyle}>Date de naissance</label>}
-                    <input type="date" className={inputStyle} value={child.birthDate}
+                    <input type="date" min="1920-01-01" max={new Date().toISOString().slice(0, 10)} className={inputStyle} value={child.birthDate}
                       onChange={e => { const up = [...newChildren]; up[i].birthDate = e.target.value; setNewChildren(up); }}/>
                   </div>
                   <div>

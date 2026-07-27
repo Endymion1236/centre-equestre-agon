@@ -645,7 +645,7 @@ export default function FamilyCard({
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <input value={editChildForm.firstName} onChange={e => setEditChildForm(f => ({ ...f, firstName: e.target.value }))} className={inputStyle} placeholder="Prénom"/>
                     <input value={editChildForm.lastName} onChange={e => setEditChildForm(f => ({ ...f, lastName: e.target.value }))} className={inputStyle} placeholder="Nom"/>
-                    <input type="date" value={editChildForm.birthDate} onChange={e => setEditChildForm(f => ({ ...f, birthDate: e.target.value }))} className={inputStyle}/>
+                    <input type="date" min="1920-01-01" max={new Date().toISOString().slice(0, 10)} value={editChildForm.birthDate} onChange={e => setEditChildForm(f => ({ ...f, birthDate: e.target.value }))} className={inputStyle}/>
                     <select value={editChildForm.galopLevel} onChange={e => setEditChildForm(f => ({ ...f, galopLevel: e.target.value }))} className={inputStyle}>
                       {galopLevels.map(g => <option key={g} value={g}>{g === "\u2014" ? "Débutant" : g}</option>)}
                     </select>
@@ -677,7 +677,7 @@ export default function FamilyCard({
                   <input placeholder="Nom" value={newChildForm.lastName} onChange={e => setNewChildForm(f => ({ ...f, lastName: e.target.value }))} className={`${inputStyle} flex-1`}/>
                 </div>
                 <div className="flex gap-2">
-                  <input type="date" value={newChildForm.birthDate} onChange={e => setNewChildForm(f => ({ ...f, birthDate: e.target.value }))} className={`${inputStyle} flex-1`}/>
+                  <input type="date" min="1920-01-01" max={new Date().toISOString().slice(0, 10)} value={newChildForm.birthDate} onChange={e => setNewChildForm(f => ({ ...f, birthDate: e.target.value }))} className={`${inputStyle} flex-1`}/>
                   <select value={newChildForm.galopLevel} onChange={e => setNewChildForm(f => ({ ...f, galopLevel: e.target.value }))} className={`${inputStyle} w-32`}>
                     {galopLevels.map(g => <option key={g} value={g}>{g === "—" ? "Débutant" : g}</option>)}
                   </select>

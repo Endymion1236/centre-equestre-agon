@@ -2668,7 +2668,21 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                           <div className="flex-1">
                             <label className="font-body text-[10px] text-slate-400 block mb-1">Date de naissance</label>
                             <input value={child.birthDate} onChange={e => { const u = [...newChildren]; u[idx].birthDate = e.target.value; setNewChildren(u); }}
-                              type="date" className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+                              type="date" min="1920-01-01" max={new Date().toISOString().slice(0, 10)}
+                              className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+                            {(() => {
+                              // Une date future (ex. 2050 saisi pour 1950) faisait
+                              // echouer la creation sur un « Timestamp seconds out
+                              // of range » incomprehensible cote utilisateur.
+                              if (!child.birthDate) return null;
+                              const d = new Date(child.birthDate);
+                              if (isNaN(d.getTime())) return null;
+                              const an = d.getFullYear();
+                              if (an > new Date().getFullYear() || an < 1920) {
+                                return <p className="mt-1 font-body text-[10px] font-semibold text-orange-600">⚠️ Année {an} — vérifiez la saisie.</p>;
+                              }
+                              return null;
+                            })()}
                           </div>
                           <div className="flex-1">
                             <label className="font-body text-[10px] text-slate-400 block mb-1">Niveau Galop</label>
@@ -2689,6 +2703,19 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   </div>
                   <button onClick={async () => {
                     const validChildren = newChildren.filter(c => c.firstName.trim());
+                    // Date aberrante : Firestore rejette les timestamps hors
+                    // plage avec un message technique. On arrete avant.
+                    const dateInvalide = validChildren.find(c => {
+                      if (!c.birthDate) return false;
+                      const d = new Date(c.birthDate);
+                      if (isNaN(d.getTime())) return true;
+                      const an = d.getFullYear();
+                      return an > new Date().getFullYear() || an < 1920;
+                    });
+                    if (dateInvalide) {
+                      panelToast(`Date de naissance invalide pour ${dateInvalide.firstName || "un cavalier"} — vérifiez l'année`, "error");
+                      return;
+                    }
                     if (!newFam.parentName.trim() || validChildren.length === 0) {
                       panelToast("Nom du parent et prénom d'au moins un cavalier requis", "error");
                       return;

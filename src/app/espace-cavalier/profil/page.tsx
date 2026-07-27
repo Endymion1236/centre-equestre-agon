@@ -649,7 +649,7 @@ export default function ProfilPage() {
                           </div>
                           <div>
                             <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Date de naissance</label>
-                            <input type="date" max={todayLocalString()} value={childForm.birthDate} onChange={(event) => setChildForm({ ...childForm, birthDate: event.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400" />
+                            <input type="date" min="1920-01-01" max={todayLocalString()} value={childForm.birthDate} onChange={(event) => setChildForm({ ...childForm, birthDate: event.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400" />
                           </div>
                         </div>
                         <div className="flex gap-2 mt-4">
