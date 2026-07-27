@@ -2503,7 +2503,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <button onClick={() => toggleHighlight(e)} disabled={highlightBusy === e.childId}
                     title={e.highlight ? "Retirer le surlignage" : "Surligner"}
-                    className={`bg-transparent border-none cursor-pointer px-1 text-sm leading-none disabled:opacity-40 ${e.highlight ? "opacity-100" : "opacity-30 hover:opacity-70"}`}>
+                    className={`border-none cursor-pointer px-1.5 py-0.5 rounded text-sm leading-none disabled:opacity-40 ${e.highlight ? "bg-yellow-200 opacity-100" : "bg-transparent opacity-40 hover:opacity-80"}`}>
                     🖍️
                   </button>
                   <a

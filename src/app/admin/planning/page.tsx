@@ -754,7 +754,13 @@ export default function PlanningPage() {
     } catch(e: any) { setIaSuggestions(`Erreur : ${e.message}`); }
     setIaLoading(false);
   };
-  const refreshCreneaux = async () => { const s=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[0]); const e=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[6]); const snap=await getDocs(query(collection(db,"creneaux"),where("date",">=",s),where("date","<=",e))); const fresh=snap.docs.map(d=>({id:d.id,...d.data()})) as (Creneau&{id:string})[]; setCreneaux(fresh); return fresh; };
+  const refreshCreneaux = async () => { const s=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[0]); const e=viewMode==="day"?fmtDate(currentDay):fmtDate(weekDates[6]); const snap=await getDocs(query(collection(db,"creneaux"),where("date",">=",s),where("date","<=",e))); const fresh=snap.docs.map(d=>({id:d.id,...d.data()})) as (Creneau&{id:string})[]; setCreneaux(fresh);
+    // Le panneau d'inscription recoit `selectedCreneau`, un objet FIGE au
+    // moment de l'ouverture : sans cette resynchro, toute modification faite
+    // depuis le panneau (surlignage, affectation poney...) partait bien en
+    // base mais n'apparaissait jamais a l'ecran tant qu'on ne fermait pas.
+    setSelectedCreneau(prev => prev ? (fresh.find(c => c.id === (prev as any).id) as any) || prev : prev);
+    return fresh; };
 
   const handleEnroll = async (cid: string, child: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean; freeReason?: string; rattrapageId?: string; competitionItems?: any[]; skipRefresh?: boolean }) => {
     const enrolled = await enrollChildInCreneau(cid, child);
