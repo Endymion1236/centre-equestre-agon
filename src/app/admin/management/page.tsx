@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { collection, getDocs, query, where, orderBy, addDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
-import { Loader2, BookOpen, Calendar, Users, Sparkles, LayoutTemplate, ClipboardList, Clock } from "lucide-react";
+import { Loader2, BookOpen, Calendar, CalendarCheck, Users, Sparkles, LayoutTemplate, ClipboardList, Clock } from "lucide-react";
 import type { TacheType, Salarie, TachePlanifiee, ModelePlanning } from "./types";
 import { getISOWeek } from "./types";
 import TabBibliotheque from "./TabBibliotheque";
@@ -13,12 +13,13 @@ import TabAgentIA from "./TabAgentIA";
 import TabModeles from "./TabModeles";
 import TabResume from "./TabResume";
 import TabHoraires from "./TabHoraires";
+import TabJournee from "./TabJournee";
 
-type TabId = "planning" | "resume" | "horaires" | "bibliotheque" | "equipe" | "ia" | "modeles";
+type TabId = "journee" | "planning" | "resume" | "horaires" | "bibliotheque" | "equipe" | "ia" | "modeles";
 
 export default function ManagementPage() {
   const { user, isMoniteur, isAdmin } = useAuth();
-  const [tab, setTab] = useState<TabId>("planning");
+  const [tab, setTab] = useState<TabId>("journee");
   const [loading, setLoading] = useState(true);
   const [tachesType, setTachesType] = useState<TacheType[]>([]);
   const [salaries, setSalaries] = useState<Salarie[]>([]);
@@ -128,6 +129,7 @@ export default function ManagementPage() {
     : (mySalId ? tachesPlanifiees.filter(t => t.salarieId === mySalId) : []);
 
   const ALL_TABS = [
+    { id: "journee" as TabId, label: "Journée", icon: CalendarCheck },
     { id: "planning" as TabId, label: "Planning", icon: Calendar },
     { id: "resume" as TabId, label: "Résumé", icon: ClipboardList },
     { id: "horaires" as TabId, label: "Horaires", icon: Clock },
@@ -141,13 +143,13 @@ export default function ManagementPage() {
   // restent réservés aux admins pour éviter toute modification accidentelle.
   const TABS = isAdmin
     ? ALL_TABS
-    : ALL_TABS.filter(t => t.id === "planning" || t.id === "resume");
+    : ALL_TABS.filter(t => t.id === "journee" || t.id === "planning" || t.id === "resume");
 
   // Si un moniteur atterrit sur un onglet interdit (ex: via URL), on le
   // ramène sur 'planning'.
   useEffect(() => {
     if (!isAdmin && isMoniteur && !TABS.some(t => t.id === tab)) {
-      setTab("planning");
+      setTab("journee");
     }
   }, [isAdmin, isMoniteur, tab]);
 
@@ -197,6 +199,12 @@ export default function ManagementPage() {
         </div>
       ) : (
         <>
+          {tab==="journee" && (
+            <TabJournee
+              semaine={semaine} setSemaine={s=>{setSemaine(s);}}
+              taches={visibleTaches} salaries={visibleSalaries}
+              creneaux={creneaux}/>
+          )}
           {tab==="planning" && (
             <TabPlanning
               semaine={semaine} setSemaine={s=>{setSemaine(s);}}
