@@ -22,6 +22,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { normalizeSearch } from "@/lib/search-normalize";
 import { Search, X, Users, User, Heart, CreditCard, Calendar, Loader2, Command } from "lucide-react";
 
 type SearchResult = {
@@ -36,13 +37,8 @@ type SearchResult = {
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────
-const normalize = (s: string) =>
-  (s || "")
-    .toString()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // retire les accents
-    .trim();
+// Normalisation partagée : accents, tirets, apostrophes (cf. lib/search-normalize)
+const normalize = (s: string) => normalizeSearch(s);
 
 /** Score de correspondance entre query et texte cible. */
 function matchScore(query: string, target: string): number {
@@ -54,6 +50,13 @@ function matchScore(query: string, target: string): number {
   if (t.startsWith(q)) return 80;
   if (t.includes(" " + q)) return 60;
   if (t.includes(q)) return 40;
+  // Saisie sans espace ni tiret : "jeanpierre" → "Jean-Pierre"
+  if (q.includes(" ") || t.includes(" ")) {
+    const qCompact = q.replace(/ /g, "");
+    const tCompact = t.replace(/ /g, "");
+    if (tCompact.startsWith(qCompact)) return 70;
+    if (tCompact.includes(qCompact)) return 35;
+  }
   // Match sur initiales des mots (ex: "lj" → "Léa Jourdan")
   const words = t.split(/\s+/);
   const initials = words.map((w) => w[0]).join("");

@@ -9,6 +9,7 @@ import {
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { validateChildrenUpdate } from "@/lib/utils";
+import { normalizeSearch, searchMatches } from "@/lib/search-normalize";
 import FamilyDetailTabs from "../FamilyDetailTabs";
 import ProgressionEditor from "@/components/ProgressionEditor";
 import EnrollModal from "./EnrollModal";
@@ -49,6 +50,8 @@ interface Props {
   allFidelite: any[];
   allCreneaux: any[];
   onRefresh: () => void;
+  /** Terme de recherche en cours — sert à surligner le cavalier trouvé. */
+  searchTerm?: string;
   autoOpenProgressionChildName?: string;
   initialProgressionChildId?: string;
   /** Si fourni, force l'expansion de la carte au montage (sans ouvrir la modale progression).
@@ -58,7 +61,7 @@ interface Props {
 
 export default function FamilyCard({
   family, families, allReservations, allPayments, allAvoirs,
-  allCartes, allMandats, allFidelite, allCreneaux, onRefresh,
+  allCartes, allMandats, allFidelite, allCreneaux, onRefresh, searchTerm,
   autoOpenProgressionChildName, initialProgressionChildId, initialExpandedForChildId,
 }: Props) {
   // Auto-expand si cette famille contient l'enfant ciblé par ID
@@ -303,6 +306,38 @@ export default function FamilyCard({
   const fid = family.firestoreId;
   const children = family.children || [];
 
+  // ── Aperçu des cavaliers sous le nom du responsable ─────────────────────
+  // On affiche le prénom seul quand le cavalier porte le même nom que le
+  // responsable (info redondante), et "Prénom NOM" quand il en diffère —
+  // c'est justement le cas où on a besoin de le voir d'un coup d'œil.
+  const familyLastName = normalizeSearch((family as any).lastName || family.parentName || "");
+  const childrenPreview = children.map((child: any) => {
+    const childLast = (child.lastName || "").trim();
+    const differentName = Boolean(childLast) && normalizeSearch(childLast) !== familyLastName;
+    return {
+      id: child.id,
+      label: differentName
+        ? `${child.firstName || ""} ${childLast.toUpperCase()}`.trim()
+        : (child.firstName || "").trim(),
+      differentName,
+      // Surligne le cavalier qui correspond à la recherche en cours
+      highlighted: Boolean(
+        searchTerm?.trim() &&
+        searchMatches(`${child.firstName || ""} ${childLast}`, searchTerm),
+      ),
+    };
+  }).filter((item: any) => item.label);
+
+  // Au-delà de 6 cavaliers (établissements, groupes) on tronque pour ne pas
+  // transformer l'en-tête en pavé. Les cavaliers trouvés passent devant.
+  const PREVIEW_MAX = 6;
+  const orderedPreview = [
+    ...childrenPreview.filter((item: any) => item.highlighted),
+    ...childrenPreview.filter((item: any) => !item.highlighted),
+  ];
+  const visiblePreview = orderedPreview.slice(0, PREVIEW_MAX);
+  const hiddenPreviewCount = orderedPreview.length - visiblePreview.length;
+
   const getEnrollmentStatus = (childId: string) => {
     const futureSlots = allCreneaux.filter((c: any) =>
       (c.enrolled || []).some((e: any) => e.childId === childId)
@@ -387,6 +422,20 @@ export default function FamilyCard({
                 {family.parentPhone && <><Phone size={10} className="inline mr-1"/><a href={`tel:${family.parentPhone.replace(/[\s.]/g, "")}`} onClick={(e) => e.stopPropagation()} className="text-slate-600 no-underline hover:text-blue-500 hover:underline">{family.parentPhone}</a> · </>}
                 {children.length} cavalier{children.length > 1 ? "s" : ""}
               </div>
+              {visiblePreview.length > 0 && (
+                <div className="font-body text-[11px] text-slate-500 mt-0.5 flex items-center gap-1 flex-wrap leading-snug">
+                  <Users size={10} className="text-slate-400 shrink-0" />
+                  {visiblePreview.map((item: any, index: number) => (
+                    <span key={item.id || index} className="inline-flex items-center">
+                      <span className={item.highlighted ? "font-semibold text-blue-600" : item.differentName ? "text-slate-600" : ""}>
+                        {item.label}
+                      </span>
+                      {index < visiblePreview.length - 1 && <span className="text-slate-300 ml-1">·</span>}
+                    </span>
+                  ))}
+                  {hiddenPreviewCount > 0 && <span className="text-slate-400">+{hiddenPreviewCount}</span>}
+                </div>
+              )}
               {(family as any).updatedAt && (
                 <div className="mt-1">
                   <LastUpdated timestamp={(family as any).updatedAt} />

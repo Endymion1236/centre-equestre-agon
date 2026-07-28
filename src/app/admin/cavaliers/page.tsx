@@ -8,6 +8,7 @@ import { Card } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { db } from "@/lib/firebase";
+import { searchMatchesAny } from "@/lib/search-normalize";
 import type { Family } from "@/types";
 import CreateFamilyModal from "./components/CreateFamilyModal";
 import FamilyCard from "./components/FamilyCard";
@@ -108,14 +109,25 @@ export default function CavaliersPage() {
       return target ? [target] : [];
     }
 
-    const queryText = search.trim().toLowerCase();
+    const queryText = search.trim();
     let list = queryText
       ? families.filter((family) =>
-          family.parentName?.toLowerCase().includes(queryText) ||
-          (family as any).lastName?.toLowerCase().includes(queryText) ||
-          (family as any).firstName?.toLowerCase().includes(queryText) ||
-          family.parentEmail?.toLowerCase().includes(queryText) ||
-          (family.children || []).some((child: any) => `${child.firstName} ${child.lastName || ""}`.toLowerCase().includes(queryText))
+          searchMatchesAny(
+            [
+              family.parentName,
+              (family as any).lastName,
+              (family as any).firstName,
+              // nom + prénom accolés : permet de chercher "dupont lea"
+              `${(family as any).lastName || ""} ${(family as any).firstName || ""}`,
+              `${(family as any).firstName || ""} ${(family as any).lastName || ""}`,
+              family.parentEmail,
+              ...(family.children || []).flatMap((child: any) => [
+                `${child.firstName || ""} ${child.lastName || ""}`,
+                `${child.lastName || ""} ${child.firstName || ""}`,
+              ]),
+            ],
+            queryText,
+          ),
         )
       : families;
 
@@ -290,6 +302,7 @@ export default function CavaliersPage() {
               allFidelite={allFidelite}
               allCreneaux={allCreneaux}
               onRefresh={fetchFamilies}
+              searchTerm={search}
               autoOpenProgressionChildName={tabParam === "progression" ? search : undefined}
               initialProgressionChildId={searchParams.get("showProgression") || undefined}
               initialExpandedForChildId={targetFamilyId && family.firestoreId === targetFamilyId ? (targetChildId || "FAMILY") : undefined}
