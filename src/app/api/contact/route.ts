@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { SITE_CONFIG } from "@/lib/config";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,13 @@ function clientIp(request: NextRequest) {
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
 }
 
+/**
+ * Limitation EN MÉMOIRE — première barrière, gratuite, mais peu fiable :
+ * sur Vercel chaque instance a sa propre Map et les instances sont
+ * éphémères. Un attaquant réparti sur plusieurs instances la contourne.
+ * Conservée comme filtre bon marché, doublée d'un compteur DURABLE en base
+ * (checkRateLimit) qui, lui, résiste au redémarrage et au scale-out.
+ */
 function isRateLimited(ip: string) {
   const now = Date.now();
   const recent = (attempts.get(ip) || []).filter((timestamp) => now - timestamp < WINDOW_MS);
@@ -38,6 +46,16 @@ export async function POST(request: NextRequest) {
   const ip = clientIp(request);
   if (isRateLimited(ip)) {
     return NextResponse.json({ error: "Trop de messages envoyés. Réessayez dans quelques minutes." }, { status: 429 });
+  }
+  // Compteur durable (Firestore) : le seul qui tienne sur du serverless.
+  if (ip !== "unknown") {
+    const rl = await checkRateLimit({
+      uid: `ip_${ip}`,
+      routeKey: "contact",
+      limit: MAX_REQUESTS,
+      windowMs: WINDOW_MS,
+    });
+    if (!rl.allowed) return rateLimitResponse(rl);
   }
 
   try {
