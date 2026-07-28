@@ -58,7 +58,10 @@ export async function POST(request: NextRequest) {
     // fourni par le support CAWL.
     const requete = {
       endpoint: `POST /v2/{merchantId}/payments`,
-      body: buildDelayedChargeBody(solde, cofToken, `SOLDE-${paymentId}-<horodatage>`),
+      body: buildDelayedChargeBody(solde, cofToken, `SOLDE-${paymentId}-<horodatage>`, {
+        familyId: p.familyId,
+        email: p.familyEmail,
+      }),
     };
 
     // ── DRY-RUN : aperçu seulement, aucun débit ───────────────────────────

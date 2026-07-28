@@ -88,7 +88,12 @@ const COF_REQUESTOR = "cardholderInitiated";
  *   - authorizationMode "SALE" : autorisation + capture immediate. Sans
  *     lui, les fonds sont bloques mais jamais encaisses.
  */
-export function buildDelayedChargeBody(amountEuros: number, token?: string, merchantRef?: string) {
+export function buildDelayedChargeBody(
+  amountEuros: number,
+  token?: string,
+  merchantRef?: string,
+  customer?: { familyId?: string; email?: string },
+) {
   return {
     cardPaymentMethodSpecificInput: {
       ...(token ? { token } : {}),
@@ -107,6 +112,17 @@ export function buildDelayedChargeBody(amountEuros: number, token?: string, merc
         currencyCode: "EUR",
       },
       ...(merchantRef ? { references: { merchantReference: merchantRef } } : {}),
+      // Bloc client : present sur le paiement initial, il etait absent ici.
+      // CreatePayment le reclame generalement, et son absence produit un 400
+      // sans statut de paiement exploitable.
+      ...(customer?.familyId || customer?.email
+        ? {
+            customer: {
+              ...(customer.familyId ? { merchantCustomerId: customer.familyId } : {}),
+              ...(customer.email ? { contactDetails: { emailAddress: customer.email } } : {}),
+            },
+          }
+        : {}),
     },
   };
 }
@@ -118,7 +134,10 @@ export async function chargeWithToken(params: MitChargeParams): Promise<MitCharg
   // Reference unique pour le rapprochement (les references CAWL de nos
   // prelevements etaient jusqu'ici anonymes cote back-office).
   const merchantRef = `SOLDE-${params.paymentId}-${Date.now().toString(36)}`;
-  const body = buildDelayedChargeBody(params.amount, params.token, merchantRef);
+  const body = buildDelayedChargeBody(params.amount, params.token, merchantRef, {
+    familyId: params.familyId,
+    email: params.familyEmail,
+  });
 
   // ── STUB : tant que non activé, aucun appel réseau ─────────────────────────
   if (!mitEnabled) {
@@ -156,16 +175,29 @@ export async function chargeWithToken(params: MitChargeParams): Promise<MitCharg
       // Le motif de refus renvoye par l'emetteur, quand il est fourni, est la
       // seule information exploitable pour distinguer un probleme de carte
       // d'un probleme d'habilitation.
-      const motif = resp?.body?.payment?.statusOutput?.errors?.[0]?.message
-        || resp?.body?.payment?.paymentOutput?.cardPaymentMethodSpecificOutput?.authorisationCode
+      // Detail de l'erreur. Un 400 signale une requete invalide (champ
+      // obligatoire absent) et n'a pas de `payment.status` : sans lire
+      // `body.errors`, le message se resumait a « Statut CAWL: inconnu »,
+      // ce qui ne dit rien de la cause.
+      const apiErrors: any[] = resp?.body?.errors || resp?.body?.paymentResult?.errors || [];
+      const motif =
+        apiErrors.map((e: any) => `[${e.code || e.id || "?"}] ${e.message || ""}${e.propertyName ? ` (champ: ${e.propertyName})` : ""}`).join(" | ")
+        || resp?.body?.payment?.statusOutput?.errors?.[0]?.message
         || "";
-      console.warn(`[cawl-mit] ❌ solde refusé — statut=${status} ref=${ref} motif=${motif || "non communiqué"}`);
+      console.warn(
+        `[cawl-mit] ❌ échec — http=${resp?.status} statut=${status || "n/a"} ref=${ref || "n/a"} ` +
+          `motif=${motif || "non communiqué"}`
+      );
+      // Reponse brute tronquee : indispensable pour transmettre au support.
+      console.warn(`[cawl-mit] réponse CAWL brute: ${JSON.stringify(resp?.body || {}).slice(0, 1200)}`);
       return {
         enabled: true,
         success: false,
         paymentReference: ref,
         statusCode: resp?.status,
-        error: `Statut CAWL: ${status || "inconnu"}${motif ? ` — ${motif}` : ""}`,
+        error: motif
+          ? `CAWL ${resp?.status || ""}: ${motif}`.trim()
+          : `Statut CAWL: ${status || "inconnu"} (HTTP ${resp?.status || "?"})`,
       };
     }
 
