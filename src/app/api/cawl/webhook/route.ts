@@ -91,10 +91,28 @@ export async function POST(req: NextRequest) {
 
       // ── Bon cadeau (achat en ligne : pas de payment associé) ─────────────
       // Traité en priorité et de façon idempotente. Si c'en est un, on s'arrête.
-      if (hostedCheckoutId) {
-        const bonCode = await traiterBonCadeauSession(hostedCheckoutId, "webhook");
+      //
+      // CAWL ne renseigne PAS toujours hostedCheckoutSpecificOutput dans ses
+      // notifications : sans repli, la branche etait sautee et le bon cadeau
+      // ne pouvait etre cree que par le retour navigateur. Un acheteur qui
+      // ferme son onglet apres avoir paye n'aurait alors jamais recu son bon,
+      // alors que le webhook existe precisement pour ce cas.
+      let checkoutId = hostedCheckoutId;
+      if (!checkoutId && merchantRef) {
+        const sessSnap = await adminDb.collection("cawl_sessions")
+          .where("merchantRef", "==", merchantRef)
+          .limit(1)
+          .get();
+        if (!sessSnap.empty) {
+          checkoutId = sessSnap.docs[0].id;
+          console.log(`CAWL webhook: hostedCheckoutId absent, retrouve via merchantRef → ${checkoutId}`);
+        }
+      }
+
+      if (checkoutId) {
+        const bonCode = await traiterBonCadeauSession(checkoutId, "webhook");
         if (bonCode) {
-          console.log(`✅ CAWL webhook: bon cadeau confirmé ${hostedCheckoutId} → ${bonCode}`);
+          console.log(`✅ CAWL webhook: bon cadeau confirmé ${checkoutId} → ${bonCode}`);
           return NextResponse.json({ received: true });
         }
       }
@@ -115,9 +133,9 @@ export async function POST(req: NextRequest) {
       }
 
       // Fallback : chercher par hostedCheckoutId
-      if (!payRef && hostedCheckoutId) {
+      if (!payRef && checkoutId) {
         const snap = await adminDb.collection("payments")
-          .where("cawlHostedCheckoutId", "==", hostedCheckoutId)
+          .where("cawlHostedCheckoutId", "==", checkoutId)
           .limit(1)
           .get();
         if (!snap.empty) {
@@ -333,7 +351,12 @@ export async function POST(req: NextRequest) {
           console.log(`CAWL webhook: paiement ${merchantRef} déjà confirmé, skip`);
         }
       } else {
-        console.warn(`CAWL webhook: payment Firestore introuvable pour ref=${merchantRef}`);
+        // Normal pour un achat hors commande famille (bon cadeau deja traite
+        // par le retour navigateur) : ce n'est pas une anomalie.
+        console.log(
+          `CAWL webhook: aucune commande famille pour ref=${merchantRef} ` +
+            `(normal s'il s'agit d'un bon cadeau deja traite)`
+        );
       }
     }
 
