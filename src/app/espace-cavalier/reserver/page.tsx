@@ -1895,14 +1895,16 @@ export default function ReserverPage() {
                               createdAt: serverTimestamp(),
                             });
                             // 3. Email admin
-                            authFetch("/api/send-email", {
+                            authFetch("/api/notify-club", {
                               method: "POST", headers: { "Content-Type": "application/json" },
                               body: JSON.stringify({
-                                to: "ceagon50@gmail.com",
-                                subject: `Paiement ${cartPayMode} à confirmer — ${family.parentName}`,
-                                context: "espace_cavalier_declaration",
+                                context: "reservation_paiement",
+                                titre: `Paiement ${cartPayMode} à confirmer — ${family.parentName}`,
+                                lignes: [
+                                  `${family.parentName} déclare un paiement de ${cartTotal.toFixed(2)}€ par ${cartPayMode}.`,
+                                  `Activités : ${cart.map(i => i.activityTitle).join(", ")}`,
+                                ],
                                 familyId,
-                                html: `<p>${family.parentName} déclare un paiement de <strong>${cartTotal.toFixed(2)}€</strong> par ${cartPayMode}.<br/>Activités : ${cart.map(i => i.activityTitle).join(", ")}</p>`,
                               }),
                             }).catch(() => {});
                             setCartPaySuccess(true);

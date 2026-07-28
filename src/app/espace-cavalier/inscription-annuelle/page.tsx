@@ -827,14 +827,16 @@ export default function InscriptionAnnuellePage() {
           createdAt: serverTimestamp(),
         });
         // Email admin (non bloquant)
-        authFetch("/api/send-email", {
+        authFetch("/api/notify-club", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            to: "ceagon50@gmail.com",
-            subject: `Inscription annuelle (${modeLabel}) à valider — ${family.parentName}`,
-            context: "espace_cavalier_declaration",
+            context: "inscription_annuelle",
+            titre: `Inscription annuelle (${modeLabel}) à valider — ${family.parentName}`,
+            lignes: [
+              `${family.parentName} a inscrit ${names} à l'année et déclare un règlement de ${totalGroupe.toFixed(2)}€ par ${modeLabel} (${paymentPlan}).`,
+              "À valider dans Paiements → Déclarations pour confirmer la ou les places.",
+            ],
             familyId: user.uid,
-            html: `<p><strong>${family.parentName}</strong> a inscrit ${names} à l'année et déclare un règlement de <strong>${totalGroupe.toFixed(2)}€</strong> par ${modeLabel} (${paymentPlan}).</p><p>👉 À valider dans <strong>Paiements → Déclarations</strong> pour confirmer la/les place(s).</p>`,
           }),
         }).catch(() => {});
         setDeclaredSuccess({ mode: moyenPaiement, total: totalGroupe, names });

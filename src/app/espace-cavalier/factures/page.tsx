@@ -395,16 +395,21 @@ export default function FacturesPage() {
         createdAt: serverTimestamp(),
       });
 
-      authFetch("/api/send-email", {
+      // /api/send-email est adminOnly : cet appel repartait en 403 et la
+      // notification n'arrivait jamais. Route dediee aux familles, avec
+      // destinataire impose cote serveur.
+      authFetch("/api/notify-club", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          to: process.env.NEXT_PUBLIC_OWNER_EMAIL || "nicolasrichard16@hotmail.com",
-          subject: `Déclaration paiement — ${declaringPayment.familyName}`,
-          context: "espace_cavalier_declaration",
+          context: "declaration_paiement",
+          titre: `Déclaration de paiement — ${declaringPayment.familyName}`,
+          lignes: [
+            `${declaringPayment.familyName} déclare un paiement de ${amount.toFixed(2)}€ en ${declareMode === "cheque" ? "chèque" : "espèces"}.`,
+            paymentTitle(declaringPayment),
+          ],
           familyId: declaringPayment.familyId,
           paymentId: declaringPayment.id,
-          html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px"><p><strong>${declaringPayment.familyName}</strong> déclare un paiement de <strong>${amount.toFixed(2)}€</strong> en ${declareMode === "cheque" ? "chèque" : "espèces"}.</p><p>${paymentTitle(declaringPayment)}</p></div>`,
         }),
       }).catch(() => {});
 
