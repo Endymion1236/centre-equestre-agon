@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, deleteField, doc, query, where, orderBy, serverTimestamp } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
@@ -388,26 +388,32 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       .finally(() => setNotesPrecLoading(false));
   }, [creneau.id, creneau.activityTitle, creneau.monitor]);
 
-  useEffect(() => {
+  // Chargement de la liste d'attente, extrait en fonction RAPPELABLE.
+  // En useEffect sur [creneau.id] seul, il ne se rejouait jamais apres un
+  // ajout : l'identifiant du creneau ne change pas, il fallait fermer et
+  // rouvrir le panneau pour voir la nouvelle entree.
+  //
+  // Deux requetes : les entrees « cours » portent creneauId, les entrees
+  // « stage » (une seule pour toute la semaine) portent creneauIds avec TOUS
+  // les jours — sinon l'attente d'un stage ne serait visible que depuis son
+  // premier jour. Le statut est filtre en memoire pour ne pas exiger un
+  // nouvel index composite Firestore.
+  const chargerWaitlist = useCallback(async () => {
     if (!creneau.id) return;
-    // Deux requêtes : les entrées « cours » portent creneauId, les entrées
-    // « stage » (une seule pour toute la semaine) portent creneauIds avec
-    // TOUS les jours — sinon l'attente d'un stage ne serait visible que
-    // depuis son premier jour. Le statut est filtré en mémoire pour ne pas
-    // exiger un nouvel index composite Firestore.
-    Promise.all([
+    const [parId, parJours] = await Promise.all([
       getDocs(query(collection(db, "waitlist"), where("creneauId", "==", creneau.id), where("status", "==", "waiting"))),
       getDocs(query(collection(db, "waitlist"), where("creneauIds", "array-contains", creneau.id))),
-    ]).then(([parId, parJours]) => {
-      const map = new Map<string, any>();
-      parId.docs.forEach(d => map.set(d.id, { id: d.id, ...d.data() }));
-      parJours.docs.forEach(d => {
-        const data = d.data() as any;
-        if (data.status === "waiting") map.set(d.id, { id: d.id, ...data });
-      });
-      setWaitlist([...map.values()].sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)));
+    ]);
+    const map = new Map<string, any>();
+    parId.docs.forEach(d => map.set(d.id, { id: d.id, ...d.data() }));
+    parJours.docs.forEach(d => {
+      const data = d.data() as any;
+      if (data.status === "waiting") map.set(d.id, { id: d.id, ...data });
     });
+    setWaitlist([...map.values()].sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)));
   }, [creneau.id]);
+
+  useEffect(() => { chargerWaitlist(); }, [chargerWaitlist]);
 
   // Resync de la note de preparation quand on ouvre un autre creneau
   // (le composant EnrollPanel est reutilise d'un creneau a l'autre).
@@ -546,6 +552,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           releasedByAdminAt: new Date().toISOString(),
         }).catch(() => {});
       }
+      await chargerWaitlist();   // l'entree repasse en « waiting » : la reafficher
       await onRefresh?.();
     } catch (e) {
       console.error("Libération hold :", e);
@@ -609,6 +616,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         createdAt: serverTimestamp(),
       });
       setSelFam(""); setSelChild(""); setSearch("");
+      await chargerWaitlist();   // sinon l'entree n'apparait qu'apres reouverture
       onRefresh?.();
     } catch (e) {
       console.error("Ajout liste d'attente :", e);
