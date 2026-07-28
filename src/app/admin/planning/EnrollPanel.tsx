@@ -388,6 +388,31 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       .finally(() => setNotesPrecLoading(false));
   }, [creneau.id, creneau.activityTitle, creneau.monitor]);
 
+  // Retrait d'une entree de liste d'attente (admin). Cote famille le bouton
+  // « Retirer » existe deja : l'admin n'avait que « Accepter ».
+  const [waitRemoving, setWaitRemoving] = useState("");
+  const retirerWaitlist = async (entry: any) => {
+    if (waitRemoving) return;
+    if (!confirm(`Retirer ${entry.childName} de la liste d'attente ?`)) return;
+    setWaitRemoving(entry.id);
+    try {
+      // Si cette entree detenait une place reservee, liberer le hold : sinon
+      // le creneau garderait une place bloquee pour quelqu'un qui n'est plus
+      // dans la file.
+      const h = (creneau as any).waitlistHold;
+      if (h?.waitlistEntryId === entry.id && creneau.id) {
+        await updateDoc(doc(db, "creneaux", creneau.id), { waitlistHold: deleteField() });
+      }
+      await deleteDoc(doc(db, "waitlist", entry.id));
+      await chargerWaitlist();
+      await onRefresh?.();
+    } catch (e) {
+      console.error("Retrait liste d'attente :", e);
+      alert("Retrait impossible. Réessayez.");
+    }
+    setWaitRemoving("");
+  };
+
   // Chargement de la liste d'attente, extrait en fonction RAPPELABLE.
   // En useEffect sur [creneau.id] seul, il ne se rejouait jamais apres un
   // ajout : l'identifiant du creneau ne change pas, il fallait fermer et
@@ -2572,12 +2597,21 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     </div>
                     <div className="font-body text-xs text-slate-500">{entry.familyName}</div>
                   </div>
-                  <button
-                    onClick={() => acceptWaitlist(entry)}
-                    disabled={waitlistLoading || spots <= 0}
-                    className={`font-body text-xs font-semibold px-3 py-1.5 rounded-lg border-none cursor-pointer ${spots > 0 ? "bg-green-500 text-white hover:bg-green-600" : "bg-gray-100 text-slate-400 cursor-not-allowed"} disabled:opacity-50`}>
-                    {waitlistLoading ? <Loader2 size={12} className="animate-spin inline" /> : "✓ Accepter"}
-                  </button>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button
+                      onClick={() => acceptWaitlist(entry)}
+                      disabled={waitlistLoading || spots <= 0}
+                      className={`font-body text-xs font-semibold px-3 py-1.5 rounded-lg border-none cursor-pointer ${spots > 0 ? "bg-green-500 text-white hover:bg-green-600" : "bg-gray-100 text-slate-400 cursor-not-allowed"} disabled:opacity-50`}>
+                      {waitlistLoading ? <Loader2 size={12} className="animate-spin inline" /> : "✓ Accepter"}
+                    </button>
+                    <button
+                      onClick={() => retirerWaitlist(entry)}
+                      disabled={waitRemoving === entry.id}
+                      title="Retirer de la liste d'attente"
+                      className="bg-transparent border-none cursor-pointer text-red-400 hover:text-red-600 px-1 disabled:opacity-40">
+                      {waitRemoving === entry.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={14} />}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
