@@ -31,11 +31,30 @@ function wrap(content: string) {
   </div>`;
 }
 
+/**
+ * Bouton « bulletproof » (structure en table).
+ *
+ * Un <a> en inline-block avec du padding se casse des que le texte passe a
+ * la ligne : le fond colore ne suit pas, et le bouton apparait coupe en deux
+ * blocs qui se chevauchent — visible sur mobile en mode sombre.
+ *
+ * Ici le fond est porte par la cellule et le lien est en display:block a
+ * l'interieur : la couleur enveloppe toujours le texte, quelle que soit la
+ * largeur. C'est la structure qui passe partout, Outlook compris.
+ */
 function button(text: string, url: string, color = "#27ae60") {
-  return `<p style="text-align:center;margin:25px 0;">
-    <a href="${url}" style="background:${color};color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;display:inline-block;">${text}</a>
-  </p>`;
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px auto;border-collapse:separate;">
+    <tr>
+      <td align="center" bgcolor="${color}" style="background:${color};border-radius:8px;">
+        <a href="${url}" style="display:block;padding:14px 28px;color:#ffffff;text-decoration:none;font-weight:bold;font-size:15px;font-family:'Segoe UI',Arial,sans-serif;line-height:1.3;">${text}</a>
+      </td>
+    </tr>
+  </table>`;
 }
+
+/** Reutilisables hors de ce module (crons, routes API). */
+export const emailLayout = wrap;
+export const emailButton = button;
 
 export const emailTemplates = {
 

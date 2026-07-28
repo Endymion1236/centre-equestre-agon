@@ -6,6 +6,7 @@ import { compareCreneaux } from "@/lib/creneau-sort";
 import { logEmail } from "@/lib/email-log";
 import { addDaysParis } from "@/lib/date-local";
 import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
+import { emailButton } from "@/lib/email-templates";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -405,11 +406,7 @@ export async function GET(req: NextRequest) {
                 <div style="font-size:28px;font-weight:bold;color:#2050A0;">${totalSolde.toFixed(2)}€</div>
                 <div style="color:#555;font-size:13px;margin-top:4px;">${activites}</div>
               </div>
-              <div style="text-align:center;margin:24px 0;">
-                <a href="${soldeLink}" style="background:#2050A0;color:white;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">
-                  💳 Régler le solde en ligne
-                </a>
-              </div>
+              ${emailButton("Régler mon solde", soldeLink, "#2050A0")}
               <p style="color:#888;font-size:12px;text-align:center;">
                 Accédez à votre espace cavalier → Mes factures pour régler par CB en ligne.
               </p>

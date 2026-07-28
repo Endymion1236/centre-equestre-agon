@@ -6,6 +6,7 @@ import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { generateCAWLQR, generateSEPAQR } from "@/lib/payment-qr";
 import { addDaysParis } from "@/lib/date-local";
 import { chargeWithToken, logMitAttempt } from "@/lib/cawl-mit";
+import { emailLayout, emailButton } from "@/lib/email-templates";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -179,19 +180,27 @@ export async function GET(req: NextRequest) {
             let emailEnvoye = false;
             if (resendKey && isRecipientAllowed(familyEmail)) {
               const subject = `⚠️ Prélèvement du solde stage impossible — ${solde.toFixed(2)}€`;
-              const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-                <div style="background:#c0392b;color:white;padding:20px;border-radius:12px 12px 0 0;text-align:center;">
-                  <h2 style="margin:0;font-size:18px;">Centre Équestre d'Agon-Coutainville</h2>
-                </div>
-                <div style="background:#fff8f8;padding:24px;border:1px solid #f5d5d5;border-top:none;border-radius:0 0 12px 12px;">
-                  <p>Bonjour <strong>${familyName}</strong>,</p>
-                  <p>Nous n'avons pas pu prélever automatiquement le solde du stage <strong>${stageTitle}</strong> sur votre carte enregistrée.</p>
-                  <p>Merci de régler le solde de <strong>${solde.toFixed(2)}€</strong> avant le ${j7Label} :</p>
-                  <div style="text-align:center;margin:24px 0;">
-                    <a href="${appUrl}/espace-cavalier/factures?payId=${payDoc.id}" style="background:#2050A0;color:white;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">💳 Régler le solde en ligne</a>
-                  </div>
-                </div>
-              </div>`;
+              // Gabarit MAISON (bandeau bleu marine + pied de page) plutot
+              // qu'un HTML ad hoc a bandeau rouge : ce n'est pas une mise en
+              // demeure, juste un prelevement qui n'a pas abouti. Le bouton
+              // vient du helper partage, insensible au passage a la ligne.
+              const html = emailLayout(`
+                <p style="margin:0 0 14px;font-size:15px;color:#1e293b;">Bonjour <strong>${familyName}</strong>,</p>
+                <p style="margin:0 0 14px;font-size:15px;color:#334155;line-height:1.6;">
+                  Le prélèvement automatique du solde de votre stage
+                  <strong>${stageTitle}</strong> n'a pas abouti.
+                  Cela arrive parfois — un plafond de carte, une opposition temporaire,
+                  ou une carte arrivée à expiration.
+                </p>
+                <p style="margin:0 0 4px;font-size:15px;color:#334155;">
+                  Il reste <strong>${solde.toFixed(2)} €</strong> à régler avant le <strong>${j7Label}</strong>.
+                </p>
+                ${emailButton("Régler mon solde", `${appUrl}/espace-cavalier/factures?payId=${payDoc.id}`, "#2050A0")}
+                <p style="margin:0;font-size:13px;color:#64748b;line-height:1.6;">
+                  Un souci pour régler en ligne ? Répondez simplement à ce message,
+                  nous trouverons une solution.
+                </p>
+              `);
               const r = await fetch("https://api.resend.com/emails", {
                 method: "POST",
                 headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
@@ -273,11 +282,7 @@ export async function GET(req: NextRequest) {
               <div style="font-size:28px;font-weight:bold;color:#2050A0;">${solde.toFixed(2)}€</div>
               <div style="color:#555;font-size:13px;margin-top:4px;">${stageTitle}</div>
             </div>
-            <div style="text-align:center;margin:24px 0;">
-              <a href="${soldeLink}" style="background:#2050A0;color:white;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">
-                💳 Régler le solde en ligne
-              </a>
-            </div>
+            ${emailButton("Régler mon solde", soldeLink, "#2050A0")}
             ${qrSection}
             <p style="color:#888;font-size:12px;text-align:center;">
               Vous pouvez également régler sur place par CB, chèque ou espèces.
