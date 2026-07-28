@@ -188,7 +188,22 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
       if (mandat) {
         await updateDoc(doc(db, "mandats-sepa", mandat.id), { iban: cleanIban, bic: mandatForm.bic, titulaire: mandatForm.titulaire, dateSignature: mandatForm.dateSignature, updatedAt: serverTimestamp() });
       } else {
-        await addDoc(collection(db, "mandats-sepa"), { familyId: fid, familyName: family.parentName, iban: cleanIban, bic: mandatForm.bic, titulaire: mandatForm.titulaire, mandatId: `SEPA-${Date.now().toString(36).toUpperCase()}`, dateSignature: mandatForm.dateSignature, status: "active", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        const mandatRef = await addDoc(collection(db, "mandats-sepa"), { familyId: fid, familyName: family.parentName, iban: cleanIban, bic: mandatForm.bic, titulaire: mandatForm.titulaire, mandatId: `SEPA-${Date.now().toString(36).toUpperCase()}`, dateSignature: mandatForm.dateSignature, status: "active", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        // Confirmation de mandat + PRENOTIFICATION de l'echeancier. Le SEPA
+        // impose d'informer le debiteur avant tout prelevement ; les montants
+        // et dates etant connus des la signature, un envoi unique suffit.
+        authFetch("/api/admin/sepa/notifier-mandat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mandatDocId: mandatRef.id }),
+        })
+          .then(r => r.json())
+          .then(d => {
+            if (d?.sent) alert(`✅ Mandat et échéancier envoyés à la famille (${d.echeances} échéance${d.echeances > 1 ? "s" : ""}).`);
+            else if (d?.blocked) alert("Mandat créé, mais l'email est bloqué par le mode restreint.");
+            else if (d?.error) alert(`Mandat créé, mais l'envoi a échoué : ${d.error}`);
+          })
+          .catch(() => {});
       }
       setEditingMandat(false); fetchFamilies();
     } catch (e) { console.error(e); }

@@ -1,4 +1,5 @@
 "use client";
+import { authFetch } from "@/lib/auth-fetch";
 
 import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, where } from "firebase/firestore";
@@ -177,7 +178,7 @@ export default function SepaPage() {
       const nextMandatNum = mandats.length + 1;
       const mandatId = `CEDC${nextMandatNum}MD${Math.floor(Math.random() * 9000) + 1000}`;
 
-      await addDoc(collection(db, "mandats-sepa"), {
+      const mandatRef = await addDoc(collection(db, "mandats-sepa"), {
         familyId: newMandat.familyId,
         familyName: family?.parentName || "",
         mandatId,
@@ -189,7 +190,21 @@ export default function SepaPage() {
         status: "active",
         createdAt: serverTimestamp(),
       });
-      toast("Mandat SEPA créé", "success");
+      // Confirmation de mandat + prenotification de l'echeancier (obligation
+      // SEPA d'informer le debiteur avant tout prelevement).
+      try {
+        const rn = await authFetch("/api/admin/sepa/notifier-mandat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mandatDocId: mandatRef.id }),
+        });
+        const dn = await rn.json();
+        if (dn?.sent) toast(`Mandat créé et envoyé (${dn.echeances} échéance${dn.echeances > 1 ? "s" : ""})`, "success");
+        else if (dn?.blocked) toast("Mandat créé — email bloqué (mode restreint)", "warning");
+        else toast("Mandat créé, mais l'email n'a pas pu être envoyé", "warning");
+      } catch {
+        toast("Mandat créé, mais l'email n'a pas pu être envoyé", "warning");
+      }
       setShowNewMandat(false);
       setNewMandat({ familyId: "", iban: "", bic: "", titulaire: "", libelle: "", dateSignature: new Date().toISOString().split("T")[0] });
       fetchAll();
