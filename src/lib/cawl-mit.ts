@@ -58,14 +58,16 @@ export interface MitChargeResult {
 /**
  * Indicateur de demandeur pour la transaction non programmee.
  *
- * Le modele fourni par le support CAWL indique "cardholderInitiated". Or
- * notre prelevement est reellement initie par le COMMERCANT (cron a J-7,
- * porteur absent), ce qui correspondrait plutot a "merchantInitiated".
+ * "merchantInitiated" : le prelevement du solde part d'un cron a J-7, sans
+ * personne devant l'ecran. C'est la realite de l'operation.
  *
- * On suit leur modele, qu'ils ont valide comme fonctionnel. Si un refus
- * persiste, c'est la premiere valeur a basculer.
+ * Le modele fourni par le support CAWL indiquait "cardholderInitiated" — mais
+ * leur exemple comportait un hostedCheckoutSpecificInput avec une URL de
+ * retour, donc un parcours ou le client EST present. Ce n'est pas notre cas.
+ * Declarer un porteur present alors qu'il est absent conduit l'emetteur a
+ * attendre une authentification qui ne viendra jamais, et a refuser.
  */
-const COF_REQUESTOR = "cardholderInitiated";
+const COF_REQUESTOR = "merchantInitiated";
 
 /**
  * Corps du prelevement du solde.
@@ -105,8 +107,14 @@ export function buildDelayedChargeBody(
       // paiement carte en reserve sans aucun accord prealable identifiable,
       // et le refuse. Constate en production : le paiement initial portait
       // bien un Scheme Reference Data, le prelevement n'en avait aucun.
-      ...(scheme?.schemeReferenceData ? { schemeReferenceData: scheme.schemeReferenceData } : {}),
-      ...(scheme?.initialSchemeTransactionId ? { initialSchemeTransactionId: scheme.initialSchemeTransactionId } : {}),
+      // On transmet la reference via initialSchemeTransactionId, et NON via
+      // schemeReferenceData : ce dernier est marque deprecie en entree dans
+      // le SDK, et son envoi faisait rejeter la requete entiere
+      // (« [1099] INVALID_VALUE »), y compris apres normalisation de la
+      // valeur. Le champ etait en cause, pas son contenu.
+      ...(scheme?.initialSchemeTransactionId || scheme?.schemeReferenceData
+        ? { initialSchemeTransactionId: scheme.initialSchemeTransactionId || scheme.schemeReferenceData }
+        : {}),
       authorizationMode: "SALE",
       threeDSecure: {
         challengeIndicator: "no-challenge-requested",
