@@ -9,6 +9,8 @@ import { authFetch } from "@/lib/auth-fetch";
 import { Badge } from "@/components/ui";
 import { Wallet, UserPlus, X, Trash2, CalendarDays, Plus, Save, Loader2, ChevronDown, Camera, Eye } from "lucide-react";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
+import ThemesVusModal from "./components/ThemesVusModal";
+import { normalizeSearch } from "@/lib/search-normalize";
 
 const modeLabels: Record<string, string> = {
   cb_terminal: "CB", cb_online: "CB en ligne", cheque: "Chèque",
@@ -53,6 +55,8 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
   const [photoUploading, setPhotoUploading] = useState<string | null>(null);
   // Lightbox photo : agrandir au clic + choix prendre une photo / fichier
   const [photoLightbox, setPhotoLightbox] = useState<string | null>(null);
+  // Saisie manuelle des thèmes déjà vus par un cavalier
+  const [themesChild, setThemesChild] = useState<any | null>(null);
 
   const relancerAttestation = async (child: any) => {
     if (!family.parentEmail) { alert("Pas d'email renseigné pour cette famille."); return; }
@@ -423,24 +427,57 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
               </button>
             )}
 
-            {/* Thèmes déjà vus (séances passées où l'enfant était inscrit avec un thème) */}
+            {/* Thèmes déjà vus — déduits du planning + saisis à la main */}
             {(() => {
-              const themesVus = Array.from(new Set(
+              const themesAuto = Array.from(new Set(
                 allCreneaux
                   .filter((c: any) => c.themeStage && (c.enrolled || []).some((e: any) => e.childId === child.id))
                   .sort((a: any, b: any) => (b.date || "").localeCompare(a.date || ""))
                   .map((c: any) => String(c.themeStage).trim())
                   .filter(Boolean)
               ));
-              if (themesVus.length === 0) return null;
+              // Un thème saisi à la main qui existe déjà via le planning n'est pas répété
+              const themesManuels = (child.themesVus || [])
+                .map((t: string) => String(t).trim())
+                .filter(Boolean)
+                .filter((t: string) => !themesAuto.some((a: string) => normalizeSearch(a) === normalizeSearch(t)));
+              const total = themesAuto.length + themesManuels.length;
+
               return (
                 <div className="mb-3">
-                  <div className="font-body text-[10px] text-teal-600 font-semibold uppercase tracking-wider mb-2 flex items-center gap-1">🎯 Thèmes déjà vus ({themesVus.length})</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {themesVus.map((t: string) => (
-                      <span key={t} className="font-body text-[11px] text-teal-700 bg-teal-50 border border-teal-100 rounded-full px-2.5 py-1">{t}</span>
-                    ))}
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="font-body text-[10px] text-teal-600 font-semibold uppercase tracking-wider flex items-center gap-1">
+                      🎯 Thèmes déjà vus ({total})
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setThemesChild(child)}
+                      className="inline-flex items-center gap-1 font-body text-[11px] font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-100 rounded-lg px-2.5 py-1 cursor-pointer transition-colors"
+                      title="Indiquer les thèmes déjà faits par ce cavalier"
+                    >
+                      <Plus size={11} /> Indiquer
+                    </button>
                   </div>
+                  {total === 0 ? (
+                    <p className="font-body text-xs text-slate-400 italic">
+                      Aucun thème connu. Utilisez « Indiquer » pour renseigner ceux faits avant la plateforme.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {themesAuto.map((t: string) => (
+                        <span key={`auto-${t}`} className="font-body text-[11px] text-teal-700 bg-teal-50 border border-teal-100 rounded-full px-2.5 py-1">{t}</span>
+                      ))}
+                      {themesManuels.map((t: string) => (
+                        <span
+                          key={`manuel-${t}`}
+                          title="Saisi manuellement"
+                          className="font-body text-[11px] text-teal-700 bg-white border border-dashed border-teal-200 rounded-full px-2.5 py-1"
+                        >
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -771,6 +808,16 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
             className="w-full font-body text-xs border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 min-h-[80px] resize-y" />
           <p className="font-body text-[10px] text-slate-400 mt-1">Sauvegarde automatique quand vous cliquez en dehors.</p>
         </div>
+      )}
+
+      {themesChild && (
+        <ThemesVusModal
+          family={family}
+          child={themesChild}
+          allCreneaux={allCreneaux}
+          onClose={() => setThemesChild(null)}
+          onDone={fetchFamilies}
+        />
       )}
     </div>
   );

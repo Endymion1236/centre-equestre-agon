@@ -79,6 +79,11 @@ export default function ThemeSuggestion({ creneau, families }: Props) {
       notes.forEach((n: any) => {
         if (n.themeStage) seen.push(n.themeStage);
       });
+      // 1 bis. Thèmes saisis à la main sur la fiche cavalier (stages faits
+      // avant la plateforme) — sinon l'IA reproposerait un thème déjà vécu.
+      (child.themesVus || []).forEach((t: string) => {
+        if (t) seen.push(String(t).trim());
+      });
     }
     // 2. Créneaux passés avec themeStage assigné
     for (const cr of allCreneaux) {
