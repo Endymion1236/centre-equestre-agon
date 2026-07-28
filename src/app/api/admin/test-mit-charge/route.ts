@@ -51,10 +51,14 @@ export async function POST(request: NextRequest) {
       statut: p.status || null,
     };
 
-    // Requête exacte qui serait envoyée à CAWL (endpoint SubsequentPayment)
+    // Requête exacte qui serait envoyée à CAWL.
+    // Le flux ne passe plus par /payments/{id}/subsequent (systematiquement
+    // refuse en production) mais par une creation de paiement serveur a
+    // serveur s'appuyant sur le token Card On File, conformement au modele
+    // fourni par le support CAWL.
     const requete = {
-      endpoint: `POST /v2/{merchantId}/payments/${initialPaymentId || "{idAcompte}"}/subsequent`,
-      body: buildDelayedChargeBody(solde),
+      endpoint: `POST /v2/{merchantId}/payments`,
+      body: buildDelayedChargeBody(solde, cofToken, `SOLDE-${paymentId}-<horodatage>`),
     };
 
     // ── DRY-RUN : aperçu seulement, aucun débit ───────────────────────────

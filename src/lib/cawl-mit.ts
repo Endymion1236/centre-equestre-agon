@@ -55,16 +55,58 @@ export interface MitChargeResult {
 // ⚠️ La propriété du SDK installé est `subsequentcardPaymentMethodSpecificInput`
 // (card en minuscule — vérifié dans onlinepayments-sdk-nodejs), pas la casse
 // "Card" de la doc web. Exporté pour test/log.
-export function buildDelayedChargeBody(amountEuros: number) {
+/**
+ * Indicateur de demandeur pour la transaction non programmee.
+ *
+ * Le modele fourni par le support CAWL indique "cardholderInitiated". Or
+ * notre prelevement est reellement initie par le COMMERCANT (cron a J-7,
+ * porteur absent), ce qui correspondrait plutot a "merchantInitiated".
+ *
+ * On suit leur modele, qu'ils ont valide comme fonctionnel. Si un refus
+ * persiste, c'est la premiere valeur a basculer.
+ */
+const COF_REQUESTOR = "cardholderInitiated";
+
+/**
+ * Corps du prelevement du solde.
+ *
+ * ── Historique ────────────────────────────────────────────────────────
+ * Premiere implementation : POST /payments/{id}/subsequent avec
+ * subsequentType "delayedCharge". L'API repondait 201 mais le paiement
+ * revenait systematiquement REJECTED en production (elle fonctionnait en
+ * preproduction). Apres analyse, le support CAWL a fourni un modele de
+ * requete different, base sur le TOKEN de la carte plutot que sur une
+ * reference a la transaction initiale.
+ *
+ * ── Modele retenu ─────────────────────────────────────────────────────
+ * Creation d'un paiement serveur a serveur (payments.createPayment) avec :
+ *   - le token Card On File issu de l'acompte ;
+ *   - sequenceIndicator "subsequent" (l'acompte portait "first") ;
+ *   - un bloc threeDSecure explicite : porteur absent, donc aucun
+ *     challenge possible. Sans ce bloc, la plateforme peut exiger une
+ *     authentification qui ne pourra jamais aboutir.
+ *   - authorizationMode "SALE" : autorisation + capture immediate. Sans
+ *     lui, les fonds sont bloques mais jamais encaisses.
+ */
+export function buildDelayedChargeBody(amountEuros: number, token?: string, merchantRef?: string) {
   return {
-    subsequentcardPaymentMethodSpecificInput: {
-      subsequentType: "delayedCharge",
+    cardPaymentMethodSpecificInput: {
+      ...(token ? { token } : {}),
+      unscheduledCardOnFileRequestor: COF_REQUESTOR,
+      unscheduledCardOnFileSequenceIndicator: "subsequent",
+      authorizationMode: "SALE",
+      threeDSecure: {
+        challengeIndicator: "no-challenge-requested",
+        skipAuthentication: false,
+        exemptionRequest: "none",
+      },
     },
     order: {
       amountOfMoney: {
         amount: Math.round(amountEuros * 100), // CAWL attend des centimes
         currencyCode: "EUR",
       },
+      ...(merchantRef ? { references: { merchantReference: merchantRef } } : {}),
     },
   };
 }
@@ -73,7 +115,10 @@ export async function chargeWithToken(params: MitChargeParams): Promise<MitCharg
   const mitEnabled = (process.env.CAWL_MIT_ENABLED || "").trim().toLowerCase() === "true";
 
   // Body prêt même en mode stub (utile pour les logs / la mise au point).
-  const body = buildDelayedChargeBody(params.amount);
+  // Reference unique pour le rapprochement (les references CAWL de nos
+  // prelevements etaient jusqu'ici anonymes cote back-office).
+  const merchantRef = `SOLDE-${params.paymentId}-${Date.now().toString(36)}`;
+  const body = buildDelayedChargeBody(params.amount, params.token, merchantRef);
 
   // ── STUB : tant que non activé, aucun appel réseau ─────────────────────────
   if (!mitEnabled) {
@@ -85,9 +130,10 @@ export async function chargeWithToken(params: MitChargeParams): Promise<MitCharg
   if (!CAWL_PSPID) {
     return { enabled: true, success: false, error: "CAWL_PSPID manquant" };
   }
-  if (!params.initialPaymentId) {
-    // delayedCharge référence la transaction initiale (acompte).
-    return { enabled: true, success: false, error: "initialPaymentId (acompte) manquant pour le delayedCharge" };
+  if (!params.token) {
+    // Le modele CAWL s'appuie sur le token Card On File, plus sur une
+    // reference a la transaction initiale.
+    return { enabled: true, success: false, error: "token Card On File manquant" };
   }
 
   // ── Appel réel CAWL (SubsequentPayment) ────────────────────────────────────
@@ -96,23 +142,37 @@ export async function chargeWithToken(params: MitChargeParams): Promise<MitCharg
   // (endpoint /v2/{merchantId}/payments/{paymentId}/subsequent). Vérifié dans
   // le SDK installé. À tester en preprod avant d'activer le flag en production.
   try {
-    const subsequentApi: any = (cawlSdk as any)?.subsequent;
+    const paymentsApi: any = (cawlSdk as any)?.payments;
 
-    if (subsequentApi && typeof subsequentApi.subsequentPayment === "function") {
-      const resp = await subsequentApi.subsequentPayment(CAWL_PSPID, params.initialPaymentId, body);
+    if (paymentsApi && typeof paymentsApi.createPayment === "function") {
+      const resp = await paymentsApi.createPayment(CAWL_PSPID, body);
       const status = resp?.body?.payment?.status || resp?.body?.status || "";
       const ref = resp?.body?.payment?.id || resp?.body?.id || "";
       const ok = ["CAPTURED", "PENDING_CAPTURE", "PAID", "CAPTURE_REQUESTED", "AUTHORIZED"].includes(String(status).toUpperCase());
       if (ok) {
+        console.log(`[cawl-mit] ✅ solde ${params.amount}EUR prélevé — ref=${ref} (${merchantRef})`);
         return { enabled: true, success: true, paymentReference: ref, statusCode: resp?.status };
       }
-      return { enabled: true, success: false, paymentReference: ref, statusCode: resp?.status, error: `Statut CAWL: ${status || "inconnu"}` };
+      // Le motif de refus renvoye par l'emetteur, quand il est fourni, est la
+      // seule information exploitable pour distinguer un probleme de carte
+      // d'un probleme d'habilitation.
+      const motif = resp?.body?.payment?.statusOutput?.errors?.[0]?.message
+        || resp?.body?.payment?.paymentOutput?.cardPaymentMethodSpecificOutput?.authorisationCode
+        || "";
+      console.warn(`[cawl-mit] ❌ solde refusé — statut=${status} ref=${ref} motif=${motif || "non communiqué"}`);
+      return {
+        enabled: true,
+        success: false,
+        paymentReference: ref,
+        statusCode: resp?.status,
+        error: `Statut CAWL: ${status || "inconnu"}${motif ? ` — ${motif}` : ""}`,
+      };
     }
 
     return {
       enabled: true,
       success: false,
-      error: "Client SDK 'subsequent' introuvable — vérifier la version du SDK",
+      error: "Client SDK 'payments' introuvable — vérifier la version du SDK",
     };
   } catch (e: any) {
     console.error("[cawl-mit] Erreur appel SubsequentPayment:", e);
