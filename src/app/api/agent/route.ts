@@ -149,6 +149,41 @@ const tools: Anthropic.Tool[] = [
 
 // ── Exécution des outils ──────────────────────────────────────────────────────
 
+/**
+ * Description DÉTERMINISTE de l'action, construite à partir des vraies
+ * valeurs de `input`.
+ *
+ * Avant, le récapitulatif lu à voix haute était généré par un SECOND appel
+ * au modèle, qui paraphrasait. L'utilisateur validait donc une reformulation,
+ * jamais les paramètres réels : si l'agent s'était trompé d'activité ou de
+ * montant, la phrase restait plausible. Ici les chiffres et les libellés sont
+ * repris tels quels — ce qui est annoncé EST ce qui sera exécuté.
+ */
+function describeAction(tool: string, input: any): string {
+  const i = input || {};
+  switch (tool) {
+    case "modifier_tarif":
+      return `Modifier le tarif de « ${i.activityTitle} » à ${i.nouveauPrixTTC} € TTC. Tu confirmes ?`;
+    case "creer_creneaux": {
+      const n = Array.isArray(i.creneaux) ? i.creneaux.length : 0;
+      const d = Array.isArray(i.creneaux) && i.creneaux[0] ? ` à partir du ${i.creneaux[0].date}` : "";
+      return `Créer ${n} créneau${n > 1 ? "x" : ""}${d}. Tu confirmes ?`;
+    }
+    case "inscrire_enfant":
+      return `Inscrire ${i.childName || "un cavalier"} sur « ${i.activityTitle || i.creneauId} »${i.date ? ` du ${i.date}` : ""}. Tu confirmes ?`;
+    case "desinscrire_enfant":
+      return `Désinscrire ${i.childName || "un cavalier"} de « ${i.activityTitle || i.creneauId} »${i.date ? ` du ${i.date}` : ""}. Tu confirmes ?`;
+    case "cloturer_reprise":
+      return `Clôturer la reprise « ${i.activityTitle || i.creneauId} »${i.date ? ` du ${i.date}` : ""}. Tu confirmes ?`;
+    case "envoyer_email":
+      return `Envoyer un email à ${i.to || i.destinataire || "un destinataire"}, objet « ${i.subject || i.objet || "sans objet"} ». Tu confirmes ?`;
+    case "creer_devis":
+      return `Créer un devis pour ${i.clientNom || i.client || "un client"}${i.montantTTC ? ` d'un montant de ${i.montantTTC} € TTC` : ""}. Tu confirmes ?`;
+    default:
+      return `Exécuter l'action « ${tool} ». Tu confirmes ?`;
+  }
+}
+
 async function executeTool(name: string, input: any): Promise<string> {
   // Vérification rapide que Firebase Admin est initialisé
   if (!adminDb) {
@@ -395,6 +430,23 @@ export async function POST(req: NextRequest) {
     // Si l'utilisateur doit confirmer une action, on l'exécute
     if (confirmed && pendingAction) {
       const result = await executeTool(pendingAction.tool, pendingAction.input);
+      // Trace de TOUTE action executee par l'agent. Sans ce journal, une
+      // modification de tarif ou une desinscription decidee par le modele
+      // etait indiscernable d'une action humaine : impossible de retrouver
+      // ce que l'agent avait change, ni quand, ni sur ordre de qui.
+      try {
+        await adminDb.collection("agent_actions").add({
+          tool: pendingAction.tool,
+          input: pendingAction.input ?? null,
+          resume: describeAction(pendingAction.tool, pendingAction.input),
+          resultat: String(result).slice(0, 500),
+          parUid: auth.uid,
+          parEmail: auth.email ?? null,
+          createdAt: new Date(),
+        });
+      } catch (e) {
+        console.error("[Agent] journalisation impossible :", e);
+      }
       return NextResponse.json({ type: "result", message: result });
     }
 
@@ -461,18 +513,15 @@ RÈGLES IMPORTANTES :
       const toolUses = response.content.filter(b => b.type === "tool_use") as Anthropic.ToolUseBlock[];
 
       // Si c'est une action qui nécessite confirmation, on retourne la demande de confirmation
-      const actionTools = ["creer_creneaux","inscrire_enfant","desinscrire_enfant","modifier_tarif","cloturer_reprise","envoyer_email"];
+      // creer_devis ecrit en base (collection "devis") : il manquait ici et
+      // s'executait donc sans aucune confirmation.
+      const actionTools = ["creer_creneaux","inscrire_enfant","desinscrire_enfant","modifier_tarif","cloturer_reprise","envoyer_email","creer_devis"];
       const actionTool = toolUses.find(t => actionTools.includes(t.name));
 
       if (actionTool && !confirmed) {
-        // Générer un résumé de confirmation
-        const confirmRes = await anthropic.messages.create({
-          model: "claude-opus-4-5",
-          max_tokens: 200,
-          system: "Résume en 1 phrase courte et naturelle (en français) l'action qui va être effectuée, puis termine par 'Tu confirmes ?'. Pas de markdown.",
-          messages: [{ role: "user", content: JSON.stringify({ tool: actionTool.name, input: actionTool.input }) }],
-        });
-        const confirmText = confirmRes.content[0].type === "text" ? confirmRes.content[0].text : "Tu confirmes cette action ?";
+        // Recapitulatif construit sur les VRAIES valeurs (plus de paraphrase
+        // par un second appel modele : ce qui est annonce est ce qui s'execute).
+        const confirmText = describeAction(actionTool.name, actionTool.input);
         return NextResponse.json({
           type: "confirm",
           message: confirmText,

@@ -609,6 +609,16 @@ service cloud.firestore {
       allow read, write: if isStaff();
     }
 
+    // ── Journal des actions de l'agent IA ─────────────────────────────────
+    // Ecrit UNIQUEMENT cote serveur (Admin SDK, qui ignore ces regles).
+    // Lecture admin pour pouvoir retracer ce que l'agent a modifie ;
+    // ecriture et suppression fermees, y compris a l'admin : un journal
+    // qu'on peut reecrire ne prouve rien.
+    match /agent_actions/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // ── Bloc par défaut — DENY ALL ────────────────────────────────────────
     // Toute collection non listée ci-dessus est bloquée
     match /{document=**} {

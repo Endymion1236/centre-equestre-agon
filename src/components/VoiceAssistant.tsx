@@ -88,7 +88,9 @@ export default function VoiceAssistant({
 
       // Si une action est en attente et que la réponse est une confirmation vocale
       if (pendingAction && mode === "admin") {
-        const confirmWords = ["oui", "confirme", "je confirme", "yes", "ok", "c'est bon", "vas-y", "go", "affirmatif"];
+        // Mots de remplissage exclus (« ok », « go », « c'est bon ») : prononces
+        // dans une conversation a cote, ils declenchaient une ecriture en base.
+        const confirmWords = ["oui", "confirme", "je confirme", "valide", "affirmatif"];
         const cancelWords = ["non", "annule", "annuler", "no", "stop", "laisse tomber"];
         const lower = text.toLowerCase();
         if (confirmWords.some(w => lower.includes(w))) {
@@ -121,7 +123,8 @@ export default function VoiceAssistant({
     // Même détection pour le texte
     if (pendingAction && mode === "admin") {
       const lower = q.toLowerCase();
-      const confirmWords = ["oui", "confirme", "je confirme", "yes", "ok", "c'est bon", "vas-y", "go"];
+      // Idem : uniquement des reponses explicites a « Tu confirmes ? ».
+      const confirmWords = ["oui", "confirme", "je confirme", "valide", "affirmatif"];
       const cancelWords = ["non", "annule", "annuler", "no", "stop"];
       if (confirmWords.some(w => lower.includes(w))) {
         await askClaude("Oui, confirme.", true);
