@@ -218,7 +218,22 @@ service cloud.firestore {
 
     // ── Settings (paramètres globaux) ─────────────────────────────────────
     match /settings/{docId} {
-      allow read: if true;  // Vitrine, tarifs = publics
+      // LISTE BLANCHE des documents réellement publics (ceux que le
+      // navigateur lit : vitrine, tarifs, dégressivité, libellés...).
+      //
+      // Avant : `allow read: if true` sur TOUTE la collection. Or
+      // `settings/gmail_oauth` y stocke le refreshToken et l'accessToken
+      // OAuth de la boîte du club : ils étaient lisibles par n'importe qui,
+      // sans même être authentifié. Ce document n'est lu que côté serveur
+      // (Admin SDK, qui ignore ces règles) : le fermer ne casse rien.
+      //
+      // Liste blanche et non liste noire : un futur document contenant un
+      // secret est protégé par défaut au lieu d'être exposé par oubli.
+      allow read: if docId in [
+        'vitrine', 'centre', 'actus', 'miniferme', 'promos', 'competitions',
+        'degressivite', 'fidelite', 'inscription', 'progression_labels',
+        'notifications', 'whatsapp', 'email'
+      ] || isAdmin();
       allow write: if isAdmin();
     }
 
