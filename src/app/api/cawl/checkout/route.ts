@@ -85,6 +85,10 @@ export async function POST(req: NextRequest) {
           enforceMode: ENFORCE,
           blocked: willBlock,
           blockReason: willBlock ? decision.reason : null,
+          // Trace du verdict INDEPENDAMMENT du mode : permet de verifier en
+          // amont qu'activer CAWL_PRICING_ENFORCE ne bloquera rien de legitime.
+          wouldBlock: decision.block,
+          wouldBlockReason: decision.block ? decision.reason : null,
         });
         if (willBlock) {
           return NextResponse.json(

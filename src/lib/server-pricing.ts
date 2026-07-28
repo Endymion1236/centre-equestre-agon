@@ -355,6 +355,9 @@ export async function logPricingAudit(
     enforceMode?: boolean;
     blocked?: boolean;
     blockReason?: string | null;
+    /** Le blocage aurait-il eu lieu si l'enforcement etait actif ? */
+    wouldBlock?: boolean;
+    wouldBlockReason?: string | null;
   }
 ): Promise<void> {
   try {
@@ -366,8 +369,19 @@ export async function logPricingAudit(
       enforceMode: context.enforceMode ?? false,
       blocked: context.blocked ?? false,
       blockReason: context.blockReason ?? null,
+      // Enregistre MEME en mode observation : sans ça, impossible de savoir
+      // si activer l'enforcement casserait des paiements legitimes. C'etait
+      // tout l'interet du mode shadow, et l'information etait perdue.
+      wouldBlock: context.wouldBlock ?? false,
+      wouldBlockReason: context.wouldBlockReason ?? null,
       createdAt: new Date(),
     });
+    if (!context.blocked && context.wouldBlock) {
+      console.warn(
+        `[server-pricing] 🔎 SHADOW — aurait BLOQUÉ payment=${result.paymentId} ` +
+          `charge=${result.claimedChargeTTC}€ raison=${context.wouldBlockReason}`
+      );
+    }
     if (context.blocked) {
       console.warn(
         `[server-pricing] 🛑 PAIEMENT BLOQUÉ payment=${result.paymentId} ` +
