@@ -139,17 +139,20 @@ export default function ManagementPage() {
     { id: "ia" as TabId, label: "Agent IA", icon: Sparkles },
   ];
   // Un moniteur ne voit que Planning + Résumé (visualisation).
+  // La vue Journée est réservée à l'admin : elle agrège l'activité de TOUTE
+  // l'équipe sur une page (cours + tâches + qui ne fait rien), ce qui dépasse
+  // le périmètre de confidentialité d'une monitrice.
   // Les onglets de configuration (Horaires, Modèles, Bibliothèque, Équipe, IA)
   // restent réservés aux admins pour éviter toute modification accidentelle.
   const TABS = isAdmin
     ? ALL_TABS
-    : ALL_TABS.filter(t => t.id === "journee" || t.id === "planning" || t.id === "resume");
+    : ALL_TABS.filter(t => t.id === "planning" || t.id === "resume");
 
   // Si un moniteur atterrit sur un onglet interdit (ex: via URL), on le
   // ramène sur 'planning'.
   useEffect(() => {
     if (!isAdmin && isMoniteur && !TABS.some(t => t.id === tab)) {
-      setTab("journee");
+      setTab("planning");
     }
   }, [isAdmin, isMoniteur, tab]);
 
@@ -199,7 +202,7 @@ export default function ManagementPage() {
         </div>
       ) : (
         <>
-          {tab==="journee" && (
+          {tab==="journee" && isAdmin && (
             <TabJournee
               semaine={semaine} setSemaine={s=>{setSemaine(s);}}
               taches={visibleTaches} salaries={visibleSalaries}
