@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/api-auth";
 import { adminDb } from "@/lib/firebase-admin";
 import { CAWL_PSPID } from "@/lib/cawl";
-import { buildDelayedChargeBody, chargeWithToken, logMitAttempt } from "@/lib/cawl-mit";
+import { buildDelayedChargeBody, chargeWithToken, logMitAttempt, lireSchemeReference } from "@/lib/cawl-mit";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -58,10 +58,12 @@ export async function POST(request: NextRequest) {
     // fourni par le support CAWL.
     const requete = {
       endpoint: `POST /v2/{merchantId}/payments`,
+      // Meme reference de schema que l'appel reel : sinon l'apercu montrerait
+      // une requete differente de celle reellement envoyee.
       body: buildDelayedChargeBody(solde, cofToken, `SOLDE-${paymentId}-<horodatage>`, {
         familyId: p.familyId,
         email: p.familyEmail,
-      }),
+      }, await lireSchemeReference(initialPaymentId)),
     };
 
     // ── DRY-RUN : aperçu seulement, aucun débit ───────────────────────────

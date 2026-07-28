@@ -93,12 +93,20 @@ export function buildDelayedChargeBody(
   token?: string,
   merchantRef?: string,
   customer?: { familyId?: string; email?: string },
+  scheme?: { schemeReferenceData?: string; initialSchemeTransactionId?: string },
 ) {
   return {
     cardPaymentMethodSpecificInput: {
       ...(token ? { token } : {}),
       unscheduledCardOnFileRequestor: COF_REQUESTOR,
       unscheduledCardOnFileSequenceIndicator: "subsequent",
+      // Rattachement a l'autorisation initiale. Sans cette reference, la
+      // transaction arrive « orpheline » chez l'emetteur : il voit un
+      // paiement carte en reserve sans aucun accord prealable identifiable,
+      // et le refuse. Constate en production : le paiement initial portait
+      // bien un Scheme Reference Data, le prelevement n'en avait aucun.
+      ...(scheme?.schemeReferenceData ? { schemeReferenceData: scheme.schemeReferenceData } : {}),
+      ...(scheme?.initialSchemeTransactionId ? { initialSchemeTransactionId: scheme.initialSchemeTransactionId } : {}),
       authorizationMode: "SALE",
       threeDSecure: {
         challengeIndicator: "no-challenge-requested",
@@ -127,6 +135,39 @@ export function buildDelayedChargeBody(
   };
 }
 
+/**
+ * Lit la reference de schema portee par la transaction initiale (l'acompte).
+ *
+ * C'est elle qui permet a l'emetteur de rattacher le prelevement a l'accord
+ * carte en reserve donne lors du paiement initial. Sans elle, la transaction
+ * arrive orpheline et se fait refuser — constate en production.
+ *
+ * Lue a la demande plutot que stockee : fonctionne aussi sur les commandes
+ * creees avant cette correction. Un echec n'est pas bloquant.
+ */
+export async function lireSchemeReference(
+  initialPaymentId?: string,
+): Promise<{ schemeReferenceData?: string; initialSchemeTransactionId?: string }> {
+  if (!initialPaymentId || !CAWL_PSPID) return {};
+  try {
+    const api: any = (cawlSdk as any)?.payments;
+    const init = await api?.getPayment?.(CAWL_PSPID, initialPaymentId);
+    const out = init?.body?.paymentOutput?.cardPaymentMethodSpecificOutput || {};
+    const scheme = {
+      ...(out.schemeReferenceData ? { schemeReferenceData: out.schemeReferenceData } : {}),
+      ...(out.initialSchemeTransactionId ? { initialSchemeTransactionId: out.initialSchemeTransactionId } : {}),
+    };
+    console.log(
+      `[cawl-mit] référence de schéma sur ${initialPaymentId}: ${JSON.stringify(scheme)}` +
+        (Object.keys(scheme).length === 0 ? " — AUCUNE, le prélèvement risque le refus" : "")
+    );
+    return scheme;
+  } catch (e: any) {
+    console.warn(`[cawl-mit] lecture de la transaction initiale impossible: ${e?.message || e}`);
+    return {};
+  }
+}
+
 export async function chargeWithToken(params: MitChargeParams): Promise<MitChargeResult> {
   const mitEnabled = (process.env.CAWL_MIT_ENABLED || "").trim().toLowerCase() === "true";
 
@@ -134,16 +175,26 @@ export async function chargeWithToken(params: MitChargeParams): Promise<MitCharg
   // Reference unique pour le rapprochement (les references CAWL de nos
   // prelevements etaient jusqu'ici anonymes cote back-office).
   const merchantRef = `SOLDE-${params.paymentId}-${Date.now().toString(36)}`;
+  // ── STUB : aucun appel reseau tant que le flag n'est pas actif ────────
+  if (!mitEnabled) {
+    const bodyStub = buildDelayedChargeBody(params.amount, params.token, merchantRef, {
+      familyId: params.familyId,
+      email: params.familyEmail,
+    });
+    console.log(`[cawl-mit] STUB (CAWL_MIT_ENABLED!=true) — solde ${params.amount}EUR pour ${params.paymentId} NON prélevé (fallback email). Body prêt:`, JSON.stringify(bodyStub));
+    return { enabled: false, success: false };
+  }
+
+  // ── Reference de schema de la transaction initiale ────────────────────
+  // Lue a la demande sur CAWL plutot que stockee : fonctionne aussi sur les
+  // commandes creees avant cette correction. Un echec de lecture n'est pas
+  // bloquant, on tente le prelevement sans (comportement anterieur).
+  const scheme = await lireSchemeReference(params.initialPaymentId);
+
   const body = buildDelayedChargeBody(params.amount, params.token, merchantRef, {
     familyId: params.familyId,
     email: params.familyEmail,
-  });
-
-  // ── STUB : tant que non activé, aucun appel réseau ─────────────────────────
-  if (!mitEnabled) {
-    console.log(`[cawl-mit] STUB (CAWL_MIT_ENABLED!=true) — solde ${params.amount}EUR pour ${params.paymentId} NON prélevé (fallback email). Body prêt:`, JSON.stringify(body));
-    return { enabled: false, success: false };
-  }
+  }, scheme);
 
   // ── Garde-fous avant tout appel réel ───────────────────────────────────────
   if (!CAWL_PSPID) {
