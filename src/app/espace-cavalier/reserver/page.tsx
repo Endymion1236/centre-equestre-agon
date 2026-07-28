@@ -90,6 +90,11 @@ export default function ReserverPage() {
   const familyId = user?.uid || "";
 
   const [monthOffset, setMonthOffset] = useState(0);
+  // Jeu LARGE (6 mois) destine a la timeline, qui laisse naviguer semaine par
+  // semaine sans limite. La liste mensuelle, elle, garde son jeu restreint au
+  // mois affiche. Ces creneaux sont deja telecharges par la requete « stages »
+  // ci-dessous : on cessait simplement de les conserver.
+  const [creneauxLarge, setCreneauxLarge] = useState<Creneau[]>([]);
   const [viewMode, setViewMode] = useState<"timeline" | "liste">(initialDate ? "liste" : "timeline");
 
   // Mois courant affiché
@@ -181,8 +186,9 @@ export default function ReserverPage() {
         // Merge des 2 requetes : on garde les creneaux du mois courant (cours)
         // + tous les stages des 6 mois. Dedoublonnage par id.
         const baseDocs = crSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Creneau[];
-        const stageDocs = stagesSnap.docs
-          .map(d => ({ id: d.id, ...d.data() }) as Creneau)
+        const wideDocs = stagesSnap.docs.map(d => ({ id: d.id, ...d.data() }) as Creneau);
+        setCreneauxLarge(wideDocs);
+        const stageDocs = wideDocs
           .filter(c => c.activityType === "stage" || c.activityType === "stage_journee");
         const seen = new Set(baseDocs.map(c => c.id));
         const merged = [...baseDocs];
@@ -924,7 +930,7 @@ export default function ReserverPage() {
           </div>
         )}
         <TimelineReservation
-          creneaux={creneaux.filter(c => c.activityType !== "stage" && c.activityType !== "stage_journee")}
+          creneaux={(creneauxLarge.length > 0 ? creneauxLarge : creneaux).filter(c => c.activityType !== "stage" && c.activityType !== "stage_journee")}
           children={(family?.children || []).map((c: any) => ({ id: c.id, firstName: c.firstName, galopLevel: c.galopLevel }))}
           familyId={familyId}
           onBook={(creneau) => { setBookingCreneau(creneau as any); }}
