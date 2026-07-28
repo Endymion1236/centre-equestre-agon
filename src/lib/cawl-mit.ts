@@ -166,8 +166,30 @@ export async function lireSchemeReference(
       return undefined;
     };
 
-    const srd = trouver(init?.body, "schemeReferenceData");
-    const ist = trouver(init?.body, "initialSchemeTransactionId");
+    const srdBrut = trouver(init?.body, "schemeReferenceData");
+    const istBrut = trouver(init?.body, "initialSchemeTransactionId");
+
+    // ── Normalisation ──────────────────────────────────────────────────
+    // CAWL restitue ce champ a largeur FIXE, avec son remplissage :
+    //   "2MCBE4APN40728  bzc4jrZUQtmKmghzApwtPQ  "
+    // Renvoye tel quel, il est rejete : « [1099] INVALID_VALUE ». Une
+    // reference de schema ne contient pas d'espaces.
+    //
+    // Le premier segment est la reference du reseau (ici Mastercard :
+    // identifiant + date MMJJ). C'est lui qui rattache le prelevement a
+    // l'autorisation initiale ; le second est une donnee interne.
+    const normaliser = (v?: string) => {
+      if (!v) return undefined;
+      const premier = v.trim().split(/\s+/)[0];
+      return premier || undefined;
+    };
+
+    const srd = normaliser(srdBrut);
+    const ist = normaliser(istBrut);
+    if (srdBrut && srd !== srdBrut) {
+      console.log(`[cawl-mit] référence normalisée: ${JSON.stringify(srdBrut)} → ${JSON.stringify(srd)}`);
+    }
+
     const scheme = {
       ...(srd ? { schemeReferenceData: srd } : {}),
       ...(ist ? { initialSchemeTransactionId: ist } : {}),
