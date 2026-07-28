@@ -64,6 +64,7 @@ import {
 import { X, Plus, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera, FileImage, Mail, Sparkles, Send, FileText, Printer, StickyNote, ChevronDown, ChevronUp, Clock } from "lucide-react";
 import type { Activity, Family } from "@/types";
 import { Creneau, EnrolledChild, payModes, typeColors, fmtDate, itemMatchesCreneau, isForfaitChildPaye, sameStage } from "./types";
+import { MOTIFS_OFFERT } from "@/lib/offerts";
 import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/lib/auth-context";
 
@@ -3246,13 +3247,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                           <label className="font-body text-[10px] font-semibold text-green-800 block mb-1">Motif</label>
                           <select value={freeReason} onChange={e => setFreeReason(e.target.value)}
                             className="w-full px-2 py-1.5 rounded-lg border border-green-200 font-body text-xs bg-white focus:border-green-500 focus:outline-none cursor-pointer">
-                            <option value="Établissement">🏫 Établissement (facturé séparément)</option>
-                            <option value="Rattrapage">Rattrapage (météo, absence moniteur...)</option>
-                            <option value="Essai">Séance d'essai</option>
-                            <option value="Monte poney">Monte d'un jeune poney</option>
-                            <option value="Geste commercial">Geste commercial</option>
-                            <option value="Bénévole">Contrepartie bénévolat</option>
-                            <option value="Autre">Autre</option>
+                            {MOTIFS_OFFERT.map(m => (
+                              <option key={m.value} value={m.value}>{m.label}</option>
+                            ))}
                           </select>
                         </div>
                         <button onClick={() => setFreeEnroll(false)} className="font-body text-[10px] text-slate-500 mt-2 bg-transparent border-none cursor-pointer underline">Annuler</button>

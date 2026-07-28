@@ -5,15 +5,11 @@ import { db } from "@/lib/firebase";
 import { enrollChildInCreneau, createReservation } from "@/lib/planning-services";
 import { generateOrderId } from "@/lib/utils";
 import { X, Search, Loader2 } from "lucide-react";
+import { MOTIFS_OFFERT_MONTOIR } from "@/lib/offerts";
 
-const OFFERT_REASONS = [
-  { value: "Rattrapage", label: "Rattrapage (météo, absence moniteur...)" },
-  { value: "Essai", label: "Séance d'essai" },
-  { value: "Monte poney", label: "Monte d'un jeune poney" },
-  { value: "Geste commercial", label: "Geste commercial" },
-  { value: "Bénévole", label: "Contrepartie bénévolat" },
-  { value: "Autre", label: "Autre" },
-];
+// Liste centralisee dans lib/offerts.ts : chaque motif y porte un flag
+// `valorise` qui determine s'il compte comme un manque a gagner reel.
+const OFFERT_REASONS = MOTIFS_OFFERT_MONTOIR;
 
 type Child = { childId: string; childName: string; familyId: string; familyName: string };
 
