@@ -159,7 +159,7 @@ export async function GET(req: NextRequest) {
                   <p style="color:#888;font-size:12px;text-align:center;">Aucune action n'est requise de votre part. Une facture est disponible dans votre espace.</p>
                 </div>
               </div>`;
-              await fetch("https://api.resend.com/emails", {
+              const r = await fetch("https://api.resend.com/emails", {
                 method: "POST",
                 headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -176,6 +176,7 @@ export async function GET(req: NextRequest) {
             continue; // solde traité, pas d'email de rappel
           } else {
             // Le prélèvement a échoué : email d'échec + on laisse le lien manuel ci-dessous.
+            let emailEnvoye = false;
             if (resendKey && isRecipientAllowed(familyEmail)) {
               const subject = `⚠️ Prélèvement du solde stage impossible — ${solde.toFixed(2)}€`;
               const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
@@ -191,7 +192,7 @@ export async function GET(req: NextRequest) {
                   </div>
                 </div>
               </div>`;
-              await fetch("https://api.resend.com/emails", {
+              const r = await fetch("https://api.resend.com/emails", {
                 method: "POST",
                 headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -199,14 +200,27 @@ export async function GET(req: NextRequest) {
                   ...(process.env.RESEND_BCC_EMAIL ? { bcc: process.env.RESEND_BCC_EMAIL } : {}),
                   subject, html,
                 }),
-              }).then(r => logEmail({ to: familyEmail, subject, context: "cron_stage_solde_echec", template: "stageSoldeEchec", status: r.ok ? "sent" : "failed", sentBy: "system", paymentId: payDoc.id })).catch(() => {});
+              });
+              emailEnvoye = r.ok;
+              await logEmail({ to: familyEmail, subject, context: "cron_stage_solde_echec", template: "stageSoldeEchec", status: r.ok ? "sent" : "failed", sentBy: "system", paymentId: payDoc.id }).catch(() => {});
             }
-            await adminDb.collection("payments").doc(payDoc.id).update({ soldeReminderSentAt: FieldValue.serverTimestamp() });
+
+            // `soldeReminderSentAt` fait SAUTER definitivement ce paiement au
+            // prochain passage (garde anti-doublon, ligne ~79). Le poser alors
+            // que l'email n'est PAS parti condamnait le solde au silence : ni
+            // prelevement, ni relance, jamais. On ne le pose donc que si
+            // l'envoi a reellement abouti.
+            await adminDb.collection("payments").doc(payDoc.id).update(
+              emailEnvoye
+                ? { soldeReminderSentAt: FieldValue.serverTimestamp() }
+                : { soldeReminderBlockedAt: FieldValue.serverTimestamp() }
+            );
             results.errors++;
+            if (emailEnvoye) results.emailsSent++;
             results.details.push(
-              resendKey && isRecipientAllowed(familyEmail)
+              emailEnvoye
                 ? `💳❌ ${familyName}: prélèvement échoué (${mit.error || "?"}) → email d'échec envoyé`
-                : `💳❌ ${familyName}: prélèvement échoué (${mit.error || "?"}) → email BLOQUÉ (mode restreint)`
+                : `💳❌ ${familyName}: prélèvement échoué (${mit.error || "?"}) → email NON envoyé, sera retenté`
             );
             console.warn(`  💳❌ Prélèvement échoué → ${familyEmail}: ${mit.error}`);
             continue;
