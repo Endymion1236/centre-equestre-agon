@@ -152,18 +152,40 @@ export async function lireSchemeReference(
   try {
     const api: any = (cawlSdk as any)?.payments;
     const init = await api?.getPayment?.(CAWL_PSPID, initialPaymentId);
-    const out = init?.body?.paymentOutput?.cardPaymentMethodSpecificOutput || {};
-    const scheme = {
-      ...(out.schemeReferenceData ? { schemeReferenceData: out.schemeReferenceData } : {}),
-      ...(out.initialSchemeTransactionId ? { initialSchemeTransactionId: out.initialSchemeTransactionId } : {}),
+
+    // Recherche INDEPENDANTE DU CHEMIN : la profondeur exacte de ces champs
+    // varie selon les reponses CAWL (paymentOutput, paymentResult, ou racine).
+    // Plutot que de deviner, on parcourt la reponse.
+    const trouver = (obj: any, cle: string, prof = 0): string | undefined => {
+      if (!obj || typeof obj !== "object" || prof > 6) return undefined;
+      if (typeof obj[cle] === "string" && obj[cle]) return obj[cle];
+      for (const v of Object.values(obj)) {
+        const r = trouver(v, cle, prof + 1);
+        if (r) return r;
+      }
+      return undefined;
     };
-    console.log(
-      `[cawl-mit] référence de schéma sur ${initialPaymentId}: ${JSON.stringify(scheme)}` +
-        (Object.keys(scheme).length === 0 ? " — AUCUNE, le prélèvement risque le refus" : "")
-    );
+
+    const srd = trouver(init?.body, "schemeReferenceData");
+    const ist = trouver(init?.body, "initialSchemeTransactionId");
+    const scheme = {
+      ...(srd ? { schemeReferenceData: srd } : {}),
+      ...(ist ? { initialSchemeTransactionId: ist } : {}),
+    };
+
+    if (Object.keys(scheme).length === 0) {
+      // Sans reference, l'emetteur refusera : on veut voir la reponse brute
+      // pour savoir si l'API ne l'expose pas, ou si l'appel a mal abouti.
+      console.warn(
+        `[cawl-mit] AUCUNE référence de schéma sur ${initialPaymentId} — le prélèvement sera probablement refusé.\n` +
+          `Réponse CAWL brute: ${JSON.stringify(init?.body || {}).slice(0, 1500)}`
+      );
+    } else {
+      console.log(`[cawl-mit] référence de schéma sur ${initialPaymentId}: ${JSON.stringify(scheme)}`);
+    }
     return scheme;
   } catch (e: any) {
-    console.warn(`[cawl-mit] lecture de la transaction initiale impossible: ${e?.message || e}`);
+    console.warn(`[cawl-mit] lecture de la transaction initiale impossible (${initialPaymentId}): ${e?.message || e}`);
     return {};
   }
 }

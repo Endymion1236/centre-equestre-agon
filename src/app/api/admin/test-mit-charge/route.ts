@@ -39,6 +39,11 @@ export async function POST(request: NextRequest) {
     // afficherait une éligibilité trompeuse et le débit réel échouerait.
     const initialPaymentId = p.cofInitialPaymentId || "";
 
+    // Reference de schema de la transaction initiale : sans elle, l'emetteur
+    // refuse le prelevement. Exposee dans la reponse pour diagnostiquer sans
+    // avoir a fouiller les logs Vercel.
+    const scheme = await lireSchemeReference(initialPaymentId);
+
     const eligibilite = {
       soldeRestant: solde,
       aUnToken: !!cofToken,
@@ -46,6 +51,8 @@ export async function POST(request: NextRequest) {
       mitActive: (process.env.CAWL_MIT_ENABLED || "").trim().toLowerCase() === "true",
       mitEnvRaw: JSON.stringify(process.env.CAWL_MIT_ENABLED ?? null),
       cawlEnvRaw: JSON.stringify(process.env.CAWL_ENV ?? null),
+      schemeReferenceTrouvee: Object.keys(scheme).length > 0,
+      schemeReference: scheme,
       pspidConfigure: !!CAWL_PSPID,
       stageDate: p.stageDate || null,
       statut: p.status || null,
@@ -63,7 +70,7 @@ export async function POST(request: NextRequest) {
       body: buildDelayedChargeBody(solde, cofToken, `SOLDE-${paymentId}-<horodatage>`, {
         familyId: p.familyId,
         email: p.familyEmail,
-      }, await lireSchemeReference(initialPaymentId)),
+      }, scheme),
     };
 
     // ── DRY-RUN : aperçu seulement, aucun débit ───────────────────────────
