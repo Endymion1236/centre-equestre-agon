@@ -2850,7 +2850,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       const noms = children.map(c => c.firstName).join(", ");
                       panelToast(`✅ Famille ${newFam.parentName} créée (${noms}) — sélectionnez le mode d'inscription`, "success");
                       setNewFam({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "", civilite: "", tags: [] });
-                      setNewChildren([{ firstName: "", lastName: "", birthDate: "", galopLevel: "—" }]);
+                      // null = « jamais touche » : le nom du foyer sera herite.
+                      // Une chaine vide signifierait « efface volontairement »
+                      // et couperait l'heritage pour toutes les familles
+                      // creees ensuite sans rechargement de la page.
+                      setNewChildren([{ firstName: "", lastName: null, birthDate: "", galopLevel: "—" }]);
                     } catch (e: any) {
                       panelToast("Erreur : " + e.message, "error");
                     }
