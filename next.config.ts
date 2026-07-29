@@ -35,6 +35,16 @@ const nextConfig: NextConfig = {
 
   // ─── Build — enlever les headers 'powered-by' inutiles ─────────────
   poweredByHeader: false,
+
+  // ─── Empreinte du build ────────────────────────────────────────────
+  // Injectee a la compilation pour savoir, depuis l'interface, QUELLE
+  // version est reellement en ligne. Sans ce reperage, impossible de
+  // distinguer « la fonctionnalite est absente » de « le deploiement
+  // n'est pas passe » — on peut chercher un bug qui n'existe pas.
+  env: {
+    NEXT_PUBLIC_BUILD_SHA: (process.env.VERCEL_GIT_COMMIT_SHA || "local").slice(0, 7),
+    NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
+  },
 };
 
 // ─── Sentry wrapper ────────────────────────────────────────────────────

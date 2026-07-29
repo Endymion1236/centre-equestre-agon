@@ -309,6 +309,17 @@ function AdminSidebar({ nbImpayes }: { nbImpayes: number }) {
           <LogOut size={15} />
           <span className="font-body text-[12px]">Déconnexion</span>
         </button>
+        {/* Version en ligne — permet de verifier d'un coup d'oeil si un
+            deploiement est bien passe avant de chercher un bug ailleurs. */}
+        <div
+          className="px-3 pt-1.5 font-body text-[10px] text-white/30 truncate"
+          title={`Version déployée : ${process.env.NEXT_PUBLIC_BUILD_SHA} — build du ${process.env.NEXT_PUBLIC_BUILD_TIME}`}
+        >
+          v. {process.env.NEXT_PUBLIC_BUILD_SHA}
+          {process.env.NEXT_PUBLIC_BUILD_TIME
+            ? ` · ${new Date(process.env.NEXT_PUBLIC_BUILD_TIME).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+            : ""}
+        </div>
       </div>
     </aside>
   );
