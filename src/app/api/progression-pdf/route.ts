@@ -186,20 +186,47 @@ export async function GET(req: NextRequest) {
             <div style="font-size:9px;color:#9ca3af;text-align:right;">${nbAcquis}/${nbTotal} compétences</div>
           </div>
           ${(() => {
-            // Tampon d'obtention : n'apparait que sur un galop reellement
-            // delivre, jamais sur un simple 100 % de competences.
+            // ── Trois etats, TROIS TRAITEMENTS VISUELS DISTINCTS ──────────
+            // Le tampon incline a double filet est un sceau : il dit « acquis ».
+            // Si « pret » lui ressemblait, une famille lirait un diplome la ou
+            // il n'y en a pas. Les etats intermediaires sont donc des mentions,
+            // pas des tampons.
             const obtenu = galopsValides[niveau.id];
-            if (!obtenu?.date) return "";
-            const d = new Date(obtenu.date + "T12:00:00");
-            const dateFr = isNaN(d.getTime())
-              ? obtenu.date
-              : d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
-            return `
+
+            // 1. OBTENU — tampon, seul acte reellement delivre
+            if (obtenu?.date) {
+              const d = new Date(obtenu.date + "T12:00:00");
+              const dateFr = isNaN(d.getTime())
+                ? obtenu.date
+                : d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+              return `
           <div style="flex-shrink:0;margin-left:10px;transform:rotate(-7deg);border:2.5px double #15803d;border-radius:8px;padding:5px 12px;color:#15803d;opacity:0.88;font-family:Georgia,'Times New Roman',serif;text-align:center;line-height:1.2;">
             <div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;font-weight:700;">Validé</div>
             <div style="font-size:12px;font-weight:800;">${niveau.labelCourt}</div>
             <div style="font-size:8px;letter-spacing:0.5px;opacity:0.85;">${dateFr}</div>
           </div>`;
+            }
+
+            // 2. PRET — badge horizontal, sobre. Une information, pas un sceau.
+            if (pctFFE === 100) {
+              return `
+          <div style="flex-shrink:0;margin-left:10px;border:1px solid #16a34a;border-radius:20px;padding:5px 12px;color:#15803d;background:#f0fdf4;text-align:center;line-height:1.25;">
+            <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">Prêt</div>
+            <div style="font-size:8px;opacity:0.8;">pour le passage</div>
+          </div>`;
+            }
+
+            // 3. BIENTOT PRET — simple mention chiffree, encore plus discrete.
+            const restantes = nbTotal - nbAcquis;
+            if (pctFFE >= 80 && restantes > 0) {
+              return `
+          <div style="flex-shrink:0;margin-left:10px;border:1px dashed #d97706;border-radius:20px;padding:5px 12px;color:#b45309;background:#fffbeb;text-align:center;line-height:1.25;">
+            <div style="font-size:9px;font-weight:700;">Plus que ${restantes}</div>
+            <div style="font-size:8px;opacity:0.8;">compétence${restantes > 1 ? "s" : ""}</div>
+          </div>`;
+            }
+
+            return "";
           })()}
         </div>
         <!-- Barre principale : reflète le % validé FFE (ce qui compte pour le passage) -->
