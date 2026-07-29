@@ -304,28 +304,50 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
         </div>
       )}
 
-      {/* ── « Prêt pour le passage » ──────────────────────────────────────
-          Calcule : toutes les competences atteignent le seuil. Volontairement
-          discret — c'est une information pedagogique, pas un diplome. */}
-      {!galopObtenu && pctFFE === 100 && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-green-200 bg-green-50 px-3 py-2.5">
-          <div>
-            <div className="font-body text-xs font-semibold text-green-800">
-              Prêt pour le passage du {niveau.label}
+      {/* ── Etat d'avancement vers le passage ────────────────────────────
+          Pas de seuil arbitraire : on affiche CE QU'IL RESTE A FAIRE.
+          Un pourcentage ne dit rien a un moniteur ; « il reste : trot
+          enleve, sauter un petit obstacle » lui dit quoi travailler.
+          A 100 % on annonce « pret », sinon on liste les manquantes. */}
+      {!galopObtenu && pctFFE >= 80 && (() => {
+        const restantes = niveau.competences.filter(c => !isCompetenceValidated(acquis[c.id], seuilFFE));
+        const pret = restantes.length === 0;
+        return (
+          <div className={`flex items-start justify-between gap-3 rounded-xl border px-3 py-2.5 ${pret ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>
+            <div className="min-w-0">
+              <div className={`font-body text-xs font-semibold ${pret ? "text-green-800" : "text-amber-800"}`}>
+                {pret
+                  ? `Prêt pour le passage du ${niveau.label}`
+                  : `Bientôt prêt — il reste ${restantes.length} compétence${restantes.length > 1 ? "s" : ""}`}
+              </div>
+              {pret ? (
+                <div className="font-body text-[11px] text-green-700 mt-0.5">
+                  Toutes les compétences atteignent le seuil. Le galop reste à valider par un examinateur.
+                </div>
+              ) : (
+                <ul className="mt-1 pl-4 list-disc">
+                  {restantes.slice(0, 6).map(c => (
+                    <li key={c.id} className="font-body text-[11px] text-amber-800 leading-relaxed">{c.label}</li>
+                  ))}
+                  {restantes.length > 6 && (
+                    <li className="font-body text-[11px] text-amber-700 opacity-70">
+                      et {restantes.length - 6} autre{restantes.length - 6 > 1 ? "s" : ""}…
+                    </li>
+                  )}
+                </ul>
+              )}
             </div>
-            <div className="font-body text-[11px] text-green-700 mt-0.5">
-              Toutes les compétences atteignent le seuil. Le galop reste à valider par un examinateur.
-            </div>
+            <button
+              onClick={validerGalop}
+              disabled={validating}
+              title={pret ? undefined : "Le galop peut être enregistré même si tout n'est pas coché"}
+              className={`flex-shrink-0 rounded-lg px-3 py-2 font-body text-xs font-semibold border-none cursor-pointer disabled:opacity-50 ${pret ? "bg-green-600 text-white hover:bg-green-700" : "bg-white text-amber-800 border border-amber-300 hover:bg-amber-100"}`}
+            >
+              {validating ? "…" : "Galop obtenu"}
+            </button>
           </div>
-          <button
-            onClick={validerGalop}
-            disabled={validating}
-            className="flex-shrink-0 rounded-lg bg-green-600 px-3 py-2 font-body text-xs font-semibold text-white border-none cursor-pointer hover:bg-green-700 disabled:opacity-50"
-          >
-            {validating ? "…" : "Galop obtenu"}
-          </button>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Sélecteur de niveau */}
       <div>
@@ -333,7 +355,9 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
           <label className="font-body text-xs font-semibold text-slate-600">Niveau en cours</label>
           {/* Enregistrement possible meme sans 100 % : un cavalier peut arriver
               avec un galop obtenu ailleurs, ou l'avoir passe hors du suivi. */}
-          {!galopObtenu && pctFFE < 100 && (
+          {/* Sous 80 %, aucun bandeau n'est affiche : ce lien reste le seul
+              moyen d'enregistrer un galop obtenu ailleurs. */}
+          {!galopObtenu && pctFFE < 80 && (
             <button
               onClick={validerGalop}
               disabled={validating}
