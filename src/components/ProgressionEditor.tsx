@@ -30,6 +30,16 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
   // Acquis : structure rétro-compatible, peut contenir boolean (legacy + binaire)
   // ou { level: 1-5 } (nouveau format pour pratique_*). Cf. progression-helpers.ts.
   const [acquis, setAcquis] = useState<Acquis>({});
+  /**
+   * Galops REELLEMENT obtenus : { [niveauId]: { date, par } }.
+   *
+   * A ne pas confondre avec « pret pour le passage », qui est calcule depuis
+   * les competences. Un galop FFE est DELIVRE par un examinateur, a une date :
+   * l'afficher comme acquis parce que toutes les cases sont cochees induirait
+   * les familles en erreur. C'est donc un acte explicite, horodate.
+   */
+  const [galopsValides, setGalopsValides] = useState<Record<string, { date: string; par?: string }>>({});
+  const [validating, setValidating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -65,6 +75,7 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
         if (snap.exists()) {
           const data = snap.data();
           setAcquis(data.acquis || {});
+          setGalopsValides(data.galopsValides || {});
           setSelectedNiveau(data.niveauEnCours || GALOPS_PROGRAMME[0].id);
         } else {
           // Initialiser avec le niveau actuel du cavalier.
@@ -199,13 +210,139 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
   // Progression globale : sur l'échelle 1-5 chaque compétence apporte un score continu.
   const pctProgression = computeProgressionPercent(niveau.competences, acquis);
 
+  const galopObtenu = galopsValides[selectedNiveau];
+
+  /** Enregistre l'obtention du galop : acte explicite, avec sa date. */
+  const validerGalop = async () => {
+    if (validating) return;
+    const aujourdhui = new Date().toISOString().split("T")[0];
+    const saisie = window.prompt(
+      `Enregistrer l'obtention du ${niveau.label} pour ${childName}.\n\n` +
+        `Date d'obtention (AAAA-MM-JJ) :`,
+      aujourdhui
+    );
+    if (!saisie) return;
+    const date = saisie.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      alert("Date invalide. Format attendu : AAAA-MM-JJ.");
+      return;
+    }
+    setValidating(true);
+    try {
+      const maj = { ...galopsValides, [selectedNiveau]: { date, par: "Centre équestre" } };
+      await setDoc(doc(db, "progressions", docId), { galopsValides: maj, updatedAt: serverTimestamp() }, { merge: true });
+      setGalopsValides(maj);
+      onSaved?.();
+    } catch (e) {
+      console.error("Validation galop:", e);
+      alert("Enregistrement impossible. Réessayez.");
+    }
+    setValidating(false);
+  };
+
+  /** Retire l'obtention (erreur de saisie). */
+  const annulerGalop = async () => {
+    if (validating || !galopObtenu) return;
+    if (!confirm(`Retirer l'obtention du ${niveau.label} pour ${childName} ?`)) return;
+    setValidating(true);
+    try {
+      const maj = { ...galopsValides };
+      delete maj[selectedNiveau];
+      await setDoc(doc(db, "progressions", docId), { galopsValides: maj, updatedAt: serverTimestamp() }, { merge: true });
+      setGalopsValides(maj);
+      onSaved?.();
+    } catch (e) { console.error(e); }
+    setValidating(false);
+  };
+
   if (loading) return <div className="text-center py-4 text-sm text-slate-400">Chargement...</div>;
 
   return (
     <div className="flex flex-col gap-4">
+      {/* ── Tampon « galop obtenu » ─────────────────────────────────────
+          N'apparait QUE sur un acte explicite et horodate, jamais sur un
+          calcul : un galop FFE est delivre par un examinateur. */}
+      {galopObtenu && (
+        <div className="relative flex items-center justify-center py-3">
+          <div
+            className="select-none"
+            style={{
+              transform: "rotate(-7deg)",
+              border: "3px double #15803d",
+              borderRadius: 10,
+              padding: "10px 22px",
+              color: "#15803d",
+              opacity: 0.88,
+              // Encre legerement irreguliere : le degrade casse l'aplat
+              // uniforme et evite l'effet « bouton », trop propre pour un tampon.
+              background:
+                "radial-gradient(circle at 30% 30%, rgba(21,128,61,0.07), rgba(21,128,61,0.02) 60%, transparent 75%)",
+              boxShadow: "inset 0 0 0 1px rgba(21,128,61,0.25)",
+              fontFamily: "Georgia, 'Times New Roman', serif",
+              textAlign: "center",
+              lineHeight: 1.25,
+            }}
+          >
+            <div style={{ fontSize: 11, letterSpacing: 2.5, textTransform: "uppercase", fontWeight: 700 }}>
+              Validé
+            </div>
+            <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: 0.5, margin: "1px 0" }}>
+              {niveau.label}
+            </div>
+            <div style={{ fontSize: 10.5, letterSpacing: 1, opacity: 0.85 }}>
+              {new Date(galopObtenu.date + "T12:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+            </div>
+          </div>
+          <button
+            onClick={annulerGalop}
+            disabled={validating}
+            title="Retirer l'obtention (erreur de saisie)"
+            className="absolute right-0 top-0 bg-transparent border-none cursor-pointer text-[11px] text-slate-300 hover:text-red-500 disabled:opacity-40"
+          >
+            retirer
+          </button>
+        </div>
+      )}
+
+      {/* ── « Prêt pour le passage » ──────────────────────────────────────
+          Calcule : toutes les competences atteignent le seuil. Volontairement
+          discret — c'est une information pedagogique, pas un diplome. */}
+      {!galopObtenu && pctFFE === 100 && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-green-200 bg-green-50 px-3 py-2.5">
+          <div>
+            <div className="font-body text-xs font-semibold text-green-800">
+              Prêt pour le passage du {niveau.label}
+            </div>
+            <div className="font-body text-[11px] text-green-700 mt-0.5">
+              Toutes les compétences atteignent le seuil. Le galop reste à valider par un examinateur.
+            </div>
+          </div>
+          <button
+            onClick={validerGalop}
+            disabled={validating}
+            className="flex-shrink-0 rounded-lg bg-green-600 px-3 py-2 font-body text-xs font-semibold text-white border-none cursor-pointer hover:bg-green-700 disabled:opacity-50"
+          >
+            {validating ? "…" : "Galop obtenu"}
+          </button>
+        </div>
+      )}
+
       {/* Sélecteur de niveau */}
       <div>
-        <label className="font-body text-xs font-semibold text-slate-600 block mb-2">Niveau en cours</label>
+        <div className="flex items-baseline justify-between mb-2">
+          <label className="font-body text-xs font-semibold text-slate-600">Niveau en cours</label>
+          {/* Enregistrement possible meme sans 100 % : un cavalier peut arriver
+              avec un galop obtenu ailleurs, ou l'avoir passe hors du suivi. */}
+          {!galopObtenu && pctFFE < 100 && (
+            <button
+              onClick={validerGalop}
+              disabled={validating}
+              className="bg-transparent border-none cursor-pointer font-body text-[11px] text-slate-400 hover:text-green-700 underline disabled:opacity-40"
+            >
+              déjà obtenu ?
+            </button>
+          )}
+        </div>
         <select
           value={selectedNiveau}
           onChange={e => { setSelectedNiveau(e.target.value); setSaved(false); }}
