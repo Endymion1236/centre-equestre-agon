@@ -302,6 +302,50 @@ export default function MontoirPage() {
     return charge;
   }, [creneaux]);
 
+  /**
+   * Ecrit une note pedagogique sur un enfant, en tenant compte des notes
+   * deja ajoutees pendant la MEME boucle.
+   *
+   * Le defaut corrige : chaque iteration repartait de `families`, un instantane
+   * React fige, puis reecrivait TOUT le tableau `children`. Deux consequences,
+   * qui expliquaient un historique de poneys « aleatoire » :
+   *   - deux enfants d'une meme famille dans la reprise : la seconde ecriture
+   *     ecrasait la note du premier ;
+   *   - plusieurs reprises cloturees a la suite sans rechargement : les
+   *     dernieres ecrasaient les notes des precedentes.
+   *
+   * `cacheFamilles` accumule l'etat a jour famille par famille et sert de
+   * source aux iterations suivantes.
+   */
+  const ecrireNotePeda = async (
+    cacheFamilles: Map<string, any[]>,
+    childId: string,
+    note: any,
+    contexte: string,
+  ): Promise<boolean> => {
+    const famDoc = families.find((f: any) => (f.children || []).some((ch: any) => ch.id === childId)) as any;
+    if (!famDoc) return false;
+
+    const enfantsCourants = cacheFamilles.get(famDoc.id) || famDoc.children || [];
+    const matchChild = enfantsCourants.find((ch: any) => ch.id === childId);
+    if (!matchChild) return false;
+
+    const peda = matchChild.peda || { objectifs: [], notes: [] };
+    // Anti-doublon sur le creneau, s'il est renseigne
+    if (note.creneauId && (peda.notes || []).some((n: any) => n.creneauId === note.creneauId)) return false;
+
+    const updatedChildren = enfantsCourants.map((ch: any) =>
+      ch.id === childId
+        ? { ...ch, peda: { ...peda, notes: [note, ...(peda.notes || [])], updatedAt: new Date().toISOString() } }
+        : ch
+    );
+    if (!validateChildrenUpdate(famDoc.id, famDoc.parentName || "", enfantsCourants, updatedChildren, contexte)) return false;
+
+    await updateDoc(doc(db, "families", famDoc.id), { children: updatedChildren, updatedAt: serverTimestamp() });
+    cacheFamilles.set(famDoc.id, updatedChildren);
+    return true;
+  };
+
   // ── Historique des 4 derniers poneys par cavalier (depuis les notes péda) ───
   const childHorseHistory = useMemo(() => {
     const hist: Record<string, string[]> = {};
@@ -446,17 +490,11 @@ export default function MontoirPage() {
 
     // 3. Créer une trace pédagogique pour chaque enfant présent
     let notesCreated = 0;
+    // Cache partage par la boucle : sans lui, deux enfants d'une meme famille
+    // se seraient ecrase mutuellement leur note.
+    const cacheFamilles = new Map<string, any[]>();
     for (const child of presents) {
       try {
-        const famDoc = allFams.find((f: any) => (f.children || []).some((ch: any) => ch.id === child.childId)) as any;
-        if (!famDoc) continue;
-        const matchChild = famDoc.children.find((ch: any) => ch.id === child.childId);
-        if (!matchChild) continue;
-        const peda = matchChild.peda || { objectifs: [], notes: [] };
-
-        // Anti-doublon : vérifier si une note pour ce créneau existe déjà
-        if (peda.notes.some((n: any) => n.creneauId === cid)) continue;
-
         const seanceNote = {
           date: new Date().toISOString(),
           text: `Séance : ${c.activityTitle} (${c.startTime}-${c.endTime})${child.horseName ? ` — Poney : ${displayFromHorseName(child.horseName)}` : ""}`,
@@ -466,12 +504,9 @@ export default function MontoirPage() {
           activityTitle: c.activityTitle,
           horseName: child.horseName || "",
         };
-        const updatedChildren = famDoc.children.map((ch: any) =>
-          ch.id === child.childId ? { ...ch, peda: { ...peda, notes: [seanceNote, ...peda.notes], updatedAt: new Date().toISOString() } } : ch
-        );
-        if (!validateChildrenUpdate(famDoc.id, famDoc.parentName || "", famDoc.children || [], updatedChildren, "montoir-cloture")) continue;
-        await updateDoc(doc(db, "families", famDoc.id), { children: updatedChildren, updatedAt: serverTimestamp() });
-        notesCreated++;
+        if (await ecrireNotePeda(cacheFamilles, child.childId, seanceNote, "montoir-cloture")) {
+          notesCreated++;
+        }
       } catch (e) { console.error("Erreur trace péda:", e); }
     }
 
@@ -872,22 +907,23 @@ export default function MontoirPage() {
 
   const saveQuickNotes = async () => {
     if (!quickNoteChild) return;
-    const allFams = families;
     const authorName = "Moniteur"; // On pourrait passer le user ici
+    // Meme cache que la cloture : plusieurs notes rapides sur des freres et
+    // soeurs s'ecrasaient mutuellement.
+    const cacheFamilles = new Map<string, any[]>();
 
     for (const child of quickNoteChild.children) {
       const noteText = quickNotes[child.childId];
       if (!noteText?.trim()) continue;
-      const famDoc = allFams.find((f: any) => (f.children || []).some((ch: any) => ch.id === child.childId)) as any;
-      if (!famDoc) continue;
-      const matchChild = famDoc.children.find((ch: any) => ch.id === child.childId);
-      if (!matchChild) continue;
-      const peda = matchChild.peda || { objectifs: [], notes: [] };
-      const note = { date: new Date().toISOString(), text: noteText.trim(), author: authorName, type: "manual" };
-      const updatedChildren = famDoc.children.map((ch: any) =>
-        ch.id === child.childId ? { ...ch, peda: { ...peda, notes: [note, ...peda.notes], updatedAt: new Date().toISOString() } } : ch
-      );
-      await updateDoc(doc(db, "families", famDoc.id), { children: updatedChildren, updatedAt: serverTimestamp() });
+      const note = {
+        date: new Date().toISOString(),
+        text: noteText.trim(),
+        author: authorName,
+        type: "manual",
+        // Le poney du jour, pour que la note alimente aussi l'historique.
+        horseName: child.horseName || "",
+      };
+      await ecrireNotePeda(cacheFamilles, child.childId, note, "montoir-note-rapide");
     }
     setQuickNoteChild(null);
     setQuickNotes({});
