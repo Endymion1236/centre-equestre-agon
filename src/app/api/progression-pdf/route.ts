@@ -38,6 +38,9 @@ export async function GET(req: NextRequest) {
 
   const data = snap.data()!;
   const acquis: Acquis = data.acquis || {};
+  // Galops REELLEMENT obtenus (acte explicite horodate), a ne pas confondre
+  // avec le pourcentage « Valide FFE » qui, lui, mesure les competences.
+  const galopsValides: Record<string, { date?: string }> = data.galopsValides || {};
   const niveauEnCoursId: string = data.niveauEnCours || "";
   const niveauIdx = GALOPS_PROGRAMME.findIndex(n => n.id === niveauEnCoursId);
   const niveauEnCours = niveauIdx >= 0 ? GALOPS_PROGRAMME[niveauIdx] : null;
@@ -182,6 +185,22 @@ export async function GET(req: NextRequest) {
             </div>
             <div style="font-size:9px;color:#9ca3af;text-align:right;">${nbAcquis}/${nbTotal} compétences</div>
           </div>
+          ${(() => {
+            // Tampon d'obtention : n'apparait que sur un galop reellement
+            // delivre, jamais sur un simple 100 % de competences.
+            const obtenu = galopsValides[niveau.id];
+            if (!obtenu?.date) return "";
+            const d = new Date(obtenu.date + "T12:00:00");
+            const dateFr = isNaN(d.getTime())
+              ? obtenu.date
+              : d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+            return `
+          <div style="flex-shrink:0;margin-left:10px;transform:rotate(-7deg);border:2.5px double #15803d;border-radius:8px;padding:5px 12px;color:#15803d;opacity:0.88;font-family:Georgia,'Times New Roman',serif;text-align:center;line-height:1.2;">
+            <div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;font-weight:700;">Validé</div>
+            <div style="font-size:12px;font-weight:800;">${niveau.labelCourt}</div>
+            <div style="font-size:8px;letter-spacing:0.5px;opacity:0.85;">${dateFr}</div>
+          </div>`;
+          })()}
         </div>
         <!-- Barre principale : reflète le % validé FFE (ce qui compte pour le passage) -->
         <div style="height:6px;background:#f3f4f6;border-radius:3px;overflow:hidden;margin-bottom:3px;">
