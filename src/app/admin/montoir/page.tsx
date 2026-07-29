@@ -4,6 +4,7 @@ import { FeuilleAppelImpression } from "./FeuilleAppelImpression";
 import { collection, getDocs, getDoc, updateDoc, addDoc, doc, query, where, serverTimestamp, runTransaction, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { validateChildrenUpdate } from "@/lib/utils";
+import { construireHistoriquePoneys, libelleJourCourt } from "./horse-history";
 import { compareCreneaux } from "@/lib/creneau-sort";
 
 const calcAge = (birthDate: any): string => {
@@ -41,6 +42,9 @@ export default function MontoirPage() {
   const sigRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const repriseSig = (c: any) => `${(c.activityTitle || "").trim()}__${c.startTime || ""}`;
   const [creneaux, setCreneaux] = useState<Creneau[]>([]);
+  // Creneaux des dernieres semaines : servent UNIQUEMENT a reconstruire
+  // l'historique des poneys (les notes peda ont pu etre perdues).
+  const [creneauxHistorique, setCreneauxHistorique] = useState<any[]>([]);
   // Filtre d'impression par moniteur : chacun imprime l'appel de SES reprises.
   // "" = tous (comportement actuel inchangé).
   const [printMonitor, setPrintMonitor] = useState<string>("");
@@ -79,8 +83,14 @@ export default function MontoirPage() {
 
   const fetchData = async () => {
     try {
-      const [cSnap, eSnap, iSnap, cartSnap, famSnap, centreSnap, forfSnap] = await Promise.all([
+      const [cSnap, cHistSnap, eSnap, iSnap, cartSnap, famSnap, centreSnap, forfSnap] = await Promise.all([
         getDocs(query(collection(db,"creneaux"),where("date","==",dateStr))),
+        // 6 semaines glissantes, hors jour courant, pour l'historique poneys
+        getDocs(query(
+          collection(db,"creneaux"),
+          where("date",">=", new Date(new Date(dateStr + "T12:00:00").getTime() - 42*86400000).toISOString().slice(0,10)),
+          where("date","<", dateStr),
+        )),
         getDocs(collection(db,"equides")),
         getDocs(collection(db,"indisponibilites")),
         getDocs(collection(db,"cartes")),
@@ -98,6 +108,7 @@ export default function MontoirPage() {
       }
       const creneauxData = (cSnap.docs.map(d=>({id:d.id,...d.data()})) as Creneau[]).sort(compareCreneaux);
       setCreneaux(creneauxData);
+      setCreneauxHistorique(cHistSnap.docs.map(d=>({id:d.id,...d.data()})));
       setEquides(eSnap.docs.map(d=>({id:d.id,...d.data()})));
       setIndisponibilites(iSnap.docs.map(d=>({id:d.id,...d.data()})));
       setCartes(cartSnap.docs.map(d=>({id:d.id,...d.data()})));
@@ -303,66 +314,88 @@ export default function MontoirPage() {
   }, [creneaux]);
 
   /**
-   * Ecrit une note pedagogique sur un enfant, en tenant compte des notes
-   * deja ajoutees pendant la MEME boucle.
+   * Ecrit une note pedagogique sur un enfant.
    *
-   * Le defaut corrige : chaque iteration repartait de `families`, un instantane
-   * React fige, puis reecrivait TOUT le tableau `children`. Deux consequences,
-   * qui expliquaient un historique de poneys « aleatoire » :
-   *   - deux enfants d'une meme famille dans la reprise : la seconde ecriture
-   *     ecrasait la note du premier ;
-   *   - plusieurs reprises cloturees a la suite sans rechargement : les
-   *     dernieres ecrasaient les notes des precedentes.
+   * ⚠️ Cette fonction reecrit le tableau `children` ENTIER de la famille.
+   * Tant qu'elle partait de `families` (un instantane React fige au dernier
+   * fetchData), toute note ecrite entre-temps etait effacee : deux reprises
+   * cloturees coup sur coup, une monitrice qui saisit depuis son espace, un
+   * second appareil ouvert sur le montoir... et l'historique des poneys
+   * revenait a trous, apparemment au hasard.
    *
-   * `cacheFamilles` accumule l'etat a jour famille par famille et sert de
-   * source aux iterations suivantes.
+   * On passe donc par une TRANSACTION : Firestore relit le document juste
+   * avant d'ecrire et rejoue l'operation si quelqu'un l'a modifie entre les
+   * deux. Le cache manuel devient inutile — la transaction voit forcement
+   * l'ecriture precedente de la meme boucle.
    */
   const ecrireNotePeda = async (
-    cacheFamilles: Map<string, any[]>,
     childId: string,
     note: any,
     contexte: string,
   ): Promise<boolean> => {
-    const famDoc = families.find((f: any) => (f.children || []).some((ch: any) => ch.id === childId)) as any;
-    if (!famDoc) return false;
+    // On ne se sert du state que pour retrouver QUELLE famille ouvrir ;
+    // le contenu, lui, sera relu dans la transaction.
+    const famRef = families.find((f: any) => (f.children || []).some((ch: any) => ch.id === childId)) as any;
+    if (!famRef) return false;
 
-    const enfantsCourants = cacheFamilles.get(famDoc.id) || famDoc.children || [];
-    const matchChild = enfantsCourants.find((ch: any) => ch.id === childId);
-    if (!matchChild) return false;
+    try {
+      return await runTransaction(db, async (tx) => {
+        const snap = await tx.get(doc(db, "families", famRef.id));
+        if (!snap.exists()) return false;
 
-    const peda = matchChild.peda || { objectifs: [], notes: [] };
-    // Anti-doublon sur le creneau, s'il est renseigne
-    if (note.creneauId && (peda.notes || []).some((n: any) => n.creneauId === note.creneauId)) return false;
+        const data = snap.data() as any;
+        const enfantsFrais = data.children || [];
+        const matchChild = enfantsFrais.find((ch: any) => ch.id === childId);
+        if (!matchChild) return false;
 
-    const updatedChildren = enfantsCourants.map((ch: any) =>
-      ch.id === childId
-        ? { ...ch, peda: { ...peda, notes: [note, ...(peda.notes || [])], updatedAt: new Date().toISOString() } }
-        : ch
-    );
-    if (!validateChildrenUpdate(famDoc.id, famDoc.parentName || "", enfantsCourants, updatedChildren, contexte)) return false;
+        const peda = matchChild.peda || { objectifs: [], notes: [] };
+        const notes = peda.notes || [];
 
-    await updateDoc(doc(db, "families", famDoc.id), { children: updatedChildren, updatedAt: serverTimestamp() });
-    cacheFamilles.set(famDoc.id, updatedChildren);
-    return true;
+        // Une note existe deja pour ce creneau ?
+        const dejaIndex = note.creneauId
+          ? notes.findIndex((n: any) => n.creneauId === note.creneauId)
+          : -1;
+
+        let nouvellesNotes: any[];
+        if (dejaIndex >= 0) {
+          const existante = notes[dejaIndex];
+          // Cas frequent : la reprise a ete cloturee AVANT que le poney soit
+          // affecte (ou rouverte puis recloturee). L'ancien anti-doublon
+          // refusait tout net, et le poney restait introuvable a jamais.
+          // On complete plutot que d'ignorer.
+          if (!existante.horseName && note.horseName) {
+            nouvellesNotes = [...notes];
+            nouvellesNotes[dejaIndex] = { ...existante, horseName: note.horseName, text: note.text };
+          } else {
+            return false; // rien de nouveau a apporter
+          }
+        } else {
+          nouvellesNotes = [note, ...notes];
+        }
+
+        const updatedChildren = enfantsFrais.map((ch: any) =>
+          ch.id === childId
+            ? { ...ch, peda: { ...peda, notes: nouvellesNotes, updatedAt: new Date().toISOString() } }
+            : ch
+        );
+        if (!validateChildrenUpdate(famRef.id, data.parentName || "", enfantsFrais, updatedChildren, contexte)) return false;
+
+        tx.update(doc(db, "families", famRef.id), { children: updatedChildren, updatedAt: serverTimestamp() });
+        return true;
+      });
+    } catch (e) {
+      console.error(`ecrireNotePeda (${contexte}) :`, e);
+      return false;
+    }
   };
 
-  // ── Historique des 4 derniers poneys par cavalier (depuis les notes péda) ───
-  const childHorseHistory = useMemo(() => {
-    const hist: Record<string, string[]> = {};
-    families.forEach((f: any) => {
-      (f.children || []).forEach((ch: any) => {
-        const notes = (ch.peda?.notes || [])
-          .filter((n: any) => n.horseName)
-          .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
-          .slice(0, 4)
-          .map((n: any) => n.horseName as string);
-        // Dédupliquer en gardant l'ordre
-        const seen = new Set<string>();
-        hist[ch.id] = notes.filter((h: string) => { if (seen.has(h)) return false; seen.add(h); return true; });
-      });
-    });
-    return hist;
-  }, [families]);
+  // ── Historique des derniers poneys montes ────────────────────────────────
+  // Deux sources croisees : les notes peda ET les affectations inscrites dans
+  // les creneaux passes. Voir horse-history.ts pour le detail.
+  const childHorseHistory = useMemo(
+    () => construireHistoriquePoneys({ families, creneauxHistorique, max: 4 }),
+    [families, creneauxHistorique],
+  );
 
   const assignHorse = (c: Creneau, childId: string, h: string) => {
     if (!h) { updateEnrolled(c.id, (c.enrolled||[]).map(e => e.childId===childId ? {...e, horseName: ""} : e)); return; }
@@ -490,9 +523,6 @@ export default function MontoirPage() {
 
     // 3. Créer une trace pédagogique pour chaque enfant présent
     let notesCreated = 0;
-    // Cache partage par la boucle : sans lui, deux enfants d'une meme famille
-    // se seraient ecrase mutuellement leur note.
-    const cacheFamilles = new Map<string, any[]>();
     for (const child of presents) {
       try {
         const seanceNote = {
@@ -504,7 +534,7 @@ export default function MontoirPage() {
           activityTitle: c.activityTitle,
           horseName: child.horseName || "",
         };
-        if (await ecrireNotePeda(cacheFamilles, child.childId, seanceNote, "montoir-cloture")) {
+        if (await ecrireNotePeda(child.childId, seanceNote, "montoir-cloture")) {
           notesCreated++;
         }
       } catch (e) { console.error("Erreur trace péda:", e); }
@@ -910,7 +940,7 @@ export default function MontoirPage() {
     const authorName = "Moniteur"; // On pourrait passer le user ici
     // Meme cache que la cloture : plusieurs notes rapides sur des freres et
     // soeurs s'ecrasaient mutuellement.
-    const cacheFamilles = new Map<string, any[]>();
+
 
     for (const child of quickNoteChild.children) {
       const noteText = quickNotes[child.childId];
@@ -923,7 +953,7 @@ export default function MontoirPage() {
         // Le poney du jour, pour que la note alimente aussi l'historique.
         horseName: child.horseName || "",
       };
-      await ecrireNotePeda(cacheFamilles, child.childId, note, "montoir-note-rapide");
+      await ecrireNotePeda(child.childId, note, "montoir-note-rapide");
     }
     setQuickNoteChild(null);
     setQuickNotes({});
@@ -1224,10 +1254,13 @@ export default function MontoirPage() {
                           ⚠️ {poneyChuteCount[e.horseName]} chutes cette saison
                         </div>
                       )}
-                      {/* Historique 4 derniers poneys du cavalier */}
+                      {/* Historique des derniers poneys montés (avec le jour) */}
                       {(childHorseHistory[e.childId] || []).length > 0 && (
-                        <div className="font-body text-[9px] text-slate-400 truncate" title={`Historique : ${childHorseHistory[e.childId].join(" → ")}`}>
-                          ↺ {childHorseHistory[e.childId].join(" · ")}
+                        <div
+                          className="font-body text-[9px] text-slate-400 truncate"
+                          title={`Historique : ${childHorseHistory[e.childId].map((m) => `${displayFromHorseName(m.horseName)} (${new Date(m.date).toLocaleDateString("fr-FR")})`).join(" → ")}`}
+                        >
+                          ↺ {childHorseHistory[e.childId].map((m) => `${displayFromHorseName(m.horseName)} ${libelleJourCourt(m.date)}`).join(" · ")}
                         </div>
                       )}
                     </div>
