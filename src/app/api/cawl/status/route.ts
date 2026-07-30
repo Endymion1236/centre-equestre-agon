@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CGV_STAGES_LONG } from "@/lib/cgv-clauses";
+import { deciderPaiement } from "@/lib/cawl-status";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { loadTemplate } from "@/lib/email-template-loader";
@@ -147,8 +148,11 @@ export async function GET(req: NextRequest) {
 
     if (httpStatus !== 200) {
       console.error(`CAWL API erreur ${httpStatus}:`, body);
-      // Rediriger quand même vers succès — le paiement a peut-être abouti
-      return NextResponse.redirect(new URL(`/espace-cavalier/reservations?success=true`, req.nextUrl.origin));
+      // On ne peut PAS savoir si le paiement a abouti : ne pas annoncer un
+      // succes. Le webhook fera foi ; la famille voit un statut en cours.
+      return NextResponse.redirect(
+        new URL(`/espace-cavalier/reservations?pending=true`, req.nextUrl.origin),
+      );
     }
 
     const hcStatus = body?.status;
@@ -159,15 +163,25 @@ export async function GET(req: NextRequest) {
 
     console.log(`CAWL hcStatus=${hcStatus}, paymentStatus=${paymentStatus}, montant=${totalEuros}€`);
 
-    const isSuccess =
-      paymentStatus === "CAPTURED" ||
-      paymentStatus === "PAID" ||
-      paymentStatus === "PENDING_CAPTURE" ||
-      hcStatus === "PAYMENT_CREATED";
+    // ⚠️ SEUL le statut du paiement decide. `hcStatus === "PAYMENT_CREATED"`
+    // figurait ici comme critere de succes : il decrit la SESSION (« une
+    // tentative a ete creee »), pas le resultat. Un refus bancaire cree lui
+    // aussi un paiement — d'ou des cartes refusees validees en factures
+    // reglees, avec email de confirmation et place reservee. Voir
+    // lib/cawl-status.ts.
+    const decision = deciderPaiement(paymentStatus);
 
-    if (!isSuccess) {
-      console.log(`CAWL paiement non abouti: hcStatus=${hcStatus}, paymentStatus=${paymentStatus}`);
-      return NextResponse.redirect(new URL(`/espace-cavalier/reserver?cancelled=true`, req.nextUrl.origin));
+    if (decision !== "succes") {
+      console.warn(
+        `CAWL paiement NON abouti (${decision}) : hcStatus=${hcStatus}, paymentStatus=${paymentStatus}, montant=${totalEuros}€`,
+      );
+      // « en_attente » : statut indetermine, le webhook tranchera. On ne
+      // valide rien ici — une inscription en attente vaut mieux qu'une
+      // place donnee sans encaissement.
+      const motif = decision === "echec" ? "refused" : "pending";
+      return NextResponse.redirect(
+        new URL(`/espace-cavalier/reserver?cancelled=true&motif=${motif}`, req.nextUrl.origin),
+      );
     }
 
     // ── Trouver le payment Firestore ──────────────────────────────────────

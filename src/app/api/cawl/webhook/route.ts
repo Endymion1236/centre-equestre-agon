@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { paiementAbouti } from "@/lib/cawl-status";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { loadTemplate } from "@/lib/email-template-loader";
@@ -87,7 +88,9 @@ export async function POST(req: NextRequest) {
     const hostedCheckoutId = payment.hostedCheckoutSpecificOutput?.hostedCheckoutId || "";
 
     // ── Paiement confirmé ─────────────────────────────────────────────────
-    if (status === "CAPTURED" || status === "PAID" || status === "PENDING_CAPTURE") {
+    // Meme regle que la route de retour (lib/cawl-status) : une seule
+    // definition du succes, pour que les deux chemins ne puissent pas diverger.
+    if (paiementAbouti(status)) {
 
       // ── Bon cadeau (achat en ligne : pas de payment associé) ─────────────
       // Traité en priorité et de façon idempotente. Si c'en est un, on s'arrête.
