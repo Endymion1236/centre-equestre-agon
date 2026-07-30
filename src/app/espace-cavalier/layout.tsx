@@ -30,12 +30,14 @@ type NavItem = {
   href: string;
   icon: any;
   label: string;
+  /** Libelle de la barre mobile, ou la place est comptee (6 entrees). */
+  shortLabel?: string;
 };
 
 const PRIMARY_NAV: NavItem[] = [
   { href: "/espace-cavalier/dashboard", icon: Home, label: "Accueil" },
   { href: "/espace-cavalier/reserver", icon: Calendar, label: "Réserver" },
-  { href: "/espace-cavalier/reservations", icon: ClipboardList, label: "Mes activités" },
+  { href: "/espace-cavalier/reservations", icon: ClipboardList, label: "Mes réservations", shortLabel: "Réservations" },
   { href: "/espace-cavalier/factures", icon: Receipt, label: "Paiements" },
   { href: "/espace-cavalier/profil", icon: Users, label: "Ma famille" },
 ];
@@ -468,7 +470,17 @@ function EspaceCavalierLayoutInner({ children }: { children: React.ReactNode }) 
           return (
             <Link key={item.href} href={item.href} className={`min-w-[58px] flex flex-col items-center gap-0.5 px-1 py-1.5 rounded-xl no-underline ${active ? "text-blue-600" : "text-gray-500"}`}>
               <Icon size={20} strokeWidth={active ? 2.4 : 1.8} />
-              <span className={`font-body text-[11px] ${active ? "font-bold" : "font-medium"}`}>{item.label === "Mes activités" ? "Activités" : item.label}</span>
+              {(() => {
+                const texte = item.shortLabel || item.label;
+                // « Réservations » deborde a 11px sur les petits ecrans :
+                // on retrecit uniquement les libelles longs.
+                const taille = texte.length > 10 ? "text-[10px]" : "text-[11px]";
+                return (
+                  <span className={`font-body ${taille} leading-none whitespace-nowrap ${active ? "font-bold" : "font-medium"}`}>
+                    {texte}
+                  </span>
+                );
+              })()}
             </Link>
           );
         })}
