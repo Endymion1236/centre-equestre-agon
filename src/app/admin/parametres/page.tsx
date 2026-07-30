@@ -1744,10 +1744,10 @@ export default function ParametresPage() {
       {/* ─── Marées ─── */}
       {section === "stages" && (
         <div className="bg-white rounded-2xl p-6 border border-gray-100">
-          <h2 className="font-display text-lg font-bold text-blue-800 mb-1">🐴 Déroulé d\u2019une séance de stage</h2>
+          <h2 className="font-display text-lg font-bold text-blue-800 mb-1">🐴 Déroulé d’une séance de stage</h2>
           <p className="font-body text-sm text-slate-500 mb-5 leading-relaxed">
-            Ce texte est repris dans l\u2019email de <strong>confirmation d\u2019inscription</strong> et dans celui de
-            <strong> rappel avant le stage</strong>. Il évite qu\u2019une famille lise « 10h–12h » et comprenne
+            Ce texte est repris dans l’email de <strong>confirmation d’inscription</strong> et dans celui de
+            <strong> rappel avant le stage</strong>. Il évite qu’une famille lise « 10h–12h » et comprenne
             deux heures à cheval. Réglage unique, valable pour tous les stages.
           </p>
 
@@ -1785,7 +1785,7 @@ export default function ParametresPage() {
             <input
               value={deroule.note || ""}
               onChange={(e) => setDeroule((d) => ({ ...d, note: e.target.value }))}
-              placeholder="Ex : l\u2019ordre des deux séquences peut être inversé selon les groupes."
+              placeholder="Ex : l’ordre des deux séquences peut être inversé selon les groupes."
               className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:border-blue-400 focus:outline-none"
             />
           </div>
@@ -1793,14 +1793,14 @@ export default function ParametresPage() {
           {/* Aperçu — ce que la famille lira réellement */}
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
             <div className="font-body text-[10px] font-semibold text-amber-800 uppercase tracking-wider mb-2">
-              Aperçu dans l\u2019email
+              Aperçu dans l’email
             </div>
             {derouleEstRempli(deroule) ? (
               <pre className="font-body text-xs text-slate-700 whitespace-pre-wrap m-0">{renderDerouleTexte(deroule)}</pre>
             ) : (
               <p className="font-body text-xs text-amber-700 m-0">
-                Les deux titres doivent être renseignés. Tant qu\u2019ils sont vides, <strong>aucun bloc
-                n\u2019est ajouté aux emails</strong> — ils partent comme aujourd\u2019hui.
+                Les deux titres doivent être renseignés. Tant qu’ils sont vides, <strong>aucun bloc
+                n’est ajouté aux emails</strong> — ils partent comme aujourd’hui.
               </p>
             )}
           </div>
