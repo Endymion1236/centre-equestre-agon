@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CGV_STAGES_LONG } from "@/lib/cgv-clauses";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { loadTemplate } from "@/lib/email-template-loader";
@@ -434,11 +435,7 @@ export async function GET(req: NextRequest) {
               `<div style="max-width:520px;margin:16px auto 0;padding:14px 16px;border:1px solid #fed7aa;background:#fff7ed;border-radius:10px;font-family:sans-serif;">
                  <p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#9a3412;">Conditions d'annulation</p>
                  <p style="margin:0;font-size:12px;line-height:1.6;color:#7c2d12;">
-                   Toute annulation à plus de <strong>3 semaines</strong> du début du stage donne lieu à un
-                   remboursement intégral. Passé ce délai, le stage n'est plus remboursable, sauf
-                   certificat médical ou cas de force majeure. L'acompte de 30&nbsp;€ est alors converti
-                   en <strong>avoir</strong>, utilisable sur toute prestation du centre jusqu'à la
-                   fin de la saison en cours (30 juin).
+                   ${CGV_STAGES_LONG}
                  </p>
                </div>`
             : html;

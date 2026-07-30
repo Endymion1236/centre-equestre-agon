@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { CGV_STAGES_COURT } from "@/lib/cgv-clauses";
 import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
@@ -1739,11 +1740,7 @@ export default function ReserverPage() {
                         className="mt-0.5 h-4 w-4 flex-shrink-0 cursor-pointer accent-orange-500"
                       />
                       <span className="font-body text-xs text-orange-900 leading-relaxed">
-                        J&apos;ai lu et j&apos;accepte les <a href="/cgv" target="_blank" rel="noopener noreferrer" className="font-semibold underline">conditions d&apos;annulation</a> :
-                        au-delà de <strong>3 semaines avant le début du stage</strong>, l&apos;annulation ne donne
-                        pas lieu à remboursement, sauf certificat médical ou force majeure.
-                        L&apos;acompte de 30&nbsp;€ est alors converti en <strong>avoir</strong>, valable
-                        jusqu&apos;à la fin de la saison en cours (30 juin).
+                        J&apos;ai lu et j&apos;accepte les <a href="/cgv" target="_blank" rel="noopener noreferrer" className="font-semibold underline">conditions d&apos;annulation</a> : {CGV_STAGES_COURT}
                       </span>
                     </label>
                   )}
