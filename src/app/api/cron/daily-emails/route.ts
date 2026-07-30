@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cleanupOldEmailLogs } from "@/lib/email-log";
+import { classerWaitlist } from "@/lib/waitlist-cleanup";
+import { adminDb } from "@/lib/firebase-admin";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 min max — les 4 crons en séquence
@@ -76,10 +78,39 @@ export async function GET(req: NextRequest) {
     console.error("[daily-emails] cleanup failed:", e);
   }
 
+  // Retrait des demandes de liste d'attente devenues sans objet (seance
+  // passee depuis plus que le delai de grace). Suppression DEFINITIVE :
+  // on journalise ce qui part, sinon une erreur de date resterait invisible.
+  let waitlistSupprimees = 0;
+  const waitlistDetail: string[] = [];
+  try {
+    if (adminDb) {
+      const aujourdhui = new Date().toISOString().slice(0, 10);
+      const snap = await adminDb.collection("waitlist").get();
+      const entries = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+      const { aSupprimer } = classerWaitlist(entries, aujourdhui);
+
+      for (const entry of aSupprimer) {
+        waitlistDetail.push(
+          `${entry.activityTitle || "?"} du ${entry.dateFin || entry.date} — ${entry.childName || entry.familyName || "?"}`,
+        );
+        await adminDb.collection("waitlist").doc(entry.id!).delete();
+        waitlistSupprimees++;
+      }
+      if (waitlistSupprimees > 0) {
+        console.log(`[daily-emails] waitlist purgee : ${waitlistSupprimees}`, waitlistDetail);
+      }
+    }
+  } catch (e) {
+    console.error("[daily-emails] purge waitlist failed:", e);
+  }
+
   return NextResponse.json({
     success: true,
     totalDurationMs: Date.now() - startTime,
     cleanedLogs,
+    waitlistSupprimees,
+    waitlistDetail,
     modules: results,
     timestamp: new Date().toISOString(),
   });

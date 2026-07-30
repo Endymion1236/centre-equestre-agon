@@ -1,5 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
+import { toLocalDateString } from "@/lib/date-local";
+import { estPerimee } from "@/lib/waitlist-cleanup";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAgentContext } from "@/hooks/useAgentContext";
@@ -776,8 +778,13 @@ export default function PlanningPage() {
         const snap = await getDocs(query(collection(db, "waitlist"), where("status", "==", "waiting")));
         const ids = new Set(creneaux.map(c => c.id));
         const counts: Record<string, number> = {};
+        const aujourdhui = toLocalDateString();
         snap.docs.forEach(d => {
           const w = d.data() as any;
+          // Une demande dont la seance est passee n'a plus d'objet : la place
+          // ne sera jamais liberee. On cesse de la compter immediatement,
+          // sans attendre la purge du cron (qui, elle, supprime vraiment).
+          if (estPerimee(w, aujourdhui)) return;
           const cibles: string[] = Array.isArray(w.creneauIds) && w.creneauIds.length
             ? w.creneauIds
             : w.creneauId ? [w.creneauId] : [];
