@@ -42,8 +42,6 @@ interface Props {
   children: Child[];
   familyId: string;
   onBook: (creneau: Creneau) => void;
-  stagesAvailable?: number;
-  onSeeStages?: () => void;
 }
 
 type FilterId = "pour_moi" | "cours" | "balade" | "tous";
@@ -89,8 +87,6 @@ export default function TimelineReservation({
   children,
   familyId,
   onBook,
-  stagesAvailable = 0,
-  onSeeStages,
 }: Props) {
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const date = new Date();
@@ -261,21 +257,6 @@ export default function TimelineReservation({
           ))}
         </div>
 
-        {stagesAvailable > 0 && onSeeStages && (
-          <button
-            type="button"
-            onClick={onSeeStages}
-            className="mt-2 w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-green-200 bg-green-50 text-left cursor-pointer hover:bg-green-100 transition-colors"
-          >
-            <span>
-              <span className="font-body text-sm font-bold text-green-800">🏇 Voir les stages</span>
-              <span className="font-body text-xs text-green-700 block mt-0.5">
-                {stagesAvailable} stage{stagesAvailable > 1 ? "s" : ""} disponible{stagesAvailable > 1 ? "s" : ""}
-              </span>
-            </span>
-            <ChevronRight size={18} className="text-green-700" />
-          </button>
-        )}
       </section>
 
       {/* Navigation dans les jours */}
