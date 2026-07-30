@@ -11,6 +11,7 @@ import {
   PUBLIC_ACTIVITIES,
   getVitrineActivityImage,
   getVitrineActivityOverride,
+  applyVitrineOverride,
   type PublicActivity,
   type PublicActivityCategory,
 } from "@/lib/public-activities";
@@ -241,15 +242,7 @@ export function ActivitiesContent() {
     return PUBLIC_ACTIVITIES.map((activity) => {
       const override = getVitrineActivityOverride(activity, source);
       if (!override) return activity;
-      return {
-        ...activity,
-        title: textValue(override.title, activity.title),
-        ages: textValue(override.ages, activity.ages),
-        schedule: textValue(override.schedule, activity.schedule),
-        description: textValue(override.description, activity.description),
-        price: textValue(override.price, activity.price || "") || undefined,
-        image: getVitrineActivityImage(override),
-      };
+      return applyVitrineOverride(activity, override);
     });
   }, [vitrine.activites]);
 

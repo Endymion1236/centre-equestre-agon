@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { PUBLIC_ACTIVITIES, activitesEditables } from "@/lib/public-activities";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
@@ -12,11 +13,18 @@ const inp = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body te
 const ta = `${inp} resize-none`;
 const label = "font-body text-xs font-semibold text-slate-600 block mb-1";
 
+const CATEGORY_EMOJI: Record<string, string> = {
+  stages: "🏕️", balades: "🌅", cours: "📅", competitions: "🏆", autres: "🎉",
+};
+
 type Tab = "activites" | "tarifs" | "infos" | "miniferme" | "actus";
 
 export default function ContenuPage() {
   const { toast } = useToast();
   const [tab, setTab] = useState<Tab>("activites");
+  // Une seule fiche ouverte a la fois : 16 fiches depliees rendraient la
+  // page illisible.
+  const [openActivite, setOpenActivite] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -82,8 +90,28 @@ export default function ContenuPage() {
     setSaving(false);
   };
 
-  const setActivite = (key: string, field: string, value: string) => {
+  // Accepte texte ET liste : « points forts » et « infos pratiques » sont
+  // des listes, une ligne par element.
+  const setActivite = (key: string, field: string, value: string | string[]) => {
     setData(prev => ({ ...prev, activites: { ...prev.activites, [key]: { ...(prev.activites as any)[key], [field]: value } } }));
+  };
+
+  /** Upload du visuel d'une fiche activite. */
+  const uploadActiviteImage = async (key: string, file: File) => {
+    setUploading(`activite-${key}`);
+    try {
+      const storageRef = ref(storage, `vitrine/activites/${key}_${Date.now()}_${file.name}`);
+      const task = uploadBytesResumable(storageRef, file);
+      await new Promise<void>((resolve, reject) => {
+        task.on("state_changed", null, reject, () => resolve());
+      });
+      const url = await getDownloadURL(task.snapshot.ref);
+      setActivite(key, "image", url);
+    } catch (err) {
+      console.error(err);
+      toast("Erreur upload", "error");
+    }
+    setUploading(null);
   };
 
   const setTarif = (field: string, value: string) => {
@@ -181,91 +209,108 @@ export default function ContenuPage() {
       {/* ── Activités ── */}
       {tab === "activites" && (
         <div className="flex flex-col gap-4">
-          {[
-            { key: "baby_poney", emoji: "🦄", label: "Baby Poney" },
-            { key: "galop_bronze", emoji: "🥉", label: "Galop de Bronze" },
-            { key: "galop_argent", emoji: "🥈", label: "Galop d'Argent" },
-            { key: "galop_or", emoji: "🥇", label: "Galop d'Or" },
-            { key: "balade_jour", emoji: "☀️", label: "Promenade en journée" },
-            { key: "balade_soleil", emoji: "🌅", label: "Balade au coucher du soleil" },
-            { key: "cours", emoji: "📅", label: "Cours réguliers" },
-            { key: "anniversaires", emoji: "🎉", label: "Anniversaires" },
-          ].map(({ key, emoji, label: lbl }) => {
-            const act = (data.activites as any)[key];
-            if (!act) return null; // sécurité si la clé n'existe pas encore (Firestore pas migré)
+          <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+            <p className="font-body text-xs text-blue-800 m-0 leading-relaxed">
+              Ces textes s’affichent sur le <strong>site public</strong>, pages Activités.
+              Un champ laissé vide reprend automatiquement le texte d’origine — pour annuler
+              une modification, il suffit de vider le champ.
+            </p>
+          </div>
+
+          {activitesEditables().map(({ key, title: lbl, category }) => {
+            const act = ((data.activites as any)[key] || {}) as any;
+            const base = PUBLIC_ACTIVITIES.find(a => a.vitrineKeys[0] === key);
+            const emoji = CATEGORY_EMOJI[category] || "🏇";
+            const ouvert = openActivite === key;
             return (
               <Card key={key} padding="md">
-                <div className="font-body text-sm font-semibold text-blue-800 mb-4">{emoji} {lbl}</div>
-                <div className="flex flex-col sm:flex-row gap-4">
-                  {/* Visuel */}
-                  <div className="flex flex-col items-center flex-shrink-0">
-                    <label className={label}>Visuel</label>
-                    <label className="relative w-32 h-32 rounded-xl border-2 border-dashed border-blue-500/20 bg-cream hover:bg-blue-50 cursor-pointer flex flex-col items-center justify-center overflow-hidden transition-colors">
-                      {uploading === `activite-${key}` ? (
-                        <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
-                      ) : act.image ? (
-                        <>
-                          <img src={act.image} alt={act.title || lbl} className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity">
-                            <span className="font-body text-xs font-semibold text-white">Changer</span>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <ImageIcon size={24} className="text-gray-400 mb-1" />
-                          <span className="font-body text-[10px] text-gray-400">Cliquez pour ajouter</span>
-                        </>
-                      )}
-                      <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        if (file.size > 5 * 1024 * 1024) { toast("Image trop lourde (max 5 Mo)", "error"); return; }
-                        setUploading(`activite-${key}`);
-                        try {
-                          const storageRef = ref(storage, `vitrine/activites/${key}_${Date.now()}_${file.name}`);
-                          const task = uploadBytesResumable(storageRef, file);
-                          await new Promise<void>((resolve, reject) => {
-                            task.on("state_changed", null, reject, () => resolve());
-                          });
-                          const url = await getDownloadURL(task.snapshot.ref);
-                          setActivite(key, "image", url);
-                        } catch (err) { console.error(err); toast("Erreur upload", "error"); }
-                        setUploading(null);
-                      }} />
-                    </label>
-                    {act.image && (
-                      <button onClick={() => setActivite(key, "image", "")}
-                        className="mt-1 font-body text-[10px] text-red-500 hover:text-red-700 border-none bg-transparent cursor-pointer">
-                        Retirer
-                      </button>
-                    )}
-                  </div>
-                  {/* Champs */}
-                  <div className="flex-1">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {act.title !== undefined && (
-                        <div><label className={label}>Titre</label>
-                          <input value={act.title} onChange={e => setActivite(key, "title", e.target.value)} className={inp} /></div>
-                      )}
-                      {act.ages !== undefined && (
-                        <div><label className={label}>Âges</label>
-                          <input value={act.ages} onChange={e => setActivite(key, "ages", e.target.value)} className={inp} /></div>
-                      )}
-                      {act.schedule !== undefined && (
-                        <div><label className={label}>Horaires</label>
-                          <input value={act.schedule} onChange={e => setActivite(key, "schedule", e.target.value)} className={inp} /></div>
-                      )}
-                      {act.price !== undefined && (
-                        <div><label className={label}>Tarif affiché</label>
-                          <input value={act.price} onChange={e => setActivite(key, "price", e.target.value)} className={inp} /></div>
-                      )}
+                <button
+                  type="button"
+                  onClick={() => setOpenActivite(ouvert ? null : key)}
+                  className="w-full flex items-center justify-between gap-3 bg-transparent border-none cursor-pointer p-0 text-left"
+                >
+                  <span className="font-body text-sm font-semibold text-blue-800">{emoji} {lbl}</span>
+                  <span className="font-body text-xs text-slate-400">{ouvert ? "▲" : "▼"}</span>
+                </button>
+
+                {ouvert && (
+                  <div className="mt-4 flex flex-col sm:flex-row gap-4">
+                    {/* Visuel */}
+                    <div className="flex flex-col items-center flex-shrink-0">
+                      <label className={label}>Visuel</label>
+                      <label className="relative w-32 h-32 rounded-xl border-2 border-dashed border-blue-500/20 bg-cream hover:bg-blue-50 cursor-pointer flex flex-col items-center justify-center overflow-hidden transition-colors">
+                        {uploading === `activite-${key}` ? (
+                          <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                        ) : act.image ? (
+                          <>
+                            <img src={act.image} alt={act.title || lbl} className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity">
+                              <span className="font-body text-xs font-semibold text-white">Changer</span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <ImageIcon size={24} className="text-gray-400 mb-1" />
+                            <span className="font-body text-[10px] text-gray-400">Ajouter</span>
+                          </>
+                        )}
+                        <input type="file" accept="image/*" className="hidden"
+                          onChange={e => { const f = e.target.files?.[0]; if (f) uploadActiviteImage(key, f); }} />
+                      </label>
                     </div>
-                    {act.description !== undefined && (
-                      <div className="mt-3"><label className={label}>Description</label>
-                        <textarea value={act.description} onChange={e => setActivite(key, "description", e.target.value)} rows={3} className={ta} /></div>
-                    )}
+
+                    {/* Champs */}
+                    <div className="flex-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {([
+                          ["title", "Titre"], ["ages", "Âges"],
+                          ["schedule", "Horaires"], ["price", "Tarif affiché"],
+                          ["level", "Niveau"],
+                        ] as const).map(([champ, lib]) => (
+                          <div key={champ}>
+                            <label className={label}>{lib}</label>
+                            <input
+                              value={act[champ] ?? ""}
+                              placeholder={String((base as any)?.[champ] ?? "")}
+                              onChange={e => setActivite(key, champ, e.target.value)}
+                              className={inp}
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-3">
+                        <label className={label}>Description courte</label>
+                        <textarea value={act.description ?? ""} placeholder={base?.description || ""}
+                          onChange={e => setActivite(key, "description", e.target.value)} rows={2} className={ta} />
+                      </div>
+
+                      <div className="mt-3">
+                        <label className={label}>Introduction</label>
+                        <textarea value={act.intro ?? ""} placeholder={base?.intro || ""}
+                          onChange={e => setActivite(key, "intro", e.target.value)} rows={3} className={ta} />
+                      </div>
+
+                      {/* Listes : une ligne = un element */}
+                      {([
+                        ["features", "Points forts", "C’est ici qu’est annoncé le déroulé des 2 séquences."],
+                        ["practical", "Infos pratiques", "Tenue, matériel, prérequis…"],
+                      ] as const).map(([champ, lib, aide]) => (
+                        <div className="mt-3" key={champ}>
+                          <label className={label}>{lib} — une ligne par élément</label>
+                          <textarea
+                            value={Array.isArray(act[champ]) ? act[champ].join("\n") : ""}
+                            placeholder={(base?.[champ] || []).join("\n")}
+                            onChange={e => setActivite(key, champ, e.target.value.split("\n").map(l => l.trim()).filter(Boolean))}
+                            rows={5}
+                            className={ta}
+                          />
+                          <p className="font-body text-[10px] text-slate-400 mt-1">{aide}</p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </Card>
             );
           })}

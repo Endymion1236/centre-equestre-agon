@@ -6,7 +6,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import IllustratedFeatureBand from "@/components/public/IllustratedFeatureBand";
 import { compareCreneaux } from "@/lib/creneau-sort";
-import { addCalendarDays, calendarDaysBetween, comparePublicPlanningSlots, type PublicPlanningSlot } from "@/lib/public-planning";
+import { addCalendarDays, calendarDaysBetween, comparePublicPlanningSlots, type PublicPlanningSlot, tarifJournee } from "@/lib/public-planning";
 import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock, Filter, Sparkles, Users } from "lucide-react";
 
 type Creneau = PublicPlanningSlot;
@@ -243,6 +243,7 @@ export default function PlanningPublic() {
                           const places = capacity > 0 ? Math.max(0, capacity - enrolled) : null;
                           const full = places === 0;
                           const price = priceOf(slot);
+                          const prixJour = tarifJournee(slot);
                           return (
                             <div key={slot.id} className={`rounded-2xl p-4 transition-colors hover:bg-slate-50 ${isPast ? "opacity-55" : ""}`}>
                               <div className="flex items-start justify-between gap-3">
@@ -250,8 +251,22 @@ export default function PlanningPublic() {
                                   <span className="inline-flex rounded-full border px-2.5 py-1 font-body text-[9px] font-bold uppercase tracking-wide" style={{ background: info.bg, borderColor: info.border, color: info.color }}>{info.label}</span>
                                   <h2 className="mt-2 font-display text-lg font-bold leading-tight text-blue-950">{slot.activityTitle}</h2>
                                 </div>
-                                {price !== null && <div className="flex-shrink-0 font-display text-lg font-bold text-blue-700">{price}€</div>}
+                                {price !== null && (
+                                  <div className="flex-shrink-0 text-right">
+                                    <div className="font-display text-lg font-bold text-blue-700">{price}€</div>
+                                    {prixJour !== null && (
+                                      <div className="font-body text-[10px] font-semibold text-slate-400 leading-tight">la semaine</div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
+                              {/* Formule journee : affichee seulement si elle est
+                                  reellement ouverte ET tarifee sur ce creneau. */}
+                              {prixJour !== null && (
+                                <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 font-body text-[11px] font-semibold text-amber-700">
+                                  Inscription à la journée possible · {prixJour}€ la journée
+                                </div>
+                              )}
                               <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 font-body text-xs text-slate-500">
                                 <span className="flex items-center gap-1.5"><Clock size={13} className="text-blue-400" />{slot.startTime}–{slot.endTime}</span>
                                 {slot.monitor && <span>{slot.monitor}</span>}

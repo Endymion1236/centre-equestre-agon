@@ -9,6 +9,7 @@ import {
   PUBLIC_ACTIVITIES,
   getVitrineActivityImage,
   getVitrineActivityOverride,
+  applyVitrineOverride,
   type PublicActivity,
 } from "@/lib/public-activities";
 import { ArrowLeft, ArrowRight, CalendarDays, Check, Clock, Gift, Info, ShieldCheck } from "lucide-react";
@@ -20,15 +21,9 @@ function textValue(value: unknown, fallback: string) {
 export default function ActivityDetailClient({ activity }: { activity: PublicActivity }) {
   const { vitrine } = useVitrine();
   const override = getVitrineActivityOverride(activity, (vitrine.activites || {}) as Record<string, unknown>);
-  const display = {
-    ...activity,
-    title: textValue(override?.title, activity.title),
-    ages: textValue(override?.ages, activity.ages),
-    schedule: textValue(override?.schedule, activity.schedule),
-    description: textValue(override?.description, activity.description),
-    price: textValue(override?.price, activity.price || "") || undefined,
-    image: getVitrineActivityImage(override),
-  };
+  // Couvre desormais AUSSI intro, points forts et infos pratiques : c'est
+  // dans les points forts qu'est annonce le deroule des 2 sequences.
+  const display = applyVitrineOverride(activity, override);
   const catalogueVisual = getCatalogueVisual(activity.id);
 
   const related = PUBLIC_ACTIVITIES

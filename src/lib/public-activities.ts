@@ -315,6 +315,55 @@ export function getVitrineActivityOverride(activity: PublicActivity, vitrineActi
   return null;
 }
 
+/**
+ * Applique les modifications saisies dans Admin > Contenu > Activites.
+ *
+ * Le catalogue ci-dessus reste la reference : un champ vide ou absent
+ * retombe sur le texte d'origine. On peut donc annuler une modification
+ * en vidant le champ, sans avoir a retrouver le texte initial — et une
+ * base momentanement injoignable laisse le site intact.
+ */
+export function applyVitrineOverride(
+  activity: PublicActivity,
+  override: Record<string, unknown> | null | undefined,
+): PublicActivity & { image?: string } {
+  const texte = (v: unknown, defaut: string) =>
+    typeof v === "string" && v.trim() ? v.trim() : defaut;
+
+  // Une liste n'ecrase l'originale que si elle contient au moins une ligne
+  // utile : un champ vide ne doit pas faire disparaitre les points forts.
+  const liste = (v: unknown, defaut: string[]) => {
+    if (!Array.isArray(v)) return defaut;
+    const propre = v.map((x) => String(x ?? "").trim()).filter(Boolean);
+    return propre.length > 0 ? propre : defaut;
+  };
+
+  if (!override) return activity;
+  return {
+    ...activity,
+    title: texte(override.title, activity.title),
+    ages: texte(override.ages, activity.ages),
+    schedule: texte(override.schedule, activity.schedule),
+    description: texte(override.description, activity.description),
+    intro: texte(override.intro, activity.intro),
+    level: texte(override.level, activity.level || "") || undefined,
+    price: texte(override.price, activity.price || "") || undefined,
+    features: liste(override.features, activity.features),
+    practical: liste(override.practical, activity.practical),
+    image: getVitrineActivityImage(override),
+  };
+}
+
+/** Liste des fiches editables, tiree du catalogue (plus de liste en dur). */
+export function activitesEditables(): { key: string; id: string; title: string; category: PublicActivityCategory }[] {
+  return PUBLIC_ACTIVITIES.map((a) => ({
+    key: a.vitrineKeys[0],
+    id: a.id,
+    title: a.title,
+    category: a.category,
+  }));
+}
+
 const REMOVED_TEST_IMAGES = ["baby_poney_1779800873646_pepita_web.jpg"];
 
 export function getVitrineActivityImage(override: Record<string, unknown> | null | undefined) {

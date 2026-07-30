@@ -12,6 +12,27 @@ export interface PublicPlanningSlot {
   priceHT?: number;
   tvaTaux?: number;
   status?: string;
+  /** L'inscription a la journee est-elle ouverte sur ce stage ? */
+  allowDayBooking?: boolean;
+  /** Tarif TTC d'une journee isolee, quand l'inscription a la journee est ouverte. */
+  priceTTCDay?: number;
+}
+
+/**
+ * Tarif journee a annoncer publiquement, ou null.
+ *
+ * Le planning public n'affichait que le prix semaine : un parent lisait
+ * « 175 € », en concluait que c'etait la semaine entiere ou rien, et
+ * repartait — alors que la journee etait parfois ouverte.
+ *
+ * Renvoie null des que l'un des deux champs manque : on n'annonce jamais
+ * une formule dont on ne connait pas le prix.
+ */
+export function tarifJournee(slot: Pick<PublicPlanningSlot, "allowDayBooking" | "priceTTCDay">): number | null {
+  if (!slot?.allowDayBooking) return null;
+  const prix = slot.priceTTCDay;
+  if (typeof prix !== "number" || !Number.isFinite(prix) || prix <= 0) return null;
+  return prix;
 }
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -79,6 +100,13 @@ export function toPublicPlanningSlot(id: string, data: Record<string, unknown>):
   if (priceTTC !== undefined) slot.priceTTC = priceTTC;
   if (priceHT !== undefined) slot.priceHT = priceHT;
   if (tvaTaux !== undefined) slot.tvaTaux = tvaTaux;
+
+  // Formule journee. Cette projection filtre volontairement les champs
+  // exposes publiquement : sans ces deux lignes, l'info n'atteint jamais
+  // le site, meme renseignee en base.
+  if (data.allowDayBooking === true) slot.allowDayBooking = true;
+  const priceTTCDay = optionalNumber(data.priceTTCDay);
+  if (priceTTCDay !== undefined) slot.priceTTCDay = priceTTCDay;
 
   return slot;
 }
