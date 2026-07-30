@@ -8,6 +8,7 @@
  */
 
 import { adminDb } from "@/lib/firebase-admin";
+import { renderDerouleStage } from "@/lib/stage-deroule";
 
 // ── Email wrapper (identique à email-templates.ts et email-templates admin page) ──
 const CLUB_NAME = "Centre Équestre d'Agon-Coutainville";
@@ -49,6 +50,7 @@ const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }> = {
   <p style="margin:0;color:#166534;font-weight:600;">🕐 {horaires}</p>
   <p style="margin:8px 0 0;color:#555;font-size:13px;">👧 {enfants}</p>
 </div>
+{deroule}
 <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:16px 0;">
   <p style="margin:0 0 6px;color:#1e40af;font-weight:600;font-size:13px;">💳 Récapitulatif du paiement</p>
   <table style="width:100%;border-collapse:collapse;font-size:14px;">
@@ -77,6 +79,7 @@ const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }> = {
   <p style="margin:8px 0 0;color:#555;font-size:13px;">👧 {enfants}</p>
   <p style="margin:8px 0 0;color:#1e3a5f;font-weight:bold;font-size:16px;">Total : {montant}€</p>
 </div>
+{deroule}
 <p style="color:#555;font-size:13px;"><strong>À prévoir :</strong> bottes, bombe, pantalon long. Prévoir un goûter et de l'eau.</p>
 <p style="color:#555;">À bientôt au centre équestre !</p>`,
   },
@@ -224,6 +227,22 @@ export async function loadTemplate(
   // Remplacer les {variables} dans le sujet et le body
   let subject = template.subject;
   let body = template.body;
+
+  // {deroule} : bloc « Comment se déroule la séance ». Résolu ici pour que
+  // TOUS les chemins d'envoi (webhook CAWL, status, relances) en bénéficient
+  // sans avoir à le passer explicitement. Vide si le réglage n'est pas saisi.
+  if (body.includes("{deroule}") && variables.deroule === undefined) {
+    let bloc = "";
+    try {
+      if (adminDb) {
+        const snap = await adminDb.collection("settings").doc("stageDeroule").get();
+        bloc = renderDerouleStage(snap.exists ? (snap.data() as any) : null);
+      }
+    } catch {
+      bloc = ""; // un réglage illisible ne doit pas empêcher l'email de partir
+    }
+    body = body.replace(/\{deroule\}/g, bloc);
+  }
 
   for (const [varKey, value] of Object.entries(variables)) {
     const regex = new RegExp(`\\{${varKey}\\}`, "g");

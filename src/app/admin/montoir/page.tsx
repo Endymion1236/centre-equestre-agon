@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useRef, type ChangeEvent } from "react";
+import { renderDerouleStage } from "@/lib/stage-deroule";
 import { FeuilleAppelImpression } from "./FeuilleAppelImpression";
 import { collection, getDocs, getDoc, updateDoc, addDoc, doc, query, where, serverTimestamp, runTransaction, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -45,6 +46,14 @@ export default function MontoirPage() {
   // Creneaux des dernieres semaines : servent UNIQUEMENT a reconstruire
   // l'historique des poneys (les notes peda ont pu etre perdues).
   const [creneauxHistorique, setCreneauxHistorique] = useState<any[]>([]);
+  // Deroule des 2 sequences repris dans le rappel de stage (reglage unique,
+  // Parametres > Deroule stages). Vide tant qu'il n'est pas saisi.
+  const [stageDerouleHtml, setStageDerouleHtml] = useState("");
+  useEffect(() => {
+    getDoc(doc(db, "settings", "stageDeroule"))
+      .then(snap => setStageDerouleHtml(renderDerouleStage(snap.exists() ? (snap.data() as any) : null)))
+      .catch(() => setStageDerouleHtml(""));
+  }, []);
   // Filtre d'impression par moniteur : chacun imprime l'appel de SES reprises.
   // "" = tous (comportement actuel inchangé).
   const [printMonitor, setPrintMonitor] = useState<string>("");
@@ -1129,7 +1138,7 @@ export default function MontoirPage() {
                   for (const [, r] of recipients) {
                     try {
                       const emailData = isStageType
-                        ? emailTemplates.rappelStage({ parentName: r.parentName, enfants: r.children, stageTitle: c.activityTitle, dateDebut: new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }), horaire: `${c.startTime}–${c.endTime}` })
+                        ? emailTemplates.rappelStage({ parentName: r.parentName, enfants: r.children, stageTitle: c.activityTitle, dateDebut: new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }), horaire: `${c.startTime}–${c.endTime}`, derouleHtml: stageDerouleHtml })
                         : emailTemplates.rappelCours({ parentName: r.parentName, childName: r.children.join(", "), coursTitle: c.activityTitle, date: new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }), horaire: `${c.startTime}–${c.endTime}`, moniteur: c.monitor || "" });
                       authFetch("/api/send-email", {
                         method: "POST",

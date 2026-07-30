@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { renderDerouleStage } from "@/lib/stage-deroule";
 import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, deleteField, doc, query, where, orderBy, serverTimestamp } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
@@ -1502,6 +1503,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         if (fam.parentEmail) {
           try {
             const dates = creneauxAInscrire.map(c => new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })).join(", ");
+            // Deroule des 2 sequences : chaine vide si le reglage n'est pas
+            // saisi, auquel cas l'email part comme avant.
+            const derouleSnap = await getDoc(doc(db, "settings", "stageDeroule"));
+            const derouleHtml = renderDerouleStage(derouleSnap.exists() ? (derouleSnap.data() as any) : null);
             const confirmEmail = emailTemplates.confirmationStage({
               parentName: fam.parentName || "",
               enfants: stageLines.map(l => ({ name: l.childName, prix: l.prixReduit, remise: l.remiseEuros })),
@@ -1510,6 +1515,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               totalTTC: stageTotalTTC,
               acompte: stageAcompte,
               solde: stageSolde,
+              derouleHtml,
             });
             authFetch("/api/send-email", {
               method: "POST",

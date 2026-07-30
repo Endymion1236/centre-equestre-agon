@@ -70,6 +70,9 @@ export const emailTemplates = {
     solde?: number;
     paiementConfirme?: boolean; // Optionnel : true si paiement deja regle (webhook CAWL)
     montantRegle?: number; // Optionnel : montant effectivement regle si different du total
+    // Bloc « Comment se deroule la seance » (cf. lib/stage-deroule). Chaine
+    // vide tant que le reglage n'est pas saisi : rien ne s'affiche alors.
+    derouleHtml?: string;
   }) => ({
     subject: vars.paiementConfirme
       ? `✅ Paiement confirmé — ${vars.stageTitle}`
@@ -100,6 +103,7 @@ export const emailTemplates = {
           </tr>
         </table>
       </div>
+      ${vars.derouleHtml || ""}
       ${!vars.paiementConfirme && vars.acompte && vars.solde && vars.solde > 0 ? `
       <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:16px 0;">
         <p style="margin:0 0 6px;color:#1e40af;font-weight:600;font-size:13px;">💳 Modalités de paiement</p>
@@ -221,6 +225,9 @@ export const emailTemplates = {
     stageTitle: string;
     dateDebut: string;
     horaire: string;
+    // Meme bloc que la confirmation : le rappel est souvent le seul mail
+    // relu la veille, il doit porter la meme information.
+    derouleHtml?: string;
   }) => ({
     subject: `Rappel — ${vars.stageTitle} commence bientôt`,
     html: wrap(`
@@ -231,6 +238,7 @@ export const emailTemplates = {
         <p style="margin:6px 0 0;color:#555;font-size:13px;">🕐 ${vars.horaire}</p>
         <p style="margin:6px 0 0;color:#555;font-size:13px;">👧 ${vars.enfants.join(", ")}</p>
       </div>
+      ${vars.derouleHtml || ""}
       <p style="color:#555;font-size:13px;"><strong>À prévoir :</strong> bottes, bombe, pantalon long. Prévoir un goûter et de l'eau.</p>
     `),
   }),
