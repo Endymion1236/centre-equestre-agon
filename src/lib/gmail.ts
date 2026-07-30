@@ -356,7 +356,7 @@ export async function gmailSend(opts: {
   body: string;
   threadId?: string;
   inReplyTo?: string; // header Message-ID d'origine (pour rester dans le fil)
-}): Promise<void> {
+}): Promise<{ id?: string; threadId?: string }> {
   const token = await getAccessToken();
   const headers = [
     `To: ${opts.to}`,
@@ -383,6 +383,32 @@ export async function gmailSend(opts: {
     body: JSON.stringify(opts.threadId ? { raw, threadId: opts.threadId } : { raw }),
   });
   if (!res.ok) throw new Error(`gmail send ${res.status}: ${await res.text()}`);
+
+  // L'API renvoie l'identifiant du message cree dans la boite : il sert de
+  // preuve d'envoi et permet de le retrouver dans « Envoyes ».
+  const data = await res.json().catch(() => ({}));
+  return { id: data?.id, threadId: data?.threadId };
+}
+
+/**
+ * Adresse du compte Gmail actuellement connecte.
+ *
+ * Sert a lever un doute frequent : les reponses de la boite partent de CE
+ * compte et se rangent dans SES « Envoyes ». Les chercher ailleurs revient
+ * a conclure a tort qu'aucun message n'est parti.
+ */
+export async function gmailAccountEmail(): Promise<string | null> {
+  try {
+    const token = await getAccessToken();
+    const res = await fetch(`${GMAIL_API}/profile`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.emailAddress || null;
+  } catch {
+    return null;
+  }
 }
 
 /** Met un message à la corbeille (nécessite le scope gmail.modify). */

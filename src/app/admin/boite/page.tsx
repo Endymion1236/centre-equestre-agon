@@ -179,7 +179,9 @@ export default function BoiteAssistantPage() {
         body: JSON.stringify({ to: dest.trim(), subject: `Fwd: ${subject}`, body: fwdBody }),
       });
       const d = await r.json();
-      setMailboxMsg(r.ok ? { ok: true, text: `Transféré à ${dest.trim()} ✓` } : { ok: false, text: d.error || "Échec du transfert" });
+      setMailboxMsg(r.ok
+        ? { ok: true, text: `Transféré à ${dest.trim()} depuis ${d.account || "la boîte connectée"} ✓` }
+        : { ok: false, text: d.error || "Échec du transfert" });
     } catch {
       setMailboxMsg({ ok: false, text: "Erreur réseau" });
     }
@@ -206,7 +208,11 @@ export default function BoiteAssistantPage() {
         }),
       });
       const d = await r.json();
-      setSendMsg(r.ok ? { ok: true, text: "Réponse envoyée ✓" } : { ok: false, text: d.error || "Échec de l'envoi" });
+      // On precise DEPUIS QUEL compte le message est parti : c'est dans les
+      // « Envoyes » de celui-ci qu'il se range, et nulle part ailleurs.
+      setSendMsg(r.ok
+        ? { ok: true, text: d.account ? `Réponse envoyée depuis ${d.account} ✓` : "Réponse envoyée ✓" }
+        : { ok: false, text: d.error || "Échec de l'envoi" });
     } catch {
       setSendMsg({ ok: false, text: "Erreur réseau" });
     }
