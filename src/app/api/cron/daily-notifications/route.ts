@@ -11,10 +11,50 @@ import { emailButton } from "@/lib/email-templates";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-const STAFF_EMAILS: Record<string, string[]> = {
-  "Emmeline": ["emmelinelagy@gmail.com"],
-  "Nicolas": ["ceagon@orange.fr", "ceagon50@gmail.com"],
-};
+// Emails toujours destinataires du récap GLOBAL (les gérants), même sans
+// cours assigné. Les monitrices, elles, viennent des fiches `moniteurs`.
+const ADMIN_RECAP_EMAILS = ["ceagon@orange.fr", "ceagon50@gmail.com"];
+
+/**
+ * Destinataires du récap : construits depuis les fiches moniteurs
+ * (Paramètres > Moniteurs), plus les admins.
+ *
+ * La liste était auparavant écrite en dur avec deux personnes : les
+ * monitrices n'ont jamais reçu leur planning. Ajouter une fiche avec un
+ * email suffit désormais — sans repasser par le code.
+ *
+ * Le rapprochement créneau ↔ moniteur ignore accents et tirets : un
+ * créneau saisi « Emeline » retrouve la fiche « Éméline ».
+ */
+async function chargerDestinatairesRecap(): Promise<{ name: string; emails: string[]; isAdmin: boolean }[]> {
+  const destinataires: { name: string; emails: string[]; isAdmin: boolean }[] = [];
+  try {
+    const snap = await adminDb.collection("moniteurs").where("status", "==", "active").get();
+    for (const doc of snap.docs) {
+      const d = doc.data() as any;
+      const email = String(d.email || "").trim();
+      if (!d.name || !email) continue;
+      const isAdmin = ADMIN_RECAP_EMAILS.includes(email.toLowerCase());
+      destinataires.push({ name: String(d.name).trim(), emails: [email], isAdmin });
+    }
+  } catch (e) {
+    console.error("Lecture fiches moniteurs:", e);
+  }
+  // Les gérants reçoivent toujours le récap global, fiche ou pas.
+  for (const email of ADMIN_RECAP_EMAILS) {
+    if (!destinataires.some(x => x.emails.includes(email))) {
+      destinataires.push({ name: "Nicolas", emails: [email], isAdmin: true });
+    }
+  }
+  return destinataires;
+}
+
+const cleNom = (nom: string) => String(nom || "")
+  .toLowerCase()
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/[-'\s]+/g, " ")
+  .trim();
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -55,7 +95,7 @@ export async function GET(req: NextRequest) {
     if (todayCreneaux.length > 0) {
       const byMonitor: Record<string, any[]> = {};
       for (const c of todayCreneaux) {
-        const monitor = c.monitor || "Non assigné";
+        const monitor = cleNom(c.monitor) || "non assigne";
         if (!byMonitor[monitor]) byMonitor[monitor] = [];
         byMonitor[monitor].push(c);
       }
@@ -75,14 +115,15 @@ export async function GET(req: NextRequest) {
       } catch {}
 
       if (staffTokens.length === 0) {
-        for (const [monitorName, emails] of Object.entries(STAFF_EMAILS)) {
+        // Fallback : retrouver les tokens push via les fiches moniteurs
+        for (const { name: monitorName, emails, isAdmin } of await chargerDestinatairesRecap()) {
           for (const email of emails) {
             const famSnap = await adminDb.collection("families").where("parentEmail", "==", email).limit(1).get();
             if (!famSnap.empty) {
               const familyId = famSnap.docs[0].id;
               const tokenSnap = await adminDb.collection("push_tokens").doc(familyId).get();
               if (tokenSnap.exists && tokenSnap.data()?.token) {
-                staffTokens.push({ name: monitorName, token: tokenSnap.data()!.token, role: "admin", email });
+                staffTokens.push({ name: monitorName, token: tokenSnap.data()!.token, role: isAdmin ? "admin" : "enseignant", email });
               }
             }
           }
@@ -91,7 +132,7 @@ export async function GET(req: NextRequest) {
 
       // Push aux moniteurs
       for (const staff of staffTokens) {
-        const monitorCreneaux = byMonitor[staff.name] || [];
+        const monitorCreneaux = byMonitor[cleNom(staff.name)] || [];
         const totalInscrits = todayCreneaux.reduce((s, c) => s + (c.enrolled || []).length, 0);
 
         let body: string;
@@ -113,9 +154,12 @@ export async function GET(req: NextRequest) {
 
       // Email récap moniteurs (format tableau interne — pas éditable via templates)
       if (resendKey) {
-        for (const [monitorName, emails] of Object.entries(STAFF_EMAILS)) {
-          const monitorCreneaux = byMonitor[monitorName] || [];
-          if (monitorCreneaux.length === 0 && !emails.some(e => e.includes("ceagon"))) continue;
+        const destinataires = await chargerDestinatairesRecap();
+        for (const { name: monitorName, emails, isAdmin } of destinataires) {
+          const monitorCreneaux = byMonitor[cleNom(monitorName)] || [];
+          // Une monitrice sans cours demain ne reçoit RIEN : le récap global
+          // est réservé aux admins (règle : « seulement SES cours »).
+          if (monitorCreneaux.length === 0 && !isAdmin) continue;
 
           const coursToShow = monitorCreneaux.length > 0 ? monitorCreneaux : todayCreneaux;
           const isPersonal = monitorCreneaux.length > 0;
