@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { derouleEstRempli } from "@/lib/stage-deroule";
 import { CGV_STAGES_COURT } from "@/lib/cgv-clauses";
 import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -34,6 +35,14 @@ export default function ReserverPage() {
 
   const [creneaux, setCreneaux] = useState<Creneau[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
+  // Deroule des 2 sequences (Parametres > Deroule stages). Meme reglage que
+  // les emails : une seule saisie, visible a la reservation ET apres paiement.
+  const [deroule, setDeroule] = useState<any | null>(null);
+  useEffect(() => {
+    getDoc(doc(db, "settings", "stageDeroule"))
+      .then(snap => setDeroule(snap.exists() ? snap.data() : null))
+      .catch(() => setDeroule(null));
+  }, []);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState(initialFilter);
   const [subfilter, setSubfilter] = useState("all"); // sous-catégorie
@@ -1143,7 +1152,12 @@ export default function ReserverPage() {
                       {(() => {
                         const act = activities.find((a: any) => a.id === first.activityId);
                         const desc = act?.description?.trim();
-                        if (!desc) return null;
+                        // Le deroule des 2 sequences s'affiche meme sans
+                        // description : c'est l'information qui manquait le
+                        // plus aux familles, elle ne doit dependre d'aucune
+                        // autre saisie.
+                        const montrerDeroule = derouleEstRempli(deroule);
+                        if (!desc && !montrerDeroule) return null;
                         const isOpen = expandedStageDetail === key;
                         return (
                           <div className="mt-2">
@@ -1152,11 +1166,38 @@ export default function ReserverPage() {
                               className="flex items-center gap-1.5 font-body text-xs text-green-700 font-semibold bg-transparent border-none cursor-pointer px-0 py-1 hover:text-green-900"
                             >
                               <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2a5 5 0 100 10A5 5 0 007 2zm0 2.5a.75.75 0 110 1.5.75.75 0 010-1.5zM6.25 6.5h1.5v3h-1.5v-3z" fill="currentColor"/></svg>
-                              {isOpen ? "Masquer le détail" : "Voir le détail du stage"}
+                              {isOpen ? "Masquer le détail" : (montrerDeroule ? "Voir le détail et le déroulé de la séance" : "Voir le détail du stage")}
                             </button>
                             {isOpen && (
                               <div className="mt-2 p-3 bg-green-50 rounded-xl border border-green-100">
-                                <p className="font-body text-xs text-gray-700 leading-relaxed whitespace-pre-line">{desc}</p>
+                                {desc && (
+                                  <p className="font-body text-xs text-gray-700 leading-relaxed whitespace-pre-line">{desc}</p>
+                                )}
+                                {montrerDeroule && (
+                                  <div className={desc ? "mt-3 pt-3 border-t border-green-200" : ""}>
+                                    <div className="font-body text-[10px] font-semibold text-green-800 uppercase tracking-wider mb-2">
+                                      🐴 Comment se déroule la séance
+                                    </div>
+                                    {[1, 2].map((n) => {
+                                      const titre = n === 1 ? deroule.sequence1Titre : deroule.sequence2Titre;
+                                      const detail = n === 1 ? deroule.sequence1Detail : deroule.sequence2Detail;
+                                      return (
+                                        <div key={n} className="flex gap-2 mb-1.5 last:mb-0">
+                                          <span className="w-4 h-4 rounded-full bg-green-600 text-white font-body text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">{n}</span>
+                                          <div className="min-w-0">
+                                            <div className="font-body text-xs font-semibold text-gray-800 leading-snug">{titre}</div>
+                                            {detail?.trim() && (
+                                              <div className="font-body text-[11px] text-gray-600 leading-snug">{detail}</div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                    {deroule.note?.trim() && (
+                                      <p className="font-body text-[10px] text-gray-500 mt-2 mb-0">{deroule.note}</p>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
