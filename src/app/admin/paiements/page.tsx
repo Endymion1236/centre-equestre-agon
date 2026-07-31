@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import AnnulationModal from "./AnnulationModal";
 import { useSearchParams } from "next/navigation";
 import { collection, getDocs, addDoc, deleteDoc, updateDoc, setDoc, doc, getDoc, serverTimestamp, Timestamp, query, where, orderBy, limit, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -74,6 +75,11 @@ async function retraitPointsFidelite(familyId: string, montantAvoir: number, lab
   }
 }
 
+/** Libelles des modes de remboursement, pour le journal comptable. */
+const MODE_REMB_LABEL: Record<string, string> = {
+  cb: "carte bancaire", virement: "virement", cheque: "chèque", especes: "espèces",
+};
+
 export default function PaiementsPage() {
   const { toast } = useToast();
   const searchParams = useSearchParams();
@@ -91,6 +97,8 @@ export default function PaiementsPage() {
   const [payLinkGenerating, setPayLinkGenerating] = useState(false);
   const [payLinkSending, setPayLinkSending] = useState(false);
   const [quickMode, setQuickMode] = useState("cheque");
+  // Annulation : répartition avoir / remboursement (cf. AnnulationModal)
+  const [annulModal, setAnnulModal] = useState<{ payment: any; encaisse: number; lignes: string[] } | null>(null);
   const [quickMontant, setQuickMontant] = useState("");
   const [quickDate, setQuickDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [quickRef, setQuickRef] = useState("");
@@ -863,8 +871,27 @@ export default function PaiementsPage() {
 
       toast(`${payment.familyName} — inscription annulée et cavaliers désinscrits`, "success");
     } else {
-      // Encaissé → avoir automatique
-      if (!confirm(`Annuler l'inscription de ${payment.familyName} ?\n\n${(payment.items || []).map((i: any) => `• ${i.childName || ""} — ${i.activityTitle}`).join("\n")}\n\n💰 ${totalEnc.toFixed(2)}€ déjà encaissés → un avoir sera créé${inscriptionMsg}\n\nConfirmer ?`)) return;
+      // Encaissé → la répartition avoir / remboursement se choisit dans la
+      // modale : les CGV prévoient trois issues, un avoir systématique n'en
+      // couvrait qu'une.
+      setAnnulModal({
+        payment,
+        encaisse: totalEnc,
+        lignes: (payment.items || []).map((i: any) => `${i.childName || ""} — ${i.activityTitle}`.trim()),
+      });
+      return;
+    }
+  };
+
+  /** Applique l'annulation une fois la répartition validée. */
+  const executerAnnulation = async (
+    payment: any,
+    totalEnc: number,
+    data: { avoir: number; rembourse: number; modeRemboursement: string; motif: string; commentaire: string },
+  ) => {
+    {
+      const isForfait = (payment as any).forfaitType
+        || (payment.items || []).some((i: any) => i.activityTitle?.includes("Forfait"));
 
       // Marquer cancelled d'abord pour éviter double-traitement
       await updateDoc(doc(db, "payments", payment.id), {
@@ -901,10 +928,17 @@ export default function PaiementsPage() {
       const expiry = new Date();
       expiry.setFullYear(expiry.getFullYear() + 1);
 
-      const avoirAmount = Math.round(totalEnc * 100) / 100;
-      const avoirReason = `Annulation commande — ${(payment.items || []).map((i: any) => i.activityTitle).join(", ").slice(0, 60)}`;
+      const avoirAmount = Math.round(data.avoir * 100) / 100;
+      const MOTIF_LABEL: Record<string, string> = {
+        anticipee: "annulation +3 semaines",
+        certificat: "certificat médical / force majeure",
+        tardive: "annulation tardive",
+      };
+      const avoirReason = `Annulation (${MOTIF_LABEL[data.motif] || data.motif}) — ` +
+        `${(payment.items || []).map((i: any) => i.activityTitle).join(", ").slice(0, 50)}` +
+        `${data.commentaire ? ` · ${data.commentaire}` : ""}`;
 
-      await addDoc(collection(db, "avoirs"), {
+      if (avoirAmount > 0) await addDoc(collection(db, "avoirs"), {
         familyId: payment.familyId,
         familyName: payment.familyName,
         type: "avoir",
@@ -922,8 +956,27 @@ export default function PaiementsPage() {
         updatedAt: serverTimestamp(),
       });
 
+      // Remboursement réellement rendu à la famille. Enregistré en négatif
+      // avec son mode réel : sans cette écriture, le rapprochement bancaire
+      // verrait un débit qu'il ne saurait rattacher à rien.
+      if (data.rembourse > 0) {
+        const refRemb = `RB-${Date.now().toString(36).toUpperCase()}`;
+        await createEncaissement({
+          paymentId: payment.id,
+          familyId: payment.familyId,
+          familyName: payment.familyName,
+          montant: -Math.round(data.rembourse * 100) / 100,
+          mode: `remboursement_${data.modeRemboursement}`,
+          modeLabel: `Remboursement ${MODE_REMB_LABEL[data.modeRemboursement] || data.modeRemboursement}`,
+          ref: refRemb,
+          activityTitle: (payment.items || []).map((i: any) => i.activityTitle).join(", "),
+          raison: avoirReason,
+        });
+        await retraitPointsFidelite(payment.familyId, data.rembourse, `Remboursement ${refRemb}`);
+      }
+
       // Trace dans le journal des encaissements (montant négatif = avoir)
-      await createEncaissement({
+      if (avoirAmount > 0) await createEncaissement({
         paymentId: payment.id,
         familyId: payment.familyId,
         familyName: payment.familyName,
@@ -937,10 +990,15 @@ export default function PaiementsPage() {
       });
 
       // Retrait des points de fidelite (1 pt par euro de l'avoir)
-      await retraitPointsFidelite(payment.familyId, avoirAmount, `Annulation ${ref}`);
+      if (avoirAmount > 0) await retraitPointsFidelite(payment.familyId, avoirAmount, `Annulation ${ref}`);
 
-      const warnMsg = unenrollErrors > 0 ? `\n⚠️ ${unenrollErrors} désinscription(s) à vérifier manuellement.` : "";
-      toast(`Commande annulée. Avoir créé : ${totalEnc.toFixed(2)}€ (réf. ${ref})${warnMsg}`);
+      const warnMsg = unenrollErrors > 0 ? ` — ⚠️ ${unenrollErrors} désinscription(s) à vérifier` : "";
+      const parts: string[] = [];
+      if (avoirAmount > 0) parts.push(`avoir ${avoirAmount.toFixed(2)}€ (${ref})`);
+      if (data.rembourse > 0) parts.push(`remboursement ${data.rembourse.toFixed(2)}€ à effectuer`);
+      const conserve = Math.round((totalEnc - avoirAmount - data.rembourse) * 100) / 100;
+      if (conserve > 0.01) parts.push(`${conserve.toFixed(2)}€ conservés`);
+      toast(`Commande annulée — ${parts.join(" · ") || "aucun mouvement"}${warnMsg}`);
     }
     await refreshAll([payment.id]);
   };
@@ -2740,6 +2798,20 @@ Règles :
           </div>
         );
       })()}
+
+      {annulModal && (
+        <AnnulationModal
+          familyName={annulModal.payment.familyName}
+          encaisse={annulModal.encaisse}
+          lignes={annulModal.lignes}
+          onClose={() => setAnnulModal(null)}
+          onConfirm={async (data) => {
+            const { payment, encaisse } = annulModal;
+            setAnnulModal(null);
+            await executerAnnulation(payment, encaisse, data);
+          }}
+        />
+      )}
     </div>
   );
 }
