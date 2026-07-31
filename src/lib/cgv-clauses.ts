@@ -28,6 +28,14 @@ export const STAGE_ACOMPTE_EUROS = 30;
 /** Fin de validite des avoirs. */
 export const AVOIR_FIN_VALIDITE = "30 juin";
 
+/**
+ * Nature exacte du justificatif accepte. « Certificat medical » tout court
+ * etait trop large : un arret de travail ou un certificat pour une autre
+ * activite ne vaut pas contre-indication a l'equitation.
+ */
+export const CERTIFICAT_MEDICAL =
+  "certificat médical de contre-indication à la pratique de l'équitation";
+
 export interface CasAnnulation {
   quand: string;
   consequence: string;
@@ -49,10 +57,14 @@ export const CGV_STAGES_CAS: CasAnnulation[] = [
     consequence: `Aucun remboursement.`,
   },
   {
-    quand: `Moins de ${STAGE_DELAI_ANNULATION} avant, avec certificat médical ou cas de force majeure`,
+    // « Certificat medical » seul etait trop large : c'est bien une
+    // contre-indication a l'equitation qui est exigee, pas un arret de
+    // travail ou un certificat pour une autre activite.
+    quand: `Moins de ${STAGE_DELAI_ANNULATION} avant, sur présentation d'un ${CERTIFICAT_MEDICAL}, ` +
+      `ou en cas de force majeure`,
     consequence:
-      `Les sommes versées sont remboursées, à l'exception de l'acompte de ${STAGE_ACOMPTE_EUROS} €, ` +
-      `converti en avoir valable sur toute prestation du centre jusqu'au ${AVOIR_FIN_VALIDITE}.`,
+      `L'acompte de ${STAGE_ACOMPTE_EUROS} € par stage est converti en avoir, valable sur toute ` +
+      `prestation du centre jusqu'au ${AVOIR_FIN_VALIDITE}. Le reste des sommes versées est remboursé.`,
   },
 ];
 
@@ -73,16 +85,17 @@ export const CGV_STAGES_HTML = `
  */
 export const CGV_STAGES_COURT =
   `remboursement intégral si j'annule plus de ${STAGE_DELAI_ANNULATION} avant le début du stage ; ` +
-  `passé ce délai, aucun remboursement, sauf certificat médical ou cas de force majeure — ` +
-  `l'acompte de ${STAGE_ACOMPTE_EUROS} € est alors converti en avoir valable jusqu'au ${AVOIR_FIN_VALIDITE}.`;
+  `passé ce délai, aucun remboursement. Sur présentation d'un ${CERTIFICAT_MEDICAL} ` +
+  `(ou en cas de force majeure), l'acompte de ${STAGE_ACOMPTE_EUROS} € par stage est converti ` +
+  `en avoir valable jusqu'au ${AVOIR_FIN_VALIDITE} et le reste est remboursé.`;
 
 export const CGV_COURS_ANNUELS =
   `Toute séance non effectuée sans prévenir 24h à l'avance est due. ` +
-  `En cas de maladie du cavalier (certificat médical), un report peut être accordé.`;
+  `En cas de maladie du cavalier (${CERTIFICAT_MEDICAL}), un report peut être accordé.`;
 
 export const CGV_BALADES =
   `Annulation jusqu'à 24h avant : remboursement intégral. ` +
-  `En deçà, aucun remboursement sauf certificat médical.`;
+  `En deçà, aucun remboursement, sauf ${CERTIFICAT_MEDICAL}.`;
 
 export const CGV_ANNULATION_CENTRE =
   `En cas d'annulation par le centre (météo, force majeure) : report proposé ou remboursement intégral.`;
