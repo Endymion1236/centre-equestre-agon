@@ -14,6 +14,7 @@
  * Body : { messageId, attachmentId, subject }
  */
 import { NextRequest, NextResponse } from "next/server";
+import { paramsTranscription } from "@/lib/transcription-params";
 import OpenAI from "openai";
 import { verifyAuth } from "@/lib/api-auth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
@@ -27,10 +28,11 @@ export const maxDuration = 60;
 
 // Vocabulaire du club : améliore nettement la transcription des noms propres
 // et du jargon (un appelant qui dit "je voudrais inscrire ma fille au galop 2").
-const PROMPT_TRANSCRIPTION =
-  "Message vocal laissé au Centre Équestre Poney Club d'Agon-Coutainville. " +
-  "Vocabulaire : stage, reprise, poney, cheval, galop, cavalier, balade, " +
-  "pony games, baptême, anniversaire, licence, moniteur, Coutainville, Agon.";
+const CTX_TRANSCRIPTION = {
+  contexte: "Message vocal laissé sur le répondeur du Centre Équestre Poney Club d'Agon-Coutainville, souvent depuis un téléphone, parfois avec du bruit de fond.",
+  motsCles: ["stage", "reprise", "poney", "galop", "cavalier", "balade", "pony games",
+    "baptême", "anniversaire", "licence", "moniteur", "Coutainville", "Agon"],
+};
 
 export async function POST(req: NextRequest) {
   const auth = await verifyAuth(req, { adminOnly: true });
@@ -102,9 +104,8 @@ export async function POST(req: NextRequest) {
       transcription = await openai.audio.transcriptions.create({
         file,
         model: primaryModel,
-        language: "fr",
-        prompt: PROMPT_TRANSCRIPTION,
-      });
+        ...paramsTranscription(primaryModel, CTX_TRANSCRIPTION),
+      } as any);
     } catch (primaryErr: any) {
       if (primaryModel === "whisper-1") throw primaryErr;
       console.warn(
@@ -114,9 +115,8 @@ export async function POST(req: NextRequest) {
       transcription = await openai.audio.transcriptions.create({
         file,
         model: "whisper-1",
-        language: "fr",
-        prompt: PROMPT_TRANSCRIPTION,
-      });
+        ...paramsTranscription("whisper-1", CTX_TRANSCRIPTION),
+      } as any);
     }
 
     const texte = (transcription.text || "").trim();

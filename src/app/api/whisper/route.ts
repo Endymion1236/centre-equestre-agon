@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { paramsTranscription } from "@/lib/transcription-params";
 import OpenAI from "openai";
 import { verifyAuth } from "@/lib/api-auth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
@@ -52,7 +53,13 @@ export async function POST(request: NextRequest) {
     // redéploiement. Fallback automatique vers whisper-1 si le modèle récent
     // échoue (indisponibilité, format non supporté), pour ne jamais bloquer
     // une dictée.
-    const PROMPT = "Bilan pédagogique équitation, galop, foulées, équilibre, position, cavalier, poney, cheval, moniteur, centre équestre.";
+    // Contexte et vocabulaire, transmis differemment selon la generation du
+    // modele (cf. lib/transcription-params) : les modeles recents separent
+    // prompt (contexte) et keywords (termes litteraux).
+    const CTX = {
+      contexte: "Dictée d'un moniteur dans un centre équestre : bilan pédagogique ou commande vocale.",
+      motsCles: ["galop", "foulées", "équilibre", "cavalier", "poney", "montoir", "reprise", "pony games"],
+    };
     const primaryModel = process.env.WHISPER_MODEL || "gpt-4o-transcribe";
 
     let transcription;
@@ -60,18 +67,16 @@ export async function POST(request: NextRequest) {
       transcription = await openai.audio.transcriptions.create({
         file: audioFile,
         model: primaryModel,
-        language: "fr",
-        prompt: PROMPT,
-      });
+        ...paramsTranscription(primaryModel, CTX),
+      } as any);
     } catch (primaryErr: any) {
       if (primaryModel === "whisper-1") throw primaryErr;
       console.warn(`Whisper: échec ${primaryModel}, fallback whisper-1:`, primaryErr?.message || primaryErr);
       transcription = await openai.audio.transcriptions.create({
         file: audioFile,
         model: "whisper-1",
-        language: "fr",
-        prompt: PROMPT,
-      });
+        ...paramsTranscription("whisper-1", CTX),
+      } as any);
     }
 
     return NextResponse.json({
