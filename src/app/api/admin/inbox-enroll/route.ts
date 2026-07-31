@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { STAGE_ACOMPTE_EUROS } from "@/lib/cgv-clauses";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
@@ -259,7 +260,7 @@ export async function POST(req: NextRequest) {
           .sort((a, b) => ((b.data() as any).date?.seconds || 0) - ((a.data() as any).date?.seconds || 0));
         const openOrder = pendingDocs.length > 0 ? pendingDocs[0] : null;
 
-        const ACOMPTE_PAR_ENFANT = 30;
+        const ACOMPTE_PAR_ENFANT = STAGE_ACOMPTE_EUROS; // source unique cgv-clauses
         if (openOrder) {
           const existing = openOrder.data() as any;
           // Ne pas dupliquer l'item si exactement le même (enfant + stageKey) existe déjà.

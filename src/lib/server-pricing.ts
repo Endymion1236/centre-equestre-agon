@@ -31,7 +31,8 @@
 import { adminDb } from "@/lib/firebase-admin";
 
 const TVA_STAGE_DEFAUT = 5.5;
-const ACOMPTE_PAR_ENFANT = 30; // doit rester synchro avec reserver/page.tsx
+import { STAGE_ACOMPTE_EUROS } from "./cgv-clauses";
+const ACOMPTE_PAR_ENFANT = STAGE_ACOMPTE_EUROS;
 const EPSILON = 0.02; // tolérance d'arrondi (2 centimes)
 
 const STAGE_TYPES = ["stage", "stage_journee"];

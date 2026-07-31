@@ -22,7 +22,15 @@
 /** Delai au-dela duquel un stage n'est plus remboursable. */
 export const STAGE_DELAI_ANNULATION = "3 semaines";
 
-/** Montant de l'acompte stage, tel qu'annonce aux familles. */
+/**
+ * Montant de l'acompte stage, PAR ENFANT.
+ *
+ * ⚠️ SOURCE UNIQUE. Ce montant etait ecrit en dur a six endroits (CGV,
+ * repartition d'annulation, validation serveur, inscription admin,
+ * reservation famille, boite IA) : en changer un sans les autres faisait
+ * soit encaisser un mauvais montant, soit annoncer des CGV fausses.
+ * Tous consomment desormais cette constante.
+ */
 export const STAGE_ACOMPTE_EUROS = 30;
 
 /** Fin de validite des avoirs. */

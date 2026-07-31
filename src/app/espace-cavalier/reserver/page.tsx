@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { derouleEstRempli } from "@/lib/stage-deroule";
-import { CGV_STAGES_COURT } from "@/lib/cgv-clauses";
+import { CGV_STAGES_COURT, STAGE_ACOMPTE_EUROS } from "@/lib/cgv-clauses";
 import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
@@ -503,7 +503,7 @@ export default function ReserverPage() {
   // concerne que les stages : inutile de la faire accepter pour une balade.
   const cartHasStage = cart.some((i: any) => i.isStage === true);
   const cartTotalReductions = cart.reduce((s, i) => s + i.remiseEuros, 0);
-  const ACOMPTE_PAR_ENFANT = 30;
+  const ACOMPTE_PAR_ENFANT = STAGE_ACOMPTE_EUROS; // source unique cgv-clauses
   const nbEnfantsStage = cart.filter(i => i.isStage).length;
   const acompteFixe = Math.min(ACOMPTE_PAR_ENFANT * nbEnfantsStage, cartTotal);
   const soldeFixe = Math.round((cartTotal - acompteFixe) * 100) / 100;

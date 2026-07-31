@@ -18,8 +18,10 @@
  * on n'enregistre que ce qui a ete decide, pour en garder la trace.
  */
 
+import { STAGE_ACOMPTE_EUROS } from "./cgv-clauses";
+
 /** Acompte stage, converti en avoir en cas de certificat medical. */
-export const ACOMPTE_STAGE = 30;
+export const ACOMPTE_STAGE = STAGE_ACOMPTE_EUROS;
 
 export type ModeRemboursement = "cb" | "cheque" | "virement" | "especes";
 

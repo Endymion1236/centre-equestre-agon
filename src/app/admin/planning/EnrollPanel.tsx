@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { STAGE_ACOMPTE_EUROS } from "@/lib/cgv-clauses";
 import { renderDerouleStage } from "@/lib/stage-deroule";
 import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, deleteField, doc, query, where, orderBy, serverTimestamp } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
@@ -1196,7 +1197,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   }, [isStage, selectedChildren, children, priceTTC, stageMode, stageDaysCount, creneau, fam, discountSettings, vacationPeriods]);
 
   const stageTotalTTC = stageLines.reduce((s, l) => s + l.prixReduit, 0);
-  const ACOMPTE_PAR_ENFANT = 30; // 30€ par enfant
+  const ACOMPTE_PAR_ENFANT = STAGE_ACOMPTE_EUROS; // par enfant — source unique cgv-clauses
   const showAcompte = stageMode === "semaine" && stagePayChoice === "acompte" && stageTotalTTC > ACOMPTE_PAR_ENFANT * stageLines.length;
   const stageAcompte = showAcompte ? Math.min(ACOMPTE_PAR_ENFANT * stageLines.length, stageTotalTTC) : stageTotalTTC;
   const stageSolde = showAcompte ? Math.round((stageTotalTTC - stageAcompte) * 100) / 100 : 0;
