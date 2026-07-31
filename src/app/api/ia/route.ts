@@ -142,7 +142,20 @@ interface AnalyseProgressionRequest {
   notesRecentes?: string[];
 }
 
-type IARequest = RapprochementRequest | AssistantRequest | SuggestionsRequest | EmailRepriseRequest | BilanPedaRequest | GenerateEmailTemplateRequest | ThemeStageRequest | PlanningManagementRequest | ManagementCommandRequest | AnalyseProgressionRequest;
+interface DescriptionActiviteRequest {
+  type: "description_activite";
+  titre?: string;
+  typeActivite?: string;
+  ageMin?: number;
+  ageMax?: number;
+  dureeMinutes?: number;
+  /** Texte deja saisi : l'IA l'ameliore au lieu de repartir de zero. */
+  currentText?: string;
+  /** Consigne libre du gerant pour orienter la redaction. */
+  userPrompt?: string;
+}
+
+type IARequest = DescriptionActiviteRequest | RapprochementRequest | AssistantRequest | SuggestionsRequest | EmailRepriseRequest | BilanPedaRequest | GenerateEmailTemplateRequest | ThemeStageRequest | PlanningManagementRequest | ManagementCommandRequest | AnalyseProgressionRequest;
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
@@ -439,6 +452,56 @@ Retourne UNIQUEMENT le HTML du body (pas de <html>, <body>, <head>). Styles inli
       const cleaned = text.replace(/```html?\s*/g, "").replace(/```\s*/g, "").trim();
 
       return NextResponse.json({ success: true, generatedBody: cleaned });
+    }
+
+    // ── Description d'activité (fiche admin) ─────────────────────────────────
+    // Rédige le texte que les familles lisent sous « Voir le détail du stage »
+    // au moment de réserver. Le prompt libre permet d'orienter le ton ou
+    // d'insister sur un aspect, sans réécrire la consigne de base.
+    if (body.type === "description_activite") {
+      const { titre, typeActivite, ageMin, ageMax, dureeMinutes, currentText, userPrompt } = body as any;
+
+      const contexte = [
+        titre ? `Nom : ${titre}` : "",
+        typeActivite ? `Type : ${typeActivite}` : "",
+        ageMin || ageMax ? `Âges : ${ageMin || "?"} à ${ageMax || "?"} ans` : "",
+        dureeMinutes ? `Durée : ${dureeMinutes} minutes` : "",
+      ].filter(Boolean).join("\n");
+
+      // Retoucher un texte existant n'est pas la même tâche que d'en écrire
+      // un : on le passe explicitement pour éviter que l'IA reparte de zéro
+      // et fasse perdre le travail déjà fait.
+      const base = currentText?.trim()
+        ? `Voici le texte actuel, à améliorer en gardant son intention :\n"""${currentText.trim()}"""`
+        : `Il n'existe pas encore de texte : rédige-le entièrement.`;
+
+      const prompt = `Tu rédiges la description d'une activité pour un centre équestre familial (poney club).
+Ce texte est lu par des parents au moment de réserver, sur la fiche de l'activité.
+
+${contexte}
+
+${base}
+
+${userPrompt?.trim() ? `Consigne particulière du gérant : ${userPrompt.trim()}` : ""}
+
+Règles :
+- 2 à 4 phrases, 60 mots maximum
+- ton chaleureux et concret, sans superlatifs creux ni jargon commercial
+- s'adresser aux parents, parler des enfants à la 3e personne
+- ne JAMAIS inventer de tarif, d'horaire, de date ni de nom de moniteur
+- pas de titre, pas de liste, pas de markdown : uniquement le texte brut
+Retourne UNIQUEMENT la description, rien d'autre.`;
+
+      const message = await client.messages.create({
+        model: "claude-sonnet-4-5",
+        max_tokens: 400,
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      const text = message.content[0].type === "text" ? message.content[0].text : "";
+      const cleaned = text.replace(/```\w*\s*/g, "").replace(/```/g, "").trim();
+
+      return NextResponse.json({ success: true, description: cleaned });
     }
 
     // ── Bilan pédagogique IA ──────────────────────────────────────────────────
