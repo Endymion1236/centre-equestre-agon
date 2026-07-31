@@ -153,6 +153,10 @@ interface DescriptionActiviteRequest {
   currentText?: string;
   /** Consigne libre du gerant pour orienter la redaction. */
   userPrompt?: string;
+  /** Champ vise : chacun a ses contraintes de longueur et de forme. */
+  champ?: "description" | "intro" | "features" | "practical";
+  /** Contexte additionnel (horaires, tarif affiche...) pour les fiches vitrine. */
+  contexteLibre?: string;
 }
 
 type IARequest = DescriptionActiviteRequest | RapprochementRequest | AssistantRequest | SuggestionsRequest | EmailRepriseRequest | BilanPedaRequest | GenerateEmailTemplateRequest | ThemeStageRequest | PlanningManagementRequest | ManagementCommandRequest | AnalyseProgressionRequest;
@@ -461,12 +465,29 @@ Retourne UNIQUEMENT le HTML du body (pas de <html>, <body>, <head>). Styles inli
     if (body.type === "description_activite") {
       const { titre, typeActivite, ageMin, ageMax, dureeMinutes, currentText, userPrompt } = body as any;
 
+      const champ = (body as any).champ || "description";
+      const contexteLibre = (body as any).contexteLibre || "";
+
       const contexte = [
         titre ? `Nom : ${titre}` : "",
         typeActivite ? `Type : ${typeActivite}` : "",
         ageMin || ageMax ? `Âges : ${ageMin || "?"} à ${ageMax || "?"} ans` : "",
         dureeMinutes ? `Durée : ${dureeMinutes} minutes` : "",
+        contexteLibre,
       ].filter(Boolean).join("\n");
+
+      // Chaque champ a sa forme propre : une liste de points forts et un
+      // paragraphe d'accroche ne se rédigent pas de la même façon.
+      const CONSIGNES: Record<string, string> = {
+        description:
+          "Rédige une description courte : 2 à 3 phrases, 60 mots maximum. Texte brut, sans titre ni liste.",
+        intro:
+          "Rédige un paragraphe d'accroche en haut de la fiche : 3 à 4 phrases, 90 mots maximum. Donne envie sans exagérer. Texte brut, sans titre ni liste.",
+        features:
+          "Rédige les POINTS FORTS : 4 à 6 lignes, une par ligne, sans tiret ni puce en début de ligne. Chaque ligne fait 12 mots maximum et énonce un bénéfice concret. Retourne uniquement les lignes, séparées par des retours à la ligne.",
+        practical:
+          "Rédige les INFOS PRATIQUES : 3 à 5 lignes, une par ligne, sans tiret ni puce. Tenue, matériel, prérequis, ce qu'il faut prévoir. Chaque ligne fait 12 mots maximum. Retourne uniquement les lignes, séparées par des retours à la ligne.",
+      };
 
       // Retoucher un texte existant n'est pas la même tâche que d'en écrire
       // un : on le passe explicitement pour éviter que l'IA reparte de zéro
@@ -484,13 +505,15 @@ ${base}
 
 ${userPrompt?.trim() ? `Consigne particulière du gérant : ${userPrompt.trim()}` : ""}
 
+${CONSIGNES[champ] || CONSIGNES.description}
+
 Règles :
-- 2 à 4 phrases, 60 mots maximum
 - ton chaleureux et concret, sans superlatifs creux ni jargon commercial
 - s'adresser aux parents, parler des enfants à la 3e personne
-- ne JAMAIS inventer de tarif, d'horaire, de date ni de nom de moniteur
-- pas de titre, pas de liste, pas de markdown : uniquement le texte brut
-Retourne UNIQUEMENT la description, rien d'autre.`;
+- ne JAMAIS inventer de tarif, d'horaire, de date ni de nom de moniteur :
+  ces données ne te sont pas fournies et une invention crédible finirait publiée
+- pas de markdown, pas de guillemets autour du texte
+Retourne UNIQUEMENT le texte demandé, rien d'autre.`;
 
       const message = await client.messages.create({
         model: "claude-sonnet-4-5",

@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import AssistantRedaction from "@/components/admin/AssistantRedaction";
 import { PUBLIC_ACTIVITIES, activitesEditables } from "@/lib/public-activities";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
@@ -283,12 +284,26 @@ export default function ContenuPage() {
                         <label className={label}>Description courte</label>
                         <textarea value={act.description ?? ""} placeholder={base?.description || ""}
                           onChange={e => setActivite(key, "description", e.target.value)} rows={2} className={ta} />
+                        <AssistantRedaction
+                          champ="description"
+                          valeur={act.description ?? base?.description ?? ""}
+                          onApply={(t) => setActivite(key, "description", t)}
+                          contexte={{ titre: act.title || base?.title, typeActivite: base?.category,
+                            contexteLibre: [act.ages || base?.ages, act.schedule || base?.schedule].filter(Boolean).join(" · ") }}
+                        />
                       </div>
 
                       <div className="mt-3">
                         <label className={label}>Introduction</label>
                         <textarea value={act.intro ?? ""} placeholder={base?.intro || ""}
                           onChange={e => setActivite(key, "intro", e.target.value)} rows={3} className={ta} />
+                        <AssistantRedaction
+                          champ="intro"
+                          valeur={act.intro ?? base?.intro ?? ""}
+                          onApply={(t) => setActivite(key, "intro", t)}
+                          contexte={{ titre: act.title || base?.title, typeActivite: base?.category,
+                            contexteLibre: [act.ages || base?.ages, act.schedule || base?.schedule].filter(Boolean).join(" · ") }}
+                        />
                       </div>
 
                       {/* Listes : une ligne = un element */}
@@ -306,6 +321,16 @@ export default function ContenuPage() {
                             className={ta}
                           />
                           <p className="font-body text-[10px] text-slate-400 mt-1">{aide}</p>
+                          <AssistantRedaction
+                            champ={champ}
+                            valeur={(Array.isArray(act[champ]) ? act[champ] : (base?.[champ] || [])).join("\n")}
+                            onApply={(t) => setActivite(key, champ, t.split("\n").map(l => l.replace(/^[-•\s]+/, "").trim()).filter(Boolean))}
+                            contexte={{ titre: act.title || base?.title, typeActivite: base?.category,
+                              contexteLibre: [act.ages || base?.ages, act.schedule || base?.schedule].filter(Boolean).join(" · ") }}
+                            placeholder={champ === "features"
+                              ? "Ex : mets en avant le déroulé en 2 séquences et les petits effectifs"
+                              : "Ex : rappelle la tenue obligatoire et le goûter à prévoir"}
+                          />
                         </div>
                       ))}
                     </div>

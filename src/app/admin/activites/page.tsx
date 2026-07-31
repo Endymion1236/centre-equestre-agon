@@ -4,9 +4,9 @@ import { useAgentContext } from "@/hooks/useAgentContext";
 import { useState, useEffect } from "react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy, setDoc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { authFetch } from "@/lib/auth-fetch";
+import AssistantRedaction from "@/components/admin/AssistantRedaction";
 import { Card, Badge, Button } from "@/components/ui";
-import { Plus, Pencil, Trash2, Copy, X, Check, Loader2, Settings2, Sparkles } from "lucide-react";
+import { Plus, Pencil, Trash2, Copy, X, Check, Loader2, Settings2 } from "lucide-react";
 import type { Activity, ActivityType } from "@/types";
 import { typeColors } from "@/app/admin/planning/types";
 
@@ -152,46 +152,6 @@ function ActivityForm({ initial, subcatOptions, onSave, onCancel }: {
   const [saving, setSaving] = useState(false);
   const update = (f: string, v: any) => setForm((p: any) => ({ ...p, [f]: v }));
 
-  // ── Assistant de rédaction ──────────────────────────────────────────────
-  // La proposition n'écrase JAMAIS le champ directement : elle s'affiche en
-  // aperçu, et c'est un clic explicite qui l'applique. Un texte travaillé ne
-  // doit pas disparaître sur une génération ratée.
-  const [iaOuvert, setIaOuvert] = useState(false);
-  const [iaPrompt, setIaPrompt] = useState("");
-  const [iaEnCours, setIaEnCours] = useState(false);
-  const [iaProposition, setIaProposition] = useState("");
-  const [iaErreur, setIaErreur] = useState("");
-
-  const genererDescription = async () => {
-    setIaEnCours(true);
-    setIaErreur("");
-    setIaProposition("");
-    try {
-      const r = await authFetch("/api/ia", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "description_activite",
-          titre: form.title,
-          typeActivite: form.type,
-          ageMin: form.ageMin,
-          ageMax: form.ageMax,
-          dureeMinutes: form.dureeMinutes,
-          currentText: form.description || "",
-          userPrompt: iaPrompt,
-        }),
-      });
-      const d = await r.json();
-      if (!r.ok || !d?.description) {
-        setIaErreur(d?.error || "La génération a échoué. Réessayez.");
-      } else {
-        setIaProposition(d.description);
-      }
-    } catch {
-      setIaErreur("Erreur réseau.");
-    }
-    setIaEnCours(false);
-  };
 
   const subcats = subcatOptions[form.type] || [];
 
@@ -284,93 +244,24 @@ function ActivityForm({ initial, subcatOptions, onSave, onCancel }: {
 
         {/* Description */}
         <div>
-          <div className="flex items-center justify-between gap-2 mb-1">
-            <label className="font-body text-xs font-semibold text-blue-800">Description</label>
-            <button
-              type="button"
-              onClick={() => setIaOuvert(o => !o)}
-              className="inline-flex items-center gap-1 font-body text-[11px] font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-100 rounded-lg px-2.5 py-1 cursor-pointer transition-colors"
-            >
-              <Sparkles size={11} /> {iaOuvert ? "Fermer" : "Rédiger avec l’IA"}
-            </button>
-          </div>
+          <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Description</label>
           <textarea value={form.description || ""} onChange={e => update("description", e.target.value)} rows={3}
             className={`${inp} resize-y`} placeholder="Description de l'activité..." />
           <p className="font-body text-[10px] text-slate-400 mt-1">
             Affichée aux familles sous « Voir le détail du stage » au moment de réserver.
           </p>
-
-          {iaOuvert && (
-            <div className="mt-2 rounded-xl border border-purple-100 bg-purple-50/60 p-3">
-              <label className="font-body text-[10px] font-semibold text-purple-800 uppercase tracking-wider block mb-1.5">
-                Consigne (facultative)
-              </label>
-              <textarea
-                value={iaPrompt}
-                onChange={e => setIaPrompt(e.target.value)}
-                rows={2}
-                placeholder="Ex : insiste sur l’autonomie et les jeux, ton rassurant pour des parents de tout-petits"
-                className={`${inp} resize-y text-xs`}
-              />
-              <p className="font-body text-[10px] text-slate-500 mt-1">
-                {form.description?.trim()
-                  ? "Le texte actuel sera amélioré en gardant son intention."
-                  : "Aucun texte pour l’instant : il sera rédigé entièrement."}
-              </p>
-
-              <button
-                type="button"
-                onClick={genererDescription}
-                disabled={iaEnCours}
-                className="mt-2 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-purple-600 text-white font-body text-xs font-semibold border-none cursor-pointer disabled:opacity-50"
-              >
-                {iaEnCours ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-                {iaEnCours ? "Rédaction…" : "Générer une proposition"}
-              </button>
-
-              {iaErreur && (
-                <p className="font-body text-[11px] text-red-600 mt-2">{iaErreur}</p>
-              )}
-
-              {iaProposition && (
-                <div className="mt-3">
-                  <div className="font-body text-[10px] font-semibold text-purple-800 uppercase tracking-wider mb-1.5">
-                    Proposition
-                  </div>
-                  <div className="bg-white border border-purple-100 rounded-lg p-3 font-body text-xs text-slate-700 leading-relaxed whitespace-pre-line">
-                    {iaProposition}
-                  </div>
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => { update("description", iaProposition); setIaProposition(""); setIaOuvert(false); }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white font-body text-xs font-semibold border-none cursor-pointer"
-                    >
-                      <Check size={12} /> Utiliser ce texte
-                    </button>
-                    <button
-                      type="button"
-                      onClick={genererDescription}
-                      disabled={iaEnCours}
-                      className="px-3 py-1.5 rounded-lg bg-white text-purple-700 border border-purple-200 font-body text-xs font-semibold cursor-pointer disabled:opacity-50"
-                    >
-                      Autre proposition
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIaProposition("")}
-                      className="px-3 py-1.5 rounded-lg bg-transparent text-slate-500 border-none font-body text-xs cursor-pointer"
-                    >
-                      Ignorer
-                    </button>
-                  </div>
-                  <p className="font-body text-[10px] text-slate-400 mt-1.5">
-                    Rien n’est modifié tant que vous n’avez pas cliqué sur « Utiliser ce texte ».
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
+          <AssistantRedaction
+            champ="description"
+            valeur={form.description || ""}
+            onApply={(t) => update("description", t)}
+            contexte={{
+              titre: form.title,
+              typeActivite: form.type,
+              ageMin: form.ageMin,
+              ageMax: form.ageMax,
+              dureeMinutes: form.dureeMinutes,
+            }}
+          />
         </div>
 
         {/* Âge + Galop + Places */}
