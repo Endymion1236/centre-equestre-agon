@@ -1,5 +1,5 @@
 import { Navbar } from "@/components/layout/Navbar";
-import { CGV_STAGES_LONG, CGV_COURS_ANNUELS, CGV_BALADES } from "@/lib/cgv-clauses";
+import { CGV_STAGES_CAS, CGV_COURS_ANNUELS, CGV_BALADES } from "@/lib/cgv-clauses";
 import { Footer } from "@/components/layout/Footer";
 import type { Metadata } from "next";
 
@@ -53,7 +53,14 @@ export default function CGVPage() {
           <section className="mb-8">
             <h2 className="font-display text-lg font-bold text-blue-700 mb-3">5. Annulation et remboursement</h2>
             <div className="font-body text-sm text-gray-600 leading-relaxed space-y-2">
-              <p><strong>Stages :</strong> {CGV_STAGES_LONG}</p>
+              <p><strong>Stages :</strong></p>
+              <ul style={{ margin: "4px 0 12px", paddingLeft: "20px" }}>
+                {CGV_STAGES_CAS.map((cas) => (
+                  <li key={cas.quand} style={{ marginBottom: "4px" }}>
+                    <strong>{cas.quand}</strong> : {cas.consequence}
+                  </li>
+                ))}
+              </ul>
               <p><strong>Cours annuels (forfait) :</strong> {CGV_COURS_ANNUELS}</p>
               <p><strong>Balades :</strong> {CGV_BALADES}</p>
               <p><strong>Annulation par le centre</strong> (météo, force majeure) : report proposé ou remboursement intégral.</p>

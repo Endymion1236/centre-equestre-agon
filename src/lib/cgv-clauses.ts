@@ -11,6 +11,12 @@
  * Toute modification faite ici s'applique donc partout.
  *
  * ⚠️ Texte a portee contractuelle : ne pas reformuler sans validation.
+ *
+ * Redaction : trois cas ENUMERES plutot qu'un paragraphe a exceptions
+ * imbriquees. Les versions precedentes disaient « au-dela de 3 semaines
+ * avant le stage », qui se lit dans les deux sens (plus tot ? plus tard ?),
+ * et n'annoncaient jamais le remboursement integral — une famille n'y
+ * lisait que des restrictions.
  */
 
 /** Delai au-dela duquel un stage n'est plus remboursable. */
@@ -22,28 +28,53 @@ export const STAGE_ACOMPTE_EUROS = 30;
 /** Fin de validite des avoirs. */
 export const AVOIR_FIN_VALIDITE = "30 juin";
 
-/**
- * Clause stages, version longue (page CGV).
- *
- * Le sort de l'acompte est enonce en deux phrases distinctes, car la
- * redaction precedente — « ... sauf certificat medical. L'acompte est
- * ALORS converti en avoir » — laissait croire que l'avoir valait pour
- * toute annulation tardive. Il n'est du qu'en cas de justificatif.
- */
-export const CGV_STAGES_LONG =
-  `Annulation jusqu'à ${STAGE_DELAI_ANNULATION} avant le début du stage : remboursement intégral ` +
-  `(hors frais bancaires). Passé ce délai, le stage n'est plus remboursable. ` +
-  `Sur présentation d'un certificat médical ou en cas de force majeure, l'acompte de ` +
-  `${STAGE_ACOMPTE_EUROS} € est converti en avoir, valable sur toute prestation du centre ` +
-  `jusqu'à la fin de la saison en cours (${AVOIR_FIN_VALIDITE}). ` +
-  `Sans justificatif, l'acompte reste acquis au centre.`;
+export interface CasAnnulation {
+  quand: string;
+  consequence: string;
+}
 
-/** Clause stages, version courte (case a cocher, email). */
+/**
+ * Les trois situations possibles, dans l'ordre chronologique.
+ * On commence par le cas favorable : c'est le plus frequent, et le taire
+ * donnait l'impression qu'aucun remboursement n'existait.
+ */
+export const CGV_STAGES_CAS: CasAnnulation[] = [
+  {
+    quand: `Plus de ${STAGE_DELAI_ANNULATION} avant le début du stage`,
+    consequence:
+      `Remboursement intégral, acompte compris (hors frais bancaires).`,
+  },
+  {
+    quand: `Moins de ${STAGE_DELAI_ANNULATION} avant le début du stage`,
+    consequence: `Aucun remboursement.`,
+  },
+  {
+    quand: `Moins de ${STAGE_DELAI_ANNULATION} avant, avec certificat médical ou cas de force majeure`,
+    consequence:
+      `Les sommes versées sont remboursées, à l'exception de l'acompte de ${STAGE_ACOMPTE_EUROS} €, ` +
+      `converti en avoir valable sur toute prestation du centre jusqu'au ${AVOIR_FIN_VALIDITE}.`,
+  },
+];
+
+/** Version phrase (page CGV, email) — reprend les trois cas a la suite. */
+export const CGV_STAGES_LONG = CGV_STAGES_CAS
+  .map((c) => `${c.quand} : ${c.consequence}`)
+  .join(" ");
+
+/** Bloc HTML en liste, plus lisible qu'un paragraphe dans un email. */
+export const CGV_STAGES_HTML = `
+  <ul style="margin:8px 0 0;padding-left:18px;color:#555;font-size:13px;line-height:1.6;">
+    ${CGV_STAGES_CAS.map((c) => `<li><strong>${c.quand}</strong> : ${c.consequence}</li>`).join("")}
+  </ul>`;
+
+/**
+ * Version courte (case a cocher avant paiement).
+ * Enonce d'abord ce a quoi la famille a droit, puis la limite.
+ */
 export const CGV_STAGES_COURT =
-  `Au-delà de ${STAGE_DELAI_ANNULATION} avant le début du stage, l'annulation ne donne pas lieu ` +
-  `à remboursement. L'acompte de ${STAGE_ACOMPTE_EUROS} € est converti en avoir uniquement sur ` +
-  `présentation d'un certificat médical ou en cas de force majeure ; sans justificatif, ` +
-  `il reste acquis au centre.`;
+  `remboursement intégral si j'annule plus de ${STAGE_DELAI_ANNULATION} avant le début du stage ; ` +
+  `passé ce délai, aucun remboursement, sauf certificat médical ou cas de force majeure — ` +
+  `l'acompte de ${STAGE_ACOMPTE_EUROS} € est alors converti en avoir valable jusqu'au ${AVOIR_FIN_VALIDITE}.`;
 
 export const CGV_COURS_ANNUELS =
   `Toute séance non effectuée sans prévenir 24h à l'avance est due. ` +
