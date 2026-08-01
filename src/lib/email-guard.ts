@@ -6,8 +6,9 @@
 // destinataires autorisés reçoivent des emails :
 //   - les 3 emails admin
 //   - le compte de test laserbayagon@gmail.com
+//   - les emails des FICHES MONITEURS actives (Paramètres > Moniteurs) —
+//     même source que le récap quotidien, whitelist automatique
 //   - tout email ajouté dans la variable d'env EMAIL_ALLOWLIST
-//     (séparés par des virgules — y mettre les emails des moniteurs)
 //
 // Pour ROUVRIR l'envoi à tout le monde le jour de la mise en service :
 //   définir la variable Vercel  EMAIL_RESTRICTED_MODE = off
@@ -23,21 +24,33 @@ const norm = (e: string) => (e || "").trim().toLowerCase();
 // settings/email.restricted (boolean) prend le pas sur EMAIL_RESTRICTED_MODE.
 // Le cache mémoire ne persiste pas en serverless : chaque route appelle
 // `await refreshEmailMode()` en tête pour lire la valeur à jour dans la requête.
-let cached: { restricted: boolean | null; at: number } | null = null;
+let cached: { restricted: boolean | null; staff: string[]; at: number } | null = null;
 const CACHE_MS = 20_000;
 
 export async function refreshEmailMode(): Promise<void> {
   if (cached && Date.now() - cached.at < CACHE_MS) return;
   let restricted: boolean | null = null;
+  let staff: string[] = [];
   try {
     const { adminDb } = await import("@/lib/firebase-admin");
     const snap = await adminDb.collection("settings").doc("email").get();
     const d = snap.exists ? (snap.data() as any) : null;
     if (d && typeof d.restricted === "boolean") restricted = d.restricted;
+
+    // Emails des fiches moniteurs ACTIVES : whitelist automatiquement.
+    // Meme source que le recap quotidien (daily-notifications) — par
+    // construction, une monitrice qui recoit son planning est autorisee a
+    // le recevoir. Deux listes separees auraient fini par diverger : fiche
+    // ajoutee, recap envoye… et bloque par le garde-fou.
+    const monSnap = await adminDb.collection("moniteurs").where("status", "==", "active").get();
+    staff = monSnap.docs
+      .map((doc) => norm((doc.data() as any).email))
+      .filter(Boolean);
   } catch {
     restricted = null; // erreur → fallback sur la variable d'env
+    staff = [];        // erreur → aucune fiche whitelistee (fail-safe)
   }
-  cached = { restricted, at: Date.now() };
+  cached = { restricted, staff, at: Date.now() };
 }
 
 /** Le mode restreint est actif si le flag Firestore le dit, sinon selon EMAIL_RESTRICTED_MODE. */
@@ -52,11 +65,18 @@ export function isEmailRestricted(): boolean {
   return norm(process.env.EMAIL_RESTRICTED_MODE || "on") !== "off";
 }
 
-/** Liste blanche : admins + compte test + emails supplémentaires (env EMAIL_ALLOWLIST). */
+/**
+ * Liste blanche : admins + compte test + fiches moniteurs actives
+ * + emails supplémentaires (env EMAIL_ALLOWLIST).
+ * Les fiches viennent du cache rempli par refreshEmailMode() — si la route
+ * a oublié de l'appeler, le fail-safe d'isEmailRestricted bloque de toute
+ * façon tout envoi, staff compris.
+ */
 function allowlist(): Set<string> {
   const extra = (process.env.EMAIL_ALLOWLIST || "")
     .split(",").map(norm).filter(Boolean);
-  return new Set([...ADMIN_EMAILS, ...TEST_EMAILS, ...extra].map(norm));
+  const staff = cached?.staff || [];
+  return new Set([...ADMIN_EMAILS, ...TEST_EMAILS, ...staff, ...extra].map(norm));
 }
 
 /**
