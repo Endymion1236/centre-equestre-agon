@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { derouleEstRempli } from "@/lib/stage-deroule";
 import Link from "next/link";
 import { collection, deleteDoc, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import {
@@ -83,6 +84,19 @@ export default function ReservationsPage() {
   const success = searchParams.get("success");
 
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  // Deroule des 2 sequences (Parametres > Deroule stages) — meme reglage que
+  // la page Reserver et les emails. Affiche ici pour que la famille inscrite
+  // AU BUREAU (qui ne passe jamais par la page Reserver, et dont l'email de
+  // confirmation peut etre bloque par le mode restreint) voie quand meme le
+  // format de la seance.
+  const [deroule, setDeroule] = useState<any | null>(null);
+  useEffect(() => {
+    getDoc(doc(db, "settings", "stageDeroule"))
+      .then(snap => setDeroule(snap.exists() ? snap.data() : null))
+      .catch(() => setDeroule(null));
+  }, []);
+  const [derouleOuvert, setDerouleOuvert] = useState(false);
+
   const [waitlistEntries, setWaitlistEntries] = useState<any[]>([]);
   const [cancellingWaitlist, setCancellingWaitlist] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -329,6 +343,39 @@ export default function ReservationsPage() {
                     </div>
                     <Badge color={status.color}>{status.label}</Badge>
                   </div>
+                  {String(nextReservation.activityType || "").toLowerCase().includes("stage") && derouleEstRempli(deroule) && (
+                    <div className="mt-3 pt-3 border-t border-white/20">
+                      <button
+                        type="button"
+                        onClick={() => setDerouleOuvert(o => !o)}
+                        className="bg-transparent border-none p-0 cursor-pointer font-body text-xs font-semibold text-blue-100 underline"
+                      >
+                        {derouleOuvert ? "Masquer le déroulé de la séance" : "🐴 Comment se déroule la séance ?"}
+                      </button>
+                      {derouleOuvert && (
+                        <div className="mt-2 bg-white/10 rounded-xl p-3">
+                          {[1, 2].map((n) => {
+                            const titre = n === 1 ? deroule.sequence1Titre : deroule.sequence2Titre;
+                            const detail = n === 1 ? deroule.sequence1Detail : deroule.sequence2Detail;
+                            return (
+                              <div key={n} className="flex gap-2 mb-1.5 last:mb-0">
+                                <span className="w-4 h-4 rounded-full bg-white/25 text-white font-body text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">{n}</span>
+                                <div className="min-w-0">
+                                  <div className="font-body text-xs font-semibold text-white leading-snug">{titre}</div>
+                                  {detail?.trim() && (
+                                    <div className="font-body text-[11px] text-blue-100 leading-snug">{detail}</div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {deroule.note?.trim() && (
+                            <p className="font-body text-[10px] text-blue-100 mt-2 mb-0">{deroule.note}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </Card>
               </section>
             );
