@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { GALOPS_PROGRAMME, DOMAINE_LABELS } from "@/lib/galops-programme";
-import { verifyAuth } from "@/lib/api-auth";
+import { verifyAuth, isAdminToken } from "@/lib/api-auth";
 import {
   type Acquis,
   isDomaineEchelle,
@@ -26,6 +26,15 @@ export async function GET(req: NextRequest) {
 
   if (!childId || !familyId) {
     return new NextResponse("Paramètres manquants", { status: 400 });
+  }
+
+  // Contrôle d'accès : une famille ne peut ouvrir que le bilan de SES
+  // enfants. Sans ce test, n'importe quel compte connecté pouvait lire le
+  // bilan d'un autre enfant en devinant familyId/childId dans l'URL —
+  // données personnelles d'un mineur, inacceptable à 551 familles.
+  const estAdmin = isAdminToken(auth);
+  if (!estAdmin && auth.uid !== familyId) {
+    return new NextResponse("Accès refusé", { status: 403 });
   }
 
   // Charger la progression depuis Firestore
@@ -390,6 +399,12 @@ export async function GET(req: NextRequest) {
   <title>Bilan de progression — ${childName}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    /* CRUCIAL : sans ces deux lignes, les navigateurs suppriment les fonds
+       colorés à l'impression — barres de progression, tampon « Validé »,
+       encadré du commentaire moniteur disparaissent, et la famille reçoit
+       un formulaire noir et blanc. C'est exactement le « simple feuille
+       A4 » du commentaire de satisfaction. */
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     body { font-family: Arial, sans-serif; color: #1f2937; background: white; }
     @media print {
       body { margin: 0; }

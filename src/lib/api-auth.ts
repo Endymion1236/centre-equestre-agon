@@ -39,7 +39,7 @@ const ADMIN_EMAILS = [
   "emmelinelagy@gmail.com",
 ];
 
-function isAdminToken(decoded: any): boolean {
+export function isAdminToken(decoded: any): boolean {
   return decoded.admin === true || ADMIN_EMAILS.includes(decoded.email || "");
 }
 
