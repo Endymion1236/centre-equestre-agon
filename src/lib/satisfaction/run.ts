@@ -9,7 +9,12 @@ import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-gu
 import { logEmail } from "@/lib/email-log";
 
 const FROM = process.env.RESEND_FROM_EMAIL || process.env.RESEND_FROM || "onboarding@resend.dev";
-const BCC = process.env.RESEND_BCC_EMAIL || process.env.RESEND_BCC || "";
+// Pas de copie cachée sur les demandes de satisfaction : envoyées par
+// vagues (une par semaine de stage x dizaines de familles), elles
+// saturaient la boîte du gérant sans rien lui apprendre — les réponses se
+// consultent dans admin/satisfaction, et chaque envoi est journalisé dans
+// emails-log. Le BCC reste en place ailleurs (paiements, SEPA), où un
+// email isolé a une valeur de preuve.
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
 
 const norm = (s: string) => (s || "")
@@ -151,7 +156,7 @@ export async function runSatisfactionStages(opts: RunOptions = {}) {
       const childFirst = (info.childName || "").split(" ")[0];
       const subject = `Votre avis sur le stage${childFirst ? ` de ${childFirst}` : ""}`;
       try {
-        await resend.emails.send({ from: FROM, to: dest, ...(BCC ? { bcc: BCC } : {}), subject, html: emailHtml(childFirst, label, link) });
+        await resend.emails.send({ from: FROM, to: dest, subject, html: emailHtml(childFirst, label, link) });
         result.emails++; report.envoyes++;
         await logEmail({ to: dest, subject, context: "cron_satisfaction_stage", template: "satisfactionStage", status: "sent", familyId: invitation.familyId, sentBy: "system" }).catch(() => {});
       } catch (err: any) {
@@ -187,7 +192,7 @@ function emailHtmlAnnee(childFirst: string, saisonLabel: string, link: string) {
   </div>`;
 }
 
-export interface RunAnneeOptions { saison?: number; dry?: boolean; toOverride?: string; limit?: number; noBcc?: boolean; }
+export interface RunAnneeOptions { saison?: number; dry?: boolean; toOverride?: string; limit?: number; }
 
 /**
  * Questionnaire de fin de saison : une invitation par enfant ayant monté en
@@ -275,7 +280,7 @@ export async function runSatisfactionAnnee(opts: RunAnneeOptions = {}) {
     const childFirst = (meta.childName || "").split(" ")[0];
     const subject = `Votre avis sur l'année${childFirst ? ` de ${childFirst}` : ""}`;
     try {
-      await resend.emails.send({ from: FROM, to: dest, ...((BCC && !opts.noBcc) ? { bcc: BCC } : {}), subject, html: emailHtmlAnnee(childFirst, saisonLabel, link) });
+      await resend.emails.send({ from: FROM, to: dest, subject, html: emailHtmlAnnee(childFirst, saisonLabel, link) });
       result.emails++;
       await logEmail({ to: dest, subject, context: "cron_satisfaction_annee", template: "satisfactionAnnee", status: "sent", familyId: invitation.familyId, sentBy: "system" }).catch(() => {});
     } catch (err: any) {
@@ -401,7 +406,7 @@ export async function runSatisfactionPromenades(opts: RunOptions = {}) {
       const childFirst = (invitation.childName || "").split(" ")[0];
       const subject = `Votre avis sur la promenade${childFirst ? ` de ${childFirst}` : ""}`;
       try {
-        await resend.emails.send({ from: FROM, to: dest, ...(BCC ? { bcc: BCC } : {}), subject, html: emailHtmlPromenade(childFirst, label, link) });
+        await resend.emails.send({ from: FROM, to: dest, subject, html: emailHtmlPromenade(childFirst, label, link) });
         result.emails++; report.envoyes++;
         await logEmail({ to: dest, subject, context: "cron_satisfaction_promenade", template: "satisfactionPromenade", status: "sent", familyId: invitation.familyId, sentBy: "system" }).catch(() => {});
       } catch (err: any) {

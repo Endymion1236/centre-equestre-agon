@@ -18,7 +18,6 @@ async function handle(req: NextRequest) {
       dry: req.nextUrl.searchParams.get("dry") === "1",
       toOverride: req.nextUrl.searchParams.get("to") || undefined,
       limit: Number(req.nextUrl.searchParams.get("limit")) || undefined,
-      noBcc: req.nextUrl.searchParams.get("bcc") === "0",
     });
     return NextResponse.json(result);
   } catch (e: any) {
