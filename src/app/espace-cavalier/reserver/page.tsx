@@ -52,6 +52,13 @@ export default function ReserverPage() {
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [paying, setPaying] = useState(false);
   const [depositMode, setDepositMode] = useState<"full" | "deposit">("full");
+  // Les stages se reglent par ACOMPTE uniquement (decision gerant) : plus
+  // d'option « payer le total » en ligne. Le solde est preleve a ~J-7 via
+  // l'empreinte de carte. Force par effet plutot qu'en dur dans le state :
+  // un panier peut gagner ou perdre son stage au fil des ajouts.
+  useEffect(() => {
+    setDepositMode(cart.some((i) => i.isStage) ? "deposit" : "full");
+  }, [cart]);
   // Modal sélection enfant (depuis Timeline)
   const [bookingCreneau, setBookingCreneau] = useState<Creneau | null>(null);
   // Mode paiement dans le panier
@@ -1709,32 +1716,29 @@ export default function ReserverPage() {
                     <span>Total</span><span className="text-green-600">{cartTotal.toFixed(2)}€</span>
                   </div>
 
-                  {/* Choix acompte si stages dans le panier */}
+                  {/* Stages : reglement par acompte uniquement. Le solde est
+                      preleve automatiquement a ~J-7. Quand l'acompte couvre
+                      deja le total (petite journee), on ne parle ni de solde
+                      ni d'empreinte de carte : il n'y a rien a prelever. */}
                   {cart.some(i => i.isStage) && cartPayMode === "cb" && (
                     <div className="bg-blue-50 rounded-lg p-3 mb-4">
-                      <div className="font-body text-xs font-semibold text-blue-800 mb-2">Paiement CB</div>
-                      <div className="flex gap-2">
-                        <button onClick={() => setDepositMode("full")}
-                          className={`flex-1 py-2 px-3 rounded-lg font-body text-xs font-semibold border cursor-pointer ${depositMode === "full" ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200"}`}>
-                          Payer tout ({cartTotal.toFixed(0)}€)
-                        </button>
-                        <button onClick={() => setDepositMode("deposit")}
-                          className={`flex-1 py-2 px-3 rounded-lg font-body text-xs font-semibold border cursor-pointer ${depositMode === "deposit" ? "bg-orange-500 text-white border-orange-500" : "bg-white text-gray-600 border-gray-200"}`}>
-                          Acompte ({acompteFixe}€)
-                        </button>
+                      <div className="font-body text-xs font-semibold text-blue-800 mb-2">
+                        Règlement du stage : acompte maintenant, solde avant le stage
                       </div>
-                      {depositMode === "deposit" && (
-                        <div className="mt-2 space-y-2">
-                          <div className="font-body text-xs text-slate-500 text-center">
-                            {nbEnfantsStage} enfant{nbEnfantsStage > 1 ? "s" : ""} × {ACOMPTE_PAR_ENFANT}€ = {acompteFixe}€ maintenant · solde {soldeFixe.toFixed(2)}€ prélevé automatiquement ~1 semaine avant le stage
-                          </div>
+                      <div className="space-y-2">
+                        <div className="font-body text-xs text-slate-600 text-center">
+                          {soldeFixe > 0
+                            ? `${nbEnfantsStage} enfant${nbEnfantsStage > 1 ? "s" : ""} × ${ACOMPTE_PAR_ENFANT}€ = ${acompteFixe.toFixed(2)}€ maintenant · solde ${soldeFixe.toFixed(2)}€ prélevé automatiquement ~1 semaine avant le stage`
+                            : `Montant réglé aujourd'hui : ${acompteFixe.toFixed(2)}€ — rien d'autre à prévoir.`}
+                        </div>
+                        {soldeFixe > 0 && (
                           <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5">
                             <p className="font-body text-[11px] text-amber-800 leading-snug">
                               ⚠️ <strong>À faire sur la page de paiement :</strong> cochez la case <strong>« Enregistrer mes données de paiement »</strong>. En la cochant, vous autorisez le prélèvement automatique du solde de <strong>{soldeFixe.toFixed(2)}€</strong> environ une semaine avant le stage. Sans cette case, le solde restera à régler manuellement.
                             </p>
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -1790,7 +1794,7 @@ export default function ReserverPage() {
                       <button onClick={handlePay} disabled={paying || (cartHasStage && !cgvAccepted)}
                         className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying || (cartHasStage && !cgvAccepted) ? "bg-gray-200 text-gray-600 cursor-not-allowed" : depositMode === "deposit" ? "bg-orange-500 text-white hover:bg-orange-400" : "bg-green-600 text-white hover:bg-green-500"}`}>
                         {paying ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
-                        {paying ? "Paiement en cours..." : depositMode === "deposit" ? `Payer l'acompte ${acompteFixe.toFixed(2)}€` : `Payer ${cartTotal.toFixed(2)}€`}
+                        {paying ? "Paiement en cours..." : depositMode === "deposit" ? (soldeFixe > 0 ? `Payer l'acompte ${acompteFixe.toFixed(2)}€` : `Payer ${acompteFixe.toFixed(2)}€`) : `Payer ${cartTotal.toFixed(2)}€`}
                       </button>
                       <p className="font-body text-xs text-gray-600 text-center mt-2">Paiement sécurisé par CAWL / Crédit Agricole</p>
                     </>
