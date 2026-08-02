@@ -340,11 +340,73 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    console.log(`\n✅ charge-stage-balances terminé: ${results.emailsSent} emails, ${results.skipped} ignorés, ${results.errors} erreurs`);
+    // ── RELANCE J-5 : soldes toujours impayés deux jours après J-7 ─────────
+    // Le passage J-7 est un tir unique (soldeReminderSentAt bloque tout
+    // repassage) : prélèvement échoué ou lien ignoré, la famille arrivait au
+    // stage avec un solde impayé sans autre rappel. À J-5, on relance UNE
+    // fois celles dont le solde reste dû ET qui ont déjà été traitées à J-7
+    // — jamais celles que J-7 aurait ratées, pour ne pas court-circuiter le
+    // prélèvement automatique.
+    let relances = 0;
+    try {
+      const j5Str = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : addDaysParis(5);
+      const [y5, m5, d5] = j5Str.split("-").map(Number);
+      const j5Label = new Date(y5, m5 - 1, d5, 12, 0, 0)
+        .toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+
+      const relanceSnap = await adminDb.collection("payments")
+        .where("stageDate", "==", j5Str)
+        .get();
+
+      for (const payDoc of relanceSnap.docs) {
+        const p = payDoc.data() as any;
+        const solde = (p.totalTTC || 0) - (p.paidAmount || 0);
+        if (solde <= 0 || p.status === "paid" || p.status === "cancelled") continue;
+        if (!p.soldeReminderSentAt) continue;   // J-7 pas encore passé sur lui : on n'anticipe pas
+        if (p.soldeRelanceJ5SentAt) continue;   // relance déjà faite (anti-doublon)
+        const familyEmail = p.familyEmail || "";
+        if (!familyEmail || !resendKey || !isRecipientAllowed(familyEmail)) continue;
+
+        const stageTitle = p.stageTitle || (p.items || [])[0]?.activityTitle || "Stage";
+        const subject = `Rappel — solde de ${solde.toFixed(2)}€ à régler avant le stage`;
+        const html = emailLayout(`
+          <p style="margin:0 0 14px;font-size:15px;color:#1e293b;">Bonjour <strong>${p.familyName || ""}</strong>,</p>
+          <p style="margin:0 0 14px;font-size:15px;color:#334155;line-height:1.6;">
+            Le stage <strong>${stageTitle}</strong> commence <strong>${j5Label}</strong> et il reste
+            <strong>${solde.toFixed(2)} €</strong> à régler sur votre inscription.
+          </p>
+          ${emailButton("Régler mon solde", `${appUrl}/espace-cavalier/factures?payId=${payDoc.id}`, "#2050A0")}
+          <p style="margin:0;font-size:13px;color:#64748b;line-height:1.6;">
+            Vous préférez régler sur place, ou rencontrez un souci ? Répondez simplement
+            à ce message, nous trouverons une solution.
+          </p>
+        `);
+        const r = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ from: fromEmail, to: familyEmail, subject, html }),
+        });
+        await logEmail({ to: familyEmail, subject, context: "cron_stage_solde_relance_j5", template: "stageSoldeRelance", status: r.ok ? "sent" : "failed", sentBy: "system", paymentId: payDoc.id }).catch(() => {});
+        // Anti-doublon pose UNIQUEMENT si l'email est parti : un envoi bloqué
+        // (mode restreint, panne Resend) sera retenté demain — a J-4, mieux
+        // que jamais.
+        if (r.ok) {
+          await adminDb.collection("payments").doc(payDoc.id).update({ soldeRelanceJ5SentAt: FieldValue.serverTimestamp() });
+          relances++;
+          results.details.push(`🔁 ${p.familyName}: relance J-5 (${solde.toFixed(2)}€)`);
+        }
+      }
+      if (relances > 0) console.log(`  🔁 ${relances} relance(s) J-5 envoyée(s)`);
+    } catch (e) {
+      console.error("Relance J-5:", e);
+    }
+
+    console.log(`\n✅ charge-stage-balances terminé: ${results.emailsSent} emails, ${relances} relances J-5, ${results.skipped} ignorés, ${results.errors} erreurs`);
 
     return NextResponse.json({
       ok: true,
-      message: `Stages du ${j7Str}: ${results.emailsSent} rappels envoyés`,
+      message: `Stages du ${j7Str}: ${results.emailsSent} rappels, ${relances} relances J-5`,
+      relancesJ5: relances,
       ...results,
     });
   } catch (error: any) {
