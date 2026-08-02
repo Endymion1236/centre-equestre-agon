@@ -43,6 +43,11 @@ interface PaymentItem {
 interface Payment {
   id: string;
   familyId: string;
+  /** Date de debut du stage — sert a annoncer la date du prelevement (J-7). */
+  stageDate?: string;
+  /** Empreinte de carte CAWL : presente = le solde sera preleve automatiquement. */
+  cofToken?: string;
+  cardOnFileToken?: string;
   familyName: string;
   items: PaymentItem[];
   totalTTC: number;
@@ -449,6 +454,26 @@ export default function FacturesPage() {
             <div className="font-body text-xs text-gray-500">{due ? "reste à régler" : payment.status === "cancelled" ? "annulé" : "réglé"}</div>
           </div>
         </div>
+
+        {/* Solde de stage : annoncer ce qui VA se passer. Sans cette ligne,
+            la famille voit « reste à régler » sans savoir si un prélèvement
+            viendra (carte enregistrée) ou si elle devra agir (pas de carte).
+            L'email de confirmation le disait — mais qui relit l'email trois
+            semaines après ? */}
+        {due && payment.stageDate && (() => {
+          const d = new Date(`${payment.stageDate}T12:00:00`);
+          if (isNaN(d.getTime())) return null;
+          d.setDate(d.getDate() - 7);
+          const datePrelev = d.toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+          const carteOk = Boolean(payment.cofToken || payment.cardOnFileToken);
+          return (
+            <div className={`mt-3 rounded-lg px-3 py-2 font-body text-[11px] leading-snug ${carteOk ? "bg-blue-50 text-blue-800" : "bg-amber-50 text-amber-800 border border-amber-200"}`}>
+              {carteOk
+                ? <>💳 Le solde sera <strong>prélevé automatiquement</strong> sur votre carte enregistrée vers le <strong>{datePrelev}</strong>. Aucune action n'est requise — vous pouvez aussi régler dès maintenant.</>
+                : <>⚠️ Votre carte n'est pas enregistrée : le solde ne sera <strong>pas prélevé automatiquement</strong>. Un lien de paiement vous sera envoyé vers le <strong>{datePrelev}</strong> — ou réglez dès maintenant ci-dessous.</>}
+            </div>
+          );
+        })()}
 
         {due && (
           <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-gray-100">
