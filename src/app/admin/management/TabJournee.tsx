@@ -4,6 +4,7 @@ import { AlertTriangle, ChevronLeft, ChevronRight, Users } from "lucide-react";
 import type { Salarie, TachePlanifiee } from "./types";
 import { JOURS_LABELS, fmtDuree, getISOWeek } from "./types";
 import { COURS_COLOR, construireJournee, jourSemaineDeDate, minToLabel } from "./journee-utils";
+import { CATEGORIES } from "./types";
 import { toLocalDateString } from "@/lib/date-local";
 
 /**
@@ -32,6 +33,27 @@ export default function TabJournee({ semaine, setSemaine, taches, salaries, cren
   const [dateISO, setDateISO] = useState(() => toLocalDateString());
   // Heure courante — calculée côté client uniquement (évite un écart au rendu serveur)
   const [maintenant, setMaintenant] = useState<number | null>(null);
+
+  // Filtre d'affichage : la vue globale devient illisible quand tout est
+  // detaille — on choisit ce qu'on regarde (cours & balades, nourrir les
+  // poneys, menage…). Choix conserve d'une visite a l'autre (localStorage) :
+  // c'est un reglage d'usage personnel, pas une donnee metier.
+  const [categoriesMasquees, setCategoriesMasquees] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const brut = window.localStorage.getItem("journee_categories_masquees");
+      return new Set(brut ? (JSON.parse(brut) as string[]) : []);
+    } catch { return new Set(); }
+  });
+  const basculerCategorie = (id: string) => {
+    setCategoriesMasquees((prev) => {
+      const suivant = new Set(prev);
+      if (suivant.has(id)) suivant.delete(id); else suivant.add(id);
+      try { window.localStorage.setItem("journee_categories_masquees", JSON.stringify([...suivant])); } catch {}
+      return suivant;
+    });
+  };
+  const itemVisible = (it: { categorie?: string }) => !categoriesMasquees.has(it.categorie || "autre");
 
   useEffect(() => {
     const tick = () => {
@@ -135,6 +157,25 @@ export default function TabJournee({ semaine, setSemaine, taches, salaries, cren
         </div>
       </div>
 
+      {/* Filtre d'affichage par type d'element */}
+      <div className="flex flex-wrap gap-1.5 mb-3">
+            {[{ id: "cours", label: "Cours & balades", emoji: "🏇", color: "#2050A0" }, ...CATEGORIES].map((c) => {
+              const masque = categoriesMasquees.has(c.id);
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => basculerCategorie(c.id)}
+                  title={masque ? "Cliquer pour réafficher" : "Cliquer pour masquer"}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-body text-[11px] font-semibold border cursor-pointer transition-opacity ${masque ? "opacity-35 bg-gray-100 text-gray-500 border-gray-200 line-through" : "text-white border-transparent"}`}
+                  style={masque ? undefined : { background: c.color }}
+                >
+                  {c.emoji} {c.label}
+                </button>
+              );
+            })}
+          </div>
+
       {/* ── Frise ────────────────────────────────────────────────────── */}
       {lignes.length === 0 ? (
         <div className="bg-white border border-gray-200 rounded-2xl py-14 text-center">
@@ -166,8 +207,12 @@ export default function TabJournee({ semaine, setSemaine, taches, salaries, cren
                 </div>
               </div>
 
+
               {/* Une ligne par personne */}
-              {lignes.map((ligne) => (
+              {lignes
+                .map((ligne) => ({ ...ligne, items: ligne.items.filter(itemVisible) }))
+                .filter((ligne) => ligne.items.length > 0 || categoriesMasquees.size === 0)
+                .map((ligne) => (
                 <div key={ligne.key} className="flex border-b border-gray-50 last:border-b-0 group">
                   {/* Nom */}
                   <div

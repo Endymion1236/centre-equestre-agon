@@ -21,6 +21,8 @@ export interface JourneeItem {
   fin: number;
   couleur: string;
   conflit?: boolean;
+  /** Categorie de tache (ecuries, soins…) ou "cours" — sert au filtre d'affichage. */
+  categorie?: string;
 }
 
 export interface JourneeLigne {
@@ -96,6 +98,7 @@ export function construireJournee(params: {
     ligne.items.push({
       id: `t_${tache.id}`,
       kind: "tache",
+      categorie: (tache as any).categorie || "autre",
       label: tache.tacheLabel,
       debut,
       fin: debut + (tache.dureeMinutes || 0),
@@ -130,6 +133,7 @@ export function construireJournee(params: {
     ligne.items.push({
       id: `c_${creneau.id}`,
       kind: "cours",
+      categorie: "cours",
       label: creneau.activityTitle || "Cours",
       sousTitre: creneau.maxPlaces ? `${inscrits}/${creneau.maxPlaces}` : String(inscrits),
       debut: heureToMin(creneau.startTime),
