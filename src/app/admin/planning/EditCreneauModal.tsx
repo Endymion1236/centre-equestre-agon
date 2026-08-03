@@ -380,7 +380,12 @@ export default function EditCreneauModal({
               </div>
             </label>
           )}
-          {enrolledList.length > 0 && (activityChanged || titleChanged || timeChanged) && onNotifyEnrolled && (
+          {/* Visible des qu'il y a des inscrits — pas seulement quand le
+              formulaire porte un changement : un creneau deja enregistre
+              (difference disparue) doit pouvoir etre RE-notifie, par exemple
+              apres un premier envoi bloque par le mode restreint. Sans
+              changement en cours, la fonction demande l'ancien horaire. */}
+          {enrolledList.length > 0 && onNotifyEnrolled && (
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
               <div className="font-body text-xs font-semibold text-blue-800 mb-1">
                 {enrolledList.length} inscrit{enrolledList.length > 1 ? "s" : ""} sur ce créneau
@@ -389,11 +394,13 @@ export default function EditCreneauModal({
                 {enrolledList.map((e: any) => e.childName).filter(Boolean).join(", ")}
               </div>
               <p className="font-body text-[11px] text-slate-600 mb-2 leading-snug">
-                Ces familles ont réservé l&apos;activité et l&apos;horaire d&apos;origine. Pense à les prévenir du changement (surtout si l&apos;heure change). L&apos;email récapitule l&apos;ancien et le nouveau créneau.
+                {(activityChanged || titleChanged || timeChanged)
+                  ? <>Ces familles ont réservé l&apos;activité et l&apos;horaire d&apos;origine. Pense à les prévenir du changement (surtout si l&apos;heure change). L&apos;email récapitule l&apos;ancien et le nouveau créneau.</>
+                  : <>Aucun changement en cours dans ce formulaire. Pour renvoyer une notification d&apos;un changement déjà enregistré, l&apos;ancien horaire te sera demandé.</>}
               </p>
               <button type="button" onClick={onNotifyEnrolled} disabled={notifyingEnrolled}
                 className="w-full py-2 rounded-lg font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-400 border-none cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5">
-                {notifyingEnrolled ? <Loader2 size={13} className="animate-spin"/> : "✉️"} Prévenir les inscrits par email
+                {notifyingEnrolled ? <Loader2 size={13} className="animate-spin"/> : "✉️"} {(activityChanged || titleChanged || timeChanged) ? "Prévenir les inscrits par email" : "Renotifier les inscrits (changement déjà enregistré)"}
               </button>
             </div>
           )}
