@@ -19,7 +19,7 @@ import { toLocalDateString } from "@/lib/date-local";
  */
 
 const PX_PAR_HEURE = 78;      // largeur d'une heure sur la frise
-const COL_NOM = 132;          // largeur de la colonne des noms
+const COL_NOM = 150;          // largeur de la colonne des noms
 
 interface Props {
   semaine: string;
@@ -54,6 +54,20 @@ export default function TabJournee({ semaine, setSemaine, taches, salaries, cren
     });
   };
   const itemVisible = (it: { categorie?: string }) => !categoriesMasquees.has(it.categorie || "autre");
+
+  // Deux lectures complementaires : la FRISE situe dans le temps mais un bloc
+  // court est trop etroit pour porter du texte (« Cours… », « S… ») ; la
+  // LISTE affiche chaque element en toutes lettres, avec qui le fait. Le
+  // besoin exprime — « voir qui fait quoi en un coup d'oeil » — appelle la
+  // liste ; on garde la frise pour reperer les trous et chevauchements.
+  const [vue, setVue] = useState<"frise" | "liste">(() => {
+    if (typeof window === "undefined") return "frise";
+    return (window.localStorage.getItem("journee_vue") as "frise" | "liste") || "frise";
+  });
+  const choisirVue = (v: "frise" | "liste") => {
+    setVue(v);
+    try { window.localStorage.setItem("journee_vue", v); } catch {}
+  };
 
   useEffect(() => {
     const tick = () => {
@@ -157,6 +171,20 @@ export default function TabJournee({ semaine, setSemaine, taches, salaries, cren
         </div>
       </div>
 
+      {/* Bascule frise / liste */}
+      <div className="flex items-center gap-1.5 mb-2">
+        {([["frise", "📊 Frise horaire"], ["liste", "📋 Liste détaillée"]] as const).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => choisirVue(id)}
+            className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border cursor-pointer ${vue === id ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-gray-200"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Filtre d'affichage par type d'element */}
       <div className="flex flex-wrap gap-1.5 mb-3">
             {[{ id: "cours", label: "Cours & balades", emoji: "🏇", color: "#2050A0" }, ...CATEGORIES].map((c) => {
@@ -176,8 +204,51 @@ export default function TabJournee({ semaine, setSemaine, taches, salaries, cren
             })}
           </div>
 
+      {/* ── Liste detaillee : chaque element en toutes lettres ───────── */}
+      {vue === "liste" && lignes.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-4">
+          {(() => {
+            // Tri chronologique global : on lit la journee comme elle se
+            // deroule, pas personne par personne.
+            const tous = lignes
+              .flatMap((l) => l.items.filter(itemVisible).map((it) => ({ ...it, qui: l.nom, couleurQui: l.couleur })))
+              .sort((a, b) => a.debut - b.debut || a.qui.localeCompare(b.qui));
+            if (tous.length === 0) {
+              return <div className="py-10 text-center font-body text-sm text-slate-500">Rien à afficher avec les filtres actuels.</div>;
+            }
+            return tous.map((it, i) => {
+              const enCours = estAujourdhui && maintenant !== null && maintenant >= it.debut && maintenant <= it.fin;
+              return (
+                <div
+                  key={`${it.id}_${i}`}
+                  className={`flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-b-0 ${enCours ? "bg-amber-50" : ""}`}
+                >
+                  <div className="font-body text-xs font-bold text-slate-700 tabular-nums shrink-0 w-[92px]">
+                    {minToLabel(it.debut)}–{minToLabel(it.fin)}
+                  </div>
+                  <span className="w-1.5 h-8 rounded-full shrink-0" style={{ background: it.couleur }} />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-body text-sm font-semibold text-blue-900 leading-tight">
+                      {it.label}
+                      {it.conflit && <span className="ml-2 font-body text-[10px] font-bold text-red-600">⚠️ chevauchement</span>}
+                    </div>
+                    {it.sousTitre && (
+                      <div className="font-body text-[11px] text-slate-500 leading-tight">{it.sousTitre}</div>
+                    )}
+                  </div>
+                  <div className="shrink-0 inline-flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-full px-2.5 py-1">
+                    <span className="w-2 h-2 rounded-full" style={{ background: it.couleurQui }} />
+                    <span className="font-body text-xs font-semibold text-slate-700">{it.qui}</span>
+                  </div>
+                </div>
+              );
+            });
+          })()}
+        </div>
+      )}
+
       {/* ── Frise ────────────────────────────────────────────────────── */}
-      {lignes.length === 0 ? (
+      {vue === "liste" ? null : lignes.length === 0 ? (
         <div className="bg-white border border-gray-200 rounded-2xl py-14 text-center">
           <div className="text-3xl mb-2">🌤️</div>
           <div className="font-display text-base font-bold text-blue-800">Rien de planifié ce jour-là</div>
@@ -258,10 +329,14 @@ export default function TabJournee({ semaine, setSemaine, taches, salaries, cren
                       const gauche = pct(item.debut);
                       const largeur = Math.max(pct(item.fin) - gauche, 1.5);
                       const estCours = item.kind === "cours";
+                      // Sous ce seuil, le texte sort tronque a une lettre
+                      // (« S… ») : mieux vaut une pastille propre, le detail
+                      // restant accessible par l'infobulle et la vue liste.
+                      const troEtroit = largeur < 7;
                       return (
                         <div
                           key={item.id}
-                          title={`${minToLabel(item.debut)}–${minToLabel(item.fin)} · ${item.label}${item.conflit ? " ⚠️ chevauchement" : ""}`}
+                          title={`${minToLabel(item.debut)}–${minToLabel(item.fin)} · ${item.label}${item.sousTitre ? ` (${item.sousTitre})` : ""}${item.conflit ? " ⚠️ chevauchement" : ""}`}
                           className={`absolute top-1.5 bottom-1.5 rounded-lg px-2 py-1 overflow-hidden flex flex-col justify-center ${
                             item.conflit ? "ring-2 ring-red-400" : ""
                           }`}
@@ -272,18 +347,29 @@ export default function TabJournee({ semaine, setSemaine, taches, salaries, cren
                             borderLeft: estCours ? "none" : `3px solid ${item.couleur}`,
                           }}
                         >
-                          <span
-                            className={`font-body text-[11px] font-semibold truncate leading-tight ${estCours ? "text-white" : ""}`}
-                            style={estCours ? undefined : { color: item.couleur }}
-                          >
-                            {item.label}
-                          </span>
-                          <span
-                            className={`font-body text-[9px] truncate leading-tight ${estCours ? "text-white/75" : "text-slate-500"}`}
-                          >
-                            {minToLabel(item.debut)}
-                            {item.sousTitre ? ` · ${item.sousTitre}` : ""}
-                          </span>
+                          {troEtroit ? (
+                            <span
+                              className="w-full text-center font-body text-[10px] font-bold leading-none"
+                              style={{ color: estCours ? "#fff" : item.couleur }}
+                            >
+                              •
+                            </span>
+                          ) : (
+                            <>
+                              <span
+                                className={`font-body text-[11px] font-semibold truncate leading-tight ${estCours ? "text-white" : ""}`}
+                                style={estCours ? undefined : { color: item.couleur }}
+                              >
+                                {item.label}
+                              </span>
+                              <span
+                                className={`font-body text-[9px] truncate leading-tight ${estCours ? "text-white/75" : "text-slate-500"}`}
+                              >
+                                {minToLabel(item.debut)}
+                                {item.sousTitre ? ` · ${item.sousTitre}` : ""}
+                              </span>
+                            </>
+                          )}
                         </div>
                       );
                     })}
