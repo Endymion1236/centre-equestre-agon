@@ -95,9 +95,15 @@ export async function GET(req: NextRequest) {
     if (todayCreneaux.length > 0) {
       const byMonitor: Record<string, any[]> = {};
       for (const c of todayCreneaux) {
-        const monitor = cleNom(c.monitor) || "non assigne";
-        if (!byMonitor[monitor]) byMonitor[monitor] = [];
-        byMonitor[monitor].push(c);
+        // Un creneau en BINOME porte « Emeline, Aubance » : chaque nom doit
+        // recevoir le cours. Comparer la chaine entiere ne matchait personne
+        // — les monitrices ne recevaient que leurs cours en solo.
+        const noms = String(c.monitor || "").split(/[,&/+]/).map(cleNom).filter(Boolean);
+        if (noms.length === 0) noms.push("non assigne");
+        for (const nom of noms) {
+          if (!byMonitor[nom]) byMonitor[nom] = [];
+          byMonitor[nom].push(c);
+        }
       }
       results.monitorRecap.monitors = Object.keys(byMonitor);
 

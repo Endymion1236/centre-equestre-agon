@@ -171,8 +171,10 @@ export async function GET(request: NextRequest) {
 
     for (const dest of destinataires.filter(d => !d.isAdmin)) {
       if (!dest.nomMoniteur) continue; // pas de fiche : impossible de cibler, on s'abstient
+      // Meme regle binome que le recap : « Emeline, Aubance » concerne les deux.
       const siens = items.filter((it: any) =>
-        cleNom(it.monitor) === cleNom(dest.nomMoniteur!) && estImminent(String(it.date || "")));
+        String(it.monitor || "").split(/[,&/+]/).map(cleNom).filter(Boolean).includes(cleNom(dest.nomMoniteur!))
+        && estImminent(String(it.date || "")));
       if (siens.length === 0) continue; // rien qui la concerne → aucune notification
 
       const corpsPerso = siens.length === 1 && siens[0].body
