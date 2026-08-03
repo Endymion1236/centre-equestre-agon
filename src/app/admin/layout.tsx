@@ -357,7 +357,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [overlayOuvert, setOverlayOuvert] = useState(false);
   useEffect(() => {
     if (typeof document === "undefined") return;
-    const check = () => {
+    let pending = 0;
+    const checkNow = () => {
       // Overlays plein écran = un enfant direct de <body> avec inset-0 + z >= 50.
       const overlays = document.querySelectorAll('[class*="fixed"][class*="inset-0"]');
       let found = false;
@@ -370,13 +371,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       });
       setOverlayOuvert(found);
     };
+    // Regroupe les appels : avec subtree, un re-render du planning declenche
+    // des dizaines de mutations — inutile de recalculer a chaque fois.
+    const check = () => {
+      if (pending) return;
+      pending = requestAnimationFrame(() => { pending = 0; checkNow(); });
+    };
     const obs = new MutationObserver(check);
     // childList sur le body seul : les overlays sont montés/démontés comme
     // enfants directs. Pas de subtree/attributes global, trop coûteux sur une
     // page dynamique (le planning re-render beaucoup).
-    obs.observe(document.body, { childList: true });
+    // subtree: true est necessaire — tous les overlays ne sont pas des
+    // enfants DIRECTS de <body> : le panneau d'inscription du planning, par
+    // exemple, est rendu dans l'arbre de la page. Sans cela il n'etait jamais
+    // detecte et la barre de navigation (z-60) restait par-dessus la modale
+    // (z-50), masquant le bas du contenu sur mobile.
+    obs.observe(document.body, { childList: true, subtree: true });
     check();
-    return () => obs.disconnect();
+    return () => { obs.disconnect(); if (pending) cancelAnimationFrame(pending); };
   }, []);
   const pushNotifications = usePushNotifications(user?.uid || null, { role: userRole, email: user?.email });
 

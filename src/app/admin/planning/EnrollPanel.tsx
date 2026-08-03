@@ -2112,8 +2112,12 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   };
 
   return (
-    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-start md:items-center justify-center p-4 pb-24 md:pb-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[82vh] md:max-h-[85vh] my-auto flex flex-col" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-start md:items-center justify-center p-3 pb-6 md:p-4 overflow-y-auto">
+      {/* La barre de navigation mobile s'escamote quand cet overlay est monte
+          (cf. admin/layout) : plus besoin de reserver 96px en bas, la modale
+          peut prendre presque toute la hauteur. dvh plutot que vh pour tenir
+          compte de la barre d'URL mobile qui se retracte au defilement. */}
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92dvh] md:max-h-[88vh] my-auto flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex-1 overflow-auto">
         <div className="p-5 border-b border-blue-500/8" style={{ borderLeftWidth: 4, borderLeftColor: color }}>
           <div className="flex justify-between items-start"><div><div className="font-body text-sm font-semibold" style={{ color }}>{creneau.startTime}–{creneau.endTime}</div><h2 className="font-display text-lg font-bold text-blue-800">{creneau.activityTitle}</h2><div className="font-body text-xs text-slate-500 mt-1">{new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · {creneau.monitor}{displayPrice > 0 ? ` · ${displayPrice.toFixed(2)}€${isStage ? "" : "/séance"}` : ""}</div></div><button onClick={confirmClose} className="text-slate-500 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button></div>
