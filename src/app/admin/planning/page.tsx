@@ -526,9 +526,25 @@ export default function PlanningPage() {
     const newTitle = (editForm.activityTitle || "").trim();
     const oldHoraire = `${editCreneau.startTime}–${editCreneau.endTime}`;
     const newHoraire = `${editForm.startTime}–${editForm.endTime}`;
-    const titleChanged = newTitle !== oldTitle;
-    const timeChanged = editForm.startTime !== editCreneau.startTime || editForm.endTime !== editCreneau.endTime;
-    if (!titleChanged && !timeChanged) { toast("Aucun changement d'activité ou d'horaire à signaler", "info"); return; }
+    let titleChanged = newTitle !== oldTitle;
+    let timeChanged = editForm.startTime !== editCreneau.startTime || editForm.endTime !== editCreneau.endTime;
+    let oldHoraireAffiche = oldHoraire;
+    // RENOTIFICATION : si le creneau est deja enregistre avec ses nouvelles
+    // valeurs, la difference a disparu — cas typique : familles prevenues
+    // pendant le mode restreint (emails bloques), a reprevenir apres coup.
+    // On demande alors l'ancien horaire a la main plutot que de refuser.
+    if (!titleChanged && !timeChanged) {
+      const saisie = window.prompt(
+        "Aucun changement détecté (créneau déjà enregistré).\n\n" +
+        "Pour RENVOYER une notification de changement d'horaire, indiquez " +
+        "l'ANCIEN horaire tel que les familles doivent le voir barré " +
+        "(ex : 10:00–12:00) — ou Annuler.",
+        ""
+      );
+      if (!saisie || !saisie.trim()) return;
+      oldHoraireAffiche = saisie.trim();
+      timeChanged = true;
+    }
     setNotifyingEnrolled(true);
     try {
       const dateFR = new Date(editCreneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -546,7 +562,7 @@ export default function PlanningPage() {
       if (byEmail.size === 0) { toast("Aucun email de famille trouvé pour les inscrits", "error"); setNotifyingEnrolled(false); return; }
       const changesHtml = [
         titleChanged ? `<li>Activité : <span style="text-decoration:line-through;color:#94a3b8">${oldTitle}</span> → <strong>${newTitle}</strong></li>` : "",
-        timeChanged ? `<li>Horaire : <span style="text-decoration:line-through;color:#94a3b8">${oldHoraire}</span> → <strong>${newHoraire}</strong></li>` : "",
+        timeChanged ? `<li>Horaire : <span style="text-decoration:line-through;color:#94a3b8">${oldHoraireAffiche}</span> → <strong>${newHoraire}</strong></li>` : "",
       ].join("");
       let sent = 0;
       for (const [email, info] of byEmail) {
