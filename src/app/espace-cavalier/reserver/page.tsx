@@ -876,7 +876,7 @@ export default function ReserverPage() {
         Votre compte est créé. Il ne reste plus qu&apos;à compléter votre profil
         (coordonnées + cavaliers) pour pouvoir réserver.
       </p>
-      <a href="/espace-cavalier/profil">
+      <a href="/espace-cavalier/profil?action=ajouter-cavalier">
         <button className="font-body text-sm font-semibold text-white bg-blue-500 px-6 py-3 rounded-xl border-none cursor-pointer hover:bg-blue-400 transition-colors">
           Compléter mon profil →
         </button>
@@ -1600,7 +1600,7 @@ export default function ReserverPage() {
                       <p className="font-body text-sm text-slate-600 mb-2">
                         Vous n&apos;avez pas encore ajouté de cavalier à votre famille.
                       </p>
-                      <a href="/espace-cavalier/profil" className="inline-block px-4 py-2 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold no-underline">
+                      <a href="/espace-cavalier/profil?action=ajouter-cavalier" className="inline-block px-4 py-2 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold no-underline">
                         Ajouter un cavalier
                       </a>
                     </div>
@@ -1663,7 +1663,7 @@ export default function ReserverPage() {
                       <p className="font-body text-sm text-slate-600 mb-2">
                         Vous n&apos;avez pas encore ajouté de cavalier à votre famille.
                       </p>
-                      <a href="/espace-cavalier/profil" className="inline-block px-4 py-2 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold no-underline">
+                      <a href="/espace-cavalier/profil?action=ajouter-cavalier" className="inline-block px-4 py-2 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold no-underline">
                         Ajouter un cavalier
                       </a>
                     </div>

@@ -251,6 +251,17 @@ export default function ProfilPage() {
   const [familyForm, setFamilyForm] = useState<FamilyForm>(EMPTY_FAMILY_FORM);
   const [savingProfile, setSavingProfile] = useState(false);
   const [showAddChild, setShowAddChild] = useState(false);
+  // Arrivee depuis « Ajouter un cavalier » (modale de reservation) : ouvrir
+  // directement le formulaire d'ajout. Sans cela, le visiteur atterrissait
+  // en haut de page face au bandeau orange « Completer mes informations »
+  // — l'action visible n'etait pas celle qu'il venait faire.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).get("action") === "ajouter-cavalier") {
+      setTab("famille");
+      setShowAddChild(true);
+    }
+  }, []);
   const [editingChild, setEditingChild] = useState<string | null>(null);
   const [childForm, setChildForm] = useState<ChildForm>(EMPTY_CHILD_FORM);
   const [editingSanitary, setEditingSanitary] = useState<string | null>(null);
