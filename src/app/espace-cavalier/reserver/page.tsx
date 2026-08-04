@@ -1595,7 +1595,16 @@ export default function ReserverPage() {
                           </button>
                         ))}
                       {(family?.children || []).filter((ch: any) => !(bookingCreneau.enrolled || []).some((e: any) => e.childId === ch.id)).length === 0 && (
-                        <p className="font-body text-sm text-slate-500 text-center py-2">Tous vos cavaliers sont déjà inscrits à ce créneau.</p>
+                        (children.length === 0 ? (
+                    <div className="text-center py-2">
+                      <p className="font-body text-sm text-slate-600 mb-2">
+                        Vous n&apos;avez pas encore ajouté de cavalier à votre famille.
+                      </p>
+                      <a href="/espace-cavalier/profil" className="inline-block px-4 py-2 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold no-underline">
+                        Ajouter un cavalier
+                      </a>
+                    </div>
+                  ) : <p className="font-body text-sm text-slate-500 text-center py-2">Tous vos cavaliers sont déjà inscrits à ce créneau.</p>)
                       )}
                     </div>
                     <button onClick={() => setBookingCreneau(null)}
@@ -1649,7 +1658,16 @@ export default function ReserverPage() {
                   })
                 }
                 {(family?.children || []).filter((ch: any) => !(bookingCreneau.enrolled || []).some((e: any) => e.childId === ch.id)).length === 0 && (
-                  <p className="font-body text-sm text-slate-500 text-center py-2">Tous vos cavaliers sont déjà inscrits à ce créneau.</p>
+                  (children.length === 0 ? (
+                    <div className="text-center py-2">
+                      <p className="font-body text-sm text-slate-600 mb-2">
+                        Vous n&apos;avez pas encore ajouté de cavalier à votre famille.
+                      </p>
+                      <a href="/espace-cavalier/profil" className="inline-block px-4 py-2 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold no-underline">
+                        Ajouter un cavalier
+                      </a>
+                    </div>
+                  ) : <p className="font-body text-sm text-slate-500 text-center py-2">Tous vos cavaliers sont déjà inscrits à ce créneau.</p>)
                 )}
               </div>
               <button onClick={() => setBookingCreneau(null)}
