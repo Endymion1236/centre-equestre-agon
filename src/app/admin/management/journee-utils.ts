@@ -142,6 +142,23 @@ export function construireJournee(params: {
     });
   }
 
+  // ── Dédoublonnage tâche ↔ cours ─────────────────────────────────────
+  // Un cours peut exister DEUX fois : comme créneau réel (source planning
+  // public) et comme tâche du planning équipe saisie pour la même personne
+  // au même horaire. Sans ce filtre, chaque cours apparaissait en double
+  // — et se signalait en chevauchement avec lui-même. Le créneau réel
+  // gagne : il porte les inscrits (x/8).
+  const norm = (t: string) => String(t || "").toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+  for (const ligne of parCle.values()) {
+    const cours = ligne.items.filter((it) => it.kind === "cours");
+    ligne.items = ligne.items.filter((it) => {
+      if (it.kind !== "tache") return true;
+      return !cours.some((c) =>
+        c.debut === it.debut && norm(c.label) === norm(it.label));
+    });
+  }
+
   // ── Chevauchements + amplitude travaillée ───────────────────────────
   for (const ligne of parCle.values()) {
     ligne.items.sort((a, b) => a.debut - b.debut);
