@@ -1639,7 +1639,7 @@ export default function ReserverPage() {
                   ) : <p className="font-body text-sm text-slate-500 text-center py-2">Tous vos cavaliers sont déjà inscrits à ce créneau.</p>)
                       )}
                     </div>
-                    <button onClick={() => setBookingCreneau(null)}
+                    <button onClick={() => { setSelCavaliers(new Set()); setBookingCreneau(null); }}
                       className="w-full mt-3 py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
                       Annuler
                     </button>
@@ -1693,6 +1693,22 @@ export default function ReserverPage() {
                     );
                   })
                 }
+                {/* Validation de la selection : la coche multiple existait
+                    mais SANS bouton dans cette branche — il n'etait present
+                    que cote liste d'attente. On inscrit tous les cavaliers
+                    coches en une fois, puis on ouvre le panier. */}
+                {selCavaliers.size > 0 && (
+                  <button
+                    onClick={() => {
+                      selCavaliers.forEach((cid) => addCoursToCart(bookingCreneau, cid));
+                      setSelCavaliers(new Set());
+                      setBookingCreneau(null);
+                      setShowCart(true);
+                    }}
+                    className="w-full py-3 rounded-xl font-body text-sm font-bold text-white bg-green-600 hover:bg-green-500 border-none cursor-pointer">
+                    Ajouter {selCavaliers.size} cavalier{selCavaliers.size > 1 ? "s" : ""} au panier
+                  </button>
+                )}
                 {(family?.children || []).filter((ch: any) => !(bookingCreneau.enrolled || []).some((e: any) => e.childId === ch.id)).length === 0 && (
                   (children.length === 0 ? (
                     <div className="text-center py-2">
