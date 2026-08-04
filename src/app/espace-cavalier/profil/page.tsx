@@ -118,6 +118,12 @@ function AddChildForm({ onDone, onCancel }: { onDone: () => void; onCancel: () =
   const [galop, setGalop] = useState("");
   const [autoEval, setAutoEval] = useState(false);
   const NIVEAUX = ["Poney de Bronze", "Poney d'Argent", "Poney d'Or", "Galop de Bronze", "Galop d'Argent", "Galop d'Or", "Galop 3", "Galop 4", "Galop 5", "Galop 6", "Galop 7"];
+  const promenadePour = (niveau: string) => {
+    const n = niveau.toLowerCase();
+    if (!n || n.includes("bronze")) return "promenades débutants";
+    if (n.includes("argent") || n.includes("or")) return "promenades débrouillés";
+    return "promenades confirmés";
+  };
   const AUTO_EVAL: [string, string][] = [
     ["N'a jamais monté, ou seulement en balade tenue", ""],
     ["À l'aise au pas, découvre le trot", "Galop de Bronze"],
@@ -204,6 +210,11 @@ function AddChildForm({ onDone, onCancel }: { onDone: () => void; onCancel: () =
             {NIVEAUX.map((n) => <option key={n} value={n}>{n}</option>)}
             <option value="?">Je ne sais pas — m'aider à évaluer</option>
           </select>
+          {!autoEval && galop && (
+            <p className="font-body text-[11px] text-slate-500 mt-1 mb-0">
+              🐴 Niveau adapté aux <strong>{promenadePour(galop)}</strong>.
+            </p>
+          )}
           {autoEval && (
             <div className="mt-2 bg-blue-50 border border-blue-100 rounded-xl p-3">
               <div className="font-body text-xs font-semibold text-blue-800 mb-2">Quelle phrase décrit le mieux le cavalier ?</div>
@@ -211,7 +222,9 @@ function AddChildForm({ onDone, onCancel }: { onDone: () => void; onCancel: () =
                 <button key={phrase} type="button"
                   onClick={() => { setGalop(niveau); setAutoEval(false); }}
                   className="block w-full text-left px-3 py-2 mb-1.5 last:mb-0 rounded-lg bg-white border border-gray-200 font-body text-xs text-slate-700 cursor-pointer hover:border-blue-300">
-                  {phrase}{niveau ? <span className="text-blue-600 font-semibold"> → {niveau}</span> : <span className="text-slate-400"> → débutant</span>}
+                  {phrase}
+                  <span className={niveau ? "text-blue-600 font-semibold" : "text-slate-400"}> → {niveau || "débutant"}</span>
+                  <span className="text-slate-500"> · {promenadePour(niveau)}</span>
                 </button>
               ))}
               <p className="font-body text-[10px] text-slate-500 mt-1.5 mb-0">Simple estimation — le niveau sera affiné avec les moniteurs.</p>
