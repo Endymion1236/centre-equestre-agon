@@ -1660,9 +1660,14 @@ export default function ReserverPage() {
                       if (!bdDate || isNaN(bdDate.getTime())) tooYoung = true;
                       else if (bdDate.getFullYear() > new Date().getFullYear() - 12) tooYoung = true;
                     }
+                    // Deja dans le panier pour CE creneau : plus selectionnable
+                    // — un double ajout ferait payer deux fois la meme place.
+                    const dejaAuPanier = cart.some((i) =>
+                      i.childId === ch.id && i.creneauIds.includes(bookingCreneau.id));
                     return (
                       <button key={ch.id}
                         onClick={() => {
+                          if (dejaAuPanier) return;
                           if (tooYoung) {
                             alert(`Les promenades sont réservées aux cavaliers de 12 ans et plus (nés en ${new Date().getFullYear() - 12} ou avant).`);
                             return;
@@ -1673,18 +1678,21 @@ export default function ReserverPage() {
                             return n;
                           });
                         }}
-                        disabled={tooYoung}
-                        title={tooYoung ? "Promenades réservées aux 12 ans et plus" : undefined}
+                        disabled={tooYoung || dejaAuPanier}
+                        title={dejaAuPanier ? "Déjà dans votre panier pour ce créneau" : tooYoung ? "Promenades réservées aux 12 ans et plus" : undefined}
                         className={`flex items-center justify-between px-4 py-3 rounded-xl border font-body text-sm transition-all ${
-                          tooYoung
+                          dejaAuPanier
+                            ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
+                            : tooYoung
                             ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
                             : selCavaliers.has(ch.id)
                               ? "border-green-500 bg-green-50 text-green-800 cursor-pointer"
                               : "border-blue-200 bg-blue-50 text-blue-800 cursor-pointer hover:bg-blue-100"
                         }`}>
                         <span className="font-semibold">
-                          {selCavaliers.has(ch.id) && "✓ "}{ch.firstName}
-                          {tooYoung && <span className="ml-2 text-xs">🔒 Moins de 12 ans</span>}
+                          {selCavaliers.has(ch.id) && !dejaAuPanier && "✓ "}{ch.firstName}
+                          {dejaAuPanier && <span className="ml-2 text-xs">🛒 Déjà au panier</span>}
+                          {!dejaAuPanier && tooYoung && <span className="ml-2 text-xs">🔒 Moins de 12 ans</span>}
                         </span>
                         {ch.galopLevel && ch.galopLevel !== "—" && (
                           <span className="font-body text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">G{ch.galopLevel}</span>
