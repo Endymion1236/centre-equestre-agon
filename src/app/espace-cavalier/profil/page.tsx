@@ -258,7 +258,9 @@ export default function ProfilPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (new URLSearchParams(window.location.search).get("action") === "ajouter-cavalier") {
-      setTab("famille");
+      // Le formulaire d'ajout vit dans l'onglet « Mes cavaliers », pas
+      // dans « Ma famille » (coordonnees du parent).
+      setTab("cavaliers");
       setShowAddChild(true);
     }
   }, []);
