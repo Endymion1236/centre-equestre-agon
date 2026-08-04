@@ -96,10 +96,15 @@ export async function GET(req: NextRequest) {
         const parCreneau = new Map<string, boolean>();
         for (const d of propSnap.docs) {
           const w = d.data() as any;
-          const pAt = w.proposedAt?.toDate?.()?.getTime?.() ?? (w.proposedAt ? new Date(w.proposedAt).getTime() : 0);
-          if (w.proposedAt && w.proposedAt !== "expired" && pAt && pAt < cutoff) {
-            await adminDb.collection("waitlist").doc(d.id).update({ proposedAt: "expired" });
-            parCreneau.set(String(w.creneauId), true);
+          // Convention unique : "notified" + notifiedAt, posee par le circuit
+          // planning ET par les routes propose. 24h ecoulees sans inscription
+          // → l'entree expire, la place est proposee au suivant.
+          if (w.status !== "notified") continue;
+          const nAt = w.notifiedAt ? new Date(w.notifiedAt).getTime() : 0;
+          if (nAt && nAt < cutoff) {
+            await adminDb.collection("waitlist").doc(d.id).update({ status: "expired" });
+            const cible = w.creneauId || (Array.isArray(w.creneauIds) ? w.creneauIds[0] : null);
+            if (cible) parCreneau.set(String(cible), true);
           }
         }
         for (const cid of parCreneau.keys()) {

@@ -37,7 +37,13 @@ export async function POST(req: NextRequest) {
     .where("creneauId", "==", String(creneauId)).get();
   const attente = wSnap.docs
     .map((d) => ({ id: d.id, ...(d.data() as any) }))
-    .filter((w) => !w.proposedAt)
+    // Convention partagee avec le planning (handleUnenroll) : seules les
+    // entrees "waiting" sont eligibles — "notified" a deja sa priorite en
+    // cours, "expired" a laisse passer sa chance. Les attentes de stage
+    // multi-jours sont laissees au circuit du planning, qui sait verifier
+    // que la semaine ENTIERE est libre avant de prevenir.
+    .filter((w) => (w.status || "waiting") === "waiting"
+      && !(w.isStage && Array.isArray(w.creneauIds) && w.creneauIds.length > 1))
     .sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
   if (attente.length === 0) return NextResponse.json({ ok: false, raison: "personne en attente" });
 
@@ -77,9 +83,19 @@ export async function POST(req: NextRequest) {
 
   // Marque la proposition meme si l'email est bloque (mode restreint) : on
   // ne re-proposera pas a la meme famille, l'admin voit le statut.
+  // Memes champs que le circuit planning + hold 24h sur le creneau : la
+  // place est reservee a cette famille, les autres ne la voient plus.
+  const holdUntil = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
   await adminDb.collection("waitlist").doc(w.id).update({
-    proposedAt: new Date(), proposedEmailSent: envoye,
+    status: "notified", notifiedAt: new Date().toISOString(), holdUntil,
+    proposedEmailSent: envoye,
   });
+  await adminDb.collection("creneaux").doc(String(creneauId)).update({
+    waitlistHold: {
+      familyId: w.familyId, childId: w.childId, childName: w.childName,
+      until: holdUntil, waitlistEntryId: w.id,
+    },
+  }).catch(() => {});
 
   return NextResponse.json({ ok: true, famille: w.familyName, email, envoye });
 }
