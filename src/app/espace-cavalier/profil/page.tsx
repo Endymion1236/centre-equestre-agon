@@ -302,13 +302,21 @@ export default function ProfilPage() {
   const [familyForm, setFamilyForm] = useState<FamilyForm>(EMPTY_FAMILY_FORM);
   const [savingProfile, setSavingProfile] = useState(false);
   const [showAddChild, setShowAddChild] = useState(false);
+  // Venue depuis une reservation : apres creation du cavalier, on RETOURNE
+  // a la promenade d'origine plutot que de laisser la famille sur Ma
+  // famille, a re-naviguer seule (chemin interne uniquement, jamais d'URL
+  // externe).
+  const [retourUrl, setRetourUrl] = useState<string | null>(null);
   // Arrivee depuis « Ajouter un cavalier » (modale de reservation) : ouvrir
   // directement le formulaire d'ajout. Sans cela, le visiteur atterrissait
   // en haut de page face au bandeau orange « Completer mes informations »
   // — l'action visible n'etait pas celle qu'il venait faire.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (new URLSearchParams(window.location.search).get("action") === "ajouter-cavalier") {
+    const q = new URLSearchParams(window.location.search);
+    const r = q.get("retour");
+    if (r && r.startsWith("/")) setRetourUrl(r);
+    if (q.get("action") === "ajouter-cavalier") {
       // Le formulaire d'ajout vit dans l'onglet « Mes cavaliers », pas
       // dans « Ma famille » (coordonnees du parent).
       setTab("cavaliers");
@@ -652,6 +660,7 @@ export default function ProfilPage() {
             <AddChildForm
               onCancel={() => setShowAddChild(false)}
               onDone={() => {
+                if (retourUrl) { window.location.href = retourUrl; return; }
                 setShowAddChild(false);
                 window.location.reload();
               }}
