@@ -61,6 +61,11 @@ export default function ReserverPage() {
   }, [cart]);
   // Modal sélection enfant (depuis Timeline)
   const [bookingCreneau, setBookingCreneau] = useState<Creneau | null>(null);
+  // Multi-selection dans la modale : une fratrie s'inscrit en une fois.
+  // Avant, chaque clic ajoutait au panier et FERMAIT la modale — il fallait
+  // la rouvrir pour chaque enfant (retour du client testeur).
+  const [selCavaliers, setSelCavaliers] = useState<Set<string>>(new Set());
+  useEffect(() => { setSelCavaliers(new Set()); }, [bookingCreneau?.id]);
   // Retour de la creation d'un cavalier : ?creneau=<id> rouvre directement
   // la modale de la promenade d'origine — la famille reprend ou elle en
   // etait, nouveau cavalier dans la liste.
@@ -1579,6 +1584,17 @@ export default function ReserverPage() {
                     <p className="font-body text-xs text-slate-500 mb-4">
                       Vous serez notifié par email si une place se libère.
                     </p>
+                    {selCavaliers.size > 0 && (
+                      <button
+                        onClick={() => {
+                          selCavaliers.forEach((cid) => addCoursToCart(bookingCreneau, cid));
+                          setBookingCreneau(null);
+                          setShowCart(true);
+                        }}
+                        className="w-full mt-2 py-3 rounded-xl font-body text-sm font-bold text-white bg-green-600 hover:bg-green-500 border-none cursor-pointer">
+                        Ajouter {selCavaliers.size} cavalier{selCavaliers.size > 1 ? "s" : ""} au panier
+                      </button>
+                    )}
                     <a href={`/espace-cavalier/profil?action=ajouter-cavalier&retour=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search + (bookingCreneau ? `${window.location.search ? "&" : "?"}creneau=${bookingCreneau.id}` : "") : "/espace-cavalier/reserver")}`}
                       className="block text-center font-body text-xs font-semibold text-blue-600 no-underline mt-2 py-1.5">
                       + Ajouter un nouveau membre de la famille
@@ -1651,19 +1667,23 @@ export default function ReserverPage() {
                             alert(`Les promenades sont réservées aux cavaliers de 12 ans et plus (nés en ${new Date().getFullYear() - 12} ou avant).`);
                             return;
                           }
-                          addCoursToCart(bookingCreneau, ch.id);
-                          setBookingCreneau(null);
-                          setShowCart(true);
+                          setSelCavaliers((prev) => {
+                            const n = new Set(prev);
+                            if (n.has(ch.id)) n.delete(ch.id); else n.add(ch.id);
+                            return n;
+                          });
                         }}
                         disabled={tooYoung}
                         title={tooYoung ? "Promenades réservées aux 12 ans et plus" : undefined}
                         className={`flex items-center justify-between px-4 py-3 rounded-xl border font-body text-sm transition-all ${
                           tooYoung
                             ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
-                            : "border-blue-200 bg-blue-50 text-blue-800 cursor-pointer hover:bg-blue-100"
+                            : selCavaliers.has(ch.id)
+                              ? "border-green-500 bg-green-50 text-green-800 cursor-pointer"
+                              : "border-blue-200 bg-blue-50 text-blue-800 cursor-pointer hover:bg-blue-100"
                         }`}>
                         <span className="font-semibold">
-                          {ch.firstName}
+                          {selCavaliers.has(ch.id) && "✓ "}{ch.firstName}
                           {tooYoung && <span className="ml-2 text-xs">🔒 Moins de 12 ans</span>}
                         </span>
                         {ch.galopLevel && ch.galopLevel !== "—" && (
