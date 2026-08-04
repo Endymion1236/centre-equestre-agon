@@ -1710,15 +1710,6 @@ export default function ReserverPage() {
                 <h2 className="font-display text-lg font-bold text-blue-800"><ShoppingCart size={18} className="inline mr-2" />Mon panier</h2>
                 <button onClick={() => setShowCart(false)} className="text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button>
               </div>
-              {cart.length > 0 && (
-                <button
-                  onClick={() => setShowCart(false)}
-                  className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl py-2.5 px-4 cursor-pointer transition-colors"
-                >
-                  <ShoppingCart size={15} />
-                  Continuer mes réservations
-                </button>
-              )}
             </div>
             <div className="p-5">
               {cart.length === 0 ? (
@@ -1825,6 +1816,14 @@ export default function ReserverPage() {
                       </span>
                     </label>
                   )}
+
+                  <button
+                    onClick={() => setShowCart(false)}
+                    className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl py-2.5 px-4 cursor-pointer transition-colors mb-3"
+                  >
+                    <ShoppingCart size={15} />
+                    Continuer mes réservations
+                  </button>
 
                   {/* Bouton CB → CAWL */}
                   {cartPayMode === "cb" && (
