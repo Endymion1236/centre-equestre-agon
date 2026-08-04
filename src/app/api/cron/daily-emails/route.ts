@@ -86,6 +86,31 @@ export async function GET(req: NextRequest) {
   try {
     if (adminDb) {
       const aujourdhui = new Date().toISOString().slice(0, 10);
+      // ── Chaine de propositions : 24h ecoulees sans reservation → au
+      //    suivant. On remet proposedAt de l'entree expiree a "expired"
+      //    (jamais re-proposee) et on declenche la proposition suivante en
+      //    rappelant la route interne — meme logique, meme email.
+      try {
+        const cutoff = Date.now() - 24 * 3600 * 1000;
+        const propSnap = await adminDb.collection("waitlist").get();
+        const parCreneau = new Map<string, boolean>();
+        for (const d of propSnap.docs) {
+          const w = d.data() as any;
+          const pAt = w.proposedAt?.toDate?.()?.getTime?.() ?? (w.proposedAt ? new Date(w.proposedAt).getTime() : 0);
+          if (w.proposedAt && w.proposedAt !== "expired" && pAt && pAt < cutoff) {
+            await adminDb.collection("waitlist").doc(d.id).update({ proposedAt: "expired" });
+            parCreneau.set(String(w.creneauId), true);
+          }
+        }
+        for (const cid of parCreneau.keys()) {
+          const base = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
+          await fetch(`${base}/api/waitlist/propose-interne`, {
+            method: "POST", headers: { "Content-Type": "application/json", "x-cron-secret": process.env.CRON_SECRET || "" },
+            body: JSON.stringify({ creneauId: cid }),
+          }).catch(() => {});
+        }
+      } catch (e) { console.error("Chaine waitlist:", e); }
+
       const snap = await adminDb.collection("waitlist").get();
       const entries = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
       const { aSupprimer } = classerWaitlist(entries, aujourdhui);

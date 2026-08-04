@@ -992,6 +992,20 @@ export default function PaiementsPage() {
       // Retrait des points de fidelite (1 pt par euro de l'avoir)
       if (avoirAmount > 0) await retraitPointsFidelite(payment.familyId, avoirAmount, `Annulation ${ref}`);
 
+      // Places liberees : proposer automatiquement chacune a la premiere
+      // famille en attente (24h de priorite). Meilleur effort — un echec
+      // ici ne doit pas faire echouer l'annulation elle-meme.
+      try {
+        const creneauxLiberes = [...new Set((payment.items || [])
+          .flatMap((i: any) => i.creneauIds || (i.creneauId ? [i.creneauId] : [])))];
+        for (const cid of creneauxLiberes) {
+          authFetch("/api/waitlist/propose", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ creneauId: cid }),
+          }).catch(() => {});
+        }
+      } catch {}
+
       const warnMsg = unenrollErrors > 0 ? ` — ⚠️ ${unenrollErrors} désinscription(s) à vérifier` : "";
       const parts: string[] = [];
       if (avoirAmount > 0) parts.push(`avoir ${avoirAmount.toFixed(2)}€ (${ref})`);
