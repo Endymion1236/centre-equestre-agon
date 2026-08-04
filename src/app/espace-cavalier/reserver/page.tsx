@@ -1567,6 +1567,10 @@ export default function ReserverPage() {
                     <p className="font-body text-xs text-slate-500 mb-4">
                       Vous serez notifié par email si une place se libère.
                     </p>
+                    <a href="/espace-cavalier/profil?action=ajouter-cavalier"
+                      className="block text-center font-body text-xs font-semibold text-blue-600 no-underline mt-2 py-1.5">
+                      + Ajouter un nouveau membre de la famille
+                    </a>
                     <button onClick={() => setBookingCreneau(null)}
                       className="w-full py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 border-none cursor-pointer hover:bg-blue-400">
                       Fermer
@@ -1670,6 +1674,10 @@ export default function ReserverPage() {
                   ) : <p className="font-body text-sm text-slate-500 text-center py-2">Tous vos cavaliers sont déjà inscrits à ce créneau.</p>)
                 )}
               </div>
+              <a href="/espace-cavalier/profil?action=ajouter-cavalier"
+                className="block text-center font-body text-xs font-semibold text-blue-600 no-underline mt-2 py-1.5">
+                + Ajouter un nouveau membre de la famille
+              </a>
               <button onClick={() => setBookingCreneau(null)}
                 className="w-full mt-3 py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
                 Annuler
