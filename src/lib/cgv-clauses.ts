@@ -101,9 +101,14 @@ export const CGV_COURS_ANNUELS =
   `Toute séance non effectuée sans prévenir 24h à l'avance est due. ` +
   `En cas de maladie du cavalier (${CERTIFICAT_MEDICAL}), un report peut être accordé.`;
 
+/** Délai d'annulation des promenades, en constante : une modification met
+ *  à jour la page CGV et tout affichage qui consomme la clause. */
+export const BALADE_DELAI_ANNULATION = "72h";
+
 export const CGV_BALADES =
-  `Annulation jusqu'à 24h avant : remboursement intégral. ` +
-  `En deçà, aucun remboursement, sauf ${CERTIFICAT_MEDICAL}.`;
+  `Annulation jusqu'à ${BALADE_DELAI_ANNULATION} avant : remboursement intégral. ` +
+  `En deçà, aucun remboursement, sauf ${CERTIFICAT_MEDICAL} — ` +
+  `les sommes versées sont alors intégralement remboursées.`;
 
 export const CGV_ANNULATION_CENTRE =
   `En cas d'annulation par le centre (météo, force majeure) : report proposé ou remboursement intégral.`;
