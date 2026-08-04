@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { derouleEstRempli } from "@/lib/stage-deroule";
 import { CGV_STAGES_COURT, STAGE_ACOMPTE_EUROS } from "@/lib/cgv-clauses";
 import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
@@ -61,6 +61,18 @@ export default function ReserverPage() {
   }, [cart]);
   // Modal sélection enfant (depuis Timeline)
   const [bookingCreneau, setBookingCreneau] = useState<Creneau | null>(null);
+  // Retour de la creation d'un cavalier : ?creneau=<id> rouvre directement
+  // la modale de la promenade d'origine — la famille reprend ou elle en
+  // etait, nouveau cavalier dans la liste.
+  const creneauRouvert = useRef(false);
+  useEffect(() => {
+    if (creneauRouvert.current || typeof window === "undefined" || creneaux.length === 0) return;
+    const cid = new URLSearchParams(window.location.search).get("creneau");
+    if (!cid) { creneauRouvert.current = true; return; }
+    const c = creneaux.find((x: any) => x.id === cid);
+    if (c) setBookingCreneau(c);
+    creneauRouvert.current = true;
+  }, [creneaux]);
   // Mode paiement dans le panier
   const [cartPayMode, setCartPayMode] = useState<"cb" | "cheque" | "especes" | "virement" | "avoir">("cb");
   // Acceptation des conditions d'annulation (stages uniquement).
@@ -876,7 +888,7 @@ export default function ReserverPage() {
         Votre compte est créé. Il ne reste plus qu&apos;à compléter votre profil
         (coordonnées + cavaliers) pour pouvoir réserver.
       </p>
-      <a href={`/espace-cavalier/profil?action=ajouter-cavalier&retour=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/espace-cavalier/reserver")}`}>
+      <a href={`/espace-cavalier/profil?action=ajouter-cavalier&retour=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search + (bookingCreneau ? `${window.location.search ? "&" : "?"}creneau=${bookingCreneau.id}` : "") : "/espace-cavalier/reserver")}`}>
         <button className="font-body text-sm font-semibold text-white bg-blue-500 px-6 py-3 rounded-xl border-none cursor-pointer hover:bg-blue-400 transition-colors">
           Compléter mon profil →
         </button>
@@ -1567,7 +1579,7 @@ export default function ReserverPage() {
                     <p className="font-body text-xs text-slate-500 mb-4">
                       Vous serez notifié par email si une place se libère.
                     </p>
-                    <a href={`/espace-cavalier/profil?action=ajouter-cavalier&retour=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/espace-cavalier/reserver")}`}
+                    <a href={`/espace-cavalier/profil?action=ajouter-cavalier&retour=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search + (bookingCreneau ? `${window.location.search ? "&" : "?"}creneau=${bookingCreneau.id}` : "") : "/espace-cavalier/reserver")}`}
                       className="block text-center font-body text-xs font-semibold text-blue-600 no-underline mt-2 py-1.5">
                       + Ajouter un nouveau membre de la famille
                     </a>
@@ -1604,7 +1616,7 @@ export default function ReserverPage() {
                       <p className="font-body text-sm text-slate-600 mb-2">
                         Vous n&apos;avez pas encore ajouté de cavalier à votre famille.
                       </p>
-                      <a href={`/espace-cavalier/profil?action=ajouter-cavalier&retour=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/espace-cavalier/reserver")}`} className="inline-block px-4 py-2 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold no-underline">
+                      <a href={`/espace-cavalier/profil?action=ajouter-cavalier&retour=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search + (bookingCreneau ? `${window.location.search ? "&" : "?"}creneau=${bookingCreneau.id}` : "") : "/espace-cavalier/reserver")}`} className="inline-block px-4 py-2 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold no-underline">
                         Ajouter un cavalier
                       </a>
                     </div>
@@ -1667,14 +1679,14 @@ export default function ReserverPage() {
                       <p className="font-body text-sm text-slate-600 mb-2">
                         Vous n&apos;avez pas encore ajouté de cavalier à votre famille.
                       </p>
-                      <a href={`/espace-cavalier/profil?action=ajouter-cavalier&retour=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/espace-cavalier/reserver")}`} className="inline-block px-4 py-2 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold no-underline">
+                      <a href={`/espace-cavalier/profil?action=ajouter-cavalier&retour=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search + (bookingCreneau ? `${window.location.search ? "&" : "?"}creneau=${bookingCreneau.id}` : "") : "/espace-cavalier/reserver")}`} className="inline-block px-4 py-2 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold no-underline">
                         Ajouter un cavalier
                       </a>
                     </div>
                   ) : <p className="font-body text-sm text-slate-500 text-center py-2">Tous vos cavaliers sont déjà inscrits à ce créneau.</p>)
                 )}
               </div>
-              <a href={`/espace-cavalier/profil?action=ajouter-cavalier&retour=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/espace-cavalier/reserver")}`}
+              <a href={`/espace-cavalier/profil?action=ajouter-cavalier&retour=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search + (bookingCreneau ? `${window.location.search ? "&" : "?"}creneau=${bookingCreneau.id}` : "") : "/espace-cavalier/reserver")}`}
                 className="block text-center font-body text-xs font-semibold text-blue-600 no-underline mt-2 py-1.5">
                 + Ajouter un nouveau membre de la famille
               </a>
