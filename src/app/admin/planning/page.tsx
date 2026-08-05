@@ -1220,6 +1220,12 @@ export default function PlanningPage() {
           coursTitle: c.activityTitle,
           date: new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
           horaire: `${c.startTime}–${c.endTime}`, prix: priceTTC,
+          // Inscription au bureau sans encaissement : le montant reste du.
+          // Sans ce drapeau, l'email disait « confirmee » avec le prix, et la
+          // famille comprenait qu'elle n'avait rien a payer.
+          regle: options?.skipPayment === true || payMode === "deja_paye"
+            ? true
+            : Boolean(payMode && payMode !== "impaye" && payMode !== "a_regler"),
         });
         authFetch("/api/send-email", {
           method: "POST",

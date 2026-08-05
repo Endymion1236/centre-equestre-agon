@@ -123,6 +123,8 @@ export const emailTemplates = {
     date: string;
     horaire: string;
     prix: number;
+    /** true = deja encaisse. Sinon le montant reste du : l'email doit le dire. */
+    regle?: boolean;
   }) => ({
     subject: `Réservation confirmée — ${vars.coursTitle}`,
     html: wrap(`
@@ -133,7 +135,18 @@ export const emailTemplates = {
         <p style="margin:6px 0 0;color:#555;font-size:13px;">📅 ${vars.date} · 🕐 ${vars.horaire}</p>
         <p style="margin:6px 0 0;color:#1e3a5f;font-weight:bold;font-size:15px;">${vars.prix.toFixed(2)}€</p>
       </div>
-      ${button("Voir mes réservations", `${SITE_URL}/espace-cavalier/reservations`, "#2050A0")}
+      ${vars.regle
+        ? `<p style="color:#166534;font-size:14px;">✅ <strong>Réglé</strong> — rien d'autre à prévoir.</p>`
+        : `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px;margin:16px 0;">
+             <p style="margin:0;color:#92400e;font-size:14px;line-height:1.6;">
+               💳 <strong>Reste à régler : ${vars.prix.toFixed(2)}€.</strong>
+               La place est bien réservée ; le règlement peut se faire en ligne depuis
+               votre espace, ou sur place au centre équestre.
+             </p>
+           </div>`}
+      ${button(vars.regle ? "Voir mes réservations" : "Régler ma réservation",
+               `${SITE_URL}/espace-cavalier/${vars.regle ? "reservations" : "factures"}`,
+               vars.regle ? "#2050A0" : "#16a34a")}
     `),
   }),
 
