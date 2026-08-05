@@ -801,7 +801,11 @@ export default function ReserverPage() {
         where("childId", "==", childId),
         where("familyId", "==", user.uid)
       ));
-      if (!existing.empty) {
+      // Seules les entrees ACTIVES bloquent (waiting/notified). Une entree
+      // expiree — 24h ecoulees sans reponse — ne doit pas empecher de se
+      // reinscrire : sinon « deja en liste d'attente » tombe alors que la
+      // famille n'est plus dans la file.
+      if (existing.docs.some((d) => ["waiting", "notified"].includes((d.data() as any).status || "waiting"))) {
         toast("Vous êtes déjà en liste d'attente pour ce créneau.", "warning");
         setWaitlistLoading(null); return;
       }
@@ -868,7 +872,7 @@ export default function ReserverPage() {
         where("childId", "==", childId),
         where("familyId", "==", user.uid)
       ));
-      if (!existing.empty) {
+      if (existing.docs.some((d) => ["waiting", "notified"].includes((d.data() as any).status || "waiting"))) {
         toast("Vous êtes déjà en liste d'attente pour ce stage.", "warning");
         setWaitlistLoading(null); return;
       }
