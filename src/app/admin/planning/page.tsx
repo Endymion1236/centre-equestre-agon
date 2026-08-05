@@ -1798,7 +1798,7 @@ export default function PlanningPage() {
                     </a>
                   </p>
                   <p style="color:#555;font-size:13px;line-height:1.6;">Un souci pour réserver en ligne, ou une question ? Appelez-nous au
-                    <strong>06 09 02 71 59</strong> ou répondez à ce message — nous prendrons l'inscription avec vous.</p>
+                    <strong>02 44 84 99 96</strong> ou répondez à ce message — nous prendrons l'inscription avec vous.</p>
                   <p style="color:#666;font-size:12px;">À bientôt au centre équestre !</p>
                 </div>`,
               }),

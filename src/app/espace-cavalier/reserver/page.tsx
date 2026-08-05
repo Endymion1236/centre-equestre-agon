@@ -1470,6 +1470,19 @@ export default function ReserverPage() {
                                   {fin.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} à{" "}
                                   {fin.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}.
                                 </div>
+                                {/* Le bandeau etait purement informatif : la famille
+                                    lisait que la place lui etait gardee sans aucun
+                                    moyen de l'accepter. Ce bouton ajoute directement
+                                    l'enfant concerne au panier et ouvre le panier. */}
+                                <button
+                                  onClick={(ev) => {
+                                    ev.stopPropagation();
+                                    addCoursToCart(c, hold.childId);
+                                    setShowCart(true);
+                                  }}
+                                  className="w-full mt-2 py-2.5 rounded-lg font-body text-xs font-bold text-white bg-green-600 hover:bg-green-500 border-none cursor-pointer">
+                                  ✓ J'accepte cette place — passer au paiement
+                                </button>
                               </div>
                             );
                           })()}
@@ -1619,7 +1632,10 @@ export default function ReserverPage() {
                     <div className="font-body text-sm text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 mb-3">
                       🔔 Ce créneau est complet. Inscrivez-vous en liste d&apos;attente :
                     </div>
-                    <div className="font-body text-sm font-semibold text-slate-700 mb-3">Pour quel cavalier ?</div>
+                    <div className="font-body text-sm font-semibold text-slate-700 mb-1">Pour quel cavalier ?</div>
+                <div className="font-body text-[11px] text-slate-500 mb-3">
+                  Touchez un ou plusieurs cavaliers, puis validez en bas.
+                </div>
                     <div className="flex flex-col gap-2">
                       {(family?.children || [])
                         .filter((ch: any) => !(bookingCreneau.enrolled || []).some((e: any) => e.childId === ch.id))
@@ -1715,18 +1731,27 @@ export default function ReserverPage() {
                     mais SANS bouton dans cette branche — il n'etait present
                     que cote liste d'attente. On inscrit tous les cavaliers
                     coches en une fois, puis on ouvre le panier. */}
-                {selCavaliers.size > 0 && (
-                  <button
-                    onClick={() => {
-                      selCavaliers.forEach((cid) => addCoursToCart(bookingCreneau, cid));
-                      setSelCavaliers(new Set());
-                      setBookingCreneau(null);
-                      setShowCart(true);
-                    }}
-                    className="w-full py-3 rounded-xl font-body text-sm font-bold text-white bg-green-600 hover:bg-green-500 border-none cursor-pointer">
-                    Ajouter {selCavaliers.size} cavalier{selCavaliers.size > 1 ? "s" : ""} au panier
-                  </button>
-                )}
+                {/* Toujours affiche : la selection multiple a rendu le clic
+                    « silencieux » (il coche au lieu d'ajouter) — sans bouton
+                    visible en permanence, la famille croit que rien ne se
+                    passe. Desactive tant que rien n'est coche. */}
+                <button
+                  disabled={selCavaliers.size === 0}
+                  onClick={() => {
+                    selCavaliers.forEach((cid) => addCoursToCart(bookingCreneau, cid));
+                    setSelCavaliers(new Set());
+                    setBookingCreneau(null);
+                    setShowCart(true);
+                  }}
+                  className={`w-full py-3 rounded-xl font-body text-sm font-bold border-none ${
+                    selCavaliers.size === 0
+                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      : "text-white bg-green-600 hover:bg-green-500 cursor-pointer"
+                  }`}>
+                  {selCavaliers.size === 0
+                    ? "Sélectionnez un cavalier ci-dessus"
+                    : `Valider — ${selCavaliers.size} cavalier${selCavaliers.size > 1 ? "s" : ""} au panier`}
+                </button>
                 {(family?.children || []).filter((ch: any) => !(bookingCreneau.enrolled || []).some((e: any) => e.childId === ch.id)).length === 0 && (
                   (children.length === 0 ? (
                     <div className="text-center py-2">
