@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { tracerExecution } from "@/lib/cron-trace";
 import { cleanupOldEmailLogs } from "@/lib/email-log";
 import { classerWaitlist } from "@/lib/waitlist-cleanup";
 import { adminDb } from "@/lib/firebase-admin";
@@ -23,10 +24,19 @@ export const maxDuration = 300; // 5 min max — les 4 crons en séquence
  * est planifié dans vercel.json.
  */
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  // Deux voies d'appel : Vercel (Authorization: Bearer) et un declencheur
+  // externe de secours (x-cron-secret), le plan Hobby n'offrant aucune
+  // garantie d'execution. Les traitements sont idempotents (marqueurs
+  // soldeReminderSentAt, notifiedAt…) : un double appel n'envoie rien deux
+  // fois.
+  const secret = process.env.CRON_SECRET;
+  const parVercel = req.headers.get("authorization") === `Bearer ${secret}`;
+  const parExterne = req.headers.get("x-cron-secret") === secret
+    || req.nextUrl.searchParams.get("secret") === secret;
+  if (!secret || (!parVercel && !parExterne)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const declencheur = parVercel ? "vercel" : "externe";
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
   const cronSecret = process.env.CRON_SECRET || "";
@@ -135,8 +145,19 @@ export async function GET(req: NextRequest) {
     console.error("[daily-emails] purge waitlist failed:", e);
   }
 
+  // Trace durable : les logs Vercel ne survivent pas a la nuit sur Hobby.
+  await tracerExecution("daily-emails", declencheur, {
+    ok: true,
+    resume: {
+      dureeMs: Date.now() - startTime,
+      modules: results.map((r: any) => ({ nom: r.name, ok: r.ok !== false })),
+      cleanedLogs, waitlistSupprimees,
+    },
+  });
+
   return NextResponse.json({
     success: true,
+    declencheur,
     totalDurationMs: Date.now() - startTime,
     cleanedLogs,
     waitlistSupprimees,

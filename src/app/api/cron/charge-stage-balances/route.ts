@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { tracerExecution } from "@/lib/cron-trace";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { logEmail } from "@/lib/email-log";
@@ -24,10 +25,17 @@ export const maxDuration = 120;
  *   Famille paie le solde → paiement paid
  */
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  // Cron le plus critique financierement : accepte aussi le declencheur
+  // externe de secours. Idempotent (soldeReminderSentAt / soldeRelanceJ5SentAt),
+  // donc un double appel ne preleve jamais deux fois.
+  const secret = process.env.CRON_SECRET;
+  const parVercel = req.headers.get("authorization") === `Bearer ${secret}`;
+  const parExterne = req.headers.get("x-cron-secret") === secret
+    || req.nextUrl.searchParams.get("secret") === secret;
+  if (!secret || (!parVercel && !parExterne)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const declencheur = parVercel ? "vercel" : "externe";
 
   const resendKey = process.env.RESEND_API_KEY;
   const fromEmail = process.env.RESEND_FROM_EMAIL || "Centre Equestre <onboarding@resend.dev>";
@@ -403,8 +411,14 @@ export async function GET(req: NextRequest) {
 
     console.log(`\n✅ charge-stage-balances terminé: ${results.emailsSent} emails, ${relances} relances J-5, ${results.skipped} ignorés, ${results.errors} erreurs`);
 
+    await tracerExecution("charge-stage-balances", declencheur, {
+      ok: true,
+      resume: { date: j7Str, rappels: results.emailsSent, relancesJ5: relances, erreurs: results.errors },
+    });
+
     return NextResponse.json({
       ok: true,
+      declencheur,
       message: `Stages du ${j7Str}: ${results.emailsSent} rappels, ${relances} relances J-5`,
       relancesJ5: relances,
       ...results,
