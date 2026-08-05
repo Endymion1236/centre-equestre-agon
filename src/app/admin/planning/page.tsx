@@ -1790,7 +1790,15 @@ export default function PlanningPage() {
                       ? `du ${new Date(first.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} au ${new Date(first.dateFin).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })}${first.nbJours ? ` (${first.nbJours} jours)` : ""}`
                       : new Date(c.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} — ${c.startTime}–${c.endTime}</p>
                   </div>
-                  <p><strong>Cette place vous est réservée pendant 24h</strong> (jusqu'au ${new Date(holdUntil).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} à ${new Date(holdUntil).toLocaleTimeString("fr-FR", { hour:"2-digit", minute:"2-digit" })}). Connectez-vous à votre espace famille pour confirmer l'inscription. Passé ce délai, elle sera proposée aux autres familles.</p>
+                  <p><strong>Cette place vous est réservée pendant 24h</strong> (jusqu'au ${new Date(holdUntil).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} à ${new Date(holdUntil).toLocaleTimeString("fr-FR", { hour:"2-digit", minute:"2-digit" })}). Passé ce délai, elle sera proposée aux autres familles.</p>
+                  <p style="text-align:center;margin:24px 0;">
+                    <a href="${typeof window !== "undefined" ? window.location.origin : "https://centre-equestre-agon.vercel.app"}/espace-cavalier/reserver?creneau=${encodeURIComponent(cid)}"
+                       style="background:#16a34a;color:#fff;padding:13px 28px;border-radius:10px;text-decoration:none;font-weight:bold;display:inline-block;">
+                      Confirmer l'inscription
+                    </a>
+                  </p>
+                  <p style="color:#555;font-size:13px;line-height:1.6;">Un souci pour réserver en ligne, ou une question ? Appelez-nous au
+                    <strong>06 09 02 71 59</strong> ou répondez à ce message — nous prendrons l'inscription avec vous.</p>
                   <p style="color:#666;font-size:12px;">À bientôt au centre équestre !</p>
                 </div>`,
               }),
