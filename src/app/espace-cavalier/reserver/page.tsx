@@ -459,14 +459,17 @@ export default function ReserverPage() {
       };
     });
 
-    setCart([...cart, ...newItems]);
+    // Forme fonctionnelle par coherence (ce chemin ajoute tous les enfants
+    // d'un coup, mais un appel concurrent ne doit rien ecraser).
+    setCart((prev) => [...prev, ...newItems]);
     setSelectedChildren([]);
     setSelectedCreneau(null);
     setShowCart(true);
   };
 
   const addCoursToCart = (creneau: Creneau, childId: string) => {
-    // Bloquer le doublon panier
+    // Bloquer le doublon panier (verification rapide sur l'etat courant ;
+    // la garde definitive est dans le setCart fonctionnel ci-dessous)
     if (cart.some(i => i.childId === childId && i.creneauIds.includes(creneau.id))) {
       toast("Cet enfant est déjà dans le panier pour ce créneau.", "warning");
       return;
@@ -504,19 +507,26 @@ export default function ReserverPage() {
     // Enlever le suffixe " (NomFamille)" pour les cavaliers liés
     const cleanName = ((child as any)?.firstName || "?").split(" (")[0];
     const sourceFamilyId = (child as any)?.sourceFamilyId || null;
-    setCart([...cart, {
-      creneauIds: [creneau.id],
-      activityTitle: creneau.activityTitle,
-      dates: new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
-      childId,
-      childName: cleanName,
-      prixBase: Math.round(priceTTC * 100) / 100,
-      remiseEuros: 0,
-      rang: 0,
-      prixFinal: Math.round(priceTTC * 100) / 100,
-      isStage: false,
-      ...(sourceFamilyId ? { sourceFamilyId } : {}),
-    }]);
+    // ⚠️ Forme FONCTIONNELLE obligatoire : `setCart([...cart, x])` capture le
+    // panier fige au rendu. Sur une inscription multi-cavaliers (boucle
+    // forEach sur la selection), les deux appels partaient du meme panier et
+    // le second ECRASAIT le premier — une seule personne etait facturee.
+    setCart((prev) => {
+      if (prev.some(i => i.childId === childId && i.creneauIds.includes(creneau.id))) return prev;
+      return [...prev, {
+        creneauIds: [creneau.id],
+        activityTitle: creneau.activityTitle,
+        dates: new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
+        childId,
+        childName: cleanName,
+        prixBase: Math.round(priceTTC * 100) / 100,
+        remiseEuros: 0,
+        rang: 0,
+        prixFinal: Math.round(priceTTC * 100) / 100,
+        isStage: false,
+        ...(sourceFamilyId ? { sourceFamilyId } : {}),
+      }];
+    });
     setSelectedCreneau(null);
     setSelectedChildren([]);
   };
@@ -1622,7 +1632,7 @@ export default function ReserverPage() {
                               {waitlistLoading === bookingCreneau.id ? <Loader2 size={14} className="animate-spin" /> : "🔔"} {ch.firstName}
                             </span>
                             {ch.galopLevel && ch.galopLevel !== "—" && (
-                              <span className="font-body text-xs text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">G{ch.galopLevel}</span>
+                              <span className="font-body text-xs text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">{/^\d/.test(String(ch.galopLevel)) ? `G${ch.galopLevel}` : ch.galopLevel}</span>
                             )}
                           </button>
                         ))}
@@ -1695,7 +1705,7 @@ export default function ReserverPage() {
                           {!dejaAuPanier && tooYoung && <span className="ml-2 text-xs">🔒 Moins de 12 ans</span>}
                         </span>
                         {ch.galopLevel && ch.galopLevel !== "—" && (
-                          <span className="font-body text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">G{ch.galopLevel}</span>
+                          <span className="font-body text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">{/^\d/.test(String(ch.galopLevel)) ? `G${ch.galopLevel}` : ch.galopLevel}</span>
                         )}
                       </button>
                     );
