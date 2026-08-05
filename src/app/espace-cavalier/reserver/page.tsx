@@ -467,7 +467,7 @@ export default function ReserverPage() {
     setShowCart(true);
   };
 
-  const addCoursToCart = (creneau: Creneau, childId: string) => {
+  const addCoursToCart = (creneau: Creneau, childId: string, opts?: { viaHold?: boolean }) => {
     // Bloquer le doublon panier (verification rapide sur l'etat courant ;
     // la garde definitive est dans le setCart fonctionnel ci-dessous)
     if (cart.some(i => i.childId === childId && i.creneauIds.includes(creneau.id))) {
@@ -479,7 +479,7 @@ export default function ReserverPage() {
     // ── Règle métier : 12 ans minimum pour les promenades ──────────────
     // "Année des 12 ans" : l'enfant doit être né au plus tard l'année N-12
     // (où N = année courante). Ex : en 2026, il faut être né en 2014 ou avant.
-    if (creneau.activityType === "balade" && child) {
+    if (creneau.activityType === "balade" && child && !opts?.viaHold) {
       const bd: any = (child as any).birthDate;
       const birthDate = bd?.seconds ? new Date(bd.seconds * 1000) : (bd ? new Date(bd) : null);
       if (birthDate && !isNaN(birthDate.getTime())) {
@@ -933,6 +933,31 @@ export default function ReserverPage() {
 
   return (
     <div>
+      {/* Place(s) reservee(s) pour CETTE famille (hold 24h) : bandeau global,
+          visible quel que soit le chemin d'arrivee. Le lien de l'email perdait
+          son parametre ?creneau= a l'ouverture dans l'application installee
+          (PWA demarre sur sa page d'accueil) — on ne depend donc plus de
+          l'URL : les holds sont dans les donnees deja chargees. */}
+      {creneaux.filter((c: any) => holdActive(c) && (c as any).waitlistHold?.familyId === familyId).map((c: any) => {
+        const hold = (c as any).waitlistHold;
+        const fin = new Date(hold.until);
+        return (
+          <div key={`hold_${c.id}`} className="mb-4 rounded-2xl border-2 border-green-300 bg-green-50 p-4">
+            <div className="font-body text-sm font-bold text-green-800">
+              🎉 Une place est réservée pour {hold.childName}
+            </div>
+            <div className="mt-1 font-body text-xs text-green-700">
+              {c.activityTitle} — {new Date(c.date + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} · {c.startTime}–{c.endTime}.
+              À confirmer avant le {fin.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric" })} à {fin.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}.
+            </div>
+            <button
+              onClick={() => { addCoursToCart(c, hold.childId, { viaHold: true }); setShowCart(true); }}
+              className="w-full mt-3 py-3 rounded-xl font-body text-sm font-bold text-white bg-green-600 hover:bg-green-500 border-none cursor-pointer">
+              ✓ J'accepte cette place — passer au paiement
+            </button>
+          </div>
+        );
+      })}
       <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="font-display text-2xl font-bold text-blue-800">
