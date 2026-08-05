@@ -822,42 +822,22 @@ export default function ReserverPage() {
         position: existing.size + 1,
         createdAt: serverTimestamp(),
       });
-      // Confirmation par email : sans elle, la famille ferme son navigateur
-      // sans aucune trace de sa demarche — d'ou les appels « je crois que je
-      // me suis inscrite, vous confirmez ? ». L'email pose surtout la suite :
-      // elle n'a rien a faire, elle sera prevenue, la place lui sera gardee.
-      const destEmail = family.parentEmail || user.email || "";
-      if (destEmail) {
-        const dateLisible = new Date(c.date + "T12:00:00").toLocaleDateString("fr-FR",
-          { weekday: "long", day: "numeric", month: "long" });
-        authFetch("/api/send-email", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            to: destEmail,
-            subject: `Inscription en liste d'attente — ${c.activityTitle}`,
-            context: "famille_waitlist_confirmation",
-            template: "waitlistConfirmation",
-            familyId: user.uid,
-            creneauId: c.id,
-            html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-              <p>Bonjour <strong>${family.parentName || ""}</strong>,</p>
-              <p><strong>${childName}</strong> est bien inscrit(e) en liste d'attente pour :</p>
-              <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:16px 0;">
-                <p style="margin:0;color:#1e40af;font-weight:600;">${c.activityTitle}</p>
-                <p style="margin:8px 0 0;color:#555;font-size:13px;">📅 ${dateLisible} — ${c.startTime}–${c.endTime}</p>
-              </div>
-              <p style="font-size:14px;line-height:1.6;color:#334155;"><strong>Vous n'avez rien d'autre à faire.</strong>
-                Si une place se libère, vous recevrez un email et elle vous sera
-                <strong>réservée pendant 24 heures</strong> pour confirmer votre inscription.</p>
-              <p style="font-size:13px;color:#555;line-height:1.6;">Cette activité ne vous intéresse plus ?
-                Appelez-nous au <strong>02 44 84 99 96</strong> ou répondez à ce message,
-                nous libérerons votre place pour une autre famille.</p>
-              <p style="color:#666;font-size:12px;">À bientôt au centre équestre !</p>
-            </div>`,
-          }),
-        }).catch(() => {});
-      }
+      // Confirmation par email via une route DEDIEE : /api/send-email est
+      // reserve aux admins, l'appel depuis l'espace famille partait en 401
+      // et le catch l'avalait — la famille ne recevait rien.
+      authFetch("/api/waitlist/confirmation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          creneauId: c.id,
+          activityTitle: c.activityTitle,
+          date: c.date,
+          startTime: c.startTime,
+          endTime: c.endTime,
+          childName,
+          parentName: family.parentName || "",
+        }),
+      }).catch((e) => console.warn("Confirmation liste d'attente:", e));
 
       setWaitlistSuccess(c.id);
       setTimeout(() => setWaitlistSuccess(null), 4000);
