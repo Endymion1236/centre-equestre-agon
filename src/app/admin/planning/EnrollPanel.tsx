@@ -690,7 +690,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               <p style="margin:8px 0 0;color:#555;font-size:13px;">📅 ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })}</p>
               <p style="margin:4px 0 0;color:#555;font-size:13px;">🕐 ${creneau.startTime}–${creneau.endTime}</p>
             </div>
-            <p><strong>${entry.childName} est maintenant inscrit(e).</strong> Vous recevrez prochainement les informations de paiement.</p>
+            <p><strong>Cette place vous est réservée pendant 24 heures.</strong> Confirmez l'inscription depuis votre espace famille : elle sera ensuite proposée aux autres familles en attente.</p>
+            <p style="text-align:center;margin:24px 0;">
+              <a href="${typeof window !== "undefined" ? window.location.origin : "https://centre-equestre-agon.vercel.app"}/espace-cavalier/reserver?creneau=${encodeURIComponent(creneau.id!)}"
+                 style="background:#16a34a;color:#fff;padding:13px 28px;border-radius:10px;text-decoration:none;font-weight:bold;display:inline-block;">
+                Confirmer l'inscription
+              </a>
+            </p>
+            <p style="color:#555;font-size:13px;line-height:1.6;">Un souci pour réserver en ligne, ou une question ? Appelez-nous au <strong>02 44 84 99 96</strong> ou répondez à ce message — nous prendrons l'inscription avec vous.</p>
             <p>À bientôt au centre équestre !</p>
           </div>`,
         }),
