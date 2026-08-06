@@ -38,6 +38,10 @@ export default function DashboardPage() {
   const { permission, loading: pushLoading, error: pushError, requestPermission } = usePushNotifications(user?.uid || null);
 
   const [stats, setStats] = useState({ upcoming: 0, due: 0, credit: 0 });
+  // Inscriptions en liste d'attente : visibles des l'accueil, sinon la
+  // famille oublie qu'elle est en file (elles ne vivaient que dans un bloc
+  // replie de Mes reservations).
+  const [waitlist, setWaitlist] = useState<{ enFile: number; placeReservee: number }>({ enFile: 0, placeReservee: 0 });
   const [nextReservation, setNextReservation] = useState<UpcomingReservation | null>(null);
   const [cards, setCards] = useState<SessionCard[]>([]);
   const [fidelity, setFidelity] = useState<{ points: number; rate: number; enabled: boolean } | null>(null);
@@ -59,6 +63,20 @@ export default function DashboardPage() {
           .sort((a, b) => `${a.date || ""} ${a.startTime || ""}`.localeCompare(`${b.date || ""} ${b.startTime || ""}`));
         setNextReservation(upcoming[0] || null);
         setStats((s) => ({ ...s, upcoming: upcoming.length }));
+
+        // Attentes actives : « place reservee » (notifiee, hold en cours)
+        // compte a part — c'est celle qui appelle une action rapide.
+        try {
+          const wSnap = await getDocs(query(collection(db, "waitlist"), where("familyId", "==", user.uid)));
+          let enFile = 0, placeReservee = 0;
+          wSnap.docs.forEach((d) => {
+            const w = d.data() as any;
+            if (w.date && w.date < today) return;
+            if (w.status === "notified" && w.holdUntil && new Date(w.holdUntil).getTime() > Date.now()) placeReservee++;
+            else if ((w.status || "waiting") === "waiting") enFile++;
+          });
+          setWaitlist({ enFile, placeReservee });
+        } catch (e) { console.warn("Dashboard waitlist:", e); }
       } catch (e) {
         console.warn("Dashboard reservations:", e);
       }
@@ -225,10 +243,31 @@ export default function DashboardPage() {
           <Card hover padding="md" className="h-full">
             <div className="text-2xl mb-3">📋</div>
             <div className="font-body text-sm font-bold text-blue-800">Mes réservations</div>
-            <div className="font-body text-xs text-gray-600 mt-1">Voir les activités à venir</div>
+            <div className="font-body text-xs text-gray-600 mt-1">
+              {waitlist.enFile > 0
+                ? `${waitlist.enFile} demande${waitlist.enFile > 1 ? "s" : ""} en liste d'attente`
+                : "Voir les activités à venir"}
+            </div>
           </Card>
         </Link>
       </div>
+
+      {/* Place reservee : action a mener sous 24h, elle passe avant tout */}
+      {waitlist.placeReservee > 0 && (
+        <Link href="/espace-cavalier/reserver" className="no-underline">
+          <div className="mb-5 rounded-2xl border-2 border-green-300 bg-green-50 p-4">
+            <div className="font-body text-sm font-bold text-green-800">
+              🎉 {waitlist.placeReservee > 1
+                ? `${waitlist.placeReservee} places vous sont réservées`
+                : "Une place vous est réservée"}
+            </div>
+            <div className="font-body text-xs text-green-700 mt-1">
+              Une place s'est libérée sur une activité où vous étiez en liste d'attente.
+              Confirmez rapidement — elle est gardée 24h. Touchez pour voir.
+            </div>
+          </div>
+        </Link>
+      )}
 
       {/* 3. Indicateurs utiles seulement */}
       <div className={`grid gap-3 mb-5 ${stats.credit > 0 ? "grid-cols-3" : "grid-cols-2"}`}>

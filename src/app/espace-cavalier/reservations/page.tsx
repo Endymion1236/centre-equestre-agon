@@ -100,7 +100,10 @@ export default function ReservationsPage() {
   const [waitlistEntries, setWaitlistEntries] = useState<any[]>([]);
   const [cancellingWaitlist, setCancellingWaitlist] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showWaitlist, setShowWaitlist] = useState(false);
+  // Ouvert par defaut : une inscription en liste d'attente est une
+  // information que la famille doit voir sans avoir a deplier quoi que ce
+  // soit — elle oubliait sinon qu'elle etait en file.
+  const [showWaitlist, setShowWaitlist] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
