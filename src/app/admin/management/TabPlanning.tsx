@@ -1324,6 +1324,18 @@ Réponds de façon concise et pratique, en français.`,
                       {/* Bouton ajouter */}
                       {addCell?.salarieId===sal.id && addCell?.jour===jour ? (
                         <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,padding:8,display:"flex",flexDirection:"column",gap:6}}>
+                          {/* Choix de la personne : la cellule cliquee determine
+                              la valeur de depart, mais on peut se tromper de
+                              ligne — ce menu evite de fermer et recommencer. */}
+                          <select
+                            value={addCell?.salarieId || ""}
+                            onChange={(e) => setAddCell({ ...addCell!, salarieId: e.target.value })}
+                            style={{width:"100%",padding:"4px 6px",borderRadius:6,border:"1px solid #bfdbfe",fontFamily:"sans-serif",fontSize:11,fontWeight:600,background:"white",color:"#1e40af"}}
+                          >
+                            {salaries.filter(x => x.actif).map(x => (
+                              <option key={x.id} value={x.id}>👤 {x.nom}</option>
+                            ))}
+                          </select>
                           <select value={addForm.tacheTypeId} onChange={e=>{
                             const tt=tachesType.find(t=>t.id===e.target.value);
                             const firstHoraire = tt?.horairesDefaut?.sort()[0];
