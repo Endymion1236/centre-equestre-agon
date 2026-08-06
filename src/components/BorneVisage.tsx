@@ -138,7 +138,8 @@ const VisageSvg = forwardRef<BorneVisageHandle, { etat: EtatVisage }>(
 
     const ecoute = etat === "listening";
     const reflechit = etat === "thinking";
-    const endormi = etat === "off" || etat === "connecting";
+    const reveil = etat === "connecting";
+    const endormi = etat === "off" || reveil;
     const eyeRy = ecoute ? 12.5 : 10.5;
     const browLift = ecoute ? 5 : reflechit ? 3 : 0;
 
@@ -173,6 +174,10 @@ const VisageSvg = forwardRef<BorneVisageHandle, { etat: EtatVisage }>(
             .borne-regard { transition: transform 0.65s cubic-bezier(.4,.1,.3,1); }
             .borne-sourcil, .borne-paupiere-trait { transition: d 0.3s ease; }
             @keyframes borne-bob { 0%,100% { transform: translateY(0px); } 50% { transform: translateY(4px); } }
+            .borne-reveil-anim { animation: borne-reveil 1.1s ease-in-out infinite; transform-origin: 120px 132px; }
+            @keyframes borne-reveil { 0%,100% { transform: rotate(-2.5deg) scale(1); } 35% { transform: rotate(2.5deg) scale(1.015); } 70% { transform: rotate(-1deg) scale(1); } }
+            .borne-flutter { animation: borne-flutter 0.7s ease-in-out infinite; }
+            @keyframes borne-flutter { 0%,100% { transform: translateY(0px); } 50% { transform: translateY(-2px); } }
             @keyframes borne-twitch-g { 0%,100% { transform: rotate(0deg); } 50% { transform: rotate(-7deg); } }
             @keyframes borne-twitch-d { 0%,100% { transform: rotate(0deg); } 50% { transform: rotate(7deg); } }
           `}</style>
@@ -183,7 +188,8 @@ const VisageSvg = forwardRef<BorneVisageHandle, { etat: EtatVisage }>(
         {/* Inclinaison de tête attentive quand il écoute (couche séparée du
             balancement : deux transforms CSS ne peuvent pas cohabiter sur le
             même élément) */}
-        <g className="borne-tilt" style={{ transform: ecoute ? "rotate(-2.5deg)" : reflechit ? "rotate(1.5deg)" : "rotate(0deg)" }}>
+        <g className={`borne-tilt ${reveil ? "borne-reveil-anim" : ""}`}
+          style={reveil ? undefined : { transform: ecoute ? "rotate(-2.5deg)" : reflechit ? "rotate(1.5deg)" : "rotate(0deg)" }}>
           <g className={`borne-bob ${ecoute || flick ? "borne-ecoute" : ""}`}>
             <g className="borne-oreille-g">
               <path d="M62 66 Q44 16 84 30 Q96 50 78 70 Z" fill="url(#borne-robe)" stroke="#4A3118" strokeWidth="3" strokeLinejoin="round" />
@@ -209,10 +215,10 @@ const VisageSvg = forwardRef<BorneVisageHandle, { etat: EtatVisage }>(
               stroke="#5C3A18" strokeWidth="4.5" fill="none" strokeLinecap="round" />
 
             {endormi ? (
-              <>
+              <g className={reveil ? "borne-flutter" : undefined}>
                 <path d="M82 96 Q91 102 100 96" stroke="#3A2A18" strokeWidth="4" fill="none" strokeLinecap="round" />
                 <path d="M140 96 Q149 102 158 96" stroke="#3A2A18" strokeWidth="4" fill="none" strokeLinecap="round" />
-              </>
+              </g>
             ) : (
               /* Regard mobile (translation douce) + clignement (écrasement
                  vertical avec transition courte) */
@@ -241,6 +247,11 @@ const VisageSvg = forwardRef<BorneVisageHandle, { etat: EtatVisage }>(
               <ellipse ref={mouthRef} cx="120" cy="162" rx="17" ry="4" fill="#7A2E2E" stroke="#4A3118" strokeWidth="2.5" />
             ) : reflechit ? (
               <ellipse cx="120" cy="162" rx="7" ry="7" fill="#7A2E2E" stroke="#4A3118" strokeWidth="2.5" />
+            ) : reveil ? (
+              <ellipse cx="120" cy="162" rx="9" ry="4" fill="#7A2E2E" stroke="#4A3118" strokeWidth="2.5">
+                <animate attributeName="ry" values="3;13;6;3" dur="1.7s" repeatCount="indefinite" />
+                <animate attributeName="rx" values="8;12;9;8" dur="1.7s" repeatCount="indefinite" />
+              </ellipse>
             ) : endormi ? (
               <path d="M104 163 Q120 167 136 163" stroke="#4A3118" strokeWidth="3.5" fill="none" strokeLinecap="round" />
             ) : (
