@@ -112,12 +112,42 @@ const VisagePhoto = forwardRef<BorneVisageHandle, { etat: EtatVisage; onErreur: 
     const etatRef = useRef(etat);
     etatRef.current = etat;
 
+    const cacherTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    /**
+     * Change de pose SANS scintillement : l'ancien fondu croisé rendait les
+     * deux images semi-transparentes en même temps (le fond apparaissait un
+     * bref instant). Ici la nouvelle pose apparaît PAR-DESSUS l'ancienne qui
+     * reste pleinement visible en dessous, et l'ancienne n'est éteinte
+     * (sans transition, donc invisiblement) qu'une fois totalement couverte.
+     */
     const montrer = (pose: PoseKey) => {
       if (poseCouranteRef.current === pose) return;
+      const prev = poseCouranteRef.current;
       poseCouranteRef.current = pose;
+      if (cacherTimerRef.current) { clearTimeout(cacherTimerRef.current); cacherTimerRef.current = null; }
       for (const k of POSES) {
         const el = imgRefs.current[k];
-        if (el) el.style.opacity = k === pose ? "1" : "0";
+        if (!el) continue;
+        if (k === pose) {
+          el.style.zIndex = "2";
+          el.style.transition = "opacity 80ms ease-out";
+          el.style.opacity = "1";
+        } else if (k === prev) {
+          el.style.zIndex = "1"; // reste visible sous la nouvelle
+        } else {
+          el.style.transition = "none";
+          el.style.opacity = "0";
+          el.style.zIndex = "0";
+        }
+      }
+      const prevEl = imgRefs.current[prev];
+      if (prevEl && prev !== pose) {
+        cacherTimerRef.current = setTimeout(() => {
+          prevEl.style.transition = "none";
+          prevEl.style.opacity = "0";
+          prevEl.style.zIndex = "0";
+        }, 120);
       }
     };
 
@@ -239,7 +269,7 @@ const VisagePhoto = forwardRef<BorneVisageHandle, { etat: EtatVisage; onErreur: 
               draggable={false}
               onError={i === 0 ? onErreur : undefined}
               className="absolute inset-0 w-full h-full object-contain select-none"
-              style={{ opacity: pose === "dodo" ? 1 : 0, transition: "opacity 70ms ease-out" }}
+              style={{ opacity: pose === "dodo" ? 1 : 0 }}
             />
           ))}
           </div>
