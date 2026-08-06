@@ -72,6 +72,114 @@ const VisageRive = forwardRef<BorneVisageHandle, { etat: EtatVisage; onErreur: (
   }
 );
 
+// ── Version illustrée (poses générées par IA, découpées et détourées) ────────
+
+type PoseKey = "idle" | "parle1" | "parle2" | "dodo" | "ecoute" | "pensif";
+const POSES: PoseKey[] = ["idle", "parle1", "parle2", "dodo", "ecoute", "pensif"];
+
+/**
+ * Visage illustré : six poses pré-dessinées (/borne/calin-*.webp) fondues
+ * entre elles. La bouche pendant la parole est choisie en direct par
+ * l'amplitude audio (fermée / entrouverte / grande ouverte) via des
+ * manipulations de style impératives — jamais de re-render à 60 fps.
+ */
+const VisagePhoto = forwardRef<BorneVisageHandle, { etat: EtatVisage; onErreur: () => void }>(
+  function VisagePhoto({ etat, onErreur }, ref) {
+    const imgRefs = useRef<Partial<Record<PoseKey, HTMLImageElement | null>>>({});
+    const poseCouranteRef = useRef<PoseKey>("dodo");
+    const etatRef = useRef(etat);
+    etatRef.current = etat;
+
+    const montrer = (pose: PoseKey) => {
+      if (poseCouranteRef.current === pose) return;
+      poseCouranteRef.current = pose;
+      for (const k of POSES) {
+        const el = imgRefs.current[k];
+        if (el) el.style.opacity = k === pose ? "1" : "0";
+      }
+    };
+
+    // Pose selon l'état + clignements en idle/écoute + réveil animé
+    useEffect(() => {
+      let timers: ReturnType<typeof setTimeout>[] = [];
+      let intervalle: ReturnType<typeof setInterval> | null = null;
+
+      if (etat === "off") montrer("dodo");
+      else if (etat === "connecting") {
+        // Réveil : paupières qui papillonnent
+        let ouvert = false;
+        montrer("dodo");
+        intervalle = setInterval(() => { ouvert = !ouvert; montrer(ouvert ? "idle" : "dodo"); }, 380);
+      } else if (etat === "listening") montrer("ecoute");
+      else if (etat === "thinking") montrer("pensif");
+      else if (etat === "speaking") montrer("parle1");
+      else {
+        montrer("idle");
+        // Clignements : 2,5 à 6 s, via la pose yeux fermés
+        const planifierClin = () => {
+          const t = setTimeout(() => {
+            if (etatRef.current !== "idle") return;
+            montrer("dodo");
+            timers.push(setTimeout(() => {
+              if (etatRef.current === "idle") montrer("idle");
+              planifierClin();
+            }, 130));
+          }, 2500 + Math.random() * 3500);
+          timers.push(t);
+        };
+        planifierClin();
+      }
+      return () => { timers.forEach(clearTimeout); if (intervalle) clearInterval(intervalle); };
+    }, [etat]);
+
+    useImperativeHandle(ref, () => ({
+      setBouche: (v: number) => {
+        if (etatRef.current !== "speaking") return;
+        // Hystérésis simple pour éviter le papillonnement entre deux poses
+        const actuelle = poseCouranteRef.current;
+        if (v > 0.42) montrer("parle2");
+        else if (v > 0.1) { if (actuelle !== "parle2" || v < 0.34) montrer("parle1"); }
+        else if (actuelle !== "idle" && v < 0.06) montrer("idle");
+      },
+    }), []);
+
+    const ecoute = etat === "listening";
+    const reflechit = etat === "thinking";
+
+    return (
+      <div className="relative w-full h-full">
+        <style>{`
+          .borne-photo-bob { animation: borne-photo-bob 4.2s ease-in-out infinite; }
+          @keyframes borne-photo-bob { 0%,100% { transform: translateY(0px); } 50% { transform: translateY(5px); } }
+        `}</style>
+        <div
+          className="borne-photo-bob relative w-full h-full transition-transform duration-500"
+          style={{
+            transform: ecoute ? "rotate(-2deg) scale(1.03)" : reflechit ? "rotate(1.5deg)" : undefined,
+            // Fondu du bas : la découpe coupe le cou net, on l'estompe
+            WebkitMaskImage: "linear-gradient(to bottom, black 82%, transparent 99%)",
+            maskImage: "linear-gradient(to bottom, black 82%, transparent 99%)",
+          }}
+        >
+          {POSES.map((pose, i) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={pose}
+              ref={(el) => { imgRefs.current[pose] = el; }}
+              src={`/borne/calin-${pose}.webp`}
+              alt=""
+              draggable={false}
+              onError={i === 0 ? onErreur : undefined}
+              className="absolute inset-0 w-full h-full object-contain select-none"
+              style={{ opacity: pose === "dodo" ? 1 : 0, transition: "opacity 90ms linear" }}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+);
+
 // ── Version SVG (secours) ─────────────────────────────────────────────────────
 
 const VisageSvg = forwardRef<BorneVisageHandle, { etat: EtatVisage }>(
@@ -272,8 +380,10 @@ const VisageSvg = forwardRef<BorneVisageHandle, { etat: EtatVisage }>(
 const BorneVisage = forwardRef<BorneVisageHandle, { etat: EtatVisage }>(
   function BorneVisage({ etat }, ref) {
     const [riveKo, setRiveKo] = useState(false);
-    if (riveKo) return <VisageSvg ref={ref} etat={etat} />;
-    return <VisageRive ref={ref} etat={etat} onErreur={() => setRiveKo(true)} />;
+    const [photoKo, setPhotoKo] = useState(false);
+    if (!riveKo) return <VisageRive ref={ref} etat={etat} onErreur={() => setRiveKo(true)} />;
+    if (!photoKo) return <VisagePhoto ref={ref} etat={etat} onErreur={() => setPhotoKo(true)} />;
+    return <VisageSvg ref={ref} etat={etat} />;
   }
 );
 
