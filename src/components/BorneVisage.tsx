@@ -79,12 +79,15 @@ const VisageRive = forwardRef<BorneVisageHandle, { etat: EtatVisage; onErreur: (
 type PoseKey =
   | "idle" | "parle1" | "parle2" | "parleO" | "dodo" | "ecoute" | "pensif"
   | "joie" | "rire" | "desole" | "clin" | "etonne"
-  | "b1" | "b2" | "b3" | "b4" | "b5" | "b6";
+  | "b1" | "b2" | "b3" | "b4" | "b5" | "b6"
+  | "rgauche" | "rdroite" | "rhautg" | "rhautd" | "miclos";
 const POSES: PoseKey[] = [
   "idle", "parle1", "parle2", "parleO", "dodo", "ecoute", "pensif",
   "joie", "rire", "desole", "clin", "etonne",
   "b1", "b2", "b3", "b4", "b5", "b6",
+  "rgauche", "rdroite", "rhautg", "rhautd", "miclos",
 ];
+const REGARDS: PoseKey[] = ["rgauche", "rdroite", "rhautg", "rhautd"];
 // Gamme d'ouverture de bouche pendant la parole : 6 dessins cohérents
 // (mêmes yeux sur toute la gamme), du plus fermé au plus ouvert
 const GAMME_BOUCHE: PoseKey[] = ["b1", "b2", "b3", "b4", "b5", "b6"];
@@ -126,9 +129,10 @@ const VisagePhoto = forwardRef<BorneVisageHandle, { etat: EtatVisage; onErreur: 
       if (etat === "off") montrer("dodo");
       else if (etat === "connecting") {
         // Réveil : paupières qui papillonnent
-        let ouvert = false;
+        const cycle: PoseKey[] = ["dodo", "miclos", "idle", "miclos"];
+        let ci = 0;
         montrer("dodo");
-        intervalle = setInterval(() => { ouvert = !ouvert; montrer(ouvert ? "idle" : "dodo"); }, 380);
+        intervalle = setInterval(() => { ci = (ci + 1) % cycle.length; montrer(cycle[ci]); }, 300);
       } else if (etat === "listening") montrer("ecoute");
       else if (etat === "thinking") {
         // Petit « oh ! » de réaction, puis l'air pensif
@@ -138,19 +142,34 @@ const VisagePhoto = forwardRef<BorneVisageHandle, { etat: EtatVisage; onErreur: 
       else if (etat === "speaking") montrer("b1");
       else {
         montrer("idle");
-        // Clignements : 2,5 à 6 s, via la pose yeux fermés
+        // Clignement en trois temps : mi-clos → fermé → mi-clos → ouvert
         const planifierClin = () => {
           const t = setTimeout(() => {
             if (etatRef.current !== "idle") return;
-            montrer("dodo");
+            montrer("miclos");
+            timers.push(setTimeout(() => { if (etatRef.current === "idle") montrer("dodo"); }, 55));
+            timers.push(setTimeout(() => { if (etatRef.current === "idle") montrer("miclos"); }, 145));
             timers.push(setTimeout(() => {
               if (etatRef.current === "idle") montrer("idle");
               planifierClin();
-            }, 130));
+            }, 210));
           }, 2500 + Math.random() * 3500);
           timers.push(t);
         };
         planifierClin();
+        // Regard qui balaie doucement la pièce, puis revient de face
+        const planifierRegard = () => {
+          const t = setTimeout(() => {
+            if (etatRef.current !== "idle") return;
+            montrer(REGARDS[Math.floor(Math.random() * REGARDS.length)]);
+            timers.push(setTimeout(() => {
+              if (etatRef.current === "idle") montrer("idle");
+              planifierRegard();
+            }, 900 + Math.random() * 900));
+          }, 3200 + Math.random() * 3000);
+          timers.push(t);
+        };
+        planifierRegard();
       }
       return () => { timers.forEach(clearTimeout); if (intervalle) clearInterval(intervalle); };
     }, [etat]);
