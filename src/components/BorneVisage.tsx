@@ -78,11 +78,17 @@ const VisageRive = forwardRef<BorneVisageHandle, { etat: EtatVisage; onErreur: (
 
 type PoseKey =
   | "idle" | "parle1" | "parle2" | "parleO" | "dodo" | "ecoute" | "pensif"
-  | "joie" | "rire" | "desole" | "clin" | "etonne";
+  | "joie" | "rire" | "desole" | "clin" | "etonne"
+  | "b1" | "b2" | "b3" | "b4" | "b5" | "b6";
 const POSES: PoseKey[] = [
   "idle", "parle1", "parle2", "parleO", "dodo", "ecoute", "pensif",
   "joie", "rire", "desole", "clin", "etonne",
+  "b1", "b2", "b3", "b4", "b5", "b6",
 ];
+// Gamme d'ouverture de bouche pendant la parole : 6 dessins cohérents
+// (mêmes yeux sur toute la gamme), du plus fermé au plus ouvert
+const GAMME_BOUCHE: PoseKey[] = ["b1", "b2", "b3", "b4", "b5", "b6"];
+const SEUILS_BOUCHE = [0.06, 0.16, 0.28, 0.42, 0.6];
 
 /**
  * Visage illustré : six poses pré-dessinées (/borne/calin-*.webp) fondues
@@ -99,9 +105,6 @@ const VisagePhoto = forwardRef<BorneVisageHandle, { etat: EtatVisage; onErreur: 
     // relâchement lent (elle se referme en douceur) — supprime le
     // papillonnement dû aux micro-variations de la voix
     const ampLisseeRef = useRef(0);
-    // Forme médiane tirée au sort à chaque ouverture de bouche : alterner
-    // « entrouverte » et « O » casse la répétitivité de la boucle à 3 poses
-    const boucheMedianeRef = useRef<PoseKey>("parle1");
     const humeurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const etatRef = useRef(etat);
     etatRef.current = etat;
@@ -132,7 +135,7 @@ const VisagePhoto = forwardRef<BorneVisageHandle, { etat: EtatVisage; onErreur: 
         montrer("etonne");
         timers.push(setTimeout(() => { if (etatRef.current === "thinking") montrer("pensif"); }, 600));
       }
-      else if (etat === "speaking") montrer("parle1");
+      else if (etat === "speaking") montrer("b1");
       else {
         montrer("idle");
         // Clignements : 2,5 à 6 s, via la pose yeux fermés
@@ -172,16 +175,11 @@ const VisagePhoto = forwardRef<BorneVisageHandle, { etat: EtatVisage; onErreur: 
           squashRef.current.style.transform = `scaleY(${s.toFixed(4)}) translateY(${(-lisse * 2).toFixed(2)}px)`;
         }
 
-        const actuelle = poseCouranteRef.current;
-        if (lisse > 0.4) montrer("parle2");
-        else if (lisse > 0.12) {
-          // À chaque réouverture depuis « fermée », on retire la forme médiane
-          if (actuelle === "idle") {
-            boucheMedianeRef.current = Math.random() < 0.4 ? "parleO" : "parle1";
-          }
-          if (actuelle !== "parle2" || lisse < 0.3) montrer(boucheMedianeRef.current);
-        }
-        else if (actuelle !== "idle" && lisse < 0.07) montrer("idle");
+        // Échelle à 6 niveaux : le signal lissé choisit le dessin — avec
+        // 6 formes cohérentes, plus besoin d'hystérésis ni de tirage
+        let niveau = 0;
+        for (const s of SEUILS_BOUCHE) { if (lisse > s) niveau++; else break; }
+        montrer(GAMME_BOUCHE[niveau]);
       },
       setHumeur: (pose, dureeMs = 1800) => {
         if (etatRef.current !== "idle") return;
