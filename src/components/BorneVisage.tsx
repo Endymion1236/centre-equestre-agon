@@ -87,6 +87,11 @@ const VisagePhoto = forwardRef<BorneVisageHandle, { etat: EtatVisage; onErreur: 
   function VisagePhoto({ etat, onErreur }, ref) {
     const imgRefs = useRef<Partial<Record<PoseKey, HTMLImageElement | null>>>({});
     const poseCouranteRef = useRef<PoseKey>("dodo");
+    const squashRef = useRef<HTMLDivElement | null>(null);
+    // Amplitude lissée : attaque rapide (la bouche s'ouvre tout de suite),
+    // relâchement lent (elle se referme en douceur) — supprime le
+    // papillonnement dû aux micro-variations de la voix
+    const ampLisseeRef = useRef(0);
     const etatRef = useRef(etat);
     etatRef.current = etat;
 
@@ -134,12 +139,28 @@ const VisagePhoto = forwardRef<BorneVisageHandle, { etat: EtatVisage; onErreur: 
 
     useImperativeHandle(ref, () => ({
       setBouche: (v: number) => {
-        if (etatRef.current !== "speaking") return;
-        // Hystérésis simple pour éviter le papillonnement entre deux poses
+        if (etatRef.current !== "speaking") {
+          ampLisseeRef.current = 0;
+          if (squashRef.current) squashRef.current.style.transform = "";
+          return;
+        }
+        // Lissage asymétrique : montée immédiate, descente progressive
+        const prev = ampLisseeRef.current;
+        const lisse = v > prev ? prev + (v - prev) * 0.65 : prev * 0.82;
+        ampLisseeRef.current = lisse;
+
+        // Squash & stretch : la tête "pulse" imperceptiblement avec la voix
+        // (60 fps continus) — c'est ce mouvement permanent qui donne la
+        // fluidité entre deux dessins de bouche, comme en animation classique
+        if (squashRef.current) {
+          const s = 1 + lisse * 0.022;
+          squashRef.current.style.transform = `scaleY(${s.toFixed(4)}) translateY(${(-lisse * 2).toFixed(2)}px)`;
+        }
+
         const actuelle = poseCouranteRef.current;
-        if (v > 0.42) montrer("parle2");
-        else if (v > 0.1) { if (actuelle !== "parle2" || v < 0.34) montrer("parle1"); }
-        else if (actuelle !== "idle" && v < 0.06) montrer("idle");
+        if (lisse > 0.4) montrer("parle2");
+        else if (lisse > 0.12) { if (actuelle !== "parle2" || lisse < 0.3) montrer("parle1"); }
+        else if (actuelle !== "idle" && lisse < 0.07) montrer("idle");
       },
     }), []);
 
@@ -161,6 +182,7 @@ const VisagePhoto = forwardRef<BorneVisageHandle, { etat: EtatVisage; onErreur: 
             maskImage: "linear-gradient(to bottom, black 82%, transparent 99%)",
           }}
         >
+          <div ref={squashRef} className="relative w-full h-full" style={{ transformOrigin: "50% 78%", willChange: "transform" }}>
           {POSES.map((pose, i) => (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -171,9 +193,10 @@ const VisagePhoto = forwardRef<BorneVisageHandle, { etat: EtatVisage; onErreur: 
               draggable={false}
               onError={i === 0 ? onErreur : undefined}
               className="absolute inset-0 w-full h-full object-contain select-none"
-              style={{ opacity: pose === "dodo" ? 1 : 0, transition: "opacity 90ms linear" }}
+              style={{ opacity: pose === "dodo" ? 1 : 0, transition: "opacity 70ms ease-out" }}
             />
           ))}
+          </div>
         </div>
       </div>
     );
