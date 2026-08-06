@@ -87,6 +87,24 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   // additionnels à assigner sur le même créneau. La tache du salarié principal +
   // une tache identique pour chaque binôme sont créées en une fois.
   const [addForm, setAddForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30, joursSelectionnes: [] as JourSemaine[], enchainer: false, binomeIds: [] as string[] });
+  // Lignes repliees : a dix collaboratrices la grille devient haute et on
+  // perd de vue celle qu'on consulte. Un clic sur la fleche range la
+  // semaine, un second la redeploie. Choix conserve entre visites.
+  const [salariesReplies, setSalariesReplies] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const b = window.localStorage.getItem("planning_salaries_replies");
+      return new Set(b ? (JSON.parse(b) as string[]) : []);
+    } catch { return new Set(); }
+  });
+  const basculerSalarie = (id: string) => {
+    setSalariesReplies((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      try { window.localStorage.setItem("planning_salaries_replies", JSON.stringify([...n])); } catch {}
+      return n;
+    });
+  };
   // Édition d'une tâche existante : ouvre une modale de modification
   const [editingTache, setEditingTache] = useState<TachePlanifiee | null>(null);
   const [editForm, setEditForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30, notes: "", salarieId: "" });
@@ -1261,6 +1279,14 @@ Réponds de façon concise et pratique, en français.`,
             <tr key={sal.id} style={{background: si%2===0?"#f8faff":"#fff"}}>
               <td style={{padding:"6px 6px", borderBottom:"1px solid #eef2f7", verticalAlign:"top"}}>
                 <div style={{display:"flex", alignItems:"center", gap:4}}>
+                  <button
+                    type="button"
+                    onClick={() => basculerSalarie(sal.id)}
+                    title={salariesReplies.has(sal.id) ? "Afficher la semaine" : "Replier la semaine"}
+                    style={{background:"none", border:"none", padding:0, cursor:"pointer", fontSize:10, color:"#64748b", width:12, flexShrink:0}}
+                  >
+                    {salariesReplies.has(sal.id) ? "▶" : "▼"}
+                  </button>
                   <div style={{width:7, height:7, borderRadius:"50%", background:sal.couleur, flexShrink:0}}/>
                   <span style={{fontFamily:"sans-serif", fontSize:11, fontWeight:700, color:"#1e293b", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{sal.nom}</span>
                 </div>
@@ -1268,7 +1294,13 @@ Réponds de façon concise et pratique, en français.`,
                   {fmtDuree(chargeParSalarie[sal.id]||0)} cette sem.
                 </div>
               </td>
-              {jourDates.slice(0, nbJours).map(({jour}) => {
+              {salariesReplies.has(sal.id) ? (
+                <td colSpan={nbJours} style={{padding:"6px 10px", borderBottom:"1px solid #eef2f7", verticalAlign:"middle"}}>
+                  <span style={{fontFamily:"sans-serif", fontSize:10, color:"#94a3b8", fontStyle:"italic"}}>
+                    Semaine repliée — {taches.filter(t => t.salarieId===sal.id).length} tâche(s). Cliquez sur ▶ pour afficher.
+                  </span>
+                </td>
+              ) : jourDates.slice(0, nbJours).map(({jour}) => {
                 const cellTaches = taches.filter(t => t.salarieId===sal.id && t.jour===jour).sort((a,b) => a.heureDebut.localeCompare(b.heureDebut));
                 return (
                   <td key={jour} style={{padding:"3px 3px", borderBottom:"1px solid #eef2f7", verticalAlign:"top"}}>
