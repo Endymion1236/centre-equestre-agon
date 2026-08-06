@@ -78,31 +78,69 @@ const VisageSvg = forwardRef<BorneVisageHandle, { etat: EtatVisage }>(
   function VisageSvg({ etat }, ref) {
     const mouthRef = useRef<SVGEllipseElement | null>(null);
     const [blink, setBlink] = useState(false);
+    const [regard, setRegard] = useState({ x: 0, y: 0 });
+    const [flick, setFlick] = useState(false);
 
-    // Clignement des yeux — toutes les 3 à 6 s
+    // Clignement des yeux — toutes les 2,5 à 6 s (double clin parfois)
     useEffect(() => {
       let timer: ReturnType<typeof setTimeout>;
       const planifier = () => {
         timer = setTimeout(() => {
           setBlink(true);
-          setTimeout(() => { setBlink(false); planifier(); }, 140);
-        }, 3000 + Math.random() * 3000);
+          setTimeout(() => {
+            setBlink(false);
+            // Un double clin une fois sur quatre — plus vivant
+            if (Math.random() < 0.25) {
+              setTimeout(() => {
+                setBlink(true);
+                setTimeout(() => { setBlink(false); planifier(); }, 110);
+              }, 160);
+            } else planifier();
+          }, 110);
+        }, 2500 + Math.random() * 3500);
       };
       planifier();
       return () => clearTimeout(timer);
     }, []);
 
+    // Regard : balaie doucement la pièce au repos, se fixe sur le visiteur
+    // pendant l'écoute, se lève pendant la réflexion
+    useEffect(() => {
+      if (etat === "listening" || etat === "speaking") { setRegard({ x: 0, y: 0 }); return; }
+      if (etat === "thinking") { setRegard({ x: 3, y: -6 }); return; }
+      setRegard({ x: 0, y: 0 });
+      const timer = setInterval(() => {
+        setRegard({ x: (Math.random() - 0.5) * 9, y: (Math.random() - 0.5) * 5 });
+      }, 2200 + Math.random() * 2500);
+      return () => clearInterval(timer);
+    }, [etat]);
+
+    // Petit frétillement d'oreilles spontané au repos
+    useEffect(() => {
+      if (etat !== "idle" && etat !== "off") return;
+      const timer = setInterval(() => {
+        setFlick(true);
+        setTimeout(() => setFlick(false), 1400);
+      }, 7000 + Math.random() * 6000);
+      return () => clearInterval(timer);
+    }, [etat]);
+
     useImperativeHandle(ref, () => ({
       setBouche: (v: number) => {
-        mouthRef.current?.setAttribute("ry", String(Math.round(3 + Math.max(0, Math.min(1, v)) * 34)));
+        const c = Math.max(0, Math.min(1, v));
+        const m = mouthRef.current;
+        if (!m) return;
+        // La bouche s'ouvre en hauteur ET s'élargit légèrement — plus naturel
+        m.setAttribute("ry", String(Math.round(3 + c * 32)));
+        m.setAttribute("rx", String(Math.round(16 + c * 7)));
       },
     }), []);
 
     const ecoute = etat === "listening";
     const reflechit = etat === "thinking";
-    const eyeCy = reflechit ? 88 : 94;
-    const eyeRy = blink ? 1.5 : ecoute ? 12.5 : 10.5;
     const endormi = etat === "off" || etat === "connecting";
+    const eyeRy = ecoute ? 12.5 : 10.5;
+    const browLift = ecoute ? 5 : reflechit ? 3 : 0;
 
     return (
       <svg viewBox="0 0 240 240" className="w-full h-full" aria-hidden="true">
@@ -125,11 +163,15 @@ const VisageSvg = forwardRef<BorneVisageHandle, { etat: EtatVisage }>(
             <stop offset="100%" stopColor="#F7E3C4" />
           </radialGradient>
           <style>{`
-            .borne-tete { animation: borne-bob 4.2s ease-in-out infinite; transform-origin: 120px 130px; }
+            .borne-bob { animation: borne-bob 4.2s ease-in-out infinite; transform-origin: 120px 130px; }
+            .borne-tilt { transition: transform 0.55s cubic-bezier(.34,1.3,.6,1); transform-origin: 120px 132px; }
             .borne-oreille-g { transform-origin: 70px 58px; }
             .borne-oreille-d { transform-origin: 170px 58px; }
             .borne-ecoute .borne-oreille-g { animation: borne-twitch-g 1.6s ease-in-out infinite; }
             .borne-ecoute .borne-oreille-d { animation: borne-twitch-d 1.6s ease-in-out infinite 0.3s; }
+            .borne-oeil { transition: transform 0.09s ease; }
+            .borne-regard { transition: transform 0.65s cubic-bezier(.4,.1,.3,1); }
+            .borne-sourcil, .borne-paupiere-trait { transition: d 0.3s ease; }
             @keyframes borne-bob { 0%,100% { transform: translateY(0px); } 50% { transform: translateY(4px); } }
             @keyframes borne-twitch-g { 0%,100% { transform: rotate(0deg); } 50% { transform: rotate(-7deg); } }
             @keyframes borne-twitch-d { 0%,100% { transform: rotate(0deg); } 50% { transform: rotate(7deg); } }
@@ -138,66 +180,73 @@ const VisageSvg = forwardRef<BorneVisageHandle, { etat: EtatVisage }>(
 
         <circle cx="120" cy="118" r="114" fill="url(#borne-halo)" />
 
-        <g className={`borne-tete ${ecoute ? "borne-ecoute" : ""}`}>
-          <g className="borne-oreille-g">
-            <path d="M62 66 Q44 16 84 30 Q96 50 78 70 Z" fill="url(#borne-robe)" stroke="#4A3118" strokeWidth="3" strokeLinejoin="round" />
-            <path d="M67 58 Q58 26 80 36 Q86 48 76 60 Z" fill="#F2B8C6" />
+        {/* Inclinaison de tête attentive quand il écoute (couche séparée du
+            balancement : deux transforms CSS ne peuvent pas cohabiter sur le
+            même élément) */}
+        <g className="borne-tilt" style={{ transform: ecoute ? "rotate(-2.5deg)" : reflechit ? "rotate(1.5deg)" : "rotate(0deg)" }}>
+          <g className={`borne-bob ${ecoute || flick ? "borne-ecoute" : ""}`}>
+            <g className="borne-oreille-g">
+              <path d="M62 66 Q44 16 84 30 Q96 50 78 70 Z" fill="url(#borne-robe)" stroke="#4A3118" strokeWidth="3" strokeLinejoin="round" />
+              <path d="M67 58 Q58 26 80 36 Q86 48 76 60 Z" fill="#F2B8C6" />
+            </g>
+            <g className="borne-oreille-d">
+              <path d="M178 66 Q196 16 156 30 Q144 50 162 70 Z" fill="url(#borne-robe)" stroke="#4A3118" strokeWidth="3" strokeLinejoin="round" />
+              <path d="M173 58 Q182 26 160 36 Q154 48 164 60 Z" fill="#F2B8C6" />
+            </g>
+
+            <ellipse cx="120" cy="126" rx="92" ry="90" fill="url(#borne-robe)" stroke="#4A3118" strokeWidth="3" />
+            <path d="M108 40 Q120 34 132 40 Q130 84 126 112 Q120 120 114 112 Q110 84 108 40 Z" fill="#FFF8EC" opacity="0.9" />
+
+            <path d="M70 46 Q120 8 170 46 Q160 32 138 28 L142 46 Q130 30 120 30 Q110 30 98 46 L102 28 Q80 32 70 46 Z"
+              fill="url(#borne-criniere)" stroke="#5C3A18" strokeWidth="2.5" strokeLinejoin="round" />
+            <path d="M74 46 Q66 66 74 88 Q82 70 84 52 Z" fill="url(#borne-criniere)" stroke="#5C3A18" strokeWidth="2.5" strokeLinejoin="round" />
+            <path d="M166 46 Q174 66 166 88 Q158 70 156 52 Z" fill="url(#borne-criniere)" stroke="#5C3A18" strokeWidth="2.5" strokeLinejoin="round" />
+            <path d="M112 34 Q118 48 112 62 Q104 50 106 38 Z" fill="#8A5A2B" />
+
+            <path className="borne-sourcil" d={`M80 ${76 - browLift} Q92 ${68 - browLift} 103 ${75 - browLift}`}
+              stroke="#5C3A18" strokeWidth="4.5" fill="none" strokeLinecap="round" />
+            <path className="borne-sourcil" d={`M137 ${75 - browLift} Q148 ${68 - browLift} 160 ${76 - browLift}`}
+              stroke="#5C3A18" strokeWidth="4.5" fill="none" strokeLinecap="round" />
+
+            {endormi ? (
+              <>
+                <path d="M82 96 Q91 102 100 96" stroke="#3A2A18" strokeWidth="4" fill="none" strokeLinecap="round" />
+                <path d="M140 96 Q149 102 158 96" stroke="#3A2A18" strokeWidth="4" fill="none" strokeLinecap="round" />
+              </>
+            ) : (
+              /* Regard mobile (translation douce) + clignement (écrasement
+                 vertical avec transition courte) */
+              <g className="borne-regard" style={{ transform: `translate(${regard.x}px, ${regard.y}px)` }}>
+                <g className="borne-oeil" style={{ transform: blink ? "scaleY(0.08)" : "scaleY(1)", transformOrigin: "91px 94px" }}>
+                  <ellipse cx="91" cy="94" rx="11" ry={eyeRy} fill="#3A2A18" />
+                  <circle cx="95" cy="90.5" r="3.4" fill="#fff" />
+                  <circle cx="88" cy="97" r="1.6" fill="#fff" opacity="0.8" />
+                </g>
+                <g className="borne-oeil" style={{ transform: blink ? "scaleY(0.08)" : "scaleY(1)", transformOrigin: "149px 94px" }}>
+                  <ellipse cx="149" cy="94" rx="11" ry={eyeRy} fill="#3A2A18" />
+                  <circle cx="153" cy="90.5" r="3.4" fill="#fff" />
+                  <circle cx="146" cy="97" r="1.6" fill="#fff" opacity="0.8" />
+                </g>
+              </g>
+            )}
+
+            <ellipse cx="70" cy="122" rx="12" ry="8" fill="#F6BDB2" opacity="0.65" />
+            <ellipse cx="170" cy="122" rx="12" ry="8" fill="#F6BDB2" opacity="0.65" />
+
+            <ellipse cx="120" cy="152" rx="46" ry="36" fill="url(#borne-museau)" stroke="#4A3118" strokeWidth="2.5" />
+            <ellipse cx="103" cy="140" rx="4.5" ry="6" fill="#8A5A3A" opacity="0.8" transform="rotate(-14 103 140)" />
+            <ellipse cx="137" cy="140" rx="4.5" ry="6" fill="#8A5A3A" opacity="0.8" transform="rotate(14 137 140)" />
+
+            {etat === "speaking" ? (
+              <ellipse ref={mouthRef} cx="120" cy="162" rx="17" ry="4" fill="#7A2E2E" stroke="#4A3118" strokeWidth="2.5" />
+            ) : reflechit ? (
+              <ellipse cx="120" cy="162" rx="7" ry="7" fill="#7A2E2E" stroke="#4A3118" strokeWidth="2.5" />
+            ) : endormi ? (
+              <path d="M104 163 Q120 167 136 163" stroke="#4A3118" strokeWidth="3.5" fill="none" strokeLinecap="round" />
+            ) : (
+              <path d="M100 158 Q120 174 140 158" stroke="#4A3118" strokeWidth="4" fill="none" strokeLinecap="round" />
+            )}
           </g>
-          <g className="borne-oreille-d">
-            <path d="M178 66 Q196 16 156 30 Q144 50 162 70 Z" fill="url(#borne-robe)" stroke="#4A3118" strokeWidth="3" strokeLinejoin="round" />
-            <path d="M173 58 Q182 26 160 36 Q154 48 164 60 Z" fill="#F2B8C6" />
-          </g>
-
-          <ellipse cx="120" cy="126" rx="92" ry="90" fill="url(#borne-robe)" stroke="#4A3118" strokeWidth="3" />
-          <path d="M108 40 Q120 34 132 40 Q130 84 126 112 Q120 120 114 112 Q110 84 108 40 Z" fill="#FFF8EC" opacity="0.9" />
-
-          <path d="M70 46 Q120 8 170 46 Q160 32 138 28 L142 46 Q130 30 120 30 Q110 30 98 46 L102 28 Q80 32 70 46 Z"
-            fill="url(#borne-criniere)" stroke="#5C3A18" strokeWidth="2.5" strokeLinejoin="round" />
-          <path d="M74 46 Q66 66 74 88 Q82 70 84 52 Z" fill="url(#borne-criniere)" stroke="#5C3A18" strokeWidth="2.5" strokeLinejoin="round" />
-          <path d="M166 46 Q174 66 166 88 Q158 70 156 52 Z" fill="url(#borne-criniere)" stroke="#5C3A18" strokeWidth="2.5" strokeLinejoin="round" />
-          <path d="M112 34 Q118 48 112 62 Q104 50 106 38 Z" fill="#8A5A2B" />
-
-          <path d={`M80 ${76 - (ecoute ? 5 : reflechit ? 3 : 0)} Q92 ${68 - (ecoute ? 5 : reflechit ? 3 : 0)} 103 ${75 - (ecoute ? 5 : reflechit ? 3 : 0)}`}
-            stroke="#5C3A18" strokeWidth="4.5" fill="none" strokeLinecap="round" />
-          <path d={`M137 ${75 - (ecoute ? 5 : reflechit ? 3 : 0)} Q148 ${68 - (ecoute ? 5 : reflechit ? 3 : 0)} 160 ${76 - (ecoute ? 5 : reflechit ? 3 : 0)}`}
-            stroke="#5C3A18" strokeWidth="4.5" fill="none" strokeLinecap="round" />
-
-          {endormi ? (
-            <>
-              <path d="M82 96 Q91 102 100 96" stroke="#3A2A18" strokeWidth="4" fill="none" strokeLinecap="round" />
-              <path d="M140 96 Q149 102 158 96" stroke="#3A2A18" strokeWidth="4" fill="none" strokeLinecap="round" />
-            </>
-          ) : (
-            <>
-              <ellipse cx="91" cy={eyeCy} rx="11" ry={eyeRy} fill="#3A2A18" />
-              <ellipse cx="149" cy={eyeCy} rx="11" ry={eyeRy} fill="#3A2A18" />
-              {!blink && (
-                <>
-                  <circle cx="95" cy={eyeCy - 3.5} r="3.4" fill="#fff" />
-                  <circle cx="88" cy={eyeCy + 3} r="1.6" fill="#fff" opacity="0.8" />
-                  <circle cx="153" cy={eyeCy - 3.5} r="3.4" fill="#fff" />
-                  <circle cx="146" cy={eyeCy + 3} r="1.6" fill="#fff" opacity="0.8" />
-                </>
-              )}
-            </>
-          )}
-
-          <ellipse cx="70" cy="122" rx="12" ry="8" fill="#F6BDB2" opacity="0.65" />
-          <ellipse cx="170" cy="122" rx="12" ry="8" fill="#F6BDB2" opacity="0.65" />
-
-          <ellipse cx="120" cy="152" rx="46" ry="36" fill="url(#borne-museau)" stroke="#4A3118" strokeWidth="2.5" />
-          <ellipse cx="103" cy="140" rx="4.5" ry="6" fill="#8A5A3A" opacity="0.8" transform="rotate(-14 103 140)" />
-          <ellipse cx="137" cy="140" rx="4.5" ry="6" fill="#8A5A3A" opacity="0.8" transform="rotate(14 137 140)" />
-
-          {etat === "speaking" ? (
-            <ellipse ref={mouthRef} cx="120" cy="162" rx="17" ry="4" fill="#7A2E2E" stroke="#4A3118" strokeWidth="2.5" />
-          ) : reflechit ? (
-            <ellipse cx="120" cy="162" rx="7" ry="7" fill="#7A2E2E" stroke="#4A3118" strokeWidth="2.5" />
-          ) : endormi ? (
-            <path d="M104 163 Q120 167 136 163" stroke="#4A3118" strokeWidth="3.5" fill="none" strokeLinecap="round" />
-          ) : (
-            <path d="M100 158 Q120 174 140 158" stroke="#4A3118" strokeWidth="4" fill="none" strokeLinecap="round" />
-          )}
         </g>
       </svg>
     );
