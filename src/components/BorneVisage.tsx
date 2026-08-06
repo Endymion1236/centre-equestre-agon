@@ -32,6 +32,8 @@ export type EtatVisage = "off" | "connecting" | "idle" | "listening" | "thinking
 export interface BorneVisageHandle {
   /** Ouverture de la bouche, 0 (fermée) à 1 (grande ouverte). */
   setBouche: (v: number) => void;
+  /** Expression ponctuelle (clin d'œil, désolé, joie…) affichée au repos. */
+  setHumeur?: (pose: "clin" | "desole" | "joie" | "rire" | "etonne", dureeMs?: number) => void;
 }
 
 const RIVE_SRC = "/calin.riv";
@@ -74,8 +76,13 @@ const VisageRive = forwardRef<BorneVisageHandle, { etat: EtatVisage; onErreur: (
 
 // ── Version illustrée (poses générées par IA, découpées et détourées) ────────
 
-type PoseKey = "idle" | "parle1" | "parle2" | "dodo" | "ecoute" | "pensif";
-const POSES: PoseKey[] = ["idle", "parle1", "parle2", "dodo", "ecoute", "pensif"];
+type PoseKey =
+  | "idle" | "parle1" | "parle2" | "parleO" | "dodo" | "ecoute" | "pensif"
+  | "joie" | "rire" | "desole" | "clin" | "etonne";
+const POSES: PoseKey[] = [
+  "idle", "parle1", "parle2", "parleO", "dodo", "ecoute", "pensif",
+  "joie", "rire", "desole", "clin", "etonne",
+];
 
 /**
  * Visage illustré : six poses pré-dessinées (/borne/calin-*.webp) fondues
@@ -92,6 +99,10 @@ const VisagePhoto = forwardRef<BorneVisageHandle, { etat: EtatVisage; onErreur: 
     // relâchement lent (elle se referme en douceur) — supprime le
     // papillonnement dû aux micro-variations de la voix
     const ampLisseeRef = useRef(0);
+    // Forme médiane tirée au sort à chaque ouverture de bouche : alterner
+    // « entrouverte » et « O » casse la répétitivité de la boucle à 3 poses
+    const boucheMedianeRef = useRef<PoseKey>("parle1");
+    const humeurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const etatRef = useRef(etat);
     etatRef.current = etat;
 
@@ -116,7 +127,11 @@ const VisagePhoto = forwardRef<BorneVisageHandle, { etat: EtatVisage; onErreur: 
         montrer("dodo");
         intervalle = setInterval(() => { ouvert = !ouvert; montrer(ouvert ? "idle" : "dodo"); }, 380);
       } else if (etat === "listening") montrer("ecoute");
-      else if (etat === "thinking") montrer("pensif");
+      else if (etat === "thinking") {
+        // Petit « oh ! » de réaction, puis l'air pensif
+        montrer("etonne");
+        timers.push(setTimeout(() => { if (etatRef.current === "thinking") montrer("pensif"); }, 600));
+      }
       else if (etat === "speaking") montrer("parle1");
       else {
         montrer("idle");
@@ -159,8 +174,22 @@ const VisagePhoto = forwardRef<BorneVisageHandle, { etat: EtatVisage; onErreur: 
 
         const actuelle = poseCouranteRef.current;
         if (lisse > 0.4) montrer("parle2");
-        else if (lisse > 0.12) { if (actuelle !== "parle2" || lisse < 0.3) montrer("parle1"); }
+        else if (lisse > 0.12) {
+          // À chaque réouverture depuis « fermée », on retire la forme médiane
+          if (actuelle === "idle") {
+            boucheMedianeRef.current = Math.random() < 0.4 ? "parleO" : "parle1";
+          }
+          if (actuelle !== "parle2" || lisse < 0.3) montrer(boucheMedianeRef.current);
+        }
         else if (actuelle !== "idle" && lisse < 0.07) montrer("idle");
+      },
+      setHumeur: (pose, dureeMs = 1800) => {
+        if (etatRef.current !== "idle") return;
+        if (humeurTimerRef.current) clearTimeout(humeurTimerRef.current);
+        montrer(pose);
+        humeurTimerRef.current = setTimeout(() => {
+          if (etatRef.current === "idle") montrer("idle");
+        }, dureeMs);
       },
     }), []);
 

@@ -61,6 +61,7 @@ export default function BornePage() {
   const inactiviteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dureeMaxRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transcriptRef = useRef("");
+  const humeurEnAttenteRef = useRef<"clin" | "desole" | "joie" | null>(null);
 
   // Nettoyage complet au démontage
   useEffect(() => () => { raccrocherInterne(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -122,6 +123,7 @@ export default function BornePage() {
         output = data.ok
           ? "Message enregistré et transmis à l'équipe."
           : `Échec de l'envoi (${data.error || "erreur inconnue"}) — proposer de passer à l'accueil.`;
+        if (data.ok) humeurEnAttenteRef.current = "clin";
       } catch {
         output = "Échec technique de l'envoi — proposer de passer à l'accueil.";
       }
@@ -181,6 +183,20 @@ export default function BornePage() {
         micStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
         micTraiteRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
         if (etatRef.current === "speaking") setEtat("idle");
+        // Expression de fin de réponse : clin d'œil après un message transmis,
+        // air désolé après un refus, sourire enthousiaste sinon si le ton y est
+        {
+          const texte = transcriptRef.current.toLowerCase();
+          let humeur = humeurEnAttenteRef.current;
+          humeurEnAttenteRef.current = null;
+          if (!humeur && /(désolé|desole|malheureusement|pas possible|ne peux pas|n'est pas possible)/.test(texte)) humeur = "desole";
+          if (!humeur && /(bienvenue|avec plaisir|à bientôt|super|génial|bonne journée)/.test(texte)) humeur = "joie";
+          if (humeur) {
+            const h = humeur;
+            // Laisser l'état repasser à idle avant d'afficher l'expression
+            setTimeout(() => visageRef.current?.setHumeur?.(h, 2000), 60);
+          }
+        }
         break;
       // Transcript de la réponse — noms d'événements beta et GA gérés
       case "response.audio_transcript.delta":
