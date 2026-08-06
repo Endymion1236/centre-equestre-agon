@@ -25,8 +25,7 @@ import PoneyChargeView from "./PoneyChargeView";
 import ThemeSuggestion from "./ThemeSuggestion";
 import QuickAddRider from "./QuickAddRider";
 import SeanceNotes from "./SeanceNotes";
-import { Loader2, ChevronLeft, ChevronRight, XCircle, AlertCircle, Printer, ClipboardList, Mic, MicOff, Sparkles, TrendingUp, AlertTriangle, Trash2, X, CalendarDays,
-} from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, XCircle, AlertCircle, Printer, ClipboardList, Mic, MicOff, Sparkles, TrendingUp, AlertTriangle, Trash2, X, CalendarDays, ChevronDown, ChevronUp } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 
 interface Creneau { id: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolled: any[]; status: string; rotationPoneys?: boolean; }
@@ -40,6 +39,20 @@ export default function MontoirPage() {
   // mémorise sa signature (titre + heure) pour revenir sur la reprise
   // équivalente du nouveau jour au lieu de remonter en haut.
   const pendingScrollSig = useRef<string | null>(null);
+
+  // Reprises repliees : a l'ouverture du montoir on veut la VUE D'ENSEMBLE
+  // (barre par cours : horaire, titre, moniteur, x/y, presents), et on
+  // deplie a la demande. On memorise l'inverse — les reprises DEPLIEES —
+  // pour que l'etat par defaut (tout replie) ne demande aucun stockage.
+  const [depliees, setDepliees] = useState<Set<string>>(new Set());
+  const estDepliee = (id: string) => depliees.has(id);
+  const basculerReprise = (id: string) => setDepliees((prev) => {
+    const n = new Set(prev);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+  const toutDeplier = (ids: string[]) => setDepliees(new Set(ids));
+  const toutReplier = () => setDepliees(new Set());
   const sigRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const repriseSig = (c: any) => `${(c.activityTitle || "").trim()}__${c.startTime || ""}`;
   const [creneaux, setCreneaux] = useState<Creneau[]>([]);
@@ -1079,6 +1092,23 @@ export default function MontoirPage() {
           ))}
         </div>
       )}
+      {/* Commandes globales : ouvrir le montoir sur la vue d'ensemble, puis
+          tout deplier d'un geste si on prefere l'ancien affichage. */}
+      {creneaux.length > 0 && (
+        <div className="flex items-center gap-2 mb-3 print:hidden">
+          <button onClick={()=>toutDeplier(creneaux.map(c=>c.id!))}
+            className="font-body text-xs font-semibold text-slate-600 bg-gray-100 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">
+            ⤵ Tout déplier
+          </button>
+          <button onClick={toutReplier}
+            className="font-body text-xs font-semibold text-slate-600 bg-gray-100 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">
+            ⤴ Tout replier
+          </button>
+          <span className="font-body text-[11px] text-slate-400">
+            {depliees.size} reprise{depliees.size>1?"s":""} ouverte{depliees.size>1?"s":""}
+          </span>
+        </div>
+      )}
       {creneaux.length === 0 ? <Card padding="lg" className="text-center"><div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><ClipboardList size={28} className="text-blue-300" /></div><p className="font-body text-sm text-slate-600">Aucune reprise ce jour.</p></Card> :
       <div className="flex flex-col gap-6">{creneaux.filter(c => !printMonitor || (c.monitor || "").trim() === printMonitor).map(c => { const en = c.enrolled||[]; const col = (c as any).color || typeColors[c.activityType]||"#666"; const closed = c.status==="closed"; const pres = en.filter((e:any)=>e.presence!=="absent" && e.presence!=="absent_nonjustified").length; const _sig = repriseSig(c); return (
         <div key={c.id} ref={(el) => { sigRefs.current[_sig] = el; }} className="scroll-mt-4">
@@ -1086,6 +1116,11 @@ export default function MontoirPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-blue-500/8">
             <div className="flex items-center gap-4">
               <div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px]" style={{color:"#475569"}}>{c.endTime}</div></div>
+              <button onClick={()=>basculerReprise(c.id!)} aria-label={estDepliee(c.id!) ? "Replier" : "Déplier"}
+                title={estDepliee(c.id!) ? "Replier cette reprise" : "Voir les cavaliers"}
+                className="print:hidden p-1.5 rounded-lg text-slate-500 bg-gray-100 hover:bg-gray-200 border-none cursor-pointer shrink-0">
+                {estDepliee(c.id!) ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
+              </button>
               <div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}{(c as any).themeStage && <span className="ml-2 font-body text-xs font-normal text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">🎭 {(c as any).themeStage}</span>}</div><div className="font-body text-xs" style={{color:"#334155"}}>{c.monitor} · {en.length}/{c.maxPlaces}</div></div>
             </div>
             <div className="flex items-center gap-2 flex-wrap print:hidden">
@@ -1161,6 +1196,7 @@ export default function MontoirPage() {
               </>}
             </div>
           </div>
+          <div className={estDepliee(c.id!) ? "" : "hidden print:block"}>
           <SeanceNotes creneau={c} onChanged={fetchData} />
           {en.length===0 ? <p className="font-body text-sm text-slate-600 italic">Aucun inscrit</p> :
           <div>
@@ -1293,6 +1329,7 @@ export default function MontoirPage() {
               </div>
             ))}
           </div>}
+          </div>
         </Card></div>); })}</div>}
       </>}
 
