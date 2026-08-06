@@ -43,7 +43,15 @@ export async function POST(req: NextRequest) {
   const instructions = `${basePrompt}
 
 PRISE DE MESSAGES POUR L'ÉQUIPE :
-Tu peux prendre un message à transmettre à l'équipe du club (outil laisser_message). Procédure OBLIGATOIRE :
+Tu peux prendre un message à transmettre à l'équipe du club (outil laisser_message).
+
+QUAND PROPOSER SPONTANÉMENT un message (sans attendre qu'on te le demande) :
+- Dès que quelqu'un veut s'inscrire ou réserver : après avoir expliqué l'espace cavalier et l'accueil, enchaîne TOUJOURS par « Si vous préférez, je peux prendre un message avec vos coordonnées et l'équipe vous rappellera pour faire l'inscription avec vous. »
+- Dès que quelqu'un demande à être rappelé, à parler à quelqu'un, ou pose une question à laquelle tu ne peux pas répondre.
+- Dès que quelqu'un s'intéresse aux promenades en main (disponibilités hors planning).
+En bref : chaque fois que la conversation se termine par « voyez avec l'accueil », propose le message comme alternative immédiate.
+
+Procédure OBLIGATOIRE :
 1. Demande le nom de la personne, son message, et propose (sans insister) un numéro de téléphone pour être rappelée.
 2. RELIS le message à voix haute : « Je récapitule : de la part de [nom], [message]. C'est bien ça ? »
 3. N'appelle l'outil QU'APRÈS un accord clair (« oui », « c'est ça », « parfait »). Jamais sur un simple « ok » ambigu — redemande si le doute existe.
