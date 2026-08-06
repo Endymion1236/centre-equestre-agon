@@ -66,8 +66,16 @@ Un message n'est PAS une réservation : si la personne veut réserver, rappelle 
             input: {
               // VAD sémantique : le modèle attend la fin réelle de la phrase
               // au lieu de couper sur un silence court — crucial avec des
-              // enfants qui hésitent
-              turn_detection: { type: "semantic_vad" },
+              // enfants qui hésitent.
+              // interrupt_response: false — en club-house, le bruit ambiant
+              // était détecté comme une prise de parole et coupait la réponse
+              // en plein milieu. L'interruption se fait désormais à l'écran
+              // (toucher le poney), plus au son.
+              turn_detection: { type: "semantic_vad", interrupt_response: false },
+              // Réduction de bruit "far_field" : conçue pour les micros
+              // d'appareils posés dans une pièce (borne, kiosque) par
+              // opposition au casque — filtre le brouhaha avant la détection
+              noise_reduction: { type: "far_field" },
             },
             output: {
               voice: "marin",

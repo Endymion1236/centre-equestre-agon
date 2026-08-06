@@ -157,9 +157,14 @@ export default function BornePage() {
         setEtat("speaking");
         transcriptRef.current = "";
         relancerInactivite();
+        // Micro coupé pendant que le poney parle : dans un club-house
+        // bruyant, le laisser ouvert transformait le brouhaha (et l'écho
+        // de sa propre voix) en fausses prises de parole
+        micStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = false; });
         break;
       case "output_audio_buffer.stopped":
       case "output_audio_buffer.cleared":
+        micStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
         if (etatRef.current === "speaking") setEtat("idle");
         break;
       // Transcript de la réponse — noms d'événements beta et GA gérés
@@ -185,6 +190,18 @@ export default function BornePage() {
         break;
     }
   };
+
+  // Interruption à l'écran : on coupe la réponse en cours et on rouvre
+  // le micro — remplace l'interruption à la voix, désactivée car le bruit
+  // ambiant coupait les réponses en plein milieu
+  const interrompreReponse = useCallback(() => {
+    const dc = dcRef.current;
+    if (etatRef.current !== "speaking" || dc?.readyState !== "open") return;
+    dc.send(JSON.stringify({ type: "response.cancel" }));
+    dc.send(JSON.stringify({ type: "output_audio_buffer.clear" }));
+    micStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
+    setEtat("idle");
+  }, []);
 
   // ── Démarrage de la conversation (WebRTC) ───────────────────────────────────
   const demarrer = async () => {
@@ -333,7 +350,7 @@ export default function BornePage() {
     etat === "connecting" ? "Connexion…"
     : etat === "listening" ? "Je vous écoute…"
     : etat === "thinking" ? "Je réfléchis…"
-    : etat === "speaking" ? ""
+    : etat === "speaking" ? "Touchez-moi pour m'interrompre"
     : enConversation ? "Parlez-moi, je vous écoute !"
     : "Bonjour ! Appuyez sur le bouton pour discuter avec moi";
 
@@ -346,7 +363,8 @@ export default function BornePage() {
       </header>
 
       {/* Visage */}
-      <div className="relative w-64 h-64 md:w-80 md:h-80 my-4">
+      <div className="relative w-64 h-64 md:w-80 md:h-80 my-4" onClick={interrompreReponse}
+        role={etat === "speaking" ? "button" : undefined}>
         {etat === "listening" && (
           <span className="absolute inset-0 rounded-full border-4 border-blue-400 animate-ping opacity-40" />
         )}
