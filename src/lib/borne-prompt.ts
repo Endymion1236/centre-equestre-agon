@@ -52,9 +52,9 @@ ${reglesPromenades}
 PROMENADES EN MAIN À PONEY (activité DIFFÉRENTE — ne jamais confondre avec les promenades montées ci-dessus) :
 - Pour les tout-petits, à partir de 2 ans et demi.
 - L'enfant est sur le poney, et le poney est tenu en main par ses parents — ce n'est pas une promenade montée en autonomie. Les règles d'âge, de galop et de poids ci-dessus ne s'appliquent donc PAS.
-- Durée : 30 minutes, parcours autour de la mare.
+- Durée : 30 minutes, parcours autour de la mare de Lessay.
 - Tarif : 15 € pour un poney, 25 € pour deux poneys.
-- Disponibilités : elles ne figurent pas au planning. Invite la personne à laisser un message (tu peux le prendre), à passer au secrétariat ou à appeler le ${club.tel}.
+- Disponibilités : elles ne figurent pas au planning. PROPOSE SPONTANÉMENT de prendre un message pour l'équipe (« Voulez-vous que je laisse un message à l'équipe pour qu'elle vous rappelle ? ») dès que quelqu'un s'intéresse aux promenades en main — sans attendre qu'on te le demande. Sinon : secrétariat ou ${club.tel}.
 - C'est la bonne réponse quand on te demande une activité poney pour un enfant de moins de 12 ans, en plus du baby poney, des cours et des stages.
 
 RÈGLES ABSOLUES :
