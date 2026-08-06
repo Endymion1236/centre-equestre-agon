@@ -45,6 +45,12 @@ export default function BornePage() {
   const dcRef = useRef<RTCDataChannel | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const micTraiteRef = useRef<MediaStream | null>(null);
+  // Élément <audio> PERSISTANT rendu dans le JSX (playsInline requis iOS).
+  // Il reste muet : il ne sert qu'à faire circuler le flux WebRTC (bizarrerie
+  // Chrome — sans élément média attaché, un flux distant ne produit rien
+  // dans Web Audio). Le SON sort par l'AudioContext, créé et débloqué
+  // PENDANT l'appui sur le bouton — c'est ce qui rend la voix audible sur
+  // mobile, où un play() différé hors geste utilisateur est bloqué.
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -77,7 +83,11 @@ export default function BornePage() {
     micStreamRef.current?.getTracks().forEach((t) => t.stop());
     micTraiteRef.current?.getTracks().forEach((t) => t.stop());
     micTraiteRef.current = null;
-    if (audioElRef.current) { audioElRef.current.pause(); audioElRef.current.srcObject = null; }
+    if (audioElRef.current) {
+      audioElRef.current.pause();
+      audioElRef.current.srcObject = null;
+      audioElRef.current.muted = true; // re-muet pour la prochaine session
+    }
     dcRef.current = null;
     pcRef.current = null;
     micStreamRef.current = null;
@@ -273,21 +283,28 @@ export default function BornePage() {
       // Audio sortant du modèle → lecteur + analyseur pour la bouche
       pc.ontrack = (e) => {
         const stream = e.streams[0];
-        const audio = new Audio();
-        audio.autoplay = true;
-        audio.srcObject = stream;
-        audioElRef.current = audio;
-        audio.play().catch(() => {});
+        const audio = audioElRef.current;
+        if (audio) {
+          audio.srcObject = stream;
+          audio.play().catch(() => {});
+        }
         if (audioCtxRef.current) {
           try {
             const src = audioCtxRef.current.createMediaStreamSource(stream);
             const analyser = audioCtxRef.current.createAnalyser();
             analyser.fftSize = 256;
             src.connect(analyser);
-            // Pas de connexion à destination : l'élément <audio> joue déjà
-            // le flux, l'analyseur ne sert qu'à mesurer l'amplitude
+            // Le son sort ICI (AudioContext débloqué par le geste), pas par
+            // l'élément <audio> qui reste muet et ne fait que pomper le flux
+            analyser.connect(audioCtxRef.current.destination);
             analyserRef.current = analyser;
-          } catch { analyserRef.current = null; }
+          } catch {
+            analyserRef.current = null;
+            // Sans Web Audio : l'élément <audio> devient la sortie sonore
+            if (audio) audio.muted = false;
+          }
+        } else if (audio) {
+          audio.muted = false;
         }
       };
 
@@ -394,6 +411,9 @@ export default function BornePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-cream to-blue-50 flex flex-col items-center justify-between py-8 px-6 select-none">
+      {/* Sortie audio persistante — voir audioElRef */}
+      <audio ref={audioElRef} autoPlay playsInline muted className="hidden" />
+
       {/* En-tête */}
       <header className="text-center">
         <h1 className="font-display text-2xl md:text-3xl font-bold text-blue-800">Centre Équestre d&apos;Agon-Coutainville</h1>
