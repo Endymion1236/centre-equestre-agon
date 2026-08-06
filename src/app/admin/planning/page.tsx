@@ -821,6 +821,26 @@ export default function PlanningPage() {
     const enrolled = await enrollChildInCreneau(cid, child);
     if (!enrolled) return;
 
+    // Une inscription solde la demande d'attente correspondante : sans cela,
+    // la famille restait affichee « En attente » sur un creneau ou elle est
+    // desormais inscrite, et le hold pouvait masquer une place a tort.
+    // On nettoie au niveau de la FAMILLE : elle peut accepter la place avec
+    // un autre cavalier que celui inscrit en attente (limite d'age, etc.).
+    try {
+      const wSnap = await getDocs(query(
+        collection(db, "waitlist"),
+        where("creneauId", "==", cid),
+        where("familyId", "==", child.familyId),
+      ));
+      await Promise.all(wSnap.docs.map((d) => deleteDoc(doc(db, "waitlist", d.id))));
+      const cRef = doc(db, "creneaux", cid);
+      const cSnap = await getDoc(cRef);
+      const holdFam = (cSnap.data() as any)?.waitlistHold?.familyId;
+      if (holdFam && holdFam === child.familyId) {
+        await updateDoc(cRef, { waitlistHold: null });
+      }
+    } catch (e) { console.warn("Nettoyage liste d'attente:", e); }
+
     // ── Mode Compétition : créer un paiement avec les lignes engagement/coaching ──
     if (options?.competitionItems && options.competitionItems.length > 0) {
       try {
