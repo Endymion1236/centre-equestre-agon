@@ -1,0 +1,17 @@
+{
+  "name": "Borne d'accueil — Câlin",
+  "short_name": "Borne Câlin",
+  "description": "Assistant vocal d'accueil du Centre Équestre d'Agon-Coutainville",
+  "id": "/borne",
+  "start_url": "/borne",
+  "scope": "/borne",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#FDF9F0",
+  "theme_color": "#0C1A2E",
+  "lang": "fr",
+  "icons": [
+    { "src": "/icons/icon-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/icon-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
