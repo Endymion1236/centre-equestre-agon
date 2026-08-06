@@ -328,11 +328,16 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
           updateDoc(doc(db, "taches-planifiees", t.id), {
             heureDebut: editForm.heureDebut,
             dureeMinutes: editForm.dureeMinutes,
+            // Le commentaire suit aussi : une consigne saisie sur la tache
+            // d'une personne (« sortir aussi les Kune Kune ») vaut pour tout
+            // le monde sur la meme tache au meme moment — sinon seule la
+            // personne depuis laquelle on a edite voyait la note.
+            notes: editForm.notes || null,
             updatedAt: serverTimestamp(),
           })
         ));
         if (jumelles.length > 0) {
-          toast(`Horaire répercuté sur ${jumelles.length} autre(s) personne(s)`, "success");
+          toast(`Modifications répercutées sur ${jumelles.length} autre(s) personne(s)`, "success");
         }
       }
       setEditingTache(null);
