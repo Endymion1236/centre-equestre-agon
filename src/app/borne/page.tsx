@@ -58,6 +58,14 @@ export default function BornePage() {
   // Nettoyage complet au démontage
   useEffect(() => () => { raccrocherInterne(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Préchauffage des fonctions serverless dès l'affichage : le démarrage
+  // à froid Vercel (1-3 s) est payé maintenant, pas quand le visiteur
+  // appuie sur le bouton
+  useEffect(() => {
+    fetch("/api/borne/session").catch(() => {});
+    fetch("/api/borne/creneaux").catch(() => {});
+  }, []);
+
   // ── Fin de conversation ─────────────────────────────────────────────────────
   const raccrocherInterne = () => {
     if (inactiviteRef.current) clearTimeout(inactiviteRef.current);
@@ -191,12 +199,14 @@ export default function BornePage() {
       }
       audioCtxRef.current?.resume().catch(() => {});
 
-      // 1. Micro
-      const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // 1+2. Micro et session éphémère EN PARALLÈLE : les deux prennent
+      // chacun 0,5 à 2 s, les enchaîner doublait l'attente pour rien
+      const [mic, sRes] = await Promise.all([
+        navigator.mediaDevices.getUserMedia({ audio: true }),
+        authFetch("/api/borne/session", { method: "POST" }),
+      ]);
       micStreamRef.current = mic;
 
-      // 2. Session éphémère créée côté serveur (clé OpenAI jamais exposée)
-      const sRes = await authFetch("/api/borne/session", { method: "POST" });
       if (sRes.status === 429) throw new Error("Trop de conversations d'un coup — patientez une minute.");
       const sData = await sRes.json();
       if (!sData.clientSecret) throw new Error(sData.error || "Session vocale indisponible");

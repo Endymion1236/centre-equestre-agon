@@ -127,3 +127,14 @@ Un message n'est PAS une réservation : si la personne veut réserver, rappelle 
     return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }
+
+/**
+ * Préchauffage : la page borne appelle ce GET dès son affichage pour
+ * réveiller la fonction serverless (imports firebase-admin compris)
+ * AVANT que le visiteur n'appuie sur le bouton. Sans ça, le premier
+ * démarrage de conversation payait 1 à 3 s de démarrage à froid Vercel.
+ * Aucune donnée, aucun coût : juste un chargement de module.
+ */
+export async function GET() {
+  return NextResponse.json({ ok: true });
+}
