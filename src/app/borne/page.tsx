@@ -1,30 +1,34 @@
 "use client";
 
 /**
- * Borne d'accueil — V1 lecture seule.
+ * Borne d'accueil — V2 conversation naturelle (OpenAI Realtime, WebRTC).
  *
- * Écran plein format (tablette à l'accueil) avec un visage animé qui
- * répond à la voix : micro → /api/whisper → /api/borne (IA lecture seule)
- * → /api/tts (ElevenLabs) → bouche synchronisée sur l'amplitude audio.
+ * Plus de pipeline micro → transcription → IA → TTS : la voix part et
+ * revient en continu via WebRTC (~500 ms de latence), le visiteur peut
+ * couper la parole à l'assistant, et la détection de fin de phrase est
+ * sémantique (le modèle attend que la phrase soit finie, pas juste un
+ * silence — important avec les enfants qui hésitent).
  *
- * La tablette doit rester connectée avec un compte Firebase (compte borne
- * dédié ou compte club) : toutes les routes appelées exigent un token.
- * Aucune écriture en base depuis cette page — l'inscription réelle passe
- * par l'espace cavalier.
+ * Sécurité inchangée par rapport à la V1 :
+ * - La clé OpenAI ne quitte jamais le serveur : le navigateur reçoit un
+ *   client secret éphémère créé par /api/borne/session (instructions et
+ *   outils verrouillés côté serveur).
+ * - LECTURE SEULE : l'unique outil (chercher_creneaux) est exécuté par le
+ *   navigateur via /api/borne/creneaux, route authentifiée (token Firebase
+ *   de la tablette) et limitée en débit. Aucune écriture en base.
+ * - Coûts maîtrisés : fin automatique après inactivité, durée max par
+ *   conversation, rate limit sur la création de sessions.
  */
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Mic, Square, Loader2, RotateCcw } from "lucide-react";
+import { Mic, PhoneOff, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { authFetch } from "@/lib/auth-fetch";
 
-type Etat = "idle" | "listening" | "thinking" | "speaking";
+type Etat = "off" | "connecting" | "idle" | "listening" | "thinking" | "speaking";
 
-interface Echange {
-  question: string;
-  reponse: string;
-  action?: { label: string; href: string } | null;
-}
+const INACTIVITE_MS = 90_000; // fin auto après 90 s sans parole
+const DUREE_MAX_MS = 6 * 60_000; // durée max d'une conversation
 
 // ── Visage SVG animé ──────────────────────────────────────────────────────────
 
@@ -33,11 +37,8 @@ function Visage({ etat, blink, mouthRef }: {
   blink: boolean;
   mouthRef: React.RefObject<SVGEllipseElement | null>;
 }) {
-  // Yeux : fermés brièvement au clignement, plissés-souriants en idle,
-  // grands ouverts en écoute, regard levé en réflexion
   const eyeRy = blink ? 1 : etat === "listening" ? 13 : 10;
   const eyeCy = etat === "thinking" ? 84 : 90;
-  // Sourcils légèrement levés quand la borne écoute
   const browLift = etat === "listening" ? 6 : etat === "thinking" ? 4 : 0;
 
   return (
@@ -46,7 +47,7 @@ function Visage({ etat, blink, mouthRef }: {
       <circle cx="120" cy="120" r="112" fill="#EEF4FF" />
       {/* Tête */}
       <circle cx="120" cy="120" r="96" fill="#FFE7C9" stroke="#0C1A2E" strokeWidth="3" />
-      {/* Oreilles de poney — c'est un centre équestre, autant l'assumer */}
+      {/* Oreilles de poney */}
       <g stroke="#0C1A2E" strokeWidth="3" fill="#FFE7C9">
         <path d="M58 52 Q50 14 82 30 Q90 48 74 62 Z" />
         <path d="M182 52 Q190 14 158 30 Q150 48 166 62 Z" />
@@ -71,14 +72,16 @@ function Visage({ etat, blink, mouthRef }: {
       {/* Joues */}
       <circle cx="74" cy="122" r="10" fill="#F9C8C0" opacity="0.7" />
       <circle cx="166" cy="122" r="10" fill="#F9C8C0" opacity="0.7" />
-      {/* Museau / nez */}
+      {/* Museau */}
       <ellipse cx="120" cy="118" rx="10" ry="7" fill="#E8A87C" />
-      {/* Bouche : l'ellipse est animée en direct (attribut ry) par la boucle
+      {/* Bouche : l'ellipse est pilotée en direct (attribut ry) par la boucle
           audio pendant que la borne parle — pas de re-render React à 60 fps */}
       {etat === "speaking" ? (
         <ellipse ref={mouthRef} cx="120" cy="152" rx="20" ry="4" fill="#7A2E2E" stroke="#0C1A2E" strokeWidth="2.5" />
       ) : etat === "thinking" ? (
         <ellipse cx="120" cy="152" rx="8" ry="8" fill="#7A2E2E" stroke="#0C1A2E" strokeWidth="2.5" />
+      ) : etat === "off" || etat === "connecting" ? (
+        <path d="M100 154 Q120 158 140 154" stroke="#0C1A2E" strokeWidth="4" fill="none" strokeLinecap="round" />
       ) : (
         <path d="M96 148 Q120 168 144 148" stroke="#0C1A2E" strokeWidth="4" fill="none" strokeLinecap="round" />
       )}
@@ -91,22 +94,25 @@ function Visage({ etat, blink, mouthRef }: {
 export default function BornePage() {
   const { user, loading: authLoading } = useAuth();
 
-  const [etat, setEtat] = useState<Etat>("idle");
+  const [etat, setEtat] = useState<Etat>("off");
   const [blink, setBlink] = useState(false);
-  const [dernierEchange, setDernierEchange] = useState<Echange | null>(null);
   const [sousTitre, setSousTitre] = useState("");
   const [erreur, setErreur] = useState("");
-  const [historique, setHistorique] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
 
-  // Objets mutables en useRef (contrainte Safari/iOS : jamais MediaRecorder en useState)
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Objets mutables en useRef (contrainte Safari/iOS : jamais en useState)
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const dcRef = useRef<RTCDataChannel | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const rafRef = useRef<number>(0);
   const mouthRef = useRef<SVGEllipseElement | null>(null);
-  const etatRef = useRef<Etat>("idle");
+  const etatRef = useRef<Etat>("off");
   etatRef.current = etat;
+  const inactiviteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dureeMaxRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transcriptRef = useRef("");
 
   // Clignement des yeux — toutes les 3 à 6 s
   useEffect(() => {
@@ -121,184 +127,227 @@ export default function BornePage() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Retour à l'accueil visuel après 45 s sans interaction (borne publique)
-  useEffect(() => {
-    if (etat !== "idle" || (!dernierEchange && !erreur)) return;
-    const t = setTimeout(() => { setDernierEchange(null); setSousTitre(""); setErreur(""); setHistorique([]); }, 45_000);
-    return () => clearTimeout(t);
-  }, [etat, dernierEchange, erreur]);
+  // Nettoyage complet au démontage
+  useEffect(() => () => { raccrocherInterne(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Enregistrement micro ────────────────────────────────────────────────────
-  const demarrerEcoute = async () => {
-    setErreur("");
-    // AudioContext créé sur le geste utilisateur (contrainte Safari)
-    if (!audioCtxRef.current) {
-      try {
-        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      } catch { /* analyseur indisponible : la bouche s'animera en secours */ }
-    }
-    audioCtxRef.current?.resume().catch(() => {});
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioChunksRef.current = [];
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
-      const recorder = new MediaRecorder(stream, { mimeType });
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-      recorder.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(audioChunksRef.current, { type: mimeType });
-        if (blob.size < 2000) { setEtat("idle"); return; } // appui accidentel
-        const ext = mimeType.includes("mp4") ? "m4a" : "webm";
-        await traiterQuestion(new File([blob], `question.${ext}`, { type: mimeType }));
-      };
-      mediaRecorderRef.current = recorder;
-      recorder.start(500);
-      setEtat("listening");
-    } catch (e: any) {
-      setErreur("Le micro est inaccessible. Vérifiez les autorisations de la tablette.");
-      setEtat("idle");
-    }
-  };
-
-  const arreterEcoute = () => {
-    if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop();
-    setEtat("thinking");
-  };
-
-  // ── Pipeline : transcription → IA → voix ────────────────────────────────────
-  const traiterQuestion = async (file: File) => {
-    setEtat("thinking");
-    try {
-      // 1. Transcription
-      const fd = new FormData();
-      fd.append("audio", file);
-      const wRes = await authFetch("/api/whisper", { method: "POST", body: fd });
-      const wData = await wRes.json();
-      if (!wData.success) throw new Error(wData.error || "Transcription impossible");
-      const question = (wData.text || "").trim();
-      if (!question) { setEtat("idle"); return; }
-      setSousTitre(question);
-
-      // 2. IA lecture seule
-      const bRes = await authFetch("/api/borne", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, history: historique.slice(-10) }),
-      });
-      if (bRes.status === 429) throw new Error("Beaucoup de questions d'un coup ! Patientez une minute.");
-      const bData = await bRes.json();
-      const reponse = bData.text || "Je n'ai pas pu répondre, désolé.";
-
-      setHistorique((prev) => [...prev, { role: "user", content: question }, { role: "assistant", content: reponse }]);
-      setDernierEchange({ question, reponse, action: bData.action || null });
-
-      // 3. Voix + bouche synchronisée
-      await parler(reponse);
-    } catch (e: any) {
-      setErreur(e?.message || "Une erreur est survenue.");
-      setEtat("idle");
-    }
-  };
-
-  // ── TTS streaming + animation de la bouche ─────────────────────────────────
-  const parler = async (texte: string) => {
-    setEtat("speaking");
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
-    try {
-      const res = await authFetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: texte }),
-      });
-      if (!res.ok) throw new Error("TTS indisponible");
-
-      const mediaSource = new MediaSource();
-      const url = URL.createObjectURL(mediaSource);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-
-      // Analyseur d'amplitude → ouverture de la bouche.
-      // createMediaElementSource ne peut être appelé qu'une fois par élément :
-      // chaque réponse crée un nouvel élément Audio, donc pas de conflit.
-      let analyser: AnalyserNode | null = null;
-      if (audioCtxRef.current) {
-        try {
-          const src = audioCtxRef.current.createMediaElementSource(audio);
-          analyser = audioCtxRef.current.createAnalyser();
-          analyser.fftSize = 256;
-          src.connect(analyser);
-          analyser.connect(audioCtxRef.current.destination);
-        } catch { analyser = null; }
-      }
-      const data = analyser ? new Uint8Array(analyser.frequencyBinCount) : null;
-
-      const animerBouche = () => {
-        if (etatRef.current !== "speaking") return;
-        let ouverture: number;
-        if (analyser && data) {
-          analyser.getByteFrequencyData(data);
-          let somme = 0;
-          for (let i = 0; i < data.length; i++) somme += data[i];
-          const amplitude = somme / data.length / 255; // 0..1
-          ouverture = 3 + amplitude * 34;
-        } else {
-          // Secours sans analyseur : oscillation pseudo-aléatoire
-          ouverture = 6 + Math.abs(Math.sin(performance.now() / 90)) * 14;
-        }
-        mouthRef.current?.setAttribute("ry", String(Math.round(ouverture)));
-        rafRef.current = requestAnimationFrame(animerBouche);
-      };
-      rafRef.current = requestAnimationFrame(animerBouche);
-
-      await new Promise<void>((resolve) => {
-        const terminer = () => {
-          cancelAnimationFrame(rafRef.current);
-          setEtat("idle");
-          URL.revokeObjectURL(url);
-          resolve();
-        };
-        mediaSource.addEventListener("sourceopen", async () => {
-          const sourceBuffer = mediaSource.addSourceBuffer("audio/mpeg");
-          const reader = res.body!.getReader();
-          let playStarted = false;
-          try {
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) {
-                if (!sourceBuffer.updating) mediaSource.endOfStream();
-                else sourceBuffer.addEventListener("updateend", () => mediaSource.endOfStream(), { once: true });
-                break;
-              }
-              if (sourceBuffer.updating) {
-                await new Promise<void>((r) => sourceBuffer.addEventListener("updateend", () => r(), { once: true }));
-              }
-              sourceBuffer.appendBuffer(value);
-              if (!playStarted) {
-                if (audio.readyState < 2) {
-                  await new Promise<void>((r) => audio.addEventListener("canplay", () => r(), { once: true }));
-                }
-                playStarted = true;
-                audio.play().catch(() => {});
-              }
-            }
-          } catch { terminer(); }
-          audio.onended = terminer;
-          audio.onerror = terminer;
-        }, { once: true });
-      });
-    } catch {
-      cancelAnimationFrame(rafRef.current);
-      setEtat("idle");
-    }
-  };
-
-  const interrompre = useCallback(() => {
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+  // ── Fin de conversation ─────────────────────────────────────────────────────
+  const raccrocherInterne = () => {
+    if (inactiviteRef.current) clearTimeout(inactiviteRef.current);
+    if (dureeMaxRef.current) clearTimeout(dureeMaxRef.current);
     cancelAnimationFrame(rafRef.current);
-    setEtat("idle");
+    try { dcRef.current?.close(); } catch {}
+    try { pcRef.current?.close(); } catch {}
+    micStreamRef.current?.getTracks().forEach((t) => t.stop());
+    if (audioElRef.current) { audioElRef.current.pause(); audioElRef.current.srcObject = null; }
+    dcRef.current = null;
+    pcRef.current = null;
+    micStreamRef.current = null;
+    analyserRef.current = null;
+  };
+
+  const raccrocher = useCallback(() => {
+    raccrocherInterne();
+    setEtat("off");
+    setSousTitre("");
   }, []);
+
+  // Minuteur d'inactivité : borne publique, on ne laisse pas une session
+  // Realtime (facturée à la minute) tourner devant un hall vide
+  const relancerInactivite = () => {
+    if (inactiviteRef.current) clearTimeout(inactiviteRef.current);
+    inactiviteRef.current = setTimeout(() => raccrocher(), INACTIVITE_MS);
+  };
+
+  // ── Outil chercher_creneaux (exécuté côté client, route authentifiée) ──────
+  const executerOutil = async (name: string, callId: string, argsJson: string) => {
+    let output = "Erreur technique.";
+    if (name === "chercher_creneaux") {
+      try {
+        const args = argsJson ? JSON.parse(argsJson) : {};
+        const res = await authFetch("/api/borne/creneaux", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(args),
+        });
+        const data = await res.json();
+        output = data.result || "Aucun résultat.";
+      } catch {
+        output = "Erreur technique lors de la consultation du planning.";
+      }
+    } else {
+      output = `Outil inconnu : ${name}`;
+    }
+    // Renvoyer le résultat au modèle puis lui demander de répondre
+    const dc = dcRef.current;
+    if (dc?.readyState === "open") {
+      dc.send(JSON.stringify({
+        type: "conversation.item.create",
+        item: { type: "function_call_output", call_id: callId, output },
+      }));
+      dc.send(JSON.stringify({ type: "response.create" }));
+    }
+  };
+
+  // ── Événements du data channel ──────────────────────────────────────────────
+  const surEvenement = (raw: string) => {
+    let ev: any;
+    try { ev = JSON.parse(raw); } catch { return; }
+
+    switch (ev.type) {
+      case "input_audio_buffer.speech_started":
+        setEtat("listening");
+        setSousTitre("");
+        relancerInactivite();
+        break;
+      case "input_audio_buffer.speech_stopped":
+        setEtat("thinking");
+        break;
+      case "output_audio_buffer.started":
+        setEtat("speaking");
+        transcriptRef.current = "";
+        relancerInactivite();
+        break;
+      case "output_audio_buffer.stopped":
+      case "output_audio_buffer.cleared":
+        if (etatRef.current === "speaking") setEtat("idle");
+        break;
+      // Transcript de la réponse — noms d'événements beta et GA gérés
+      case "response.audio_transcript.delta":
+      case "response.output_audio_transcript.delta":
+        transcriptRef.current += ev.delta || "";
+        setSousTitre(transcriptRef.current);
+        break;
+      case "response.done": {
+        // Appels d'outils demandés par le modèle
+        const outputs = ev.response?.output;
+        if (Array.isArray(outputs)) {
+          for (const item of outputs) {
+            if (item?.type === "function_call" && item.call_id) {
+              executerOutil(item.name, item.call_id, item.arguments || "{}");
+            }
+          }
+        }
+        break;
+      }
+      case "error":
+        console.error("[Borne Realtime] erreur:", ev.error);
+        break;
+    }
+  };
+
+  // ── Démarrage de la conversation (WebRTC) ───────────────────────────────────
+  const demarrer = async () => {
+    setErreur("");
+    setEtat("connecting");
+    try {
+      // AudioContext créé sur le geste utilisateur (contrainte Safari)
+      if (!audioCtxRef.current) {
+        try {
+          audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        } catch { /* bouche en oscillation de secours */ }
+      }
+      audioCtxRef.current?.resume().catch(() => {});
+
+      // 1. Micro
+      const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = mic;
+
+      // 2. Session éphémère créée côté serveur (clé OpenAI jamais exposée)
+      const sRes = await authFetch("/api/borne/session", { method: "POST" });
+      if (sRes.status === 429) throw new Error("Trop de conversations d'un coup — patientez une minute.");
+      const sData = await sRes.json();
+      if (!sData.clientSecret) throw new Error(sData.error || "Session vocale indisponible");
+
+      // 3. Connexion WebRTC
+      const pc = new RTCPeerConnection();
+      pcRef.current = pc;
+
+      // Audio sortant du modèle → lecteur + analyseur pour la bouche
+      pc.ontrack = (e) => {
+        const stream = e.streams[0];
+        const audio = new Audio();
+        audio.autoplay = true;
+        audio.srcObject = stream;
+        audioElRef.current = audio;
+        audio.play().catch(() => {});
+        if (audioCtxRef.current) {
+          try {
+            const src = audioCtxRef.current.createMediaStreamSource(stream);
+            const analyser = audioCtxRef.current.createAnalyser();
+            analyser.fftSize = 256;
+            src.connect(analyser);
+            // Pas de connexion à destination : l'élément <audio> joue déjà
+            // le flux, l'analyseur ne sert qu'à mesurer l'amplitude
+            analyserRef.current = analyser;
+          } catch { analyserRef.current = null; }
+        }
+      };
+
+      pc.addTrack(mic.getTracks()[0], mic);
+
+      const dc = pc.createDataChannel("oai-events");
+      dcRef.current = dc;
+      dc.onmessage = (e) => surEvenement(e.data);
+      dc.onopen = () => {
+        setEtat("idle");
+        relancerInactivite();
+        // Message d'accueil dès la connexion
+        dc.send(JSON.stringify({
+          type: "response.create",
+          response: { instructions: "Accueille le visiteur en une phrase courte et chaleureuse, et demande-lui comment tu peux l'aider." },
+        }));
+      };
+
+      pc.onconnectionstatechange = () => {
+        if (["failed", "disconnected", "closed"].includes(pc.connectionState) && etatRef.current !== "off") {
+          raccrocher();
+        }
+      };
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      const sdpRes = await fetch("https://api.openai.com/v1/realtime/calls?model=gpt-realtime", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${sData.clientSecret}`,
+          "Content-Type": "application/sdp",
+        },
+        body: offer.sdp,
+      });
+      if (!sdpRes.ok) throw new Error("Connexion vocale refusée");
+      const answerSdp = await sdpRes.text();
+      await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+
+      // Boucle d'animation de la bouche — pilotée par l'amplitude réelle
+      const animer = () => {
+        if (etatRef.current === "off") return;
+        if (etatRef.current === "speaking" && mouthRef.current) {
+          let ouverture: number;
+          const analyser = analyserRef.current;
+          if (analyser) {
+            const data = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(data);
+            let somme = 0;
+            for (let i = 0; i < data.length; i++) somme += data[i];
+            ouverture = 3 + (somme / data.length / 255) * 34;
+          } else {
+            ouverture = 6 + Math.abs(Math.sin(performance.now() / 90)) * 14;
+          }
+          mouthRef.current.setAttribute("ry", String(Math.round(ouverture)));
+        }
+        rafRef.current = requestAnimationFrame(animer);
+      };
+      rafRef.current = requestAnimationFrame(animer);
+
+      // Durée max de conversation : garde-fou coût
+      dureeMaxRef.current = setTimeout(() => raccrocher(), DUREE_MAX_MS);
+    } catch (e: any) {
+      raccrocherInterne();
+      setEtat("off");
+      setErreur(e?.message || "Impossible de démarrer la conversation.");
+    }
+  };
 
   // ── Garde : la tablette doit être connectée ────────────────────────────────
   if (authLoading) {
@@ -326,12 +375,14 @@ export default function BornePage() {
   }
 
   // ── Écran principal ─────────────────────────────────────────────────────────
+  const enConversation = etat !== "off" && etat !== "connecting";
   const statusTexte =
-    etat === "listening" ? "Je vous écoute…"
+    etat === "connecting" ? "Connexion…"
+    : etat === "listening" ? "Je vous écoute…"
     : etat === "thinking" ? "Je réfléchis…"
-    : etat === "speaking" ? "…"
-    : dernierEchange ? "Une autre question ?"
-    : "Bonjour ! Appuyez sur le bouton et posez-moi votre question";
+    : etat === "speaking" ? ""
+    : enConversation ? "Parlez-moi, je vous écoute !"
+    : "Bonjour ! Appuyez sur le bouton pour discuter avec moi";
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-cream to-blue-50 flex flex-col items-center justify-between py-8 px-6 select-none">
@@ -351,53 +402,40 @@ export default function BornePage() {
 
       {/* Sous-titres */}
       <div className="w-full max-w-2xl text-center min-h-[120px] flex flex-col items-center gap-3">
-        <p className="font-body text-lg md:text-xl font-semibold text-blue-800">{statusTexte}</p>
-        {sousTitre && etat !== "listening" && (
-          <p className="font-body text-sm text-gray-400 italic">« {sousTitre} »</p>
-        )}
-        {dernierEchange && etat !== "listening" && (
-          <p className="font-body text-base md:text-lg text-gray-700 leading-relaxed bg-white/80 rounded-2xl px-6 py-4 shadow-sm">
-            {dernierEchange.reponse}
+        {statusTexte && <p className="font-body text-lg md:text-xl font-semibold text-blue-800">{statusTexte}</p>}
+        {sousTitre && (
+          <p className="font-body text-base md:text-lg text-gray-700 leading-relaxed bg-white/80 rounded-2xl px-6 py-4 shadow-sm max-h-40 overflow-y-auto">
+            {sousTitre}
           </p>
         )}
-        {dernierEchange?.action && etat === "idle" && (
-          <a href={dernierEchange.action.href}
-            className="inline-flex items-center gap-2 px-8 py-4 rounded-2xl bg-green-500 hover:bg-green-600 text-white font-body text-lg font-bold no-underline shadow-lg transition-colors">
-            → {dernierEchange.action.label}
-          </a>
+        {enConversation && etat === "idle" && !sousTitre && (
+          <p className="font-body text-sm text-gray-400">
+            Essayez : « Il reste de la place aux prochains stages ? » — « Quels sont les tarifs ? »
+          </p>
         )}
         {erreur && <p className="font-body text-sm text-red-500">{erreur}</p>}
       </div>
 
       {/* Bouton principal */}
       <div className="flex flex-col items-center gap-3 pb-2">
-        {etat === "speaking" ? (
-          <button onClick={interrompre}
-            className="w-24 h-24 rounded-full bg-red-500 hover:bg-red-400 flex items-center justify-center border-none cursor-pointer shadow-xl transition-colors">
-            <Square size={32} className="text-white" fill="white" />
+        {etat === "off" ? (
+          <button onClick={demarrer}
+            className="w-24 h-24 rounded-full bg-blue-500 hover:bg-blue-600 flex items-center justify-center border-none cursor-pointer shadow-xl transition-all">
+            <Mic size={36} className="text-white" />
           </button>
-        ) : etat === "thinking" ? (
+        ) : etat === "connecting" ? (
           <div className="w-24 h-24 rounded-full bg-blue-500/60 flex items-center justify-center shadow-xl">
             <Loader2 size={36} className="text-white animate-spin" />
           </div>
         ) : (
-          <button
-            onClick={etat === "listening" ? arreterEcoute : demarrerEcoute}
-            className={`w-24 h-24 rounded-full flex items-center justify-center border-none cursor-pointer shadow-xl transition-all ${
-              etat === "listening" ? "bg-red-500 animate-pulse scale-110" : "bg-blue-500 hover:bg-blue-600"
-            }`}>
-            <Mic size={36} className="text-white" />
+          <button onClick={raccrocher}
+            className="w-24 h-24 rounded-full bg-red-500 hover:bg-red-400 flex items-center justify-center border-none cursor-pointer shadow-xl transition-colors">
+            <PhoneOff size={32} className="text-white" />
           </button>
         )}
         <p className="font-body text-xs text-gray-400">
-          {etat === "listening" ? "Appuyez pour terminer" : etat === "speaking" ? "Appuyez pour m'interrompre" : "Appuyez pour parler"}
+          {etat === "off" ? "Appuyez pour discuter" : etat === "connecting" ? "Un instant…" : "Appuyez pour terminer la conversation"}
         </p>
-        {dernierEchange && etat === "idle" && (
-          <button onClick={() => { setDernierEchange(null); setSousTitre(""); setHistorique([]); }}
-            className="flex items-center gap-1.5 font-body text-xs text-gray-400 bg-transparent border-none cursor-pointer hover:text-blue-500">
-            <RotateCcw size={12} /> Nouvelle conversation
-          </button>
-        )}
       </div>
     </div>
   );
