@@ -89,7 +89,22 @@ export default function BornePage() {
   // ── Outil chercher_creneaux (exécuté côté client, route authentifiée) ──────
   const executerOutil = async (name: string, callId: string, argsJson: string) => {
     let output = "Erreur technique.";
-    if (name === "chercher_creneaux") {
+    if (name === "laisser_message") {
+      try {
+        const args = argsJson ? JSON.parse(argsJson) : {};
+        const res = await authFetch("/api/borne/message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(args),
+        });
+        const data = await res.json();
+        output = data.ok
+          ? "Message enregistré et transmis à l'équipe."
+          : `Échec de l'envoi (${data.error || "erreur inconnue"}) — proposer de passer à l'accueil.`;
+      } catch {
+        output = "Échec technique de l'envoi — proposer de passer à l'accueil.";
+      }
+    } else if (name === "chercher_creneaux") {
       try {
         const args = argsJson ? JSON.parse(argsJson) : {};
         const res = await authFetch("/api/borne/creneaux", {

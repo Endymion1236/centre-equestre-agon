@@ -39,7 +39,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "OPENAI_API_KEY non configurée" }, { status: 500 });
   }
 
-  const instructions = await bornePromptSysteme();
+  const basePrompt = await bornePromptSysteme();
+  const instructions = `${basePrompt}
+
+PRISE DE MESSAGES POUR L'ÉQUIPE :
+Tu peux prendre un message à transmettre à l'équipe du club (outil laisser_message). Procédure OBLIGATOIRE :
+1. Demande le nom de la personne, son message, et propose (sans insister) un numéro de téléphone pour être rappelée.
+2. RELIS le message à voix haute : « Je récapitule : de la part de [nom], [message]. C'est bien ça ? »
+3. N'appelle l'outil QU'APRÈS un accord clair (« oui », « c'est ça », « parfait »). Jamais sur un simple « ok » ambigu — redemande si le doute existe.
+4. Après l'envoi, confirme simplement que l'équipe recevra le message. Si l'outil échoue, excuse-toi et oriente vers l'accueil ou le téléphone du club.
+Un message n'est PAS une réservation : si la personne veut réserver, rappelle que ça passe par l'espace cavalier — le message peut seulement demander à être rappelé.`;
 
   try {
     const res = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
@@ -65,6 +74,21 @@ export async function POST(req: NextRequest) {
             },
           },
           tools: [
+            {
+              type: "function",
+              name: "laisser_message",
+              description:
+                "Transmet un message d'un visiteur à l'équipe du club. À n'appeler QU'APRÈS avoir relu le message au visiteur et obtenu sa confirmation orale explicite.",
+              parameters: {
+                type: "object",
+                properties: {
+                  nom: { type: "string", description: "Nom (ou prénom) de la personne qui laisse le message" },
+                  telephone: { type: "string", description: "Numéro de téléphone pour être rappelé (optionnel)" },
+                  contenu: { type: "string", description: "Le message à transmettre, tel que confirmé par le visiteur" },
+                },
+                required: ["nom", "contenu"],
+              },
+            },
             {
               type: "function",
               name: "chercher_creneaux",
