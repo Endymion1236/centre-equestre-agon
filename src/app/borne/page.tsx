@@ -44,6 +44,7 @@ export default function BornePage() {
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
+  const micTraiteRef = useRef<MediaStream | null>(null);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -74,6 +75,8 @@ export default function BornePage() {
     try { dcRef.current?.close(); } catch {}
     try { pcRef.current?.close(); } catch {}
     micStreamRef.current?.getTracks().forEach((t) => t.stop());
+    micTraiteRef.current?.getTracks().forEach((t) => t.stop());
+    micTraiteRef.current = null;
     if (audioElRef.current) { audioElRef.current.pause(); audioElRef.current.srcObject = null; }
     dcRef.current = null;
     pcRef.current = null;
@@ -161,10 +164,12 @@ export default function BornePage() {
         // bruyant, le laisser ouvert transformait le brouhaha (et l'écho
         // de sa propre voix) en fausses prises de parole
         micStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = false; });
+        micTraiteRef.current?.getAudioTracks().forEach((t) => { t.enabled = false; });
         break;
       case "output_audio_buffer.stopped":
       case "output_audio_buffer.cleared":
         micStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
+        micTraiteRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
         if (etatRef.current === "speaking") setEtat("idle");
         break;
       // Transcript de la réponse — noms d'événements beta et GA gérés
@@ -200,6 +205,7 @@ export default function BornePage() {
     dc.send(JSON.stringify({ type: "response.cancel" }));
     dc.send(JSON.stringify({ type: "output_audio_buffer.clear" }));
     micStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
+    micTraiteRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
     setEtat("idle");
   }, []);
 
@@ -217,12 +223,44 @@ export default function BornePage() {
       audioCtxRef.current?.resume().catch(() => {});
 
       // 1+2. Micro et session éphémère EN PARALLÈLE : les deux prennent
-      // chacun 0,5 à 2 s, les enchaîner doublait l'attente pour rien
+      // chacun 0,5 à 2 s, les enchaîner doublait l'attente pour rien.
+      // Contraintes explicites : autoGainControl remonte les voix faibles,
+      // les valeurs par défaut varient selon les navigateurs.
       const [mic, sRes] = await Promise.all([
-        navigator.mediaDevices.getUserMedia({ audio: true }),
+        navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        }),
         authFetch("/api/borne/session", { method: "POST" }),
       ]);
       micStreamRef.current = mic;
+
+      // Compresseur + gain entre le micro et l'envoi : remonte les petites
+      // voix (enfants, personnes timides) sans faire saturer les fortes —
+      // le même principe que le traitement voix d'une radio. Si Web Audio
+      // est indisponible, on envoie le micro brut.
+      let pisteEnvoyee = mic.getAudioTracks()[0];
+      let fluxEnvoye: MediaStream = mic;
+      if (audioCtxRef.current) {
+        try {
+          const ctx = audioCtxRef.current;
+          const source = ctx.createMediaStreamSource(mic);
+          const compresseur = ctx.createDynamicsCompressor();
+          compresseur.threshold.value = -35; // agit dès les niveaux faibles
+          compresseur.knee.value = 20;
+          compresseur.ratio.value = 6;
+          compresseur.attack.value = 0.01;
+          compresseur.release.value = 0.2;
+          const gain = ctx.createGain();
+          gain.gain.value = 1.6;
+          const sortie = ctx.createMediaStreamDestination();
+          source.connect(compresseur);
+          compresseur.connect(gain);
+          gain.connect(sortie);
+          micTraiteRef.current = sortie.stream;
+          pisteEnvoyee = sortie.stream.getAudioTracks()[0];
+          fluxEnvoye = sortie.stream;
+        } catch { micTraiteRef.current = null; }
+      }
 
       if (sRes.status === 429) throw new Error("Trop de conversations d'un coup — patientez une minute.");
       const sData = await sRes.json();
@@ -253,7 +291,7 @@ export default function BornePage() {
         }
       };
 
-      pc.addTrack(mic.getTracks()[0], mic);
+      pc.addTrack(pisteEnvoyee, fluxEnvoye);
 
       const dc = pc.createDataChannel("oai-events");
       dcRef.current = dc;
