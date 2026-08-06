@@ -203,11 +203,14 @@ const VisageSvg = forwardRef<BorneVisageHandle, { etat: EtatVisage }>(
             <ellipse cx="120" cy="126" rx="92" ry="90" fill="url(#borne-robe)" stroke="#4A3118" strokeWidth="3" />
             <path d="M108 40 Q120 34 132 40 Q130 84 126 112 Q120 120 114 112 Q110 84 108 40 Z" fill="#FFF8EC" opacity="0.9" />
 
-            <path d="M70 46 Q120 8 170 46 Q160 32 138 28 L142 46 Q130 30 120 30 Q110 30 98 46 L102 28 Q80 32 70 46 Z"
+            {/* Crinière : une seule forme pleine qui épouse le crâne, bord
+                inférieur en festons — remplace les mèches éparses qui
+                ressemblaient à des brindilles */}
+            <path d="M56 78 Q60 34 120 26 Q180 34 184 78 Q174 62 162 72 Q152 54 140 66 Q130 48 120 62 Q110 48 100 66 Q88 54 78 72 Q66 62 56 78 Z"
               fill="url(#borne-criniere)" stroke="#5C3A18" strokeWidth="2.5" strokeLinejoin="round" />
-            <path d="M74 46 Q66 66 74 88 Q82 70 84 52 Z" fill="url(#borne-criniere)" stroke="#5C3A18" strokeWidth="2.5" strokeLinejoin="round" />
-            <path d="M166 46 Q174 66 166 88 Q158 70 156 52 Z" fill="url(#borne-criniere)" stroke="#5C3A18" strokeWidth="2.5" strokeLinejoin="round" />
-            <path d="M112 34 Q118 48 112 62 Q104 50 106 38 Z" fill="#8A5A2B" />
+            {/* Toupet qui retombe sur la liste */}
+            <path d="M106 52 Q120 44 134 52 Q130 78 120 86 Q110 78 106 52 Z"
+              fill="url(#borne-criniere)" stroke="#5C3A18" strokeWidth="2.5" strokeLinejoin="round" />
 
             <path className="borne-sourcil" d={`M80 ${76 - browLift} Q92 ${68 - browLift} 103 ${75 - browLift}`}
               stroke="#5C3A18" strokeWidth="4.5" fill="none" strokeLinecap="round" />
