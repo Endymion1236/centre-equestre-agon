@@ -6,7 +6,7 @@
   "start_url": "/borne",
   "scope": "/borne",
   "display": "fullscreen",
-  "orientation": "landscape",
+  "orientation": "portrait",
   "background_color": "#FDF9F0",
   "theme_color": "#0C1A2E",
   "lang": "fr",
