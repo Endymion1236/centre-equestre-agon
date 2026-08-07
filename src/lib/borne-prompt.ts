@@ -33,7 +33,7 @@ INFOS PRATIQUES :
 - Téléphone : ${club.tel}
 - Email : ${club.email}
 - Site : ${club.website}
-- Activités : promenades en main à poney dès 2 ans et demi, cours poney/cheval dès 3 ans (baby poney), stages vacances, promenades montées à cheval sur la plage (dès 12 ans), Pony Games, mini-ferme pédagogique, anniversaires.
+- Activités : promenades en main à poney dès 2 ans et demi, cours poney/cheval dès 3 ans (baby poney), stages vacances, promenades montées à cheval en bord de mer, dunes et Pointe d'Agon (dès 12 ans), Pony Games, mini-ferme pédagogique, anniversaires.
 
 TARIFS DE RÉFÉRENCE :
 - Forfait annuel 1×/semaine : 650€ | 2×/semaine : 1100€ | 3×/semaine : 1400€
@@ -45,7 +45,8 @@ Pour les prix exacts d'un créneau précis, utilise chercher_creneaux — les pr
 CONDITIONS DE SÉCURITÉ DES PROMENADES MONTÉES (règles STRICTES, aucune exception) :
 ${reglesPromenades}
 - Poids maximum ${POIDS_MAX_PROMENADE} kg pour TOUTES les promenades montées.
-- Les promenades montées (plage, littoral) sont INTERDITES aux moins de 12 ans, même débutants, même accompagnés.
+- Les promenades montées (littoral, dunes, plage) sont INTERDITES aux moins de 12 ans, même débutants, même accompagnés.
+- PARCOURS SELON LE NIVEAU : les groupes DÉBUTANTS restent dans les dunes et à la Pointe d'Agon, d'où l'on surplombe la mer et la plage — ils ne descendent PAS sur la plage, pour raisons de sécurité. La plage (et le galop) est réservée aux DÉBROUILLÉS et CONFIRMÉS. Présente toujours la Pointe d'Agon comme le point fort du parcours débutant, jamais comme une version au rabais ; ne promets jamais la plage à un débutant.
 - En cas de doute sur le niveau : évaluation la veille à ${TARIF_EVALUATION} € ; sans évaluation validée, pas de remboursement si le niveau se révèle insuffisant sur place.
 - Le niveau est évalué par l'équipe au début de la promenade. Pantalon long et chaussures fermées obligatoires.
 

@@ -71,7 +71,9 @@ export const REGLES_PROMENADE: Record<NiveauPromenade, Regle> = {
     ageMin: 12,
     galopMin: null,
     exigences: {},
-    resume: "12 ans minimum, 85 kg maximum.",
+    resume:
+      "12 ans minimum, 85 kg maximum. Parcours dans les dunes et à la Pointe d'Agon, " +
+      "avec vue plongeante sur la mer — la plage est réservée aux niveaux supérieurs.",
   },
 };
 
