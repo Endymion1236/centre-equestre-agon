@@ -337,6 +337,12 @@ export default function ReserverPage() {
   // donc passer prixJourParam (prix d'UN jour) et totalJoursStageParam (nombre
   // total de jours du stage) calculés par l'appelant, sinon le prorata est faux.
   const addStageToCart = (stageCreneaux: Creneau[], prixJourParam?: number, totalJoursStageParam?: number) => {
+    if (reservationsFermees) {
+      alert(messageFermeture ||
+        "Les réservations en ligne ne sont pas encore ouvertes. Contactez le centre équestre pour toute demande.");
+      return;
+    }
+
     if (selectedChildren.length === 0) return;
     const first = stageCreneaux[0];
     const prixSemaine = (first as any).priceTTC || first.priceHT * (1 + (first.tvaTaux || 5.5) / 100);
@@ -481,6 +487,12 @@ export default function ReserverPage() {
   };
 
   const addCoursToCart = (creneau: Creneau, childId: string, opts?: { viaHold?: boolean }) => {
+    if (reservationsFermees) {
+      alert(messageFermeture ||
+        "Les réservations en ligne ne sont pas encore ouvertes. Contactez le centre équestre pour toute demande.");
+      return;
+    }
+
     // Bloquer le doublon panier (verification rapide sur l'etat courant ;
     // la garde definitive est dans le setCart fonctionnel ci-dessous)
     if (cart.some(i => i.childId === childId && i.creneauIds.includes(creneau.id))) {
@@ -558,6 +570,12 @@ export default function ReserverPage() {
   // Paiement
   const handlePay = async () => {
     if (cart.length === 0 || !family || !user) return;
+    if (reservationsFermees) {
+      alert(messageFermeture ||
+        "Les réservations en ligne ne sont pas encore ouvertes. Contactez le centre équestre pour toute demande.");
+      return;
+    }
+
     setPaying(true);
     try {
       // 1. Inscrire chaque enfant dans chaque créneau
@@ -1501,8 +1519,11 @@ export default function ReserverPage() {
                                   addStageToCart(stageCreneaux);
                                 }
                               }}
-                                className="w-full py-2.5 rounded-lg font-body text-sm font-semibold text-white bg-green-600 border-none cursor-pointer hover:bg-green-500">
-                                Ajouter au panier ({selectedChildren.length} enfant{selectedChildren.length > 1 ? "s" : ""}{isJourMode ? ` · ${nbJours} jour${nbJours > 1 ? "s" : ""}` : ""})
+                                disabled={reservationsFermees}
+                                className={`w-full py-2.5 rounded-lg font-body text-sm font-semibold border-none ${reservationsFermees ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "text-white bg-green-600 cursor-pointer hover:bg-green-500"}`}>
+                                {reservationsFermees
+                                  ? "Réservations fermées"
+                                  : `Ajouter au panier (${selectedChildren.length} enfant${selectedChildren.length > 1 ? "s" : ""}${isJourMode ? ` · ${nbJours} jour${nbJours > 1 ? "s" : ""}` : ""})`}
                               </button>
                             )}
                             </>

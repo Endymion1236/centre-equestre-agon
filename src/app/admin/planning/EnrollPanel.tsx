@@ -2551,6 +2551,25 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   {age && <span className="font-body text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full flex-shrink-0">{age}</span>}
                   {galop && galop !== "—" && <span className="font-body text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full flex-shrink-0">{galop}</span>}
                   {statusLabel && <span className={`font-body text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 hidden sm:inline ${isForfaitPaid ? "text-emerald-700 bg-emerald-50" : isForfaitPending ? "text-amber-700 bg-amber-50" : hasPaid ? "text-green-700 bg-green-50" : "text-orange-600 bg-orange-50"}`}>{statusLabel}</span>}
+                  {/* Place TENUE : inscription provisoire posée le temps d'un
+                      paiement en ligne. Elle se libère toute seule à
+                      expiration — à ne pas confondre avec une inscription
+                      ferme en attente de chèque. */}
+                  {(e as any).pending && (e as any).holdUntil && (() => {
+                    const fin = new Date((e as any).holdUntil);
+                    const expiree = fin.getTime() < Date.now();
+                    return (
+                      <span
+                        title={expiree
+                          ? `Place tenue expirée le ${fin.toLocaleString("fr-FR")} — sera libérée au prochain passage automatique`
+                          : `Place tenue pendant le paiement, jusqu'à ${fin.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`}
+                        className={`font-body text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                          expiree ? "text-rose-700 bg-rose-100" : "text-violet-700 bg-violet-100"
+                        }`}>
+                        {expiree ? "⏳ hold expiré" : "⏳ place tenue"}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <button onClick={() => toggleHighlight(e)} disabled={highlightBusy === e.childId}
