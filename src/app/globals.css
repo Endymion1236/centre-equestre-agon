@@ -43,6 +43,8 @@
 
   --font-display: "Libre Baskerville", Georgia, serif;
   --font-body: "Outfit", system-ui, sans-serif;
+  /* Police manuscrite — réservée aux titres d'ambiance (borne d'accueil). */
+  --font-calligraphie: "Dancing Script", "Brush Script MT", cursive;
 }
 
 /* ═══ Base styles ═══ */

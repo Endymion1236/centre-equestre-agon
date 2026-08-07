@@ -490,7 +490,7 @@ export default function BornePage() {
 
       {/* En-tête */}
       <header className="text-center">
-        <h1 className="font-display text-2xl md:text-3xl font-bold text-blue-800">Centre Équestre d&apos;Agon-Coutainville</h1>
+        <h1 className="font-calligraphie text-4xl md:text-6xl font-bold text-blue-800 leading-tight">Centre Équestre d&apos;Agon-Coutainville</h1>
         <p className="inline-flex items-center gap-1.5 font-body text-base font-semibold text-amber-800 bg-white/70 rounded-full px-4 py-1.5 mt-2 shadow-sm">
           🐴 Câlin, votre assistant d&apos;accueil
         </p>
