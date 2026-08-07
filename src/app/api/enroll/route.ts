@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { bloquerSiReservationsFermees } from "@/lib/reservations-ouvertes";
+import { dateExpirationHold } from "@/lib/places-tenues";
 
 interface EnrollItem {
   childId: string;
@@ -28,6 +29,7 @@ interface EnrollItem {
   paymentSource?: string;      // ex. "forfait" pour une inscription annuelle
   forfaitId?: string | null;
   pending?: boolean;           // place tenue mais non confirmée (paiement différé)
+  holdUntil?: string;          // ISO — au-delà, la place tenue est purgée
   paymentMethod?: string;
 }
 
@@ -125,7 +127,16 @@ export async function POST(req: NextRequest) {
             if (item.sourceFamilyId) entry.sourceFamilyId = item.sourceFamilyId;
             if (item.paymentSource) entry.paymentSource = item.paymentSource;
             if ("forfaitId" in item) entry.forfaitId = item.forfaitId ?? null;
-            if (item.pending) { entry.pending = true; if (item.paymentMethod) entry.paymentMethod = item.paymentMethod; }
+            if (item.pending) {
+              entry.pending = true;
+              // Sans date d'expiration, une place tenue le reste pour toujours :
+              // c'est exactement le bug des inscriptions fantômes. On en pose
+              // donc systématiquement une.
+              entry.holdUntil = typeof item.holdUntil === "string" && item.holdUntil
+                ? item.holdUntil
+                : dateExpirationHold();
+              if (item.paymentMethod) entry.paymentMethod = item.paymentMethod;
+            }
             tx.update(refs[i], { enrolled: [...list, entry], enrolledCount: list.length + 1 });
           }
           return { status: "ok" as const };

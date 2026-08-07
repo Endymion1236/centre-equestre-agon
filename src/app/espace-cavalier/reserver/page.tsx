@@ -577,6 +577,11 @@ export default function ReserverPage() {
               childId: item.childId,
               childName: item.childName,
               creneauIds: creneauIdsToEnroll,
+              // Place TENUE, pas encore acquise : elle protege le paiement en
+              // cours mais expire toute seule si celui-ci n'aboutit pas. Le
+              // marqueur est leve par /api/cawl/status ou le webhook des que
+              // l'encaissement est confirme.
+              pending: true,
               ...(( item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
             }],
           }),

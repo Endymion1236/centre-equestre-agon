@@ -6,6 +6,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { loadTemplate } from "@/lib/email-template-loader";
 import { awardLoyaltyPointsServer } from "@/lib/fidelite";
 import { confirmReservationsForPayment } from "@/lib/reservations";
+import { confirmerPlacesTenues } from "@/lib/places-tenues";
 import { createForfaitsForPayment } from "@/lib/forfaits-server";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import { logEmail } from "@/lib/email-log";
@@ -316,6 +317,11 @@ export async function GET(req: NextRequest) {
         ...(cofInitialPaymentId ? { cofInitialPaymentId } : {}),
         updatedAt: FieldValue.serverTimestamp(),
       });
+
+      // Le paiement est encaissé : les places tenues deviennent définitives.
+      // Non bloquant — un échec ici ne doit pas faire échouer l'encaissement,
+      // la purge respecte de toute façon les paiements aboutis.
+      await confirmerPlacesTenues(payRef.id);
 
       await createEncaissementServer({
         paymentId: payRef.id,

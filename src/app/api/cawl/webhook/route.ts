@@ -5,6 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { loadTemplate } from "@/lib/email-template-loader";
 import { awardLoyaltyPointsServer } from "@/lib/fidelite";
 import { confirmReservationsForPayment } from "@/lib/reservations";
+import { confirmerPlacesTenues } from "@/lib/places-tenues";
 import { createForfaitsForPayment } from "@/lib/forfaits-server";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import { logEmail } from "@/lib/email-log";
@@ -257,6 +258,9 @@ export async function POST(req: NextRequest) {
             montant: paidAmount,
             label: (pData.items || []).map((i: any) => i.activityTitle).join(", ") || "Paiement en ligne",
           });
+
+          // Places tenues pendant le paiement → inscriptions définitives.
+          await confirmerPlacesTenues(payRef.id);
 
           // ── Confirmer les réservations associées ──────────────────────
           // Les réservations créées en pending_payment au checkout doivent
