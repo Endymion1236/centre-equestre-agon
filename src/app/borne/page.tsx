@@ -30,6 +30,12 @@ type Etat = EtatVisage;
 
 const INACTIVITE_MS = 90_000; // fin auto après 90 s sans parole
 const DUREE_MAX_MS = 6 * 60_000; // durée max d'une conversation
+// Au-delà de ce délai passé en "thinking", on considère que la réponse ne
+// viendra jamais et on rend la main au visiteur (voir le watchdog).
+const REFLEXION_MAX_MS = 15_000;
+// Un appel d'outil qui ne répond pas fige la conversation : on l'abandonne
+// et on renvoie une erreur au modèle, qui saura quoi dire.
+const OUTIL_TIMEOUT_MS = 8_000;
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -70,6 +76,8 @@ export default function BornePage() {
   const humeurEnAttenteRef = useRef<"clin" | "desole" | "joie" | null>(null);
   const accueilFaitRef = useRef(false);
   const repriseMicTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Filet de sécurité de l'état "thinking" — voir le useEffect plus bas
+  const reflexionWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Nettoyage complet au démontage
   useEffect(() => () => { raccrocherInterne(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -82,10 +90,51 @@ export default function BornePage() {
     fetch("/api/borne/creneaux").catch(() => {});
   }, []);
 
+  // ── Filet de sécurité : ne jamais rester bloqué en réflexion ──────────────
+  // "thinking" n'a AUCUNE sortie garantie : on y entre quand le visiteur
+  // arrête de parler et quand le modèle demande un outil, mais on n'en sort
+  // que si de l'audio finit par arriver. Si la réponse échoue, si un appel
+  // d'outil n'aboutit pas, ou si le modèle ne produit rien, la borne reste
+  // sur « Un instant, je cherche… » indéfiniment — le visiteur doit reparler
+  // pour la débloquer. Ce watchdog couvre tous ces cas d'un coup.
+  useEffect(() => {
+    if (etat !== "thinking") {
+      if (reflexionWatchdogRef.current) {
+        clearTimeout(reflexionWatchdogRef.current);
+        reflexionWatchdogRef.current = null;
+      }
+      return;
+    }
+    reflexionWatchdogRef.current = setTimeout(() => {
+      if (etatRef.current !== "thinking") return;
+      console.warn("[Borne] réflexion bloquée — retour à l'écoute");
+      // Le micro a pu être coupé par la garde anti-écho : on le rouvre.
+      if (repriseMicTimerRef.current) {
+        clearTimeout(repriseMicTimerRef.current);
+        repriseMicTimerRef.current = null;
+      }
+      micStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
+      micTraiteRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
+      if (dcRef.current?.readyState === "open") {
+        dcRef.current.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
+      }
+      setSousTitre("Désolé, je n'ai pas réussi à répondre. Vous pouvez répéter ?");
+      setEtat("idle");
+      relancerInactivite();
+    }, REFLEXION_MAX_MS);
+    return () => {
+      if (reflexionWatchdogRef.current) {
+        clearTimeout(reflexionWatchdogRef.current);
+        reflexionWatchdogRef.current = null;
+      }
+    };
+  }, [etat]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Fin de conversation ─────────────────────────────────────────────────────
   const raccrocherInterne = () => {
     if (tickerRef.current) { clearInterval(tickerRef.current); tickerRef.current = null; }
     if (repriseMicTimerRef.current) { clearTimeout(repriseMicTimerRef.current); repriseMicTimerRef.current = null; }
+    if (reflexionWatchdogRef.current) { clearTimeout(reflexionWatchdogRef.current); reflexionWatchdogRef.current = null; }
     if (inactiviteRef.current) clearTimeout(inactiviteRef.current);
     if (dureeMaxRef.current) clearTimeout(dureeMaxRef.current);
     cancelAnimationFrame(rafRef.current);
@@ -122,14 +171,22 @@ export default function BornePage() {
   // ── Outil chercher_creneaux (exécuté côté client, route authentifiée) ──────
   const executerOutil = async (name: string, callId: string, argsJson: string) => {
     let output = "Erreur technique.";
+    // Sans limite de temps, une route qui ne répond pas (démarrage à froid,
+    // réseau du club-house) laissait la borne figée sur « je cherche… ».
+    const avecTimeout = (url: string, body: string) => {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), OUTIL_TIMEOUT_MS);
+      return authFetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        signal: ctrl.signal,
+      }).finally(() => clearTimeout(t));
+    };
     if (name === "laisser_message") {
       try {
         const args = argsJson ? JSON.parse(argsJson) : {};
-        const res = await authFetch("/api/borne/message", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(args),
-        });
+        const res = await avecTimeout("/api/borne/message", JSON.stringify(args));
         const data = await res.json();
         output = data.ok
           ? "Message enregistré et transmis à l'équipe."
@@ -141,11 +198,7 @@ export default function BornePage() {
     } else if (name === "chercher_creneaux") {
       try {
         const args = argsJson ? JSON.parse(argsJson) : {};
-        const res = await authFetch("/api/borne/creneaux", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(args),
-        });
+        const res = await avecTimeout("/api/borne/creneaux", JSON.stringify(args));
         const data = await res.json();
         output = data.result || "Aucun résultat.";
       } catch {
@@ -244,11 +297,18 @@ export default function BornePage() {
           for (const item of appels) {
             executerOutil(item.name, item.call_id, item.arguments || "{}");
           }
+          // Réponse en échec ou annulée sans outil à exécuter : aucun audio
+          // n'arrivera, donc rien ne nous ferait quitter "thinking".
+          const statut = ev.response?.status;
+          if (appels.length === 0 && (statut === "failed" || statut === "cancelled")) {
+            if (etatRef.current === "thinking") setEtat("idle");
+          }
         }
         break;
       }
       case "error":
         console.error("[Borne Realtime] erreur:", ev.error);
+        if (etatRef.current === "thinking") setEtat("idle");
         break;
     }
   };
