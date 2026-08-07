@@ -61,6 +61,12 @@ export default function BornePage() {
   const inactiviteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dureeMaxRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transcriptRef = useRef("");
+  // Sous-titres cadencés : le modèle génère son texte bien avant de le
+  // prononcer — on le dévoile progressivement au rythme de la parole
+  // (~17 caractères/s) au lieu de l'afficher d'un bloc
+  const sousTitreCibleRef = useRef("");
+  const sousTitreAffRef = useRef(0);
+  const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const humeurEnAttenteRef = useRef<"clin" | "desole" | "joie" | null>(null);
 
   // Nettoyage complet au démontage
@@ -76,6 +82,7 @@ export default function BornePage() {
 
   // ── Fin de conversation ─────────────────────────────────────────────────────
   const raccrocherInterne = () => {
+    if (tickerRef.current) { clearInterval(tickerRef.current); tickerRef.current = null; }
     if (inactiviteRef.current) clearTimeout(inactiviteRef.current);
     if (dureeMaxRef.current) clearTimeout(dureeMaxRef.current);
     cancelAnimationFrame(rafRef.current);
@@ -168,9 +175,14 @@ export default function BornePage() {
       case "input_audio_buffer.speech_stopped":
         setEtat("thinking");
         break;
+      case "response.created":
+        transcriptRef.current = "";
+        sousTitreCibleRef.current = "";
+        sousTitreAffRef.current = 0;
+        setSousTitre("");
+        break;
       case "output_audio_buffer.started":
         setEtat("speaking");
-        transcriptRef.current = "";
         relancerInactivite();
         // Micro coupé pendant que le poney parle : dans un club-house
         // bruyant, le laisser ouvert transformait le brouhaha (et l'écho
@@ -183,6 +195,8 @@ export default function BornePage() {
         micStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
         micTraiteRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
         if (etatRef.current === "speaking") setEtat("idle");
+        sousTitreAffRef.current = sousTitreCibleRef.current.length;
+        setSousTitre(sousTitreCibleRef.current);
         // Expression de fin de réponse : clin d'œil après un message transmis,
         // air désolé après un refus, sourire enthousiaste sinon si le ton y est
         {
@@ -202,7 +216,7 @@ export default function BornePage() {
       case "response.audio_transcript.delta":
       case "response.output_audio_transcript.delta":
         transcriptRef.current += ev.delta || "";
-        setSousTitre(transcriptRef.current);
+        sousTitreCibleRef.current = transcriptRef.current;
         break;
       case "response.done": {
         // Appels d'outils demandés par le modèle
@@ -332,6 +346,17 @@ export default function BornePage() {
       dc.onopen = () => {
         setEtat("idle");
         relancerInactivite();
+        // Cadenceur des sous-titres : ~1 caractère toutes les 60 ms
+        // (≈ débit de parole), rattrapage accéléré si gros retard
+        if (tickerRef.current) clearInterval(tickerRef.current);
+        tickerRef.current = setInterval(() => {
+          const cible = sousTitreCibleRef.current;
+          if (sousTitreAffRef.current < cible.length) {
+            const retard = cible.length - sousTitreAffRef.current;
+            sousTitreAffRef.current += retard > 140 ? 3 : 1;
+            setSousTitre(cible.slice(0, sousTitreAffRef.current));
+          }
+        }, 60);
         // Message d'accueil dès la connexion
         dc.send(JSON.stringify({
           type: "response.create",

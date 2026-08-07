@@ -79,7 +79,10 @@ Un message n'est PAS une réservation : si la personne veut réserver, rappelle 
               // était détecté comme une prise de parole et coupait la réponse
               // en plein milieu. L'interruption se fait désormais à l'écran
               // (toucher le poney), plus au son.
-              turn_detection: { type: "semantic_vad", interrupt_response: false },
+              // eagerness "low" : le modèle attend franchement la fin de la
+              // phrase avant de répondre — il coupait la parole aux visiteurs
+              // qui font des pauses en parlant
+              turn_detection: { type: "semantic_vad", eagerness: "low", interrupt_response: false },
               // Réduction de bruit "far_field" : conçue pour les micros
               // d'appareils posés dans une pièce (borne, kiosque) par
               // opposition au casque — filtre le brouhaha avant la détection
@@ -87,6 +90,9 @@ Un message n'est PAS une réservation : si la personne veut réserver, rappelle 
             },
             output: {
               voice: "marin",
+              // Débit légèrement ralenti : plus confortable pour les enfants
+              // et les aînés dans un hall d'accueil
+              speed: 0.9,
             },
           },
           tools: [
