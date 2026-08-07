@@ -4,6 +4,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { verifyAuth } from "@/lib/api-auth";
 import { auditPaymentPricing, logPricingAudit, evaluatePaymentEnforcement } from "@/lib/server-pricing";
+import { bloquerSiReservationsFermees } from "@/lib/reservations-ouvertes";
 
 export async function POST(req: NextRequest) {
   // 🔒 Auth obligatoire
@@ -20,6 +21,12 @@ export async function POST(req: NextRequest) {
     if (!items || items.length === 0) {
       return NextResponse.json({ error: "Panier vide" }, { status: 400 });
     }
+
+    // Verrou d'avant-ouverture. Exception : régler un solde déjà dû
+    // (paymentId présent) reste possible, sans quoi une famille ayant versé
+    // un acompte n'aurait plus aucun moyen de payer le reste.
+    const verrou = await bloquerSiReservationsFermees(auth, { autoriser: !!paymentId });
+    if (verrou) return verrou;
 
     if (!CAWL_PSPID) {
       return NextResponse.json({ error: "CAWL non configuré (CAWL_PSPID manquant)" }, { status: 500 });

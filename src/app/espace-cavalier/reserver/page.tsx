@@ -43,6 +43,19 @@ export default function ReserverPage() {
       .then(snap => setDeroule(snap.exists() ? snap.data() : null))
       .catch(() => setDeroule(null));
   }, []);
+  // Verrou d'avant-ouverture : le blocage reel vit cote serveur, ce bandeau
+  // evite juste a la famille de remplir un panier pour rien.
+  const [reservationsFermees, setReservationsFermees] = useState(false);
+  const [messageFermeture, setMessageFermeture] = useState("");
+  useEffect(() => {
+    getDoc(doc(db, "settings", "reservations"))
+      .then(snap => {
+        const d = snap.exists() ? (snap.data() as any) : null;
+        setReservationsFermees(d?.ouvert === false);
+        setMessageFermeture((d?.message || "").trim());
+      })
+      .catch(() => setReservationsFermees(false));
+  }, []);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState(initialFilter);
   const [subfilter, setSubfilter] = useState("all"); // sous-catégorie
@@ -937,6 +950,18 @@ export default function ReserverPage() {
 
   return (
     <div>
+      {reservationsFermees && (
+        <div className="mb-5 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4">
+          <div className="font-body text-sm font-bold text-amber-900">
+            Réservations en ligne pas encore ouvertes
+          </div>
+          <div className="mt-1 font-body text-sm text-amber-800">
+            {messageFermeture ||
+              "Les réservations en ligne ne sont pas encore ouvertes. Contactez le centre équestre pour toute demande."}
+          </div>
+        </div>
+      )}
+
       {/* Place(s) reservee(s) pour CETTE famille (hold 24h) : bandeau global,
           visible quel que soit le chemin d'arrivee. Le lien de l'email perdait
           son parametre ?creneau= a l'ouverture dans l'application installee

@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { verifyAuth } from "@/lib/api-auth";
+import { bloquerSiReservationsFermees } from "@/lib/reservations-ouvertes";
 import { awardLoyaltyPointsServer } from "@/lib/fidelite";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,8 @@ interface CartItem {
 export async function POST(req: NextRequest) {
   const auth = await verifyAuth(req);
   if (auth instanceof NextResponse) return auth;
+  const verrou = await bloquerSiReservationsFermees(auth);
+  if (verrou) return verrou;
 
   const uid = auth.uid;
 

@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { cawlSdk, CAWL_PSPID } from "@/lib/cawl";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { bloquerSiReservationsFermees } from "@/lib/reservations-ouvertes";
 
 // Achat PUBLIC d'un bon cadeau (sans compte) : crée une session de paiement
 // carte CAWL et stocke les détails de l'achat pour le traitement au retour.
 export async function POST(req: NextRequest) {
   try {
+    // Achat public sans compte : aucun token à examiner, le verrou
+    // d'avant-ouverture s'applique donc sans exception.
+    const verrou = await bloquerSiReservationsFermees();
+    if (verrou) return verrou;
+
     const body = await req.json();
     const montant = parseFloat(String(body.montant).replace(",", "."));
     const beneficiaire = String(body.beneficiaire || "").trim().slice(0, 80);

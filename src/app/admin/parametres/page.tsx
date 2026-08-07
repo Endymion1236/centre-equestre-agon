@@ -9,6 +9,7 @@ import { Card, Badge } from "@/components/ui";
 import { Save, Plus, Trash2, Loader2, AlertTriangle, Users, Pencil, Calendar, KeyRound, RefreshCw, Search, ShieldCheck, ShieldOff } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import MareesSection from "./MareesSection";
+import ReservationsToggle from "@/components/admin/ReservationsToggle";
 import { DEFAULT_ECHELLE_LABELS, DEFAULT_VALIDATED_FFE_LEVEL, type ProgressionLabelsSettings } from "@/lib/progression-helpers";
 
 const defaultAccounts = [
@@ -1825,6 +1826,9 @@ export default function ParametresPage() {
       {/* ─── Maintenance ─── */}
       {section === "maintenance" && (
         <div className="flex flex-col gap-5">
+
+          {/* Ouverture des réservations en ligne */}
+          <ReservationsToggle />
 
           {/* Avertissement */}
           <Card padding="md" className="bg-orange-50 border-orange-200">

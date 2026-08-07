@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
+import { bloquerSiReservationsFermees } from "@/lib/reservations-ouvertes";
 
 interface EnrollItem {
   childId: string;
@@ -33,6 +34,9 @@ interface EnrollItem {
 export async function POST(req: NextRequest) {
   const auth = await verifyAuth(req);
   if (auth instanceof NextResponse) return auth;
+  // Verrou d'avant-ouverture (les admins passent toujours)
+  const verrou = await bloquerSiReservationsFermees(auth);
+  if (verrou) return verrou;
   const uid = auth.uid;
 
   try {
