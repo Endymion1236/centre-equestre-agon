@@ -69,6 +69,7 @@ export default function BornePage() {
   const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const humeurEnAttenteRef = useRef<"clin" | "desole" | "joie" | null>(null);
   const accueilFaitRef = useRef(false);
+  const repriseMicTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Nettoyage complet au démontage
   useEffect(() => () => { raccrocherInterne(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -84,6 +85,7 @@ export default function BornePage() {
   // ── Fin de conversation ─────────────────────────────────────────────────────
   const raccrocherInterne = () => {
     if (tickerRef.current) { clearInterval(tickerRef.current); tickerRef.current = null; }
+    if (repriseMicTimerRef.current) { clearTimeout(repriseMicTimerRef.current); repriseMicTimerRef.current = null; }
     if (inactiviteRef.current) clearTimeout(inactiviteRef.current);
     if (dureeMaxRef.current) clearTimeout(dureeMaxRef.current);
     cancelAnimationFrame(rafRef.current);
@@ -189,13 +191,26 @@ export default function BornePage() {
         // Micro coupé pendant que le poney parle : dans un club-house
         // bruyant, le laisser ouvert transformait le brouhaha (et l'écho
         // de sa propre voix) en fausses prises de parole
+        if (repriseMicTimerRef.current) { clearTimeout(repriseMicTimerRef.current); repriseMicTimerRef.current = null; }
         micStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = false; });
         micTraiteRef.current?.getAudioTracks().forEach((t) => { t.enabled = false; });
         break;
       case "output_audio_buffer.stopped":
       case "output_audio_buffer.cleared":
-        micStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
-        micTraiteRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
+        // Garde anti-écho : la fin de la phrase du poney résonne encore
+        // dans la pièce quand l'audio "se termine" côté flux — rouvrir le
+        // micro immédiatement lui faisait entendre sa propre voix, qu'il
+        // prenait pour une prise de parole (d'où les relances « que
+        // souhaitez-vous ? » avant même que le visiteur ne parle)
+        if (repriseMicTimerRef.current) clearTimeout(repriseMicTimerRef.current);
+        repriseMicTimerRef.current = setTimeout(() => {
+          micStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
+          micTraiteRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
+          // Purge de ce qui aurait pu être capté entre-temps
+          if (dcRef.current?.readyState === "open") {
+            dcRef.current.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
+          }
+        }, 600);
         if (etatRef.current === "speaking") setEtat("idle");
         sousTitreAffRef.current = sousTitreCibleRef.current.length;
         setSousTitre(sousTitreCibleRef.current);
@@ -246,8 +261,10 @@ export default function BornePage() {
     if (etatRef.current !== "speaking" || dc?.readyState !== "open") return;
     dc.send(JSON.stringify({ type: "response.cancel" }));
     dc.send(JSON.stringify({ type: "output_audio_buffer.clear" }));
+    if (repriseMicTimerRef.current) { clearTimeout(repriseMicTimerRef.current); repriseMicTimerRef.current = null; }
     micStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
     micTraiteRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
+    dc.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
     setEtat("idle");
   }, []);
 
