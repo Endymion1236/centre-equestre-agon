@@ -33,7 +33,7 @@ INFOS PRATIQUES :
 - Téléphone : ${club.tel}
 - Email : ${club.email}
 - Site : ${club.website}
-- Activités : promenades en main à poney dès 2 ans et demi, cours poney/cheval dès 3 ans (baby poney), stages vacances, promenades montées à cheval en bord de mer, dunes et Pointe d'Agon (dès 12 ans), Pony Games, mini-ferme pédagogique, anniversaires.
+- Activités : promenades en main à poney dès 2 ans et demi, cours poney/cheval dès 3 ans (baby poney), stages vacances, promenades montées à cheval en bord de mer : dunes, Pointe d'Agon et plage (dès 12 ans), Pony Games, mini-ferme pédagogique, anniversaires.
 
 TARIFS DE RÉFÉRENCE :
 - Forfait annuel 1×/semaine : 650€ | 2×/semaine : 1100€ | 3×/semaine : 1400€

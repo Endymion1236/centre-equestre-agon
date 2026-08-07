@@ -38,7 +38,7 @@ export const vitrineDefaults = {
     balade: {
       title: "Balades en bord de mer",
       schedule: "Sur réservation · Toute l'année",
-      description: "2h entre dunes, estuaire et Pointe d'Agon, avec la mer en contrebas. Découverte du littoral normand à cheval, au coucher du soleil c'est magique.",
+      description: "2h entre dunes, estuaire, Pointe d'Agon et plage. Découverte du littoral normand à cheval, au coucher du soleil c'est magique.",
       image: "",
     },
     balade_jour: {
@@ -46,7 +46,7 @@ export const vitrineDefaults = {
       ages: "Dès 12 ans",
       schedule: "2h · départ en journée · selon calendrier et météo",
       price: "53€",
-      description: "Une promenade en pleine journée pour découvrir le littoral d'Agon-Coutainville, entre chemins, dunes, estuaire et le panorama de la Pointe d'Agon.",
+      description: "Une promenade en pleine journée pour découvrir le littoral d'Agon-Coutainville, entre chemins, dunes, estuaire, Pointe d'Agon et plage.",
       image: "",
     },
     balade_soleil: {
@@ -54,7 +54,7 @@ export const vitrineDefaults = {
       ages: "Dès 12 ans",
       schedule: "2h · départ en fin de journée · d'avril à octobre",
       price: "57€",
-      description: "Notre expérience phare : deux heures à cheval entre dunes, estuaire et Pointe d'Agon, dans la lumière dorée du coucher de soleil.",
+      description: "Notre expérience phare : deux heures à cheval entre dunes, estuaire, Pointe d'Agon et plage, dans la lumière dorée du coucher de soleil.",
       image: "",
     },
     cours: {
