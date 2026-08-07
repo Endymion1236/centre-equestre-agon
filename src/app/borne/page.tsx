@@ -68,6 +68,7 @@ export default function BornePage() {
   const sousTitreAffRef = useRef(0);
   const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const humeurEnAttenteRef = useRef<"clin" | "desole" | "joie" | null>(null);
+  const accueilFaitRef = useRef(false);
 
   // Nettoyage complet au démontage
   useEffect(() => () => { raccrocherInterne(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -104,6 +105,7 @@ export default function BornePage() {
 
   const raccrocher = useCallback(() => {
     raccrocherInterne();
+    accueilFaitRef.current = false;
     setEtat("off");
     setSousTitre("");
   }, []);
@@ -222,10 +224,10 @@ export default function BornePage() {
         // Appels d'outils demandés par le modèle
         const outputs = ev.response?.output;
         if (Array.isArray(outputs)) {
-          for (const item of outputs) {
-            if (item?.type === "function_call" && item.call_id) {
-              executerOutil(item.name, item.call_id, item.arguments || "{}");
-            }
+          const appels = outputs.filter((o: any) => o?.type === "function_call" && o.call_id);
+          if (appels.length > 0) setEtat("thinking"); // il cherche — rester en réflexion
+          for (const item of appels) {
+            executerOutil(item.name, item.call_id, item.arguments || "{}");
           }
         }
         break;
@@ -357,11 +359,14 @@ export default function BornePage() {
             setSousTitre(cible.slice(0, sousTitreAffRef.current));
           }
         }, 60);
-        // Message d'accueil dès la connexion
-        dc.send(JSON.stringify({
-          type: "response.create",
-          response: { instructions: "Accueille le visiteur en une phrase courte et chaleureuse, et demande-lui comment tu peux l'aider." },
-        }));
+        // Message d'accueil dès la connexion — UNE SEULE phrase, une seule fois
+        if (!accueilFaitRef.current) {
+          accueilFaitRef.current = true;
+          dc.send(JSON.stringify({
+            type: "response.create",
+            response: { instructions: "Salue le visiteur en UNE SEULE phrase courte et chaleureuse (quinze mots maximum, question incluse), puis tais-toi et attends. N'enchaîne aucune deuxième phrase." },
+          }));
+        }
       };
 
       pc.onconnectionstatechange = () => {
@@ -443,12 +448,19 @@ export default function BornePage() {
   // ── Écran principal ─────────────────────────────────────────────────────────
   const enConversation = etat !== "off" && etat !== "connecting";
   const statusTexte =
-    etat === "connecting" ? "Connexion…"
-    : etat === "listening" ? "Je vous écoute…"
-    : etat === "thinking" ? "Je réfléchis…"
+    etat === "connecting" ? "Câlin se réveille…"
+    : etat === "listening" ? "Je vous écoute… parlez !"
+    : etat === "thinking" ? "Un instant, je cherche…"
     : etat === "speaking" ? "Touchez-moi pour m'interrompre"
-    : enConversation ? "Parlez-moi, je vous écoute !"
+    : enConversation ? "À vous ! Posez-moi votre question"
     : "Bonjour ! Appuyez sur le bouton pour discuter avec moi";
+  // Pastille d'état : vert = à vous de parler, orange = il travaille,
+  // bleu = il parle — lisible d'un coup d'œil même sans lire le texte
+  const pastille =
+    etat === "listening" || (enConversation && etat === "idle") ? "bg-green-500"
+    : etat === "thinking" || etat === "connecting" ? "bg-amber-400"
+    : etat === "speaking" ? "bg-blue-500"
+    : null;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-cream to-blue-50 flex flex-col items-center justify-between py-8 px-6 select-none">
@@ -472,7 +484,12 @@ export default function BornePage() {
 
       {/* Sous-titres */}
       <div className="w-full max-w-2xl text-center min-h-[120px] flex flex-col items-center gap-3">
-        {statusTexte && <p className="font-body text-lg md:text-xl font-semibold text-blue-800">{statusTexte}</p>}
+        {statusTexte && (
+          <div className="inline-flex items-center gap-2.5 mx-auto">
+            {pastille && <span className={`w-3.5 h-3.5 rounded-full ${pastille} ${etat === "thinking" || etat === "connecting" ? "animate-pulse" : ""}`} />}
+            <p className="font-body text-lg md:text-xl font-semibold text-blue-800">{statusTexte}</p>
+          </div>
+        )}
         {sousTitre && (
           <p className="font-body text-base md:text-lg text-gray-700 leading-relaxed bg-white/80 rounded-2xl px-6 py-4 shadow-sm max-h-40 overflow-y-auto">
             {sousTitre}
