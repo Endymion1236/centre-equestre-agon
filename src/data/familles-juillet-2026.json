@@ -5266,7 +5266,8 @@
       "2026-07-20",
       "2026-07-27",
       "2026-08-03",
-      "2026-08-10"
+      "2026-08-10",
+      "2026-08-17"
     ],
     "inscriptionsStages": [
       {
@@ -5301,6 +5302,15 @@
         "stageLabel": "Stage galop 4 et +",
         "horaire": "10:00-12:00",
         "moniteur": "Nicolas",
+        "prix": 175,
+        "places": 8,
+        "enfant": "Ninon Khayat"
+      },
+      {
+        "semaine": "2026-08-17",
+        "stageLabel": "Stage galop 4 et +",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
         "prix": 175,
         "places": 8,
         "enfant": "Ninon Khayat"
@@ -5423,11 +5433,21 @@
       }
     ],
     "semaines": [
-      "2026-08-10"
+      "2026-08-10",
+      "2026-08-17"
     ],
     "inscriptionsStages": [
       {
         "semaine": "2026-08-10",
+        "stageLabel": "Stage Galop 3",
+        "horaire": "10:00-12:00",
+        "moniteur": "Gaëlle",
+        "prix": 175,
+        "places": 10,
+        "enfant": "Lila Hadjazi Duauge"
+      },
+      {
+        "semaine": "2026-08-17",
         "stageLabel": "Stage Galop 3",
         "horaire": "10:00-12:00",
         "moniteur": "Gaëlle",
@@ -5672,6 +5692,454 @@
         "prix": 175,
         "places": 8,
         "enfant": "louise Kusztos"
+      }
+    ]
+  },
+  {
+    "email": "",
+    "parentName": "Victoire Perdriau",
+    "responsable": "Victoire Perdriau",
+    "tel": "0676051305",
+    "cp": "",
+    "ville": "",
+    "sans_email": true,
+    "enfants": [
+      {
+        "firstName": "Victoire",
+        "lastName": "Perdriau",
+        "birthDate": "2022-08-18"
+      }
+    ],
+    "semaines": [
+      "2026-08-17"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-17",
+        "stageLabel": "Stage 3/4 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Lilou",
+        "prix": 175,
+        "places": 6,
+        "enfant": "Victoire Perdriau"
+      }
+    ]
+  },
+  {
+    "email": "bastien.levoy@hotmail.fr",
+    "parentName": "Bastien Levoy",
+    "responsable": "Bastien Levoy",
+    "tel": "0683972615",
+    "cp": "50440",
+    "ville": "La Hague",
+    "sans_email": false,
+    "enfants": [
+      {
+        "firstName": "Thaïs",
+        "lastName": "Levoy",
+        "birthDate": "2022-05-05"
+      }
+    ],
+    "semaines": [
+      "2026-08-17"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-17",
+        "stageLabel": "Stage 3/4 ans",
+        "horaire": "10:00-12:00",
+        "moniteur": "Lilou",
+        "prix": 175,
+        "places": 6,
+        "enfant": "Thaïs Levoy"
+      }
+    ]
+  },
+  {
+    "email": "",
+    "parentName": "theo herbelin",
+    "responsable": "theo herbelin",
+    "tel": "0603932410",
+    "cp": "",
+    "ville": "",
+    "sans_email": true,
+    "enfants": [
+      {
+        "firstName": "theo",
+        "lastName": "herbelin",
+        "birthDate": "2015-01-09"
+      }
+    ],
+    "semaines": [
+      "2026-08-17"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-17",
+        "stageLabel": "Stage galop d'or",
+        "horaire": "10:00-12:00",
+        "moniteur": "Gaëlle",
+        "prix": 175,
+        "places": 10,
+        "enfant": "theo herbelin"
+      }
+    ]
+  },
+  {
+    "email": "catherine.jutteau@gmail.com",
+    "parentName": "MARGOT Smagghe Pino",
+    "responsable": "MARGOT Smagghe Pino",
+    "tel": "0681783645",
+    "cp": "",
+    "ville": "",
+    "sans_email": false,
+    "enfants": [
+      {
+        "firstName": "MARGOT",
+        "lastName": "Smagghe Pino",
+        "birthDate": "2010-01-06"
+      }
+    ],
+    "semaines": [
+      "2026-08-17"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-17",
+        "stageLabel": "Stage galop d'or",
+        "horaire": "10:00-12:00",
+        "moniteur": "Gaëlle",
+        "prix": 175,
+        "places": 10,
+        "enfant": "MARGOT Smagghe Pino"
+      }
+    ]
+  },
+  {
+    "email": "antico.katy@gmail.com",
+    "parentName": "Katy ANTICO",
+    "responsable": "Katy ANTICO",
+    "tel": "0607120109",
+    "cp": "50200",
+    "ville": "Coutances",
+    "sans_email": false,
+    "enfants": [
+      {
+        "firstName": "Lisa",
+        "lastName": "ANTICO",
+        "birthDate": "2017-01-28"
+      }
+    ],
+    "semaines": [
+      "2026-08-17"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-17",
+        "stageLabel": "Stage galop d'or",
+        "horaire": "10:00-12:00",
+        "moniteur": "Gaëlle",
+        "prix": 175,
+        "places": 10,
+        "enfant": "Lisa ANTICO"
+      }
+    ]
+  },
+  {
+    "email": "Odilesimon0401@gmail.com",
+    "parentName": "Odile Simon",
+    "responsable": "Odile Simon",
+    "tel": "0614888176",
+    "cp": "75011",
+    "ville": "Paris",
+    "sans_email": false,
+    "enfants": [
+      {
+        "firstName": "César",
+        "lastName": "Bogdanas",
+        "birthDate": "2016-05-19"
+      }
+    ],
+    "semaines": [
+      "2026-08-17"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-17",
+        "stageLabel": "Stage galop d'or",
+        "horaire": "10:00-12:00",
+        "moniteur": "Gaëlle",
+        "prix": 175,
+        "places": 10,
+        "enfant": "César Bogdanas"
+      }
+    ]
+  },
+  {
+    "email": "",
+    "parentName": "CELIA LEMOINE",
+    "responsable": "CELIA LEMOINE",
+    "tel": "0618222203",
+    "cp": "",
+    "ville": "",
+    "sans_email": true,
+    "enfants": [
+      {
+        "firstName": "CELIA",
+        "lastName": "LEMOINE",
+        "birthDate": "2016-01-01"
+      }
+    ],
+    "semaines": [
+      "2026-08-17"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-17",
+        "stageLabel": "Stage galop d'or",
+        "horaire": "10:00-12:00",
+        "moniteur": "Gaëlle",
+        "prix": 175,
+        "places": 10,
+        "enfant": "CELIA LEMOINE"
+      }
+    ]
+  },
+  {
+    "email": "amalelemoine@yahoo.fr",
+    "parentName": "tessa lemoine",
+    "responsable": "tessa lemoine",
+    "tel": "0622093451",
+    "cp": "",
+    "ville": "",
+    "sans_email": false,
+    "enfants": [
+      {
+        "firstName": "tessa",
+        "lastName": "lemoine",
+        "birthDate": "2013-03-03"
+      }
+    ],
+    "semaines": [
+      "2026-08-17"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-17",
+        "stageLabel": "Stage Galop 3",
+        "horaire": "10:00-12:00",
+        "moniteur": "Gaëlle",
+        "prix": 175,
+        "places": 10,
+        "enfant": "tessa lemoine"
+      }
+    ]
+  },
+  {
+    "email": "dumainema@gmail.com",
+    "parentName": "MAITENA DUMAINE",
+    "responsable": "MAITENA DUMAINE",
+    "tel": "0621310054",
+    "cp": "50230",
+    "ville": "AGON COUTAINVILLE",
+    "sans_email": false,
+    "enfants": [
+      {
+        "firstName": "Sarah",
+        "lastName": "DUMAINE BIGNOLAS",
+        "birthDate": "2013-06-24"
+      }
+    ],
+    "semaines": [
+      "2026-08-17"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-17",
+        "stageLabel": "Stage Galop 3",
+        "horaire": "10:00-12:00",
+        "moniteur": "Gaëlle",
+        "prix": 175,
+        "places": 10,
+        "enfant": "Sarah DUMAINE BIGNOLAS"
+      }
+    ]
+  },
+  {
+    "email": "",
+    "parentName": "appoline quintaine",
+    "responsable": "appoline quintaine",
+    "tel": "0684531654",
+    "cp": "",
+    "ville": "",
+    "sans_email": true,
+    "enfants": [
+      {
+        "firstName": "appoline",
+        "lastName": "quintaine",
+        "birthDate": "2015-12-11"
+      }
+    ],
+    "semaines": [
+      "2026-08-17"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-17",
+        "stageLabel": "Stage Galop 3",
+        "horaire": "10:00-12:00",
+        "moniteur": "Gaëlle",
+        "prix": 175,
+        "places": 10,
+        "enfant": "appoline quintaine"
+      }
+    ]
+  },
+  {
+    "email": "carole.oddoux@gmail.com",
+    "parentName": "Carole Oddoux",
+    "responsable": "Carole Oddoux",
+    "tel": "0612735713",
+    "cp": "91370",
+    "ville": "VERRIERES LE BUISSON",
+    "sans_email": false,
+    "enfants": [
+      {
+        "firstName": "Raphaël",
+        "lastName": "Oddoux",
+        "birthDate": "2012-03-23"
+      },
+      {
+        "firstName": "Noémie",
+        "lastName": "Oddoux",
+        "birthDate": "2006-03-01"
+      }
+    ],
+    "semaines": [
+      "2026-08-17"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-17",
+        "stageLabel": "Stage galop 4 et +",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
+        "prix": 175,
+        "places": 8,
+        "enfant": "Raphaël Oddoux"
+      },
+      {
+        "semaine": "2026-08-17",
+        "stageLabel": "Stage galop 4 et +",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
+        "prix": 175,
+        "places": 8,
+        "enfant": "Noémie Oddoux"
+      }
+    ]
+  },
+  {
+    "email": "lelire@gmail.com",
+    "parentName": "Valérie NICAISE",
+    "responsable": "Valérie NICAISE",
+    "tel": "0610455242",
+    "cp": "77500",
+    "ville": "CHELLES",
+    "sans_email": false,
+    "enfants": [
+      {
+        "firstName": "Natalia",
+        "lastName": "MONTOYA NICAISE",
+        "birthDate": "2013-12-07"
+      }
+    ],
+    "semaines": [
+      "2026-08-17"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-17",
+        "stageLabel": "Stage galop 4 et +",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
+        "prix": 175,
+        "places": 8,
+        "enfant": "Natalia MONTOYA NICAISE"
+      }
+    ]
+  },
+  {
+    "email": "Hmarcm@gmail.com",
+    "parentName": "eulalie Marc",
+    "responsable": "eulalie Marc",
+    "tel": "0615563027",
+    "cp": "92600",
+    "ville": "Asnieres Sur Seine",
+    "sans_email": false,
+    "enfants": [
+      {
+        "firstName": "Hélène",
+        "lastName": "MARC",
+        "birthDate": "1974-08-31"
+      },
+      {
+        "firstName": "eulalie",
+        "lastName": "Marc",
+        "birthDate": "2005-09-12"
+      }
+    ],
+    "semaines": [
+      "2026-08-17"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-17",
+        "stageLabel": "Stage galop 4 et +",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
+        "prix": 175,
+        "places": 8,
+        "enfant": "Hélène MARC"
+      },
+      {
+        "semaine": "2026-08-17",
+        "stageLabel": "Stage galop 4 et +",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
+        "prix": 175,
+        "places": 8,
+        "enfant": "eulalie Marc"
+      }
+    ]
+  },
+  {
+    "email": "michelotconstance@gmail.com",
+    "parentName": "Constance MICHELOT",
+    "responsable": "Constance MICHELOT",
+    "tel": "0669362059",
+    "cp": "",
+    "ville": "",
+    "sans_email": false,
+    "enfants": [
+      {
+        "firstName": "Constance",
+        "lastName": "MICHELOT",
+        "birthDate": "2000-02-14"
+      }
+    ],
+    "semaines": [
+      "2026-08-17"
+    ],
+    "inscriptionsStages": [
+      {
+        "semaine": "2026-08-17",
+        "stageLabel": "Stage galop 4 et +",
+        "horaire": "10:00-12:00",
+        "moniteur": "Emeline",
+        "prix": 175,
+        "places": 8,
+        "enfant": "Constance MICHELOT"
       }
     ]
   }
