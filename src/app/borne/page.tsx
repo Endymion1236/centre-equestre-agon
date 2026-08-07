@@ -480,18 +480,24 @@ export default function BornePage() {
     : null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-cream to-blue-50 flex flex-col items-center justify-between py-8 px-6 select-none">
+    <div className="relative min-h-screen bg-gradient-to-b from-sky-100 via-cream to-green-100 flex flex-col items-center justify-between py-8 px-6 select-none overflow-hidden">
+      {/* Décor : soleil et bulles pastel floutées (pur CSS, aucun coût) */}
+      <div className="pointer-events-none absolute -top-16 -right-16 w-72 h-72 rounded-full bg-amber-200/60 blur-3xl" />
+      <div className="pointer-events-none absolute top-1/3 -left-24 w-80 h-80 rounded-full bg-sky-200/50 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-24 right-1/4 w-96 h-96 rounded-full bg-green-200/50 blur-3xl" />
       {/* Sortie audio persistante — voir audioElRef */}
       <audio ref={audioElRef} autoPlay playsInline muted className="hidden" />
 
       {/* En-tête */}
       <header className="text-center">
         <h1 className="font-display text-2xl md:text-3xl font-bold text-blue-800">Centre Équestre d&apos;Agon-Coutainville</h1>
-        <p className="font-body text-sm text-gray-400 mt-1">Câlin, votre assistant d&apos;accueil</p>
+        <p className="inline-flex items-center gap-1.5 font-body text-base font-semibold text-amber-800 bg-white/70 rounded-full px-4 py-1.5 mt-2 shadow-sm">
+          🐴 Câlin, votre assistant d&apos;accueil
+        </p>
       </header>
 
       {/* Visage */}
-      <div className="relative w-64 h-64 md:w-80 md:h-80 my-4" onClick={interrompreReponse}
+      <div className="relative w-80 h-80 md:w-[26rem] md:h-[26rem] my-2" onClick={interrompreReponse}
         role={etat === "speaking" ? "button" : undefined}>
         {etat === "listening" && (
           <span className="absolute inset-0 rounded-full border-4 border-blue-400 animate-ping opacity-40" />
@@ -524,17 +530,17 @@ export default function BornePage() {
       <div className="flex flex-col items-center gap-3 pb-2">
         {etat === "off" ? (
           <button onClick={demarrer}
-            className="w-24 h-24 rounded-full bg-blue-500 hover:bg-blue-600 flex items-center justify-center border-none cursor-pointer shadow-xl transition-all">
-            <Mic size={36} className="text-white" />
+            className="w-28 h-28 rounded-full bg-gradient-to-br from-blue-500 to-sky-400 hover:scale-105 flex items-center justify-center border-none cursor-pointer shadow-2xl transition-transform">
+            <Mic size={44} className="text-white" />
           </button>
         ) : etat === "connecting" ? (
-          <div className="w-24 h-24 rounded-full bg-blue-500/60 flex items-center justify-center shadow-xl">
-            <Loader2 size={36} className="text-white animate-spin" />
+          <div className="w-28 h-28 rounded-full bg-blue-500/60 flex items-center justify-center shadow-2xl">
+            <Loader2 size={40} className="text-white animate-spin" />
           </div>
         ) : (
           <button onClick={raccrocher}
-            className="w-24 h-24 rounded-full bg-red-500 hover:bg-red-400 flex items-center justify-center border-none cursor-pointer shadow-xl transition-colors">
-            <PhoneOff size={32} className="text-white" />
+            className="w-28 h-28 rounded-full bg-gradient-to-br from-red-500 to-rose-400 hover:scale-105 flex items-center justify-center border-none cursor-pointer shadow-2xl transition-transform">
+            <PhoneOff size={36} className="text-white" />
           </button>
         )}
         <p className="font-body text-base font-semibold text-gray-500">
