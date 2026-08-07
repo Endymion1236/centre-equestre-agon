@@ -503,17 +503,17 @@ export default function BornePage() {
       <div className="w-full max-w-2xl text-center min-h-[120px] flex flex-col items-center gap-3">
         {statusTexte && (
           <div className="inline-flex items-center gap-2.5 mx-auto">
-            {pastille && <span className={`w-3.5 h-3.5 rounded-full ${pastille} ${etat === "thinking" || etat === "connecting" ? "animate-pulse" : ""}`} />}
-            <p className="font-body text-lg md:text-xl font-semibold text-blue-800">{statusTexte}</p>
+            {pastille && <span className={`w-5 h-5 rounded-full flex-shrink-0 ${pastille} ${etat === "thinking" || etat === "connecting" ? "animate-pulse" : ""}`} />}
+            <p className="font-body text-2xl md:text-3xl font-bold text-blue-900">{statusTexte}</p>
           </div>
         )}
         {sousTitre && (
-          <p className="font-body text-base md:text-lg text-gray-700 leading-relaxed bg-white/80 rounded-2xl px-6 py-4 shadow-sm max-h-40 overflow-y-auto">
+          <p className="font-body text-xl md:text-2xl text-slate-800 leading-relaxed bg-white/90 rounded-2xl px-7 py-5 shadow-sm max-h-52 overflow-y-auto">
             {sousTitre}
           </p>
         )}
         {enConversation && etat === "idle" && !sousTitre && (
-          <p className="font-body text-sm text-gray-400">
+          <p className="font-body text-lg text-gray-500">
             Essayez : « Il reste de la place aux prochains stages ? » — « Quels sont les tarifs ? »
           </p>
         )}
@@ -537,7 +537,7 @@ export default function BornePage() {
             <PhoneOff size={32} className="text-white" />
           </button>
         )}
-        <p className="font-body text-xs text-gray-400">
+        <p className="font-body text-base font-semibold text-gray-500">
           {etat === "off" ? "Appuyez pour discuter" : etat === "connecting" ? "Un instant…" : "Appuyez pour terminer la conversation"}
         </p>
       </div>
