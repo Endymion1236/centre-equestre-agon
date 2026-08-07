@@ -56,7 +56,8 @@ export const REGLES_PROMENADE: Record<NiveauPromenade, Regle> = {
     galopMin: 3, // "bon galop 3"
     exigences: { troisAllures: true },
     resume:
-      "13 ans minimum, bon Galop 3, maîtrise des 3 allures, 85 kg maximum.",
+      "13 ans minimum, bon Galop 3, maîtrise des 3 allures, 85 kg maximum. " +
+      "Plage et galop.",
   },
   debrouille: {
     label: "Promenade débrouillés",
@@ -64,7 +65,8 @@ export const REGLES_PROMENADE: Record<NiveauPromenade, Regle> = {
     galopMin: 2, // bonne maîtrise du trot enlevé OU galop 2
     exigences: { trotEnleve: true },
     resume:
-      "12 ans minimum, bonne maîtrise du trot enlevé ou Galop 2, 85 kg maximum.",
+      "12 ans minimum, bonne maîtrise du trot enlevé ou Galop 2, 85 kg maximum. " +
+      "Promenade au trot, plage comprise.",
   },
   debutant: {
     label: "Promenade débutants",
