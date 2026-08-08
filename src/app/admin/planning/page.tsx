@@ -576,7 +576,7 @@ export default function PlanningPage() {
           <p>Bonjour${info.parentName ? " " + info.parentName : ""},</p>
           <p>${intro}</p>
           <ul>${changesHtml}</ul>
-          <p>Si ce changement ne vous convient pas, contactez-nous et nous ajusterons ou annulerons votre réservation.</p>
+          <p>Votre réservation reste valable, elle est simplement décalée : rien n'est à refaire de votre côté. Si ce nouvel horaire ne vous convient pas, contactez-nous et nous chercherons ensemble une autre date.</p>
           <p>À bientôt,<br/>Le Centre Équestre d'Agon-Coutainville</p>
         </div>`;
         try {
