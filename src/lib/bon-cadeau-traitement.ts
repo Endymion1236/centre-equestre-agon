@@ -2,6 +2,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import { Resend } from "resend";
+import { REPLY_TO } from "@/lib/email-reply-to";
 
 const genCode = () => "BON-" + (Date.now().toString(36).slice(-4) + Math.random().toString(36).slice(2, 5)).toUpperCase();
 
@@ -84,7 +85,7 @@ export async function traiterBonCadeauSession(
     const BCC = process.env.RESEND_BCC_EMAIL || process.env.RESEND_BCC || "";
     if (resend && sess.acheteurEmail) {
       await resend.emails.send({
-        from: FROM, to: sess.acheteurEmail, ...(BCC ? { bcc: BCC } : {}),
+        from: FROM, replyTo: REPLY_TO, to: sess.acheteurEmail, ...(BCC ? { bcc: BCC } : {}),
         subject: "🎁 Votre bon cadeau — Centre Équestre d'Agon-Coutainville",
         html: emailHtml(code, montant, sess.beneficiaire || "", sess.message || ""),
       });

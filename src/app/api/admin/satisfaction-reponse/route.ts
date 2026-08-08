@@ -5,6 +5,7 @@ import { Resend } from "resend";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { refreshEmailMode, isEmailRestricted, isRecipientAllowed, blockedLog } from "@/lib/email-guard";
+import { REPLY_TO } from "@/lib/email-reply-to";
 
 // ═══════════════════════════════════════════════════════════════════
 // POST /api/admin/satisfaction-reponse  (admin uniquement)
@@ -110,7 +111,7 @@ Règles :
     if (!apiKey) return NextResponse.json({ error: "RESEND_API_KEY manquant.", status: "config" }, { status: 500 });
     const resend = new Resend(apiKey);
     const subject = `Merci pour votre avis${avis.stageLabel ? ` — ${avis.stageLabel}` : ""}`;
-    const { error } = await resend.emails.send({ from: FROM_EMAIL, to: email, bcc: BCC_SUIVI, subject, text: message });
+    const { error } = await resend.emails.send({ from: FROM_EMAIL, replyTo: REPLY_TO, to: email, bcc: BCC_SUIVI, subject, text: message });
     if (error) {
       return NextResponse.json({ error: `Resend : ${error.message || "échec"}`, status: "sendError" }, { status: 502 });
     }

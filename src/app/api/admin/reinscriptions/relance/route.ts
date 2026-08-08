@@ -10,6 +10,7 @@ import { verifyAuth } from "@/lib/api-auth";
 import { Resend } from "resend";
 import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
 import { logEmail } from "@/lib/email-log";
+import { REPLY_TO } from "@/lib/email-reply-to";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
 
     const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#222">${esc(body).replace(/\n/g, "<br>")}</div>`;
 
-    await resend.emails.send({ from: FROM, to, ...(BCC ? { bcc: BCC } : {}), subject, html });
+    await resend.emails.send({ from: FROM, replyTo: REPLY_TO, to, ...(BCC ? { bcc: BCC } : {}), subject, html });
     await logEmail({ to, subject, context: "reinscription_relance", template: "reinscriptionRelance", status: "sent", familyId: familyId || "", sentBy: (auth as any)?.email || "admin" }).catch(() => {});
 
     return NextResponse.json({ ok: true });

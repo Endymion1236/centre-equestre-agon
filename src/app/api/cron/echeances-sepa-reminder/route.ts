@@ -3,6 +3,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { Resend } from "resend";
 import { sendPushBatch } from "@/lib/push";
 import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
+import { REPLY_TO } from "@/lib/email-reply-to";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -100,6 +101,7 @@ export async function GET(req: NextRequest) {
         const resend = new Resend(resendKey);
         await resend.emails.send({
           from: process.env.RESEND_FROM_EMAIL || "Centre Equestre <onboarding@resend.dev>",
+          replyTo: REPLY_TO,
           to,
           subject: `Rappel : ${result.dueCount} échéance(s) SEPA à prélever${result.overdueCount ? ` (${result.overdueCount} en retard)` : ""}`,
           html,

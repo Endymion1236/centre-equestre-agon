@@ -5,6 +5,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { refreshEmailMode, isEmailRestricted, isRecipientAllowed, blockedLog } from "@/lib/email-guard";
 import { offerKeyFrom } from "@/lib/offres";
+import { REPLY_TO } from "@/lib/email-reply-to";
 
 // ═══════════════════════════════════════════════════════════════════
 // POST /api/admin/offres/envoyer  (admin uniquement)
@@ -92,6 +93,7 @@ export async function POST(req: NextRequest) {
 
       const { error } = await resend.emails.send({
         from: FROM_EMAIL,
+        replyTo: REPLY_TO,
         to: email,
         bcc: BCC_SUIVI,
         subject: perso(subject),

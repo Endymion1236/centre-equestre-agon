@@ -18,6 +18,7 @@ import { adminAuth, adminDb } from "./firebase-admin";
 import { logEmail } from "./email-log";
 import { isRecipientAllowed, blockedLog, refreshEmailMode } from "./email-guard";
 import { createActivationToken } from "./activation-token";
+import { REPLY_TO } from "@/lib/email-reply-to";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
 const FROM_EMAIL_RAW = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
@@ -122,6 +123,7 @@ export async function sendMagicLink(opts: SendMagicLinkOptions): Promise<SendMag
   try {
     const send = await resend.emails.send({
       from: FROM,
+      replyTo: REPLY_TO,
       to: emailNormalized,
       bcc: BCC ? [BCC] : undefined,
       subject,

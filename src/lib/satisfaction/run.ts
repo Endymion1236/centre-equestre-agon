@@ -7,6 +7,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { Resend } from "resend";
 import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
 import { logEmail } from "@/lib/email-log";
+import { REPLY_TO } from "@/lib/email-reply-to";
 
 const FROM = process.env.RESEND_FROM_EMAIL || process.env.RESEND_FROM || "onboarding@resend.dev";
 // Pas de copie cachée sur les demandes de satisfaction : envoyées par
@@ -156,7 +157,7 @@ export async function runSatisfactionStages(opts: RunOptions = {}) {
       const childFirst = (info.childName || "").split(" ")[0];
       const subject = `Votre avis sur le stage${childFirst ? ` de ${childFirst}` : ""}`;
       try {
-        await resend.emails.send({ from: FROM, to: dest, subject, html: emailHtml(childFirst, label, link) });
+        await resend.emails.send({ from: FROM, replyTo: REPLY_TO, to: dest, subject, html: emailHtml(childFirst, label, link) });
         result.emails++; report.envoyes++;
         await logEmail({ to: dest, subject, context: "cron_satisfaction_stage", template: "satisfactionStage", status: "sent", familyId: invitation.familyId, sentBy: "system" }).catch(() => {});
       } catch (err: any) {
@@ -280,7 +281,7 @@ export async function runSatisfactionAnnee(opts: RunAnneeOptions = {}) {
     const childFirst = (meta.childName || "").split(" ")[0];
     const subject = `Votre avis sur l'année${childFirst ? ` de ${childFirst}` : ""}`;
     try {
-      await resend.emails.send({ from: FROM, to: dest, subject, html: emailHtmlAnnee(childFirst, saisonLabel, link) });
+      await resend.emails.send({ from: FROM, replyTo: REPLY_TO, to: dest, subject, html: emailHtmlAnnee(childFirst, saisonLabel, link) });
       result.emails++;
       await logEmail({ to: dest, subject, context: "cron_satisfaction_annee", template: "satisfactionAnnee", status: "sent", familyId: invitation.familyId, sentBy: "system" }).catch(() => {});
     } catch (err: any) {

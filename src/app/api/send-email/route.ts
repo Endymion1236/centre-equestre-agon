@@ -4,6 +4,7 @@ import { verifyAuth } from "@/lib/api-auth";
 import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, isEmailRestricted, blockedLog, refreshEmailMode } from "@/lib/email-guard";
 import { adminDb } from "@/lib/firebase-admin";
+import { REPLY_TO } from "@/lib/email-reply-to";
 
 // Emails du personnel (moniteurs / salariés) : TOUJOURS autorisés, même en mode
 // restreint — plus besoin de les ajouter à la main dans EMAIL_ALLOWLIST.
@@ -165,7 +166,7 @@ export async function POST(request: NextRequest) {
             <strong>⚠️ MODE TEST</strong> — Cet email aurait été envoyé à : <strong>${allowedRecipients.join(", ")}</strong>
           </div>${html}`
         : html,
-      replyTo: replyTo || process.env.RESEND_OWNER_EMAIL || process.env.RESEND_FROM_EMAIL || "",
+      replyTo: replyTo || REPLY_TO,
       ...(safeAttachments.length > 0 ? { attachments: safeAttachments } : {}),
     });
 
