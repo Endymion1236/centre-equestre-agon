@@ -27,7 +27,13 @@ interface Impaye {
   activites: string[];
   places: Place[];
   toutesTenues: boolean;
+  declaration: { mode: string; declareLe: string | null } | null;
 }
+
+const LIBELLE_MODE: Record<string, string> = {
+  cheque: "chèque", especes: "espèces", virement: "virement",
+  ancv: "chèques vacances", avoir: "avoir",
+};
 
 function jolieDate(d: string) {
   if (!/^\d{4}-\d{2}-\d{2}/.test(d)) return d || "—";
@@ -93,6 +99,9 @@ export default function InscriptionsImpayeesPage() {
     return <div className="p-6 font-body text-slate-600">Accès réservé aux administrateurs.</div>;
   }
 
+  const declares = (data?.impayes || []).filter(i => i.declaration);
+  const abandons = (data?.impayes || []).filter(i => !i.declaration);
+
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">
       <h1 className="font-display text-2xl font-bold text-slate-800">Inscriptions non payées</h1>
@@ -109,7 +118,9 @@ export default function InscriptionsImpayeesPage() {
         </button>
         {data && (
           <span className="font-body text-sm text-slate-500">
-            {data.nb} dossier{data.nb > 1 ? "s" : ""} · {data.montantTotal.toFixed(2)} € non encaissés
+            {abandons.length} abandon{abandons.length > 1 ? "s" : ""}
+            {declares.length > 0 && ` · ${declares.length} règlement${declares.length > 1 ? "s" : ""} déclaré${declares.length > 1 ? "s" : ""}`}
+            {" · "}{data.montantTotal.toFixed(2)} € non encaissés
           </span>
         )}
       </div>
@@ -124,14 +135,54 @@ export default function InscriptionsImpayeesPage() {
         </div>
       )}
 
-      {data && data.nb === 0 && (
+      {data && abandons.length === 0 && declares.length === 0 && (
         <div className="mt-5 p-4 rounded-xl bg-emerald-50 border border-emerald-200 font-body text-emerald-800 flex items-center gap-2">
           <CheckCircle2 size={18} /> Aucune place occupée sans paiement.
         </div>
       )}
 
-      <div className="mt-4 space-y-3">
-        {data?.impayes.map(imp => (
+      {/* Déclarations en attente : dossiers à encaisser, pas à libérer */}
+      {declares.length > 0 && (
+        <div className="mt-5">
+          <h2 className="font-display text-lg font-bold text-slate-800">
+            Règlements déclarés, en attente de réception
+          </h2>
+          <p className="font-body text-xs text-slate-500 mt-0.5">
+            Ces familles se sont engagées à régler sur place. Leur place est ferme —
+            confirmez la réception dans Paiements › Déclarations.
+          </p>
+          <div className="mt-3 space-y-2">
+            {declares.map(imp => (
+              <div key={imp.paymentId} className="rounded-xl border border-sky-200 bg-sky-50/60 p-3">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <span className="font-body font-semibold text-slate-800">
+                    {imp.familyName || "—"}
+                  </span>
+                  <span className="font-body text-sm text-slate-600">{imp.enfants.join(", ")}</span>
+                  <span className="font-body text-xs px-2 py-0.5 rounded-full bg-sky-200 text-sky-900 font-semibold">
+                    {LIBELLE_MODE[imp.declaration!.mode] || imp.declaration!.mode || "règlement différé"}
+                  </span>
+                  <span className="ml-auto font-body text-sm font-bold text-sky-900">
+                    {imp.totalTTC.toFixed(2)} €
+                  </span>
+                </div>
+                <div className="mt-1 font-body text-xs text-slate-500">
+                  déclaré le {imp.declaration!.declareLe ? jolieDate(imp.declaration!.declareLe) : "—"}
+                  {" · "}{imp.activites.join(", ")}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {abandons.length > 0 && (
+        <h2 className="mt-6 font-display text-lg font-bold text-slate-800">
+          Paiements abandonnés
+        </h2>
+      )}
+      <div className="mt-3 space-y-3">
+        {abandons.map(imp => (
           <div key={imp.paymentId} className="rounded-xl border border-amber-300 bg-amber-50/50 p-4">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span className="font-display font-bold text-slate-800">
@@ -182,7 +233,7 @@ export default function InscriptionsImpayeesPage() {
         ))}
       </div>
 
-      {data && data.nb > 0 && (
+      {abandons.length > 0 && (
         <div className="mt-5 p-3 rounded-lg bg-slate-50 border border-slate-200 font-body text-xs text-slate-600 flex items-start gap-2">
           <AlertTriangle size={14} className="mt-0.5 flex-shrink-0 text-slate-400" />
           <span>

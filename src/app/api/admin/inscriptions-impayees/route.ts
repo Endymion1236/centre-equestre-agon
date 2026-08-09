@@ -59,6 +59,23 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Déclarations en attente de réception (chèque, espèces, virement).
+  // Ce ne sont PAS des abandons : la famille s'est engagée et apporte son
+  // règlement. Elles doivent être visibles, mais jamais libérables d'un clic.
+  const declParPaiement = new Map<string, any>();
+  try {
+    const declSnap = await adminDb
+      .collection("payment_declarations")
+      .where("status", "==", "pending_confirmation")
+      .get();
+    for (const d of declSnap.docs) {
+      const dd = d.data() as any;
+      if (dd.paymentId) declParPaiement.set(dd.paymentId, dd);
+    }
+  } catch (e) {
+    console.error("[impayes] lecture des déclarations impossible", e);
+  }
+
   const paySnap = await adminDb.collection("payments").get();
   const impayes: any[] = [];
 
@@ -84,7 +101,16 @@ export async function GET(req: NextRequest) {
     if (places.length === 0) continue; // plus aucune place occupée → rien à récupérer
 
     places.sort((a, b) => a.date.localeCompare(b.date));
+    const decl = declParPaiement.get(d.id);
     impayes.push({
+      /** Déclaration de règlement différé en attente : dossier à encaisser,
+       *  surtout pas une place à récupérer. */
+      declaration: decl
+        ? {
+            mode: decl.mode || p.paymentMode || "",
+            declareLe: decl.createdAt?.toDate?.()?.toISOString?.() || null,
+          }
+        : null,
       paymentId: d.id,
       familyId: p.familyId || "",
       familyName: p.familyName || "",
@@ -125,6 +151,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Paiement introuvable" }, { status: 404 });
   }
   const p = paySnap.data() as any;
+
+  // Garde-fou : une déclaration de règlement en attente n'est pas un abandon.
+  // Le refus vit ici et pas seulement dans l'affichage : la route est
+  // appelable directement.
+  const declEnCours = await adminDb
+    .collection("payment_declarations")
+    .where("paymentId", "==", paymentId)
+    .where("status", "==", "pending_confirmation")
+    .get();
+  if (!declEnCours.empty) {
+    return NextResponse.json(
+      {
+        error:
+          "Cette famille a déclaré un règlement en attente de réception. " +
+          "Traitez-le dans Paiements › Déclarations plutôt que de libérer la place.",
+      },
+      { status: 409 }
+    );
+  }
 
   // Garde-fou : on ne libère jamais une place réglée, même partiellement.
   if ((p.paidAmount || 0) > 0) {
