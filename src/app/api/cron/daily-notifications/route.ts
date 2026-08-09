@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
   }
 
   const results = {
+    declarationsAnciennes: { nb: 0, emailSent: 0 },
     monitorRecap: { pushSent: 0, emailsSent: 0, blocked: 0, monitors: [] as string[] },
     familyReminders: { pushSent: 0, emailsSent: 0, errors: 0, blocked: 0, families: 0 },
     soldeStagej7: { emailsSent: 0, errors: 0, blocked: 0 },
@@ -589,6 +590,67 @@ export async function GET(req: NextRequest) {
           await flagRef.set({ sentAt: new Date().toISOString(), families: famSeason.size, emailsSent: results.saisonRappel.emailsSent });
         }
       }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Déclarations de règlement qui traînent
+    // Un chèque annoncé mais jamais apporté laisse une place occupée et une
+    // somme non encaissée, sans que rien ne le signale. Alerte interne au-delà
+    // de 15 jours : c'est une décision commerciale, pas une relance à envoyer
+    // automatiquement à la famille.
+    // ─────────────────────────────────────────────────────────────────────
+    const SEUIL_JOURS = 15;
+    try {
+      const limite = new Date(Date.now() - SEUIL_JOURS * 86400_000);
+      const declSnap = await adminDb
+        .collection("payment_declarations")
+        .where("status", "==", "pending_confirmation")
+        .get();
+
+      const anciennes = declSnap.docs
+        .map(d => ({ id: d.id, ...(d.data() as any) }))
+        .filter(d => {
+          const cree = d.createdAt?.toDate?.();
+          return cree instanceof Date && cree < limite;
+        })
+        .sort((a, b) => (a.createdAt?.toDate?.()?.getTime() || 0) - (b.createdAt?.toDate?.()?.getTime() || 0));
+
+      results.declarationsAnciennes.nb = anciennes.length;
+
+      if (anciennes.length > 0 && resendKey) {
+        const dest = process.env.RESEND_BCC_EMAIL || "ceagon50@gmail.com";
+        const lignes = anciennes.map(d => {
+          const cree = d.createdAt?.toDate?.();
+          const jours = cree ? Math.floor((Date.now() - cree.getTime()) / 86400_000) : "?";
+          const mode = { cheque: "chèque", especes: "espèces", virement: "virement" }[d.mode as string] || d.mode || "règlement";
+          return `<div style="padding:10px 12px;border-left:3px solid #f59e0b;background:#fffbeb;margin-bottom:8px;">
+            <strong>${d.familyName || "—"}</strong> — ${Number(d.montant || 0).toFixed(2)} € par ${mode}
+            <p style="margin:4px 0 0;color:#555;font-size:13px;">${d.activityTitle || ""}</p>
+            <p style="margin:2px 0 0;color:#92400e;font-size:12px;">déclaré il y a ${jours} jour(s)${d.familyEmail ? ` · ${d.familyEmail}` : ""}</p>
+          </div>`;
+        }).join("");
+        const subject = `⏳ ${anciennes.length} règlement(s) déclaré(s) depuis plus de ${SEUIL_JOURS} jours`;
+        const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+          <p>Ces familles ont annoncé un règlement qui n'a toujours pas été confirmé. Leur place reste réservée et la somme n'est pas encaissée.</p>
+          ${lignes}
+          <p style="color:#888;font-size:12px;margin-top:16px;">À traiter dans Paiements › Déclarations, ou à libérer depuis Inscriptions non payées si la réservation est caduque.</p>
+        </div>`;
+        try {
+          const res = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ from: fromEmail, to: dest, subject, html }),
+          });
+          if (res.ok) {
+            results.declarationsAnciennes.emailSent = 1;
+            console.log(`  ✅ Alerte déclarations anciennes → ${dest} (${anciennes.length})`);
+          }
+        } catch (e) {
+          console.error("  ❌ Alerte déclarations anciennes:", e);
+        }
+      }
+    } catch (e) {
+      console.error("Déclarations anciennes:", e);
     }
 
     console.log("\n✅ Cron daily-notifications terminé");
