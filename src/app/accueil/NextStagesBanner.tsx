@@ -6,6 +6,7 @@ import { Baby, Award, Medal, Crown, GraduationCap, type LucideIcon } from "lucid
 import { toParisDateString } from "@/lib/date-local";
 import { addCalendarDays } from "@/lib/public-planning";
 import { getNextStagesGrouped, formatDateRange, type NextStagesResult } from "@/lib/next-stages";
+import { chargerPlanningPublic, jourPlanning } from "@/lib/public-planning-client";
 
 // Mapping heuristique d'un titre de stage vers une icône / couleur.
 // Indépendant de la casse, on cherche des mots-clés.
@@ -26,13 +27,9 @@ export function NextStagesBanner() {
     let cancelled = false;
     (async () => {
       try {
-        const todayStr = toParisDateString();
-        const end = addCalendarDays(todayStr, 180);
-        const response = await fetch(`/api/public/planning?start=${todayStr}&end=${end}`, { cache: "no-store" });
-        if (!response.ok) throw new Error(`Planning public indisponible (${response.status})`);
-        const payload = await response.json();
+        const todayStr = jourPlanning();
+        const creneaux = await chargerPlanningPublic();
         if (cancelled) return;
-        const creneaux = Array.isArray(payload.slots) ? payload.slots : [];
         const result = getNextStagesGrouped(creneaux, todayStr);
         setData(result);
       } catch (e) {

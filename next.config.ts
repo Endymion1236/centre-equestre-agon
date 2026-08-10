@@ -2,6 +2,21 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
+  // ─── Redirections ──────────────────────────────────────────────────
+  // Quatre outils internes vivaient à la racine du site, hors /admin, avec
+  // en prime une copie conforme imbriquée (/pedagogie/pedagogie…). Aucun
+  // lien de l'application n'y menait, et une version plus complète existait
+  // déjà sous /admin. Supprimés, mais redirigés : un favori ou un lien
+  // partagé en interne continue de fonctionner.
+  async redirects() {
+    return [
+      { source: "/pedagogie/:path*", destination: "/admin/pedagogie", permanent: true },
+      { source: "/passage/:path*", destination: "/admin/passage", permanent: true },
+      { source: "/bons-recup/:path*", destination: "/admin/bons-recup", permanent: true },
+      { source: "/email-reprise/:path*", destination: "/admin/email-reprise", permanent: true },
+    ];
+  },
+
   // ─── Images ────────────────────────────────────────────────────────
   images: {
     remotePatterns: [

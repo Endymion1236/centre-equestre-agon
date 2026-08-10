@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { addCalendarDays, type PublicPlanningSlot } from "@/lib/public-planning";
 import { CalendarDays } from "lucide-react";
+import { chargerPlanningPublic } from "@/lib/public-planning-client";
 
 type PublicSlot = PublicPlanningSlot;
 
@@ -29,12 +30,10 @@ export default function LiveHeroStatus() {
 
     const load = async () => {
       try {
-        const start = localDateString();
-        const end = addCalendarDays(start, 180);
-        const response = await fetch(`/api/public/planning?start=${start}&end=${end}`, { cache: "no-store" });
-        if (!response.ok) throw new Error(`Planning public indisponible (${response.status})`);
-        const payload = await response.json();
-        const next = ((Array.isArray(payload.slots) ? payload.slots : []) as PublicSlot[])
+        // Requête mutualisée avec le bandeau des prochains stages : les deux
+        // composants demandaient exactement la même période, chacun de son côté.
+        const slots = await chargerPlanningPublic();
+        const next = (slots as unknown as PublicSlot[])
           .find((item) => {
             const capacity = Number(item.maxPlaces || 0);
             return capacity === 0 || item.enrolledCount < capacity;
