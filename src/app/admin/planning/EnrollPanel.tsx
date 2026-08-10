@@ -2917,8 +2917,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 </div>
               </div>
             )}
-            {fam && available.length > 0 && !isStage && (
+            {fam && !isStage && (
               <div>
+                {available.length === 0 && (
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 mb-2 font-body text-xs text-amber-800">
+                    Tous les cavaliers de cette famille sont déjà inscrits sur ce créneau
+                    ou occupés au même horaire. Vous pouvez en ajouter un nouveau.
+                  </div>
+                )}
                 {available.length > 1 && (
                   <div className="font-body text-xs font-semibold text-slate-500 mb-2">
                     {inscriptionMode === "annuel"
