@@ -746,7 +746,16 @@ export default function SatisfactionPage() {
                 <div key={a.id} className="bg-white border border-slate-200 rounded-2xl p-4">
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div>
-                      <div className="font-body font-semibold text-slate-900">{a.familyName || "Famille"}</div>
+                      {/* Le cavalier d'abord : c'est de lui qu'on parle. Le nom
+                          de famille reste affiché pour retrouver le dossier. */}
+                      <div className="font-body font-semibold text-slate-900">
+                        {a.childName?.trim()
+                          ? a.childName.trim().split(" ")[0]
+                          : (a.familyName || "Famille")}
+                        {a.childName?.trim() && a.familyName && (
+                          <span className="font-normal text-slate-400"> · {a.familyName}</span>
+                        )}
+                      </div>
                       <div className="font-body text-xs text-slate-400">
                         {a.stageLabel || a.activityTitle || "Général"}
                         {a.source === "annee" && " · bilan de saison"}
