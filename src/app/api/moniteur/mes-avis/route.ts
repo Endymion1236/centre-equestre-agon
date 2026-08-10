@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAuth } from "@/lib/api-auth";
+import { verifyAuth, isAdminToken } from "@/lib/api-auth";
 import { adminDb } from "@/lib/firebase-admin";
 
 export const dynamic = "force-dynamic";
@@ -52,13 +52,21 @@ export async function GET(req: NextRequest) {
       .limit(1)
       .get();
 
-    if (monSnap.empty) {
+    // Un admin n'a pas de fiche moniteur : il voit tout ce qui est partagé,
+    // ce qui lui permet de vérifier ce que reçoivent ses monitrices.
+    const estAdmin = isAdminToken(auth);
+
+    if (monSnap.empty && !estAdmin) {
       return NextResponse.json({ avis: [], moniteur: null });
     }
-    const mon = monSnap.docs[0].data() as any;
-    const monNom = `${mon.prenom || ""} ${mon.nom || ""}`.trim();
+
+    // Les fiches moniteurs portent le nom complet dans `name` — pas en
+    // `prenom` / `nom`. Les replis couvrent d'éventuelles fiches anciennes.
+    const mon = monSnap.empty ? null : (monSnap.docs[0].data() as any);
+    const monNom = mon
+      ? String(mon.name || `${mon.prenom || ""} ${mon.nom || ""}`).trim()
+      : "";
     const mesPrenoms = new Set(prenomsDe(monNom));
-    if (mon.prenom) mesPrenoms.add(norm(mon.prenom).split(" ")[0]);
 
     const avisSnap = await adminDb
       .collection("avis-satisfaction")
@@ -78,7 +86,7 @@ export async function GET(req: NextRequest) {
             if (typeof m.note === "number") maNote = m.note;
           }
         }
-        return { a, citee, maNote };
+        return { a, citee: citee || (estAdmin && !mon), maNote };
       })
       .filter(x => x.citee)
       .map(({ a, maNote }) => ({
@@ -101,7 +109,8 @@ export async function GET(req: NextRequest) {
       : null;
 
     return NextResponse.json({
-      moniteur: monNom,
+      moniteur: monNom || (estAdmin ? "Vue administrateur" : ""),
+      vueAdmin: estAdmin && !mon,
       moyenne,
       nbNotes: notees.length,
       avis,

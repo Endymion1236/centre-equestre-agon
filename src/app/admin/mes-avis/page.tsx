@@ -29,7 +29,7 @@ function Etoiles({ n, size = 15 }: { n: number; size?: number }) {
 export default function MesAvisPage() {
   const { user } = useAuth();
   const [data, setData] = useState<{
-    moniteur: string | null; moyenne: number | null; nbNotes: number; avis: Avis[];
+    moniteur: string | null; moyenne: number | null; nbNotes: number; avis: Avis[]; vueAdmin?: boolean;
   } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -63,6 +63,13 @@ export default function MesAvisPage() {
       <p className="font-body text-sm text-slate-600 mt-1">
         Les retours des familles sur les séances que tu as encadrées, partagés par Nicolas.
       </p>
+
+      {data?.vueAdmin && (
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 font-body text-sm text-slate-600">
+          Vue administrateur : tous les avis partagés sont listés ici. Une monitrice
+          ne verra que ceux qui la citent.
+        </div>
+      )}
 
       {data?.moyenne != null && (
         <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 flex flex-wrap items-center gap-3">
