@@ -60,20 +60,12 @@ export default function EquipePage() {
     let cancelled = false;
     const load = async () => {
       try {
-        const snapshot = await getDocs(query(collection(db, "equides"), where("featured", "==", true)));
+        // Lecture par l'API publique : la collection `equides` est réservée au
+        // staff par les règles Firestore, un visiteur anonyme n'y accède pas.
+        const res = await fetch("/api/public/poneys");
+        const data = await res.json();
         if (cancelled) return;
-        setFeaturedPoneys(snapshot.docs
-          .map((document) => ({ id: document.id, ...document.data() } as any))
-          .filter((horse) => horse.status === "actif" && typeof horse.photo === "string" && horse.photo.trim())
-          .map((horse) => ({
-            id: horse.id,
-            name: String(horse.surnom || horse.name || "").trim(),
-            type: horse.type === "shetland" ? "Shetland" : horse.type === "cheval" ? "Cheval" : horse.type === "ane" ? "Âne" : "Poney",
-            niveauCavalier: horse.niveauCavalier || "Tous niveaux",
-            publicDescription: horse.publicDescription || "",
-            photo: horse.photo,
-          }))
-          .sort((a, b) => a.name.localeCompare(b.name)));
+        setFeaturedPoneys(Array.isArray(data?.poneys) ? data.poneys : []);
       } catch (error) {
         console.error("Erreur chargement poneys vedettes :", error);
       } finally {

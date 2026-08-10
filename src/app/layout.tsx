@@ -3,7 +3,9 @@ import { Providers } from "@/components/Providers";
 import { SITE_CONFIG } from "@/lib/config";
 import "./globals.css";
 
-const socialImage = "/images/hero-equestre.png";
+// Image de partage aux dimensions annoncées (1200x630). L'ancienne était
+// verticale (940x1672) : Facebook, WhatsApp et LinkedIn la recadraient.
+const socialImage = "/images/og-image.jpg";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_CONFIG.url),

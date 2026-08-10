@@ -10,6 +10,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/tarifs", priority: 0.85, frequency: "monthly" },
     { path: "/offrir-un-bon", priority: 0.8, frequency: "monthly" },
     { path: "/equipe", priority: 0.75, frequency: "monthly" },
+    { path: "/installations", priority: 0.7, frequency: "monthly" },
     { path: "/mini-ferme", priority: 0.7, frequency: "monthly" },
     { path: "/galerie", priority: 0.65, frequency: "weekly" },
     { path: "/contact", priority: 0.8, frequency: "monthly" },
@@ -20,14 +21,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   const pages: MetadataRoute.Sitemap = staticPages.map((page) => ({
     url: `${SITE_CONFIG.url}${page.path}`,
-    lastModified: new Date(),
+    // Pas de lastModified : le renseigner avec la date du jour reviendrait à
+    // annoncer à Google que tout le site change à chaque génération, ce qui
+    // dévalue le signal au lieu de l'aider.
     changeFrequency: page.frequency,
     priority: page.priority,
   }));
 
   const activities: MetadataRoute.Sitemap = PUBLIC_ACTIVITIES.map((activity) => ({
     url: `${SITE_CONFIG.url}/activites/${activity.id}`,
-    lastModified: new Date(),
     changeFrequency: "monthly",
     priority: activity.featured ? 0.85 : 0.72,
   }));

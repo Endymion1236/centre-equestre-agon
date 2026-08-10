@@ -161,7 +161,7 @@ Si la famille parle d'inscription, de réservation, de paiement, ou confirme vou
 { "text": "Pour vous inscrire, utilisez le bouton ci-dessous — c'est rapide et sécurisé !", "action": { "label": "Réserver maintenant", "href": "/espace-cavalier/reserver" } }
 
 Si elle demande à voir son profil ou ses informations : href = "/espace-cavalier/profil"
-Si elle veut voir ses paiements : href = "/espace-cavalier/paiements"
+Si elle veut voir ses paiements : href = "/espace-cavalier/factures"
 
 Réponds toujours chaleureusement, en français. La réponse "text" sera lue à voix haute — pas de listes ni markdown.
 Données disponibles :
