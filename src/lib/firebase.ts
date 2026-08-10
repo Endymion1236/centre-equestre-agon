@@ -7,7 +7,6 @@ import {
   type Firestore,
 } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
-import { getMessaging, isSupported } from "firebase/messaging";
 
 // Config Firebase. Les valeurs viennent des variables d'env si presentes,
 // sinon fallback sur les valeurs de PROD (gestion-2026). Cela permet :
@@ -77,6 +76,10 @@ if (typeof window !== "undefined") {
 
 // Messaging (push notifications) — uniquement côté client
 export const getMessagingInstance = async () => {
+  // Chargé à la demande : firebase/messaging ne concerne que les personnes
+  // qui activent les notifications, il n'a rien à faire dans le bundle servi
+  // à un visiteur du site public.
+  const { getMessaging, isSupported } = await import("firebase/messaging");
   const supported = await isSupported();
   if (!supported) return null;
   return getMessaging(app);

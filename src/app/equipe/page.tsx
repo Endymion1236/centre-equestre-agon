@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui";
 import { EditableImage } from "@/components/ui/EditableImage";
 import type { VitrineImageKey } from "@/hooks/useVitrineImages";
 import { Award, Heart, Loader2, Sparkles, Users, Waves } from "lucide-react";
+import Image from "next/image";
 
 const team: Array<{
   name: string;
@@ -155,7 +156,7 @@ export default function EquipePage() {
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {featuredPoneys.map((poney) => (
                   <article key={poney.id} className="group overflow-hidden rounded-[24px] border border-blue-500/[0.08] bg-white shadow-[0_12px_38px_rgba(12,26,46,0.045)] transition-all hover:-translate-y-1 hover:shadow-[0_22px_52px_rgba(12,26,46,0.1)]">
-                    <div className="aspect-[4/3] overflow-hidden bg-blue-50"><img src={poney.photo} alt={poney.name} className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" loading="lazy" /></div>
+                    <div className="relative aspect-[4/3] overflow-hidden bg-blue-50"><Image src={poney.photo} alt={poney.name} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover transition-transform duration-700 group-hover:scale-105" /></div>
                     <div className="p-5"><div className="flex flex-wrap items-center gap-2"><h3 className="font-display text-xl font-bold text-blue-950">{poney.name}</h3><Badge color="gray">{poney.type}</Badge><Badge color={levelColors[poney.niveauCavalier] || "blue"}>{poney.niveauCavalier}</Badge></div>{poney.publicDescription && <p className="mt-3 font-body text-sm leading-relaxed text-slate-500">{poney.publicDescription}</p>}</div>
                   </article>
                 ))}

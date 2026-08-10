@@ -5,6 +5,7 @@ import { ArrowDown, ArrowRight, CalendarDays, Phone, ShieldCheck, Sparkles } fro
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { ActivitiesContent } from "./content";
+import Image from "next/image";
 
 export const metadata: Metadata = {
   title: "Activités équestres",
@@ -88,7 +89,7 @@ export default function ActivitesPage() {
         <div className="mx-auto grid max-w-[1180px] gap-4 md:grid-cols-3">
           {universes.map((universe) => (
             <Link key={universe.title} href={universe.href} className={`group relative min-h-[275px] overflow-hidden rounded-[26px] border bg-white no-underline shadow-[0_18px_55px_rgba(12,26,46,0.1)] transition-all duration-500 hover:-translate-y-1.5 hover:shadow-[0_28px_65px_rgba(12,26,46,0.16)] ${universe.border}`}>
-              <img src={universe.image} alt="" aria-hidden="true" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.025]" />
+              <Image src={universe.image} alt="" aria-hidden="true" fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover transition-transform duration-700 group-hover:scale-[1.025]" />
               <div className={`absolute inset-0 bg-gradient-to-r ${universe.wash}`} />
               <div className="relative z-10 flex min-h-[275px] max-w-[68%] flex-col justify-end p-6">
                 <div className={`font-body text-[10px] font-bold uppercase tracking-[0.16em] ${universe.accent}`}>{universe.eyebrow}</div>

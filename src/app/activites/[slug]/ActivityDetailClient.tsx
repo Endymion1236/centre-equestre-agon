@@ -13,6 +13,7 @@ import {
   type PublicActivity,
 } from "@/lib/public-activities";
 import { ArrowLeft, ArrowRight, CalendarDays, Check, Clock, Gift, Info, ShieldCheck } from "lucide-react";
+import Image from "next/image";
 
 function textValue(value: unknown, fallback: string) {
   return typeof value === "string" && value.trim() ? value : fallback;
@@ -69,7 +70,7 @@ export default function ActivityDetailClient({ activity }: { activity: PublicAct
 
           <div className="relative min-h-[420px] overflow-hidden lg:min-h-full">
             {display.image ? (
-              <img src={display.image} alt={display.title} className="absolute inset-0 h-full w-full object-cover" />
+              <Image src={display.image} alt={display.title} fill priority sizes="(max-width: 768px) 100vw, 60vw" className="object-cover" />
             ) : (
               <EditableImage
                 imageKey={display.imageKey}
