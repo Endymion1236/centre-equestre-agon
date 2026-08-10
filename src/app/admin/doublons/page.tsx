@@ -173,6 +173,22 @@ export default function DoublonsPage() {
             {preview && (
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-3 font-body text-xs text-slate-600">
                 <div className="font-semibold text-slate-700 mb-1">Ce qui sera déplacé vers « {preview.keep.name} » :</div>
+                {(preview.enfantsConserves?.length > 0 || preview.enfantsDeplaces?.length > 0) && (
+                  <div className="mb-2 rounded-lg bg-white border border-slate-200 p-2">
+                    <div className="text-[11px] text-slate-500 mb-1">
+                      Après fusion, la famille comptera {(preview.enfantsConserves?.length || 0) + (preview.enfantsDeplaces?.length || 0)} cavalier(s) :
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {(preview.enfantsConserves || []).map((n: string) => (
+                        <span key={`k-${n}`} className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px]">{n}</span>
+                      ))}
+                      {(preview.enfantsDeplaces || []).map((n: string) => (
+                        <span key={`m-${n}`} className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px]">{n} (rapatrié)</span>
+                      ))}
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-1">Aucun cavalier n&apos;est supprimé : les deux listes sont réunies.</div>
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-x-4 gap-y-0.5">
                   <span>{preview.enfantsAjoutes} enfant(s)</span>
                   {Object.entries(preview.reassign).map(([k, v]: any) => v > 0 && <span key={k}>{v} {k}</span>)}

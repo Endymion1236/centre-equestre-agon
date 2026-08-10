@@ -77,9 +77,14 @@ export async function POST(req: NextRequest) {
       creneauOps.push({ ref: d.ref, data: { enrolled: newEnrolled } });
     });
 
+    // On NOMME les cavaliers de part et d'autre : annoncer « 2 enfant(s) »
+    // avant un geste irréversible n'a jamais rassuré personne.
+    const nomEnfant = (c: any) => `${c.firstName || ""} ${c.lastName || ""}`.trim() || c.name || "sans nom";
     const apercu = {
       keep: { id: keepId, name: keep.parentName, email: keep.parentEmail },
       merge: { id: mergeId, name: merge.parentName, email: merge.parentEmail },
+      enfantsConserves: (keep.children || []).map(nomEnfant),
+      enfantsDeplaces: childrenToAdd.map(nomEnfant),
       enfantsAjoutes: childrenToAdd.length,
       reassign: counts,
       creneauxTouches,

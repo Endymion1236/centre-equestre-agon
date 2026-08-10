@@ -260,6 +260,77 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [addingChild, setAddingChild] = useState(false);
   const [childDraft, setChildDraft] = useState({ firstName: "", lastName: "", birthDate: "", galopLevel: "—" });
 
+  // Formulaire d'ajout d'un cavalier, partagé entre les créneaux ordinaires et
+  // les stages. Fonction et non sous-composant : un composant déclaré ici
+  // serait recréé à chaque rendu, et le champ perdrait le focus à chaque
+  // lettre tapée.
+  const renderAjoutCavalier = (fam: any) => (
+                  <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/60 p-3">
+                    <div className="font-body text-xs font-semibold text-blue-800 mb-2">
+                      Nouveau cavalier chez {fam.parentName}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input value={childDraft.firstName} autoFocus
+                        onChange={e => setChildDraft({ ...childDraft, firstName: e.target.value })}
+                        placeholder="Prénom *"
+                        className="px-3 py-2 rounded-lg border border-gray-200 font-body text-sm" />
+                      <input value={childDraft.lastName}
+                        onChange={e => setChildDraft({ ...childDraft, lastName: e.target.value })}
+                        placeholder="Nom"
+                        className="px-3 py-2 rounded-lg border border-gray-200 font-body text-sm" />
+                      <input type="date" value={childDraft.birthDate}
+                        onChange={e => setChildDraft({ ...childDraft, birthDate: e.target.value })}
+                        className="px-3 py-2 rounded-lg border border-gray-200 font-body text-sm" />
+                      <select value={childDraft.galopLevel}
+                        onChange={e => setChildDraft({ ...childDraft, galopLevel: e.target.value })}
+                        className="px-3 py-2 rounded-lg border border-gray-200 font-body text-sm">
+                        {["—","Galop 1","Galop 2","Galop 3","Galop 4","Galop 5","Galop 6","Galop 7"].map(g => <option key={g} value={g}>{g}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      <button disabled={addingChild || !childDraft.firstName.trim()}
+                        onClick={async () => {
+                          setAddingChild(true);
+                          try {
+                            const nouveau = {
+                              id: `child_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                              firstName: childDraft.firstName.trim(),
+                              lastName: (childDraft.lastName || "").trim(),
+                              birthDate: childDraft.birthDate ? new Date(childDraft.birthDate) : null,
+                              galopLevel: childDraft.galopLevel || "—",
+                              sanitaryForm: null,
+                            };
+                            const liste = [...(fam.children || []), nouveau];
+                            await updateDoc(doc(db, "families", fam.firestoreId), {
+                              children: liste, updatedAt: serverTimestamp(),
+                            });
+                            // Le cavalier apparaît immédiatement dans la liste,
+                            // sans recharger tout le planning.
+                            setChildOverrides(prev => ({ ...prev, [fam.firestoreId]: liste }));
+                            // Et il est présélectionné : c'est bien pour l'inscrire
+                            // qu'on vient de le créer.
+                            setSelectedChildren(inscriptionMode === "annuel" ? [nouveau.id] : [...selectedChildren, nouveau.id]);
+                            if (!selChild) setSelChild(nouveau.id);
+                            setShowAddChild(false);
+                            panelToast(`${nouveau.firstName} ajouté(e) à la famille`, "success");
+                          } catch (e: any) {
+                            panelToast(`Échec : ${e?.message || e}`, "error");
+                          }
+                          setAddingChild(false);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-body text-xs font-semibold border-none cursor-pointer disabled:opacity-50">
+                        {addingChild ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                        Ajouter
+                      </button>
+                      <button onClick={() => setShowAddChild(false)}
+                        className="px-3 py-2 rounded-lg bg-white border border-gray-200 font-body text-xs cursor-pointer">
+                        Annuler
+                      </button>
+                    </div>
+                  </div>
+  );
+
+
   // Plan de séance
   const [planUploading, setPlanUploading] = useState(false);
   const [lightbox, setLightbox] = useState(false);
@@ -2975,71 +3046,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   </button>
                 </div>
 
-                {showAddChild && (
-                  <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/60 p-3">
-                    <div className="font-body text-xs font-semibold text-blue-800 mb-2">
-                      Nouveau cavalier chez {fam.parentName}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input value={childDraft.firstName} autoFocus
-                        onChange={e => setChildDraft({ ...childDraft, firstName: e.target.value })}
-                        placeholder="Prénom *"
-                        className="px-3 py-2 rounded-lg border border-gray-200 font-body text-sm" />
-                      <input value={childDraft.lastName}
-                        onChange={e => setChildDraft({ ...childDraft, lastName: e.target.value })}
-                        placeholder="Nom"
-                        className="px-3 py-2 rounded-lg border border-gray-200 font-body text-sm" />
-                      <input type="date" value={childDraft.birthDate}
-                        onChange={e => setChildDraft({ ...childDraft, birthDate: e.target.value })}
-                        className="px-3 py-2 rounded-lg border border-gray-200 font-body text-sm" />
-                      <select value={childDraft.galopLevel}
-                        onChange={e => setChildDraft({ ...childDraft, galopLevel: e.target.value })}
-                        className="px-3 py-2 rounded-lg border border-gray-200 font-body text-sm">
-                        {["—","Galop 1","Galop 2","Galop 3","Galop 4","Galop 5","Galop 6","Galop 7"].map(g => <option key={g} value={g}>{g}</option>)}
-                      </select>
-                    </div>
-                    <div className="flex gap-2 mt-2">
-                      <button disabled={addingChild || !childDraft.firstName.trim()}
-                        onClick={async () => {
-                          setAddingChild(true);
-                          try {
-                            const nouveau = {
-                              id: `child_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-                              firstName: childDraft.firstName.trim(),
-                              lastName: (childDraft.lastName || "").trim(),
-                              birthDate: childDraft.birthDate ? new Date(childDraft.birthDate) : null,
-                              galopLevel: childDraft.galopLevel || "—",
-                              sanitaryForm: null,
-                            };
-                            const liste = [...(fam.children || []), nouveau];
-                            await updateDoc(doc(db, "families", fam.firestoreId), {
-                              children: liste, updatedAt: serverTimestamp(),
-                            });
-                            // Le cavalier apparaît immédiatement dans la liste,
-                            // sans recharger tout le planning.
-                            setChildOverrides(prev => ({ ...prev, [fam.firestoreId]: liste }));
-                            // Et il est présélectionné : c'est bien pour l'inscrire
-                            // qu'on vient de le créer.
-                            setSelectedChildren(inscriptionMode === "annuel" ? [nouveau.id] : [...selectedChildren, nouveau.id]);
-                            if (!selChild) setSelChild(nouveau.id);
-                            setShowAddChild(false);
-                            panelToast(`${nouveau.firstName} ajouté(e) à la famille`, "success");
-                          } catch (e: any) {
-                            panelToast(`Échec : ${e?.message || e}`, "error");
-                          }
-                          setAddingChild(false);
-                        }}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-body text-xs font-semibold border-none cursor-pointer disabled:opacity-50">
-                        {addingChild ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                        Ajouter
-                      </button>
-                      <button onClick={() => setShowAddChild(false)}
-                        className="px-3 py-2 rounded-lg bg-white border border-gray-200 font-body text-xs cursor-pointer">
-                        Annuler
-                      </button>
-                    </div>
-                  </div>
-                )}
+                {showAddChild && renderAjoutCavalier(fam)}
               </div>
             )}
 
@@ -3077,9 +3084,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             )}
 
             {/* Stage : sélection multiple d'enfants */}
-            {fam && available.length > 0 && isStage && (
+            {fam && isStage && (
               <div>
                 <div className="font-body text-xs font-semibold text-slate-500 mb-2">Sélectionner les enfants (multi-sélection)</div>
+                {available.length === 0 && (
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 mb-2 font-body text-xs text-amber-800">
+                    Tous les cavaliers de cette famille sont déjà inscrits sur ce stage
+                    ou occupés au même horaire. Vous pouvez en ajouter un nouveau.
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-2 mb-3">
                   {available.map((c: any) => {
                     const sel = selectedChildren.includes(c.id);
@@ -3090,7 +3103,12 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       </button>
                     );
                   })}
+                  <button onClick={() => { setChildDraft({ firstName: "", lastName: fam.children?.[0]?.lastName || "", birthDate: "", galopLevel: "—" }); setShowAddChild(v => !v); }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-green-400 bg-green-50 text-green-700 font-body text-sm cursor-pointer hover:bg-green-100">
+                    <Plus size={12}/> Ajouter un cavalier
+                  </button>
                 </div>
+                {showAddChild && renderAjoutCavalier(fam)}
 
                 {/* Récap stage */}
                 {selectedChildren.length > 0 && (() => {
