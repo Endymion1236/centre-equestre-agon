@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error("invoice/next-number error:", error);
     return NextResponse.json(
-      { error: error.message || "Erreur interne" },
+      { error: "Erreur interne" },
       { status: 500 }
     );
   }

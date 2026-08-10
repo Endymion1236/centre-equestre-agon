@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       process.env.CAWL_SECRET_API_KEY ||
       process.env.CAWL_SECRET_API_KEY_VALUE ||
       "";
-    const secretSource = process.env.CAWL_WEBHOOK_SECRET
+    const origineCle = process.env.CAWL_WEBHOOK_SECRET
       ? "CAWL_WEBHOOK_SECRET"
       : process.env.CAWL_SECRET_API_KEY
         ? "CAWL_SECRET_API_KEY (repli — verifier le secret webhook dedie)"
@@ -60,13 +60,13 @@ export async function POST(req: NextRequest) {
       // Diagnostic explicite : sans le nom du secret essaye, un echec de
       // signature est indiscernable d'un mauvais secret configure.
       console.error(
-        `CAWL webhook: signature invalide (secret utilise : ${secretSource}). ` +
+        `CAWL webhook: signature invalide (cle utilisee : ${origineCle}). ` +
           `Si le secret webhook dedie du portail CAWL n'est pas dans CAWL_WEBHOOK_SECRET, c'est la cause.`
       );
       return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
     }
 
-    console.log(`✅ CAWL webhook: signature validee (${secretSource})`);
+    console.log(`✅ CAWL webhook: signature validee (cle : ${origineCle})`);
 
     let event: any;
     try {

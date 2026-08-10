@@ -113,7 +113,7 @@ Règles :
     const subject = `Merci pour votre avis${avis.stageLabel ? ` — ${avis.stageLabel}` : ""}`;
     const { error } = await resend.emails.send({ from: FROM_EMAIL, replyTo: REPLY_TO, to: email, bcc: BCC_SUIVI, subject, text: message });
     if (error) {
-      return NextResponse.json({ error: `Resend : ${error.message || "échec"}`, status: "sendError" }, { status: 502 });
+      return NextResponse.json({ error: "L'envoi de l'email a échoué", status: "sendError" }, { status: 502 });
     }
 
     // Traçabilité sur l'avis (empêche la double réponse).

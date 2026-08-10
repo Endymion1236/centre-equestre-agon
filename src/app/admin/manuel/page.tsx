@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Card, Badge } from "@/components/ui";
 import { MANUAL, type ManualChapter, type ManualSection } from "@/lib/manual-content";
 import { startTour, isTourNew } from "@/lib/manual-tours";
+import DOMPurify from "isomorphic-dompurify";
 import {
   Sparkles, Users, Calendar, CreditCard, Heart, ClipboardList, BookOpen,
   Mail, Lightbulb, Search, ExternalLink, Play, ChevronRight, BookMarked,
@@ -169,9 +170,13 @@ function SectionView({ section, chapterId }: { section: ManualSection; chapterId
         </div>
       </div>
 
+      {/* Le manuel est aujourd'hui du contenu statique écrit dans le dépôt, donc
+          sûr par construction. On l'assainit malgré tout : le jour où ces textes
+          deviendront modifiables depuis l'admin — trajectoire probable — la
+          protection sera déjà en place, et personne n'aura à y repenser. */}
       <div
         className="font-body text-sm text-slate-700 leading-relaxed manual-content"
-        dangerouslySetInnerHTML={{ __html: section.text }}
+        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(section.text) }}
       />
 
       {section.screenshot && (

@@ -133,6 +133,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("[cron/recurrences-monthly] Erreur:", error);
-    return NextResponse.json({ error: error.message || "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

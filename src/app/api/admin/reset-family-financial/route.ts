@@ -238,6 +238,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("[reset-family-financial] Erreur:", error);
-    return NextResponse.json({ error: error.message || "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

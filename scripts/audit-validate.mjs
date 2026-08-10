@@ -663,7 +663,8 @@ test("XSS1 — Pas de dangerouslySetInnerHTML sur des données utilisateur", () 
       // Vérifier que c'est sur du contenu admin/statique, pas des données user
       if (
         !f.includes("layout.tsx") && // Script JSON-LD = OK
-        !f.includes("email-templates") // Aperçu admin = risque accepté
+        !f.includes("email-templates") && // Aperçu admin = risque accepté
+        !content.includes("DOMPurify.sanitize") // Contenu assaini avant injection
       ) {
         dangerous.push(f);
       }

@@ -208,6 +208,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("livret-pdf:", error);
-    return NextResponse.json({ error: error.message || "Erreur génération livret" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur génération livret" }, { status: 500 });
   }
 }
