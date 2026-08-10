@@ -14,6 +14,7 @@ const nextConfig: NextConfig = {
       { source: "/passage/:path*", destination: "/admin/passage", permanent: true },
       { source: "/bons-recup/:path*", destination: "/admin/bons-recup", permanent: true },
       { source: "/email-reprise/:path*", destination: "/admin/email-reprise", permanent: true },
+      { source: "/modeles/:path*", destination: "/admin/modeles", permanent: true },
     ];
   },
 

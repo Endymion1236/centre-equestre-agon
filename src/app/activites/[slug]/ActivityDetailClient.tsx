@@ -31,6 +31,18 @@ export default function ActivityDetailClient({ activity }: { activity: PublicAct
     .filter((item) => item.category === activity.category && item.id !== activity.id)
     .slice(0, 3);
 
+  // Correspondance entre la catégorie d'une fiche et le filtre du planning.
+  const TYPE_PLANNING: Record<string, string> = {
+    stages: "stage", balades: "balade", cours: "cours",
+  };
+  const lienPlanning = (() => {
+    const params = new URLSearchParams();
+    const type = TYPE_PLANNING[display.category];
+    if (type) params.set("type", type);
+    params.set("q", display.title);
+    return `/planning?${params.toString()}`;
+  })();
+
   return (
     <main className="bg-cream">
       <section className="relative overflow-hidden bg-blue-950 pt-24 text-white">
@@ -60,8 +72,12 @@ export default function ActivityDetailClient({ activity }: { activity: PublicAct
               </div>
             </div>
 
+            {/* « Voir les disponibilités » doit MONTRER les disponibilités,
+                pas demander de se connecter. On envoie vers le planning public
+                pré-filtré sur cette activité ; la connexion n'arrive qu'au
+                clic sur « Réserver », depuis le créneau choisi. */}
             <div className="mt-9 flex flex-wrap gap-3">
-              <Link href="/espace-cavalier/reserver" className="group inline-flex items-center gap-2 rounded-xl bg-gold-400 px-6 py-4 font-body text-sm font-bold text-blue-950 no-underline shadow-[0_12px_28px_rgba(240,160,16,0.2)] transition-transform hover:-translate-y-0.5">
+              <Link href={lienPlanning} className="group inline-flex items-center gap-2 rounded-xl bg-gold-400 px-6 py-4 font-body text-sm font-bold text-blue-950 no-underline shadow-[0_12px_28px_rgba(240,160,16,0.2)] transition-transform hover:-translate-y-0.5">
                 {display.bookingLabel || "Voir les disponibilités"} <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
               </Link>
               <Link href="/contact" className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/[0.06] px-6 py-4 font-body text-sm font-bold text-white no-underline hover:bg-white/10">Une question ?</Link>

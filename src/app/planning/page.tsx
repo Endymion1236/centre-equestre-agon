@@ -76,7 +76,20 @@ export default function PlanningPublic() {
   const [reloadKey, setReloadKey] = useState(0);
   const [weekOffset, setWeekOffset] = useState(0);
   const [filter, setFilter] = useState("all");
+  // Filtre par activité précise, transmis par les fiches activité :
+  // /planning?type=stage&q=Baby%20Poney. Sans lui, « Voir les
+  // disponibilités » depuis une fiche renvoyait vers tout le planning,
+  // à charge au visiteur de retrouver son activité.
+  const [activite, setActivite] = useState("");
   const didSelectInitialWeek = useRef(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const type = params.get("type");
+    const q = params.get("q");
+    if (type) setFilter(type);
+    if (q) setActivite(q);
+  }, []);
 
   const monday = useMemo(() => {
     const date = getMonday(new Date());
@@ -138,9 +151,23 @@ export default function PlanningPublic() {
   const types = useMemo(() => Array.from(new Set(slots.map((slot) => slot.activityType === "stage_journee" ? "stage" : slot.activityType))), [slots]);
 
   const filtered = useMemo(() => {
-    if (filter === "all") return slots;
-    return slots.filter((slot) => slot.activityType === filter || (filter === "stage" && slot.activityType === "stage_journee"));
-  }, [filter, slots]);
+    let liste = slots;
+    if (filter !== "all") {
+      liste = liste.filter((slot) => slot.activityType === filter || (filter === "stage" && slot.activityType === "stage_journee"));
+    }
+    if (activite) {
+      // Rapprochement souple : l'intitulé du créneau saisi dans l'admin ne
+      // reprend pas mot pour mot le titre de la fiche activité.
+      const mots = activite.toLowerCase().split(/\s+/).filter(m => m.length > 2);
+      if (mots.length > 0) {
+        liste = liste.filter((slot) => {
+          const titre = (slot.activityTitle || "").toLowerCase();
+          return mots.some((m) => titre.includes(m));
+        });
+      }
+    }
+    return liste;
+  }, [filter, slots, activite]);
 
   const byDay = useMemo(() => {
     const result: Record<string, Creneau[]> = {};
@@ -208,6 +235,12 @@ export default function PlanningPublic() {
 
               <div className="mt-5 flex items-center gap-2 overflow-x-auto border-t border-slate-100 pt-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-400"><Filter size={15} /></div>
+                {activite && (
+                  <button type="button" onClick={() => { setActivite(""); setFilter("all"); }}
+                    className="flex-shrink-0 rounded-full border border-blue-700 bg-blue-700 px-4 py-2 font-body text-xs font-bold text-white">
+                    {activite} ✕
+                  </button>
+                )}
                 <button type="button" onClick={() => setFilter("all")} className={`flex-shrink-0 rounded-full border px-4 py-2 font-body text-xs font-bold ${filter === "all" ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-500"}`}>Tout</button>
                 {types.map((type) => {
                   const info = TYPE_LABELS[type] || { label: type, color: "#475569", bg: "#f8fafc", border: "#e2e8f0" };
