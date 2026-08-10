@@ -11,7 +11,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/offrir-un-bon", priority: 0.8, frequency: "monthly" },
     { path: "/equipe", priority: 0.75, frequency: "monthly" },
     { path: "/installations", priority: 0.7, frequency: "monthly" },
-    { path: "/disponibilites", priority: 0.8, frequency: "daily" },
     { path: "/mini-ferme", priority: 0.7, frequency: "monthly" },
     { path: "/galerie", priority: 0.65, frequency: "weekly" },
     { path: "/contact", priority: 0.8, frequency: "monthly" },
