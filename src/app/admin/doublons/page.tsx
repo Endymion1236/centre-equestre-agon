@@ -44,6 +44,10 @@ export default function DoublonsPage() {
   const [preview, setPreview] = useState<any>(null);
   const [merging, setMerging] = useState(false);
   const [mergeErr, setMergeErr] = useState("");
+  // « Pas un doublon » est un clic facile à donner par erreur, et la paire
+  // disparaissait alors définitivement du scan. On garde de quoi revenir
+  // en arrière le temps de la session.
+  const [dernierIgnore, setDernierIgnore] = useState<{ pairId: string; label: string } | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -84,20 +88,47 @@ export default function DoublonsPage() {
     } catch (e: any) { setMergeErr(e?.message || String(e)); } finally { setMerging(false); }
   };
 
-  const ignorer = async (a: string, b: string) => {
+  const ignorer = async (a: string, b: string, label?: string) => {
     if (!user) return;
     const pairId = [a, b].sort().join("__");
     setPaires(prev => prev.filter(p => [p.a.id, p.b.id].sort().join("__") !== pairId));
+    setDernierIgnore({ pairId, label: label || "cette paire" });
     try {
       const token = await user.getIdToken(true);
       await fetch("/api/admin/doublons-ignore", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ pairId }) });
     } catch { /* la liste est déjà filtrée localement */ }
   };
 
+  /** Réintègre au scan une paire écartée par erreur. */
+  const annulerIgnore = async () => {
+    if (!user || !dernierIgnore) return;
+    try {
+      const token = await user.getIdToken(true);
+      await fetch("/api/admin/doublons-ignore", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ pairId: dernierIgnore.pairId, undo: true }),
+      });
+      setDernierIgnore(null);
+      await load();
+    } catch { /* rien */ }
+  };
+
   if (!isAdmin) return <div className="p-8"><h1 className="font-display text-2xl">Accès refusé</h1></div>;
 
   return (
     <div className="p-4 sm:p-6 max-w-3xl mx-auto">
+      {dernierIgnore && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5">
+          <span className="font-body text-sm text-slate-600">
+            « {dernierIgnore.label} » a été écartée des doublons.
+          </span>
+          <button onClick={annulerIgnore}
+            className="ml-auto px-3 py-1.5 rounded-lg bg-slate-800 text-white font-body text-xs font-semibold border-none cursor-pointer hover:bg-slate-700">
+            Annuler
+          </button>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-3 mb-5">
         <div>
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 mb-1 flex items-center gap-2">
@@ -134,7 +165,7 @@ export default function DoublonsPage() {
                 <FamCard f={p.b} />
               </div>
               <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-slate-100">
-                <button onClick={() => ignorer(p.a.id, p.b.id)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-body text-xs font-semibold text-slate-500 hover:bg-slate-50">
+                <button onClick={() => ignorer(p.a.id, p.b.id, `${p.a.parentName} / ${p.b.parentName}`)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-body text-xs font-semibold text-slate-500 hover:bg-slate-50">
                   <X size={12} /> Pas un doublon
                 </button>
                 <button onClick={() => openMerge(p)} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white font-body text-xs font-semibold hover:bg-blue-500">
