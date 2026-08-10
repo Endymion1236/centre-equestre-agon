@@ -48,6 +48,9 @@ interface Avis {
   // Réponse envoyée depuis la page admin :
   reponse?: string;
   reponseAt?: any;
+  // Partage avec les monitrices citees (geste volontaire, rien par defaut) :
+  partageMoniteurs?: boolean;
+  motMoniteurs?: string;
 }
 
 function Stars({ n, size = 14 }: { n: number; size?: number }) {
@@ -78,6 +81,28 @@ export default function SatisfactionPage() {
   const [replyText, setReplyText] = useState("");
   const [replyBusy, setReplyBusy] = useState<"ia" | "send" | null>(null);
   const [replyMsg, setReplyMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // Partage d'un avis avec les monitrices citées : rien n'est visible par
+  // défaut, le partage est un geste volontaire qu'on peut accompagner d'un mot.
+  const [partageOpen, setPartageOpen] = useState<string | null>(null);
+  const [motMon, setMotMon] = useState("");
+  const [partageBusy, setPartageBusy] = useState<string | null>(null);
+
+  const partager = async (avisId: string, partage: boolean, mot?: string) => {
+    if (!user) return;
+    setPartageBusy(avisId);
+    try {
+      const token = await user.getIdToken(true);
+      await fetch("/api/admin/satisfaction-partage", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ avisId, partage, mot }),
+      });
+      setAvis(prev => prev.map(x => x.id === avisId
+        ? { ...x, partageMoniteurs: partage, motMoniteurs: partage ? (mot || "") : "" } : x));
+      setPartageOpen(null); setMotMon("");
+    } catch { /* rien */ }
+    setPartageBusy(null);
+  };
 
   // ── Répondre à un avis : brouillon IA (aucun envoi) puis envoi relu ──
   const redigerIA = async (avisId: string) => {
@@ -796,6 +821,45 @@ export default function SatisfactionPage() {
                       ))}
                     </div>
                   )}
+                  {/* ── Partage avec les monitrices citées ── */}
+                  {(a.moniteurs?.length ?? 0) > 0 && (
+                    a.partageMoniteurs ? (
+                      <div className="mt-2 rounded-lg bg-violet-50 border border-violet-200 p-2.5">
+                        <div className="font-body text-[11px] font-semibold text-violet-700">
+                          👁 Partagé avec {a.moniteurs!.map(m => m.nom).join(", ")}
+                        </div>
+                        {a.motMoniteurs && (
+                          <p className="font-body text-xs text-violet-900 mt-1">« {a.motMoniteurs} »</p>
+                        )}
+                        <button onClick={() => partager(a.id, false)} disabled={partageBusy === a.id}
+                          className="mt-1.5 font-body text-[11px] text-violet-500 bg-transparent border-none cursor-pointer hover:underline p-0">
+                          Ne plus partager
+                        </button>
+                      </div>
+                    ) : partageOpen === a.id ? (
+                      <div className="mt-2 rounded-lg bg-slate-50 border border-slate-200 p-3">
+                        <textarea value={motMon} onChange={e => setMotMon(e.target.value)} rows={2}
+                          placeholder="Un mot pour accompagner (facultatif) — utile surtout quand le retour est dur"
+                          className="w-full resize-y rounded-lg border border-slate-200 px-3 py-2 font-body text-sm bg-white focus:outline-none focus:border-violet-400" />
+                        <div className="mt-2 flex items-center gap-2">
+                          <button onClick={() => partager(a.id, true, motMon)} disabled={partageBusy === a.id}
+                            className="px-3 py-1.5 rounded-lg bg-violet-600 text-white font-body text-xs font-bold border-none cursor-pointer hover:bg-violet-700 disabled:opacity-50">
+                            {partageBusy === a.id ? "…" : "Partager"}
+                          </button>
+                          <button onClick={() => { setPartageOpen(null); setMotMon(""); }}
+                            className="font-body text-xs text-slate-400 bg-transparent border-none cursor-pointer hover:underline">
+                            Annuler
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button onClick={() => { setPartageOpen(a.id); setMotMon(""); }}
+                        className="mt-2 px-3 py-1.5 rounded-lg border border-violet-200 bg-white font-body text-xs font-semibold text-violet-700 cursor-pointer hover:bg-violet-50">
+                        Partager avec {a.moniteurs!.map(m => m.nom).join(", ")}
+                      </button>
+                    )
+                  )}
+
                   {/* ── Réponse à la famille ── */}
                   {a.reponse ? (
                     <div className="mt-2 rounded-lg bg-emerald-50 border border-emerald-100 p-3">
