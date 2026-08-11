@@ -36,11 +36,8 @@ export default function ActivityDetailClient({ activity }: { activity: PublicAct
     stages: "stage", balades: "balade", cours: "cours",
   };
   const lienPlanning = (() => {
-    const params = new URLSearchParams();
     const type = TYPE_PLANNING[display.category];
-    if (type) params.set("type", type);
-    params.set("q", display.title);
-    return `/planning?${params.toString()}`;
+    return type ? `/planning?type=${type}` : "/planning";
   })();
 
   return (
