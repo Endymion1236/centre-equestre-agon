@@ -2073,12 +2073,20 @@ export default function PlanningPage() {
             <input type="date" title="Aller à cette date"
               className="font-body text-xs px-2 py-1 rounded-lg border border-gray-200 bg-white cursor-pointer focus:border-blue-400 focus:outline-none text-slate-500"
               onChange={e => {
-                if (!e.target.value) return;
-                const [py2, pm2, pd2] = e.target.value.split("-").map(Number);
+                const v = e.target.value;
+                if (!v) return;
+                // Le champ émet un événement à CHAQUE frappe : en tapant
+                // « 01/09/2026 », le navigateur envoie d'abord 0001-09-01,
+                // puis 0019-…, 0192-…, 0202-… avant la bonne valeur. On
+                // partait alors sur une année aberrante (1902, 1926) et le
+                // champ se vidait avant la fin de la saisie.
+                const [py2, pm2, pd2] = v.split("-").map(Number);
+                if (!py2 || !pm2 || !pd2) return;
+                if (py2 < 2000 || py2 > 2100) return; // saisie encore en cours
                 const picked = new Date(py2, pm2 - 1, pd2);
+                if (Number.isNaN(picked.getTime())) return;
                 const today = new Date(); today.setHours(0,0,0,0);
                 setDayOffset(Math.round((picked.getTime() - today.getTime()) / 86400000));
-                e.target.value = "";
               }}/>
           </div>
           <div className="flex gap-2"><button onClick={()=>setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setDayOffset(d=>d+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain<ChevronRight size={16}/></button></div>
