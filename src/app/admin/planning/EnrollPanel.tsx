@@ -172,6 +172,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       setPreinscription(false);
       setShowPay(false);
       setSearch(e.familyName || "");
+      if ((e as any).preinscriptionMode === "annuel") setInscriptionMode("annuel");
       panelToast(`${e.childName} — choisissez le règlement puis validez l'inscription`, "success");
       await onRefresh?.();
     } catch (err: any) {
@@ -1735,6 +1736,37 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     const childName = childLastName ? `${childFirstName} ${childLastName}` : childFirstName;
 
     const createdPaymentIds: string[] = [];
+
+    // ── PRÉ-INSCRIPTION ANNUELLE ────────────────────────────────────────
+    // La branche annuelle ci-dessous crée le forfait, l'échéancier et le
+    // paiement AVANT d'inscrire : elle ne peut pas être neutralisée par les
+    // options passées à onEnroll. On la court-circuite donc entièrement.
+    // Le cavalier est simplement posé sur le créneau, marqué pré-inscrit.
+    if (inscriptionMode === "annuel" && preinscription) {
+      if (!selChild || !fam) return;
+      const childName = (fam.children || []).find((c: any) => c.id === selChild)?.firstName || "—";
+      setEnrolling(true);
+      try {
+        await onEnroll(creneau.id!, {
+          childId: selChild,
+          childName,
+          familyId: fam.firestoreId,
+          familyName: fam.parentName || "—",
+          enrolledAt: new Date().toISOString(),
+          preinscription: true,
+          // Mémorisé pour la conversion : on saura qu'il s'agissait d'une
+          // inscription à l'année, pas d'une séance isolée.
+          preinscriptionMode: "annuel",
+        } as any, undefined, { skipPayment: true, skipEmail: true });
+        panelToast(`${childName} pré-inscrit(e) à l'année — aucun paiement créé`, "success");
+        setSelChild(""); setSelectedChildren([]); setPreinscription(false);
+        await onRefresh?.();
+      } catch (err: any) {
+        panelToast(`Échec : ${err?.message || err}`, "error");
+      }
+      setEnrolling(false);
+      return;
+    }
 
     if (inscriptionMode === "annuel") {
       // Inscription annuelle : créer le forfait + inscrire dans le créneau
@@ -3604,7 +3636,19 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 )}
 
                 {/* Mode annuel */}
-                {inscriptionMode === "annuel" && (
+                {inscriptionMode === "annuel" && preinscription && (
+                  <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+                    <div className="font-body text-xs font-semibold text-indigo-800">
+                      Pré-inscription à l&apos;année
+                    </div>
+                    <div className="mt-1 font-body text-[11px] text-indigo-700 leading-relaxed">
+                      La place est retenue sur ce créneau. Aucun forfait, aucun
+                      échéancier et aucune facture ne sont créés — le tarif sera
+                      calculé au moment où vous confirmerez l&apos;inscription.
+                    </div>
+                  </div>
+                )}
+                {inscriptionMode === "annuel" && !preinscription && (
                   <div className="bg-white rounded-lg p-3 space-y-3">
                     <div className="font-body text-xs font-semibold text-green-600 uppercase tracking-wider">Détail du forfait</div>
 
@@ -3912,6 +3956,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   // affichait "Inscrire + Encaisser" alors que cliquer ne
                   // crée bien aucun paiement → confusion utilisateur.
                   : useRattrapage ? `🔄 Inscrire en rattrapage (gratuit)${suffixe}`
+                  : preinscription ? `✎ Pré-inscrire (aucun paiement)`
                   : inscriptionMode === "annuel" ? `Inscrire à l'année (${totalAnnuel.toFixed(2)}€)`
                   : (allCartes.some((c: any) => c.status === "active" && (c.remainingSessions || 0) > 0 && (c.childId === selChild || (c.familiale && c.familyId === selFam)))) ? `Inscrire 🎟️ (débit carte à la clôture)${suffixe}`
                   : showPay ? `Inscrire + Encaisser (${totalTTC.toFixed(2)}€)${suffixe}`
