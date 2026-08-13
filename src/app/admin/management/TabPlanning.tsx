@@ -108,6 +108,10 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   // Édition d'une tâche existante : ouvre une modale de modification
   const [editingTache, setEditingTache] = useState<TachePlanifiee | null>(null);
   const [editForm, setEditForm] = useState({ tacheTypeId: "", heureDebut: "08:00", dureeMinutes: 30, notes: "", salarieId: "" });
+  // Diffuser la NOTE seule sur toute la semaine : une consigne du type
+  // « Caramel boite jusqu'a vendredi » vaut pour chaque jour, alors qu'un
+  // changement d'horaire ne concerne que la tache ouverte.
+  const [editNoteSemaine, setEditNoteSemaine] = useState(false);
   // Une "tache a 2 personnes" = 2 documents distincts (un salarieId chacun).
   // Cette option repercute le changement d'horaire sur les jumelles.
   const [editAppliquerTous, setEditAppliquerTous] = useState(true);
@@ -298,6 +302,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       return;
     }
     setEditingTache(t);
+    setEditNoteSemaine(false);
     setEditForm({
       salarieId: t.salarieId || "",
       tacheTypeId: t.tacheTypeId,
@@ -358,7 +363,28 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
           toast(`Modifications répercutées sur ${jumelles.length} autre(s) personne(s)`, "success");
         }
       }
+      // Note appliquée à toute la semaine : on ne touche QUE le champ notes,
+      // jamais les horaires — chaque jour peut avoir les siens.
+      if (editNoteSemaine) {
+        const memeSemaine = taches.filter((t: any) =>
+          t.id !== editingTache.id
+          && t.semaine === editingTache.semaine
+          && t.tacheTypeId === editingTache.tacheTypeId
+          && t.salarieId === nouveauSal
+        );
+        await Promise.all(memeSemaine.map((t: any) =>
+          updateDoc(doc(db, "taches-planifiees", t.id), {
+            notes: editForm.notes || null,
+            updatedAt: serverTimestamp(),
+          })
+        ));
+        if (memeSemaine.length > 0) {
+          toast(`Note appliquée à ${memeSemaine.length} autre(s) jour(s) de la semaine`, "success");
+        }
+      }
+
       setEditingTache(null);
+      setEditNoteSemaine(false);
       onRefresh();
       toast(`"${tt.label}" mise à jour`, "success");
     } catch (e: any) {
@@ -2481,7 +2507,29 @@ Réponds de façon concise et pratique, en français.`,
               onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
               rows={2}
               placeholder="Précisions, rappels…"
-              style={{width:"100%", padding:"8px 10px", borderRadius:8, border:"1px solid #e2e8f0", fontFamily:"sans-serif", fontSize:13, marginBottom:16, resize:"vertical"}} />
+              style={{width:"100%", padding:"8px 10px", borderRadius:8, border:"1px solid #e2e8f0", fontFamily:"sans-serif", fontSize:13, marginBottom:8, resize:"vertical"}} />
+
+            {(() => {
+              // Mêmes tâches, même personne, ailleurs dans la semaine.
+              const nbJours = taches.filter((t: any) =>
+                t.id !== editingTache.id
+                && t.semaine === editingTache.semaine
+                && t.tacheTypeId === editingTache.tacheTypeId
+                && t.salarieId === (editForm.salarieId || editingTache.salarieId)
+              ).length;
+              if (nbJours === 0) return null;
+              return (
+                <label style={{display:"flex", alignItems:"flex-start", gap:8, marginBottom:16, padding:"8px 10px", background:"#fefce8", border:"1px solid #fde68a", borderRadius:8, cursor:"pointer"}}>
+                  <input type="checkbox" checked={editNoteSemaine}
+                    onChange={e => setEditNoteSemaine(e.target.checked)}
+                    style={{marginTop:2, cursor:"pointer"}} />
+                  <span style={{fontFamily:"sans-serif", fontSize:11, color:"#92400e", lineHeight:1.5}}>
+                    Appliquer cette note aux <strong>{nbJours} autre(s) jour(s)</strong> de la semaine
+                    sur cette tâche. Les horaires de chaque jour ne sont pas modifiés.
+                  </span>
+                </label>
+              );
+            })()}
 
             {/* Boutons */}
             <div style={{display:"flex", gap:8}}>
