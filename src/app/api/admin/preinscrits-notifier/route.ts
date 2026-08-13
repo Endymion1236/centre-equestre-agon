@@ -1,0 +1,154 @@
+import { NextRequest, NextResponse } from "next/server";
+import { Resend } from "resend";
+import { adminDb } from "@/lib/firebase-admin";
+import { verifyAuth } from "@/lib/api-auth";
+import { refreshEmailMode, isRecipientAllowed, blockedLog } from "@/lib/email-guard";
+import { REPLY_TO } from "@/lib/email-reply-to";
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+/**
+ * Pré-inscrits : liste (GET) et notification groupée (POST).
+ *
+ * Une pré-inscription retient une place sans rien facturer. Avant la rentrée,
+ * il faut prévenir ces familles : leur place existe, mais elle n'est pas encore
+ * confirmée — mandat de prélèvement à signer, dossier à compléter.
+ *
+ * Les réponses arrivent sur la boîte du centre (REPLY_TO), pas sur le domaine
+ * d'envoi qui ne reçoit rien.
+ */
+
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+const BCC_SUIVI = "ceagon50@gmail.com";
+
+/** Rassemble les pré-inscrits par famille, sur les créneaux à venir. */
+async function collecter() {
+  const aujourdhui = new Date().toISOString().split("T")[0];
+  const snap = await adminDb
+    .collection("creneaux")
+    .where("date", ">=", aujourdhui)
+    .get();
+
+  const parFamille = new Map<string, {
+    familyId: string; familyName: string; email: string;
+    lignes: { childName: string; activite: string; date: string; horaire: string; annuel: boolean }[];
+  }>();
+
+  for (const d of snap.docs) {
+    const c = d.data() as any;
+    for (const e of c.enrolled || []) {
+      if (!e?.preinscription) continue;
+      const cle = e.familyId;
+      if (!cle) continue;
+      if (!parFamille.has(cle)) {
+        parFamille.set(cle, {
+          familyId: cle, familyName: e.familyName || "", email: "", lignes: [],
+        });
+      }
+      parFamille.get(cle)!.lignes.push({
+        childName: e.childName || "",
+        activite: c.activityTitle || "",
+        date: c.date || "",
+        horaire: `${c.startTime || ""}–${c.endTime || ""}`,
+        annuel: e.preinscriptionMode === "annuel",
+      });
+    }
+  }
+
+  // Emails résolus côté serveur, jamais transmis par le navigateur.
+  for (const f of parFamille.values()) {
+    try {
+      const fam = await adminDb.collection("families").doc(f.familyId).get();
+      if (fam.exists) {
+        const fd = fam.data() as any;
+        f.email = (fd.parentEmail || "").trim();
+        if (!f.familyName) f.familyName = fd.parentName || "";
+      }
+    } catch { /* famille supprimée : laissée sans email, signalée à l'écran */ }
+  }
+
+  for (const f of parFamille.values()) {
+    f.lignes.sort((a, b) => a.date.localeCompare(b.date));
+  }
+  return [...parFamille.values()].sort((a, b) => a.familyName.localeCompare(b.familyName));
+}
+
+export async function GET(req: NextRequest) {
+  const auth = await verifyAuth(req, { adminOnly: true });
+  if (auth instanceof NextResponse) return auth;
+  const familles = await collecter();
+  return NextResponse.json({
+    nbFamilles: familles.length,
+    nbPlaces: familles.reduce((s, f) => s + f.lignes.length, 0),
+    sansEmail: familles.filter(f => !f.email).length,
+    familles,
+  });
+}
+
+export async function POST(req: NextRequest) {
+  const auth = await verifyAuth(req, { adminOnly: true });
+  if (auth instanceof NextResponse) return auth;
+
+  const body = await req.json().catch(() => ({} as any));
+  const subject = (body?.subject || "").trim();
+  const message = (body?.message || "").trim();
+  const cibles: string[] = Array.isArray(body?.familyIds) ? body.familyIds : [];
+  if (!subject || !message) {
+    return NextResponse.json({ error: "Objet et message requis." }, { status: 400 });
+  }
+
+  await refreshEmailMode();
+  const resend = new Resend(process.env.RESEND_API_KEY);
+  const familles = (await collecter()).filter(
+    f => f.email && (cibles.length === 0 || cibles.includes(f.familyId))
+  );
+
+  let envoyes = 0, bloques = 0, erreurs = 0;
+  for (const f of familles) {
+    if (!isRecipientAllowed(f.email)) {
+      blockedLog("preinscrits-notifier", f.email);
+      bloques++;
+      continue;
+    }
+    const lignes = f.lignes.map(l => {
+      const d = new Date(l.date + "T12:00:00").toLocaleDateString("fr-FR", {
+        weekday: "long", day: "numeric", month: "long",
+      });
+      return `<li style="margin-bottom:6px;"><strong>${l.childName}</strong> — ${l.activite}` +
+        `${l.annuel ? " (à l'année)" : ` · ${d}`} · ${l.horaire}</li>`;
+    }).join("");
+
+    const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#1e293b;">
+      <p>Bonjour ${f.familyName || ""},</p>
+      <div style="white-space:pre-wrap;line-height:1.6;">${message
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+      <div style="margin:20px 0;padding:14px;background:#eef2ff;border-left:3px solid #6366f1;border-radius:0 6px 6px 0;">
+        <p style="margin:0 0 8px;font-weight:bold;">Place${f.lignes.length > 1 ? "s" : ""} retenue${f.lignes.length > 1 ? "s" : ""} :</p>
+        <ul style="margin:0;padding-left:18px;">${lignes}</ul>
+      </div>
+      <p style="color:#64748b;font-size:13px;">
+        Vous pouvez répondre directement à ce message, il nous parviendra.
+      </p>
+      <p style="margin-top:16px;">Centre Équestre d'Agon-Coutainville</p>
+    </div>`;
+
+    try {
+      const { error } = await resend.emails.send({
+        from: FROM_EMAIL,
+        replyTo: REPLY_TO,
+        to: f.email,
+        bcc: BCC_SUIVI,
+        subject,
+        html,
+      });
+      if (error) { erreurs++; console.error("[preinscrits]", f.email, error); }
+      else envoyes++;
+    } catch (e) {
+      erreurs++;
+      console.error("[preinscrits]", f.email, e);
+    }
+  }
+
+  return NextResponse.json({ ok: true, envoyes, bloques, erreurs, total: familles.length });
+}
