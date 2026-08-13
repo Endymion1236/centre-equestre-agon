@@ -69,13 +69,23 @@ export default function ManagementPage() {
         }
       }
 
-      // Désactiver les salariés dont le moniteur n'existe plus ou est inactif
+      // Aligner l'état des salariés sur celui de leur fiche moniteur, DANS LES
+      // DEUX SENS. La désactivation seule était traitée : une monitrice
+      // réactivée dans les paramètres restait donc inactive ici, invisible
+      // dans les listes du planning alors que sa fiche s'affichait bien comme
+      // active — d'où l'impression qu'elle avait « disparu » sans raison.
       for (const sal of existingSalaries) {
         const nameLC = sal.nom.toLowerCase().trim();
         const monMatch = moniteurs.find((m: any) => (m.name || "").toLowerCase().trim() === nameLC);
-        if (monMatch && monMatch.status !== "active" && sal.actif) {
-          await updateDoc(doc(db, "salaries-management", sal.id), { actif: false, updatedAt: serverTimestamp() });
-          sal.actif = false;
+        if (!monMatch) continue;
+        const doitEtreActif = monMatch.status === "active";
+        if (sal.actif !== doitEtreActif) {
+          await updateDoc(doc(db, "salaries-management", sal.id), {
+            actif: doitEtreActif,
+            ...(doitEtreActif ? { moniteurId: monMatch.id } : {}),
+            updatedAt: serverTimestamp(),
+          });
+          sal.actif = doitEtreActif;
           needRefresh = true;
         }
       }
