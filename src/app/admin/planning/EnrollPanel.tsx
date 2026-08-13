@@ -2703,8 +2703,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               : hasPending ? "bg-orange-400"
               : "bg-gray-300";
             return (
-              <div key={e.childId} className="flex items-center justify-between bg-sand rounded-lg px-3 py-2">
-                <div className="flex items-center gap-2.5 min-w-0">
+              <div key={e.childId} className="flex flex-wrap items-center justify-between gap-y-1.5 bg-sand rounded-lg px-3 py-2">
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 flex-1">
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColor}`} title={statusLabel || undefined}></span>
                   <a
                     href={
@@ -2772,7 +2772,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       title="Transformer en inscription définitive : le paiement sera créé"
                       className="flex items-center gap-1 font-body text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-indigo-50 flex-shrink-0 disabled:opacity-40">
                       {conversion === e.childId ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                      Confirmer
+                      <span className="hidden sm:inline">Confirmer</span>
                     </button>
                   )}
                   <button onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId}
