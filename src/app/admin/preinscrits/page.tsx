@@ -7,11 +7,13 @@ import { Loader2, Send, RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-re
 interface Ligne { childName: string; activite: string; date: string; horaire: string; annuel: boolean }
 interface Famille { familyId: string; familyName: string; email: string; lignes: Ligne[] }
 
-const MESSAGE_DEFAUT = `La rentrée approche et nous voulions faire le point avec vous.
+const MESSAGE_DEFAUT = `La rentrée approche, et nous voulions faire le point avec vous.
 
-Votre place est bien retenue, mais votre inscription n'est pas encore définitive : il nous manque votre dossier complet (et le mandat de prélèvement si vous avez choisi ce mode de règlement).
+Votre place est bien retenue, mais votre inscription n'est pas encore définitive : il nous manque votre dossier complet.
 
-Merci de nous recontacter rapidement pour finaliser, afin que nous puissions confirmer la place à votre enfant.`;
+Si vous avez choisi le prélèvement automatique, merci de nous transmettre votre RIB (par retour de ce mail ou au club-house) : nous préparerons le mandat, que vous n'aurez plus qu'à signer.
+
+Merci de nous répondre rapidement, afin que nous puissions confirmer la place de votre enfant.`;
 
 export default function PreinscritsPage() {
   const { isAdmin, user } = useAuth();

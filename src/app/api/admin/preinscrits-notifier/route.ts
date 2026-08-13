@@ -127,6 +127,24 @@ export async function POST(req: NextRequest) {
         <p style="margin:0 0 8px;font-weight:bold;">Place${f.lignes.length > 1 ? "s" : ""} retenue${f.lignes.length > 1 ? "s" : ""} :</p>
         <ul style="margin:0;padding-left:18px;">${lignes}</ul>
       </div>
+      <div style="margin:20px 0;padding:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
+        <p style="margin:0 0 8px;font-weight:bold;">Votre espace famille</p>
+        <p style="margin:0 0 12px;font-size:14px;line-height:1.6;">
+          Nous changeons d'outil de gestion cette saison. Vous disposez désormais
+          d'un espace en ligne pour consulter le planning et vos réservations,
+          retrouver vos factures, suivre la progression et les galops de votre
+          enfant, et réserver stages et balades.
+        </p>
+        <a href="https://centre-equestre-agon.vercel.app/espace-cavalier"
+           style="display:inline-block;padding:11px 20px;background:#1e40af;color:#ffffff;
+                  text-decoration:none;border-radius:8px;font-weight:bold;font-size:14px;">
+          Accéder à mon espace
+        </a>
+        <p style="margin:12px 0 0;font-size:12px;color:#64748b;">
+          À partir du 1<sup>er</sup> octobre, l'adresse deviendra
+          <strong>centreequestreagon.com</strong>. Vous serez redirigé automatiquement.
+        </p>
+      </div>
       <p style="color:#64748b;font-size:13px;">
         Vous pouvez répondre directement à ce message, il nous parviendra.
       </p>
