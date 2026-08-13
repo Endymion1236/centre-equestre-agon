@@ -12,16 +12,17 @@ import { generateOrderId } from "@/lib/utils";
 import { formatStageSchedule } from "@/lib/format-stage";
 
 // ── Composant warning mandat SEPA ─────────────────────────────────────────────
-function SepaWarning({ familyId }: { familyId: string }) {
+function SepaWarning({ familyId, onStatus }: { familyId: string; onStatus?: (s: "loading" | "ok" | "missing") => void }) {
   const [status, setStatus] = useState<"loading" | "ok" | "missing">("loading");
   useEffect(() => {
-    if (!familyId) { setStatus("missing"); return; }
+    const maj = (v: "loading" | "ok" | "missing") => { setStatus(v); onStatus?.(v); };
+    if (!familyId) { maj("missing"); return; }
     getDocs(query(collection(db, "mandats-sepa"),
       where("familyId", "==", familyId),
       where("status", "==", "active")
-    )).then(snap => setStatus(snap.empty ? "missing" : "ok"))
-      .catch(() => setStatus("missing"));
-  }, [familyId]);
+    )).then(snap => maj(snap.empty ? "missing" : "ok"))
+      .catch(() => maj("missing"));
+  }, [familyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (status === "loading") return (
     <div className="mt-1.5 font-body text-[10px] text-slate-400 bg-slate-50 rounded-lg px-2 py-1 flex items-center gap-1">
@@ -193,6 +194,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [assuranceOccasionnelle, setAssuranceOccasionnelle] = useState(false);
   const [payPlan, setPayPlan] = useState<"1x" | "3x" | "10x">("1x");
   const [annualPayMode, setAnnualPayMode] = useState<string>("cb_terminal");
+  // Verdict du controle de mandat, remonte par SepaWarning : sans lui, le
+  // bouton restait actif et l'inscription echouait au clic.
+  const [sepaStatus, setSepaStatus] = useState<"loading" | "ok" | "missing">("loading");
+  const sepaBloque =
+    inscriptionMode === "annuel" &&
+    annualPayMode === "prelevement_sepa" &&
+    sepaStatus === "missing" &&
+    !preinscription;
 
   // ── Protection contre fermeture involontaire du panel ──────────────
   // Bug rapporte : un clic mal place sur le fond noir (ou un raccourci
@@ -3801,7 +3810,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         ))}
                       </div>
                       {annualPayMode === "prelevement_sepa" && (
-                        <SepaWarning familyId={selFam} />
+                        <SepaWarning familyId={selFam} onStatus={setSepaStatus} />
                       )}
                     </div>
                   </div>
@@ -3859,7 +3868,26 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   </div>
                   {assuranceOccasionnelle && <span className="font-body text-sm font-bold text-orange-700">+{inscParams.assuranceOccasionnelle * selectedChildren.length}€</span>}
                 </label>
-                <button onClick={handleEnroll} disabled={enrolling} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${enrolling ? "bg-gray-200 text-slate-500" : "bg-green-600 text-white hover:bg-green-500"}`}>
+                {/* SEPA sans mandat : l'inscription echouerait de toute facon
+                    cote traitement. On le dit AVANT le clic, et on propose la
+                    seule issue utile — pre-inscrire en attendant le mandat. */}
+                {sepaBloque && (
+                  <div className="mb-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5">
+                    <p className="font-body text-xs font-semibold text-amber-900">
+                      Le prélèvement SEPA demande un mandat signé
+                    </p>
+                    <p className="mt-0.5 font-body text-[11px] text-amber-800 leading-relaxed">
+                      Créez-le dans <strong>Prélèvements SEPA</strong>, ou pré-inscrivez
+                      ce cavalier en attendant : la place est retenue, sans paiement ni
+                      facture, et vous confirmerez l&apos;inscription une fois le mandat signé.
+                    </p>
+                    <button onClick={() => { setPreinscription(true); setAnnualPayMode("cb_terminal"); }}
+                      className="mt-2 rounded-lg bg-indigo-600 px-3 py-1.5 font-body text-[11px] font-semibold text-white border-none cursor-pointer hover:bg-indigo-700">
+                      Pré-inscrire à la place
+                    </button>
+                  </div>
+                )}
+                <button onClick={handleEnroll} disabled={enrolling || sepaBloque} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none ${enrolling || sepaBloque ? "bg-gray-200 text-slate-500 cursor-not-allowed" : "bg-green-600 text-white hover:bg-green-500 cursor-pointer"}`}>
                   {enrolling ? "..." : `Inscrire ${selectedChildren.length} enfant${selectedChildren.length > 1 ? "s" : ""} — ${(stageTotalTTC + (assuranceOccasionnelle ? inscParams.assuranceOccasionnelle * selectedChildren.length : 0)).toFixed(2)}€`}
                 </button>
               </div>
