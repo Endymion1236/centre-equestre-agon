@@ -1356,10 +1356,31 @@ export default function PlanningPage() {
         `✓ L'enfant reste inscrit aux autres séances`;
       if (!confirm(msgForfait)) return;
 
+      // Désinscrire d'une séance ne touche pas au forfait — c'est le bon
+      // comportement pour une absence. Mais après une inscription faite par
+      // erreur ou pour un test, le forfait survit et continue de compter dans
+      // les réductions famille de la fratrie, sans que rien ne le montre.
+      // On propose donc de l'annuler, sans jamais le faire d'office.
+      const annulerForfait = confirm(
+        `Annuler AUSSI le forfait annuel de ${child.childName} ?\n\n` +
+        `OK = le forfait est annulé (inscription faite par erreur ou abandon\n` +
+        `définitif). Il ne comptera plus dans les réductions famille.\n\n` +
+        `Annuler = le forfait reste actif (simple absence sur cette séance).`
+      );
+
       try {
         // 1. Retirer l'enfant de CE créneau uniquement
         await removeChildFromCreneau(cid, childId);
         await deleteReservations(cid, childId);
+
+        if (annulerForfait) {
+          await updateDoc(doc(db, "forfaits", forfaitActif.id), {
+            status: "annule",
+            annuleAt: new Date().toISOString(),
+            annuleMotif: "Désinscription — forfait annulé par l'administrateur",
+          });
+          toast(`Forfait annuel de ${child.childName} annulé`, "info");
+        }
 
         // 2. Anti-doublon : éviter de créer plusieurs rattrapages pour le même créneau
         const existingSnap = await getDocs(query(

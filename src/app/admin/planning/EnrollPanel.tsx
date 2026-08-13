@@ -1167,6 +1167,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       .filter((f: any) => f.familyId === fam.firestoreId)
       .forEach((f: any) => {
         if (!f.childId || f.childId === selChild) return;
+        if (f.status && f.status !== "actif") return;
         // Comparaison de saison : on accepte le forfait si sa saison
         // (champ dédié ou createdAt) correspond à celle du créneau cible.
         const forfaitSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
