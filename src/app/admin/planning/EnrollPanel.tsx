@@ -138,6 +138,41 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [showPay, setShowPay] = useState(false); const [payMode, setPayMode] = useState("cb_terminal"); const [unenrolling, setUnenrolling] = useState("");
   const [avoirSolde, setAvoirSolde] = useState<Record<string, number>>({});
   const [freeEnroll, setFreeEnroll] = useState(false);
+  // PRE-INSCRIPTION : poser un cavalier sur un creneau sans rien declencher —
+  // ni paiement, ni facture, ni email. Sert a remplir les cours avant que les
+  // mandats de prelevement soient signes. Se supprime comme une inscription
+  // ordinaire, ou se transforme en inscription definitive une fois les
+  // conditions reunies.
+  const [preinscription, setPreinscription] = useState(false);
+  const [conversion, setConversion] = useState<string | null>(null);
+
+  /**
+   * Transforme une pré-inscription en inscription définitive.
+   *
+   * On désinscrit puis on réinscrit par le chemin normal, plutôt que de
+   * recopier ici la création du paiement : celle-ci gère les cartes, les
+   * forfaits, les réductions et les réservations, et la dupliquer serait le
+   * meilleur moyen de la voir diverger.
+   */
+  const convertirPreinscription = async (e: any) => {
+    if (!confirm(`Confirmer l'inscription de ${e.childName} ?\n\nLe paiement correspondant sera créé.`)) return;
+    setConversion(e.childId);
+    try {
+      await onUnenroll(creneau.id!, e.childId);
+      await onEnroll(creneau.id!, {
+        childId: e.childId,
+        childName: e.childName,
+        familyId: e.familyId,
+        familyName: e.familyName,
+        enrolledAt: new Date().toISOString(),
+      }, undefined, { skipEmail: true });
+      panelToast(`${e.childName} — inscription confirmée`, "success");
+      await onRefresh?.();
+    } catch (err: any) {
+      panelToast(`Échec de la conversion : ${err?.message || err}`, "error");
+    }
+    setConversion(null);
+  };
   const [freeReason, setFreeReason] = useState("Rattrapage");
   const [childRattrapages, setChildRattrapages] = useState<any[]>([]);
   const [useRattrapage, setUseRattrapage] = useState<string | null>(null); // rattrapageId
@@ -1378,9 +1413,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 familyId: fam.firestoreId,
                 familyName: fam.parentName || "—",
                 enrolledAt: new Date().toISOString(),
-              },
-              payModeToUse,
-              freeEnrollOptions,
+                ...(preinscription ? { preinscription: true } : {}),
+              } as any,
+              preinscription ? undefined : payModeToUse,
+              preinscription ? { skipPayment: true, skipEmail: true } : freeEnrollOptions,
             );
             enrolledNames.push(firstName);
           } catch (err) {
@@ -1864,7 +1900,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
     // Dans les 2 cas : inscrire dans le créneau
     // Pour les forfaits annuels : skipPayment car les échéances sont déjà créées
-    const enrollOptions = inscriptionMode === "annuel" ? { skipPayment: true, skipEmail: true } : undefined;
+    // Une pre-inscription ne declenche RIEN : ni paiement, ni facture, ni email.
+    const enrollOptions = preinscription
+      ? { skipPayment: true, skipEmail: true }
+      : inscriptionMode === "annuel" ? { skipPayment: true, skipEmail: true } : undefined;
 
     if (inscriptionMode === "annuel") {
       // Inscrire dans TOUS les créneaux futurs du même cours (même jour + même heure + même activité)
@@ -1983,7 +2022,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       } else {
         const freeEnrollOptions = freeEnroll ? { freeReason, skipEmail: false } : undefined;
         const rattrapageOptions = useRattrapage ? { rattrapageId: useRattrapage, skipEmail: false } : undefined;
-        await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, inscriptionMode === "ponctuel" && showPay && !freeEnroll && !useRattrapage ? payMode : undefined, enrollOptions || freeEnrollOptions || rattrapageOptions);
+        await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString(), ...(preinscription ? { preinscription: true } : {}) } as any, preinscription ? undefined : (inscriptionMode === "ponctuel" && showPay && !freeEnroll && !useRattrapage ? payMode : undefined), enrollOptions || freeEnrollOptions || rattrapageOptions);
       }
       // Alerter si le creneau (cours collectif ou competition) passe complet
       await checkAndAlertIfFull([creneau.id!]);
@@ -2635,6 +2674,12 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   {age && <span className="font-body text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full flex-shrink-0">{age}</span>}
                   {galop && galop !== "—" && <span className="font-body text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full flex-shrink-0">{galop}</span>}
                   {statusLabel && <span className={`font-body text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 hidden sm:inline ${isForfaitPaid ? "text-emerald-700 bg-emerald-50" : isForfaitPending ? "text-amber-700 bg-amber-50" : hasPaid ? "text-green-700 bg-green-50" : "text-orange-600 bg-orange-50"}`}>{statusLabel}</span>}
+                  {(e as any).preinscription && (
+                    <span title="Pré-inscription : aucun paiement ni facture n'a été créé"
+                      className="font-body text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 text-indigo-700 bg-indigo-100">
+                      ✎ pré-inscrit
+                    </span>
+                  )}
                   {/* Place TENUE : inscription provisoire posée le temps d'un
                       paiement en ligne. Elle se libère toute seule à
                       expiration — à ne pas confondre avec une inscription
@@ -2673,6 +2718,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     title={`Envoyer la fiche d'évaluation de ${e.childName} par email à la famille`}>
                     {sendingFicheFor === e.childId ? <Loader2 size={12} className="animate-spin" /> : <span>✉️</span>}
                   </button>
+                  {(e as any).preinscription && (
+                    <button onClick={() => convertirPreinscription(e)} disabled={conversion === e.childId}
+                      title="Transformer en inscription définitive : le paiement sera créé"
+                      className="flex items-center gap-1 font-body text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-indigo-50 flex-shrink-0 disabled:opacity-40">
+                      {conversion === e.childId ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                      Confirmer
+                    </button>
+                  )}
                   <button onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId}
                     className="flex items-center gap-1 font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-red-50 flex-shrink-0">
                     {unenrolling===e.childId ? <Loader2 size={12} className="animate-spin"/> : <Trash2 size={12}/>}
@@ -3425,7 +3478,22 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 )}
 
                 {/* Mode ponctuel */}
-                {inscriptionMode === "ponctuel" && priceTTC > 0 && !(freeEnroll && freeReason === "Établissement") && (
+                {/* Pre-inscription : poser le cavalier sans rien declencher.
+                    Presentee AVANT le bloc paiement, qu'elle escamote — sinon
+                    on propose d'encaisser quelque chose qui n'existe pas. */}
+                <label className={`flex items-start gap-2 mb-3 p-2.5 rounded-lg border cursor-pointer ${
+                  preinscription ? "bg-indigo-50 border-indigo-300" : "bg-white border-gray-200"}`}>
+                  <input type="checkbox" checked={preinscription}
+                    onChange={e => setPreinscription(e.target.checked)}
+                    className="mt-0.5 cursor-pointer" />
+                  <span className="font-body text-xs text-slate-700 leading-relaxed">
+                    <strong>Pré-inscription</strong> — retenir la place sans créer
+                    de paiement, de facture ni d&apos;email. À transformer en
+                    inscription définitive plus tard.
+                  </span>
+                </label>
+
+                {!preinscription && inscriptionMode === "ponctuel" && priceTTC > 0 && !(freeEnroll && freeReason === "Établissement") && (
                   <div className="bg-white rounded-lg p-3">
                     {carteActive ? (
                       <div className="font-body text-xs text-gold-600 bg-gold-50 rounded-lg px-3 py-2">
