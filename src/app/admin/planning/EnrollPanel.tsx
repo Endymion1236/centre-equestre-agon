@@ -149,27 +149,32 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   /**
    * Transforme une pré-inscription en inscription définitive.
    *
-   * On désinscrit puis on réinscrit par le chemin normal, plutôt que de
-   * recopier ici la création du paiement : celle-ci gère les cartes, les
-   * forfaits, les réductions et les réservations, et la dupliquer serait le
-   * meilleur moyen de la voir diverger.
+   * On retire la pré-inscription puis on REPASSE PAR LE FORMULAIRE, au lieu de
+   * créer le paiement en douce. C'est volontaire : le mode de paiement se
+   * choisit ici, et notamment le prélèvement SEPA, qui exige un mandat actif,
+   * un échéancier et un montant annuel — rien qu'une conversion silencieuse ne
+   * saurait deviner. Le cavalier et sa famille sont pré-sélectionnés, il ne
+   * reste qu'à choisir le règlement et valider.
    */
   const convertirPreinscription = async (e: any) => {
-    if (!confirm(`Confirmer l'inscription de ${e.childName} ?\n\nLe paiement correspondant sera créé.`)) return;
+    if (!confirm(
+      `Transformer la pré-inscription de ${e.childName} en inscription définitive ?\n\n` +
+      `Elle sera retirée de la liste et le formulaire s'ouvrira pré-rempli : ` +
+      `vous choisirez le mode de règlement (dont le prélèvement SEPA) avant de valider.`
+    )) return;
     setConversion(e.childId);
     try {
       await onUnenroll(creneau.id!, e.childId);
-      await onEnroll(creneau.id!, {
-        childId: e.childId,
-        childName: e.childName,
-        familyId: e.familyId,
-        familyName: e.familyName,
-        enrolledAt: new Date().toISOString(),
-      }, undefined, { skipEmail: true });
-      panelToast(`${e.childName} — inscription confirmée`, "success");
+      setSelFam(e.familyId);
+      setSelChild(e.childId);
+      setSelectedChildren([e.childId]);
+      setPreinscription(false);
+      setShowPay(false);
+      setSearch(e.familyName || "");
+      panelToast(`${e.childName} — choisissez le règlement puis validez l'inscription`, "success");
       await onRefresh?.();
     } catch (err: any) {
-      panelToast(`Échec de la conversion : ${err?.message || err}`, "error");
+      panelToast(`Échec : ${err?.message || err}`, "error");
     }
     setConversion(null);
   };
