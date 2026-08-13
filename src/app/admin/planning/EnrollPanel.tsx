@@ -210,7 +210,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // On considere qu'une saisie est "en cours" des qu'une famille est
   // selectionnee — c'est suffisant pour proteger les cas courants.
   // hasFormChanges centralise ce check.
-  const hasFormChanges = !!(selFam || selChild);
+  const [inscriptionFaite, setInscriptionFaite] = useState(false);
+  const hasFormChanges = !!(selFam || selChild) && !inscriptionFaite;
 
   // confirmClose : remplace les appels onClose() directs. Si une saisie
   // est en cours, demande une confirmation native avant fermeture.
@@ -1760,6 +1761,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         } as any, undefined, { skipPayment: true, skipEmail: true });
         panelToast(`${childName} pré-inscrit(e) à l'année — aucun paiement créé`, "success");
         setSelChild(""); setSelectedChildren([]); setPreinscription(false);
+        setInscriptionFaite(true);
         await onRefresh?.();
       } catch (err: any) {
         panelToast(`Échec : ${err?.message || err}`, "error");
@@ -2847,11 +2849,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               <div className="flex flex-col gap-3">
                 <div className="relative">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input value={search} onChange={e => { setSearch(e.target.value); setSelFam(""); setSelChild(""); }}
+                  <input value={search} onChange={e => { setSearch(e.target.value); setSelFam(""); setSelChild(""); setInscriptionFaite(false); }}
                     placeholder="Nom parent, prénom enfant, email..."
                     className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-orange-400 focus:outline-none" />
                 </div>
-                <select value={selFam} onChange={e => { setSelFam(e.target.value); setSelChild(""); }}
+                <select value={selFam} onChange={e => { setSelFam(e.target.value); setSelChild(""); setInscriptionFaite(false); }}
                   className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream">
                   <option value="">Famille ({filteredFamilies.length})</option>
                   {filteredFamilies.map(f => {
@@ -2882,7 +2884,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
           {spots > 0 && (creneau as any).status !== "closed" && (<div className="border-t border-blue-500/8 pt-4"><h3 className="font-body text-sm font-semibold text-blue-800 mb-3"><UserPlus size={16} className="inline mr-1"/>Inscrire</h3><div className="flex flex-col gap-3">
             {/* Recherche famille */}
-            <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={search} onChange={e=>{setSearch(e.target.value);setSelFam("");setSelChild("");}} placeholder="Nom parent, prénom enfant, email..." className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/></div>
+            <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={search} onChange={e=>{setSearch(e.target.value);setSelFam("");setSelChild("");setInscriptionFaite(false);}} placeholder="Nom parent, prénom enfant, email..." className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/></div>
             <select value={selFam} onChange={e=>{setSelFam(e.target.value);setSelChild("");}} className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream"><option value="">Famille ({filteredFamilies.length})</option>{filteredFamilies.map(f=>{const n=(f.children||[]).map((c:any)=>c.firstName).join(", ");return<option key={f.firestoreId} value={f.firestoreId}>{f.parentName} {n?`(${n})`:""}</option>})}</select>
 
             {/* Bouton nouvelle famille */}
