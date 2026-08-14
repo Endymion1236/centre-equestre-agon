@@ -10,6 +10,7 @@ import { Save, Plus, Trash2, Loader2, AlertTriangle, Users, Pencil, Calendar, Ke
 import { authFetch } from "@/lib/auth-fetch";
 import MareesSection from "./MareesSection";
 import ReservationsToggle from "@/components/admin/ReservationsToggle";
+import ThemeSaisonnierToggle from "@/components/admin/ThemeSaisonnierToggle";
 import { DEFAULT_ECHELLE_LABELS, DEFAULT_VALIDATED_FFE_LEVEL, type ProgressionLabelsSettings } from "@/lib/progression-helpers";
 
 const defaultAccounts = [
@@ -1829,6 +1830,9 @@ export default function ParametresPage() {
 
           {/* Ouverture des réservations en ligne */}
           <ReservationsToggle />
+
+          {/* Thème saisonnier du site vitrine */}
+          <ThemeSaisonnierToggle />
 
           {/* Avertissement */}
           <Card padding="md" className="bg-orange-50 border-orange-200">

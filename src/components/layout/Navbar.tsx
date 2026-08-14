@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, Gift, Menu, Pencil, UserRound, X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import BandeauSaisonnier from "@/components/public/BandeauSaisonnier";
 
 const primaryLinks = [
   { href: "/activites", label: "Activités" },
@@ -46,6 +47,8 @@ export function Navbar() {
   }`;
 
   return (
+    <>
+    <BandeauSaisonnier />
     <nav
       style={{ top: "var(--nav-top, 0px)" }}
       className={`fixed inset-x-0 z-[200] transition-all duration-300 ${
@@ -153,5 +156,6 @@ export function Navbar() {
         </div>
       )}
     </nav>
+    </>
   );
 }

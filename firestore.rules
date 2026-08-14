@@ -232,7 +232,7 @@ service cloud.firestore {
       allow read: if docId in [
         'vitrine', 'centre', 'actus', 'miniferme', 'promos', 'competitions',
         'degressivite', 'fidelite', 'inscription', 'progression_labels',
-        'notifications', 'whatsapp', 'email', 'reservations'
+        'notifications', 'whatsapp', 'email', 'reservations', 'theme'
       ] || isAdmin();
       allow write: if isAdmin();
     }
