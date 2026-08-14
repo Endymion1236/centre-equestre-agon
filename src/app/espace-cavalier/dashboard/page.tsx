@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, where, updateDoc } from "firebase/firestore";
 import { Calendar, ChevronRight, CreditCard, Bell, Wallet, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
@@ -198,12 +198,47 @@ export default function DashboardPage() {
     : "";
 
   const hasWhatsApp = Boolean(waCommunity || waGroups.length);
+  const [rejointLocal, setRejointLocal] = useState(false);
+  const groupesRejoints = Boolean((family as any)?.whatsappRejoint) || rejointLocal;
+  const relanceGroupes = waGroups.length > 0 && !groupesRejoints;
+
+  const marquerRejoint = async () => {
+    if (!user?.uid) return;
+    try {
+      setRejointLocal(true);
+      await updateDoc(doc(db, "families", user.uid), { whatsappRejoint: true });
+    } catch { /* sans effet : la banniere reste, ce n'est pas bloquant */ }
+  };
   const fidelityValue = fidelity ? fidelity.points / fidelity.rate : 0;
 
   return (
     <div className="pb-8">
       <div className="mb-6">
         <h1 className="font-display text-2xl font-bold text-blue-800 mb-1">Bonjour {firstName} 👋</h1>
+        {relanceGroupes && (
+          <div className="mt-4 rounded-2xl border-2 border-green-500 bg-green-50 p-4">
+            <div className="font-body text-sm font-bold text-green-900">
+              Rejoignez le groupe WhatsApp de votre reprise
+            </div>
+            <div className="mt-1 font-body text-xs text-green-800 leading-relaxed">
+              C&apos;est par là que passent les infos de dernière minute : météo,
+              changement d&apos;horaire, séance annulée. Un seul clic, une seule fois.
+            </div>
+            <div className="mt-3 flex flex-col gap-2">
+              {waGroups.map((g) => (
+                <a key={g.key} href={g.url} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center justify-between gap-2 rounded-xl bg-green-600 px-4 py-3 font-body text-sm font-bold text-white no-underline hover:bg-green-700">
+                  <span>{g.label}</span>
+                  <ChevronRight size={16} />
+                </a>
+              ))}
+            </div>
+            <button onClick={marquerRejoint}
+              className="mt-2 font-body text-xs text-green-700 bg-transparent border-none cursor-pointer hover:underline p-0">
+              C&apos;est fait, ne plus afficher
+            </button>
+          </div>
+        )}
         <p className="font-body text-sm text-gray-600">Voici l’essentiel pour votre famille.</p>
       </div>
 
