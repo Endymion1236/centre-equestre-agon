@@ -97,7 +97,24 @@ export default function PreinscritsPage() {
 
       {familles.length > 0 && (
         <>
-          <div className="mt-5 space-y-2">
+          {(() => {
+            const joignables = familles.filter(f => f.email);
+            const toutesCochees = joignables.length > 0 && joignables.every(f => selection.has(f.familyId));
+            return (
+              <div className="mt-5 flex items-center justify-between gap-3">
+                <button
+                  onClick={() => setSelection(toutesCochees ? new Set() : new Set(joignables.map(f => f.familyId)))}
+                  className="font-body text-sm font-semibold text-indigo-700 bg-transparent border-none cursor-pointer hover:underline p-0">
+                  {toutesCochees ? "Tout décocher" : `Tout cocher (${joignables.length})`}
+                </button>
+                <span className="font-body text-xs text-slate-500">
+                  {selection.size} sélectionnée(s)
+                </span>
+              </div>
+            );
+          })()}
+
+          <div className="mt-2 space-y-2">
             {familles.map(f => (
               <label key={f.familyId}
                 className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer ${
