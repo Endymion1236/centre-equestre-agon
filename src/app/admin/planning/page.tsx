@@ -290,15 +290,37 @@ export default function PlanningPage() {
     let existingCreneaux: any[] = [];
     if (dates.length > 0) {
       const snap = await getDocs(query(collection(db, "creneaux"), where("date", ">=", dates[0]), where("date", "<=", dates[dates.length - 1])));
-      existingCreneaux = snap.docs.map(d => d.data());
+      existingCreneaux = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
     }
-    let created = 0, skipped = 0;
+    let created = 0, skipped = 0, rattaches = 0;
     let firstCreated: Partial<Creneau> | null = null;
+    // stageGroupId du lot en cours : tous les jours d'un même stage doivent le
+    // partager, y compris ceux qui existaient déjà.
+    const groupeDuLot = (nc.find((x: any) => x.stageGroupId) as any)?.stageGroupId || null;
+
     for (const c of nc) {
-      const isDuplicate = existingCreneaux.some(ex =>
+      const existant = existingCreneaux.find(ex =>
         ex.date === c.date && ex.startTime === c.startTime && ex.activityTitle === c.activityTitle
       );
-      if (isDuplicate) { skipped++; continue; }
+      if (existant) {
+        // Sauter en silence un jour déjà présent fabriquait des stages à trous :
+        // les autres jours recevaient le nouveau stageGroupId, celui-ci gardait
+        // l'ancien. L'application y voyait alors DEUX stages distincts — d'où
+        // les modales ne proposant qu'une partie des jours et les inscriptions
+        // « semaine complète » incomplètes. On le rattache au lot.
+        if (groupeDuLot && existant.stageGroupId !== groupeDuLot) {
+          try {
+            await updateDoc(doc(db, "creneaux", existant.id), { stageGroupId: groupeDuLot });
+            rattaches++;
+          } catch (e) {
+            console.error("[handleCreate] rattachement impossible", existant.id, e);
+            skipped++;
+          }
+        } else {
+          skipped++;
+        }
+        continue;
+      }
       // Injecter la couleur de l'activité si elle n'est pas déjà sur le créneau
       const actColor = activities.find(a => a.title === c.activityTitle)?.color;
       const creneauData: any = { ...c, createdAt: serverTimestamp() };
@@ -308,7 +330,12 @@ export default function PlanningPage() {
       created++;
     }
     setShowSimple(false); setShowGenerator(false);
-    toast(`${created} créneau${created > 1 ? "x" : ""} créé${created > 1 ? "s" : ""}${skipped > 0 ? ` (${skipped} doublon${skipped > 1 ? "s" : ""})` : ""}`, "success");
+    toast(
+      `${created} créneau${created > 1 ? "x" : ""} créé${created > 1 ? "s" : ""}` +
+      `${rattaches > 0 ? ` · ${rattaches} jour${rattaches > 1 ? "s" : ""} existant${rattaches > 1 ? "s" : ""} rattaché${rattaches > 1 ? "s" : ""} au stage` : ""}` +
+      `${skipped > 0 ? ` · ${skipped} doublon${skipped > 1 ? "s" : ""} ignoré${skipped > 1 ? "s" : ""}` : ""}`,
+      "success"
+    );
     if (created > 0 && firstCreated) {
       await notifyPlanningChange({
         action: "created",
