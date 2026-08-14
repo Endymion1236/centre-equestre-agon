@@ -15,6 +15,12 @@ Si vous avez choisi le prélèvement automatique, merci de nous transmettre votr
 
 Merci de nous répondre rapidement, afin que nous puissions confirmer la place de votre enfant.`;
 
+function jolieDate(iso: string) {
+  if (!/^\d{4}-\d{2}-\d{2}/.test(iso)) return iso || "—";
+  const [a, m, j] = iso.slice(0, 10).split("-");
+  return `${j}/${m}/${a}`;
+}
+
 export default function PreinscritsPage() {
   const { isAdmin, user } = useAuth();
   const [data, setData] = useState<{ nbFamilles: number; nbPlaces: number; sansEmail: number; familles: Famille[] } | null>(null);
@@ -22,6 +28,8 @@ export default function PreinscritsPage() {
   const [subject, setSubject] = useState("Votre pré-inscription au centre équestre");
   const [message, setMessage] = useState(MESSAGE_DEFAUT);
   const [selection, setSelection] = useState<Set<string>>(new Set());
+  const [onglet, setOnglet] = useState<"cours" | "stages">("cours");
+  const [stages, setStages] = useState<any>(null);
   const [envoi, setEnvoi] = useState(false);
   const [resultat, setResultat] = useState<any>(null);
 
@@ -39,6 +47,18 @@ export default function PreinscritsPage() {
   }, [user]);
 
   useEffect(() => { if (isAdmin && user) load(); }, [isAdmin, user, load]);
+
+  // Récapitulatif stages : chargé à la demande, il n'intéresse pas la relance.
+  useEffect(() => {
+    if (onglet !== "stages" || !user || stages) return;
+    (async () => {
+      try {
+        const token = await user.getIdToken(true);
+        const res = await fetch("/api/admin/preinscrits-stages", { headers: { Authorization: `Bearer ${token}` } });
+        setStages(await res.json());
+      } catch { /* rien */ }
+    })();
+  }, [onglet, user, stages]);
 
   const envoyer = async () => {
     if (!user || selection.size === 0) return;
@@ -72,6 +92,65 @@ export default function PreinscritsPage() {
         Les réponses à ce message arriveront dans votre boîte.
       </p>
 
+      <div className="mt-4 flex gap-2">
+        {([["cours", "Cours à l'année"], ["stages", "Stages"]] as const).map(([id, label]) => (
+          <button key={id} onClick={() => setOnglet(id)}
+            className={`px-4 py-2 rounded-xl font-body text-sm font-semibold border cursor-pointer ${
+              onglet === id ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {onglet === "stages" && (
+        <div className="mt-5">
+          {!stages ? (
+            <div className="flex items-center gap-2 font-body text-slate-500">
+              <Loader2 size={16} className="animate-spin" /> Chargement…
+            </div>
+          ) : stages.nbStages === 0 ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center font-body text-slate-500">
+              Aucune pré-inscription sur les stages à venir.
+            </div>
+          ) : (
+            <>
+              <p className="font-body text-sm text-slate-500 mb-3">
+                {stages.nbPreinscrits} cavalier(s) sur {stages.nbStages} stage(s).
+                Aucune relance ici : un stage se règle sur place.
+              </p>
+              <div className="space-y-3">
+                {stages.stages.map((st: any) => (
+                  <div key={st.cle} className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                      <span className="font-display font-bold text-slate-800">{st.titre}</span>
+                      <span className="font-body text-xs text-slate-500">
+                        semaine du {jolieDate(st.semaineLundi)} · {st.nbJours} jour(s)
+                      </span>
+                      <span className="ml-auto font-body text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+                        {st.nbPreinscrits} pré-inscrit(s)
+                        {st.places > 0 && ` · ${st.inscritsFermes + st.nbPreinscrits}/${st.places} places`}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {st.cavaliers.map((c: any) => (
+                        <span key={c.childId}
+                          className="rounded-md bg-indigo-50 border border-indigo-200 px-2 py-1 font-body text-[11px] text-indigo-900">
+                          {c.childName} <span className="text-indigo-400">· {c.familyName}</span>
+                          {c.jours.length < st.nbJours && (
+                            <span className="text-indigo-500"> ({c.jours.length}j)</span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {onglet === "cours" && (<>
       <div className="mt-4 flex items-center gap-2">
         <button onClick={load} disabled={loading}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 font-body text-sm disabled:opacity-50">
@@ -163,7 +242,10 @@ export default function PreinscritsPage() {
         </>
       )}
 
-      {resultat && (
+      </>
+      )}
+
+      {onglet === "cours" && resultat && (
         <div className={`mt-4 rounded-xl border p-4 font-body text-sm ${
           resultat.error ? "bg-rose-50 border-rose-200 text-rose-800" : "bg-emerald-50 border-emerald-200 text-emerald-800"}`}>
           {resultat.error ? resultat.error : (
