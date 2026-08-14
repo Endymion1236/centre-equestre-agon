@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import ActusBanner from "@/components/ActusBanner";
 import { NextStagesBanner } from "./NextStagesBanner";
+import { HeroTitreSaison, HeroVoileSaison } from "@/components/public/HeroSaison";
 
 const strengths = [
   {
@@ -73,6 +74,7 @@ export default function HomePage() {
       <HeroEditable>
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(7,17,31,0.78)_0%,rgba(12,26,46,0.54)_47%,rgba(12,26,46,0.14)_100%)]" style={{ zIndex: 1 }} />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_78%_20%,rgba(240,160,16,0.14)_0%,transparent_45%)]" style={{ zIndex: 2 }} />
+        <HeroVoileSaison />
         <svg className="absolute bottom-0 left-0 z-[3] h-20 w-full" viewBox="0 0 1440 80" preserveAspectRatio="none">
           <path d="M0,40 C360,75 720,10 1440,50 L1440,80 L0,80Z" className="fill-cream/45" />
           <path d="M0,55 C480,25 960,70 1440,40 L1440,80 L0,80Z" className="fill-cream" />
@@ -84,8 +86,7 @@ export default function HomePage() {
           </div>
 
           <h1 className="max-w-4xl animate-fade-in-up font-display text-5xl font-bold leading-[0.98] tracking-[-0.045em] text-white [text-shadow:0_4px_40px_rgba(0,0,0,0.35)] sm:text-6xl md:text-7xl lg:text-[88px]">
-            L&apos;équitation<br />
-            <span className="text-gradient-gold">les pieds dans le sable</span>
+            <HeroTitreSaison />
           </h1>
 
           <p className="mt-7 max-w-2xl animate-fade-in-up font-body text-lg leading-relaxed text-white/78 sm:text-xl">

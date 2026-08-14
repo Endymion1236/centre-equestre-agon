@@ -101,6 +101,12 @@ export default function ThemeSaisonnierToggle() {
                     placeholder="/planning ou /activites/animation-halloween"
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 font-body text-sm" />
 
+                  <div className="mt-2 rounded-lg border border-gray-200 bg-slate-50 px-3 py-2 font-body text-[11px] text-slate-500 leading-relaxed">
+                    Ce thème remplace aussi le titre d&apos;accueil par «&nbsp;{actuel.emoji} {actuel.heroTitre} {actuel.heroSousTitre}&nbsp;»,
+                    teinte la photo d&apos;accueil et ajoute des décorations sur tout le site public.
+                    Le logo et la charte du centre restent inchangés.
+                  </div>
+
                   {/* Aperçu : évite d'aller vérifier sur le site public */}
                   <div className="mt-2">
                     <div className="font-body text-[11px] text-slate-400 mb-1">Aperçu</div>
