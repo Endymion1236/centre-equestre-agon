@@ -473,6 +473,26 @@ export default function PlanningPage() {
         ));
         // Filtre sameStage (stageGroupId prioritaire) : ne supprime QUE ce stage
         const weekTargets = snap.docs.filter(d => sameStage(d.data(), deleteCreneau));
+
+        // Garde-fou : un stage tient en une semaine, donc au plus 7 créneaux.
+        // Au-delà, le regroupement a forcément dérapé — mieux vaut s'arrêter
+        // et demander confirmation que d'effacer une année de planning.
+        if (weekTargets.length > 7) {
+          const dates = [...new Set(weekTargets.map(t => (t.data() as any).date))].sort();
+          const ok = confirm(
+            `⚠️ ATTENTION — ${weekTargets.length} créneaux vont être supprimés.\n\n` +
+            `Un stage tient normalement en 5 à 7 jours. Ce nombre indique que des ` +
+            `stages d'autres semaines sont concernés.\n\n` +
+            `Du ${dates[0]} au ${dates[dates.length - 1]}\n\n` +
+            `Confirmer la suppression de TOUS ces créneaux ?`
+          );
+          if (!ok) {
+            setDeleteDeleting(false);
+            toast("Suppression annulée", "info");
+            return;
+          }
+        }
+
         for (const t of weekTargets) await deleteDoc(doc(db, "creneaux", t.id));
         deletedCount = weekTargets.length;
         toast(`🗑️ Stage supprimé (${weekTargets.length} créneaux)`, "success");

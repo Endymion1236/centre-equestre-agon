@@ -27,16 +27,32 @@ export interface Creneau {
 // Priorité au stageGroupId (fiable à 100%). Fallback legacy : même activityId
 // + même titre — limite connue : deux stages homonymes créés depuis la même
 // activité AVANT l'introduction du stageGroupId restent indissociables.
+/** Lundi de la semaine d'une date ISO, en UTC pour éviter tout décalage. */
+function lundiDe(dateISO: string): string {
+  if (!dateISO) return "";
+  const d = new Date(dateISO + "T12:00:00Z");
+  if (Number.isNaN(d.getTime())) return "";
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().split("T")[0];
+}
+
 export function sameStage(a: any, b: any): boolean {
   if (!a || !b) return false;
+
+  // Un stage se déroule sur UNE semaine. Deux créneaux de semaines différentes
+  // ne sont jamais le même stage, quels que soient leurs autres champs.
+  // Sans cette barrière, les règles de repli ci-dessous rapprochaient le
+  // « Stage galop d'or » de la Toussaint et celui d'août — au même titre et à
+  // la même heure — et une suppression de stage emportait toute l'année.
+  const sa = lundiDe(a.date), sb = lundiDe(b.date);
+  if (sa && sb && sa !== sb) return false;
+
   // Priorité 1 : identifiant de lot explicite (stages créés ensemble)
   if (a.stageGroupId && b.stageGroupId) return a.stageGroupId === b.stageGroupId;
   // Priorité 2 : même activité + même titre (stages depuis la même activité)
   if (a.activityId && b.activityId) return a.activityId === b.activityId && a.activityTitle === b.activityTitle;
-  // Priorité 3 (fallback) : ni l'un ni l'autre n'a d'identifiant fiable
-  // (stages anciens ou créés jour par jour à la main) → on regroupe sur
-  // titre + horaire de début identiques. Suffisant car deux stages distincts
-  // au même titre ET même heure de début la même période sont très rares.
+  // Priorité 3 (repli) : ni l'un ni l'autre n'a d'identifiant fiable
+  // (stages anciens ou créés jour par jour à la main) → titre + horaire.
   return a.activityTitle === b.activityTitle && a.startTime === b.startTime;
 }
 
