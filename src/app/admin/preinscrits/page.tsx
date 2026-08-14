@@ -66,8 +66,10 @@ export default function PreinscritsPage() {
     <div className="p-4 sm:p-6 max-w-3xl mx-auto">
       <h1 className="font-display text-2xl font-bold text-slate-800">Pré-inscrits</h1>
       <p className="font-body text-sm text-slate-600 mt-1">
-        Familles dont une place est retenue sans inscription définitive. Les réponses
-        à ce message arriveront dans votre boîte.
+        Familles dont une place est retenue en <strong>cours à l&apos;année</strong> sans
+        inscription définitive. Les pré-inscriptions aux stages n&apos;apparaissent pas
+        ici : elles se règlent sur place, sans dossier ni mandat à préparer.
+        Les réponses à ce message arriveront dans votre boîte.
       </p>
 
       <div className="mt-4 flex items-center gap-2">

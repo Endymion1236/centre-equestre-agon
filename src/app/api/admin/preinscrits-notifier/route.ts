@@ -37,8 +37,13 @@ async function collecter() {
 
   for (const d of snap.docs) {
     const c = d.data() as any;
+    // Cours à l'année UNIQUEMENT. Une pré-inscription à un stage se règle sur
+    // place le jour venu : relancer une famille pour un dossier et un mandat
+    // de prélèvement n'aurait aucun sens.
+    if (c.activityType === "stage" || c.activityType === "stage_journee") continue;
     for (const e of c.enrolled || []) {
       if (!e?.preinscription) continue;
+      if (e.preinscriptionMode === "stage") continue;
       const cle = e.familyId;
       if (!cle) continue;
       if (!parFamille.has(cle)) {
