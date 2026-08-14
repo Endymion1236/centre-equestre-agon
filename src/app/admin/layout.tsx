@@ -458,17 +458,46 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         const families = familiesSnapshot.docs.map((item) => ({ id: item.id, ...item.data() } as any));
         const payments = paymentsSnapshot.docs.map((item) => item.data());
         const todaySlots = slots.filter((slot: any) => slot.date === todayStr);
-        const totalEnrolled = slots.reduce((sum: number, slot: any) => sum + (slot.enrolled?.length || 0), 0);
-        const totalPlaces = slots.reduce((sum: number, slot: any) => sum + (slot.maxPlaces || 0), 0);
+        // Taux de remplissage : ne comptent que les créneaux ANNULABLES ET
+        // DOTÉS D'UNE CAPACITÉ. Un créneau annulé, ou sans maxPlaces, ajoutait
+        // ses inscrits au numérateur sans rien au dénominateur — le taux
+        // dépassait alors 100 % sans raison visible.
+        const slotsComptables = slots.filter(
+          (slot: any) => (slot.maxPlaces || 0) > 0 && slot.status !== "closed" && slot.status !== "annule"
+        );
+        const totalEnrolled = slotsComptables.reduce((sum: number, slot: any) => sum + (slot.enrolled?.length || 0), 0);
+        const totalPlaces = slotsComptables.reduce((sum: number, slot: any) => sum + (slot.maxPlaces || 0), 0);
+
+        // Détail par type : « 50 inscrits en stage » et « 3/6 en cours baby »
+        // n'ont pas le même sens. Sans ventilation, le modèle agrège des
+        // choses incomparables et sort un chiffre qui ne veut rien dire.
+        const parType: Record<string, { inscrits: number; places: number; creneaux: number }> = {};
+        for (const slot of slotsComptables as any[]) {
+          const t = slot.activityType || "autre";
+          if (!parType[t]) parType[t] = { inscrits: 0, places: 0, creneaux: 0 };
+          parType[t].inscrits += slot.enrolled?.length || 0;
+          parType[t].places += slot.maxPlaces || 0;
+          parType[t].creneaux++;
+        }
+        const remplissageParType = Object.entries(parType)
+          .sort((a, b) => b[1].places - a[1].places)
+          .map(([type, v]) =>
+            `${type} : ${v.inscrits}/${v.places} places sur ${v.creneaux} créneau(x) — ${v.places > 0 ? Math.round((v.inscrits / v.places) * 100) : 0}%`
+          );
         const pending = payments.filter((payment: any) => payment.paymentMode !== "cheque_differe" && (payment.status === "pending" || payment.status === "partial"));
 
         setVoiceContext({
           date_aujourdhui: now.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
           reprises_aujourdhui: todaySlots.map((slot: any) => `${slot.startTime} — ${slot.activityTitle} — ${slot.enrolled?.length || 0}/${slot.maxPlaces || 0}`),
           creneaux_semaine: slots.length,
+          semaine_analysee: `du ${mondayStr} au ${sundayStr} (semaine en cours)`,
           inscrits_semaine: totalEnrolled,
           places_semaine: totalPlaces,
-          taux_remplissage: totalPlaces > 0 ? `${Math.round((totalEnrolled / totalPlaces) * 100)}%` : "N/A",
+          taux_remplissage: totalPlaces > 0
+            ? `${Math.round((totalEnrolled / totalPlaces) * 100)}% (${totalEnrolled} inscrits sur ${totalPlaces} places, semaine en cours, tous types confondus)`
+            : "Aucun créneau avec places cette semaine",
+          remplissage_par_type: remplissageParType,
+          note_remplissage: "Le taux global mélange cours, stages et promenades : cite de préférence le détail par type. Ne calcule aucun autre taux toi-même, utilise uniquement ces chiffres.",
           total_familles: families.length,
           total_cavaliers: families.reduce((sum: number, family: any) => sum + (family.children?.length || 0), 0),
           impayes: pending.length,
