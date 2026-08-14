@@ -173,6 +173,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       setShowPay(false);
       setSearch(e.familyName || "");
       if ((e as any).preinscriptionMode === "annuel") setInscriptionMode("annuel");
+      // Sur un stage, le cavalier se coche dans le selecteur multi-enfants.
+      if ((e as any).preinscriptionMode === "stage") setSelectedChildren([e.childId]);
       panelToast(`${e.childName} — choisissez le règlement puis validez l'inscription`, "success");
       await onRefresh?.();
     } catch (err: any) {
@@ -1532,6 +1534,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               familyId: fam.firestoreId, familyName: fam.parentName || "—",
               enrolledAt: new Date().toISOString(),
               stageKey, // ← NOUVEAU : permet le matching paiement précis
+              ...(preinscription ? { preinscription: true, preinscriptionMode: "stage" } : {}),
             } as any, undefined, { skipPayment: true, skipEmail: true });
           }
         }
@@ -1541,6 +1544,19 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
         // Alerter pour chaque jour du stage qui passe complet (demande Nicolas)
         await checkAndAlertIfFull(creneauxAInscrire.map(c => c.id!).filter(Boolean));
+
+        // Pré-inscription : on s'arrête là. Les places sont retenues, aucun
+        // panier n'est constitué — donc ni commande, ni facture, ni relance.
+        if (preinscription) {
+          panelToast(
+            `${stageLines.length} cavalier(s) pré-inscrit(s) au stage — aucun paiement créé`,
+            "success"
+          );
+          setSelectedChildren([]); setPreinscription(false); setInscriptionFaite(true);
+          await onRefresh?.();
+          setEnrolling(false);
+          return;
+        }
 
         // Ajouter les lignes au panier de la famille (1 seul paiement pending)
         const scheduleDesc = formatStageSchedule(creneauxAInscrire);
@@ -3211,6 +3227,19 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   </button>
                 </div>
                 {showAddChild && renderAjoutCavalier(fam)}
+
+                {/* Pré-inscription : retenir les places d'un stage à venir
+                    (Toussaint, vacances) avant d'ouvrir les paiements. */}
+                <label className={`flex items-start gap-2 mt-3 p-2.5 rounded-lg border cursor-pointer ${
+                  preinscription ? "bg-indigo-50 border-indigo-300" : "bg-white border-gray-200"}`}>
+                  <input type="checkbox" checked={preinscription}
+                    onChange={e => setPreinscription(e.target.checked)}
+                    className="mt-0.5 cursor-pointer" />
+                  <span className="font-body text-xs text-slate-700 leading-relaxed">
+                    <strong>Pré-inscription</strong> — retenir la place sans créer
+                    de paiement, de facture ni d'email.
+                  </span>
+                </label>
 
                 {/* Récap stage */}
                 {selectedChildren.length > 0 && (() => {
