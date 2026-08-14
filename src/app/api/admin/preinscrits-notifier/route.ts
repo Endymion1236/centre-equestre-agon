@@ -32,7 +32,7 @@ async function collecter() {
 
   const parFamille = new Map<string, {
     familyId: string; familyName: string; email: string;
-    lignes: { childName: string; activite: string; date: string; horaire: string; annuel: boolean }[];
+    lignes: { childName: string; activite: string; date: string; horaire: string; annuel: boolean; waKey: string }[];
   }>();
 
   for (const d of snap.docs) {
@@ -46,12 +46,14 @@ async function collecter() {
           familyId: cle, familyName: e.familyName || "", email: "", lignes: [],
         });
       }
+      const jourIndex = c.date ? (new Date(c.date + "T12:00:00Z").getUTCDay() + 6) % 7 : -1;
       parFamille.get(cle)!.lignes.push({
         childName: e.childName || "",
         activite: c.activityTitle || "",
         date: c.date || "",
         horaire: `${c.startTime || ""}–${c.endTime || ""}`,
         annuel: e.preinscriptionMode === "annuel",
+        waKey: c.activityId && jourIndex >= 0 ? `${c.activityId}-${jourIndex}-${c.startTime}` : "",
       });
     }
   }
@@ -99,6 +101,19 @@ export async function POST(req: NextRequest) {
   }
 
   await refreshEmailMode();
+
+  // Réglages WhatsApp : lien de communauté + un lien par reprise, indexés par
+  // `activityId-jourSemaine-heure` comme sur le tableau de bord famille.
+  let waCommunity = "";
+  let waReprises: Record<string, string> = {};
+  try {
+    const wa = await adminDb.collection("settings").doc("whatsapp").get();
+    if (wa.exists) {
+      const d = wa.data() as any;
+      waCommunity = d.communityUrl || "";
+      waReprises = d.reprises || {};
+    }
+  } catch { /* absence de réglages : le mail part sans encart WhatsApp */ }
   const resend = new Resend(process.env.RESEND_API_KEY);
   const familles = (await collecter()).filter(
     f => f.email && (cibles.length === 0 || cibles.includes(f.familyId))
@@ -127,6 +142,34 @@ export async function POST(req: NextRequest) {
         <p style="margin:0 0 8px;font-weight:bold;">Place${f.lignes.length > 1 ? "s" : ""} retenue${f.lignes.length > 1 ? "s" : ""} :</p>
         <ul style="margin:0;padding-left:18px;">${lignes}</ul>
       </div>
+      ${(() => {
+        // Groupes WhatsApp des reprises de CETTE famille. Un lien vers son
+        // propre groupe convainc bien mieux qu'un lien générique.
+        const liens = [...new Map(
+          f.lignes
+            .filter(l => l.waKey && waReprises[l.waKey])
+            .map(l => [l.waKey, { label: l.activite, url: waReprises[l.waKey] }])
+        ).values()];
+        if (liens.length === 0 && !waCommunity) return "";
+        const boutons = liens.map(l =>
+          `<a href="${l.url}" style="display:block;margin-bottom:8px;padding:11px 16px;background:#16a34a;
+             color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:14px;">
+             Groupe WhatsApp — ${l.label}</a>`
+        ).join("");
+        const communaute = (liens.length === 0 && waCommunity)
+          ? `<a href="${waCommunity}" style="display:inline-block;padding:11px 16px;background:#16a34a;
+               color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:14px;">
+               Rejoindre la communauté WhatsApp</a>`
+          : "";
+        return `<div style="margin:20px 0;padding:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">
+          <p style="margin:0 0 6px;font-weight:bold;">Rejoignez le groupe WhatsApp de votre reprise</p>
+          <p style="margin:0 0 12px;font-size:14px;line-height:1.6;">
+            C'est par là que passent les infos de dernière minute : météo, changement
+            d'horaire, séance annulée. Un seul clic, une seule fois.
+          </p>
+          ${boutons}${communaute}
+        </div>`;
+      })()}
       <div style="margin:20px 0;padding:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
         <p style="margin:0 0 8px;font-weight:bold;">Votre espace famille</p>
         <p style="margin:0 0 12px;font-size:14px;line-height:1.6;">
