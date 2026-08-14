@@ -28,6 +28,10 @@ type ChildMeta = { childName: string; familyId: string; familyName: string };
 async function coursDeSaison(start: string, end: string) {
   const snap = await adminDb.collection("creneaux").where("date", ">=", start).where("date", "<=", end).get();
   const enrolled = new Map<string, ChildMeta>();
+  // Pre-inscrits : places retenues sans inscription definitive. Les compter
+  // comme reinscrits gonflerait le taux de retention avec des dossiers qui
+  // ne sont ni payes ni confirmes.
+  const preinscrits = new Map<string, ChildMeta>();
   const monByChild = new Map<string, Set<string>>();
   let nbCreneaux = 0, nbCours = 0;
   snap.forEach(d => {
@@ -38,11 +42,16 @@ async function coursDeSaison(start: string, end: string) {
     const mon = c.monitor || "";
     for (const e of (c.enrolled || [])) {
       if (!e?.childId) continue;
-      if (!enrolled.has(e.childId)) enrolled.set(e.childId, { childName: e.childName || "", familyId: e.familyId || "", familyName: e.familyName || "" });
+      const meta = { childName: e.childName || "", familyId: e.familyId || "", familyName: e.familyName || "" };
+      if (e.preinscription) {
+        if (!preinscrits.has(e.childId)) preinscrits.set(e.childId, meta);
+      } else if (!enrolled.has(e.childId)) {
+        enrolled.set(e.childId, meta);
+      }
       if (mon) { if (!monByChild.has(e.childId)) monByChild.set(e.childId, new Set()); monByChild.get(e.childId)!.add(mon); }
     }
   });
-  return { enrolled, monByChild, nbCreneaux, nbCours };
+  return { enrolled, preinscrits, monByChild, nbCreneaux, nbCours };
 }
 
 async function handle(req: NextRequest) {
@@ -138,9 +147,16 @@ async function handle(req: NextRequest) {
 
     let totalN = 0, reinscrits = 0;
     const nonReinscrits: any[] = [];
+    const preinscritsListe: any[] = [];
     for (const [childId, meta] of sN.enrolled) {
       totalN++;
       if (enrolledN1.has(childId) || forfaitActiveN1.has(childId)) { reinscrits++; continue; }
+      // Entre les deux : la place est retenue, mais rien n'est acquis. Relance
+      // assuree par l'ecran Pre-inscrits, pas par celui-ci — pas de doublon.
+      if (sN1.preinscrits.has(childId)) {
+        preinscritsListe.push(enrich(childId, meta, "preinscrit"));
+        continue;
+      }
       nonReinscrits.push(enrich(childId, meta, apresRentree ? "a_risque" : "pas_encore"));
     }
 
@@ -157,6 +173,7 @@ async function handle(req: NextRequest) {
     return NextResponse.json({
       saison: N, prochaine: N + 1, rentree, today, apresRentree,
       totalN, reinscrits, nonReinscritsCount: nonReinscrits.length, partisCount: partis.length,
+      preinscritsCount: preinscritsListe.length, preinscrits: preinscritsListe,
       retentionPct: totalN ? Math.round((reinscrits / totalN) * 100) : null,
       nonReinscrits, partis,
       diag: {

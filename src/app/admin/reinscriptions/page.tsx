@@ -14,6 +14,7 @@ interface Data {
   saison: number; prochaine: number; rentree: string; today: string; apresRentree: boolean;
   totalN: number; reinscrits: number; nonReinscritsCount: number; partisCount: number;
   retentionPct: number | null; nonReinscrits: Cavalier[]; partis: Cavalier[];
+  preinscritsCount?: number; preinscrits?: Cavalier[];
   diag?: { creneauxSaisonN: number; coursSaisonN: number; inscritsCoursN: number; creneauxSaisonN1: number; coursSaisonN1: number; inscritsCoursN1: number; nbForfaits: number };
 }
 
@@ -190,6 +191,11 @@ export default function ReinscriptionsPage() {
               <div className="font-body text-xs text-slate-500 uppercase tracking-wider mb-1">Non réinscrits</div>
               <div className="font-display text-3xl font-bold text-slate-800">{data.nonReinscritsCount}</div>
             </div>
+            <div className="bg-white border border-indigo-200 rounded-2xl p-4 text-center">
+              <div className="font-body text-xs text-indigo-500 uppercase tracking-wider mb-1">Pré-inscrits</div>
+              <div className="font-display text-3xl font-bold text-indigo-600">{data.preinscritsCount ?? 0}</div>
+              <div className="font-body text-[10px] text-indigo-400 mt-1">place retenue, à confirmer</div>
+            </div>
             <div className="bg-white border border-slate-200 rounded-2xl p-4 text-center">
               <div className="font-body text-xs text-slate-500 uppercase tracking-wider mb-1">Partis en cours</div>
               <div className="font-display text-3xl font-bold text-amber-600">{data.partisCount}</div>
@@ -199,6 +205,27 @@ export default function ReinscriptionsPage() {
               <div className="font-display text-3xl font-bold text-slate-800">{data.totalN}</div>
             </div>
           </div>
+
+          {(data.preinscrits?.length ?? 0) > 0 && (
+            <div className="mb-5 rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4">
+              <div className="font-body text-sm font-bold text-indigo-900">
+                {data.preinscrits!.length} cavalier(s) pré-inscrit(s)
+              </div>
+              <div className="font-body text-xs text-indigo-700 mt-0.5">
+                Leur place est retenue sans inscription définitive. Ils ne comptent pas
+                dans le taux de réinscription et sont relancés depuis l&apos;écran
+                <strong> Pré-inscrits</strong> — inutile de les solliciter deux fois.
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {data.preinscrits!.map(c => (
+                  <span key={c.childId}
+                    className="rounded-md bg-white border border-indigo-200 px-2 py-1 font-body text-[11px] text-indigo-800">
+                    {c.childName} <span className="text-indigo-400">· {c.familyName}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {data.diag && (
             <div className="font-body text-[11px] text-slate-400 mb-4">
