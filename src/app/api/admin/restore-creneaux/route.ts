@@ -47,19 +47,35 @@ async function lireSauvegarde(date: string) {
   return JSON.parse(buf.toString("utf-8"));
 }
 
-/** Créneaux de la sauvegarde absents de Firestore, sur la plage demandée. */
-async function creneauxManquants(payload: any, from: string, to: string) {
+/** Signature métier d'un créneau : ce qui le rend unique aux yeux d'un humain. */
+function signature(c: any): string {
+  return `${c.date}|${(c.activityTitle || "").trim().toLowerCase()}|${c.startTime}`;
+}
+
+/**
+ * Créneaux de la sauvegarde absents de Firestore, sur la plage demandée.
+ *
+ * La comparaison se fait sur la signature métier — date, intitulé, heure de
+ * début — et NON sur l'identifiant du document. Un créneau supprimé puis
+ * recréé à la main porte un identifiant neuf : le comparer par identifiant
+ * le déclarait manquant et la restauration aurait fabriqué des doublons.
+ */
+async function creneauxManquants(payload: any, from: string, to: string, titre?: string) {
   const collections = payload?.collections || payload || {};
   const source: any[] = collections.creneaux || [];
 
   const snap = await adminDb.collection("creneaux")
     .where("date", ">=", from).where("date", "<=", to).get();
-  const presents = new Set(snap.docs.map(d => d.id));
+  const presents = new Set(snap.docs.map(d => signature(d.data())));
+
+  const filtreTitre = (titre || "").trim().toLowerCase();
 
   return source
     .filter((c: any) => {
       const d = c.date;
-      return typeof d === "string" && d >= from && d <= to && !presents.has(c.__id__);
+      if (typeof d !== "string" || d < from || d > to) return false;
+      if (filtreTitre && !(c.activityTitle || "").toLowerCase().includes(filtreTitre)) return false;
+      return !presents.has(signature(c));
     })
     .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
 }
@@ -97,9 +113,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: `Aucune sauvegarde au ${date}.` }, { status: 404 });
   }
 
-  const manquants = await creneauxManquants(payload, from, to);
+  const titre = req.nextUrl.searchParams.get("titre") || "";
+  const manquants = await creneauxManquants(payload, from, to, titre);
   return NextResponse.json({
-    date, from, to,
+    date, from, to, titre,
     nb: manquants.length,
     creneaux: manquants.map((c: any) => ({
       id: c.__id__,
@@ -117,7 +134,7 @@ export async function POST(req: NextRequest) {
   const auth = await verifyAuth(req, { adminOnly: true });
   if (auth instanceof NextResponse) return auth;
 
-  const { date, from, to, confirm } = await req.json().catch(() => ({} as any));
+  const { date, from, to, confirm, titre } = await req.json().catch(() => ({} as any));
   if (!date || !from || !to) {
     return NextResponse.json({ error: "date, from et to requis." }, { status: 400 });
   }
@@ -130,7 +147,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Aucune sauvegarde au ${date}.` }, { status: 404 });
   }
 
-  const manquants = await creneauxManquants(payload, from, to);
+  const manquants = await creneauxManquants(payload, from, to, titre);
   let restaures = 0;
   for (const c of manquants) {
     const { __id__, ...donnees } = c;

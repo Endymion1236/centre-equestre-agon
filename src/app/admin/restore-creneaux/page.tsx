@@ -14,6 +14,7 @@ export default function RestoreCreneauxPage() {
   const [date, setDate] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [titre, setTitre] = useState("");
   const [apercu, setApercu] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [resultat, setResultat] = useState<any>(null);
@@ -38,7 +39,9 @@ export default function RestoreCreneauxPage() {
   const previsualiser = async () => {
     if (!date || !from || !to) return;
     setBusy(true); setResultat(null);
-    setApercu(await appel(`/api/admin/restore-creneaux?date=${date}&from=${from}&to=${to}`));
+    setApercu(await appel(
+      `/api/admin/restore-creneaux?date=${date}&from=${from}&to=${to}&titre=${encodeURIComponent(titre)}`
+    ));
     setBusy(false);
   };
 
@@ -48,7 +51,7 @@ export default function RestoreCreneauxPage() {
     setBusy(true);
     setResultat(await appel("/api/admin/restore-creneaux", {
       method: "POST",
-      body: JSON.stringify({ date, from, to, confirm: "RESTAURER" }),
+      body: JSON.stringify({ date, from, to, titre, confirm: "RESTAURER" }),
     }));
     setApercu(null);
     setBusy(false);
@@ -61,8 +64,9 @@ export default function RestoreCreneauxPage() {
       <h1 className="font-display text-2xl font-bold text-slate-800">Restaurer des créneaux</h1>
       <p className="font-body text-sm text-slate-600 mt-1">
         Récupère des créneaux supprimés par erreur depuis une sauvegarde. Seuls les
-        créneaux <strong>absents</strong> sont recréés : rien de ce qui existe
-        aujourd&apos;hui n&apos;est modifié.
+        créneaux <strong>absents</strong> sont recréés — la comparaison porte sur la
+        date, l&apos;intitulé et l&apos;horaire, donc un créneau que vous avez déjà
+        recréé à la main ne sera pas proposé en double.
       </p>
 
       <div className="mt-5 rounded-xl border border-slate-200 bg-white p-4 space-y-3">
@@ -89,6 +93,19 @@ export default function RestoreCreneauxPage() {
             <input type="date" value={to} onChange={e => { setTo(e.target.value); setApercu(null); }}
               className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 font-body text-sm" />
           </div>
+        </div>
+
+        <div>
+          <label className="font-body text-xs font-semibold text-slate-600">
+            Filtrer par intitulé (recommandé)
+          </label>
+          <input value={titre} onChange={e => { setTitre(e.target.value); setApercu(null); }}
+            placeholder="ex. galop d'argent"
+            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 font-body text-sm" />
+          <p className="mt-1 font-body text-[11px] text-slate-400">
+            Laissez vide pour tout voir. Cibler un stage évite de restaurer par erreur
+            des créneaux qui n'ont jamais disparu.
+          </p>
         </div>
 
         <button onClick={previsualiser} disabled={busy || !date || !from || !to}
