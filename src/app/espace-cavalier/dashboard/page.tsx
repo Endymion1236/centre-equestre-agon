@@ -150,7 +150,11 @@ export default function DashboardPage() {
         const childIds = new Set((family.children || []).map((c: any) => c.id));
         const today = todayLocalString();
         const end = new Date();
-        end.setDate(end.getDate() + 28);
+        // 45 jours : a la rentree, les familles doivent pouvoir rejoindre le
+        // groupe de leur reprise bien avant la premiere seance. 28 jours
+        // masquait le lien jusqu'a fin aout pour un cours reprenant le
+        // 26 septembre.
+        end.setDate(end.getDate() + 45);
         const endString = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
         const slotsSnap = await getDocs(query(collection(db, "creneaux"), where("date", ">=", today), where("date", "<=", endString)));
         const days = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
