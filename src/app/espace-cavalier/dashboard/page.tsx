@@ -159,7 +159,13 @@ export default function DashboardPage() {
         slotsSnap.docs.forEach((d) => {
           const c = d.data() as any;
           if (!c.activityId || c.activityType === "stage" || c.activityType === "stage_journee") return;
-          const member = (c.enrolled || []).some((e: any) => childIds.has(e.childId) && e.paymentSource === "forfait");
+          // Appartenance au groupe : le lien s'affiche pour toute inscription
+          // au cours, pas seulement celles couvertes par un forfait annuel.
+          // Une pré-inscription (place retenue avant signature du mandat) ou
+          // une inscription réglée autrement n'ont pas de paymentSource
+          // "forfait" : ces familles se retrouvaient sans lien vers le groupe
+          // de leur reprise, alors qu'elles y ont bien leur place.
+          const member = (c.enrolled || []).some((e: any) => childIds.has(e.childId));
           if (!member) return;
           const dayIndex = (new Date(c.date).getDay() + 6) % 7;
           const key = `${c.activityId}-${dayIndex}-${c.startTime}`;
