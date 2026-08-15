@@ -1,36 +1,55 @@
 "use client";
-import { useState, useEffect } from "react";
-import { authFetch } from "@/lib/auth-fetch";
-import { Loader2, Mail, Sparkles, Calendar, Copy, Check, Inbox, RefreshCw, Send, Trash2, Forward, UserPlus, Phone } from "lucide-react";
-
-const CLASSIF: Record<string, { label: string; cls: string }> = {
-  inscription: { label: "Demande d'inscription", cls: "bg-green-50 text-green-700" },
-  info: { label: "Demande d'info", cls: "bg-blue-50 text-blue-700" },
-  administratif: { label: "Administratif", cls: "bg-amber-50 text-amber-700" },
-  autre: { label: "Autre", cls: "bg-slate-100 text-slate-600" },
-};
-
-// Décode les entités HTML (d&#39;Agon → d'Agon) pour un affichage propre.
-function decodeHtml(s: string): string {
-  if (!s) return "";
-  if (typeof document === "undefined") return s;
-  const el = document.createElement("textarea");
-  el.innerHTML = s;
-  return el.value;
-}
 
 /**
- * Un mail est un message du répondeur s'il vient de StandardFacile ET porte
- * une pièce jointe audio. Les deux conditions : un mail de facturation
- * StandardFacile ne doit pas déclencher de transcription.
+ * src/app/admin/boite/page.tsx
+ *
+ * Boîte de réception assistée : on choisit un mail Gmail, l'assistant le
+ * classe, le résume, propose un brouillon de réponse et les prestations
+ * réellement disponibles — puis, si besoin, crée la famille et inscrit
+ * l'enfant en un clic.
+ *
+ * Cette page est l'ORCHESTRATEUR : elle détient tout l'état (le mail en cours,
+ * le résultat d'analyse, la fiche famille, les sélections) et le distribue.
+ * Ce qui appelle le réseau ou dessine un bloc vit à côté :
+ *
+ *   - types.ts               formes des états partagés (Gmail, fiche famille, inscriptions)
+ *   - mail-utils.ts          libellés de classification, décodage HTML, détection d'un vocal
+ *   - gmail-actions.ts       lister / paginer / connecter / corbeille / transfert / envoi
+ *   - assistant-actions.ts   transcription vocale, création de famille, inscription 1-clic
+ *   - PanneauGmail           liste des mails et état de la connexion
+ *   - PanneauMailRecu        le mail en cours (éditable) et le bouton Analyser
+ *   - FicheNouvelleFamille   fiche pré-remplie à relire puis créer
+ *   - ListePrestations       suggestions + catalogue + inscription
+ *   - BlocBrouillon          la réponse, son envoi et sa copie
+ *
+ * Pourquoi ce découpage : l'écran enchaîne des actions irréversibles sur des
+ * systèmes différents (la boîte mail réelle, la base des familles, les
+ * commandes). Chacune méritait d'être lisible seule, avec ses garde-fous, sans
+ * être noyée dans 600 lignes de JSX.
+ *
+ * `analyser` est volontairement restée ici : elle ne fait pas qu'appeler
+ * l'API, elle remet à zéro la moitié de l'état de la page (suggestions,
+ * ajouts manuels, famille créée, enfants choisis). C'est le rôle de
+ * l'orchestrateur, pas d'un module d'appel réseau.
  */
-function estVocal(m: any): boolean {
-  const from = String(m?.from || "").toLowerCase();
-  return (
-    !!m?.audioAttachmentId &&
-    (from.includes("monstandardfacile.com") || from.includes("standardfacile.com"))
-  );
-}
+
+import { useState, useEffect } from "react";
+import { authFetch } from "@/lib/auth-fetch";
+import { Loader2 } from "lucide-react";
+import { CLASSIF, decodeHtml, estVocal } from "./mail-utils";
+import type {
+  ActionBoite, EtatGmail, EtatInscription, FicheFamille, NouvelleFamille, StatutAction,
+} from "./types";
+import {
+  chargerGmail, connecterGmail, chargerPlusDeMessages,
+  mettreALaCorbeilleSelection, mettreALaCorbeille, transfererMail, envoyerReponse,
+} from "./gmail-actions";
+import { transcrireVocal, creerFamille, inscrireSuggestion } from "./assistant-actions";
+import { PanneauGmail } from "./PanneauGmail";
+import { PanneauMailRecu } from "./PanneauMailRecu";
+import { FicheNouvelleFamille } from "./FicheNouvelleFamille";
+import { ListePrestations } from "./ListePrestations";
+import { BlocBrouillon } from "./BlocBrouillon";
 
 export default function BoiteAssistantPage() {
   const [vocal, setVocal] = useState<any>(null);
@@ -46,217 +65,61 @@ export default function BoiteAssistantPage() {
   const [draft, setDraft] = useState("");
   const [copied, setCopied] = useState(false);
   // Suivi de l'inscription 1-clic par suggestion (index → état)
-  const [enrollState, setEnrollState] = useState<Record<number, { busy?: boolean; done?: boolean; error?: string; orderMsg?: string; orderWarn?: string }>>({});
+  const [enrollState, setEnrollState] = useState<Record<number, EtatInscription>>({});
   // Étape 4 — nouvelle famille (expéditeur inconnu) : fiche pré-remplie par
   // l'IA, RELUE par l'admin, créée au clic. Puis les inscriptions se font
   // sur cette famille fraîchement créée.
-  const [famForm, setFamForm] = useState<{ parentName: string; parentEmail: string; parentPhone: string; flechage: string; children: { firstName: string; lastName: string; birthDate: string; galopLevel: string; ageHint: number | null }[] } | null>(null);
-  const [newFam, setNewFam] = useState<{ familyId: string; familyName: string; children: { id: string; firstName: string }[] } | null>(null);
+  const [famForm, setFamForm] = useState<FicheFamille | null>(null);
+  const [newFam, setNewFam] = useState<NouvelleFamille | null>(null);
   const [creatingFam, setCreatingFam] = useState(false);
-  const [famMsg, setFamMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [famMsg, setFamMsg] = useState<StatutAction | null>(null);
   const [chosenChild, setChosenChild] = useState<Record<number, string>>({});
   // Ajouts MANUELS de prestations par l'admin (depuis res.catalogue)
   const [manual, setManual] = useState<any[]>([]);
   const [pickerValue, setPickerValue] = useState("");
 
   // ── Gmail ──
-  const [gmail, setGmail] = useState<{
-    loading: boolean;
-    configured: boolean;
-    connected: boolean;
-    messages: any[];
-    error: string;
-    /** Adresse REELLEMENT connectee (renvoyee par l'API, jamais devinee). */
-    email?: string | null;
-    /** Jeton de page suivante Gmail, null si fin de liste. */
-    nextPageToken?: string | null;
-  }>({ loading: true, configured: false, connected: false, messages: [], error: "", email: null, nextPageToken: null });
+  const [gmail, setGmail] = useState<EtatGmail>({ loading: true, configured: false, connected: false, messages: [], error: "", email: null, nextPageToken: null });
   const [connecting, setConnecting] = useState(false);
   const [replyMeta, setReplyMeta] = useState<{ threadId: string; messageId: string }>({ threadId: "", messageId: "" });
   const [selectedId, setSelectedId] = useState<string>("");
-  const [mailboxBusy, setMailboxBusy] = useState<"" | "trash" | "forward">("");
-  const [mailboxMsg, setMailboxMsg] = useState<{ ok: boolean; text: string } | null>(null);
-
-  const deleteSelected = async () => {
-    if (selectedIds.length === 0 || mailboxBusy) return;
-    const n = selectedIds.length;
-    if (!confirm(`Mettre ${n} mail${n > 1 ? "s" : ""} à la corbeille Gmail ?`)) return;
-    setMailboxBusy("trash");
-    setMailboxMsg(null);
-    try {
-      const r = await authFetch("/api/admin/gmail/trash", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: selectedIds }),
-      });
-      const d = await r.json();
-      if (r.ok || (d.trashed && d.trashed.length)) {
-        const trashed: string[] = d.trashed || selectedIds;
-        setGmail((g) => ({ ...g, messages: g.messages.filter((m: any) => !trashed.includes(m.id)) }));
-        if (trashed.includes(selectedId)) {
-          setFrom(""); setSubject(""); setBody(""); setSelectedId(""); setRes(null);
-        }
-        setSelectedIds((prev) => prev.filter((x) => !trashed.includes(x)));
-        const nFailed = (d.failed || []).length;
-        setMailboxMsg({
-          ok: nFailed === 0,
-          text: nFailed === 0
-            ? `${trashed.length} mail${trashed.length > 1 ? "s" : ""} à la corbeille ✓`
-            : `${trashed.length} supprimé(s), ${nFailed} en échec`,
-        });
-      } else {
-        setMailboxMsg({ ok: false, text: d.error || "Échec de la suppression" });
-      }
-    } catch {
-      setMailboxMsg({ ok: false, text: "Erreur réseau" });
-    }
-    setMailboxBusy("");
-  };
-
-  const loadMore = async () => {
-    if (!gmail.nextPageToken || loadingMore) return;
-    setLoadingMore(true);
-    try {
-      const r = await authFetch(`/api/admin/gmail/messages?pageToken=${encodeURIComponent(gmail.nextPageToken)}`);
-      const d = await r.json();
-      if (r.ok && Array.isArray(d.messages)) {
-        setGmail((g) => {
-          // Dédoublonnage : une page peut chevaucher si la boîte a bougé.
-          const vus = new Set(g.messages.map((m: any) => m.id));
-          const nouveaux = d.messages.filter((m: any) => !vus.has(m.id));
-          return { ...g, messages: [...g.messages, ...nouveaux], nextPageToken: d.nextPageToken || null };
-        });
-      }
-    } catch {
-      /* silencieux : le bouton reste disponible pour réessayer */
-    }
-    setLoadingMore(false);
-  };
-
-  const deleteMail = async () => {
-    if (!selectedId || mailboxBusy) return;
-    if (!confirm("Mettre ce mail à la corbeille Gmail ?")) return;
-    setMailboxBusy("trash");
-    setMailboxMsg(null);
-    try {
-      const r = await authFetch("/api/admin/gmail/trash", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: selectedId }),
-      });
-      const d = await r.json();
-      if (r.ok) {
-        setGmail((g) => ({ ...g, messages: g.messages.filter((m: any) => m.id !== selectedId) }));
-        setFrom("");
-        setSubject("");
-        setBody("");
-        setSelectedId("");
-        setRes(null);
-        setMailboxMsg({ ok: true, text: "Mail mis à la corbeille ✓" });
-      } else {
-        setMailboxMsg({ ok: false, text: d.error || "Échec de la suppression" });
-      }
-    } catch {
-      setMailboxMsg({ ok: false, text: "Erreur réseau" });
-    }
-    setMailboxBusy("");
-  };
-
-  const forwardMail = async () => {
-    if (mailboxBusy) return;
-    const dest = window.prompt("Transférer ce mail à quelle adresse ?");
-    if (!dest || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dest.trim())) {
-      if (dest !== null) setMailboxMsg({ ok: false, text: "Adresse invalide" });
-      return;
-    }
-    setMailboxBusy("forward");
-    setMailboxMsg(null);
-    try {
-      const fwdBody = `---------- Message transféré ----------\nDe : ${from}\nObjet : ${subject}\n\n${body}`;
-      const r = await authFetch("/api/admin/gmail/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: dest.trim(), subject: `Fwd: ${subject}`, body: fwdBody }),
-      });
-      const d = await r.json();
-      setMailboxMsg(r.ok
-        ? { ok: true, text: `Transféré à ${dest.trim()} depuis ${d.account || "la boîte connectée"} ✓` }
-        : { ok: false, text: d.error || "Échec du transfert" });
-    } catch {
-      setMailboxMsg({ ok: false, text: "Erreur réseau" });
-    }
-    setMailboxBusy("");
-  };
+  const [mailboxBusy, setMailboxBusy] = useState<ActionBoite>("");
+  const [mailboxMsg, setMailboxMsg] = useState<StatutAction | null>(null);
   const [sending, setSending] = useState(false);
-  const [sendMsg, setSendMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [sendMsg, setSendMsg] = useState<StatutAction | null>(null);
 
-  const sendReply = async () => {
-    if (!from.trim() || !draft.trim() || sending) return;
-    if (!confirm(`Envoyer cette réponse à ${from} ?`)) return;
-    setSending(true);
-    setSendMsg(null);
-    try {
-      const r = await authFetch("/api/admin/gmail/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to: from,
-          subject,
-          body: draft,
-          threadId: replyMeta.threadId || undefined,
-          inReplyTo: replyMeta.messageId || undefined,
-        }),
-      });
-      const d = await r.json();
-      // On precise DEPUIS QUEL compte le message est parti : c'est dans les
-      // « Envoyes » de celui-ci qu'il se range, et nulle part ailleurs.
-      setSendMsg(r.ok
-        ? { ok: true, text: d.account ? `Réponse envoyée depuis ${d.account} ✓` : "Réponse envoyée ✓" }
-        : { ok: false, text: d.error || "Échec de l'envoi" });
-    } catch {
-      setSendMsg({ ok: false, text: "Erreur réseau" });
-    }
-    setSending(false);
+  /** Le mail affiché vient de disparaître (corbeille) : on vide le panneau. */
+  const viderMailSelectionne = () => {
+    setFrom("");
+    setSubject("");
+    setBody("");
+    setSelectedId("");
+    setRes(null);
   };
 
-  const loadGmail = async () => {
-    setGmail((g) => ({ ...g, loading: true, error: "" }));
-    try {
-      const r = await authFetch("/api/admin/gmail/messages");
-      const d = await r.json();
-      setGmail({
-        loading: false,
-        configured: !!d.configured,
-        connected: !!d.connected,
-        messages: Array.isArray(d.messages) ? d.messages : [],
-        error: d.error || "",
-        email: d.email ?? null,
-        nextPageToken: d.nextPageToken ?? null,
-      });
-    } catch {
-      setGmail((g) => ({ ...g, loading: false, error: "Erreur réseau" }));
-    }
-  };
+  const deleteSelected = () => mettreALaCorbeilleSelection({
+    selectedIds, selectedId, mailboxBusy,
+    setMailboxBusy, setMailboxMsg, setGmail, setSelectedIds, viderMailSelectionne,
+  });
+
+  const loadMore = () => chargerPlusDeMessages({ gmail, loadingMore, setGmail, setLoadingMore });
+
+  const deleteMail = () => mettreALaCorbeille({
+    selectedId, mailboxBusy, setMailboxBusy, setMailboxMsg, setGmail, viderMailSelectionne,
+  });
+
+  const forwardMail = () => transfererMail({ from, subject, body, mailboxBusy, setMailboxBusy, setMailboxMsg });
+
+  const sendReply = () => envoyerReponse({ from, subject, draft, replyMeta, sending, setSending, setSendMsg });
+
+  const loadGmail = () => chargerGmail(setGmail);
 
   useEffect(() => {
     loadGmail();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const connectGmail = async () => {
-    setConnecting(true);
-    try {
-      const r = await authFetch("/api/auth/gmail");
-      const d = await r.json();
-      if (d.url) window.location.href = d.url;
-      else {
-        setGmail((g) => ({ ...g, error: d.error || "Impossible de démarrer la connexion" }));
-        setConnecting(false);
-      }
-    } catch {
-      setConnecting(false);
-    }
-  };
+  const connectGmail = () => connecterGmail({ setGmail, setConnecting });
 
   const pickMessage = async (m: any) => {
     setFrom(decodeHtml(m.from || ""));
@@ -275,30 +138,7 @@ export default function BoiteAssistantPage() {
     // TRANSCRIPTION du message vocal. Le reste de la page (analyse, brouillon,
     // création de famille) fonctionne ensuite à l'identique.
     if (estVocal(m)) {
-      setVocalLoading(true);
-      try {
-        const r = await authFetch("/api/admin/gmail/voicemail", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messageId: m.id,
-            attachmentId: m.audioAttachmentId,
-            subject: m.subject,
-          }),
-        });
-        const d = await r.json();
-        if (!r.ok) {
-          setErr(d.error || "Transcription impossible");
-        } else {
-          setFrom(d.from || "");
-          setSubject(d.subject || "");
-          setBody(d.body || "");
-          setVocal(d);
-        }
-      } catch {
-        setErr("Transcription impossible");
-      }
-      setVocalLoading(false);
+      await transcrireVocal({ message: m, setVocalLoading, setErr, setFrom, setSubject, setBody, setVocal });
     }
   };
 
@@ -357,79 +197,9 @@ export default function BoiteAssistantPage() {
     setTimeout(() => setCopied(false), 1500);
   };
 
-  // ── Création de la nouvelle famille (étape 4) — jamais automatique ──
-  const createFamily = async () => {
-    if (!famForm) return;
-    setCreatingFam(true);
-    setFamMsg(null);
-    try {
-      const r = await authFetch("/api/admin/inbox-create-family", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          parentName: famForm.parentName,
-          parentEmail: famForm.parentEmail,
-          parentPhone: famForm.parentPhone,
-          flechage: famForm.flechage,
-          children: famForm.children
-            .filter((c) => c.firstName.trim())
-            .map((c) => ({ firstName: c.firstName, lastName: c.lastName, birthDate: c.birthDate, galopLevel: c.galopLevel })),
-        }),
-      });
-      const d = await r.json();
-      if (!r.ok) {
-        if (d.status === "exists") {
-          setFamMsg({ ok: false, text: `Une famille existe déjà avec cet email (${d.familyName || d.familyId}) — corrige l'email ou relance l'analyse.` });
-        } else {
-          setFamMsg({ ok: false, text: d.error || "Échec de la création" });
-        }
-      } else {
-        setNewFam({ familyId: d.familyId, familyName: d.familyName, children: d.children || [] });
-        setFamMsg({ ok: true, text: `Famille "${d.familyName}" créée (${(d.children || []).length} enfant(s)). Tu peux maintenant inscrire.` });
-      }
-    } catch {
-      setFamMsg({ ok: false, text: "Erreur réseau" });
-    }
-    setCreatingFam(false);
-  };
+  const createFamily = () => creerFamille({ famForm, setCreatingFam, setFamMsg, setNewFam });
 
-  // ── Inscription 1-clic (étape 2) : le serveur re-vérifie tout ──
-  // Un stage semaine = tous ses creneauIds (inscription tout-ou-rien côté serveur).
-  // Famille : celle du mail (connue) OU la nouvelle famille créée à l'instant.
-  const enrollSuggestion = async (s: any, i: number) => {
-    const ids: string[] = Array.isArray(s?.creneauIds) && s.creneauIds.length > 0 ? s.creneauIds : s?.creneauId ? [s.creneauId] : [];
-    const effFamilyId = res?.familyId || newFam?.familyId || "";
-    const famChildren: { id: string; firstName: string }[] = newFam
-      ? newFam.children
-      : (Array.isArray(res?.enfants) ? res.enfants : [])
-          .filter((e: any) => e.childId)
-          .map((e: any) => ({ id: e.childId, firstName: e.prenom || "" }));
-    const effChildId = s?.childId || chosenChild[i] || famChildren[0]?.id || "";
-    if (ids.length === 0 || !effChildId || !effFamilyId) return;
-    setEnrollState((prev) => ({ ...prev, [i]: { busy: true } }));
-    try {
-      const r = await authFetch("/api/admin/inbox-enroll", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ creneauIds: ids, childId: effChildId, familyId: effFamilyId }),
-      });
-      const d = await r.json();
-      if (!r.ok) {
-        setEnrollState((prev) => ({ ...prev, [i]: { error: d.error || "Échec de l'inscription" } }));
-      } else {
-        const orderMsg = d.order
-          ? d.order.merged
-            ? `Ajouté à la commande ${d.order.orderId} — total ${d.order.totalTTC} €`
-            : `Commande ${d.order.orderId} créée — ${d.order.totalTTC} €`
-          : d.status === "already"
-          ? "Déjà inscrit — commande inchangée"
-          : "";
-        setEnrollState((prev) => ({ ...prev, [i]: { done: true, orderMsg, orderWarn: d.orderError || "" } }));
-      }
-    } catch {
-      setEnrollState((prev) => ({ ...prev, [i]: { error: "Erreur réseau" } }));
-    }
-  };
+  const enrollSuggestion = (s: any, i: number) => inscrireSuggestion(s, i, { res, newFam, chosenChild, setEnrollState });
 
   const c = res ? CLASSIF[res.classification] || CLASSIF.autre : null;
 
@@ -445,224 +215,40 @@ export default function BoiteAssistantPage() {
       </div>
 
       {/* ── Panneau Gmail ── */}
-      <div className="mb-6 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2 font-body text-sm font-semibold text-slate-700">
-            <Inbox size={16} className="flex-shrink-0 text-blue-500" /> <span className="truncate">Gmail{gmail.email ? ` — ${gmail.email}` : gmail.connected ? " — compte inconnu" : ""}</span>
-          </div>
-          {gmail.connected && (
-            <div className="flex flex-shrink-0 items-center gap-2">
-              <button
-                onClick={connectGmail}
-                disabled={connecting}
-                title="Redemander l'autorisation Google (nécessaire pour activer l'envoi)"
-                className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 font-body text-[11px] font-semibold text-blue-600 hover:bg-blue-100 disabled:opacity-50"
-              >
-                {connecting ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />} Reconnecter
-              </button>
-              <button
-                onClick={loadGmail}
-                disabled={gmail.loading}
-                className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-body text-[11px] font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50"
-              >
-                <RefreshCw size={12} className={gmail.loading ? "animate-spin" : ""} /> Actualiser
-              </button>
-            </div>
-          )}
-        </div>
-
-        {gmail.loading && (
-          <div className="flex items-center gap-2 font-body text-xs text-slate-400">
-            <Loader2 size={14} className="animate-spin" /> Chargement…
-          </div>
-        )}
-
-        {!gmail.loading && !gmail.configured && (
-          <p className="font-body text-xs text-amber-600">
-            Connexion Gmail non configurée : ajoute d'abord les variables <code>GMAIL_OAUTH_CLIENT_ID</code> et{" "}
-            <code>GMAIL_OAUTH_CLIENT_SECRET</code> dans Vercel. En attendant, tu peux coller un mail à la main ci-dessous.
-          </p>
-        )}
-
-        {!gmail.loading && gmail.configured && !gmail.connected && (
-          <button
-            onClick={connectGmail}
-            disabled={connecting}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-body text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {connecting ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />} Connecter Gmail
-          </button>
-        )}
-
-        {!gmail.loading && gmail.connected && (
-          <div>
-            {gmail.error && <p className="mb-2 font-body text-xs text-red-500">{gmail.error}</p>}
-            {gmail.messages.length === 0 && !gmail.error && (
-              <p className="font-body text-xs text-slate-400">Aucun mail récent.</p>
-            )}
-            {selectedIds.length > 0 && (
-              <div className="mb-2 flex items-center justify-between rounded-lg bg-red-50 px-3 py-2">
-                <span className="font-body text-xs font-semibold text-red-700">
-                  {selectedIds.length} sélectionné{selectedIds.length > 1 ? "s" : ""}
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setSelectedIds([])}
-                    className="font-body text-[11px] text-slate-500 hover:text-slate-700"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    onClick={deleteSelected}
-                    disabled={mailboxBusy === "trash"}
-                    className="inline-flex items-center gap-1 rounded-md bg-red-600 px-2.5 py-1 font-body text-[11px] font-semibold text-white hover:bg-red-700 disabled:opacity-50"
-                  >
-                    {mailboxBusy === "trash" ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
-                    Corbeille
-                  </button>
-                </div>
-              </div>
-            )}
-            <div className="max-h-72 space-y-1 overflow-y-auto">
-              {gmail.messages.map((m: any) => (
-                <div
-                  key={m.id}
-                  className={`flex items-start gap-2 rounded-lg border px-2 py-2 transition-colors ${
-                    selectedIds.includes(m.id)
-                      ? "border-red-200 bg-red-50/40"
-                      : "border-transparent hover:border-blue-100 hover:bg-blue-50/50"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.includes(m.id)}
-                    onChange={(e) => {
-                      setSelectedIds((prev) =>
-                        e.target.checked ? [...prev, m.id] : prev.filter((x) => x !== m.id)
-                      );
-                    }}
-                    className="mt-1 h-4 w-4 flex-shrink-0 cursor-pointer accent-red-600"
-                    aria-label="Sélectionner ce mail"
-                  />
-                  <button onClick={() => pickMessage(m)} className="min-w-0 flex-1 text-left">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate font-body text-xs font-semibold text-slate-700">
-                        {estVocal(m) ? "Répondeur téléphonique" : decodeHtml(m.from)}
-                      </span>
-                      {estVocal(m) && (
-                        <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 font-body text-[10px] font-semibold text-amber-700">
-                          <Phone size={10} /> Vocal
-                        </span>
-                      )}
-                    </div>
-                    <div className="truncate font-body text-sm text-slate-800">{decodeHtml(m.subject) || "(sans objet)"}</div>
-                    <div className="truncate font-body text-[11px] text-slate-400">{decodeHtml(m.snippet)}</div>
-                  </button>
-                </div>
-              ))}
-            </div>
-            {gmail.nextPageToken && (
-              <button
-                onClick={loadMore}
-                disabled={loadingMore}
-                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 py-2 font-body text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-              >
-                {loadingMore ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-                Charger plus de messages
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      <PanneauGmail
+        gmail={gmail}
+        connecting={connecting}
+        connectGmail={connectGmail}
+        loadGmail={loadGmail}
+        selectedIds={selectedIds}
+        setSelectedIds={setSelectedIds}
+        deleteSelected={deleteSelected}
+        mailboxBusy={mailboxBusy}
+        loadMore={loadMore}
+        loadingMore={loadingMore}
+        pickMessage={pickMessage}
+      />
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Entrée */}
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 font-body text-sm font-semibold text-slate-700">
-              <Mail size={16} className="text-blue-500" /> Mail reçu
-            </div>
-            {selectedId && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={forwardMail}
-                  disabled={!!mailboxBusy}
-                  className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-body text-[11px] font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50"
-                >
-                  {mailboxBusy === "forward" ? <Loader2 size={12} className="animate-spin" /> : <Forward size={12} />} Transférer
-                </button>
-                <button
-                  onClick={deleteMail}
-                  disabled={!!mailboxBusy}
-                  className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-1 font-body text-[11px] font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50"
-                >
-                  {mailboxBusy === "trash" ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Supprimer
-                </button>
-              </div>
-            )}
-          </div>
-          {vocalLoading && (
-            <div className="mb-3 flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 font-body text-xs font-semibold text-amber-700">
-              <Loader2 size={14} className="animate-spin" /> Transcription du message vocal…
-            </div>
-          )}
-          {vocal && !vocalLoading && (
-            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-              <div className="flex flex-wrap items-center gap-2 font-body text-xs font-semibold text-amber-800">
-                <Phone size={13} />
-                {vocal.numeroLisible || "Numéro masqué"}
-                <span className="font-normal text-amber-600">· {vocal.dureeSec}s</span>
-              </div>
-              <div className="mt-1 font-body text-[11px] text-amber-700">
-                {vocal.famille ? (
-                  <>
-                    Famille reconnue : <strong>{vocal.famille.parentName}</strong>
-                    {vocal.famille.children?.length > 0 && (
-                      <> — {vocal.famille.children.map((c: any) => c.firstName).join(", ")}</>
-                    )}
-                  </>
-                ) : vocal.vide ? (
-                  "Message vide."
-                ) : (
-                  "Numéro inconnu de la base — l'analyse proposera une création de famille."
-                )}
-              </div>
-            </div>
-          )}
-          {mailboxMsg && (
-            <p className={`mb-2 font-body text-xs font-semibold ${mailboxMsg.ok ? "text-green-600" : "text-red-500"}`}>
-              {mailboxMsg.text}
-            </p>
-          )}
-          <input
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            placeholder="Expéditeur (email)"
-            className="mb-2 w-full rounded-lg border border-gray-200 px-3 py-2 font-body text-sm focus:border-blue-400 focus:outline-none"
-          />
-          <input
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="Objet"
-            className="mb-2 w-full rounded-lg border border-gray-200 px-3 py-2 font-body text-sm focus:border-blue-400 focus:outline-none"
-          />
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Corps du message…"
-            rows={9}
-            className="w-full resize-y rounded-lg border border-gray-200 px-3 py-2 font-body text-sm focus:border-blue-400 focus:outline-none"
-          />
-          <button
-            onClick={analyser}
-            disabled={loading || (!body.trim() && !subject.trim())}
-            className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-body text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-          >
-            {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-            Analyser
-          </button>
-          {err && <p className="mt-2 font-body text-xs text-red-500">{err}</p>}
-        </div>
+        <PanneauMailRecu
+          selectedId={selectedId}
+          mailboxBusy={mailboxBusy}
+          forwardMail={forwardMail}
+          deleteMail={deleteMail}
+          vocalLoading={vocalLoading}
+          vocal={vocal}
+          mailboxMsg={mailboxMsg}
+          from={from}
+          setFrom={setFrom}
+          subject={subject}
+          setSubject={setSubject}
+          body={body}
+          setBody={setBody}
+          analyser={analyser}
+          loading={loading}
+          err={err}
+        />
 
         {/* Sortie */}
         <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
@@ -698,348 +284,41 @@ export default function BoiteAssistantPage() {
 
               {/* ── Étape 4 : nouvelle famille détectée (expéditeur inconnu) ── */}
               {famForm && (
-                <div className="rounded-lg border border-violet-200 bg-violet-50/40 p-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <div className="font-body text-[11px] font-bold uppercase tracking-wide text-violet-500">
-                      Nouvelle famille détectée — fiche pré-remplie, à relire avant création
-                    </div>
-                    {newFam && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 font-body text-[10px] font-semibold text-green-700">
-                        <Check size={10} /> Créée
-                      </span>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <input
-                      value={famForm.parentName}
-                      onChange={(e) => setFamForm({ ...famForm, parentName: e.target.value })}
-                      placeholder="Nom du parent"
-                      disabled={!!newFam}
-                      className="rounded-md border border-violet-200 bg-white px-2.5 py-1.5 font-body text-xs disabled:opacity-60"
-                    />
-                    <input
-                      value={famForm.parentEmail}
-                      onChange={(e) => setFamForm({ ...famForm, parentEmail: e.target.value })}
-                      placeholder="Email"
-                      disabled={!!newFam}
-                      className="rounded-md border border-violet-200 bg-white px-2.5 py-1.5 font-body text-xs disabled:opacity-60"
-                    />
-                    <input
-                      value={famForm.parentPhone}
-                      onChange={(e) => setFamForm({ ...famForm, parentPhone: e.target.value })}
-                      placeholder="Téléphone (optionnel)"
-                      disabled={!!newFam}
-                      className="rounded-md border border-violet-200 bg-white px-2.5 py-1.5 font-body text-xs disabled:opacity-60"
-                    />
-                  </div>
-                  <div className="mt-2 flex items-center gap-1.5">
-                    <span className="font-body text-[10px] font-semibold uppercase text-violet-400">Fléchage :</span>
-                    {[
-                      { id: "cavalier_annee", label: "À l'année" },
-                      { id: "stage", label: "Stages" },
-                      { id: "passage", label: "Passage" },
-                    ].map((o) => (
-                      <button
-                        key={o.id}
-                        type="button"
-                        disabled={!!newFam}
-                        onClick={() => setFamForm({ ...famForm, flechage: o.id })}
-                        className={`rounded-full px-2.5 py-0.5 font-body text-[10px] font-semibold disabled:opacity-60 ${
-                          famForm.flechage === o.id ? "bg-violet-600 text-white" : "bg-white text-violet-600 border border-violet-200"
-                        }`}
-                      >
-                        {o.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="mt-2 space-y-1.5">
-                    {famForm.children.map((c, ci) => (
-                      <div key={ci} className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-                        <input
-                          value={c.firstName}
-                          onChange={(e) => setFamForm({ ...famForm, children: famForm.children.map((x, xi) => (xi === ci ? { ...x, firstName: e.target.value } : x)) })}
-                          placeholder="Prénom enfant"
-                          disabled={!!newFam}
-                          className="rounded-md border border-violet-200 bg-white px-2.5 py-1.5 font-body text-xs disabled:opacity-60"
-                        />
-                        <input
-                          value={c.lastName}
-                          onChange={(e) => setFamForm({ ...famForm, children: famForm.children.map((x, xi) => (xi === ci ? { ...x, lastName: e.target.value } : x)) })}
-                          placeholder="Nom"
-                          disabled={!!newFam}
-                          className="rounded-md border border-violet-200 bg-white px-2.5 py-1.5 font-body text-xs disabled:opacity-60"
-                        />
-                        <input
-                          type="date"
-                          value={c.birthDate}
-                          onChange={(e) => setFamForm({ ...famForm, children: famForm.children.map((x, xi) => (xi === ci ? { ...x, birthDate: e.target.value } : x)) })}
-                          disabled={!!newFam}
-                          title={c.ageHint !== null ? `Âge indiqué dans le mail : ${c.ageHint} ans` : "Date de naissance"}
-                          className="rounded-md border border-violet-200 bg-white px-2.5 py-1.5 font-body text-xs disabled:opacity-60"
-                        />
-                        <input
-                          value={c.galopLevel}
-                          onChange={(e) => setFamForm({ ...famForm, children: famForm.children.map((x, xi) => (xi === ci ? { ...x, galopLevel: e.target.value } : x)) })}
-                          placeholder={c.ageHint !== null ? `Galop (${c.ageHint} ans indiqué)` : "Galop (optionnel)"}
-                          disabled={!!newFam}
-                          className="rounded-md border border-violet-200 bg-white px-2.5 py-1.5 font-body text-xs disabled:opacity-60"
-                        />
-                      </div>
-                    ))}
-                    {!newFam && (
-                      <button
-                        type="button"
-                        onClick={() => setFamForm({ ...famForm, children: [...famForm.children, { firstName: "", lastName: "", birthDate: "", galopLevel: "", ageHint: null }] })}
-                        className="font-body text-[11px] font-semibold text-violet-500 hover:text-violet-700"
-                      >
-                        + Ajouter un enfant
-                      </button>
-                    )}
-                  </div>
-                  {!newFam && (
-                    <div className="mt-2.5">
-                      <button
-                        onClick={createFamily}
-                        disabled={creatingFam || !famForm.parentEmail.trim() || !famForm.children.some((c) => c.firstName.trim())}
-                        className="inline-flex items-center gap-1 rounded-md bg-violet-600 px-3 py-1.5 font-body text-[11px] font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
-                      >
-                        {creatingFam ? <Loader2 size={12} className="animate-spin" /> : <UserPlus size={12} />}
-                        {creatingFam ? "Création…" : "Créer la famille"}
-                      </button>
-                      <span className="ml-2 font-body text-[10px] text-slate-400">Aucun email envoyé à la famille.</span>
-                    </div>
-                  )}
-                  {famMsg && (
-                    <div className={`mt-1.5 font-body text-[11px] font-semibold ${famMsg.ok ? "text-green-600" : "text-red-600"}`}>{famMsg.text}</div>
-                  )}
-                </div>
-              )}
-
-              {((Array.isArray(res.suggestions) && res.suggestions.length > 0) || manual.length > 0 || (Array.isArray(res.catalogue) && res.catalogue.length > 0)) && (
-                <div>
-                  <div className="mb-1.5 font-body text-[11px] font-bold uppercase tracking-wide text-slate-400">
-                    Prestations disponibles proposées
-                  </div>
-                  <div className="space-y-2">
-                    {[...(res.suggestions || []), ...manual].map((s: any, i: number) => (
-                      <div key={i} className={`rounded-lg border p-3 ${s.actionable ? "border-green-100 bg-green-50/40" : "border-gray-100 bg-slate-50/60"}`}>
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-1.5 font-body text-sm font-semibold text-slate-800">
-                            <Calendar size={13} className="text-blue-400" /> {s.titre || "(créneau)"}
-                          </div>
-                          {typeof s.places === "number" && s.places > 0 && (
-                            <span className="whitespace-nowrap font-body text-[11px] font-semibold text-green-600">
-                              {s.places} place{s.places > 1 ? "s" : ""}
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-1 font-body text-xs text-slate-500">
-                          {[
-                            s.periode || s.date,
-                            s.horaire,
-                            typeof s.prixTTC === "number"
-                              ? s.prixMode === "semaine"
-                                ? `${s.prixTTC} € la semaine (${s.nbJours} jour${s.nbJours > 1 ? "s" : ""})`
-                                : s.prixMode === "jours"
-                                ? `${s.prixTTC} € les ${s.nbJours} jour${s.nbJours > 1 ? "s" : ""} (sur ${s.nbJoursSemaine} du stage)`
-                                : `${s.prixTTC} €`
-                              : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                          {s.prixMode === "semaine" && typeof s.prixJour === "number" && (
-                            <span className="text-slate-400"> · journée possible : {s.prixJour} €/jour</span>
-                          )}
-                        </div>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                          {s.childName && (
-                            <span className="rounded-full bg-blue-50 px-2 py-0.5 font-body text-[10px] font-semibold text-blue-600">
-                              pour {s.childName}
-                            </span>
-                          )}
-                          {s.manual && (
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 font-body text-[10px] font-semibold text-slate-500">
-                              ajout manuel
-                            </span>
-                          )}
-                          {s.manual && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const prixLbl =
-                                  typeof s.prixTTC === "number"
-                                    ? s.prixMode === "semaine"
-                                      ? `${s.prixTTC} € la semaine (${s.nbJours} jours)`
-                                      : `${s.prixTTC} €`
-                                    : "";
-                                const ligne = `\n• ${s.titre} — ${s.periode || s.date}${s.horaire ? `, ${s.horaire}` : ""}${prixLbl ? ` (${prixLbl})` : ""}`;
-                                setDraft((prev) => (prev ? `${prev}${ligne}` : ligne.trim()));
-                              }}
-                              className="rounded-full bg-blue-50 px-2 py-0.5 font-body text-[10px] font-semibold text-blue-600 hover:bg-blue-100"
-                              title="Ajouter cette prestation à la fin du brouillon de réponse"
-                            >
-                              → brouillon
-                            </button>
-                          )}
-                          {s.actionable ? (
-                            s.childId ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 font-body text-[10px] font-semibold text-green-700">
-                                <Check size={10} /> Vérifié · place dispo
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 font-body text-[10px] font-semibold text-sky-600">
-                                <Check size={10} /> Place dispo · éligibilité à confirmer
-                              </span>
-                            )
-                          ) : (
-                            <span className="rounded-full bg-amber-50 px-2 py-0.5 font-body text-[10px] font-semibold text-amber-600">
-                              {s.note || "non disponible"}
-                            </span>
-                          )}
-                        </div>
-                        {s.pourquoi && <div className="mt-1 font-body text-[11px] italic text-slate-400">{s.pourquoi}</div>}
-                        {/* Étape 2 — inscription 1-clic (famille connue OU nouvelle famille créée) */}
-                        {(() => {
-                          const hasIds = Array.isArray(s.creneauIds) ? s.creneauIds.length > 0 : !!s.creneauId;
-                          const effFamilyId = res.familyId || newFam?.familyId || "";
-                          // Enfants sélectionnables : nouvelle famille créée OU famille connue (res.enfants)
-                          const famChildren: { id: string; firstName: string }[] = newFam
-                            ? newFam.children
-                            : (Array.isArray(res.enfants) ? res.enfants : [])
-                                .filter((e: any) => e.childId)
-                                .map((e: any) => ({ id: e.childId, firstName: e.prenom || "" }));
-                          const effChildId = s.childId || chosenChild[i] || famChildren[0]?.id || "";
-                          const effChildName =
-                            s.childName || famChildren.find((c) => c.id === effChildId)?.firstName || "";
-                          if (!s.actionable || !hasIds || !effFamilyId || !effChildId) return null;
-                          return (
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
-                            {/* Sélecteur d'enfant (suggestion sans enfant ciblé, plusieurs enfants) */}
-                            {!s.childId && famChildren.length > 1 && !enrollState[i]?.done && (
-                              <select
-                                value={chosenChild[i] || famChildren[0]?.id || ""}
-                                onChange={(e) => setChosenChild((prev) => ({ ...prev, [i]: e.target.value }))}
-                                className="rounded-md border border-blue-200 bg-white px-2 py-1 font-body text-[11px]"
-                              >
-                                {famChildren.map((c) => (
-                                  <option key={c.id} value={c.id}>{c.firstName}</option>
-                                ))}
-                              </select>
-                            )}
-                            {enrollState[i]?.done ? (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-green-600 px-2.5 py-1 font-body text-[11px] font-semibold text-white">
-                                <Check size={12} /> Inscrit{effChildName ? ` · ${effChildName}` : ""}
-                                {s.prixMode === "semaine" && s.nbJours > 1 ? ` · ${s.nbJours} jours` : ""}
-                              </span>
-                            ) : (
-                              <button
-                                onClick={() => enrollSuggestion(s, i)}
-                                disabled={enrollState[i]?.busy}
-                                className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 font-body text-[11px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-                              >
-                                {enrollState[i]?.busy ? <Loader2 size={12} className="animate-spin" /> : <UserPlus size={12} />}
-                                {enrollState[i]?.busy
-                                  ? "Inscription…"
-                                  : `Inscrire${effChildName ? ` ${effChildName}` : ""}${
-                                      s.prixMode === "semaine" && s.nbJours > 1
-                                        ? ` · semaine complète (${s.nbJours} j)`
-                                        : s.prixMode === "jours"
-                                        ? ` · ${s.nbJours} jour${s.nbJours > 1 ? "s" : ""} seulement`
-                                        : ""
-                                    }`}
-                              </button>
-                            )}
-                            {enrollState[i]?.error && (
-                              <span className="ml-2 font-body text-[11px] font-semibold text-red-600">{enrollState[i]?.error}</span>
-                            )}
-                            {enrollState[i]?.done && enrollState[i]?.orderWarn && (
-                              <span className="ml-2 font-body text-[11px] font-semibold text-amber-600">{enrollState[i]?.orderWarn}</span>
-                            )}
-                            {enrollState[i]?.done && !enrollState[i]?.orderWarn && enrollState[i]?.orderMsg && (
-                              <span className="ml-2 font-body text-[11px] text-slate-500">
-                                {enrollState[i]?.orderMsg} · à régler dans Paiements (aucun lien envoyé)
-                              </span>
-                            )}
-                          </div>
-                          );
-                        })()}
-                      </div>
-                    ))}
-                  </div>
-                  {/* Ajout MANUEL d'une prestation du catalogue (l'admin complète l'IA) */}
-                  {Array.isArray(res.catalogue) && res.catalogue.length > 0 && (
-                    <div className="mt-2">
-                      <select
-                        value={pickerValue}
-                        onChange={(e) => {
-                          const key = e.target.value;
-                          if (!key) return;
-                          const entry = res.catalogue.find((c: any) => (c.groupId || c.creneauId) === key);
-                          const dejaPresent = [...(res.suggestions || []), ...manual].some(
-                            (s: any) => (s.groupId || s.creneauId) === key
-                          );
-                          if (entry && !dejaPresent) setManual((prev) => [...prev, entry]);
-                          setPickerValue("");
-                        }}
-                        className="w-full rounded-md border border-dashed border-slate-300 bg-white px-2.5 py-1.5 font-body text-xs text-slate-600"
-                      >
-                        <option value="">+ Ajouter une prestation disponible…</option>
-                        {res.catalogue
-                          .filter((c: any) => ![...(res.suggestions || []), ...manual].some((s: any) => (s.groupId || s.creneauId) === (c.groupId || c.creneauId)))
-                          .map((c: any) => (
-                            <option key={c.groupId || c.creneauId} value={c.groupId || c.creneauId}>
-                              {c.titre} — {c.periode || c.date}
-                              {c.horaire ? ` · ${c.horaire}` : ""}
-                              {typeof c.prixTTC === "number" ? ` · ${c.prixTTC} €${c.prixMode === "semaine" ? ` (${c.nbJours}j)` : ""}` : ""}
-                              {c.places > 0 ? ` · ${c.places} pl.` : " · complet"}
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div>
-                <div className="mb-1 flex items-center justify-between">
-                  <div className="font-body text-[11px] font-bold uppercase tracking-wide text-slate-400">
-                    Brouillon de réponse
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {gmail.connected && (
-                      <button
-                        onClick={sendReply}
-                        disabled={sending || !from.trim() || !draft.trim()}
-                        className="inline-flex items-center gap-1 rounded-md bg-green-600 px-2.5 py-1 font-body text-[11px] font-semibold text-white hover:bg-green-700 disabled:opacity-50"
-                      >
-                        {sending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Envoyer
-                      </button>
-                    )}
-                    <button
-                      onClick={copyDraft}
-                      className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-body text-[11px] font-semibold text-slate-600 hover:bg-slate-200"
-                    >
-                      {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? "Copié" : "Copier"}
-                    </button>
-                  </div>
-                </div>
-                <textarea
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  rows={10}
-                  className="w-full resize-y rounded-lg border border-gray-200 px-3 py-2 font-body text-sm focus:border-blue-400 focus:outline-none"
+                <FicheNouvelleFamille
+                  famForm={famForm}
+                  setFamForm={setFamForm}
+                  newFam={newFam}
+                  creatingFam={creatingFam}
+                  createFamily={createFamily}
+                  famMsg={famMsg}
                 />
-                {sendMsg && (
-                  <p className={`mt-1.5 font-body text-xs font-semibold ${sendMsg.ok ? "text-green-600" : "text-red-500"}`}>
-                    {sendMsg.text}
-                  </p>
-                )}
-                <p className="mt-1.5 font-body text-[11px] text-slate-400">
-                  {gmail.connected
-                    ? "« Envoyer » répond directement dans le fil Gmail (à ton clic). Sinon, copie et envoie depuis Gmail."
-                    : "Relis, ajuste, puis envoie toi-même depuis Gmail. Aucune action automatique."}
-                </p>
-              </div>
+              )}
+
+              <ListePrestations
+                res={res}
+                manual={manual}
+                setManual={setManual}
+                pickerValue={pickerValue}
+                setPickerValue={setPickerValue}
+                newFam={newFam}
+                chosenChild={chosenChild}
+                setChosenChild={setChosenChild}
+                enrollState={enrollState}
+                enrollSuggestion={enrollSuggestion}
+                setDraft={setDraft}
+              />
+
+              <BlocBrouillon
+                draft={draft}
+                setDraft={setDraft}
+                gmailConnected={gmail.connected}
+                sending={sending}
+                sendReply={sendReply}
+                sendMsg={sendMsg}
+                from={from}
+                copied={copied}
+                copyDraft={copyDraft}
+              />
             </div>
           )}
         </div>
