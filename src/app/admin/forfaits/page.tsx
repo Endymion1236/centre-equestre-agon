@@ -118,6 +118,9 @@ export default function ForfaitsPage() {
   const [familySearch, setFamilySearch] = useState("");
   const [selChild, setSelChild] = useState("");
   const [frequence, setFrequence] = useState<"1x" | "2x" | "3x">("1x");
+  // Une semaine sur deux : garde alternée. Moitié des séances, moitié du tarif.
+  const [rythmeQuinzaine, setRythmeQuinzaine] = useState(false);
+  const [semainePaire, setSemainePaire] = useState(true);
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
   const [slotSearch, setSlotSearch] = useState("");
   const [licenceFFE, setLicenceFFE] = useState(true);
@@ -228,8 +231,14 @@ export default function ForfaitsPage() {
   // ── Prices ──
   const slotsPrices = selectedSlotsData.map(slot => {
     const price = slot.priceTTC || 0;
-    const forfaitPrice = price > 100 ? price : price * slot.totalSessions;
-    return { slot, forfaitPrice, sessions: slot.totalSessions };
+    // Une semaine sur deux : le cavalier ne suit que la moitié des séances.
+    // Sans cet ajustement, le forfait était facturé pour l'année pleine alors
+    // que le planning ne l'attendait qu'une semaine sur deux.
+    const sessions = rythmeQuinzaine ? Math.ceil(slot.totalSessions / 2) : slot.totalSessions;
+    const forfaitPrice = price > 100
+      ? (rythmeQuinzaine ? Math.round(price / 2) : price)
+      : price * sessions;
+    return { slot, forfaitPrice, sessions };
   });
   const totalForfaitBrut = slotsPrices.reduce((sum, s) => sum + s.forfaitPrice, 0);
 
@@ -291,6 +300,10 @@ export default function ForfaitsPage() {
       const _seasonStartYear = _now.getMonth() >= 8 ? _now.getFullYear() : _now.getFullYear() - 1;
       for (const sp of slotsPrices) {
         await addDoc(collection(db, "forfaits"), {
+          // Rythme : "hebdo" par défaut. En quinzaine, le planning n'attend le
+          // cavalier qu'une semaine sur deux (cf. lib/rythme.ts).
+          rythme: rythmeQuinzaine ? "quinzaine" : "hebdo",
+          ...(rythmeQuinzaine ? { semainePaire } : {}),
           familyId: selFamily,
           familyName: fam.parentName || "—",
           childId: selChild,
@@ -1005,6 +1018,31 @@ export default function ForfaitsPage() {
                 )}
               </div>
             )}
+
+            {/* Une semaine sur deux — gardes alternées */}
+            <div>
+              <label className={`flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer ${
+                rythmeQuinzaine ? "bg-sky-50 border-sky-300" : "bg-white border-gray-200"}`}>
+                <input type="checkbox" checked={rythmeQuinzaine}
+                  onChange={e => setRythmeQuinzaine(e.target.checked)}
+                  className="mt-0.5 cursor-pointer" />
+                <span className="font-body text-xs text-slate-700 leading-relaxed">
+                  <strong>Une semaine sur deux</strong> — garde alternée. Moitié des
+                  séances, donc moitié du tarif.
+                </span>
+              </label>
+              {rythmeQuinzaine && (
+                <div className="flex gap-2 mt-2">
+                  {([[true, "Semaines paires"], [false, "Semaines impaires"]] as const).map(([v, label]) => (
+                    <button key={label} type="button" onClick={() => setSemainePaire(v)}
+                      className={`flex-1 py-2 rounded-lg font-body text-xs font-semibold border cursor-pointer ${
+                        semainePaire === v ? "bg-sky-600 text-white border-sky-600" : "bg-white text-slate-600 border-gray-200"}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Fréquence */}
             <div>

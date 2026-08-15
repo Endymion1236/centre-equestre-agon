@@ -1198,7 +1198,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       .filter((f: any) => f.familyId === fam.firestoreId)
       .forEach((f: any) => {
         if (!f.childId || f.childId === selChild) return;
-        if (f.status && f.status !== "actif") return;
+        if (f.status && f.status !== "actif" && f.status !== "active") return;
         // Comparaison de saison : on accepte le forfait si sa saison
         // (champ dédié ou createdAt) correspond à celle du créneau cible.
         const forfaitSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
@@ -1218,7 +1218,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     allForfaits
       .filter((f: any) => f.familyId === fam.firestoreId && f.childId === selChild)
       .forEach((f: any) => {
-        if (f.status && f.status !== "actif") return;
+        if (f.status && f.status !== "actif" && f.status !== "active") return;
         const forfaitSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
         if (forfaitSeason !== targetSeason) return;
         total += Number(f.frequence) || 0;
@@ -3349,10 +3349,17 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       {(() => {
                         const cr = creneau as any;
                         const p1 = cr.price1day;
-                        const prixJourAff = (p1 && p1 <= Math.round((priceTTC / nbJours) * 100) / 100) ? p1 : Math.round((priceTTC / nbJours) * 100) / 100;
+                        // Doit refléter ce qui sera RÉELLEMENT facturé : le tarif
+                        // configuré fait foi dès qu'il existe. On retenait avant
+                        // le moins cher des deux, d'où un stage annoncé 37,50 €
+                        // et facturé 45 €.
+                        const prixJourAff = (p1 && p1 > 0)
+                          ? p1
+                          : Math.round((priceTTC / Math.max(1, nbJours)) * 100) / 100;
+                        const origine = (p1 && p1 > 0) ? "tarif jour" : "prorata";
                         return stageMode === "semaine"
                           ? `${nbJours} jour${nbJours > 1 ? "s" : ""} — ${priceTTC.toFixed(2)}€`
-                          : `1 jour sur ${nbJours} — ${prixJourAff.toFixed(2)}€/jour (prorata)`;
+                          : `1 jour sur ${nbJours} — ${prixJourAff.toFixed(2)}€/jour (${origine})`;
                       })()}
                     </div>
                     {existingStageCount > 0 && (
