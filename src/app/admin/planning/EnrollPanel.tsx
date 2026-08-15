@@ -1030,6 +1030,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const prixLicence = licenceType === "moins18" ? inscParams.licenceMoins18 : inscParams.licencePlus18;
   // Forfait selon fréquence (sélectionnable)
   const [frequenceCours, setFrequenceCours] = useState<1 | 2 | 3>(1);
+  // Une semaine sur deux : cas des gardes alternées. Le cavalier ne vient que
+  // la moitié des séances, le forfait est donc calculé sur la moitié du tarif.
+  // `semainePaire` dit QUELLES semaines, au sens du numéro ISO de semaine.
+  const [quinzaine, setQuinzaine] = useState(false);
+  const [semainePaire, setSemainePaire] = useState(true);
   const [extraSlots, setExtraSlots] = useState<string[]>([]); // 2ème + 3ème créneaux pour 2×/3×/sem
   const [extraSlotSearch, setExtraSlotSearch] = useState("");
   const prixForfaitPlein = (f: number) => f >= 3 ? inscParams.forfait3x : f === 2 ? inscParams.forfait2x : inscParams.forfait1x;
@@ -1209,7 +1214,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const prixForfaitAnnuel = ajoutHeureAdmin
     ? Math.max(0, prixForfaitPlein(freqCumuleeAdmin) - prixForfaitPlein(frequenceDejaInscrite))
     : prixForfaitPlein(frequenceCours);
-  const prixForfaitBrut = Math.round(prixForfaitAnnuel * prorata);
+  // Une semaine sur deux = moitié des séances, donc moitié du tarif. Appliqué
+  // avant le prorata et les réductions famille, qui restent proportionnelles.
+  const coefRythme = quinzaine ? 0.5 : 1;
+  const prixForfaitBrut = Math.round(prixForfaitAnnuel * prorata * coefRythme);
 
   // Réduction famille sur le forfait (chargée depuis settings/degressivite)
   const [familyDiscountRules, setFamilyDiscountRules] = useState<{ nth: number; discount: number }[]>([]);
@@ -1800,7 +1808,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           dayLabel: new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long" }),
           startTime: creneau.startTime,
           endTime: creneau.endTime,
-          totalSessions: sessionsRestantes,
+          totalSessions: quinzaine ? Math.ceil(sessionsRestantes / 2) : sessionsRestantes,
+          // Rythme : "hebdo" par défaut, "quinzaine" pour une semaine sur deux.
+          // semainePaire indique les semaines concernées (numéro ISO).
+          rythme: quinzaine ? "quinzaine" : "hebdo",
+          ...(quinzaine ? { semainePaire } : {}),
           totalSessionsSaison,
           attendedSessions: 0,
           licenceFFE: licence,
@@ -3682,6 +3694,29 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 {inscriptionMode === "annuel" && !preinscription && (
                   <div className="bg-white rounded-lg p-3 space-y-3">
                     <div className="font-body text-xs font-semibold text-green-600 uppercase tracking-wider">Détail du forfait</div>
+
+                    {/* Une semaine sur deux — gardes alternées */}
+                    <label className={`flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer ${
+                      quinzaine ? "bg-sky-50 border-sky-300" : "bg-white border-gray-200"}`}>
+                      <input type="checkbox" checked={quinzaine}
+                        onChange={e => setQuinzaine(e.target.checked)}
+                        className="mt-0.5 cursor-pointer" />
+                      <span className="font-body text-xs text-slate-700 leading-relaxed">
+                        <strong>Une semaine sur deux</strong> — garde alternée. Moitié
+                        des séances, donc moitié du tarif.
+                      </span>
+                    </label>
+                    {quinzaine && (
+                      <div className="flex gap-2">
+                        {([[true, "Semaines paires"], [false, "Semaines impaires"]] as const).map(([v, label]) => (
+                          <button key={label} onClick={() => setSemainePaire(v)}
+                            className={`flex-1 py-2 rounded-lg font-body text-xs font-semibold border cursor-pointer ${
+                              semainePaire === v ? "bg-sky-600 text-white border-sky-600" : "bg-white text-slate-600 border-gray-200"}`}>
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
 
                     {/* Fréquence hebdomadaire */}
                     <div>
