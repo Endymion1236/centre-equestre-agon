@@ -7,6 +7,7 @@ import { db } from "@/lib/firebase";
 import { validateChildrenUpdate } from "@/lib/utils";
 import { construireHistoriquePoneys, libelleJourCourt } from "./horse-history";
 import { compareCreneaux } from "@/lib/creneau-sort";
+import { estQuinzaine, libelleRythme, expliqueRythme } from "@/lib/rythme";
 
 const calcAge = (birthDate: any): string => {
   if (!birthDate) return "";
@@ -1250,6 +1251,15 @@ export default function MontoirPage() {
                         <span className="shrink-0 whitespace-nowrap font-body text-[10px] font-semibold text-pink-600 bg-pink-50 px-1.5 py-0.5 rounded-full"
                           title={dBirth === 0 ? "C'est son anniversaire aujourd'hui !" : `Anniversaire dans ${dBirth} jour${dBirth > 1 ? "s" : ""}`}>
                           🎂{dBirth === 0 ? " Aujourd'hui !" : ` J-${dBirth}`}
+                        </span>
+                      )}
+                      {/* Garde alternée : il est bien attendu aujourd'hui,
+                          mais pas la semaine prochaine. Le dire ici évite de
+                          le porter absent au prochain cours. */}
+                      {estQuinzaine(e) && (
+                        <span className="shrink-0 whitespace-nowrap font-body text-[10px] font-semibold text-sky-700 bg-sky-100 px-1.5 py-0.5 rounded-full"
+                          title={expliqueRythme(c.date, e)}>
+                          ⇄ {libelleRythme(e)}
                         </span>
                       )}
                     </>;

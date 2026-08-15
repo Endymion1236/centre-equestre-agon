@@ -28,7 +28,7 @@
     "test:api": "./scripts/run-tests.sh api",
     "test:rapport": "./scripts/run-tests.sh rapport",
     "test:all": "./scripts/run-tests.sh all",
-    "test:unit": "npx tsx tests/unit/sepa-validation.test.ts && npx tsx tests/unit/search-normalize.test.ts && npx tsx tests/unit/journee-management.test.ts && npx tsx tests/unit/horse-history.test.ts && npx tsx tests/unit/stage-deroule.test.ts && npx tsx tests/unit/waitlist-cleanup.test.ts && npx tsx tests/unit/public-activities.test.ts && npx tsx tests/unit/cawl-status.test.ts && npx tsx tests/unit/remboursement.test.ts && npx tsx tests/unit/transcription-params.test.ts",
+    "test:unit": "npx tsx tests/unit/sepa-validation.test.ts && npx tsx tests/unit/search-normalize.test.ts && npx tsx tests/unit/journee-management.test.ts && npx tsx tests/unit/horse-history.test.ts && npx tsx tests/unit/stage-deroule.test.ts && npx tsx tests/unit/waitlist-cleanup.test.ts && npx tsx tests/unit/public-activities.test.ts && npx tsx tests/unit/cawl-status.test.ts && npx tsx tests/unit/remboursement.test.ts && npx tsx tests/unit/transcription-params.test.ts && npx tsx tests/unit/rythme.test.ts",
     "validate:rules": "node scripts/validate-rules.mjs"
   },
   "dependencies": {

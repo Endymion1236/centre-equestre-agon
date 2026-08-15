@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import { emailTemplates } from "@/lib/email-templates";
 import { generateOrderId } from "@/lib/utils";
 import { formatStageSchedule } from "@/lib/format-stage";
+import { estQuinzaine, estSemaineAttendue, libelleRythme, expliqueRythme } from "@/lib/rythme";
 
 // ── Composant warning mandat SEPA ─────────────────────────────────────────────
 function SepaWarning({ familyId, onStatus }: { familyId: string; onStatus?: (s: "loading" | "ok" | "missing") => void }) {
@@ -655,6 +656,27 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   }, [isStage, creneau.date, creneau.activityTitle]);
 
   const enrolled = creneau.enrolled || []; const enrolledIds = enrolled.map((e: any) => e.childId);
+
+  // ── Cavaliers en quinzaine non attendus cette semaine ────────────────
+  // Ils ne sont pas dans `enrolled` — c'est voulu, sinon la feuille d'appel
+  // les compterait présents. Mais un créneau où il « manque » quelqu'un sans
+  // explication inquiète le moniteur et fait rouvrir le dossier. On les
+  // affiche donc en grisé, à partir de leur forfait, comme un rappel : ils
+  // existent, ils ne sont simplement pas là aujourd'hui.
+  const nonAttendusQuinzaine = useMemo(() => {
+    if (isStage) return [];
+    const jour = new Date(creneau.date + "T12:00:00")
+      .toLocaleDateString("fr-FR", { weekday: "long" }).toLowerCase();
+    return (allForfaits || []).filter((f: any) => {
+      if (!estQuinzaine(f)) return false;
+      if (f.status !== "actif" && f.status !== "active") return false;
+      if (enrolledIds.includes(f.childId)) return false;
+      if (estSemaineAttendue(creneau.date, f)) return false;
+      return (f.activityTitle || "").toLowerCase() === (creneau.activityTitle || "").toLowerCase()
+        && (f.dayLabel || "").toLowerCase() === jour
+        && (f.startTime || "") === (creneau.startTime || "");
+    });
+  }, [allForfaits, creneau.date, creneau.activityTitle, creneau.startTime, enrolledIds.join(","), isStage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // À l'ouverture, arriver directement sur la liste des inscrits (une seule
   // fois), sur mobile ET desktop — évite de scroller sous le plan et les notes.
@@ -2000,10 +2022,16 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       // Créneau principal : filtrer par jour + heure + activityTitle SEULEMENT
       // Ne PAS filtrer par moniteur — il peut changer en cours de saison (remplacements)
       const dow = new Date(creneau.date + "T12:00:00").getDay();
+      // Rythme du forfait : une quinzaine ne doit poser le cavalier QUE sur les
+      // semaines de sa parité. L'inscrire partout puis le griser à l'affichage
+      // ne suffirait pas : la feuille d'appel compte présent tout inscrit non
+      // marqué absent, et gonflerait ses séances d'un facteur deux.
+      const rythmeForfait = { rythme: quinzaine ? "quinzaine" : "hebdo", semainePaire };
       const slotsToEnroll = allFutureCreneaux.filter(c =>
         new Date(c.date + "T12:00:00").getDay() === dow &&
         c.startTime === creneau.startTime &&
-        c.activityTitle === creneau.activityTitle
+        c.activityTitle === creneau.activityTitle &&
+        estSemaineAttendue(c.date, rythmeForfait)
       );
 
       console.log(`📋 Inscription annuelle : ${slotsToEnroll.length} séances pour "${creneau.activityTitle}" (jour ${dow}, ${creneau.startTime}) du ${startDate} au ${endDate}`);
@@ -2034,7 +2062,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           c.date >= startDate &&
           new Date(c.date + "T12:00:00").getDay() === extraDow &&
           c.startTime === refCreneau.startTime &&
-          c.activityTitle === refCreneau.activityTitle
+          c.activityTitle === refCreneau.activityTitle &&
+          // Le rythme vaut pour le forfait entier : un cavalier en garde
+          // alternée n'est pas là non plus pour ses 2e et 3e créneaux.
+          estSemaineAttendue(c.date, rythmeForfait)
         );
 
         console.log(`📋 Créneau supplémentaire : ${extraCreneaux.length} séances pour "${refCreneau.activityTitle}" (jour ${extraDow}, ${refCreneau.startTime})`);
@@ -2049,6 +2080,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         familyId: fam.firestoreId, familyName: fam.parentName || "—",
         enrolledAt: new Date().toISOString(),
         paymentSource: "forfait" as const,
+        // Recopié sur chaque inscription : le planning et le montoir lisent le
+        // créneau, pas le forfait. Sans ce marqueur, rien à l'écran ne dirait
+        // pourquoi ce cavalier manque une semaine sur deux.
+        ...(quinzaine ? { rythme: "quinzaine" as const, semainePaire } : {}),
       };
 
       // Promise.all : toutes les ecritures partent en meme temps. Firestore
@@ -2757,6 +2792,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       ✎ pré-inscrit
                     </span>
                   )}
+                  {/* Rythme quinzaine : dit au moniteur que ce cavalier ne
+                      revient pas la semaine prochaine, avant qu'il ne le
+                      cherche. */}
+                  {estQuinzaine(e) && (
+                    <span title={expliqueRythme(creneau.date, e)}
+                      className="font-body text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 text-sky-700 bg-sky-100">
+                      ⇄ {libelleRythme(e)}
+                    </span>
+                  )}
                   {/* Place TENUE : inscription provisoire posée le temps d'un
                       paiement en ligne. Elle se libère toute seule à
                       expiration — à ne pas confondre avec une inscription
@@ -2811,6 +2855,30 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               </div>
             );
           })}</div>}
+
+          {/* ── Quinzaine : attendus la semaine prochaine ── */}
+          {nonAttendusQuinzaine.length > 0 && (
+            <div className="mb-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2.5">
+              <div className="font-body text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                Pas attendus cette semaine ({nonAttendusQuinzaine.length})
+              </div>
+              <div className="mt-1.5 flex flex-col gap-1">
+                {nonAttendusQuinzaine.map((f: any) => (
+                  <div key={f.id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="font-body text-sm text-slate-400 line-through">{f.childName}</span>
+                    <span title={expliqueRythme(creneau.date, f)}
+                      className="font-body text-[10px] font-semibold px-1.5 py-0.5 rounded-full text-slate-500 bg-slate-200">
+                      ⇄ {libelleRythme(f)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-1.5 font-body text-[11px] text-slate-500">
+                Garde alternée : ils reviennent la semaine prochaine. Ce n&apos;est pas une
+                absence, ne les comptez pas sur la feuille d&apos;appel.
+              </div>
+            </div>
+          )}
 
           {/* ── Place tenue pour une famille notifiée ── */}
           {holdActif && (
