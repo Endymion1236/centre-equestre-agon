@@ -149,17 +149,36 @@ export async function POST(req: NextRequest) {
 
   const manquants = await creneauxManquants(payload, from, to, titre);
   let restaures = 0;
+  const echecs: any[] = [];
+
   for (const c of manquants) {
     const { __id__, ...donnees } = c;
     try {
-      // create() et non set() : si le document est réapparu entre l'aperçu et
-      // maintenant, on échoue plutôt que d'écraser.
+      // create() et non set() : si le document existe déjà, on échoue plutôt
+      // que d'écraser un état plus récent.
       await adminDb.collection("creneaux").doc(__id__).create(deserialize(donnees));
       restaures++;
-    } catch (e) {
-      console.error("[restore-creneaux] échec", __id__, e);
+    } catch (e: any) {
+      // Le document existe : on regarde SON ÉTAT ACTUEL. C'est presque
+      // toujours l'explication utile — le créneau n'a pas été supprimé mais
+      // déplacé ou modifié, et la comparaison ne le retrouvait donc pas.
+      let actuel: any = null;
+      try {
+        const snap = await adminDb.collection("creneaux").doc(__id__).get();
+        if (snap.exists) {
+          const d = snap.data() as any;
+          actuel = { date: d.date, activityTitle: d.activityTitle, startTime: d.startTime, status: d.status || null };
+        }
+      } catch { /* rien */ }
+      echecs.push({
+        id: __id__,
+        sauvegarde: { date: c.date, activityTitle: c.activityTitle, startTime: c.startTime },
+        actuel,
+        raison: actuel ? "Le créneau existe déjà, sous un autre état" : (e?.message || "Erreur"),
+      });
+      console.error("[restore-creneaux] échec", __id__, e?.message);
     }
   }
 
-  return NextResponse.json({ ok: true, restaures, total: manquants.length });
+  return NextResponse.json({ ok: true, restaures, total: manquants.length, echecs });
 }

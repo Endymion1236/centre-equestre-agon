@@ -152,6 +152,25 @@ export default function RestoreCreneauxPage() {
       {resultat && (
         <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 font-body text-sm text-emerald-800">
           {resultat.error || `${resultat.restaures}/${resultat.total} créneau(x) restauré(s).`}
+          {resultat.echecs?.length > 0 && (
+            <div className="mt-3 space-y-1.5">
+              <div className="font-semibold text-slate-700">
+                Pourquoi les autres n&apos;ont pas été restaurés :
+              </div>
+              {resultat.echecs.map((e: any) => (
+                <div key={e.id} className="rounded-md bg-white border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700">
+                  <div className="font-semibold">{e.sauvegarde.activityTitle} · {e.sauvegarde.date}</div>
+                  <div className="text-slate-500">{e.raison}</div>
+                  {e.actuel && (
+                    <div className="mt-0.5 text-slate-500">
+                      Aujourd&apos;hui : {e.actuel.activityTitle} · {e.actuel.date} · {e.actuel.startTime}
+                      {e.actuel.status && ` · ${e.actuel.status}`}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
