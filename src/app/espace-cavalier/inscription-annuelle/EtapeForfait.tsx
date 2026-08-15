@@ -22,7 +22,10 @@ import { prixAjoutAffiche } from "./tarifs";
 export default function EtapeForfait({
   frequenceDejaInscrite, freqMaxAjoutable, tarifs,
   forfaitType, setForfaitType, setSelectedSlots, setStep,
+  dejaEnQuinzaine,
 }: {
+  /** Le cavalier a déjà un forfait « une semaine sur deux » cette saison. */
+  dejaEnQuinzaine?: boolean;
   frequenceDejaInscrite: number;
   freqMaxAjoutable: number;
   tarifs: ForfaitTarifs;
@@ -45,6 +48,21 @@ export default function EtapeForfait({
       <p className="font-body text-xs text-gray-400 mb-4">
         {ajout ? "Combien d'heures ajouter par semaine ?" : "Combien de cours par semaine ?"}
       </p>
+      {/* L'inscription en ligne ne gère pas le rythme d'une semaine sur deux :
+          le tarif affiché serait celui de l'année pleine. On prévient plutôt
+          que de laisser la famille payer deux fois ce qu'elle doit. */}
+      {dejaEnQuinzaine && (
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+          <p className="font-body text-xs text-amber-900 font-semibold">
+            Votre cavalier est inscrit une semaine sur deux
+          </p>
+          <p className="font-body text-xs text-amber-800 mt-1">
+            Ce rythme ne peut pas être choisi en ligne : les tarifs affichés ici
+            correspondent à l&apos;année complète. Contactez le centre équestre,
+            nous ferons l&apos;inscription avec le bon tarif.
+          </p>
+        </div>
+      )}
       {ajout && (
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
           <p className="font-body text-xs text-blue-800">

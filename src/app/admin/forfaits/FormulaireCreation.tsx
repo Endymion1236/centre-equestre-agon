@@ -75,6 +75,10 @@ export default function FormulaireCreation({ visible, onClose, onCreated, famili
   const fam = families.find(f => f.firestoreId === selFamily);
   const children = fam?.children || [];
 
+  // Une semaine sur deux : garde alternée. Moitié des séances, moitié du tarif.
+  const [rythmeQuinzaine, setRythmeQuinzaine] = useState(false);
+  const [semainePaire, setSemainePaire] = useState(true);
+
   // ── Prices ──
   const {
     slotsPrices, childRank, familyDiscountPercent, familyDiscountAmount,
@@ -82,6 +86,7 @@ export default function FormulaireCreation({ visible, onClose, onCreated, famili
   } = calculeTarifsInscription({
     selectedSlotsData, forfaits, selFamily, selChild, familyDiscountRules,
     licenceFFE, licenceType, adhesion,
+    rythme: rythmeQuinzaine ? "quinzaine" : "hebdo",
   });
 
   // ── Create forfait + batch enroll ──
@@ -96,10 +101,11 @@ export default function FormulaireCreation({ visible, onClose, onCreated, famili
         selFamily, selChild, childName, fam, creneaux, selectedSlotsData, slotsPrices,
         frequence, licenceFFE, licenceType, adhesion, payPlan,
         licencePrice, adhesionPrice, grandTotal, childRank, familyDiscountPercent, familyDiscountAmount,
+        rythme: rythmeQuinzaine ? "quinzaine" : "hebdo", semainePaire,
       });
 
       // Reset form
-      setSelFamily(""); setSelChild(""); setSelectedSlots([]);
+      setSelFamily(""); setSelChild(""); setSelectedSlots([]); setRythmeQuinzaine(false);
       setFrequence("1x"); setSlotSearch(""); setFamilySearch("");
       onClose();
       onCreated();
@@ -161,6 +167,31 @@ export default function FormulaireCreation({ visible, onClose, onCreated, famili
             )}
           </div>
         )}
+
+        {/* Une semaine sur deux — gardes alternées */}
+        <div className="mb-4">
+          <label className={`flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer ${
+            rythmeQuinzaine ? "bg-sky-50 border-sky-300" : "bg-white border-gray-200"}`}>
+            <input type="checkbox" checked={rythmeQuinzaine}
+              onChange={e => setRythmeQuinzaine(e.target.checked)}
+              className="mt-0.5 cursor-pointer" />
+            <span className="font-body text-xs text-slate-700 leading-relaxed">
+              <strong>Une semaine sur deux</strong> — garde alternée. Moitié des
+              séances, donc moitié du tarif.
+            </span>
+          </label>
+          {rythmeQuinzaine && (
+            <div className="flex gap-2 mt-2">
+              {([[true, "Semaines paires"], [false, "Semaines impaires"]] as const).map(([v, label]) => (
+                <button key={label} type="button" onClick={() => setSemainePaire(v)}
+                  className={`flex-1 py-2 rounded-lg font-body text-xs font-semibold border cursor-pointer ${
+                    semainePaire === v ? "bg-sky-600 text-white border-sky-600" : "bg-white text-slate-600 border-gray-200"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Fréquence */}
         <div>

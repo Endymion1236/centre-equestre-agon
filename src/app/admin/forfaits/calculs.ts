@@ -334,13 +334,26 @@ export function calculeTarifsInscription(params: {
   licenceFFE: boolean;
   licenceType: "moins18" | "plus18";
   adhesion: boolean;
+  /** "quinzaine" = une semaine sur deux (garde alternée) : moitié des séances. */
+  rythme?: "hebdo" | "quinzaine";
 }): TarifsInscription {
   const { selectedSlotsData, forfaits, selFamily, selChild, familyDiscountRules, licenceFFE, licenceType, adhesion } = params;
 
+  // Une semaine sur deux : le cavalier ne suit que la moitié des séances de la
+  // saison. Sans cet ajustement, le forfait était facturé pour l'année pleine
+  // alors que le planning, lui, ne l'attendait qu'une semaine sur deux.
+  const quinzaine = params.rythme === "quinzaine";
   const slotsPrices = selectedSlotsData.map(slot => {
     const price = slot.priceTTC || 0;
-    const forfaitPrice = price > 100 ? price : price * slot.totalSessions;
-    return { slot, forfaitPrice, sessions: slot.totalSessions };
+    const sessions = quinzaine
+      ? Math.ceil(slot.totalSessions / 2)
+      : slot.totalSessions;
+    // Un tarif > 100 € est un forfait annuel déjà global : on le divise
+    // plutôt que de le multiplier par un nombre de séances.
+    const forfaitPrice = price > 100
+      ? (quinzaine ? Math.round(price / 2) : price)
+      : price * sessions;
+    return { slot, forfaitPrice, sessions };
   });
   const totalForfaitBrut = slotsPrices.reduce((sum, s) => sum + s.forfaitPrice, 0);
 

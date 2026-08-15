@@ -398,6 +398,11 @@ export default function InscriptionAnnuellePage() {
           {/* ─── Step 3 (annuel): Choose forfait type ─── */}
           {step === 3 && mode === "annuel" && (
             <EtapeForfait
+              dejaEnQuinzaine={allForfaits.some((f: any) =>
+                f.childId === selectedChild
+                && f.rythme === "quinzaine"
+                && (f.status === "actif" || f.status === "active")
+              )}
               frequenceDejaInscrite={frequenceDejaInscrite}
               freqMaxAjoutable={freqMaxAjoutable}
               tarifs={tarifs}

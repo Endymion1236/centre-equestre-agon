@@ -108,7 +108,7 @@ export function calculeRangEnfantFamille(
     .filter((f: any) => f.familyId === familyId)
     .forEach((f: any) => {
       if (!f.childId || f.childId === childId) return;
-      if (f.status && f.status !== "actif") return;
+      if (f.status && f.status !== "actif" && f.status !== "active") return;
       // Comparaison de saison : on accepte le forfait si sa saison
       // (champ dédié ou createdAt) correspond à celle du créneau cible.
       const forfaitSeason = f.seasonStartYear ?? saisonDe(f.createdAt);
@@ -135,7 +135,7 @@ export function calculeFrequenceDejaInscrite(
   allForfaits
     .filter((f: any) => f.familyId === familyId && f.childId === childId)
     .forEach((f: any) => {
-      if (f.status && f.status !== "actif") return;
+      if (f.status && f.status !== "actif" && f.status !== "active") return;
       const forfaitSeason = f.seasonStartYear ?? saisonDe(f.createdAt);
       if (forfaitSeason !== targetSeason) return;
       total += Number(f.frequence) || 0;
@@ -247,11 +247,19 @@ export function calculePrixEffectifStage(
     : (configuredPrices[nbJoursStage] && configuredPrices[nbJoursStage] <= prixStageComplet ? configuredPrices[nbJoursStage] : prixStageComplet);
 }
 
-/** Prix jour AFFICHÉ dans le récapitulatif stage (indicatif, mode jour). */
+/**
+ * Prix jour affiché dans le récapitulatif stage.
+ *
+ * DOIT rester aligné sur ce qui est réellement facturé (cf. prixJourFacture) :
+ * l'affichage retenait auparavant le PLUS PETIT du tarif configuré et du
+ * prorata, alors que la facturation prend toujours le tarif configuré quand il
+ * existe. Un stage à 45 €/jour dont le prorata tombait à 37,50 € annonçait
+ * donc 37,50 € et facturait 45 €.
+ */
 export function prixJourAffiche(creneau: any, priceTTC: number, nbJours: number): number {
   const p1 = (creneau as any)?.price1day;
-  const prorataJour = Math.round((priceTTC / nbJours) * 100) / 100;
-  return (p1 && p1 <= prorataJour) ? p1 : prorataJour;
+  if (p1 && p1 > 0) return p1;
+  return Math.round((priceTTC / Math.max(1, nbJours)) * 100) / 100;
 }
 
 /**

@@ -58,6 +58,9 @@ export async function creerForfaitAnnuel(params: {
   childRank: number;
   familyDiscountPercent: number;
   familyDiscountAmount: number;
+  /** "quinzaine" = une semaine sur deux (garde alternée). */
+  rythme?: "hebdo" | "quinzaine";
+  semainePaire?: boolean;
 }): Promise<number> {
   const {
     selFamily, selChild, childName, fam, creneaux, selectedSlotsData, slotsPrices,
@@ -101,6 +104,10 @@ export async function creerForfaitAnnuel(params: {
   const _seasonStartYear = _now.getMonth() >= 8 ? _now.getFullYear() : _now.getFullYear() - 1;
   for (const sp of slotsPrices) {
     await addDoc(collection(db, "forfaits"), {
+    // Rythme : "hebdo" par défaut. En quinzaine, le planning n'attend le
+    // cavalier qu'une semaine sur deux (cf. lib/rythme.ts).
+    rythme: params.rythme === "quinzaine" ? "quinzaine" : "hebdo",
+    ...(params.rythme === "quinzaine" ? { semainePaire: params.semainePaire !== false } : {}),
       familyId: selFamily,
       familyName: fam.parentName || "—",
       childId: selChild,

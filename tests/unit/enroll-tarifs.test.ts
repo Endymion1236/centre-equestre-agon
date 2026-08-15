@@ -232,12 +232,17 @@ console.log("\n✓ Tarifs de stage (en-tête, mode jour, mode semaine) :");
   // price1day. Comportement d'origine, conservé tel quel et documenté ici :
   // avec price1day = 45 € et un prorata à 37,50 €, l'écran annonce 37,50 €/jour
   // et la commande porte 45 €.
-  assert("prix jour affiché : le moins cher des deux (prorata ici)",
-    prixJourAffiche(stage, 150, 4) === 37.5);
-  assert("prix jour affiché : price1day s'il est plus bas que le prorata",
+  // Le tarif configuré fait foi, qu'il soit au-dessus ou en dessous du prorata :
+  // c'est lui qui sera facturé, l'affichage doit dire la même chose.
+  assert("prix jour affiché : le tarif configuré, même au-dessus du prorata",
+    prixJourAffiche(stage, 150, 4) === 45);
+  assert("prix jour affiché : le tarif configuré, même en dessous du prorata",
     prixJourAffiche({ price1day: 30 }, 150, 4) === 30);
-  assert("écart assumé entre prix affiché et prix facturé",
-    prixJourAffiche(stage, 150, 4) !== calculePrixEffectifStage(stage, 150, "jour", 4));
+  assert("prix jour affiché : prorata seulement si aucun tarif configuré",
+    prixJourAffiche({}, 150, 4) === 37.5);
+  // Garde-fou anti-régression : ce qui est montré doit être ce qui est facturé.
+  assert("prix affiché = prix facturé",
+    prixJourAffiche(stage, 150, 4) === calculePrixEffectifStage(stage, 150, "jour", 4));
 }
 
 // ─── Acompte / solde d'un stage ───────────────────────────────────
