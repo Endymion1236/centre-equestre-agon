@@ -866,7 +866,9 @@ export default function PlanningPage() {
 
   const handleEnroll = async (cid: string, child: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean; freeReason?: string; rattrapageId?: string; competitionItems?: any[]; skipRefresh?: boolean }) => {
     const enrolled = await enrollChildInCreneau(cid, child);
-    if (!enrolled) return;
+    // Sortir en silence laissait les appelants croire l'inscription faite :
+    // l'ajout d'un jour de stage facturait alors 2 jours pour 1 seul inscrit.
+    if (!enrolled) return false;
 
     // Une inscription solde la demande d'attente correspondante : sans cela,
     // la famille restait affichee « En attente » sur un creneau ou elle est

@@ -73,7 +73,7 @@ import { useAuth } from "@/lib/auth-context";
 
 function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allForfaits, onClose, onEnroll, onUnenroll, onRefresh }: {
   creneau: Creneau & { id: string }; families: (Family & { firestoreId: string })[]; allCreneaux: (Creneau & { id: string })[]; payments: any[]; allCartes: any[]; allForfaits: any[];  onClose: () => void;
-  onEnroll: (id: string, c: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean; freeReason?: string; rattrapageId?: string; skipRefresh?: boolean }) => Promise<void>;
+  onEnroll: (id: string, c: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean; freeReason?: string; rattrapageId?: string; skipRefresh?: boolean }) => Promise<boolean | void>;
   onUnenroll: (id: string, childId: string) => Promise<void>;
   // Optionnel : si fourni, appele apres une boucle d'inscriptions (annuel)
   // pour rafraichir creneaux + forfaits une seule fois au lieu de N fois.
@@ -4013,14 +4013,27 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     setEnrolling(true);
                     try {
                       const fam2 = families.find(f => f.firestoreId === showAddDays.familyId);
+                      let inscritsCeJour = 0;
                       if (fam2) {
                         for (const enfant of showAddDays.enfants) {
-                          await onEnroll(j.id, {
+                          const ok = await onEnroll(j.id, {
                             childId: enfant.childId, childName: enfant.childName,
                             familyId: showAddDays.familyId, familyName: fam2.parentName || "—",
                             enrolledAt: new Date().toISOString(),
                           }, undefined, { skipPayment: true, skipEmail: true });
+                          if (ok !== false) inscritsCeJour++;
                         }
+                      }
+
+                      // Sans ce contrôle, un jour complet (ou déjà pris) était
+                      // facturé sans que personne n'y soit inscrit : la facture
+                      // passait à 2 jours pour une seule journée réelle.
+                      if (inscritsCeJour === 0) {
+                        panelToast(
+                          `Inscription impossible le ${j.label} — journée complète ou déjà inscrit. Tarif inchangé.`,
+                          "error"
+                        );
+                        return;
                       }
                       // Recalcul tarif : jours inscrits AVANT + 1 (ce jour qu'on vient d'ajouter)
                       try {
