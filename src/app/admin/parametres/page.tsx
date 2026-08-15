@@ -1,37 +1,51 @@
 "use client";
+/**
+ * src/app/admin/parametres/page.tsx
+ *
+ * Écran d'administration des réglages du centre. Chaque onglet écrit un
+ * document `settings/*` de Firestore (ou une collection dédiée pour les
+ * vacances, les moniteurs et les marées).
+ *
+ * Ce fichier est l'ORCHESTRATEUR : il détient l'état, les chargements et les
+ * sauvegardes, et distribue le tout aux composants de section (Section*.tsx).
+ * Les sections sont des composants de présentation ; l'état est resté ici pour
+ * une raison précise : plusieurs chargements se font à l'ouverture de la PAGE
+ * et non à l'affichage de l'onglet (le semis des vacances scolaires écrit même
+ * en base au premier lancement), et un onglet qu'on quitte puis rouvre doit
+ * retrouver ce qu'on y avait saisi.
+ *
+ * ⚠️ Les réglages saisis ici pilotent toute l'application, facturation
+ * comprise. Les noms de champs et de documents sont un contrat avec les autres
+ * pages (voir types.ts) : un champ écrit sous une mauvaise clé ne se remarque
+ * pas ici, il se remarque sur une facture.
+ */
 import { useAgentContext } from "@/hooks/useAgentContext";
-import { STAGE_DEROULE_VIDE, derouleEstRempli, renderDerouleTexte, type StageDeroule } from "@/lib/stage-deroule";
+import { STAGE_DEROULE_VIDE, type StageDeroule } from "@/lib/stage-deroule";
 
 import { useState, useEffect } from "react";
-import { doc, getDoc, setDoc, collection, getDocs, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, getDocs, deleteDoc, addDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Card, Badge } from "@/components/ui";
-import { Save, Plus, Trash2, Loader2, AlertTriangle, Users, Pencil, Calendar, KeyRound, RefreshCw, Search, ShieldCheck, ShieldOff } from "lucide-react";
-import { authFetch } from "@/lib/auth-fetch";
+import { Save } from "lucide-react";
 import MareesSection from "./MareesSection";
-import ReservationsToggle from "@/components/admin/ReservationsToggle";
-import ThemeSaisonnierToggle from "@/components/admin/ThemeSaisonnierToggle";
 import { DEFAULT_ECHELLE_LABELS, DEFAULT_VALIDATED_FFE_LEVEL, type ProgressionLabelsSettings } from "@/lib/progression-helpers";
-
-const defaultAccounts = [
-  { code: "70641000", label: "Animations collectivité", tva: "5.50%", affectation: "Animations CE, collectivités" },
-  { code: "70611110", label: "Cotisations / Adhésions", tva: "5.50%", affectation: "Adhésions annuelles" },
-  { code: "70611600", label: "Découverte / Familiarisation", tva: "5.50%", affectation: "Séances découverte, baby poney" },
-  { code: "70605000", label: "Divers", tva: "20%", affectation: "Produits divers" },
-  { code: "70619900", label: "Droits d'accès installations", tva: "5.50%", affectation: "Accès carrière, manège" },
-  { code: "70611300", label: "Enseignement / Cartes", tva: "5.50%", affectation: "Cartes d'heures" },
-  { code: "70611700", label: "Enseignement / Coaching", tva: "5.50%", affectation: "Cours particuliers, coaching" },
-  { code: "70611000", label: "Enseignement / Forfaits", tva: "5.50%", affectation: "Forfaits annuels, trimestriels" },
-  { code: "4386", label: "Formation professionnelle", tva: "0%", affectation: "BPJEPS, formations" },
-  { code: "70613110", label: "Location poneys", tva: "20%", affectation: "Location poneys extérieurs" },
-  { code: "70630110", label: "Pensions équidé", tva: "5.50%", affectation: "Pensions box, paddock" },
-  { code: "70611500", label: "Randonnées / Promenades", tva: "5.50%", affectation: "Balades plage, randonnées" },
-  { code: "70100000", label: "Refacturation FFE", tva: "0%", affectation: "Licences FFE refacturées" },
-  { code: "70880000", label: "Refacturation soin", tva: "20%", affectation: "Soins vétérinaires refacturés" },
-  { code: "70611400", label: "Stages équitation", tva: "5.50%", affectation: "Stages vacances" },
-  { code: "70622011", label: "Transport", tva: "20%", affectation: "Transport chevaux/cavaliers" },
-  { code: "70410000", label: "Ventes équidés", tva: "20%", affectation: "Vente de chevaux/poneys" },
-];
+import { DEFAULT_VACATION_PERIODS, EPREUVES_PAR_DEFAUT } from "./constantes";
+import type {
+  CustomInscriptionLine, MaintenanceTab, Promo, SectionId, VacationPeriod,
+} from "./types";
+import { useComptesMoniteurs } from "./useComptesMoniteurs";
+import SectionCentre from "./SectionCentre";
+import SectionInscription from "./SectionInscription";
+import SectionReductions from "./SectionReductions";
+import SectionDegressivite from "./SectionDegressivite";
+import SectionVacances from "./SectionVacances";
+import { SectionAnnulation, SectionPlanComptable, SectionHoraires } from "./SectionsSimples";
+import SectionMoniteurs from "./SectionMoniteurs";
+import SectionEpreuves from "./SectionEpreuves";
+import SectionProgression from "./SectionProgression";
+import SectionFidelite from "./SectionFidelite";
+import SectionStageDeroule from "./SectionStageDeroule";
+import SectionMaintenance from "./SectionMaintenance";
+import SectionNotifications from "./SectionNotifications";
 
 export default function ParametresPage() {
     const { setAgentContext } = useAgentContext("parametres");
@@ -40,8 +54,7 @@ export default function ParametresPage() {
     setAgentContext({ module_actif: "parametres", description: "moniteurs, tarifs, infos centre" });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [section, setSection] = useState<"centre" | "reductions" | "degressivite" | "vacances" | "annulation" | "comptable" | "horaires" | "moniteurs" | "fidelite" | "inscription" | "epreuves" | "progression" | "maintenance" | "notifications" | "marees" | "stages">("centre");
-
+  const [section, setSection] = useState<SectionId>("centre");
   // Ouvrir directement une section via l'URL (ex. /admin/parametres?section=moniteurs)
   useEffect(() => {
     const allowed = ["centre","reductions","degressivite","vacances","annulation","comptable","horaires","moniteurs","fidelite","inscription","epreuves","progression","maintenance","notifications","marees","stages"];
@@ -59,8 +72,7 @@ export default function ParametresPage() {
   });
   const [notifSaving, setNotifSaving] = useState(false);
   const [testPushSending, setTestPushSending] = useState(false);
-  const [maintenanceTab, setMaintenanceTab] = useState<"nettoyage" | "test" | "historique">("nettoyage");
-
+  const [maintenanceTab, setMaintenanceTab] = useState<MaintenanceTab>("nettoyage");
   // ─── Infos Centre ───
   const [centreParams, setCentreParams] = useState({
     nom: "Centre Equestre d'Agon-Coutainville",
@@ -79,16 +91,6 @@ export default function ParametresPage() {
     seuilPoneyHeures: 4,   // nb heures max/jour
   });
   const [centreSaved, setCentreSaved] = useState(false);
-
-  // ─── Type d'une ligne optionnelle libre ───
-  // Ces lignes apparaissent dans l'inscription annuelle et la famille peut les cocher.
-  type CustomInscriptionLine = {
-    id: string;            // identifiant stable (timestamp ou uuid simple)
-    label: string;         // ex. "Forfait compétition", "Tenue club"
-    priceTTC: number;      // montant TTC en euros
-    tvaRate: number;       // 0, 5.5, 10 ou 20
-    accountCode: string;   // code du plan comptable (ex. 70611000)
-  };
 
   // ─── Paramètres inscription annuelle ───
   const [inscriptionParams, setInscriptionParams] = useState({
@@ -117,18 +119,7 @@ export default function ParametresPage() {
   const [inscriptionSaved, setInscriptionSaved] = useState(false);
 
   // ─── Épreuves compétition ───
-  const DISCIPLINES = [
-    { key: "pony_games", label: "Pony Games", default: ["Trot en ligne","Slalom","Tonneau","Cavaletti","Portique","Barre de vitesse","Étoile","Flag race"] },
-    { key: "cso", label: "CSO", default: ["Parcours A","Barrage","Maniabilité","Chrono"] },
-    { key: "equifun", label: "Équifun", default: ["Parcours thématique","Épreuve de précision","Course d'obstacles","Épreuve d'adresse"] },
-    { key: "endurance", label: "Endurance", default: ["Boucle 1","Boucle 2","Boucle 3","Phase vétérinaire"] },
-  ];
-  const [epreuves, setEpreuves] = useState<Record<string, string[]>>({
-    pony_games: ["Trot en ligne","Slalom","Tonneau","Cavaletti","Portique","Barre de vitesse","Étoile","Flag race"],
-    cso: ["Parcours A","Barrage","Maniabilité","Chrono"],
-    equifun: ["Parcours thématique","Épreuve de précision","Course d'obstacles","Épreuve d'adresse"],
-    endurance: ["Boucle 1","Boucle 2","Boucle 3","Phase vétérinaire"],
-  });
+  const [epreuves, setEpreuves] = useState<Record<string, string[]>>(EPREUVES_PAR_DEFAUT);
   const [epreuvesSaved, setEpreuvesSaved] = useState(false);
   const [newEpreuve, setNewEpreuve] = useState<Record<string, string>>({});
 
@@ -212,103 +203,11 @@ export default function ParametresPage() {
   const [moniteurForm, setMoniteurForm] = useState({ name: "", role: "", email: "", phone: "", status: "active" });
   const [moniteurSaving, setMoniteurSaving] = useState(false);
   // Comptes de connexion (Firebase Auth) — pour afficher/gérer l'accès depuis ici.
-  // On relie un compte à une fiche moniteur par l'EMAIL.
-  const [authMoniteurs, setAuthMoniteurs] = useState<any[]>([]);
-  const [accountBusy, setAccountBusy] = useState<string>(""); // email en cours de traitement
-
-  const reloadAuthMoniteurs = async () => {
-    try {
-      const res = await authFetch("/api/admin/list-moniteurs");
-      const data = await res.json();
-      if (data.moniteurs) setAuthMoniteurs(data.moniteurs);
-    } catch (e) { console.error("Chargement comptes moniteurs:", e); }
-  };
-
-  // Compte Auth correspondant à une fiche moniteur (rapprochement par email)
-  const accountFor = (m: any) =>
-    authMoniteurs.find(a => (a.email || "").toLowerCase() === (m.email || "").toLowerCase());
-
-  // Créer l'accès (compte Firebase Auth + rôle moniteur) pour une fiche existante
-  const createAccess = async (m: any) => {
-    if (!m.email) { alert("Ajoutez d'abord un email à ce moniteur (bouton Modifier)."); return; }
-    const password = window.prompt(
-      `Mot de passe initial pour le compte de ${m.name} (${m.email}) ?\n\nMinimum 6 caractères. Vous le communiquerez au moniteur, qui pourra le changer ensuite.`
-    );
-    if (password === null) return; // annulé
-    if (password.length < 6) { alert("Le mot de passe doit faire au moins 6 caractères."); return; }
-    setAccountBusy(m.email);
-    try {
-      const res = await authFetch("/api/admin/create-moniteur", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ displayName: m.name, email: m.email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) { alert(data.error || "Erreur lors de la création du compte."); return; }
-      // Compte préexistant rattaché : le mot de passe saisi n'a PAS été
-      // appliqué, il faut le dire clairement sous peine de communiquer un
-      // mot de passe qui ne fonctionnera pas.
-      alert(data.adopted
-        ? `✅ Accès moniteur accordé à ${m.email}.\n\nUn compte existait déjà pour cette adresse : il a été rattaché.\n⚠️ Le mot de passe que vous venez de saisir n'a PAS été appliqué — la personne se connecte avec son mot de passe habituel (ou via « mot de passe oublié »).`
-        : `✅ Accès créé pour ${m.email}.\nLe moniteur peut se connecter via « Connexion par email ».`);
-      await reloadAuthMoniteurs();
-    } catch (e) { alert("Erreur réseau."); }
-    finally { setAccountBusy(""); }
-  };
-
-  const deleteAccess = async (m: any, acct: any) => {
-    if (!confirm(`Supprimer l'ACCÈS (compte de connexion) de ${m.name} (${m.email}) ?\n\nLa fiche moniteur est conservée — seul le compte de connexion est supprimé.`)) return;
-    setAccountBusy(m.email);
-    try {
-      const res = await authFetch("/api/admin/create-moniteur", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid: acct.uid }),
-      });
-      if (res.ok) { await reloadAuthMoniteurs(); }
-      else { const d = await res.json(); alert(d.error || "Erreur lors de la suppression du compte."); }
-    } catch (e) { alert("Erreur réseau."); }
-    finally { setAccountBusy(""); }
-  };
-
-  const refreshAccessClaim = async (m: any, acct: any) => {
-    if (!confirm(
-      `Rafraîchir le rôle moniteur de ${m.name} ?\n\n` +
-      `Cela réapplique le droit d'accès et déconnecte la personne de ses sessions. ` +
-      `Elle devra se reconnecter (utile en cas d'erreur de permission).`
-    )) return;
-    setAccountBusy(m.email);
-    try {
-      const res = await authFetch("/api/admin/refresh-moniteur-claim", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid: acct.uid }),
-      });
-      if (res.ok) alert(`Rôle moniteur réappliqué pour ${m.name}. Demandez-lui de se reconnecter.`);
-      else { const d = await res.json(); alert(d.error || "Erreur lors du rafraîchissement."); }
-    } catch (e) { alert("Erreur réseau."); }
-    finally { setAccountBusy(""); }
-  };
-
-  const diagAccess = async (m: any) => {
-    try {
-      const res = await authFetch(`/api/admin/diag-claims?email=${encodeURIComponent(m.email)}`);
-      const data = await res.json();
-      if (!res.ok) { alert(data.error || "Erreur lors du diagnostic."); return; }
-      const claims = data.customClaims || {};
-      const claimsStr = Object.keys(claims).length === 0 ? "AUCUN CLAIM" : JSON.stringify(claims, null, 2);
-      alert(
-        `🔍 Diagnostic accès — ${m.name}\n\n` +
-        `Email : ${data.email}\nUID : ${data.uid}\n` +
-        `Compte désactivé : ${data.disabled ? "OUI" : "non"}\n` +
-        `Email vérifié : ${data.emailVerified ? "oui" : "NON"}\n\n` +
-        `Custom claims : ${claimsStr}\n\n` +
-        `✅ Claim moniteur : ${data.hasMoniteurClaim ? "OUI" : "❌ NON"}\n` +
-        `✅ Claim admin : ${data.hasAdminClaim ? "OUI" : "non"}\n\n` +
-        `Dernière connexion : ${data.lastSignIn || "jamais"}`
-      );
-    } catch (e) { alert("Erreur réseau."); }
-  };
+  // On relie un compte à une fiche moniteur par l'EMAIL. Voir useComptesMoniteurs.ts.
+  const {
+    authMoniteurs, accountBusy, reloadAuthMoniteurs,
+    accountFor, createAccess, deleteAccess, refreshAccessClaim, diagAccess,
+  } = useComptesMoniteurs();
 
   useEffect(() => {
     if (section !== "moniteurs") return;
@@ -339,23 +238,13 @@ export default function ParametresPage() {
   const [prixPlancherStage, setPrixPlancherStage] = useState<number>(0);
   const [cancellation, setCancellation] = useState({ hours: 72, retention: 50 });
 
-  // ═══ Vacances scolaires ═══
-  // Source pour la logique de réduction famille/multi-stages.
-  interface VacationPeriod { id: string; name: string; startDate: string; endDate: string; }
+  // ═══ Vacances scolaires ═══ (type VacationPeriod : voir types.ts)
   const [vacations, setVacations] = useState<VacationPeriod[]>([]);
   const [loadingVacations, setLoadingVacations] = useState(true);
   const [savingVacation, setSavingVacation] = useState(false);
   const [newVacName, setNewVacName] = useState("");
   const [newVacStart, setNewVacStart] = useState("");
   const [newVacEnd, setNewVacEnd] = useState("");
-  // Vacances scolaires zone B 2025-2026 (source : education.gouv.fr)
-  const DEFAULT_VACATION_PERIODS = [
-    { name: "Vacances de la Toussaint 2025", startDate: "2025-10-18", endDate: "2025-11-03" },
-    { name: "Vacances de Noël 2025", startDate: "2025-12-20", endDate: "2026-01-05" },
-    { name: "Vacances d'Hiver 2026", startDate: "2026-02-14", endDate: "2026-03-02" },
-    { name: "Vacances de Printemps 2026", startDate: "2026-04-11", endDate: "2026-04-27" },
-    { name: "Vacances d'Été 2026", startDate: "2026-07-04", endDate: "2026-08-31" },
-  ];
   useEffect(() => {
     (async () => {
       try {
@@ -411,23 +300,6 @@ export default function ParametresPage() {
     }).catch(console.error);
   }, []);
 
-  // ─── Réductions & codes promo ───
-  type PromoType = "code" | "premiere_annee" | "anniversaire" | "parrainage";
-  type DiscountMode = "percent" | "fixed";
-  interface Promo {
-    id: string;
-    type: PromoType;
-    code: string;
-    label: string;
-    discountMode: DiscountMode;
-    discountValue: number;
-    appliesTo: "forfait" | "paiement" | "tout";
-    active: boolean;
-    maxUses: number;
-    usedCount: number;
-    validFrom: string;
-    validUntil: string;
-  }
   const [promos, setPromos] = useState<Promo[]>([]);
   const [loadingPromos, setLoadingPromos] = useState(true);
 
@@ -535,8 +407,6 @@ export default function ParametresPage() {
     setSavingDegress(false);
   };
 
-  const inputCls = "px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none text-center";
-
   return (
     <div>
       <h1 className="font-display text-2xl font-bold text-blue-800 mb-6">Paramètres</h1>
@@ -579,1245 +449,154 @@ export default function ParametresPage() {
       {/* ─── Tarifs annuels ─── */}
       {/* ─── Centre ─── */}
       {section === "centre" && (
-        <div className="flex flex-col gap-5">
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-4">🏠 Identité du centre</h3>
-            <div className="flex flex-col gap-3">
-              {[
-                { key: "nom", label: "Nom commercial" },
-                { key: "legalName", label: "Raison sociale (factures)" },
-                { key: "address", label: "Adresse complète" },
-                { key: "tel", label: "Téléphone" },
-                { key: "email", label: "Email de contact" },
-                { key: "website", label: "Site web" },
-              ].map(({ key, label }) => (
-                <div key={key}>
-                  <label className="font-body text-xs font-semibold text-blue-800 block mb-1">{label}</label>
-                  <input value={(centreParams as any)[key]}
-                    onChange={e => setCentreParams(prev => ({ ...prev, [key]: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-4">🧾 Informations légales & bancaires</h3>
-            <div className="flex flex-col gap-3">
-              {[
-                { key: "siret", label: "SIRET" },
-                { key: "tvaIntra", label: "N° TVA intracommunautaire (si applicable)" },
-                { key: "iban", label: "IBAN" },
-                { key: "bic", label: "BIC" },
-              ].map(({ key, label }) => (
-                <div key={key}>
-                  <label className="font-body text-xs font-semibold text-blue-800 block mb-1">{label}</label>
-                  <input value={(centreParams as any)[key]}
-                    onChange={e => setCentreParams(prev => ({ ...prev, [key]: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
-                    placeholder={key === "tvaIntra" ? "FR00 000000000 (optionnel)" : ""} />
-                </div>
-              ))}
-            </div>
-            <p className="font-body text-[10px] text-slate-400 mt-3">Ces informations apparaissent sur les factures, bons cadeaux et emails officiels.</p>
-          </Card>
-
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-4">🐴 Seuils d'alerte poneys</h3>
-            <p className="font-body text-xs text-slate-500 mb-3">Charge journalière au-delà de laquelle une alerte s'affiche dans le Montoir</p>
-            <div className="flex flex-col gap-3">
-              {[
-                { key: "seuilPoneyOrange", label: "Alerte orange (nb séances)", unit: "séances" },
-                { key: "seuilPoneyRouge",  label: "Alerte rouge (nb séances)",  unit: "séances" },
-                { key: "seuilPoneyHeures", label: "Maximum heures/jour",         unit: "heures" },
-              ].map(({ key, label, unit }) => (
-                <div key={key} className="flex items-center justify-between gap-4">
-                  <span className="font-body text-sm text-blue-800">{label}</span>
-                  <div className="flex items-center gap-2">
-                    <input type="number" min="1" max="10" value={(centreParams as any)[key]}
-                      onChange={e => setCentreParams(prev => ({ ...prev, [key]: parseInt(e.target.value) || 1 }))}
-                      className="w-20 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm text-right bg-cream focus:border-blue-500 focus:outline-none" />
-                    <span className="font-body text-xs text-slate-400">{unit}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <button onClick={saveCentre}
-            className="flex items-center justify-center gap-2 py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none cursor-pointer">
-            {centreSaved ? "✅ Sauvegardé !" : "Sauvegarder les infos du centre"}
-          </button>
-        </div>
+        <SectionCentre
+          centreParams={centreParams}
+          setCentreParams={setCentreParams}
+          centreSaved={centreSaved}
+          saveCentre={saveCentre}
+        />
       )}
 
       {/* ─── Réductions & promos ─── */}
       {section === "reductions" && (
-        <div className="flex flex-col gap-5">
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-2">Codes promo & réductions</h3>
-            <p className="font-body text-xs text-gray-400 mb-4">
-              Créez des codes promo, des réductions automatiques (1ère année, anniversaire) ou manuelles.
-              Ces réductions sont utilisables dans les forfaits annuels et les paiements.
-            </p>
-
-            {loadingPromos ? (
-              <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto" /></div>
-            ) : (
-              <>
-                {/* Liste des promos existantes */}
-                {promos.length > 0 && (
-                  <div className="flex flex-col gap-2 mb-5">
-                    {promos.map((p, i) => {
-                      const typeLabels: Record<string, { label: string; color: "blue" | "green" | "orange" | "purple" }> = {
-                        code: { label: "Code promo", color: "blue" },
-                        premiere_annee: { label: "1ère année", color: "green" },
-                        anniversaire: { label: "Anniversaire", color: "orange" },
-                        parrainage: { label: "Parrainage", color: "purple" },
-                      };
-                      const t = typeLabels[p.type] || { label: p.type, color: "gray" as const };
-                      return (
-                        <div key={p.id} className={`flex items-center gap-3 rounded-lg px-4 py-3 border ${p.active ? "bg-white border-gray-200" : "bg-gray-50 border-gray-100 opacity-60"}`}>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Badge color={t.color}>{t.label}</Badge>
-                              {p.code && <span className="font-body text-sm font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded font-mono">{p.code}</span>}
-                              <span className="font-body text-sm text-gray-600">{p.label}</span>
-                              {!p.active && <Badge color="gray">Désactivé</Badge>}
-                            </div>
-                            <div className="font-body text-xs text-gray-400 mt-1">
-                              {p.discountMode === "percent" ? `-${p.discountValue}%` : `-${p.discountValue}€`}
-                              {" · "}{p.appliesTo === "tout" ? "Forfaits + paiements" : p.appliesTo === "forfait" ? "Forfaits uniquement" : "Paiements uniquement"}
-                              {p.maxUses > 0 && <> · {p.usedCount}/{p.maxUses} utilisations</>}
-                              {p.validUntil && <> · Expire le {new Date(p.validUntil).toLocaleDateString("fr-FR")}</>}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <button onClick={() => {
-                              const up = [...promos]; up[i] = { ...p, active: !p.active }; setPromos(up);
-                            }} className={`font-body text-xs px-3 py-1.5 rounded-lg border-none cursor-pointer ${p.active ? "bg-orange-50 text-orange-500 hover:bg-orange-100" : "bg-green-50 text-green-600 hover:bg-green-100"}`}>
-                              {p.active ? "Désactiver" : "Activer"}
-                            </button>
-                            <button onClick={() => setPromos(promos.filter((_, j) => j !== i))}
-                              className="w-8 h-8 rounded-lg bg-red-50 text-red-400 flex items-center justify-center border-none cursor-pointer hover:bg-red-100">
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Boutons ajout rapide */}
-                <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Ajouter une réduction</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-                  {/* Code promo */}
-                  <button onClick={() => setPromos([...promos, {
-                    id: `promo_${Date.now()}`, type: "code", code: "", label: "Nouveau code promo",
-                    discountMode: "percent", discountValue: 10, appliesTo: "tout", active: true,
-                    maxUses: 0, usedCount: 0, validFrom: "", validUntil: "",
-                  }])} className="flex items-center gap-3 px-4 py-3 rounded-lg border border-dashed border-blue-300 bg-blue-50/30 text-left cursor-pointer hover:bg-blue-50 transition-all">
-                    <Plus size={18} className="text-blue-500" />
-                    <div>
-                      <div className="font-body text-sm font-semibold text-blue-800">Code promo</div>
-                      <div className="font-body text-xs text-gray-400">Ex: BIENVENUE10, ETE2026, NOEL...</div>
-                    </div>
-                  </button>
-
-                  {/* 1ère année */}
-                  <button onClick={() => setPromos([...promos, {
-                    id: `promo_${Date.now()}`, type: "premiere_annee", code: "", label: "Tarif spécial 1ère année",
-                    discountMode: "percent", discountValue: 10, appliesTo: "forfait", active: true,
-                    maxUses: 0, usedCount: 0, validFrom: "", validUntil: "",
-                  }])} className="flex items-center gap-3 px-4 py-3 rounded-lg border border-dashed border-green-300 bg-green-50/30 text-left cursor-pointer hover:bg-green-50 transition-all">
-                    <Plus size={18} className="text-green-600" />
-                    <div>
-                      <div className="font-body text-sm font-semibold text-blue-800">1ère année</div>
-                      <div className="font-body text-xs text-gray-400">Réduction auto pour les nouveaux inscrits</div>
-                    </div>
-                  </button>
-
-                  {/* Anniversaire */}
-                  <button onClick={() => setPromos([...promos, {
-                    id: `promo_${Date.now()}`, type: "anniversaire", code: "", label: "Réduction anniversaire",
-                    discountMode: "percent", discountValue: 15, appliesTo: "tout", active: true,
-                    maxUses: 0, usedCount: 0, validFrom: "", validUntil: "",
-                  }])} className="flex items-center gap-3 px-4 py-3 rounded-lg border border-dashed border-orange-300 bg-orange-50/30 text-left cursor-pointer hover:bg-orange-50 transition-all">
-                    <Plus size={18} className="text-orange-500" />
-                    <div>
-                      <div className="font-body text-sm font-semibold text-blue-800">Anniversaire</div>
-                      <div className="font-body text-xs text-gray-400">Réduction le mois d&apos;anniversaire du cavalier</div>
-                    </div>
-                  </button>
-
-                  {/* Parrainage */}
-                  <button onClick={() => setPromos([...promos, {
-                    id: `promo_${Date.now()}`, type: "parrainage", code: "", label: "Parrainage",
-                    discountMode: "fixed", discountValue: 30, appliesTo: "forfait", active: true,
-                    maxUses: 0, usedCount: 0, validFrom: "", validUntil: "",
-                  }])} className="flex items-center gap-3 px-4 py-3 rounded-lg border border-dashed border-purple-300 bg-purple-50/30 text-left cursor-pointer hover:bg-purple-50 transition-all">
-                    <Plus size={18} className="text-purple-600" />
-                    <div>
-                      <div className="font-body text-sm font-semibold text-blue-800">Parrainage</div>
-                      <div className="font-body text-xs text-gray-400">Réduction quand un client amène un nouveau</div>
-                    </div>
-                  </button>
-                </div>
-
-                {/* Édition détaillée des promos */}
-                {promos.length > 0 && (
-                  <div className="border-t border-gray-100 pt-4">
-                    <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Détail des réductions</div>
-                    {promos.map((p, i) => (
-                      <div key={p.id} className="bg-gray-50 rounded-lg p-4 mb-3">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                          {p.type === "code" && (
-                            <div>
-                              <label className="font-body text-[10px] font-semibold text-gray-400 uppercase block mb-1">Code</label>
-                              <input value={p.code} onChange={e => { const up = [...promos]; up[i] = { ...p, code: e.target.value.toUpperCase() }; setPromos(up); }}
-                                className={`${inputCls} !text-left font-mono !uppercase`} placeholder="BIENVENUE10" />
-                            </div>
-                          )}
-                          <div>
-                            <label className="font-body text-[10px] font-semibold text-gray-400 uppercase block mb-1">Description</label>
-                            <input value={p.label} onChange={e => { const up = [...promos]; up[i] = { ...p, label: e.target.value }; setPromos(up); }}
-                              className={`${inputCls} !text-left`} />
-                          </div>
-                          <div>
-                            <label className="font-body text-[10px] font-semibold text-gray-400 uppercase block mb-1">Réduction</label>
-                            <div className="flex gap-1">
-                              <input type="number" value={p.discountValue} onChange={e => { const up = [...promos]; up[i] = { ...p, discountValue: parseFloat(e.target.value) || 0 }; setPromos(up); }}
-                                className={`${inputCls} w-16`} />
-                              <select value={p.discountMode} onChange={e => { const up = [...promos]; up[i] = { ...p, discountMode: e.target.value as "percent" | "fixed" }; setPromos(up); }}
-                                className={`${inputCls} w-16`}>
-                                <option value="percent">%</option>
-                                <option value="fixed">€</option>
-                              </select>
-                            </div>
-                          </div>
-                          <div>
-                            <label className="font-body text-[10px] font-semibold text-gray-400 uppercase block mb-1">S&apos;applique à</label>
-                            <select value={p.appliesTo} onChange={e => { const up = [...promos]; up[i] = { ...p, appliesTo: e.target.value as any }; setPromos(up); }}
-                              className={`${inputCls} !text-left`}>
-                              <option value="tout">Forfaits + paiements</option>
-                              <option value="forfait">Forfaits uniquement</option>
-                              <option value="paiement">Paiements uniquement</option>
-                            </select>
-                          </div>
-                          {p.type === "code" && (
-                            <>
-                              <div>
-                                <label className="font-body text-[10px] font-semibold text-gray-400 uppercase block mb-1">Max utilisations</label>
-                                <input type="number" value={p.maxUses} onChange={e => { const up = [...promos]; up[i] = { ...p, maxUses: parseInt(e.target.value) || 0 }; setPromos(up); }}
-                                  className={inputCls} placeholder="0 = illimité" />
-                              </div>
-                              <div>
-                                <label className="font-body text-[10px] font-semibold text-gray-400 uppercase block mb-1">Expire le</label>
-                                <input type="date" value={p.validUntil} onChange={e => { const up = [...promos]; up[i] = { ...p, validUntil: e.target.value }; setPromos(up); }}
-                                  className={inputCls} />
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <button onClick={savePromos} className="mt-2 self-start flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-6 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400">
-                  <Save size={16} /> Enregistrer les réductions
-                </button>
-              </>
-            )}
-          </Card>
-        </div>
+        <SectionReductions
+          promos={promos}
+          setPromos={setPromos}
+          loadingPromos={loadingPromos}
+          savePromos={savePromos}
+        />
       )}
 
       {/* ─── Dégressivité ─── */}
       {section === "degressivite" && (
-        <div className="flex flex-col gap-5">
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-1">Réductions multi-stages (même enfant)</h3>
-            <p className="font-body text-xs text-slate-500 mb-4">
-              S'applique <strong>uniquement aux stages</strong> : un même enfant qui s'inscrit à plusieurs stages dans la même période de vacances bénéficie d'une réduction sur les inscriptions suivantes.
-            </p>
-            <div className="flex flex-col gap-3">
-              {multiStage.map((r, i) => (
-                <div key={i} className="flex items-center gap-4">
-                  <span className="font-body text-sm text-gray-500 flex-1">{r.nth}ème stage consécutif</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-body text-sm text-gray-400">-</span>
-                    <input type="number" value={r.discount} onChange={(e) => {
-                      const updated = [...multiStage];
-                      updated[i].discount = parseInt(e.target.value) || 0;
-                      setMultiStage(updated);
-                    }} className={`${inputCls} w-16`} />
-                    <span className="font-body text-sm text-gray-400">%</span>
-                  </div>
-                  <button onClick={() => setMultiStage(multiStage.filter((_, j) => j !== i))}
-                    className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={14} /></button>
-                </div>
-              ))}
-              <button onClick={() => setMultiStage([...multiStage, { nth: multiStage.length + 2, discount: 0 }])}
-                className="flex items-center gap-1 font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer mt-1">
-                <Plus size={14} /> Ajouter un palier
-              </button>
-            </div>
-          </Card>
-
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-1">Réductions famille (forfaits annuels + stages)</h3>
-            <p className="font-body text-xs text-slate-500 mb-4">
-              S'applique aux <strong>forfaits annuels</strong> (selon le rang du nouvel enfant inscrit dans la famille)
-              et aux <strong>stages</strong> sur une même période de vacances scolaires.
-            </p>
-            <div className="flex flex-col gap-3">
-              {familyDiscount.map((r, i) => (
-                <div key={i} className="flex items-center gap-4">
-                  <span className="font-body text-sm text-gray-500 flex-1">{r.nth}ème enfant {r.nth === 2 ? "(2ème)" : r.nth === 3 ? "(3ème)" : `(${r.nth}ème+)`}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-body text-sm text-gray-400">-</span>
-                    <input type="number" value={r.discount} onChange={(e) => {
-                      const updated = [...familyDiscount];
-                      updated[i].discount = parseInt(e.target.value) || 0;
-                      setFamilyDiscount(updated);
-                    }} className={`${inputCls} w-16`} />
-                    <span className="font-body text-sm text-gray-400">%</span>
-                  </div>
-                  <button onClick={() => setFamilyDiscount(familyDiscount.filter((_, j) => j !== i))}
-                    className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={14} /></button>
-                </div>
-              ))}
-              <button onClick={() => setFamilyDiscount([...familyDiscount, { nth: (familyDiscount[familyDiscount.length - 1]?.nth || 1) + 1, discount: 0 }])}
-                className="flex items-center gap-1 font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer mt-1">
-                <Plus size={14} /> Ajouter un palier
-              </button>
-            </div>
-          </Card>
-
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-1">Prix plancher par stage</h3>
-            <p className="font-body text-xs text-slate-500 mb-4">
-              Garde-fou : même si les réductions cumulées (famille + multi-stages) dépassent ce seuil,
-              le prix d'un stage ne descendra jamais sous ce montant. Utile car un stage de plusieurs jours
-              compte aujourd'hui comme plusieurs réservations, ce qui peut gonfler le rang multi-stages.
-              <strong> Mettre 0 pour désactiver le plancher.</strong>
-            </p>
-            <div className="flex items-center gap-4">
-              <span className="font-body text-sm text-gray-500 flex-1">Prix minimum par stage</span>
-              <div className="flex items-center gap-2">
-                <input type="number" min={0} step={1} value={prixPlancherStage}
-                  onChange={e => setPrixPlancherStage(parseFloat(e.target.value) || 0)}
-                  className={`${inputCls} w-24`} />
-                <span className="font-body text-sm text-gray-400">€</span>
-              </div>
-            </div>
-          </Card>
-
-          <Card padding="sm" className="bg-blue-50 border-blue-500/8">
-            <div className="font-body text-sm text-blue-800">
-              💡 <strong>Cumul possible :</strong> un 2ème enfant à son 3ème stage bénéficie de -{familyDiscount[0]?.discount || 0}% (famille) + -{multiStage[1]?.discount || 0}% ({multiStage[1]?.nth || 3}ème stage) = -{(familyDiscount[0]?.discount || 0) + (multiStage[1]?.discount || 0)}%.{prixPlancherStage > 0 && <> Plafond au prix plancher : <strong>{prixPlancherStage}€</strong>.</>}
-            </div>
-          </Card>
-
-          <button onClick={handleSave} disabled={savingDegress} className="self-start flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-6 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400 disabled:opacity-50">
-            {savingDegress ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {savingDegress ? "Enregistrement..." : "Enregistrer"}
-          </button>
-        </div>
+        <SectionDegressivite
+          multiStage={multiStage}
+          setMultiStage={setMultiStage}
+          familyDiscount={familyDiscount}
+          setFamilyDiscount={setFamilyDiscount}
+          prixPlancherStage={prixPlancherStage}
+          setPrixPlancherStage={setPrixPlancherStage}
+          handleSave={handleSave}
+          savingDegress={savingDegress}
+        />
       )}
 
       {/* ─── Vacances scolaires ─── */}
       {section === "vacances" && (
-        <div className="flex flex-col gap-5">
-          <Card padding="sm" className="bg-blue-50 border-blue-500/8">
-            <div className="font-body text-sm text-blue-800">
-              <Calendar className="inline w-4 h-4 mr-1" />
-              Ces périodes définissent quand les réductions famille et multi-stages s&apos;appliquent. Une inscription stage en dehors de ces périodes n&apos;aura pas de réduction automatique.
-            </div>
-          </Card>
-          {loadingVacations ? (
-            <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto" /></div>
-          ) : (
-            <>
-              <Card padding="md">
-                <h3 className="font-body text-base font-semibold text-blue-800 mb-4">
-                  Périodes définies ({vacations.length})
-                </h3>
-                <div className="flex flex-col gap-3">
-                  {[...vacations].sort((a, b) => a.startDate.localeCompare(b.startDate)).map((v) => (
-                    <div key={v.id} className="flex items-center gap-3 flex-wrap border border-blue-500/8 rounded-lg p-3">
-                      <input type="text" value={v.name}
-                        onChange={(e) => handleUpdateVacation(v.id, "name", e.target.value)}
-                        className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
-                      <input type="date" value={v.startDate}
-                        onChange={(e) => handleUpdateVacation(v.id, "startDate", e.target.value)}
-                        className="w-40 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
-                      <span className="font-body text-xs text-gray-400">→</span>
-                      <input type="date" value={v.endDate}
-                        onChange={(e) => handleUpdateVacation(v.id, "endDate", e.target.value)}
-                        className="w-40 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
-                      <button onClick={() => handleDeleteVacation(v.id)}
-                        className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  ))}
-                  {vacations.length === 0 && (
-                    <p className="font-body text-sm text-gray-400 italic text-center py-4">Aucune période définie.</p>
-                  )}
-                </div>
-              </Card>
-              <Card padding="md">
-                <h3 className="font-body text-base font-semibold text-blue-800 mb-4">Ajouter une période</h3>
-                <div className="flex gap-3 flex-wrap items-end">
-                  <div className="flex-1 min-w-[200px]">
-                    <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Nom</label>
-                    <input type="text" value={newVacName} onChange={(e) => setNewVacName(e.target.value)}
-                      placeholder="Ex : Vacances de la Toussaint 2026"
-                      className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Début</label>
-                    <input type="date" value={newVacStart} onChange={(e) => setNewVacStart(e.target.value)}
-                      className="w-40 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Fin</label>
-                    <input type="date" value={newVacEnd} onChange={(e) => setNewVacEnd(e.target.value)}
-                      className="w-40 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
-                  </div>
-                  <button onClick={handleAddVacation} disabled={savingVacation}
-                    className={`px-4 py-2 rounded-lg font-body text-sm font-semibold border-none cursor-pointer
-                      ${savingVacation ? "bg-gray-200 text-gray-400" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
-                    {savingVacation ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus size={14} className="inline mr-1" />Ajouter</>}
-                  </button>
-                </div>
-              </Card>
-            </>
-          )}
-        </div>
+        <SectionVacances
+          vacations={vacations}
+          loadingVacations={loadingVacations}
+          savingVacation={savingVacation}
+          newVacName={newVacName}
+          setNewVacName={setNewVacName}
+          newVacStart={newVacStart}
+          setNewVacStart={setNewVacStart}
+          newVacEnd={newVacEnd}
+          setNewVacEnd={setNewVacEnd}
+          handleAddVacation={handleAddVacation}
+          handleUpdateVacation={handleUpdateVacation}
+          handleDeleteVacation={handleDeleteVacation}
+        />
       )}
 
       {/* ─── Annulation ─── */}
       {section === "annulation" && (
-        <Card padding="md">
-          <h3 className="font-body text-base font-semibold text-blue-800 mb-4">Politique d&apos;annulation</h3>
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-4">
-              <span className="font-body text-sm text-gray-500 flex-1">Délai d&apos;annulation gratuite</span>
-              <input type="number" value={cancellation.hours} onChange={(e) => setCancellation({ ...cancellation, hours: parseInt(e.target.value) || 0 })} className={`${inputCls} w-20`} />
-              <span className="font-body text-sm text-gray-400">heures avant</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="font-body text-sm text-gray-500 flex-1">Retenue après délai</span>
-              <input type="number" value={cancellation.retention} onChange={(e) => setCancellation({ ...cancellation, retention: parseInt(e.target.value) || 0 })} className={`${inputCls} w-20`} />
-              <span className="font-body text-sm text-gray-400">%</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="font-body text-sm text-gray-500 flex-1">Mode de remboursement</span>
-              <select className="px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none">
-                <option>Au choix du client (CB ou avoir)</option>
-                <option>Remboursement CB uniquement</option>
-                <option>Avoir uniquement</option>
-              </select>
-            </div>
-            <button onClick={handleSave} className="self-start flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-6 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400 mt-2">
-              <Save size={16} /> Enregistrer
-            </button>
-          </div>
-        </Card>
+        <SectionAnnulation
+          cancellation={cancellation}
+          setCancellation={setCancellation}
+          handleSave={handleSave}
+        />
       )}
 
       {/* ─── Plan comptable ─── */}
       {section === "comptable" && (
-        <div>
-          <div className="flex justify-between items-center mb-4">
-            <p className="font-body text-sm text-gray-500">Plan comptable importé de Celeris — {defaultAccounts.length} comptes</p>
-            <button className="flex items-center gap-2 font-body text-xs font-semibold text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">
-              <Plus size={14} /> Ajouter un compte
-            </button>
-          </div>
-          <Card className="!p-0 overflow-hidden">
-            <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-              <span className="w-24">Compte</span>
-              <span className="flex-1">Intitulé</span>
-              <span className="w-20 text-center">TVA</span>
-              <span className="flex-1">Affectation</span>
-              <span className="w-12"></span>
-            </div>
-            {defaultAccounts.map((a, i) => (
-              <div key={i} className="px-5 py-3 border-b border-blue-500/8 last:border-b-0 flex items-center hover:bg-blue-50/30 transition-colors">
-                <span className="w-24 font-body text-sm font-bold text-blue-500">{a.code}</span>
-                <span className="flex-1 font-body text-sm font-medium text-blue-800">{a.label}</span>
-                <span className="w-20 text-center">
-                  <Badge color={a.tva === "0%" ? "gray" : a.tva === "5.50%" ? "green" : "orange"}>{a.tva}</Badge>
-                </span>
-                <span className="flex-1 font-body text-xs text-gray-400">{a.affectation}</span>
-                <span className="w-12 text-right">
-                  <button className="text-gray-300 hover:text-blue-500 bg-transparent border-none cursor-pointer">✏️</button>
-                </span>
-              </div>
-            ))}
-          </Card>
-        </div>
+        <SectionPlanComptable />
       )}
 
       {/* ─── Horaires ─── */}
       {section === "horaires" && (
-        <Card padding="md">
-          <h3 className="font-body text-base font-semibold text-blue-800 mb-4">Horaires d&apos;ouverture</h3>
-          <div className="flex flex-col gap-3">
-            {[
-              { period: "Pleine saison (Juil–Août)", days: "Lun – Sam", hours: "9h – 19h" },
-              { period: "Vacances scolaires", days: "Lun – Ven", hours: "9h – 18h" },
-              { period: "Période scolaire", days: "Mer, Sam", hours: "9h – 18h" },
-              { period: "Hiver (Déc–Fév)", days: "Fermé", hours: "—" },
-            ].map((h, i) => (
-              <div key={i} className="flex items-center gap-4 pb-3 border-b border-blue-500/8 last:border-b-0">
-                <span className="font-body text-sm font-medium text-blue-800 flex-1">{h.period}</span>
-                <input defaultValue={h.days} className={`${inputCls} w-28`} />
-                <input defaultValue={h.hours} className={`${inputCls} w-24`} />
-              </div>
-            ))}
-          </div>
-          <button onClick={handleSave} className="mt-4 flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-6 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400">
-            <Save size={16} /> Enregistrer
-          </button>
-        </Card>
+        <SectionHoraires handleSave={handleSave} />
       )}
 
       {/* ─── Moniteurs ─── */}
       {section === "moniteurs" && (
-        <div className="flex flex-col gap-4">
-          <Card padding="md">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="font-body text-base font-semibold text-blue-800">Moniteurs & instructeurs</h3>
-                <p className="font-body text-[11px] text-slate-400 mt-0.5">
-                  Chaque moniteur a une fiche (nom, rôle, email…) et, en dessous, son <strong>accès</strong> (compte de connexion). L'accès se gère ici, relié par l'email.
-                </p>
-              </div>
-              <button onClick={() => { setShowAddMoniteur(true); setEditMoniteurId(null); setMoniteurForm({ name: "", role: "", email: "", phone: "", status: "active" }); }}
-                className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-400">
-                <Plus size={14} /> Ajouter
-              </button>
-            </div>
-
-            {moniteurs.length === 0 ? (
-              <p className="font-body text-sm text-slate-400 text-center py-4">Aucun moniteur enregistré.</p>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {moniteurs.map((m: any) => (
-                  <div key={m.id} className="bg-sand rounded-lg px-4 py-3 flex flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center font-body text-sm font-bold text-blue-500">
-                        {(m.name || "?")[0].toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="font-body text-sm font-semibold text-blue-800">{m.name}</div>
-                        <div className="font-body text-xs text-slate-400">{m.role}{m.email ? ` · ${m.email}` : ""}{m.phone ? ` · ${m.phone}` : ""}</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge color={m.status === "active" ? "green" : "gray"}>{m.status === "active" ? "Actif" : "Inactif"}</Badge>
-                      <button onClick={async () => {
-                        await updateDoc(doc(db, "moniteurs", m.id), { status: m.status === "active" ? "inactive" : "active" });
-                        setMoniteurs(prev => prev.map(x => x.id === m.id ? { ...x, status: m.status === "active" ? "inactive" : "active" } : x));
-                      }} className="font-body text-[10px] text-slate-400 hover:text-blue-500 bg-transparent border-none cursor-pointer px-1"
-                        title={m.status === "active" ? "Désactiver" : "Réactiver"}>
-                        {m.status === "active" ? "Désactiver" : "Réactiver"}
-                      </button>
-                      <button onClick={() => {
-                        setEditMoniteurId(m.id);
-                        setMoniteurForm({ name: m.name || "", role: m.role || "", email: m.email || "", phone: m.phone || "", status: m.status || "active" });
-                        setShowAddMoniteur(true);
-                      }} className="text-blue-400 hover:text-blue-600 bg-transparent border-none cursor-pointer p-1" title="Modifier la fiche">
-                        <Pencil size={14}/>
-                      </button>
-                      <button onClick={async () => {
-                        if (!confirm(`Supprimer la fiche de ${m.name} ?`)) return;
-                        await deleteDoc(doc(db, "moniteurs", m.id));
-                        setMoniteurs(prev => prev.filter(x => x.id !== m.id));
-                      }} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1" title="Supprimer la fiche">
-                        <Trash2 size={14}/>
-                      </button>
-                    </div>
-                    </div>
-
-                    {/* Ligne « accès » : compte de connexion (Firebase Auth), relié par email */}
-                    <div className="flex items-center justify-between flex-wrap gap-2 border-t border-blue-100/70 pt-2">
-                      {(() => {
-                        const acct = accountFor(m);
-                        const busy = !!accountBusy && accountBusy === m.email;
-                        if (acct) {
-                          return (
-                            <>
-                              <span className="flex items-center gap-1.5 font-body text-[11px] font-semibold text-green-600">
-                                <ShieldCheck size={13} /> Accès actif{acct.disabled ? " (désactivé)" : ""}
-                              </span>
-                              <div className="flex items-center gap-1">
-                                <button onClick={() => diagAccess(m)} title="Diagnostic des droits"
-                                  className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-purple-500 hover:bg-purple-50 bg-transparent border-none cursor-pointer">
-                                  <Search size={13} />
-                                </button>
-                                <button onClick={() => refreshAccessClaim(m, acct)} disabled={busy} title="Rafraîchir le rôle (erreurs de permission)"
-                                  className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-blue-500 hover:bg-blue-50 bg-transparent border-none cursor-pointer disabled:opacity-50">
-                                  {busy ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-                                </button>
-                                <button onClick={() => deleteAccess(m, acct)} disabled={busy} title="Supprimer le compte de connexion (la fiche est conservée)"
-                                  className="flex items-center gap-1 font-body text-[10px] font-semibold text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-1.5 py-1 disabled:opacity-50">
-                                  <ShieldOff size={12} /> Supprimer l'accès
-                                </button>
-                              </div>
-                            </>
-                          );
-                        }
-                        if (!m.email) {
-                          return (
-                            <span className="flex items-center gap-1.5 font-body text-[11px] text-slate-400">
-                              <ShieldOff size={13} /> Pas d'email — ajoutez-en un (Modifier) pour pouvoir créer l'accès
-                            </span>
-                          );
-                        }
-                        return (
-                          <>
-                            <span className="flex items-center gap-1.5 font-body text-[11px] text-slate-400">
-                              <ShieldOff size={13} /> Aucun compte de connexion
-                            </span>
-                            <button onClick={() => createAccess(m)} disabled={busy} title="Créer le compte de connexion moniteur"
-                              className="flex items-center gap-1.5 font-body text-[11px] font-semibold text-white bg-blue-500 hover:bg-blue-400 px-2.5 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
-                              {busy ? <Loader2 size={12} className="animate-spin" /> : <KeyRound size={12} />} Créer l'accès
-                            </button>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-
-          {/* Comptes de connexion existants SANS fiche moniteur (réconciliation) */}
-          {(() => {
-            const orphans = authMoniteurs.filter(a =>
-              !moniteurs.some(m => (m.email || "").toLowerCase() === (a.email || "").toLowerCase())
-            );
-            if (orphans.length === 0) return null;
-            return (
-              <Card padding="md" className="border-amber-200">
-                <div className="flex items-center gap-2 mb-1">
-                  <AlertTriangle size={15} className="text-amber-500" />
-                  <h3 className="font-body text-base font-semibold text-amber-700">Comptes de connexion sans fiche</h3>
-                </div>
-                <p className="font-body text-[11px] text-slate-400 mb-3">
-                  Ces personnes ont un <strong>accès</strong> (compte de connexion) mais pas de fiche moniteur ici. Crée-leur une fiche pour les retrouver dans le planning et le management.
-                </p>
-                <div className="flex flex-col gap-2">
-                  {orphans.map((a: any) => {
-                    const busy = !!accountBusy && accountBusy === a.email;
-                    return (
-                      <div key={a.uid} className="flex items-center justify-between flex-wrap gap-2 bg-amber-50/60 rounded-lg px-4 py-3">
-                        <div>
-                          <div className="font-body text-sm font-semibold text-blue-800">{a.displayName || a.email}</div>
-                          <div className="font-body text-xs text-slate-400">{a.email}{a.disabled ? " · compte désactivé" : ""}</div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button onClick={async () => {
-                            const ref = await addDoc(collection(db, "moniteurs"), {
-                              name: a.displayName || a.email, role: "", email: a.email, phone: "", status: "active", createdAt: serverTimestamp(),
-                            });
-                            setMoniteurs(prev => [...prev, { id: ref.id, name: a.displayName || a.email, role: "", email: a.email, phone: "", status: "active" }]);
-                          }} className="flex items-center gap-1.5 font-body text-[11px] font-semibold text-white bg-blue-500 hover:bg-blue-400 px-2.5 py-1.5 rounded-lg border-none cursor-pointer" title="Créer une fiche moniteur à partir de ce compte">
-                            <Plus size={12} /> Créer la fiche
-                          </button>
-                          <button onClick={() => deleteAccess({ name: a.displayName || a.email, email: a.email }, a)} disabled={busy}
-                            className="flex items-center gap-1 font-body text-[10px] font-semibold text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-1.5 py-1 disabled:opacity-50" title="Supprimer ce compte de connexion">
-                            {busy ? <Loader2 size={12} className="animate-spin" /> : <ShieldOff size={12} />} Supprimer l'accès
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </Card>
-            );
-          })()}
-
-          {/* Formulaire ajout */}
-          {showAddMoniteur && (
-            <Card padding="md" className="border-blue-200">
-              <h4 className="font-body text-sm font-semibold text-blue-800 mb-3">{editMoniteurId ? "Modifier le moniteur" : "Nouveau moniteur"}</h4>
-              <div className="flex flex-col gap-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Nom *</label>
-                    <input value={moniteurForm.name} onChange={e => setMoniteurForm(f => ({ ...f, name: e.target.value }))}
-                      placeholder="Ex: Emmeline" className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-500" />
-                  </div>
-                  <div>
-                    <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Rôle</label>
-                    <input value={moniteurForm.role} onChange={e => setMoniteurForm(f => ({ ...f, role: e.target.value }))}
-                      placeholder="Ex: BPJEPS Équitation" className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-500" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Email</label>
-                    <input type="email" value={moniteurForm.email} onChange={e => setMoniteurForm(f => ({ ...f, email: e.target.value }))}
-                      placeholder="email@exemple.fr" className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-500" />
-                  </div>
-                  <div>
-                    <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Téléphone</label>
-                    <input type="tel" value={moniteurForm.phone} onChange={e => setMoniteurForm(f => ({ ...f, phone: e.target.value }))}
-                      placeholder="06 00 00 00 00" className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-500" />
-                  </div>
-                </div>
-                <div className="flex gap-3 pt-1">
-                  <button onClick={() => { setShowAddMoniteur(false); setEditMoniteurId(null); }}
-                    className="px-4 py-2 rounded-lg font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
-                    Annuler
-                  </button>
-                  <button disabled={!moniteurForm.name.trim() || moniteurSaving}
-                    onClick={async () => {
-                      setMoniteurSaving(true);
-                      if (editMoniteurId) {
-                        // Édition
-                        await updateDoc(doc(db, "moniteurs", editMoniteurId), {
-                          ...moniteurForm,
-                          updatedAt: serverTimestamp(),
-                        });
-                        setMoniteurs(prev => prev.map(x => x.id === editMoniteurId ? { ...x, ...moniteurForm } : x));
-                      } else {
-                        // Ajout
-                        const ref = await addDoc(collection(db, "moniteurs"), {
-                          ...moniteurForm,
-                          createdAt: serverTimestamp(),
-                        });
-                        setMoniteurs(prev => [...prev, { id: ref.id, ...moniteurForm }]);
-                      }
-                      setShowAddMoniteur(false);
-                      setEditMoniteurId(null);
-                      setMoniteurSaving(false);
-                    }}
-                    className="flex-1 py-2 rounded-lg font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-400 border-none cursor-pointer disabled:opacity-50">
-                    {moniteurSaving ? "Sauvegarde..." : editMoniteurId ? "Enregistrer les modifications" : "Ajouter le moniteur"}
-                  </button>
-                </div>
-              </div>
-            </Card>
-          )}
-        </div>
+        <SectionMoniteurs
+          moniteurs={moniteurs}
+          setMoniteurs={setMoniteurs}
+          authMoniteurs={authMoniteurs}
+          accountBusy={accountBusy}
+          accountFor={accountFor}
+          createAccess={createAccess}
+          deleteAccess={deleteAccess}
+          refreshAccessClaim={refreshAccessClaim}
+          diagAccess={diagAccess}
+          showAddMoniteur={showAddMoniteur}
+          setShowAddMoniteur={setShowAddMoniteur}
+          editMoniteurId={editMoniteurId}
+          setEditMoniteurId={setEditMoniteurId}
+          moniteurForm={moniteurForm}
+          setMoniteurForm={setMoniteurForm}
+          moniteurSaving={moniteurSaving}
+          setMoniteurSaving={setMoniteurSaving}
+        />
       )}
 
       {/* ─── Inscription annuelle ─── */}
       {section === "inscription" && (
-        <div className="flex flex-col gap-5">
-          {/* Forfaits par fréquence */}
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-1">📋 Forfaits annuels</h3>
-            <p className="font-body text-xs text-slate-500 mb-4">Prix plein tarif — le prorata est calculé automatiquement selon la date d'inscription</p>
-            <div className="flex flex-col gap-3">
-              {[
-                { key: "forfait1x", label: "1 cours / semaine", icon: "1×" },
-                { key: "forfait2x", label: "2 cours / semaine", icon: "2×" },
-                { key: "forfait3x", label: "3 cours / semaine", icon: "3×" },
-              ].map(({ key, label, icon }) => (
-                <div key={key} className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <span className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center font-body text-sm font-bold text-blue-600">{icon}</span>
-                    <span className="font-body text-sm text-blue-800">{label}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input type="number" value={(inscriptionParams as any)[key]}
-                      onChange={e => setInscriptionParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))}
-                      className="w-24 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm text-right bg-cream focus:border-blue-500 focus:outline-none" />
-                    <span className="font-body text-sm text-slate-400">€/an</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {/* Adhésion dégressive */}
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-1">👨‍👩‍👧‍👦 Adhésion dégressive par famille</h3>
-            <p className="font-body text-xs text-slate-500 mb-4">Le rang est calculé automatiquement selon le nombre d'enfants déjà inscrits en forfait annuel cette saison</p>
-            <div className="flex flex-col gap-3">
-              {[
-                { key: "adhesion1", label: "1er enfant" },
-                { key: "adhesion2", label: "2ème enfant" },
-                { key: "adhesion3", label: "3ème enfant" },
-                { key: "adhesion4plus", label: "4ème enfant et +" },
-              ].map(({ key, label }) => (
-                <div key={key} className="flex items-center justify-between gap-4">
-                  <span className="font-body text-sm text-blue-800">{label}</span>
-                  <div className="flex items-center gap-2">
-                    <input type="number" value={(inscriptionParams as any)[key]}
-                      onChange={e => setInscriptionParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))}
-                      className="w-24 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm text-right bg-cream focus:border-blue-500 focus:outline-none" />
-                    <span className="font-body text-sm text-slate-400">€</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {/* Licence FFE + Saison */}
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-4">📄 Licence FFE & Saison</h3>
-            <div className="flex flex-col gap-3">
-              {[
-                { key: "licenceMoins18", label: "Licence FFE -18 ans" },
-                { key: "licencePlus18", label: "Licence FFE +18 ans" },
-                { key: "totalSessionsSaison", label: "Nombre de séances / saison" },
-              ].map(({ key, label }) => (
-                <div key={key} className="flex items-center justify-between gap-4">
-                  <span className="font-body text-sm text-blue-800">{label}</span>
-                  <div className="flex items-center gap-2">
-                    <input type="number" value={(inscriptionParams as any)[key]}
-                      onChange={e => setInscriptionParams(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))}
-                      className="w-24 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm text-right bg-cream focus:border-blue-500 focus:outline-none" />
-                    <span className="font-body text-sm text-slate-400">{key === "totalSessionsSaison" ? "séances" : "€"}</span>
-                  </div>
-                </div>
-              ))}
-              <div className="flex items-center justify-between gap-4">
-                <span className="font-body text-sm text-blue-800">Fin de saison</span>
-                <input type="date" value={inscriptionParams.dateFinSaison}
-                  onChange={e => setInscriptionParams(prev => ({ ...prev, dateFinSaison: e.target.value }))}
-                  className="px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
-              </div>
-
-              {/* TVA + code compta de la licence FFE (utilisés pour la facturation) */}
-              <div className="mt-2 pt-3 border-t border-blue-500/8">
-                <div className="font-body text-xs text-slate-400 mb-2">Paramètres comptables — appliqués aux deux licences</div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-body text-xs text-slate-500 block mb-1">Taux de TVA</label>
-                    <select value={inscriptionParams.licenceTvaRate}
-                      onChange={e => setInscriptionParams(prev => ({ ...prev, licenceTvaRate: parseFloat(e.target.value) }))}
-                      className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none">
-                      <option value={0}>0 %</option>
-                      <option value={5.5}>5,5 %</option>
-                      <option value={10}>10 %</option>
-                      <option value={20}>20 %</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="font-body text-xs text-slate-500 block mb-1">Code comptable</label>
-                    <input value={inscriptionParams.licenceAccountCode}
-                      onChange={e => setInscriptionParams(prev => ({ ...prev, licenceAccountCode: e.target.value }))}
-                      placeholder="ex. 70100000"
-                      className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Stages */}
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-4">🏕️ Stages — Assurance occasionnelle</h3>
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <span className="font-body text-sm text-blue-800">Assurance occasionnelle 1 mois</span>
-                <div className="font-body text-xs text-slate-400 mt-0.5">Proposée aux cavaliers non licenciés lors des stages</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <input type="number" value={inscriptionParams.assuranceOccasionnelle}
-                  onChange={e => setInscriptionParams(prev => ({ ...prev, assuranceOccasionnelle: parseFloat(e.target.value) || 0 }))}
-                  className="w-24 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm text-right bg-cream focus:border-blue-500 focus:outline-none" />
-                <span className="font-body text-sm text-slate-400">€</span>
-              </div>
-            </div>
-          </Card>
-
-          {/* Lignes optionnelles libres (forfait compétition, suppléments, options...) */}
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-1">➕ Lignes optionnelles</h3>
-            <p className="font-body text-xs text-slate-500 mb-4">
-              Ajoutez ici des forfaits ou options proposés en plus à l&apos;inscription (forfait compétition, tenue club, etc.).
-              Ces lignes apparaîtront comme options cochables dans le formulaire d&apos;inscription annuelle.
-            </p>
-            <div className="flex flex-col gap-2 mb-3">
-              {(inscriptionParams.customLines || []).length === 0 && (
-                <div className="font-body text-xs text-slate-400 italic py-2">Aucune ligne optionnelle — cliquez sur « Ajouter une ligne » pour en créer une.</div>
-              )}
-              {(inscriptionParams.customLines || []).map((line, idx) => (
-                <div key={line.id} className="grid grid-cols-12 gap-2 items-center bg-blue-50/30 border border-blue-100 rounded-lg p-3">
-                  <input
-                    value={line.label}
-                    onChange={e => {
-                      const next = [...(inscriptionParams.customLines || [])];
-                      next[idx] = { ...line, label: e.target.value };
-                      setInscriptionParams(prev => ({ ...prev, customLines: next }));
-                    }}
-                    placeholder="Nom de la ligne"
-                    className="col-span-5 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none" />
-                  <div className="col-span-2 flex items-center gap-1">
-                    <input
-                      type="number"
-                      value={line.priceTTC}
-                      onChange={e => {
-                        const next = [...(inscriptionParams.customLines || [])];
-                        next[idx] = { ...line, priceTTC: parseFloat(e.target.value) || 0 };
-                        setInscriptionParams(prev => ({ ...prev, customLines: next }));
-                      }}
-                      className="w-full px-2 py-2 rounded-lg border border-blue-500/8 font-body text-sm text-right bg-white focus:border-blue-500 focus:outline-none" />
-                    <span className="font-body text-xs text-slate-400">€</span>
-                  </div>
-                  <select
-                    value={line.tvaRate}
-                    onChange={e => {
-                      const next = [...(inscriptionParams.customLines || [])];
-                      next[idx] = { ...line, tvaRate: parseFloat(e.target.value) };
-                      setInscriptionParams(prev => ({ ...prev, customLines: next }));
-                    }}
-                    className="col-span-2 px-2 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none">
-                    <option value={0}>0%</option>
-                    <option value={5.5}>5,5%</option>
-                    <option value={10}>10%</option>
-                    <option value={20}>20%</option>
-                  </select>
-                  <input
-                    value={line.accountCode}
-                    onChange={e => {
-                      const next = [...(inscriptionParams.customLines || [])];
-                      next[idx] = { ...line, accountCode: e.target.value };
-                      setInscriptionParams(prev => ({ ...prev, customLines: next }));
-                    }}
-                    placeholder="Code compta"
-                    className="col-span-2 px-2 py-2 rounded-lg border border-blue-500/8 font-body text-xs bg-white focus:border-blue-500 focus:outline-none" />
-                  <button
-                    onClick={() => {
-                      const next = (inscriptionParams.customLines || []).filter(l => l.id !== line.id);
-                      setInscriptionParams(prev => ({ ...prev, customLines: next }));
-                    }}
-                    className="col-span-1 text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer flex items-center justify-center"
-                    title="Supprimer">
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button
-              onClick={() => {
-                const newLine: CustomInscriptionLine = {
-                  id: `line_${Date.now()}`,
-                  label: "",
-                  priceTTC: 0,
-                  tvaRate: 5.5,
-                  accountCode: "70611000",
-                };
-                setInscriptionParams(prev => ({
-                  ...prev,
-                  customLines: [...(prev.customLines || []), newLine],
-                }));
-              }}
-              className="self-start flex items-center gap-2 font-body text-sm font-semibold text-blue-700 bg-blue-100 hover:bg-blue-200 px-4 py-2 rounded-lg border-none cursor-pointer">
-              <Plus size={14} /> Ajouter une ligne
-            </button>
-          </Card>
-
-          <button onClick={saveInscription}
-            className="flex items-center justify-center gap-2 py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none cursor-pointer">
-            {inscriptionSaved ? "✅ Sauvegardé !" : "Sauvegarder les paramètres"}
-          </button>
-        </div>
+        <SectionInscription
+          inscriptionParams={inscriptionParams}
+          setInscriptionParams={setInscriptionParams}
+          inscriptionSaved={inscriptionSaved}
+          saveInscription={saveInscription}
+        />
       )}
 
       {/* ─── Épreuves compétition ─── */}
       {section === "epreuves" && (
-        <div className="flex flex-col gap-5">
-          {DISCIPLINES.map(disc => (
-            <Card key={disc.key} padding="md">
-              <h3 className="font-body text-base font-semibold text-blue-800 mb-4">🏆 {disc.label}</h3>
-              <div className="flex flex-col gap-2 mb-3">
-                {(epreuves[disc.key] || []).map((ep, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <input value={ep}
-                      onChange={e => setEpreuves(prev => ({
-                        ...prev,
-                        [disc.key]: prev[disc.key].map((x, j) => j === i ? e.target.value : x)
-                      }))}
-                      className="flex-1 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
-                    <button onClick={() => setEpreuves(prev => ({
-                      ...prev,
-                      [disc.key]: prev[disc.key].filter((_, j) => j !== i)
-                    }))} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1">
-                      <Trash2 size={14}/>
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <input value={newEpreuve[disc.key] || ""}
-                  onChange={e => setNewEpreuve(prev => ({ ...prev, [disc.key]: e.target.value }))}
-                  onKeyDown={e => {
-                    if (e.key === "Enter" && (newEpreuve[disc.key] || "").trim()) {
-                      setEpreuves(prev => ({ ...prev, [disc.key]: [...(prev[disc.key] || []), newEpreuve[disc.key].trim()] }));
-                      setNewEpreuve(prev => ({ ...prev, [disc.key]: "" }));
-                    }
-                  }}
-                  placeholder="Nouvelle épreuve..."
-                  className="flex-1 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
-                <button onClick={() => {
-                  if (!(newEpreuve[disc.key] || "").trim()) return;
-                  setEpreuves(prev => ({ ...prev, [disc.key]: [...(prev[disc.key] || []), newEpreuve[disc.key].trim()] }));
-                  setNewEpreuve(prev => ({ ...prev, [disc.key]: "" }));
-                }} className="px-4 py-2 rounded-lg font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-400 border-none cursor-pointer">
-                  + Ajouter
-                </button>
-              </div>
-              <button onClick={() => setEpreuves(prev => ({ ...prev, [disc.key]: disc.default }))}
-                className="mt-2 font-body text-[10px] text-slate-400 bg-transparent border-none cursor-pointer hover:text-blue-500">
-                Réinitialiser aux épreuves par défaut
-              </button>
-            </Card>
-          ))}
-          <button onClick={saveEpreuves}
-            className="flex items-center justify-center gap-2 py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none cursor-pointer">
-            {epreuvesSaved ? "✅ Sauvegardé !" : "Sauvegarder les épreuves"}
-          </button>
-        </div>
+        <SectionEpreuves
+          epreuves={epreuves}
+          setEpreuves={setEpreuves}
+          newEpreuve={newEpreuve}
+          setNewEpreuve={setNewEpreuve}
+          epreuvesSaved={epreuvesSaved}
+          saveEpreuves={saveEpreuves}
+        />
       )}
 
       {/* ─── Progression : labels échelle 1-5 ─── */}
       {section === "progression" && (
-        <div className="flex flex-col gap-5">
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-2">📈 Échelle de progression (pratiques)</h3>
-            <p className="font-body text-xs text-slate-500 mb-4">
-              Pour les compétences de pratique à cheval et à pied, on utilise une échelle de 1 à 5.
-              Personnalise ici les libellés affichés dans l&apos;éditeur de progression et dans
-              l&apos;espace cavalier des familles. Les compétences de connaissances et soins
-              restent en case à cocher (binaire).
-            </p>
-            <div className="flex flex-col gap-3 mb-5">
-              {progressionLabels.map((label, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-lg font-body text-sm font-bold text-white"
-                    style={{ background: `linear-gradient(135deg, hsl(${(i * 30) + 0}, 75%, 50%), hsl(${(i * 30) + 0}, 70%, 45%))` }}>
-                    {i + 1}
-                  </div>
-                  <input
-                    value={label}
-                    onChange={(e) => {
-                      const next = [...progressionLabels];
-                      next[i] = e.target.value;
-                      setProgressionLabels(next);
-                    }}
-                    placeholder={DEFAULT_ECHELLE_LABELS[i]}
-                    className="flex-1 px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
-              ))}
-            </div>
-
-            <div className="border-t border-gray-100 pt-4 mb-4">
-              <label className="font-body text-sm font-semibold text-blue-800 block mb-2">
-                Seuil &laquo;&nbsp;Validé FFE&nbsp;&raquo;
-              </label>
-              <p className="font-body text-xs text-slate-500 mb-3">
-                Niveau à partir duquel une compétence pratique compte comme validée pour le passage de Galop.
-                Les niveaux inférieurs apparaissent en progression mais pas comme validés sur le bilan FFE.
-              </p>
-              <select
-                value={progressionValidatedFfe}
-                onChange={(e) => setProgressionValidatedFfe(parseInt(e.target.value, 10))}
-                className="px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
-              >
-                {[1, 2, 3, 4, 5].map(n => (
-                  <option key={n} value={n}>
-                    Niveau {n} ({progressionLabels[n - 1] || DEFAULT_ECHELLE_LABELS[n - 1]}) ou +
-                  </option>
-                ))}
-              </select>
-              <p className="font-body text-[11px] text-slate-400 mt-2 italic">
-                Recommandé : niveau 5 (acquis). Tu peux baisser si tu veux marquer les Galops plus tôt
-                dans la progression — par exemple niveau 4 = autonomie suffisante pour valider FFE.
-              </p>
-            </div>
-
-            <button onClick={saveProgressionLabels}
-              className="flex items-center justify-center gap-2 py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none cursor-pointer">
-              {progressionSaved ? "✅ Sauvegardé !" : "Sauvegarder l'échelle"}
-            </button>
-          </Card>
-
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-2">📋 Aperçu</h3>
-            <p className="font-body text-xs text-slate-500 mb-4">
-              Voici comment l&apos;échelle apparaîtra dans l&apos;éditeur de progression et chez les familles.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {progressionLabels.map((label, i) => {
-                const level = i + 1;
-                const isValidatedFfe = level >= progressionValidatedFfe;
-                return (
-                  <div key={i}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${isValidatedFfe ? "bg-green-50 border-green-300" : "bg-slate-50 border-slate-200"}`}>
-                    <div className="flex items-center justify-center w-7 h-7 rounded-md font-body text-xs font-bold text-white"
-                      style={{ background: `linear-gradient(135deg, hsl(${(i * 30)}, 75%, 50%), hsl(${(i * 30)}, 70%, 45%))` }}>
-                      {level}
-                    </div>
-                    <span className="font-body text-sm text-slate-700">{label || DEFAULT_ECHELLE_LABELS[i]}</span>
-                    {isValidatedFfe && <span className="font-body text-[10px] text-green-700 font-semibold">✓ FFE</span>}
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        </div>
+        <SectionProgression
+          progressionLabels={progressionLabels}
+          setProgressionLabels={setProgressionLabels}
+          progressionValidatedFfe={progressionValidatedFfe}
+          setProgressionValidatedFfe={setProgressionValidatedFfe}
+          progressionSaved={progressionSaved}
+          saveProgressionLabels={saveProgressionLabels}
+        />
       )}
 
       {/* ─── Fidélité ─── */}
       {section === "fidelite" && (
-        <div className="flex flex-col gap-5">
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-4">🏆 Programme de fidélité</h3>
-            <div className="flex flex-col gap-5">
-
-              {/* Activer/désactiver */}
-              <div className="flex items-center justify-between p-4 bg-sand rounded-xl">
-                <div>
-                  <div className="font-body text-sm font-semibold text-blue-800">Activer le programme fidélité</div>
-                  <div className="font-body text-xs text-gray-400 mt-0.5">Les points sont attribués automatiquement à chaque encaissement</div>
-                </div>
-                <button onClick={() => setFideliteEnabled(!fideliteEnabled)}
-                  className={`w-12 h-6 rounded-full transition-all border-none cursor-pointer ${fideliteEnabled ? "bg-blue-500" : "bg-gray-200"}`}>
-                  <div className={`w-5 h-5 rounded-full bg-white shadow transition-all mx-0.5 ${fideliteEnabled ? "translate-x-6" : "translate-x-0"}`} />
-                </button>
-              </div>
-
-              {fideliteEnabled && (
-                <>
-                  {/* Taux de conversion */}
-                  <div>
-                    <label className="font-body text-xs font-semibold text-blue-800 block mb-2">Taux de conversion</label>
-                    <div className="flex items-center gap-3 bg-sand rounded-xl p-4">
-                      <input type="number" min="1" value={fideliteTaux}
-                        onChange={e => setFideliteTaux(Number(e.target.value))}
-                        className="w-24 text-center border border-gray-200 rounded-lg px-3 py-2 font-body text-sm bg-white focus:outline-none focus:border-blue-500" />
-                      <span className="font-body text-sm text-gray-500">points = <strong className="text-blue-800">1€</strong> de réduction</span>
-                    </div>
-                    <div className="font-body text-xs text-gray-400 mt-1.5">
-                      Exemple : avec {fideliteTaux} points/€ → 100€ dépensés = {Math.floor(100 * 1 / fideliteTaux * 100) / 100}€ de réduction possible
-                    </div>
-                  </div>
-
-                  {/* Seuil minimum */}
-                  <div>
-                    <label className="font-body text-xs font-semibold text-blue-800 block mb-2">Seuil minimum pour utiliser les points</label>
-                    <div className="flex items-center gap-3 bg-sand rounded-xl p-4">
-                      <input type="number" min="1" value={fideliteMinPoints}
-                        onChange={e => setFideliteMinPoints(Number(e.target.value))}
-                        className="w-24 text-center border border-gray-200 rounded-lg px-3 py-2 font-body text-sm bg-white focus:outline-none focus:border-blue-500" />
-                      <span className="font-body text-sm text-gray-500">points minimum requis</span>
-                    </div>
-                    <div className="font-body text-xs text-gray-400 mt-1.5">
-                      Soit {(fideliteMinPoints / fideliteTaux).toFixed(2)}€ de réduction minimum
-                    </div>
-                  </div>
-
-                  {/* Résumé */}
-                  <div className="bg-blue-50 rounded-xl p-4 font-body text-xs text-blue-700 space-y-1">
-                    <div>✅ <strong>1€ encaissé</strong> = <strong>1 point</strong></div>
-                    <div>✅ <strong>{fideliteTaux} points</strong> = <strong>1€</strong> de réduction</div>
-                    <div>✅ Minimum <strong>{fideliteMinPoints} points</strong> pour utiliser</div>
-                    <div>✅ Points valables <strong>1 an</strong> après acquisition</div>
-                    <div>✅ La famille gère depuis son espace cavalier</div>
-                  </div>
-                </>
-              )}
-
-              <button onClick={saveFidelite}
-                className="w-full py-3 rounded-xl font-body text-sm font-bold text-white bg-blue-500 border-none cursor-pointer hover:bg-blue-600">
-                {fideliteSaved ? "✅ Sauvegardé !" : "Sauvegarder"}
-              </button>
-            </div>
-          </Card>
-        </div>
+        <SectionFidelite
+          fideliteEnabled={fideliteEnabled}
+          setFideliteEnabled={setFideliteEnabled}
+          fideliteTaux={fideliteTaux}
+          setFideliteTaux={setFideliteTaux}
+          fideliteMinPoints={fideliteMinPoints}
+          setFideliteMinPoints={setFideliteMinPoints}
+          fideliteSaved={fideliteSaved}
+          saveFidelite={saveFidelite}
+        />
       )}
 
       {/* ─── Marées ─── */}
       {section === "stages" && (
-        <div className="bg-white rounded-2xl p-6 border border-gray-100">
-          <h2 className="font-display text-lg font-bold text-blue-800 mb-1">🐴 Déroulé d’une séance de stage</h2>
-          <p className="font-body text-sm text-slate-500 mb-5 leading-relaxed">
-            Ce texte est repris dans l’email de <strong>confirmation d’inscription</strong> et dans celui de
-            <strong> rappel avant le stage</strong>. Il évite qu’une famille lise « 10h–12h » et comprenne
-            deux heures à cheval. Réglage unique, valable pour tous les stages.
-          </p>
-
-          {[1, 2].map((n) => {
-            const kt = (n === 1 ? "sequence1Titre" : "sequence2Titre") as keyof StageDeroule;
-            const kd = (n === 1 ? "sequence1Detail" : "sequence2Detail") as keyof StageDeroule;
-            return (
-              <div key={n} className="mb-4 pb-4 border-b border-gray-100 last:border-b-0">
-                <div className="font-body text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                  Séquence {n}
-                </div>
-                <input
-                  value={(deroule[kt] as string) || ""}
-                  onChange={(e) => setDeroule((d) => ({ ...d, [kt]: e.target.value }))}
-                  placeholder={n === 1 ? "Ex : 1re heure — Équitation montée" : "Ex : 2e heure — Atelier à pied"}
-                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:border-blue-400 focus:outline-none mb-2"
-                />
-                <input
-                  value={(deroule[kd] as string) || ""}
-                  onChange={(e) => setDeroule((d) => ({ ...d, [kd]: e.target.value }))}
-                  placeholder={n === 1 ? "Ex : travail en carrière, jeux et parcours à poney" : "Ex : pansage, soins et connaissance du poney"}
-                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:border-blue-400 focus:outline-none"
-                />
-                <p className="font-body text-[10px] text-slate-400 mt-1">
-                  Titre obligatoire, détail facultatif.
-                </p>
-              </div>
-            );
-          })}
-
-          <div className="mb-4">
-            <div className="font-body text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              Note complémentaire (facultatif)
-            </div>
-            <input
-              value={deroule.note || ""}
-              onChange={(e) => setDeroule((d) => ({ ...d, note: e.target.value }))}
-              placeholder="Ex : l’ordre des deux séquences peut être inversé selon les groupes."
-              className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:border-blue-400 focus:outline-none"
-            />
-          </div>
-
-          {/* Aperçu — ce que la famille lira réellement */}
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
-            <div className="font-body text-[10px] font-semibold text-amber-800 uppercase tracking-wider mb-2">
-              Aperçu dans l’email
-            </div>
-            {derouleEstRempli(deroule) ? (
-              <pre className="font-body text-xs text-slate-700 whitespace-pre-wrap m-0">{renderDerouleTexte(deroule)}</pre>
-            ) : (
-              <p className="font-body text-xs text-amber-700 m-0">
-                Les deux titres doivent être renseignés. Tant qu’ils sont vides, <strong>aucun bloc
-                n’est ajouté aux emails</strong> — ils partent comme aujourd’hui.
-              </p>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={saveDeroule}
-              className="px-5 py-2.5 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold border-none cursor-pointer"
-            >
-              Enregistrer
-            </button>
-            {derouleSaved && <span className="font-body text-sm text-green-600">Enregistré ✓</span>}
-          </div>
-        </div>
+        <SectionStageDeroule
+          deroule={deroule}
+          setDeroule={setDeroule}
+          derouleSaved={derouleSaved}
+          saveDeroule={saveDeroule}
+        />
       )}
 
       {section === "marees" && (
@@ -1826,355 +605,22 @@ export default function ParametresPage() {
 
       {/* ─── Maintenance ─── */}
       {section === "maintenance" && (
-        <div className="flex flex-col gap-5">
-
-          {/* Ouverture des réservations en ligne */}
-          <ReservationsToggle />
-
-          {/* Thème saisonnier du site vitrine */}
-          <ThemeSaisonnierToggle />
-
-          {/* Avertissement */}
-          <Card padding="md" className="bg-orange-50 border-orange-200">
-            <div className="flex items-center gap-3 mb-2">
-              <AlertTriangle size={20} className="text-orange-500" />
-              <div className="font-body text-sm font-semibold text-orange-700">Zone de maintenance</div>
-            </div>
-            <p className="font-body text-xs text-orange-600">
-              Actions irréversibles. Créneaux et familles conservés (structure). Suivi péda effacé si demandé.
-            </p>
-          </Card>
-
-          {/* Sous-onglets */}
-          <div className="flex gap-1 bg-sand rounded-xl p-1">
-            {([
-              ["nettoyage", "🧹 Nettoyage complet"],
-              ["test",      "🧪 Données test"],
-              ["historique","📋 Historique cavaliers"],
-            ] as const).map(([id, label]) => (
-              <button key={id} onClick={() => setMaintenanceTab(id)}
-                className={`flex-1 font-body text-xs font-semibold px-3 py-2 rounded-lg border-none cursor-pointer transition-all ${
-                  maintenanceTab === id ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700 bg-transparent"
-                }`}>
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* ══ ONGLET NETTOYAGE ══ */}
-          {maintenanceTab === "nettoyage" && (
-            <Card padding="md">
-              <h3 className="font-body text-base font-semibold text-blue-800 mb-1">Nettoyer tout sauf créneaux & familles</h3>
-              <p className="font-body text-xs text-slate-500 mb-4">
-                Supprime toutes les données transactionnelles. Les créneaux restent intacts (structure + planning), les familles et cavaliers aussi.
-                Le suivi pédagogique sera effacé si vous cochez l'option en bas.
-              </p>
-
-              {/* Grille des collections */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-5">
-                {[
-                  { col: "payments",             label: "Paiements & factures",       icon: "💶", danger: true },
-                  { col: "reservations",          label: "Réservations",               icon: "📅", danger: true },
-                  { col: "forfaits",              label: "Forfaits annuels",            icon: "📋", danger: true },
-                  { col: "avoirs",                label: "Avoirs",                     icon: "🎫", danger: true },
-                  { col: "echeances-sepa",        label: "Échéances SEPA",             icon: "🏦", danger: true },
-                  { col: "mandats-sepa",          label: "Mandats SEPA",               icon: "📄", danger: true },
-                  { col: "remises-sepa",          label: "Remises SEPA",               icon: "📤", danger: true },
-                  { col: "encaissements",         label: "Journal encaissements",       icon: "📒", danger: true },
-                  { col: "cartes",                label: "Cartes & tickets",            icon: "🎟️", danger: true },
-                  { col: "passages",              label: "Passages / présences",       icon: "✅", danger: false },
-                  { col: "bonsRecup",             label: "Bons récupération",          icon: "🔄", danger: false },
-                  { col: "waitlist",              label: "Liste d'attente",            icon: "⏳", danger: false },
-                  { col: "payment_declarations",  label: "Déclarations de paiement",   icon: "📝", danger: false },
-                  { col: "remises",               label: "Remises bancaires",          icon: "🏦", danger: false },
-                  { col: "rdv_pro",               label: "RDV professionnels",         icon: "📆", danger: false },
-                  { col: "emailsReprise",         label: "Emails reprise",             icon: "📧", danger: false },
-                ].map(item => (
-                  <div key={item.col} className={`flex items-center justify-between px-3 py-2 rounded-lg ${item.danger ? "bg-red-50" : "bg-sand"}`}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">{item.icon}</span>
-                      <span className="font-body text-sm text-blue-800">{item.label}</span>
-                    </div>
-                    <button onClick={async () => {
-                      if (!confirm(`Supprimer TOUS les documents de "${item.label}" ?\n\nAction irréversible.`)) return;
-                      try {
-                        const snap = await getDocs(collection(db, item.col));
-                        let count = 0;
-                        for (const d of snap.docs) { await deleteDoc(doc(db, item.col, d.id)); count++; }
-                        alert(`✅ ${count} document(s) supprimé(s) dans "${item.label}".`);
-                      } catch (e) { console.error(e); alert("Erreur."); }
-                    }} className="font-body text-[10px] text-red-500 bg-white border border-red-200 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-red-100 border-solid">
-                      Vider
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              {/* Vider les inscrits des créneaux */}
-              <div className="border-t border-gray-100 pt-4 mb-4 flex flex-col gap-2">
-                <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Créneaux — retirer les inscrits</div>
-                <button onClick={async () => {
-                  if (!confirm("Retirer TOUS les cavaliers inscrits des créneaux ?\n\nLes créneaux restent intacts, seul le tableau 'enrolled' est vidé.\n\nAction irréversible.")) return;
-                  try {
-                    const snap = await getDocs(collection(db, "creneaux"));
-                    let count = 0;
-                    for (const d of snap.docs) {
-                      const data = d.data();
-                      if ((data.enrolled || []).length > 0) {
-                        await updateDoc(doc(db, "creneaux", d.id), { enrolled: [], enrolledCount: 0 });
-                        count++;
-                      }
-                    }
-                    alert(`✅ Inscriptions vidées sur ${count} créneaux. Les créneaux sont conservés.`);
-                  } catch (e) { console.error(e); alert("Erreur."); }
-                }} className="flex items-center gap-2 font-body text-sm font-semibold text-orange-700 bg-orange-50 px-4 py-2.5 rounded-lg border border-orange-200 cursor-pointer hover:bg-orange-100 border-solid">
-                  <Users size={15}/> Vider tous les inscrits des créneaux (créneaux conservés)
-                </button>
-              </div>
-
-              {/* Nettoyage tout en un */}
-              <div className="border-t border-gray-100 pt-4">
-                <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-3">Tout nettoyer en une fois</div>
-                <div className="bg-red-50 rounded-xl p-4 mb-3">
-                  <p className="font-body text-xs text-red-700 mb-3">
-                    Supprime les 16 collections ci-dessus + vide les inscrits des créneaux.<br/>
-                    <strong>Créneaux, familles, cavaliers, cavalerie, activités, paramètres : conservés.</strong>
-                  </p>
-                  <label className="flex items-center gap-2 cursor-pointer mb-3">
-                    <input type="checkbox" id="effacerPedaCheck" className="accent-red-500 w-4 h-4"/>
-                    <span className="font-body text-sm text-red-700 font-semibold">Effacer aussi le suivi pédagogique des cavaliers</span>
-                  </label>
-                </div>
-                <button onClick={async () => {
-                  const effacerPeda = (document.getElementById("effacerPedaCheck") as HTMLInputElement)?.checked;
-                  const msg = `⚠️ NETTOYAGE COMPLET\n\nCeci va supprimer :\n- Paiements, réservations, forfaits, avoirs\n- SEPA (mandats, échéances, remises)\n- Encaissements, cartes, passages\n- Bons récup, waitlist, déclarations, RDV pro\n- Inscrits des créneaux (créneaux conservés)${effacerPeda ? "\n- Suivi pédagogique des cavaliers" : ""}\n\nCONSERVÉ : familles, cavaliers, créneaux, cavalerie, activités, paramètres\n\nContinuer ?`;
-                  if (!confirm(msg)) return;
-                  if (!confirm("DERNIÈRE CONFIRMATION — action irréversible.\n\nConfirmer le nettoyage ?")) return;
-
-                  let total = 0;
-                  const cols = ["payments","reservations","forfaits","avoirs","echeances-sepa","mandats-sepa","remises-sepa","encaissements","cartes","passages","bonsRecup","waitlist","payment_declarations","remises","rdv_pro","emailsReprise"];
-                  for (const colName of cols) {
-                    try {
-                      const snap = await getDocs(collection(db, colName));
-                      for (const d of snap.docs) { await deleteDoc(doc(db, colName, d.id)); total++; }
-                    } catch (e) { console.error(`Erreur sur ${colName}:`, e); }
-                  }
-
-                  // Vider les inscrits
-                  try {
-                    const snap = await getDocs(collection(db, "creneaux"));
-                    for (const d of snap.docs) {
-                      const data = d.data();
-                      if ((data.enrolled || []).length > 0) {
-                        await updateDoc(doc(db, "creneaux", d.id), { enrolled: [], enrolledCount: 0 });
-                      }
-                    }
-                  } catch (e) { console.error("Erreur enrolled:", e); }
-
-                  // Effacer le suivi péda si coché
-                  if (effacerPeda) {
-                    try {
-                      const famSnap = await getDocs(collection(db, "families"));
-                      for (const fam of famSnap.docs) {
-                        const data = fam.data() as any;
-                        const children = (data.children || []).map((ch: any) => ({
-                          ...ch,
-                          peda: { notes: [], lastNote: null },
-                        }));
-                        await updateDoc(doc(db, "families", fam.id), { children });
-                      }
-                    } catch (e) { console.error("Erreur péda:", e); }
-                  }
-
-                  alert(`✅ Nettoyage terminé : ${total} documents supprimés.\n\nCréneaux, familles et cavalerie intacts.${effacerPeda ? "\nSuivi pédagogique effacé." : ""}`);
-                }} className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-red-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-red-600">
-                  <Trash2 size={16}/> Tout nettoyer (2 confirmations requises)
-                </button>
-              </div>
-            </Card>
-          )}
-
-          {/* ══ ONGLET TEST ══ */}
-          {maintenanceTab === "test" && (
-            <Card padding="md">
-              <h3 className="font-body text-base font-semibold text-blue-800 mb-2">🧪 Supprimer les données de test</h3>
-              <p className="font-body text-xs text-slate-500 mb-4">
-                Supprime uniquement les documents marqués <code className="bg-gray-100 px-1 rounded">_seed: "SEED_2026"</code>.
-                Les vraies données ne sont pas affectées.
-              </p>
-              <button onClick={async () => {
-                if (!confirm("Supprimer toutes les données de test (SEED_2026) ?\n\nLes vraies données restent intactes.")) return;
-                const cols = ["families","creneaux","payments","encaissements","forfaits","avoirs","cartes","reservations","equides","passages","fidelite","bonsRecup","payment_declarations","waitlist","activities"];
-                let total = 0;
-                for (const colName of cols) {
-                  try {
-                    const snap = await getDocs(query(collection(db, colName), where("_seed","==","SEED_2026")));
-                    for (const docSnap of snap.docs) { await deleteDoc(docSnap.ref); total++; }
-                  } catch(e) { console.error(colName, e); }
-                }
-                alert(`✅ ${total} documents de test supprimés.`);
-              }} className="flex items-center gap-2 font-body text-sm font-semibold text-blue-700 bg-blue-50 px-5 py-2.5 rounded-lg border border-blue-200 cursor-pointer hover:bg-blue-100 border-solid">
-                🗑️ Nettoyer les données SEED_2026
-              </button>
-            </Card>
-          )}
-
-          {/* ══ ONGLET HISTORIQUE ══ */}
-          {maintenanceTab === "historique" && (
-            <Card padding="md">
-              <h3 className="font-body text-base font-semibold text-blue-800 mb-2">📋 Historique cavaliers</h3>
-              <p className="font-body text-xs text-slate-500 mb-4">
-                Efface les notes pédagogiques et/ou l'historique des poneys montés. Les familles et cavaliers restent intacts.
-              </p>
-              <div className="flex flex-col gap-2">
-                <button onClick={async () => {
-                  if (!confirm("Effacer les notes pédagogiques de TOUS les cavaliers ?\n\nAction irréversible.")) return;
-                  const snap = await getDocs(collection(db, "families"));
-                  let total = 0;
-                  for (const fam of snap.docs) {
-                    const data = fam.data() as any;
-                    const children = (data.children || []).map((ch: any) => ({
-                      ...ch, peda: { ...((ch.peda || {})), notes: [], lastNote: null },
-                    }));
-                    await updateDoc(doc(db, "families", fam.id), { children });
-                    total += (data.children || []).length;
-                  }
-                  alert(`✅ Notes pédagogiques effacées pour ${total} cavaliers.`);
-                }} className="flex items-center gap-2 font-body text-sm font-semibold text-orange-700 bg-orange-50 px-4 py-2.5 rounded-lg border border-orange-200 cursor-pointer hover:bg-orange-100 border-solid">
-                  <Trash2 size={14}/> Effacer les notes pédagogiques
-                </button>
-                <button onClick={async () => {
-                  if (!confirm("Effacer l'historique des poneys montés de TOUS les cavaliers ?\n\nAction irréversible.")) return;
-                  const snap = await getDocs(collection(db, "families"));
-                  let total = 0;
-                  for (const fam of snap.docs) {
-                    const data = fam.data() as any;
-                    const children = (data.children || []).map((ch: any) => ({
-                      ...ch,
-                      peda: { ...((ch.peda || {})), notes: ((ch.peda?.notes || []) as any[]).map((n: any) => ({ ...n, horseName: null })) },
-                    }));
-                    await updateDoc(doc(db, "families", fam.id), { children });
-                    total += (data.children || []).length;
-                  }
-                  alert(`✅ Historique poneys réinitialisé pour ${total} cavaliers.`);
-                }} className="flex items-center gap-2 font-body text-sm font-semibold text-orange-700 bg-orange-50 px-4 py-2.5 rounded-lg border border-orange-200 cursor-pointer hover:bg-orange-100 border-solid">
-                  <Trash2 size={14}/> Effacer l'historique des poneys
-                </button>
-                <button onClick={async () => {
-                  if (!confirm("⚠️ Effacer TOUTES les notes péda ET l'historique poneys ?\n\nAction irréversible.")) return;
-                  if (!confirm("DERNIÈRE CONFIRMATION — effacer tout l'historique cavaliers ?")) return;
-                  const snap = await getDocs(collection(db, "families"));
-                  let total = 0;
-                  for (const fam of snap.docs) {
-                    const data = fam.data() as any;
-                    const children = (data.children || []).map((ch: any) => ({ ...ch, peda: { notes: [], lastNote: null } }));
-                    await updateDoc(doc(db, "families", fam.id), { children });
-                    total += (data.children || []).length;
-                  }
-                  alert(`✅ Historique complet effacé pour ${total} cavaliers.`);
-                }} className="flex items-center gap-2 font-body text-sm font-semibold text-red-600 bg-red-50 px-4 py-2.5 rounded-lg border border-red-200 cursor-pointer hover:bg-red-100 border-solid">
-                  <Trash2 size={14}/> Tout effacer (notes + poneys)
-                </button>
-              </div>
-            </Card>
-          )}
-
-          {/* Données préservées */}
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-2">🟢 Toujours préservé</h3>
-            <div className="flex flex-wrap gap-2">
-              {["Créneaux planning","Familles & cavaliers","Cavalerie (équidés)","Soins vétérinaires","Registre d'élevage","Activités","Paramètres & tarifs"].map(item => (
-                <div key={item} className="font-body text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-lg">{item}</div>
-              ))}
-            </div>
-          </Card>
-        </div>
+        <SectionMaintenance
+          maintenanceTab={maintenanceTab}
+          setMaintenanceTab={setMaintenanceTab}
+        />
       )}
 
       {section === "notifications" && (
-        <div className="flex flex-col gap-5">
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-1">🔔 Notifications push — Admin</h3>
-            <p className="font-body text-xs text-slate-500 mb-4">
-              Choisissez les événements pour lesquels vous recevez une notification push sur votre téléphone ou ordinateur.
-              Les notifications arrivent même quand l'application est fermée (si vous avez autorisé les notifications dans votre navigateur).
-            </p>
-
-            {/* Comment activer */}
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
-              <div className="font-body text-sm font-semibold text-blue-800 mb-2">📱 Comment activer les notifications ?</div>
-              <ol className="font-body text-xs text-blue-700 space-y-1 list-decimal list-inside">
-                <li>Ouvrez l'application admin sur votre téléphone ou ordinateur</li>
-                <li>Votre navigateur vous demandera <strong>"Autoriser les notifications"</strong> → cliquez <strong>Autoriser</strong></li>
-                <li>Si vous avez refusé, allez dans les paramètres de votre navigateur → Site → Notifications → Autoriser</li>
-                <li>Sur <strong>iPhone/Safari</strong> : ajoutez d'abord le site à l'écran d'accueil (partage → Sur l'écran d'accueil)</li>
-              </ol>
-            </div>
-
-            {/* Événements configurables */}
-            <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-3">Événements déclencheurs</div>
-            <div className="flex flex-col gap-2">
-              {([
-                ["nouvelle_inscription", "Nouvelle inscription", "Un cavalier s'inscrit à un créneau ou un stage"],
-                ["nouveau_paiement", "Nouveau paiement reçu", "Un paiement CB en ligne est confirmé"],
-                ["impaye", "Impayé détecté", "Un paiement en attente dépasse 7 jours"],
-                ["liste_attente", "Place libérée (liste d'attente)", "Une place se libère et un cavalier en liste d'attente est notifié"],
-                ["annulation", "Annulation d'inscription", "Un cavalier annule une réservation"],
-                ["nouveau_cavalier", "Nouveau compte cavalier", "Une famille crée un compte depuis l'espace cavalier"],
-                ["rappel_stage", "Rappel J-3 stage", "Rappel automatique 3 jours avant un stage"],
-              ] as [string, string, string][]).map(([key, label, desc]) => (
-                <label key={key} className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 cursor-pointer hover:bg-sand transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={(notifSettings as any)[key] ?? false}
-                    onChange={e => setNotifSettings(prev => ({ ...prev, [key]: e.target.checked }))}
-                    className="w-4 h-4 accent-blue-500 mt-0.5 flex-shrink-0"
-                  />
-                  <div>
-                    <div className="font-body text-sm font-semibold text-blue-800">{label}</div>
-                    <div className="font-body text-xs text-slate-500">{desc}</div>
-                  </div>
-                </label>
-              ))}
-            </div>
-
-            <div className="flex gap-3 mt-4">
-              <button onClick={async () => {
-                setNotifSaving(true);
-                try {
-                  await setDoc(doc(db, "settings", "notifications"), { ...notifSettings, updatedAt: serverTimestamp() }, { merge: true });
-                  setSaved(true); setTimeout(() => setSaved(false), 2000);
-                } catch (e: any) { alert("Erreur : " + e.message); }
-                setNotifSaving(false);
-              }} disabled={notifSaving}
-                className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400 disabled:opacity-50">
-                {notifSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                Enregistrer
-              </button>
-              <button onClick={async () => {
-                setTestPushSending(true);
-                try {
-                  const res = await authFetch("/api/push", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      broadcast: true,
-                      title: "🐴 Test notification",
-                      body: "Les notifications push fonctionnent correctement !",
-                    }),
-                  });
-                  const data = await res.json();
-                  alert(data.sent > 0 ? `✅ Notification envoyée à ${data.sent} appareil(s)` : "⚠️ Aucun appareil enregistré. Autorisez d'abord les notifications.");
-                } catch { alert("Erreur lors de l'envoi"); }
-                setTestPushSending(false);
-              }} disabled={testPushSending}
-                className="flex items-center gap-2 font-body text-sm font-semibold text-blue-600 bg-blue-50 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 disabled:opacity-50">
-                {testPushSending ? <Loader2 size={14} className="animate-spin" /> : "📱"}
-                Tester une notification
-              </button>
-            </div>
-          </Card>
-        </div>
+        <SectionNotifications
+          notifSettings={notifSettings}
+          setNotifSettings={setNotifSettings}
+          notifSaving={notifSaving}
+          setNotifSaving={setNotifSaving}
+          testPushSending={testPushSending}
+          setTestPushSending={setTestPushSending}
+          setSaved={setSaved}
+        />
       )}
 
     </div>
