@@ -119,7 +119,7 @@ export async function GET(req: NextRequest) {
     date, from, to, titre,
     nb: manquants.length,
     creneaux: manquants.map((c: any) => ({
-      id: c.__id__,
+      id: c.id,
       date: c.date,
       activityTitle: c.activityTitle,
       startTime: c.startTime,
@@ -152,11 +152,12 @@ export async function POST(req: NextRequest) {
   const echecs: any[] = [];
 
   for (const c of manquants) {
-    const { __id__, ...donnees } = c;
+    // L'identifiant du document est stocké dans `id` par la sauvegarde.
+    const { id: docId, ...donnees } = c;
     try {
       // create() et non set() : si le document existe déjà, on échoue plutôt
       // que d'écraser un état plus récent.
-      await adminDb.collection("creneaux").doc(__id__).create(deserialize(donnees));
+      await adminDb.collection("creneaux").doc(docId).create(deserialize(donnees));
       restaures++;
     } catch (e: any) {
       // Le document existe : on regarde SON ÉTAT ACTUEL. C'est presque
@@ -164,19 +165,19 @@ export async function POST(req: NextRequest) {
       // déplacé ou modifié, et la comparaison ne le retrouvait donc pas.
       let actuel: any = null;
       try {
-        const snap = await adminDb.collection("creneaux").doc(__id__).get();
+        const snap = await adminDb.collection("creneaux").doc(docId).get();
         if (snap.exists) {
           const d = snap.data() as any;
           actuel = { date: d.date, activityTitle: d.activityTitle, startTime: d.startTime, status: d.status || null };
         }
       } catch { /* rien */ }
       echecs.push({
-        id: __id__,
+        id: docId,
         sauvegarde: { date: c.date, activityTitle: c.activityTitle, startTime: c.startTime },
         actuel,
         raison: actuel ? "Le créneau existe déjà, sous un autre état" : (e?.message || "Erreur"),
       });
-      console.error("[restore-creneaux] échec", __id__, e?.message);
+      console.error("[restore-creneaux] échec", docId, e?.message);
     }
   }
 
