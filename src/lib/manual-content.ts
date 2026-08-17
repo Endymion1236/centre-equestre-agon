@@ -528,6 +528,78 @@ export const MANUAL: ManualChapter[] = [
   },
 
   {
+    id: "contenus",
+    title: "Descriptifs & contenus",
+    icon: "PenLine",
+    summary: "Modifier les textes des activités, et savoir où chaque changement s'affiche.",
+    sections: [
+      {
+        id: "deux-ecrans",
+        title: "Deux écrans, deux portées",
+        text: `
+          <p>Il existe <strong>deux écrans</strong> qui modifient des « descriptions d'activités »,
+          et ils ne touchent pas les mêmes endroits :</p>
+          <ul>
+            <li><strong>Admin → Contenu</strong> écrit les textes du <strong>site public</strong> (vitrine).</li>
+            <li><strong>Admin → Activités</strong> écrit le <strong>catalogue</strong> : ce que voient les
+            familles connectées, la caisse, les devis et le planning.</li>
+          </ul>
+          <p>En cas de doute, demande-toi <strong>qui doit voir le texte</strong> : un visiteur du site
+          → Contenu ; une famille connectée ou la caisse → Activités.</p>
+        `,
+      },
+      {
+        id: "contenu-vitrine",
+        title: "Site vitrine : Admin → Contenu",
+        text: `
+          <p>L'onglet <strong>Activités</strong> liste chaque activité publique. En dépliant une carte,
+          tu modifies son <strong>visuel</strong>, sa <strong>description courte</strong> et son
+          <strong>introduction</strong>. Le changement est visible sur le site public dès l'enregistrement.</p>
+          <p>Les autres onglets (Tarifs, Infos pratiques, Mini-ferme, Actus) alimentent les autres pages publiques.</p>
+        `,
+        href: "/admin/contenu",
+        tips: [
+          "Un champ laissé vide reprend le texte d'origine : pour annuler une modification, il suffit de vider le champ.",
+          "Ces textes ne concernent QUE le site public : ils n'apparaissent ni dans l'espace famille, ni sur les factures.",
+        ],
+      },
+      {
+        id: "catalogue-activites",
+        title: "Catalogue : Admin → Activités",
+        text: `
+          <p>Le bouton crayon ouvre la fiche de l'activité. Le champ <strong>Description</strong> alimente
+          la fiche que la famille consulte dans <strong>Espace cavalier → Réserver</strong> — il est lu en
+          direct, donc à jour dès l'enregistrement.</p>
+          <p>Un <strong>assistant de rédaction</strong> (IA) peut proposer un texte à partir du titre et du
+          type de l'activité.</p>
+        `,
+        href: "/admin/activites",
+      },
+      {
+        id: "report-creneaux",
+        title: "Titre, prix, places : report sur les créneaux futurs",
+        text: `
+          <p>Chaque créneau du planning est une <strong>copie</strong> de l'activité, figée à sa génération.
+          Modifier le catalogue ne les touchait pas — depuis la mise à jour du 17 août, l'enregistrement d'une
+          activité modifiée <strong>propose de reporter les changements sur les créneaux à venir</strong>
+          (titre, type, prix, couleur, places), avec le nombre de créneaux concernés.</p>
+          <p>Les règles du report :</p>
+          <ul>
+            <li>les créneaux <strong>passés</strong> ne bougent jamais — l'historique reste ce qui a été vendu ;</li>
+            <li>un prix ou un nombre de places <strong>réglé à la main</strong> sur un jour précis est conservé ;</li>
+            <li>les places ne descendent jamais sous le nombre d'inscrits ;</li>
+            <li>un <strong>renommage</strong> met aussi à jour les forfaits actifs des cavaliers à l'année,
+            pour qu'ils continuent de couvrir leurs cours.</li>
+          </ul>
+        `,
+        href: "/admin/activites",
+        tips: [
+          "La description, elle, n'est pas copiée sur les créneaux : elle est lue en direct, aucun report à confirmer.",
+        ],
+      },
+    ],
+  },
+  {
     id: "management",
     title: "Management des salariés",
     icon: "Users",

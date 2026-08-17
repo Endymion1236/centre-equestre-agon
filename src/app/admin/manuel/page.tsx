@@ -8,11 +8,11 @@ import { startTour, isTourNew } from "@/lib/manual-tours";
 import DOMPurify from "isomorphic-dompurify";
 import {
   Sparkles, Users, Calendar, CreditCard, Heart, ClipboardList, BookOpen,
-  Mail, Lightbulb, Search, ExternalLink, Play, ChevronRight, BookMarked,
+  Mail, Lightbulb, PenLine, Search, ExternalLink, Play, ChevronRight, BookMarked,
 } from "lucide-react";
 
 const ICONS: Record<string, any> = {
-  Sparkles, Users, Calendar, CreditCard, Heart, ClipboardList, BookOpen, Mail, Lightbulb,
+  Sparkles, Users, Calendar, CreditCard, Heart, ClipboardList, BookOpen, Mail, Lightbulb, PenLine,
 };
 
 export default function ManuelPage() {
