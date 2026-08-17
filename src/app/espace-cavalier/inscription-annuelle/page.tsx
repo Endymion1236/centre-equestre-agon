@@ -9,6 +9,7 @@ import { Check, ChevronRight, AlertTriangle, Calculator, CreditCard, Loader2, Ca
 import { authFetch } from "@/lib/auth-fetch";
 import { compareCreneauxByDow } from "@/lib/creneau-sort";
 import { todayLocalString } from "@/lib/date-local";
+import { isForfaitActif, FORFAIT_STATUT_ACTIF } from "@/lib/forfaits";
 import { useToast } from "@/components/ui/Toast";
 import {
   calculerForfaitAnnuel, seasonOf,
@@ -323,7 +324,7 @@ export default function InscriptionAnnuellePage() {
     const set = new Set<string>();
     allForfaits.forEach((f: any) => {
       if (!f.childId) return;
-      if (f.status && f.status !== "actif") return; // ignore les forfaits annulés
+      if (!isForfaitActif(f.status)) return; // ignore les forfaits annulés
       const fSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
       if (fSeason !== MIN_SEASON_INSCRIPTION) return;
       set.add(f.childId);
@@ -345,7 +346,7 @@ export default function InscriptionAnnuellePage() {
     if (!selectedChild) return { licence, adhesion };
     allForfaits.forEach((f: any) => {
       if (f.childId !== selectedChild) return;
-      if (f.status && f.status !== "actif") return;
+      if (!isForfaitActif(f.status)) return;
       const fSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
       if (fSeason !== targetSeason) return;
       if (f.licenceFFE) licence = true;
@@ -369,7 +370,7 @@ export default function InscriptionAnnuellePage() {
     let total = 0;
     allForfaits.forEach((f: any) => {
       if (f.childId !== selectedChild) return;
-      if (f.status && f.status !== "actif") return;
+      if (!isForfaitActif(f.status)) return;
       const fSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
       if (fSeason !== targetSeason) return;
       total += Number(f.frequence) || 0;
@@ -698,7 +699,7 @@ export default function InscriptionAnnuellePage() {
       forfaitPriceTTC: item.totalAnnuel,
       totalPaidTTC: 0,
       paymentPlan,
-      status: "actif",
+      status: FORFAIT_STATUT_ACTIF,
       frequence: item.frequence,
       // Forfait "complément" : heures ajoutées à un forfait existant la même
       // saison (facturé au différentiel). frequenceDejaInscrite = heures déjà

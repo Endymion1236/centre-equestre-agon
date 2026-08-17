@@ -12,6 +12,7 @@ import type { Family } from "@/types";
 import { authFetch } from "@/lib/auth-fetch";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { compareCreneauxByDow } from "@/lib/creneau-sort";
+import { isForfaitActif, FORFAIT_STATUT_ACTIF } from "@/lib/forfaits";
 
 interface Forfait {
   id: string;
@@ -321,7 +322,9 @@ export default function ForfaitsPage() {
           forfaitPriceTTC: sp.forfaitPrice,
           totalPaidTTC: 0,
           paymentPlan: payPlan,
-          status: "active",
+          // "actif" — même orthographe que l'espace famille, qui filtre dessus
+          // pour le cumul licence/adhésion/fréquence (cf. lib/forfaits.ts).
+          status: FORFAIT_STATUT_ACTIF,
           frequence,
           creneauIds: sp.slot.creneauIds,
           seasonStartYear: _seasonStartYear,
@@ -414,7 +417,10 @@ export default function ForfaitsPage() {
 
   const filtered = useMemo(() => {
     let result = [...forfaits];
-    if (filterStatus !== "all") result = result.filter(f => f.status === filterStatus || (filterStatus === "active" && f.status === "actif"));
+    if (filterStatus !== "all") result = result.filter(f =>
+      (filterStatus === "active" || filterStatus === "actif")
+        ? isForfaitActif(f.status)
+        : f.status === filterStatus);
     if (search) {
       const terms = search.toLowerCase().trim().split(/\s+/);
       result = result.filter(f => {

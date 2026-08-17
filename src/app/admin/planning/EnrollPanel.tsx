@@ -11,6 +11,7 @@ import { emailTemplates } from "@/lib/email-templates";
 import { generateOrderId } from "@/lib/utils";
 import { formatStageSchedule } from "@/lib/format-stage";
 import { estQuinzaine, estSemaineAttendue, libelleRythme, expliqueRythme } from "@/lib/rythme";
+import { isForfaitActif } from "@/lib/forfaits";
 
 // ── Composant warning mandat SEPA ─────────────────────────────────────────────
 function SepaWarning({ familyId, onStatus }: { familyId: string; onStatus?: (s: "loading" | "ok" | "missing") => void }) {
@@ -3517,7 +3518,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               const currentSlotKey = `${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long" })} ${creneau.startTime}`;
               // Forfait actif pour CE créneau précis ?
               const hasForfaitPourCeCreneau = allForfaits.some((f: any) => {
-                if (f.childId !== selChild || f.status !== "actif") return false;
+                if (f.childId !== selChild || !isForfaitActif(f.status)) return false;
                 const ft = f.activityType || "cours";
                 const typeMatch = ft === "all" || (ft === "cours" && isCours) || (ft === "balade" && isBalade);
                 if (!typeMatch) return false;

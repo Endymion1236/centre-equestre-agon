@@ -39,6 +39,23 @@ export const ANNUAL_PREREQUISITES = {
   },
 };
 
+// ═══ Statut d'un forfait ═══
+// Deux orthographes coexistent en base : "actif" (inscription en ligne des
+// familles, avoirs, créations récentes) et "active" (créations depuis l'admin
+// jusqu'à cette correction). Un forfait écrit "active" était invisible pour
+// l'espace famille : licence et adhésion re-facturées, heure supplémentaire
+// vendue à plein tarif au lieu du différentiel, garde anti-double-inscription
+// contournée.
+//
+// On écrit désormais "actif" partout, et on lit les deux — les forfaits déjà
+// enregistrés en "active" restent valides sans migration.
+// Un forfait sans statut est considéré actif (comportement historique).
+export const FORFAIT_STATUT_ACTIF = "actif";
+
+export function isForfaitActif(status?: string | null): boolean {
+  return !status || status === "actif" || status === "active";
+}
+
 // Calcul du nombre de séances dans une période
 export function countSessionsInPeriod(
   startDate: string,
