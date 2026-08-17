@@ -1005,6 +1005,10 @@ export default function PlanningPage() {
         return;
       }
 
+      // Identifiant de la commande créée ou fusionnée — renvoyé à l'appelant
+      // (déclaré ici pour rester visible jusqu'au `return` en fin de fonction).
+      let payRefId = "";
+
       if (!options?.skipPayment && priceTTC > 0) {
 
       // ─── LOGIQUE CARTE : noter paymentSource=card si carte compatible, sans débiter ───
@@ -1108,8 +1112,6 @@ export default function PlanningPage() {
         newItem.discountAmount = discountResult.discountAmount;
         newItem.discountReasons = discountResult.reasons;
       }
-
-      let payRefId = "";
 
       if (isPaid) {
         // Encaissement immédiat → toujours créer un payment séparé (pas de fusion)
@@ -1324,6 +1326,11 @@ export default function PlanningPage() {
         setAllForfaits(forfaitsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       } catch(e) { console.error("Erreur refresh forfaits:", e); }
     }
+    // Identifiant de la commande créée (ou fusionnée). L'appelant en a besoin
+    // pour encaisser plusieurs cavaliers en UN seul règlement : il inscrit sans
+    // mode de paiement — les enfants tombent alors dans la même commande — puis
+    // encaisse cette commande une fois.
+    return payRefId || true;
     } catch (error) {
       console.error("Erreur handleEnroll, rollback:", error);
       try {

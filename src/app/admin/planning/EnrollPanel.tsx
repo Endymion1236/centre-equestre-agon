@@ -77,7 +77,8 @@ import { useAuth } from "@/lib/auth-context";
 
 function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allForfaits, onClose, onEnroll, onUnenroll, onRefresh }: {
   creneau: Creneau & { id: string }; families: (Family & { firestoreId: string })[]; allCreneaux: (Creneau & { id: string })[]; payments: any[]; allCartes: any[]; allForfaits: any[];  onClose: () => void;
-  onEnroll: (id: string, c: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean; freeReason?: string; rattrapageId?: string; skipRefresh?: boolean }) => Promise<boolean | void>;
+  /** Renvoie l'identifiant de la commande créée ou fusionnée, `false` si l'inscription a échoué. */
+  onEnroll: (id: string, c: EnrolledChild, payMode?: string, options?: { skipPayment?: boolean; skipEmail?: boolean; freeReason?: string; rattrapageId?: string; skipRefresh?: boolean }) => Promise<string | boolean | void>;
   onUnenroll: (id: string, childId: string) => Promise<void>;
   // Optionnel : si fourni, appele apres une boucle d'inscriptions (annuel)
   // pour rafraichir creneaux + forfaits une seule fois au lieu de N fois.
@@ -1479,15 +1480,26 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           .filter(Boolean) as any[];
 
         const freeEnrollOptions = freeEnroll ? { freeReason, skipEmail: false } : undefined;
-        const payModeToUse = showPay && !freeEnroll && !useRattrapage ? payMode : undefined;
+        const encaisseEnsemble = showPay && !freeEnroll && !useRattrapage && !preinscription;
+        // Encaissement immédiat de plusieurs cavaliers : on inscrit SANS mode de
+        // paiement, ce qui fait tomber tous les enfants dans la même commande
+        // (fusion des impayés récents de la famille), puis on encaisse cette
+        // commande une seule fois. Sinon chaque enfant produisait sa facture et
+        // son encaissement : deux lignes de 57€ au journal pour une seule
+        // transaction CB de 114€, que le rapprochement bancaire ne retrouve pas
+        // (le match par combinaison est désactivé, cf. comptabilité).
+        const payModeToUse = encaisseEnsemble
+          ? undefined
+          : (showPay && !freeEnroll && !useRattrapage ? payMode : undefined);
 
         const enrolledNames: string[] = [];
+        const commandeIds = new Set<string>();
         for (const child of childrenToEnroll) {
           const firstName = child.firstName || "—";
           const lastName = child.lastName || "";
           const childName = lastName ? `${firstName} ${lastName}` : firstName;
           try {
-            await onEnroll(
+            const resultat = await onEnroll(
               creneau.id!,
               {
                 childId: child.id,
@@ -1500,6 +1512,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               preinscription ? undefined : payModeToUse,
               preinscription ? { skipPayment: true, skipEmail: true } : freeEnrollOptions,
             );
+            if (typeof resultat === "string" && resultat) commandeIds.add(resultat);
             enrolledNames.push(firstName);
           } catch (err) {
             console.error(`[EnrollPanel] échec inscription ${firstName}:`, err);
@@ -1507,9 +1520,63 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           }
         }
 
-        const payInfo = freeEnroll ? ` — 🎁 offert (${freeReason})` : showPay ? " — encaissé ✅" : priceTTC > 0 ? " — paiement(s) en attente" : "";
+        // Un seul règlement pour toute la commande : une ligne au journal, du
+        // montant réellement passé sur le terminal.
+        let encaisseOk = true;
+        if (encaisseEnsemble && enrolledNames.length > 0) {
+          if (commandeIds.size !== 1) {
+            // Les enfants ne se sont pas retrouvés sur la même commande (fenêtre
+            // de fusion dépassée, échec partiel). On ne devine pas : la commande
+            // reste en impayé, à encaisser depuis Paiements.
+            encaisseOk = false;
+            console.warn(`[EnrollPanel] ${commandeIds.size} commande(s) pour ${enrolledNames.length} cavaliers — encaissement groupé abandonné`);
+          } else {
+            const paymentId = [...commandeIds][0];
+            try {
+              const paySnap = await getDoc(doc(db, "payments", paymentId));
+              if (!paySnap.exists()) throw new Error("commande introuvable");
+              const pData = paySnap.data() as any;
+
+              // On encaisse ce qui vient d'être inscrit, PAS le total de la
+              // commande : les impayés récents de la famille sont fusionnés
+              // dans la même commande (fenêtre de 7 jours), et encaisser son
+              // total prélèverait une dette antérieure que le terminal n'a pas
+              // vue. Les lignes sont relues en base pour tenir compte des
+              // remises appliquées à l'inscription.
+              const childIds = new Set(childrenToEnroll.map(c => c.id));
+              const montantInscrit = (pData.items || [])
+                .filter((i: any) => i.creneauId === creneau.id && childIds.has(i.childId))
+                .reduce((s: number, i: any) => s + (Number(i.priceTTC) || 0), 0);
+              const restantDu = Math.round(((Number(pData.totalTTC) || 0) - (Number(pData.paidAmount) || 0)) * 100) / 100;
+              // Jamais plus que ce qui reste dû sur la commande.
+              const aEncaisser = Math.round(Math.min(montantInscrit, restantDu) * 100) / 100;
+              if (aEncaisser <= 0) throw new Error("montant à encaisser nul");
+
+              await enregistrerEncaissement(
+                paymentId,
+                pData,
+                aEncaisser,
+                payMode,
+                "",
+                creneau.activityTitle,
+              );
+            } catch (e) {
+              encaisseOk = false;
+              console.error("[EnrollPanel] encaissement groupé:", e);
+              panelToast("Inscriptions créées, mais l'encaissement a échoué — à encaisser depuis Paiements", "error");
+            }
+          }
+        }
+
+        const totalEncaisse = priceTTC * enrolledNames.length;
+        const payInfo = freeEnroll ? ` — 🎁 offert (${freeReason})`
+          : encaisseEnsemble ? (encaisseOk ? ` — encaissé ✅ ${totalEncaisse.toFixed(2)}€` : " — à encaisser")
+          : showPay ? " — encaissé ✅"
+          : priceTTC > 0 ? " — paiement(s) en attente" : "";
         setJustEnrolled(`${enrolledNames.length} cavalier${enrolledNames.length > 1 ? "s" : ""} inscrit${enrolledNames.length > 1 ? "s" : ""} : ${enrolledNames.join(", ")}${payInfo}`);
-        panelToast(`${enrolledNames.length} inscription${enrolledNames.length > 1 ? "s" : ""} créée${enrolledNames.length > 1 ? "s" : ""} — ${(priceTTC * enrolledNames.length).toFixed(2)}€ au total`, "success");
+        if (encaisseOk) {
+          panelToast(`${enrolledNames.length} inscription${enrolledNames.length > 1 ? "s" : ""} créée${enrolledNames.length > 1 ? "s" : ""} — ${totalEncaisse.toFixed(2)}€ au total`, "success");
+        }
         // Alerter si le creneau passe complet apres la salve d'inscriptions
         await checkAndAlertIfFull([creneau.id!]);
       } finally {
@@ -4135,7 +4202,17 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               <div className="bg-sand rounded-xl p-4 space-y-3">
                 {priceTTC > 0 && (
                   <div>
-                    <div className="font-body text-lg font-bold text-blue-500 mb-2">{priceTTC.toFixed(2)}€</div>
+                    {/* Montant affiché = ce qui sera réellement encaissé. Avec
+                        plusieurs cavaliers, montrer le prix unitaire ici et le
+                        total sur le bouton faisait douter du montant prélevé. */}
+                    <div className="font-body text-lg font-bold text-blue-500 mb-2">
+                      {(priceTTC * Math.max(1, selectedChildren.length)).toFixed(2)}€
+                      {selectedChildren.length > 1 && (
+                        <span className="font-body text-xs font-normal text-slate-500 ml-2">
+                          {selectedChildren.length} × {priceTTC.toFixed(2)}€
+                        </span>
+                      )}
+                    </div>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" checked={showPay} onChange={e => setShowPay(e.target.checked)} className="accent-blue-500 w-4 h-4"/>
                       <span className="font-body text-sm text-blue-800 font-semibold">Encaisser maintenant</span>
