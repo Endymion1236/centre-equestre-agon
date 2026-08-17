@@ -37,6 +37,10 @@ const MODE_LABELS: Record<string, string> = {
   especes: "espèces",
   cheque: "chèque",
   cb_terminal: "carte bancaire",
+  cheque_vacances: "chèques-vacances",
+  pass_sport: "Pass'Sport",
+  ancv: "chèques-vacances ANCV",
+  virement: "virement",
 };
 
 export async function POST(req: NextRequest) {

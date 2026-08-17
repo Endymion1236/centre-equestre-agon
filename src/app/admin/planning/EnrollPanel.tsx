@@ -10,10 +10,16 @@ import { useToast } from "@/components/ui/Toast";
 import { emailTemplates } from "@/lib/email-templates";
 import { generateOrderId, emailValide } from "@/lib/utils";
 import { enregistrerEncaissement } from "@/lib/encaissement";
+import { paymentModes } from "@/app/admin/paiements/types";
 import { formatStageSchedule } from "@/lib/format-stage";
 import { estQuinzaine, estSemaineAttendue, libelleRythme, expliqueRythme, frequenceEquivalente, formatFrequence } from "@/lib/rythme";
 import { tarifPourFrequence } from "@/lib/forfait-pricing";
 import { isForfaitActif } from "@/lib/forfaits";
+
+/** Libellé lisible d'un moyen de règlement d'acompte, aligné sur la caisse. */
+function libelleModeAcompte(mode: string): string {
+  return paymentModes.find(m => m.id === mode)?.label || mode;
+}
 
 // ── Composant warning mandat SEPA ─────────────────────────────────────────────
 function SepaWarning({ familyId, onStatus }: { familyId: string; onStatus?: (s: "loading" | "ok" | "missing") => void }) {
@@ -3550,9 +3556,24 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         </div>
                       </div>
                     ))}
-                    <div className="flex items-center justify-between pt-2 border-t border-green-200 font-body">
-                      <span className="text-sm font-bold text-blue-800">Total à régler</span>
-                      <span className="text-2xl font-bold text-green-600">{stageTotalTTC.toFixed(2)}€</span>
+                    <div className="pt-2 border-t border-green-200 font-body">
+                      <div className="flex items-center justify-between">
+                        {/* En mode acompte, 180€ n'est PAS ce qui va être
+                            encaissé : le libellé le dit, et la ligne dessous
+                            annonce ce qui part maintenant. */}
+                        <span className="text-sm font-bold text-blue-800">
+                          {showAcompte ? "Total du stage" : "Total à régler"}
+                        </span>
+                        <span className="text-2xl font-bold text-green-600">{stageTotalTTC.toFixed(2)}€</span>
+                      </div>
+                      {showAcompte && (
+                        <div className="font-body text-xs text-slate-600 mt-1">
+                          dont <strong className="text-blue-800">{stageAcompte.toFixed(2)}€</strong>
+                          {acompteReglement === "sur_place" ? " encaissés maintenant" : " par lien de paiement"}
+                          {" · "}
+                          <strong className="text-blue-800">{stageSolde.toFixed(2)}€</strong> au solde J-7
+                        </div>
+                      )}
                     </div>
                     {stageMode === "semaine" && stageTotalTTC > ACOMPTE_PAR_ENFANT * stageLines.length && (
                       <div className="mt-1">
@@ -3597,10 +3618,12 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
                           {acompteReglement === "sur_place" && (
                             <div className="mt-2 flex flex-col gap-2">
-                              <div className="flex gap-2">
-                                {([["cb_terminal", "💳 CB"], ["cheque", "📝 Chèque"], ["especes", "💶 Espèces"]] as const).map(([id, label]) => (
+                              {/* Mêmes moyens qu'à la caisse — les chèques-vacances
+                                  sont acceptés par le centre (cf. CGV) et manquaient ici. */}
+                              <div className="grid grid-cols-2 gap-2">
+                                {([["cb_terminal", "💳 CB"], ["cheque", "📝 Chèque"], ["especes", "💶 Espèces"], ["cheque_vacances", "🎫 Chèques vacances"]] as const).map(([id, label]) => (
                                   <button key={id} onClick={() => setAcompteMode(id)}
-                                    className={`flex-1 py-1.5 rounded-lg font-body text-xs font-semibold border cursor-pointer ${acompteMode === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
+                                    className={`py-1.5 px-2 rounded-lg font-body text-xs font-semibold border cursor-pointer ${acompteMode === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
                                     {label}
                                   </button>
                                 ))}
@@ -3619,7 +3642,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       <div className="font-body text-xs text-slate-600 text-center">
                         {showAcompte
                           ? acompteReglement === "sur_place"
-                            ? <>L&apos;acompte de {stageAcompte.toFixed(2)}€ sera encaissé maintenant ({acompteMode === "cheque" ? "chèque" : acompteMode === "especes" ? "espèces" : "CB terminal"}) et écrit au journal.<br/>Le solde sera demandé automatiquement 7 jours avant le stage.</>
+                            ? <>L&apos;acompte de {stageAcompte.toFixed(2)}€ sera encaissé maintenant ({libelleModeAcompte(acompteMode)}) et écrit au journal.<br/>Le solde de {stageSolde.toFixed(2)}€ sera demandé automatiquement 7 jours avant le stage.</>
                             : <>Un email avec le lien de paiement pour l&apos;acompte sera envoyé à la famille.<br/>Le solde sera demandé automatiquement 7 jours avant le stage.</>
                           : <>La commande sera ajoutée aux impayés.<br/>Encaissement possible depuis <strong>Paiements → Encaisser</strong>.</>
                         }
