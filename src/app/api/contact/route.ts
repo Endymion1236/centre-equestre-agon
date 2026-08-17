@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
+import { FieldValue } from "firebase-admin/firestore";
+import { adminDb } from "@/lib/firebase-admin";
 import { SITE_CONFIG } from "@/lib/config";
+import { vitrineDefaults } from "@/lib/vitrine-defaults";
+import { logEmail } from "@/lib/email-log";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -86,7 +90,34 @@ export async function POST(request: NextRequest) {
 
     const resend = new Resend(apiKey);
     const from = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
-    const to = process.env.RESEND_CONTACT_TO || process.env.RESEND_OWNER_EMAIL || SITE_CONFIG.contact.email;
+    // Destinataire : la MÊME adresse que celle affichée sur la page contact
+    // (Admin → Contenu → Infos pratiques). L'ancienne chaîne passait par
+    // RESEND_OWNER_EMAIL — le compte technique Resend : le visiteur écrivait à
+    // l'adresse affichée, le message partait ailleurs, et personne ne le voyait.
+    // RESEND_CONTACT_TO reste un forçage explicite si on veut dériver les
+    // messages du site vers une autre boîte.
+    let clubEmail = "";
+    try {
+      const vitrineSnap = await adminDb.collection("settings").doc("vitrine").get();
+      clubEmail = String((vitrineSnap.data() as any)?.infos?.email || "").trim();
+    } catch (e) {
+      console.warn("[contact] lecture settings/vitrine impossible :", e);
+    }
+    const to = process.env.RESEND_CONTACT_TO || clubEmail || vitrineDefaults.infos.email || SITE_CONFIG.contact.email;
+
+    // Trace AVANT l'envoi : un message de contact ne doit jamais pouvoir
+    // disparaître sans laisser de trace, même si l'email se perd.
+    let traceId = "";
+    try {
+      const traceRef = await adminDb.collection("messages-contact").add({
+        firstName, lastName, email, phone, subject, message,
+        to, ip, status: "recu",
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      traceId = traceRef.id;
+    } catch (e) {
+      console.error("[contact] trace Firestore impossible :", e);
+    }
 
     const fullName = `${firstName} ${lastName}`;
     const safeMessage = escapeHtml(message).replaceAll("\n", "<br />");
@@ -114,8 +145,26 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error("Erreur Resend contact :", error);
+      if (traceId) {
+        await adminDb.collection("messages-contact").doc(traceId)
+          .update({ status: "echec_envoi", erreur: String((error as any)?.message || error).slice(0, 300) })
+          .catch(() => {});
+      }
+      await logEmail({
+        to, subject: `[Site CE Agon] ${subject}`, context: "contact_site",
+        status: "failed", error: String((error as any)?.message || error).slice(0, 300), sentBy: "system",
+      }).catch(() => {});
       return NextResponse.json({ error: "Le message n’a pas pu être envoyé. Merci de réessayer ou de nous appeler." }, { status: 500 });
     }
+
+    if (traceId) {
+      await adminDb.collection("messages-contact").doc(traceId)
+        .update({ status: "envoye" }).catch(() => {});
+    }
+    await logEmail({
+      to, subject: `[Site CE Agon] ${subject}`, context: "contact_site",
+      status: "sent", sentBy: "system",
+    }).catch(() => {});
 
     return NextResponse.json({ success: true });
   } catch (error) {
