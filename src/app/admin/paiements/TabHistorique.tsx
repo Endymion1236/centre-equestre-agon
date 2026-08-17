@@ -25,10 +25,20 @@ interface TabHistoriqueProps {
   setEditItems: (val: any[]) => void;
   setEditRemisePct: (val: string) => void;
   setEditRemiseEuros: (val: string) => void;
+  /** Recherche texte initiale (paramètre `search` de l'URL). */
+  initialSearch?: string;
+  /**
+   * Identifiant de la famille sur laquelle ouvrir l'historique (paramètre
+   * `family` de l'URL) — sur l'identifiant, pas sur le nom, pour la même
+   * raison que dans l'onglet Impayés : deux homonymes ne doivent pas se
+   * retrouver mélangées.
+   */
+  familyFilterId?: string;
 }
 
-export function TabHistorique({ loading, payments, avoirs, encaissements, families, toast, setPayments, setDuplicateTarget, deletePaymentCommand, setEditPayment, setEditItems, setEditRemisePct, setEditRemiseEuros }: TabHistoriqueProps) {
-  const [histSearch, setHistSearch] = useState("");
+export function TabHistorique({ loading, payments, avoirs, encaissements, families, toast, setPayments, setDuplicateTarget, deletePaymentCommand, setEditPayment, setEditItems, setEditRemisePct, setEditRemiseEuros, initialSearch, familyFilterId }: TabHistoriqueProps) {
+  const [histSearch, setHistSearch] = useState(initialSearch || "");
+  const [familyFilter, setFamilyFilter] = useState(familyFilterId || "");
   const [histModeFilter, setHistModeFilter] = useState("all");
   const [histStatusFilter, setHistStatusFilter] = useState("all");
   const [histPeriod, setHistPeriod] = useState("");
@@ -81,6 +91,7 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
           _fromEncaissement: true,
         }));
       filtered = [...filtered, ...avoirEncaissements] as any[];
+      if (familyFilter) filtered = filtered.filter(p => p.familyId === familyFilter);
       if (modeFilter !== "all") filtered = filtered.filter(p => p.paymentMode === modeFilter);
       if (statusFilter !== "all") filtered = filtered.filter(p => p.status === statusFilter);
       if (searchFilter) {
@@ -152,6 +163,25 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
 
       return (
         <>
+          {/* Bandeau du filtre famille — arriver ici depuis la recherche
+              globale ouvre l'historique de CETTE famille, pas celui du centre. */}
+          {familyFilter && (
+            <Card padding="sm" className="mb-4 flex items-center justify-between gap-3 !bg-blue-50/50 !border-blue-200">
+              <div className="font-body text-sm text-slate-700 min-w-0">
+                Historique de <span className="font-semibold text-blue-800">{
+                  families.find((f: any) => f.firestoreId === familyFilter)?.parentName
+                  || filtered[0]?.familyName
+                  || "cette famille"
+                }</span>
+                <span className="text-slate-500"> · {filtered.length} ligne{filtered.length > 1 ? "s" : ""}</span>
+              </div>
+              <button data-testid="historique-family-filter-clear" onClick={() => setFamilyFilter("")}
+                className="shrink-0 flex items-center gap-1.5 font-body text-xs font-semibold text-blue-700 bg-white hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 cursor-pointer">
+                <X size={13}/> Tout l&apos;historique
+              </button>
+            </Card>
+          )}
+
           {/* KPIs par mode */}
           <div className="flex flex-wrap gap-3 mb-4">
             {Object.entries(totalsByMode).sort(([,a],[,b]) => b - a).map(([mode, total]) => {
@@ -189,8 +219,8 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
             </div>
             <input type="month" value={histPeriod} onChange={e => setHistPeriod(e.target.value)}
               className="font-body text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-blue-400" />
-            {(modeFilter !== "all" || statusFilter !== "all" || searchFilter || periodFilter) && (
-              <button onClick={() => { setHistModeFilter("all"); setHistStatusFilter("all"); setHistSearch(""); setHistPeriod(""); }}
+            {(modeFilter !== "all" || statusFilter !== "all" || searchFilter || periodFilter || familyFilter) && (
+              <button onClick={() => { setHistModeFilter("all"); setHistStatusFilter("all"); setHistSearch(""); setHistPeriod(""); setFamilyFilter(""); }}
                 className="font-body text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-red-100">
                 Réinitialiser
               </button>

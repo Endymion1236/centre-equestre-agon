@@ -86,7 +86,16 @@ export default function PaiementsPage() {
   const urlSearch = searchParams.get("search") || "";
   const urlFamily = searchParams.get("family") || "";
   const urlTab = searchParams.get("tab") || "";
-  const [tab, setTab] = useState<"encaisser" | "journal" | "historique" | "echeances" | "impayes" | "offerts" | "declarations" | "cheques_differes">(urlTab === "impayes" ? "impayes" : urlSearch ? "impayes" : "encaisser");
+  // Onglet d'ouverture : celui demandé par l'URL s'il est connu (seul
+  // `impayes` était honoré — un lien vers l'historique retombait sur
+  // « Encaisser »), sinon les impayés dès qu'un filtre est passé.
+  type PaiementsTab = "encaisser" | "journal" | "historique" | "echeances" | "impayes" | "offerts" | "declarations" | "cheques_differes";
+  const TABS: PaiementsTab[] = ["encaisser", "journal", "historique", "echeances", "impayes", "offerts", "declarations", "cheques_differes"];
+  const [tab, setTab] = useState<PaiementsTab>(
+    TABS.includes(urlTab as PaiementsTab) ? (urlTab as PaiementsTab)
+      : (urlSearch || urlFamily) ? "impayes"
+      : "encaisser"
+  );
   const [editPayment, setEditPayment] = useState<any | null>(null);
   const [quickEncaisser, setQuickEncaisser] = useState<{ payment: any } | null>(null);
   const [sendingCawlLink, setSendingCawlLink] = useState<string | null>(null);
@@ -1554,6 +1563,8 @@ export default function PaiementsPage() {
           setEditItems={setEditItems}
           setEditRemisePct={setEditRemisePct}
           setEditRemiseEuros={setEditRemiseEuros}
+          initialSearch={urlSearch}
+          familyFilterId={urlFamily}
         />
       )}
       {/* ─── Échéances Tab ─── */}
