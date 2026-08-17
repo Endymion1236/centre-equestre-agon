@@ -146,8 +146,9 @@ export default function PaiementsPage() {
   const [quickChequesDiffres, setQuickChequesDiffres] = useState<
     { numero: string; banque: string; montant: string; dateEncaissementPrevue: string }[]
   >([{ numero: "", banque: "", montant: "", dateEncaissementPrevue: new Date().toISOString().split("T")[0] }]);
-  const [impayesSearch, setImpayesSearch] = useState(urlSearch);
-  const [impayesExpanded, setImpayesExpanded] = useState<Set<string>>(new Set());
+  // `search` et `family` de l'URL sont transmis à TabImpayes, qui porte l'état
+  // de la recherche et du filtre famille (états locaux ici : morts depuis
+  // l'extraction du composant, la liste s'ouvrait donc sans filtre).
   const [editItems, setEditItems] = useState<any[]>([]);
   const [editRemisePct, setEditRemisePct] = useState("");
   const [selectedFamily, setSelectedFamily] = useState<string>(urlFamily);
@@ -1585,6 +1586,8 @@ export default function PaiementsPage() {
           deletePaymentCommand={deletePaymentCommand}
           enrollChildInForfait={enrollChildInForfait}
           onMultiEncaisser={(familyId, familyName, pays) => { setMultiEncaisser({ familyId, familyName, payments: pays }); setMultiMode("cheque"); setMultiRef(""); setMultiDate(new Date().toISOString().split("T")[0]); }}
+          initialSearch={urlSearch}
+          familyFilterId={urlFamily}
         />
       )}
 

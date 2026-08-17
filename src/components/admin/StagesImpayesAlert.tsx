@@ -7,6 +7,7 @@ import { AlertTriangle, X, ChevronDown, ChevronUp } from "lucide-react";
 
 interface StageImapye {
   paymentId: string;
+  familyId: string;
   familyName: string;
   familyEmail: string;
   activityTitle: string;
@@ -55,6 +56,7 @@ export default function StagesImpayesAlert() {
             if (diffDays >= 0 && diffDays <= 15) {
               found.push({
                 paymentId: doc.id,
+                familyId: p.familyId || "",
                 familyName: p.familyName || "—",
                 familyEmail: p.familyEmail || "",
                 activityTitle: item.activityTitle || "Stage",
@@ -164,7 +166,7 @@ export default function StagesImpayesAlert() {
                 }`}>
                   {alert.totalTTC.toFixed(2)}€
                 </span>
-                <Link href={`/admin/paiements?famille=${encodeURIComponent(alert.familyName)}`}>
+                <Link href={`/admin/paiements?tab=impayes${alert.familyId ? `&family=${encodeURIComponent(alert.familyId)}` : `&search=${encodeURIComponent(alert.familyName)}`}`}>
                   <button className="font-body text-xs font-semibold text-white bg-blue-500 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-400">
                     Voir
                   </button>

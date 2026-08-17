@@ -273,8 +273,12 @@ export default function GlobalSearch() {
           subtitle: (pay.items || []).slice(0, 2).map((i: any) => i.activityTitle).join(", "),
           badge: isUnpaid ? `${due.toFixed(0)}€ dû` : `${(pay.totalTTC || 0).toFixed(0)}€ payé`,
           badgeColor: isUnpaid ? "bg-red-50 text-red-500" : "bg-green-50 text-green-600",
+          // Le filtre se fait sur l'identifiant de la famille, pas sur son nom :
+          // avec deux familles homonymes, le nom en ramènerait deux à l'écran.
           url: `/admin/paiements?tab=${isUnpaid ? "impayes" : "historique"}`
-            + `&search=${encodeURIComponent(pay.familyName || "")}`,
+            + (pay.familyId
+                ? `&family=${encodeURIComponent(pay.familyId)}`
+                : `&search=${encodeURIComponent(pay.familyName || "")}`),
           score,
         });
       }

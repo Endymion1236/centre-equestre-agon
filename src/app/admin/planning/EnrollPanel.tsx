@@ -4263,7 +4263,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     <div className="font-body text-[10px] text-orange-600 truncate">{familyNames}</div>
                   </div>
                 </div>
-                <a href={`/admin/paiements?search=${encodeURIComponent(familyNames.split(",")[0].trim())}`}
+                <a href={`/admin/paiements?tab=impayes${pendingPayments[0]?.familyId ? `&family=${encodeURIComponent(pendingPayments[0].familyId)}` : `&search=${encodeURIComponent(familyNames.split(",")[0].trim())}`}`}
                   className="flex-shrink-0 font-body text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 px-3 py-2 rounded-lg no-underline transition-colors">
                   Encaisser →
                 </a>

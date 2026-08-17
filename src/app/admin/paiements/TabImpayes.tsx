@@ -36,6 +36,14 @@ interface TabImpayesProps {
   deletePaymentCommand: (payment: any) => Promise<void>;
   enrollChildInForfait: (payment: any, familyId: string) => Promise<number>;
   onMultiEncaisser: (familyId: string, familyName: string, payments: any[]) => void;
+  /** Recherche texte initiale (paramètre `search` de l'URL). */
+  initialSearch?: string;
+  /**
+   * Identifiant de la famille sur laquelle ouvrir la liste (paramètre `family`
+   * de l'URL). On filtre sur l'identifiant et non sur le nom : deux familles
+   * homonymes ne doivent jamais apparaître ensemble à l'écran d'encaissement.
+   */
+  familyFilterId?: string;
 }
 
 export function TabImpayes({
@@ -44,9 +52,10 @@ export function TabImpayes({
   setEditPayment, setEditItems, setEditRemisePct, setEditRemiseEuros,
   setPayLinkModal, setPayLinkEmail, setPayLinkAmount, setPayLinkMessage,
   removePaymentItem, setDuplicateTarget, deletePaymentCommand, enrollChildInForfait,
-  onMultiEncaisser,
+  onMultiEncaisser, initialSearch, familyFilterId,
 }: TabImpayesProps) {
-  const [impayesSearch, setImpayesSearch] = useState("");
+  const [impayesSearch, setImpayesSearch] = useState(initialSearch || "");
+  const [familyFilter, setFamilyFilter] = useState(familyFilterId || "");
   const [impayesExpanded, setImpayesExpanded] = useState<Set<string>>(new Set());
   // Filtre par type : 'all' = tout, 'invoice' = factures simples, 'echeance' = échéances en retard
   const [typeFilter, setTypeFilter] = useState<"all" | "invoice" | "echeance">("all");
@@ -83,6 +92,13 @@ export function TabImpayes({
 
       const filtered = unpaid
         .filter(p => {
+          // Filtre famille — sur l'identifiant, jamais sur le nom : deux
+          // familles portant le même nom ne doivent pas se retrouver mélangées
+          // au moment d'encaisser.
+          if (!familyFilter) return true;
+          return p.familyId === familyFilter;
+        })
+        .filter(p => {
           // Filtre par type
           const isEch = (p as any).echeancesTotal > 1;
           if (typeFilter === "invoice" && isEch) return false;
@@ -98,6 +114,15 @@ export function TabImpayes({
           const inDate = p.date?.seconds ? new Date(p.date.seconds * 1000).toLocaleDateString("fr-FR").includes(q) : false;
           return inName || inItems || inDate;
         });
+
+      // Libellé de la famille filtrée : la fiche famille si elle est déjà
+      // chargée, sinon le nom porté par ses factures.
+      const familyFilterLabel = !familyFilter ? "" : (
+        families.find((f: any) => f.firestoreId === familyFilter)?.parentName
+        || unpaid.find(p => p.familyId === familyFilter)?.familyName
+        || "cette famille"
+      );
+      const totalFiltre = filtered.reduce((s, p) => s + ((p.totalTTC || 0) - (p.paidAmount || 0)), 0);
 
       // ─── Regroupement par événement ─────────────────────────────────────
       // Critère : même date de créneau (items[0].date) + même activityTitle.
@@ -214,6 +239,21 @@ export function TabImpayes({
             );
           })()}
 
+          {/* Bandeau du filtre famille — on affiche sur qui on encaisse, et on
+              donne un moyen d'en sortir sans repasser par la fiche client. */}
+          {familyFilter && (
+            <Card padding="sm" className="mb-3 flex items-center justify-between gap-3 !bg-blue-50/50 !border-blue-200">
+              <div className="font-body text-sm text-slate-700 min-w-0">
+                Impayés de <span className="font-semibold text-blue-800">{familyFilterLabel}</span>
+                <span className="text-slate-500"> · {filtered.length} facture{filtered.length > 1 ? "s" : ""} · {totalFiltre.toFixed(2)}€</span>
+              </div>
+              <button data-testid="impaye-family-filter-clear" onClick={() => setFamilyFilter("")}
+                className="shrink-0 flex items-center gap-1.5 font-body text-xs font-semibold text-blue-700 bg-white hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 cursor-pointer">
+                <X size={13}/> Tous les impayés
+              </button>
+            </Card>
+          )}
+
           {/* Barre de recherche */}
           <div className="relative mb-3">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
@@ -247,6 +287,7 @@ export function TabImpayes({
           {filtered.length === 0 && (
             <p className="font-body text-sm text-slate-500 text-center py-8">
               {search ? `Aucun résultat pour "${search}"` :
+                familyFilter ? `Aucun impayé pour ${familyFilterLabel}.` :
                 typeFilter === "invoice" ? "Aucune facture impayée." :
                 typeFilter === "echeance" ? "Aucune échéance en retard." :
                 "Aucun impayé."}
