@@ -169,6 +169,21 @@ export default function DevisPage() {
     { label: "Assurance occasionnelle 1 mois", priceTTC: 10, tva: 20 },
   ], [tarifs]);
   const fam = families.find(f => f.firestoreId === selFamily);
+
+  /**
+   * Nom du client à afficher pour un devis.
+   *
+   * Le devis fige `familyName` à sa création : c'est voulu pour un devis déjà
+   * parti, qui doit garder le nom sous lequel le client l'a reçu. Mais tant
+   * qu'il est en brouillon, ce nom figé peut être périmé — renommer la fiche
+   * ne le mettait pas à jour, et aucun rafraîchissement n'y changeait rien
+   * puisque la valeur est en base, pas en cache. On relit donc la fiche pour
+   * les brouillons.
+   */
+  const nomClient = (d: Devis) =>
+    d.status === "draft"
+      ? (families.find(f => f.firestoreId === d.familyId)?.parentName || d.familyName)
+      : d.familyName;
   const child = fam?.children?.find((c: any) => c.id === selChild);
   const servicesFacturables: string[] = Array.isArray((fam as any)?.services)
     ? (fam as any).services.filter(Boolean)
@@ -244,6 +259,10 @@ export default function DevisPage() {
     if (!d.familyEmail) { alert("Pas d'email pour cette famille."); return; }
     setSendingId(d.id!);
     try {
+      // Le devis part sous le nom actuel de la fiche, et c'est celui-là qui est
+      // figé : ce que le client reçoit doit être ce que le devis conservera.
+      const nomEnvoi = nomClient(d);
+      d = { ...d, familyName: nomEnvoi };
       // Générer le HTML du devis
       const lignesHtml = d.items.map(i => `
         <tr>
@@ -300,7 +319,7 @@ export default function DevisPage() {
         }),
       });
 
-      await updateDoc(doc(db, "devis", d.id!), { status: "sent", sentAt: serverTimestamp() });
+      await updateDoc(doc(db, "devis", d.id!), { status: "sent", sentAt: serverTimestamp(), familyName: nomEnvoi });
       await fetchData();
     } catch (e) { console.error(e); alert("Erreur envoi email"); }
     setSendingId(null);
@@ -311,7 +330,9 @@ export default function DevisPage() {
     try {
       await addDoc(collection(db, "payments"), {
         familyId: d.familyId,
-        familyName: d.familyName,
+        // Un brouillon converti sans avoir été envoyé prendrait sinon le nom
+        // figé à sa création, périmé si la fiche a été renommée depuis.
+        familyName: nomClient(d),
         // Le service suit le devis jusqu'à la facture : sans ça, il fallait le
         // resaisir en caisse et un devis accepté pouvait se facturer au mauvais site.
         ...((d as any).serviceFacture ? { serviceFacture: (d as any).serviceFacture } : {}),
@@ -588,7 +609,7 @@ export default function DevisPage() {
                       <span className="font-body text-[10px] text-red-500 bg-red-50 px-2 py-0.5 rounded">Expiré</span>
                     )}
                   </div>
-                  <div className="font-body text-base font-semibold text-blue-800 mt-1">{d.familyName}</div>
+                  <div className="font-body text-base font-semibold text-blue-800 mt-1">{nomClient(d)}</div>
                   {d.serviceFacture && (
                     <div className="font-body text-xs text-slate-600">Service : {d.serviceFacture}</div>
                   )}
