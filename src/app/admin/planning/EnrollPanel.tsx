@@ -9,6 +9,7 @@ import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { emailTemplates } from "@/lib/email-templates";
 import { generateOrderId, emailValide } from "@/lib/utils";
+import { enregistrerEncaissement } from "@/lib/encaissement";
 import { formatStageSchedule } from "@/lib/format-stage";
 import { estQuinzaine, estSemaineAttendue, libelleRythme, expliqueRythme, frequenceEquivalente, formatFrequence } from "@/lib/rythme";
 import { tarifPourFrequence } from "@/lib/forfait-pricing";
@@ -623,6 +624,12 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [stageMode, setStageMode] = useState<"semaine" | "jour">("semaine");
   const [stageDaysCount, setStageDaysCount] = useState<number>(0);
   const [stagePayChoice, setStagePayChoice] = useState<"acompte" | "total">("total");
+  // Acompte : par lien de paiement (la famille règle en ligne) ou encaissé au
+  // comptoir tout de suite. Dans le second cas l'écriture comptable est faite
+  // ici même, par la fonction d'encaissement partagée avec la caisse.
+  const [acompteReglement, setAcompteReglement] = useState<"lien" | "sur_place">("lien");
+  const [acompteMode, setAcompteMode] = useState("cb_terminal");
+  const [acompteRef, setAcompteRef] = useState("");
   const [showAddDays, setShowAddDays] = useState<{ familyId: string; enfants: { childId: string; childName: string }[]; joursRestants: { id: string; date: string; label: string }[]; totalJoursStage: number; joursInscrits: number; stageTitle: string; creneauRef: any } | null>(null);
   const isStage = creneau.activityType === "stage" || creneau.activityType === "stage_journee";
 
@@ -1678,6 +1685,18 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             soldeAmount: Math.round((mergedTotal - ACOMPTE_PAR_ENFANT * (mergedItems.filter((i: any) => i.activityType === "stage" || i.activityType === "stage_journee").length || stageLines.length)) * 100) / 100,
             updatedAt: serverTimestamp(),
           });
+
+          // Acompte réglé au comptoir : même écriture comptable que la caisse.
+          if (showAcompte && acompteReglement === "sur_place") {
+            await enregistrerEncaissement(
+              openOrder.id,
+              { ...existingData, items: mergedItems, totalTTC: Math.round(mergedTotal * 100) / 100 },
+              stageAcompte,
+              acompteMode,
+              acompteRef,
+              `Acompte ${creneau.activityTitle}`,
+            );
+          }
         } else {
           // Créer une nouvelle commande stage avec infos acompte
           const newPayRef = await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
@@ -1696,8 +1715,25 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             date: serverTimestamp(),
           });
 
+          // Acompte réglé au comptoir : on encaisse ici, sans lien de paiement.
+          if (showAcompte && acompteReglement === "sur_place") {
+            await enregistrerEncaissement(
+              newPayRef.id,
+              {
+                familyId: fam.firestoreId,
+                familyName: fam.parentName || "",
+                items: newItems,
+                totalTTC: stageTotalTTC,
+              },
+              stageAcompte,
+              acompteMode,
+              acompteRef,
+              `Acompte ${creneau.activityTitle}`,
+            );
+          }
+
           // Envoyer automatiquement le lien de paiement pour l'acompte
-          if (showAcompte && fam.parentEmail) {
+          if (showAcompte && acompteReglement === "lien" && fam.parentEmail) {
             authFetch("/api/send-payment-link", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -1761,7 +1797,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           } catch (e) { console.error("Email confirmation stage:", e); }
         }
 
-        panelToast(`${noms} inscrit(s) — ${stageTotalTTC.toFixed(2)}€${showAcompte ? ` (acompte ${stageAcompte}€ + solde J-7)` : " — paiement en attente"}`, "success");
+        panelToast(`${noms} inscrit(s) — ${stageTotalTTC.toFixed(2)}€${showAcompte ? (acompteReglement === "sur_place" ? ` (acompte ${stageAcompte}€ encaissé + solde J-7)` : ` (acompte ${stageAcompte}€ + solde J-7)`) : " — paiement en attente"}`, "success");
       } catch (e) { console.error(e); panelToast("Erreur lors de l'inscription", "error"); }
       setSelectedChildren([]);
       setSelChild(""); setSelFam(""); setSearch(""); setEnrolling(false);
@@ -3463,12 +3499,48 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                           <span>Solde à régler J-7 avant le stage</span>
                           <span className="font-semibold">{stageSolde.toFixed(2)}€</span>
                         </div>
+
+                        {/* Comment l'acompte est réglé : en ligne par la famille,
+                            ou tout de suite au comptoir. */}
+                        <div className="mt-2.5 pt-2.5 border-t border-blue-200">
+                          <div className="font-body text-xs font-semibold text-slate-600 mb-1.5">Règlement de l&apos;acompte :</div>
+                          <div className="flex gap-2">
+                            <button onClick={() => setAcompteReglement("lien")}
+                              className={`flex-1 py-2 rounded-lg font-body text-xs font-semibold border cursor-pointer ${acompteReglement === "lien" ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
+                              ✉️ Envoyer le lien
+                            </button>
+                            <button onClick={() => setAcompteReglement("sur_place")}
+                              className={`flex-1 py-2 rounded-lg font-body text-xs font-semibold border cursor-pointer ${acompteReglement === "sur_place" ? "bg-green-600 text-white border-green-600" : "bg-white text-slate-600 border-gray-200"}`}>
+                              💶 Encaisser maintenant
+                            </button>
+                          </div>
+
+                          {acompteReglement === "sur_place" && (
+                            <div className="mt-2 flex flex-col gap-2">
+                              <div className="flex gap-2">
+                                {([["cb_terminal", "💳 CB"], ["cheque", "📝 Chèque"], ["especes", "💶 Espèces"]] as const).map(([id, label]) => (
+                                  <button key={id} onClick={() => setAcompteMode(id)}
+                                    className={`flex-1 py-1.5 rounded-lg font-body text-xs font-semibold border cursor-pointer ${acompteMode === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+                              {acompteMode === "cheque" && (
+                                <input value={acompteRef} onChange={e => setAcompteRef(e.target.value)}
+                                  placeholder="N° de chèque (facultatif)"
+                                  className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-xs bg-white focus:outline-none focus:border-blue-400"/>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                     <div className="bg-white rounded-lg p-3">
                       <div className="font-body text-xs text-slate-600 text-center">
                         {showAcompte
-                          ? <>Un email avec le lien de paiement pour l'acompte sera envoyé à la famille.<br/>Le solde sera demandé automatiquement 7 jours avant le stage.</>
+                          ? acompteReglement === "sur_place"
+                            ? <>L&apos;acompte de {stageAcompte.toFixed(2)}€ sera encaissé maintenant ({acompteMode === "cheque" ? "chèque" : acompteMode === "especes" ? "espèces" : "CB terminal"}) et écrit au journal.<br/>Le solde sera demandé automatiquement 7 jours avant le stage.</>
+                            : <>Un email avec le lien de paiement pour l&apos;acompte sera envoyé à la famille.<br/>Le solde sera demandé automatiquement 7 jours avant le stage.</>
                           : <>La commande sera ajoutée aux impayés.<br/>Encaissement possible depuis <strong>Paiements → Encaisser</strong>.</>
                         }
                       </div>
