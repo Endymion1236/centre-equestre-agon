@@ -246,24 +246,186 @@ test("C9 — Aucun mot de passe hardcodé", () => {
   }
 });
 
-// C10 — Vérification que error.message n'est pas renvoyé au client
-test("C10 — Les routes API ne doivent pas exposer error.message brut", () => {
-  let exposedCount = 0;
-  const exposedRoutes = [];
-  for (const route of apiRoutes) {
-    const content = readFile(route);
-    if (!content) continue;
-    // Cherche NextResponse.json({ error: error.message }) ou similaire
-    if (/NextResponse\.json\(\s*\{[^}]*error\.message/s.test(content)) {
-      exposedCount++;
-      exposedRoutes.push(route.replace("src/app/api/", ""));
+// ─── C10 — Message d'erreur interne renvoyé au client ────────────────────────
+//
+// L'ancienne version cherchait le littéral `error.message` dans le premier
+// niveau d'accolades d'un NextResponse.json(). Elle ne voyait donc ni
+// `e.message`, ni `e?.message`, ni un objet sur plusieurs lignes — la forme la
+// plus répandue dans ce dépôt. Elle annonçait « aucune route » alors qu'il y en
+// avait une cinquantaine : un contrôle qui ment est pire que pas de contrôle,
+// puisqu'il éteint la vigilance.
+//
+// La version ci-dessous lit l'argument complet de chaque NextResponse.json()
+// (parenthèses équilibrées, chaînes ignorées) et y cherche le `.message` d'une
+// variable réellement attrapée par un `catch` du fichier. C'est cette liaison
+// au catch qui évite les faux positifs : `body.message` d'un formulaire de
+// contact n'est pas une fuite, `e?.message` en est une.
+
+/**
+ * Découpe le texte d'un appel `X.json(...)` en repartant de la parenthèse
+ * ouvrante et en comptant jusqu'à sa fermeture. Les chaînes ('", `) sont
+ * traversées sans compter leurs parenthèses, sinon un message contenant
+ * « Erreur ( » ferait dérailler le compteur.
+ */
+function argumentsDAppel(source, indexParenthese) {
+  let profondeur = 0;
+  let i = indexParenthese;
+  let delimiteur = null; // guillemet en cours, ou null hors chaîne
+  for (; i < source.length; i++) {
+    const c = source[i];
+    if (delimiteur) {
+      if (c === "\\") { i++; continue; }
+      if (c === delimiteur) delimiteur = null;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") { delimiteur = c; continue; }
+    if (c === "(") profondeur++;
+    else if (c === ")") {
+      profondeur--;
+      if (profondeur === 0) return source.slice(indexParenthese + 1, i);
     }
   }
+  return source.slice(indexParenthese + 1); // appel non refermé (fichier tronqué)
+}
+
+/** Noms des variables attrapées par un catch : `catch (e)`, `catch (error: any)`. */
+function variablesAttrapees(source) {
+  const noms = new Set();
+  for (const m of source.matchAll(/catch\s*\(\s*([A-Za-z_$][\w$]*)/g)) noms.add(m[1]);
+  return noms;
+}
+
+/**
+ * Renvoie les fuites d'un fichier : chaque `.message` (ou `.stack`) d'une
+ * variable de catch, trouvé dans l'argument d'une réponse JSON.
+ */
+function fuitesDeMessage(source) {
+  const attrapees = variablesAttrapees(source);
+  if (attrapees.size === 0) return [];
+  const fuites = [];
+  for (const m of source.matchAll(/(?:NextResponse|Response)\s*\.\s*json\s*\(/g)) {
+    const ouvrante = m.index + m[0].length - 1;
+    const args = argumentsDAppel(source, ouvrante);
+    for (const acces of args.matchAll(/([A-Za-z_$][\w$]*)\s*\??\.\s*(message|stack)\b/g)) {
+      if (attrapees.has(acces[1])) {
+        // Ligne d'origine, pour pouvoir aller la corriger directement.
+        const ligne = source.slice(0, ouvrante).split("\n").length;
+        fuites.push({ expression: acces[0], ligne });
+      }
+    }
+  }
+  return fuites;
+}
+
+/**
+ * Une route qui exige un jeton ou le secret de cron n'est pas publique.
+ *
+ * Trois écritures cohabitent dans le dépôt : le helper `verifyAuth`, la
+ * vérification à la main du jeton Firebase (`adminAuth.verifyIdToken`), et la
+ * comparaison au `CRON_SECRET`. Ne reconnaître que la première ferait passer
+ * une dizaine de routes admin pour publiques — un faux positif qui décrédibilise
+ * le contrôle aussi sûrement qu'un faux négatif.
+ */
+function routeAuthentifiee(source) {
+  return /verifyAuth\s*\(/.test(source)
+    || /verifyIdToken\s*\(/.test(source)
+    || /CRON_SECRET/.test(source)
+    || /authHeader\s*!==\s*`Bearer/.test(source);
+}
+
+// C10a — Le détecteur lui-même, éprouvé sur des cas connus.
+// Sans ces fixtures, une régression du détecteur redonnerait un audit tout vert.
+test("C10a — Le détecteur de fuites de message reconnaît toutes les écritures", () => {
+  const rates = [];
+  const doitDetecter = {
+    "error.message (forme historique)":
+      `try {} catch (error) { return NextResponse.json({ error: error.message }, { status: 500 }); }`,
+    "e.message (forme courte)":
+      `try {} catch (e) { return NextResponse.json({ error: e.message }, { status: 500 }); }`,
+    "e?.message (chaînage optionnel)":
+      `try {} catch (e) { return NextResponse.json({ error: e?.message || "Erreur" }, { status: 500 }); }`,
+    "objet sur plusieurs lignes":
+      `try {} catch (e) {\n  return NextResponse.json(\n    { error: e?.message || "Erreur" },\n    { status: 500 },\n  );\n}`,
+    "objet imbriqué avant le message":
+      `try {} catch (e) { return NextResponse.json({ meta: { ok: false }, error: e.message }); }`,
+    "message masqué derrière une parenthèse dans une chaîne":
+      `try {} catch (e) { return NextResponse.json({ error: "Erreur (interne) : " + e.message }); }`,
+    "pile d'exécution":
+      `try {} catch (e) { return NextResponse.json({ detail: e.stack }); }`,
+    "Response.json sans Next":
+      `try {} catch (err) { return Response.json({ error: err.message }); }`,
+  };
+  const neDoitPasDetecter = {
+    "message d'un formulaire de contact":
+      `export async function POST(req) { const body = await req.json(); return NextResponse.json({ recu: body.message }); }`,
+    "message écrit en dur":
+      `try {} catch (e) { console.error(e); return NextResponse.json({ error: "Une erreur interne est survenue" }, { status: 500 }); }`,
+    "message journalisé côté serveur seulement":
+      `try {} catch (e) { console.error("[route]", e.message); return NextResponse.json({ error: "Erreur interne" }); }`,
+    "variable homonyme non attrapée":
+      `const e = { message: "coucou" }; export function GET() { return NextResponse.json({ error: e.message }); }`,
+  };
+  // Le classement public/authentifié doit lui aussi reconnaître les trois
+  // écritures d'authentification du dépôt, sinon une route admin serait
+  // signalée comme publique.
+  for (const [nom, code] of Object.entries({
+    "helper verifyAuth": `const auth = await verifyAuth(req, { adminOnly: true });`,
+    "jeton vérifié à la main": `const caller = await adminAuth.verifyIdToken(idToken);`,
+    "secret de cron": `if (authHeader !== \`Bearer \${process.env.CRON_SECRET}\`) {}`,
+  })) {
+    if (!routeAuthentifiee(code)) rates.push(`authentification non reconnue : ${nom}`);
+  }
+  if (routeAuthentifiee(`export async function GET() { return NextResponse.json({ ok: true }); }`)) {
+    rates.push("faux positif : une route sans auth est vue comme authentifiée");
+  }
+  for (const [nom, code] of Object.entries(doitDetecter)) {
+    if (fuitesDeMessage(code).length === 0) rates.push(`non détecté : ${nom}`);
+  }
+  for (const [nom, code] of Object.entries(neDoitPasDetecter)) {
+    if (fuitesDeMessage(code).length > 0) rates.push(`faux positif : ${nom}`);
+  }
+  assert(rates.length === 0, rates.join(" | "));
+});
+
+// C10b — Aucune route PUBLIQUE ne renvoie un message d'erreur interne.
+// C'est le cas qui compte vraiment : sans authentification, n'importe qui peut
+// provoquer l'erreur et lire ce qu'elle raconte de la base ou du serveur.
+const fuitesParRoute = [];
+for (const route of apiRoutes) {
+  const content = readFile(route);
+  if (!content) continue;
+  const fuites = fuitesDeMessage(content);
+  if (fuites.length === 0) continue;
+  fuitesParRoute.push({
+    route: route.replace("src/app/api/", "").replace("/route.ts", ""),
+    fuites,
+    authentifiee: routeAuthentifiee(content),
+  });
+}
+const fuitesPubliques = fuitesParRoute.filter(r => !r.authentifiee);
+const fuitesAuthentifiees = fuitesParRoute.filter(r => r.authentifiee);
+
+test("C10b — Aucune route API publique n'expose un message d'erreur interne", () => {
   assert(
-    exposedCount === 0,
-    `${exposedCount} routes exposent error.message au client : ${exposedRoutes.slice(0, 5).join(", ")}${exposedCount > 5 ? "..." : ""}`
+    fuitesPubliques.length === 0,
+    `${fuitesPubliques.length} route(s) publique(s) : ` +
+    fuitesPubliques.map(r => `${r.route} (l.${r.fuites.map(f => f.ligne).join(", l.")})`).join(", ")
   );
 });
+
+// C10c — Les routes authentifiées : dette à résorber, pas urgence de sécurité.
+// Un avertissement plutôt qu'un échec, mais chiffré et nominatif — c'est ce
+// qu'il faut pour l'éteindre progressivement sans bloquer les mises en ligne.
+if (fuitesAuthentifiees.length > 0) {
+  const total = fuitesAuthentifiees.reduce((n, r) => n + r.fuites.length, 0);
+  warn(
+    `C10c — ${total} message(s) d'erreur interne renvoyés par ${fuitesAuthentifiees.length} route(s) authentifiée(s)`,
+    `À remplacer par un texte générique côté client (le détail reste dans les logs). ` +
+    `Routes : ${fuitesAuthentifiees.map(r => r.route).join(", ")}`
+  );
+} else {
+  test("C10c — Les routes authentifiées n'exposent plus de message interne", () => {});
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SECTION 2 : INTÉGRITÉ — Migration Stripe → CAWL

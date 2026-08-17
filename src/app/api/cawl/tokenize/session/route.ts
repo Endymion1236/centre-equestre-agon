@@ -57,7 +57,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ hostedTokenizationUrl, hostedTokenizationId });
   } catch (e: any) {
+    // Route publique (appelée par le navigateur de la famille avant tout
+    // paiement) : le détail de l'erreur reste dans les logs serveur, le client
+    // ne reçoit qu'un texte générique.
     console.error("[cawl/tokenize/session]", e);
-    return NextResponse.json({ error: e?.message || "Erreur création session tokenisation" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur création session tokenisation" }, { status: 500 });
   }
 }

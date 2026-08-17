@@ -83,8 +83,11 @@ export async function POST(req: NextRequest) {
     try {
       payResp = await payApi.createPayment(CAWL_PSPID, createReq);
     } catch (createErr: any) {
+      // Le message de la banque peut décrire l'infrastructure de paiement :
+      // il reste côté serveur. Le navigateur n'a besoin que de savoir que
+      // l'opération a échoué pour proposer un autre moyen de règlement.
       console.error("[cawl/tokenize/finalize] createPayment:", createErr?.message, JSON.stringify(createErr?.body || {}));
-      return NextResponse.json({ error: "createPayment a échoué", detail: createErr?.message }, { status: 502 });
+      return NextResponse.json({ error: "createPayment a échoué" }, { status: 502 });
     }
     const payBody = payResp?.body || payResp;
     const payment = payBody?.payment || payBody?.creationOutput?.payment || payBody?.createdPaymentOutput?.payment || {};
@@ -140,6 +143,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ requiresRedirect: false, status, statusCode, cawlPaymentId });
   } catch (e: any) {
     console.error("[cawl/tokenize/finalize]", e);
-    return NextResponse.json({ error: e?.message || "Erreur finalisation tokenisation" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur finalisation tokenisation" }, { status: 500 });
   }
 }
